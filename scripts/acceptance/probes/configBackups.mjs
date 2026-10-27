@@ -137,9 +137,9 @@ export async function configBackups({ base, page, check, log }) {
     return { width: dialog.getBoundingClientRect().width, isCloseHit: Boolean(hit && close.contains(hit)), canScrollTable: table.scrollWidth > table.clientWidth };
   });
   check('phone backups stay mounted after tools close and remain locally scrollable', phoneGeometry.width <= 390 && phoneGeometry.isCloseHit && phoneGeometry.canScrollTable, JSON.stringify(phoneGeometry));
-  await page.goBack();
+  await phoneDialog.locator('.ant-modal-close').click();
   await phoneDialog.waitFor({ state: 'hidden' });
   await until(async () => await tools.evaluate((button) => button === document.activeElement), { label: 'backup closure restores visible phone tools focus' });
-  check('Back dismisses phone backups without leaving the draft page', page.url().endsWith('/config') && await tools.getAttribute('aria-expanded') === 'false');
+  check('closing phone backups leaves the draft page in place', page.url().endsWith('/config') && await tools.getAttribute('aria-expanded') === 'false');
 
 }

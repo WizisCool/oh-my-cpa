@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { App as AntdApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
+import { App as AntdApp, Button, Input, Segmented, Select } from 'antd';
 import { Switch } from '../common/Switch';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,7 +10,6 @@ import { SecretInput } from '../common/SecretInput';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { PluginConfigEditor } from './PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual, pluginConfigSummary } from './pluginConfig';
 import {
@@ -34,6 +33,7 @@ import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
+import { Tooltip } from '../common/Tooltip';
 
 type EditorMode = 'form' | 'json';
 
@@ -137,7 +137,6 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
       onOk: onClose,
     });
   };
-  useOverlayHistory({ isOpen: plugin !== null, onClose: requestClose });
 
   const switchMode = (next: EditorMode) => {
     if (next === mode) return;

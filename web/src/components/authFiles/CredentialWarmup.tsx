@@ -7,7 +7,6 @@ import { api, ApiError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
 import { createID } from '../../utils/ids';
 import { languageLocale } from '../../i18n/language';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
 import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, isWarmupPolicyEnabled, type WarmupPolicy, type WarmupResult, type WarmupSettings, type WarmupCredential } from '../../types/warmup';
 import { AppDrawer } from '../common/AppDrawer';
@@ -16,6 +15,7 @@ import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { Switch } from '../common/Switch';
 import { LoadFailure, useToast } from '../feedback';
 import styles from './CredentialWarmup.module.css';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 const { Text } = Typography;
 const REASON_KEYS: Record<string, MessageKey> = {
@@ -170,7 +170,6 @@ export function WarmupSettingsDrawer({ open, onClose }: { open: boolean; onClose
     if (!isDirty) { setDraft(undefined); onClose(); return; }
     modal.confirm({ title: t('af.unsaved_confirm_title'), content: t('af.unsaved_confirm_desc'), okText: t('common.confirm'), cancelText: t('common.cancel'), onOk: () => { setDraft(undefined); onClose(); } });
   }, [isDirty, modal, onClose, saveMutation.isPending, t]);
-  useOverlayHistory({ isOpen: open, onClose: attemptClose });
   const save = () => {
     if (!settingsQuery.data || !canSaveWarmupPolicy(policy)) return;
     const revision = draftRevision.current ?? settingsQuery.data.revision; const selectedPolicy = { ...policy };
@@ -180,7 +179,7 @@ export function WarmupSettingsDrawer({ open, onClose }: { open: boolean; onClose
   return <AppDrawer open={open} onClose={attemptClose} title={t('warmup.settings')} destroyOnHidden
     footer={<Space><Button onClick={() => setDraft(undefined)} disabled={!isDirty || saveMutation.isPending}>{t('common.cancel')}</Button>
       <Button type="primary" onClick={save} loading={saveMutation.isPending} disabled={!isDirty || !canSaveWarmupPolicy(policy) || isDemoMode()}>{t('common.save')}</Button></Space>}>
-    <Tabs activeKey={provider} items={[{ key: 'codex', label: 'Codex', disabled: isDirty || saveMutation.isPending }, { key: 'claude', label: 'Claude', disabled: isDirty || saveMutation.isPending }]}
+    <Tabs more={TAB_OVERFLOW} activeKey={provider} items={[{ key: 'codex', label: 'Codex', disabled: isDirty || saveMutation.isPending }, { key: 'claude', label: 'Claude', disabled: isDirty || saveMutation.isPending }]}
       onChange={value => { setProvider(value as 'codex' | 'claude'); setDraft(undefined); }} />
     {settingsQuery.isError ? <LoadFailure title={t('warmup.load_failed')} error={safeError(settingsQuery.error, t)} onRetry={() => void settingsQuery.refetch()} /> : settingsQuery.data ?
       <div className={styles['warmup-section']}>

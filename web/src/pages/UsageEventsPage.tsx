@@ -6,7 +6,6 @@ import {
   Button,
   Listy,
   Popover,
-  Tooltip,
 } from 'antd';
 import clsx from 'clsx';
 import { Switch } from '../components/common/Switch';
@@ -74,6 +73,7 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { LoadFailure, Notice } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { FactList } from '../components/common/FactList';
+import { Tooltip } from '../components/common/Tooltip';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();
@@ -156,6 +156,7 @@ export const UsageEventsPage: React.FC = () => {
   const {
     pageRef,
     listRef,
+    isNativeScroll,
     collapse,
     scrolledDown,
     observeLatest,
@@ -687,13 +688,13 @@ export const UsageEventsPage: React.FC = () => {
               <Listy<UsageEvent>
                 ref={listRef}
                 key={`${viewScope}:${grouping}`}
-                virtual
+                virtual={!isNativeScroll}
                 height={height}
                 items={events}
                 rowKey="id"
                 group={group}
                 sticky
-                className="request-list"
+                className={clsx('request-list', isNativeScroll && 'is-native-scroll')}
                 onScroll={handleScroll}
                 itemRender={(event) => (
                   <RequestRow

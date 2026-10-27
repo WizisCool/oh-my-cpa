@@ -1,7 +1,7 @@
 import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Modal, Tabs, Tooltip } from 'antd';
+import { Button, Modal, Tabs } from 'antd';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
@@ -40,7 +40,6 @@ import {
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { CostBreakdownView } from '../pricing/CostBreakdownView';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
@@ -49,6 +48,8 @@ import { AppDrawer } from '../common/AppDrawer';
 import { CopyButton } from '../common/CopyButton';
 import './UsageEventDrawer.css';
 import './requestMarks.css';
+import { Tooltip } from '../common/Tooltip';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -75,13 +76,6 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const toast = useToast();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
 
-  // The drawer and the download confirmation over it are two overlays on one stack, so Back
-  // closes the confirmation first and the record second - the order the reader sees them in.
-  useOverlayHistory({ isOpen: eventId != null, onClose });
-  useOverlayHistory({
-    isOpen: downloadModalOpen && eventId != null,
-    onClose: () => setDownloadModalOpen(false),
-  });
   const [downloading, setDownloading] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
   React.useEffect(() => {
@@ -319,7 +313,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
               <strong>{event.cost_usd != null ? `$${event.cost_usd.toFixed(4)}` : '—'}</strong>
             </div>
           </div>
-          <Tabs
+          <Tabs more={TAB_OVERFLOW}
             activeKey={tab}
             onChange={setTab}
             animated={false}

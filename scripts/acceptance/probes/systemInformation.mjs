@@ -309,7 +309,7 @@ export async function systemInformationPage({ base, page, check }) {
   // that grows a fifth surface as a side effect of a later change is the failure this
   // pins, because the information budget is a product decision rather than a default.
   // Waiting for at least four and then requiring exactly four keeps a fifth card a
-  // failure, while a busy runner still re-rendering after the overlay's history pop
+  // failure, while a busy runner still re-rendering after the drawer closes
   // no longer reads an empty page. The URL is reported because "found 0" otherwise
   // cannot say whether the page was mid-render or had been navigated away from.
   const cardTitleLocator = page.locator('.system-page .ant-card-head-title');

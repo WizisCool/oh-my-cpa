@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Modal, Tooltip } from 'antd';
+import { Button, Modal } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../../api/client';
@@ -14,6 +14,7 @@ import { SectionHeading } from '../common/SectionHeading';
 import { SettingRow } from '../common/SettingRow';
 import { Switch } from '../common/Switch';
 import styles from './SidebarNavSettings.module.css';
+import { Tooltip } from '../common/Tooltip';
 
 /**
  * SidebarNavSettings is the rail's own layout setting - which entries it shows, and in what order -

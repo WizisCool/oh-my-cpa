@@ -448,7 +448,6 @@
   font-size: var(--text-xs);
   font-weight: 500;
   line-height: 18px;
-  text-transform: capitalize;
   padding: 0 7px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
@@ -639,8 +638,8 @@
    Below the container threshold a record is four lines, not twelve labelled fields. One field per
    line made a single record taller than a phone, so the list could be read but not scanned; a
    record now takes about a sixth of the screen and its lines answer, in order: when and how it
-   ended and what it cost, which model and how many tokens, who served it and how long it took,
-   and the secondary measures.
+   ended and what it cost, which model and how much of it came from cache, who served it and how
+   fast it ran, and the secondary measures.
 
    The DOM is the table row's own. The cells that hold two facts (time and id, total and breakdown,
    latency and first token) dissolve with `display: contents` so each fact can sit on its own line,
@@ -652,7 +651,7 @@
     display: none;
   }
   /* A stacked record is three lines, each a pair: what was asked and what it cost, who answered
-     and how much it used, when it ran and how long it took. Everything else the table shows
+     and how much came from cache, when it ran and how fast. Everything else the table shows
      is one tap away in the detail drawer. A phone-wide list that repeats all of a table's
      columns in small type is a table nobody can scan; the record is here to be recognised, and
      the drawer is where it is read. */
@@ -747,7 +746,7 @@
     font-size: var(--text-base);
   }
 
-  /* Line 2: who answered, and the tokens it used. */
+  /* Line 2: who answered, and how much of the prompt came from cache. */
   .req-col-provider {
     order: 20;
     flex: 1 1 0;
@@ -784,13 +783,14 @@
     min-width: 0;
     font-size: var(--text-sm);
   }
-  .req-tokens-total { order: 21; }
-  .req-tokens-total strong {
-    font-weight: 400;
-    color: var(--fg-2);
+  /* The cache rate rather than the token total: on one record the total says little, while the
+     rate says whether the prompt was served from cache, which is what explains its cost. It keeps
+     the table's pill and its hue, which reads as the rate without a label. */
+  .req-col-cache {
+    order: 21;
   }
 
-  /* Line 3, the quiet one: when, the verdict, and how long it took. */
+  /* Line 3, the quiet one: when, the verdict, and how fast it ran. */
   .req-time-text {
     order: 30;
     font-size: var(--text-sm);
@@ -803,12 +803,22 @@
     display: none;
   }
   .req-col-result { order: 32; }
+  /* Throughput, as the table's TPS column computes it; a record with none to state (a failure, a
+     response with no output) shows how long it took instead. */
+  .req-col-tps,
   .req-latency-val {
     order: 34;
     margin-left: auto;
+  }
+  .req-tps-val,
+  .req-latency-val {
     font-size: var(--text-sm);
     font-weight: 400;
     color: var(--fg-2);
+  }
+  .req-col-tps:not(:has(.req-tps-val)),
+  .request-row:has(.req-tps-val) .req-latency-val {
+    display: none;
   }
 
   /* Colour is for the exception. Side by side in a table, each mark's tint has a column to
@@ -835,11 +845,9 @@
   /* The detail drawer carries these. */
   .req-col-key,
   .req-col-ua,
-  .req-col-cache,
-  .req-col-tps,
   .req-ttft-val,
+  .req-tokens-total,
   .req-tokens-breakdown,
-  .req-tokens-total small,
   .req-badge-oauth,
   .request-chevron {
     display: none;

@@ -6,6 +6,7 @@ import { ProviderBrandIcon } from '../LobeIcon';
 import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useT } from '../../i18n';
 import styles from './ProviderFilterTabs.module.css';
+import { TAB_OVERFLOW } from './tabOverflow';
 
 export interface ProviderFilterTabsProps {
   providers: string[];
@@ -70,7 +71,7 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
 
   return (
     <div className={styles['tabs-wrap']}>
-      <Tabs
+      <Tabs more={TAB_OVERFLOW}
         activeKey={active}
         onChange={onChange}
         items={items}

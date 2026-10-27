@@ -116,6 +116,7 @@ export default {
   "cfg.copy_failed": "Salinan gagal",
   "cfg.lines_count": "{n} baris",
   "cfg.nav_aria": "Navigasi bahagian tetapan",
+  "cfg.outline_aria": "Navigasi kumpulan tetapan",
   "cfg.save_shortcut": "{key} untuk disimpan",
   "cfg.yaml_syntax_error": "Ralat sintaks YAML, sila periksa dalam mod Sumber",
   "cfg.api_key_empty_warning": "Kunci API tidak boleh kosong",

@@ -1,6 +1,5 @@
 import React from 'react';
 import { Button } from 'antd';
-import { LabelTip } from '../common/LabelTip';
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
@@ -17,6 +16,7 @@ import { clsx } from 'clsx';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ArrowUpOutlined, CloseOutlined, PictureOutlined } from '../icons';
 import styles from './Workspace.module.css';
+import { Tooltip } from '../common/Tooltip';
 
 /**
  * Something `/` runs: an action of the page, or a setting of the next message. A command is listed
@@ -194,20 +194,20 @@ function ComposerSurface({
   // Send and stop are one round primary-filled button whose glyph changes: the single filled shape in the
   // frame, so the eye finds the action without reading the row.
   const send = (
-    <LabelTip title={canSend ? sendLabel : blockedReason}>
+    <Tooltip title={canSend ? sendLabel : blockedReason}>
       <button type="button" className={styles['send-button']} aria-label={sendLabel} aria-disabled={!canSend || undefined} onClick={submit}>
         <ArrowUpOutlined aria-hidden="true" />
       </button>
-    </LabelTip>
+    </Tooltip>
   );
   const stop = (
-    <LabelTip title={stopLabel}>
+    <Tooltip title={stopLabel}>
       <ComposerPrimitive.Cancel asChild>
         <button type="button" className={styles['send-button']} data-action="stop" aria-label={stopLabel}>
           <span className={styles['stop-glyph']} aria-hidden="true" />
         </button>
       </ComposerPrimitive.Cancel>
-    </LabelTip>
+    </Tooltip>
   );
   // One action occupies the same slot: an empty running composer stops; a draft can be queued.
   const controls = (
@@ -216,11 +216,11 @@ function ComposerSurface({
     </span>
   );
   const addAttachment = attachments && (
-    <LabelTip title={attachments.addLabel}>
+    <Tooltip title={attachments.addLabel}>
       <ComposerPrimitive.AddAttachment asChild>
         <Button type="text" shape="circle" className={styles['attach-button']} aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
       </ComposerPrimitive.AddAttachment>
-    </LabelTip>
+    </Tooltip>
   );
   // On a phone the picker sits beside send, so an attachment alone never costs the box a row.
   const start = (footerStart || (addAttachment && !isPhone)) ? (
@@ -268,11 +268,11 @@ function ComposerSurface({
               <div className={styles['queue-item']} data-testid="composer-queue-item" key={queueItem.id}>
                 <ArrowUpOutlined className={styles['queue-mark']} aria-hidden="true" />
                 <QueueItemPrimitive.Text className={styles['queue-text']} />
-                <LabelTip title={queue.removeLabel}>
+                <Tooltip title={queue.removeLabel}>
                   <QueueItemPrimitive.Remove asChild>
                     <Button type="text" size="small" aria-label={queue.removeLabel} icon={<CloseOutlined />} />
                   </QueueItemPrimitive.Remove>
-                </LabelTip>
+                </Tooltip>
               </div>
             )}
           </ComposerPrimitive.Queue>

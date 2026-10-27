@@ -1,7 +1,6 @@
 import React from 'react';
 import { Checkbox, Modal } from 'antd';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { filterModelOptions } from '../../utils/modelOptions';
 import styles from './ModelPickerModal.module.css';
 import { SearchInput } from '../common/SearchInput';
@@ -28,8 +27,6 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
   const t = useT();
   const [query, setQuery] = React.useState('');
   const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set());
-
-  useOverlayHistory({ isOpen, onClose });
 
   // Each opening starts from the provider's current rows, not from a previous
   // pick the operator dismissed.

@@ -116,6 +116,7 @@ export default {
   "cfg.copy_failed": "複製失敗",
   "cfg.lines_count": "{n} 行",
   "cfg.nav_aria": "設定分割槽導航",
+  "cfg.outline_aria": "設定卡片導航",
   "cfg.save_shortcut": "{key} 儲存",
   "cfg.yaml_syntax_error": "YAML 語法錯誤，請切換到原始碼模式檢查",
   "cfg.api_key_empty_warning": "API 金鑰不能為空",

@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tooltip, Typography } from 'antd';
+import { Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
 import XMarkdown from '@ant-design/x-markdown';
@@ -12,6 +12,7 @@ import { PageLoading } from '../common/PageLoading';
 import styles from '../../pages/SystemPage.module.css';
 import { LoadFailure, Notice } from '../feedback';
 import { Tag } from '../common/Tag';
+import { Tooltip } from '../common/Tooltip';
 
 const { Text } = Typography;
 

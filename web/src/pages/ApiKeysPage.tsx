@@ -17,7 +17,6 @@ import dayjs from '../utils/time';
 import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
-import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { ApiKeysList } from '../components/keys/ApiKeysList';
 import { buildKeyRecords, summarizeKeys, type ApiKeyRecord, type KeyUseFilter } from '../components/keys/keyOverview';
 import { updateFieldWithBaseline, getFieldSemanticValue } from '../components/config/configDirty';
@@ -254,8 +253,6 @@ export const ApiKeysPage: React.FC = () => {
     setAliasInput('');
     setIsKeyVisible(false);
   }, []);
-
-  useOverlayHistory({ isOpen: editor.isOpen, onClose: closeEditor });
 
   // A new key starts from a generated value, shown, because generating is what almost every
   // operator does next - and a value they typed themselves can still replace it.

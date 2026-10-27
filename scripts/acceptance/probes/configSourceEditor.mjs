@@ -292,18 +292,18 @@ async function configSourceMobile({ base, page, check }) {
   await confirmSave();
   await page.locator('.ant-modal:visible').waitFor({ state: 'visible' });
   check('revision conflict opens above focus editing and preserves its draft', writes.length === 1 && (await page.locator('.view-lines').innerText()).includes('mobile-draft'));
-  await page.goBack();
+  await page.locator('.ant-modal:visible .ant-modal-close').click();
   await page.locator('.ant-modal:visible').waitFor({ state: 'hidden' });
-  check('Back closes the conflict before the focused workspace', await focusRegion.isVisible());
+  check('closing the conflict keeps the focused workspace', await focusRegion.isVisible());
 
   responseMode = 'failure';
   await confirmSave();
   await until(async () => writes.length === 2 && await save.isEnabled(), { label: 'failed save settles' });
   check('a failed save keeps the draft and its single action surface', (await page.locator('.view-lines').innerText()).includes('mobile-draft') && await page.locator('.config-dirty-bar').count() === 1);
 
-  await page.goBack();
+  await focusRegion.getByRole('button', { name: 'Return', exact: true }).click();
   await focusRegion.waitFor({ state: 'hidden' });
-  check('Back exits focus editing without leaving source or losing its draft', page.url().endsWith('/config') && (await page.locator('.view-lines').innerText()).includes('mobile-draft'));
+  check('returning from focus editing keeps the source draft', page.url().endsWith('/config') && (await page.locator('.view-lines').innerText()).includes('mobile-draft'));
   check('focus returns to the focused-edit trigger', await page.getByRole('button', { name: 'Focus editor', exact: true }).evaluate((button) => button === document.activeElement));
   await page.locator('.monaco-editor .view-lines').click();
   const draftBeforeUndo = await page.locator('.view-lines').innerText();

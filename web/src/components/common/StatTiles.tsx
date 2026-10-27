@@ -1,8 +1,9 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Tooltip } from 'antd';
+
 import { StatusLabel, type StatusTone } from './StatusLabel';
 import styles from './StatTiles.module.css';
+import { Tooltip } from './Tooltip';
 
 export interface StatTile<K extends string> {
   key: K;

@@ -29,7 +29,6 @@ import dayjs from '../utils/time';
 import { api, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
-import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import type {
   SystemInfoResponse,
   SystemProductVersion,
@@ -548,7 +547,6 @@ export const SystemPage: React.FC = () => {
   // page off screen, and an overlay is what the rest of the console uses for content that
   // takes over the reading position.
   const closeChangelog = () => setExpandedProduct(null);
-  useOverlayHistory({ isOpen: expandedProduct !== null, onClose: closeChangelog });
 
   // The product whose log the drawer renders, retained across the close so the exit animation has
   // something to draw. `expandedProduct` cannot serve: it goes null the moment the close begins, so

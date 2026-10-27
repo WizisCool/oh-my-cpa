@@ -11,7 +11,7 @@ import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
-import { displayEffortName, effortColor, effortStep } from '../../theme/effortScale';
+import { effortBadgeName, effortColor, effortStep } from '../../theme/effortScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveProviderInfo,
@@ -133,7 +133,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     // The level's place on the effort scale, as a token reference; absent for
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
-    const effortLabel = displayEffortName(event.reasoning_effort);
+    const effortLabel = effortBadgeName(event.reasoning_effort);
     const isNonStreaming = isNonStreamingEvent(event);
     const isFastTier = isFastTierEvent(event);
 

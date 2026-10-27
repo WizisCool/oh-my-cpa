@@ -9,7 +9,6 @@ import { EditOutlined, LinkOutlined, ThunderboltOutlined } from '../icons';
 import { api } from '../../api/client';
 import { pricingErrorText } from './pricingErrors';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -97,7 +96,6 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
   const toast = useToast();
   const queryClient = useQueryClient();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  useOverlayHistory({ isOpen, onClose });
 
   const detail = useQuery({
     queryKey: PRICING_QUERY_KEYS.model(model, channel),

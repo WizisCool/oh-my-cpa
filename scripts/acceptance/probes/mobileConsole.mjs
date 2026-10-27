@@ -16,9 +16,17 @@ export async function mobileConsole({ base, page, check, errors }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.dashboard-page').waitFor({ state: 'visible' });
   await page.setViewportSize({ width: 320, height: 844 });
+  await page.locator('.app-header-left button').click();
+  const initialNavigation = page.locator('.mobile-nav-drawer:visible');
+  await initialNavigation.locator('.app-brand').click();
+  await initialNavigation.waitFor({ state: 'hidden' });
+  check('the navigation sheet closes when its brand navigates', new URL(page.url()).pathname.endsWith('/dashboard'));
   for (const [route, contentSelector] of ROUTES) {
     await page.locator('.app-header-left button').click();
     const navigation = page.locator('.mobile-nav-drawer:visible');
+    if (route === '/dashboard') {
+      check('the phone navigation sheet has an accessible name', await page.getByRole('dialog', { name: 'Navigation', exact: true }).count() === 1);
+    }
     await navigation.locator(`[data-route-path="${route}"]`).click();
     await page.waitForURL(`${base}${route}`);
     await navigation.waitFor({ state: 'hidden' });
@@ -56,9 +64,9 @@ export async function mobileConsole({ base, page, check, errors }) {
   check('the header menu names the selected language and theme', await popup.getByRole('button', { name: 'English', exact: true }).getAttribute('aria-pressed') === 'true' && await popup.getByRole('button', { name: 'Light', exact: true }).getAttribute('aria-pressed') === 'true');
   const heights = await popup.locator('button, a').evaluateAll((controls) => controls.map((control) => control.getBoundingClientRect().height));
   check('header menu rows have 44px hit areas', heights.length >= 9 && heights.every((height) => height >= 44), JSON.stringify(heights));
-  await page.goBack();
-  await until(async () => await tools.getAttribute('aria-expanded') === 'false', { label: 'Back dismisses header tools' });
-  check('Back closes tools without leaving the page and restores focus', page.url().endsWith('/config') && await tools.evaluate((control) => control === document.activeElement));
+  await page.keyboard.press('Escape');
+  await until(async () => await tools.getAttribute('aria-expanded') === 'false', { label: 'header tools to close' });
+  check('closing tools leaves the page in place and restores focus', page.url().endsWith('/config') && await tools.evaluate((control) => control === document.activeElement));
 
   for (const width of [640, 641, 900, 901, 1440]) {
     await page.setViewportSize({ width, height: 900 });

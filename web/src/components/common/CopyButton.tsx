@@ -1,9 +1,10 @@
 import React from 'react';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import { CheckOutlined, CopyOutlined } from '../icons';
 import { useI18n } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { useToast } from '../feedback';
+import { Tooltip } from './Tooltip';
 
 /** How long the check mark stands in for the copy glyph after a successful copy. */
 const COPIED_MS = 1500;

@@ -113,6 +113,7 @@ export default {
   'cfg.copy_failed': '复制失败',
   'cfg.lines_count': '{n} 行',
   'cfg.nav_aria': '配置分区导航',
+  'cfg.outline_aria': '配置卡片导航',
   'cfg.save_shortcut': '{key} 保存',
   'cfg.yaml_syntax_error': 'YAML 语法错误，请切换到源码模式检查',
   'cfg.api_key_empty_warning': 'API 密钥不能为空',

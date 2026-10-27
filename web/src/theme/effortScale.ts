@@ -37,6 +37,16 @@ export function displayEffortName(effort: string | undefined | null): string {
 }
 
 /**
+ * effortBadgeName is the badge's spelling: a level leads with a capital (`High`), except `xHigh`,
+ * whose lowercase prefix is the parameter's own spelling. Spelled here rather than by a CSS
+ * `text-transform`, which capitalised it to `XHigh` and which the exported image cannot apply.
+ */
+export function effortBadgeName(effort: string | undefined | null): string {
+  const name = displayEffortName(effort);
+  return name === 'xHigh' ? name : name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
  * effortStep places a recorded effort on the scale: 0 for `none`, 1 to
  * `EFFORT_STEPS` for a level that reasons, and null for a value the scale does
  * not know.

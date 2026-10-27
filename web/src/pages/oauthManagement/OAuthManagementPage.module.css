@@ -157,9 +157,11 @@
   margin-right: auto;
 }
 
-.toolbar > :global(.ant-dropdown-button) {
-  width: auto;
-  flex: 0 0 auto;
+.collection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
@@ -224,9 +226,19 @@
     align-items: flex-start;
   }
 
-  .toolbar > :global(.ant-dropdown-button),
-  .toolbar > :global(.ant-space-compact) {
+  /* Settings keeps its label's width; the refresh takes the rest of the row, its main segment
+     stretching and the scope caret staying square. */
+  .collection-actions {
     grid-column: 1 / -1;
-    width: 100%;
+  }
+
+  .refresh-quota {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .refresh-quota > :global(.ant-btn):first-child {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }

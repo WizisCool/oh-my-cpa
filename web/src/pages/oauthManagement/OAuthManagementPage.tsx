@@ -188,8 +188,7 @@ export const OAuthManagementPage: React.FC = () => {
     resetSearchToken,
   );
 
-  // Consume one-shot navigation intent before the connect panel arms overlay history,
-  // so Back closes the panel once instead of reopening it from a stale query value.
+  // Consume one-shot navigation intent so it cannot reopen the panel on a later render.
   const [pendingIntent, setPendingIntent] = React.useState<{ connect: boolean; provider?: string; focusQuota: boolean }>();
   const [pendingFocusQuota, setPendingFocusQuota] = React.useState(false);
   React.useEffect(() => {
@@ -722,32 +721,37 @@ export const OAuthManagementPage: React.FC = () => {
         >
           {t('events.more_filters')}
         </Button>
-        <Button onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
-        {/* The main segment refreshes the filtered set, which is what the list is showing; the
-            caret offers the other scopes. */}
-        <Space.Compact>
-          <Button
-            icon={<SyncOutlined />}
-            disabled={visibleRecords.length === 0}
-            loading={actions.busyQuotaIndexes.size > 0}
-            onClick={() => void actions.refreshQuota('filtered', visibleRecords, pagedRecords, records)}
-          >
-            {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
-          </Button>
-          <Dropdown
-            disabled={visibleRecords.length === 0}
-            menu={{
-              items: [
-                { key: 'page', label: t('omc.refresh_scope_page', { n: pagedRecords.filter((record) => record.canRefreshQuota).length }) },
-                { key: 'filtered', label: t('omc.refresh_scope_filtered', { n: eligibleFilteredRefreshCount }) },
-                { key: 'all', label: t('omc.refresh_scope_all', { n: new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size }) },
-              ],
-              onClick: ({ key }) => void actions.refreshQuota(key as 'page' | 'filtered' | 'all', visibleRecords, pagedRecords, records),
-            }}
-          >
-            <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
-          </Dropdown>
-        </Space.Compact>
+        {/* The two collection actions travel as one group, so on a phone they share a row instead of
+            each wrapping onto its own. */}
+        <div className={styles['collection-actions']}>
+          <Button onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
+          {/* The main segment refreshes the filtered set, which is what the list is showing; the
+              caret offers the other scopes. */}
+          <Space.Compact className={styles['refresh-quota']}>
+            <Button
+              icon={<SyncOutlined />}
+              disabled={visibleRecords.length === 0}
+              loading={actions.busyQuotaIndexes.size > 0}
+              onClick={() => void actions.refreshQuota('filtered', visibleRecords, pagedRecords, records)}
+            >
+              {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
+            </Button>
+            <Dropdown
+              trigger={['click']}
+              disabled={visibleRecords.length === 0}
+              menu={{
+                items: [
+                  { key: 'page', label: t('omc.refresh_scope_page', { n: pagedRecords.filter((record) => record.canRefreshQuota).length }) },
+                  { key: 'filtered', label: t('omc.refresh_scope_filtered', { n: eligibleFilteredRefreshCount }) },
+                  { key: 'all', label: t('omc.refresh_scope_all', { n: new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size }) },
+                ],
+                onClick: ({ key }) => void actions.refreshQuota(key as 'page' | 'filtered' | 'all', visibleRecords, pagedRecords, records),
+              }}
+            >
+              <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
+            </Dropdown>
+          </Space.Compact>
+        </div>
       </Toolbar>
       {isFiltersOpen && (
         <div id="oauth-collection-filters" className={styles['advanced-filters']}>

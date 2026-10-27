@@ -751,12 +751,12 @@ async function checkOAuthModelRules({ page, base, check }) {
   await drawer.getByTestId('oauth-model-rules-tab-excluded').click();
   check('the other section still has its draft after the alias save',
     (await drawer.locator('[data-rule="claude-3*"]').count()) === 1);
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   const discard = page.locator('.ant-modal-confirm').last();
   await discard.waitFor({ state: 'visible' });
   await discard.getByRole('button', { name: 'Cancel', exact: true }).click();
   await discard.waitFor({ state: 'hidden' });
-  check('declining native Back leaves the rules and draft visible', await drawer.locator('[data-rule="claude-3*"]').isVisible());
+  check('declining discard leaves the rules and draft visible', await drawer.locator('[data-rule="claude-3*"]').isVisible());
   await drawer.getByTestId('oauth-model-rules-revert').click();
   const picker = provider.getByRole('combobox');
   await picker.fill('Codex');
@@ -789,9 +789,9 @@ async function checkOAuthModelRules({ page, base, check }) {
       JSON.stringify(geometry));
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   await drawer.waitFor({ state: 'hidden' });
-  check('native Back closes the saved rules without leaving the OAuth workspace', page.url().includes('/oauth-management'));
+  check('closing saved rules leaves the OAuth workspace in place', page.url().includes('/oauth-management'));
   await openRules.click();
   await drawer.getByTestId('oauth-model-rules-tab-excluded').click();
   await drawer.locator('[data-rule="claude-3*"]').waitFor({ state: 'hidden' });
@@ -1296,16 +1296,16 @@ export async function oauthWindowWarmup({ page, base, check }) {
     await settleLayout(page);
     await checkRuleAlignment(drawer, 'Claude settings desktop');
     await drawer.getByRole('switch', { name: 'Warm up daily at a set time' }).click();
-    await page.goBack();
+    await drawer.locator('.ant-drawer-close').click();
     const confirmation = page.getByRole('dialog').filter({ hasText: 'Unsaved' });
     await confirmation.waitFor({ state: 'visible' });
-    check('Back asks before discarding an unsaved warmup policy', await drawer.isVisible());
+    check('closing asks before discarding an unsaved warmup policy', await drawer.isVisible());
     await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
     await confirmation.waitFor({ state: 'hidden' });
     await drawer.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.goBack();
+    await drawer.locator('.ant-drawer-close').click();
     await drawer.waitFor({ state: 'hidden' });
-    check('Back closes a reverted warmup editor without leaving OAuth management', page.url().includes('/oauth-management'));
+    check('closing a reverted warmup editor leaves OAuth management in place', page.url().includes('/oauth-management'));
     const record = page.getByTestId('oauth-credential-record').filter({ hasText: 'credential-02.json' });
     await record.getByRole('button', { name: /^Details:/ }).click();
     const warmup = page.getByTestId('credential-warmup');

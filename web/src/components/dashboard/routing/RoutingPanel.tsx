@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { Tooltip } from 'antd';
+
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../../../api/client';
@@ -34,6 +34,7 @@ import {
 import { RoutingMap, type RoutingArrivals } from './RoutingMap';
 import { routeColor, type IdentitySources } from './routingIdentity';
 import styles from './RoutingPanel.module.css';
+import { Tooltip } from '../../common/Tooltip';
 
 const STRATEGY_LABEL_KEYS: Record<string, MessageKey> = {
   'round-robin': 'cfg.strategy_round_robin',

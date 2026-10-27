@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb } from 'antd';
+import { Layout, Menu, Drawer, Button, Breadcrumb } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -8,7 +8,6 @@ import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
 import { RouteLoading } from './PageLoading';
@@ -28,6 +27,7 @@ import { navEntryLabel, type NavEntry, type NavGroup } from '../../types/sidebar
 import { usePreference } from '../../hooks/usePreference';
 import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
+import { Tooltip } from './Tooltip';
 
 const { Sider, Content } = Layout;
 
@@ -123,12 +123,6 @@ export const AppLayout: React.FC = () => {
   const [isMobile, setIsMobile] = React.useState(isNarrowViewport);
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
 
-  // The sheet is an overlay like any other: Back puts it away rather than leaving the route,
-  // which on a phone is what the hardware button is expected to do. Gated on `isMobile`
-  // because the sheet only exists there, so a rotation that closes it must not leave a
-  // sentinel behind.
-  useOverlayHistory({ isOpen: isMobile && isMobileNavOpen, onClose: () => setIsMobileNavOpen(false) });
-
   React.useEffect(() => {
     const onResize = () => {
       const narrow = isNarrowViewport();
@@ -197,6 +191,11 @@ export const AppLayout: React.FC = () => {
     setIsMobileNavOpen(false);
   };
 
+  const goToDashboard = () => {
+    setIsMobileNavOpen(false);
+    navigate('/dashboard');
+  };
+
   const preloadMenuTarget = (event: React.SyntheticEvent) => {
     const target = event.target;
     const path = target instanceof Element ? target.closest('[data-route-path]')?.getAttribute('data-route-path') : null;
@@ -221,14 +220,14 @@ export const AppLayout: React.FC = () => {
   const handleBrandKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      navigate('/dashboard');
+      goToDashboard();
     }
   };
 
   const brand = (
     <div
       className="app-brand"
-      onClick={() => navigate('/dashboard')}
+      onClick={goToDashboard}
       onKeyDown={handleBrandKeyDown}
       role="button"
       tabIndex={0}
@@ -339,10 +338,10 @@ export const AppLayout: React.FC = () => {
       </Layout>
       {isMobile && (
         /* The sheet carries the same parts as the rail - brand and nav - because it is the
-           rail at a phone width, not a menu of links. Its width is bounded in `vw` as well as `px:`
-           at a 320px viewport a fixed 320px sheet leaves no page visible behind the mask, and the
-           reader loses the sense that this is a layer over where they were. The safe-area inset
-           keeps the rail's labels clear of a landscape notch. */
+           rail at a phone width, not a menu of links. The width is bounded in both `px` and
+           `vw`: at a 320px viewport a fixed 320px sheet leaves no page visible behind the mask,
+           and the reader loses the sense that this is a layer over where they were. The
+           safe-area inset keeps the rail's labels clear of a landscape notch. */
         <Drawer
           placement="left"
           open={isMobileNavOpen}
@@ -350,7 +349,8 @@ export const AppLayout: React.FC = () => {
           size="min(320px, 86vw)"
           closable={false}
           className="mobile-nav-drawer"
-          styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
+          aria-label={t('header.nav_sheet')}
+          styles={{ body: { display: 'flex', flexDirection: 'column' } }}
         >
           {brand}
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>

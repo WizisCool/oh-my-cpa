@@ -18,7 +18,6 @@ import { credentialProviderIconId, getCredentialProviderMetadata } from '../comp
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { useOpenPriceEditor } from '../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
-import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { copyText } from '../utils/clipboard';
 import { formatRatePer1M } from '../types/pricingDisplay';
 import { isUsageFacetsResponse } from '../types/usageEvents';
@@ -289,7 +288,6 @@ export const ModelSquarePage: React.FC = () => {
   const [page, setPage] = React.useState(1);
   const [selectedIdentity, setSelectedIdentity] = React.useState<string>();
   const closeDetails = React.useCallback(() => setSelectedIdentity(undefined), []);
-  useOverlayHistory({ isOpen: selectedIdentity !== undefined, onClose: closeDetails });
   const detailsRef = React.useRef<HTMLDivElement>(null);
 
   const directory = useQuery({ queryKey: ['model-square'], queryFn: () => api.getModelSquare(), staleTime: 30_000 });

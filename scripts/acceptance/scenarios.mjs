@@ -57,7 +57,7 @@ import {
   providerRateProviders,
   providerRateTraffic,
 } from './probes/providerRateMarks.mjs';
-import { overlayBackDismisses } from './probes/overlayHistory.mjs';
+import { browserNavigation } from './probes/browserNavigation.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
 import { pluginManagement, pluginManagementFixtures, pluginManagementNarrow } from './probes/pluginManagement.mjs';
 import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/pricingBook.mjs';
@@ -202,9 +202,9 @@ export const SCENARIOS = [
   { id: 'agent-attach', name: 'Agent takes text files and images with a message and refuses what is neither', options: { routes: agentFixtures() }, run: agentAttach },
   { id: 'agent-failure', name: 'Agent hands a refused message back and reports a failure as a sentence, not a code', options: { routes: agentFixtures() }, run: agentFailureCopy },
   { id: 'agent-stream', name: 'Agent coalesces tokens and follows live reasoning through Markdown layout changes', options: { routes: agentFixtures() }, run: agentStream },
-  { id: 'agent-narrow', name: 'Agent keeps its model named in the composer and its drawer follows native Back on phones', options: { routes: agentFixtures(), viewport: { width: 320, height: 850 } }, run: agentNarrow },
+  { id: 'agent-narrow', name: 'Agent keeps its model named in the composer and its drawer fits phones', options: { routes: agentFixtures(), viewport: { width: 320, height: 850 } }, run: agentNarrow },
   { id: 'playground', name: 'ephemeral multimodal playground streams and inspects safe requests', options: { routes: playgroundFixtures() }, run: playground },
-  { id: 'playground-narrow', name: 'playground settings follow native Back and fit a phone', options: { routes: playgroundFixtures(), viewport: { width: 320, height: 850 } }, run: playgroundNarrow },
+  { id: 'playground-narrow', name: 'playground settings fit a phone', options: { routes: playgroundFixtures(), viewport: { width: 320, height: 850 } }, run: playgroundNarrow },
   {
     id: 'omc-settings',
     name: 'OMC settings and the unit style it governs',
@@ -578,23 +578,10 @@ export const SCENARIOS = [
       assert('the search box raises no page error', errors.length === 0, errors.join(' | '));
     },
   },
-  /**
-   * The platform's Back button, which is the only dismissal a phone has that is always in reach.
-   *
-   * The fixtures are the minimum each surface needs. The dashboard appears because the probe
-   * arrives at every route through a real in-app navigation - a reload replaces the history
-   * entry rather than adding one, and Back would then have nowhere to go - and the dashboard is
-   * the hop that needs the most of its own data to render. Everything else is one request record
-   * for the list and one provider for its editor; a richer fixture would not change what is
-   * asserted, which is about the history entry an overlay pushed.
-   */
   {
-    id: 'overlay-back',
-    name: "overlays answer the platform's Back",
+    id: 'browser-navigation',
+    name: 'browser Back follows page history with overlays open',
     options: {
-      // A phone, because that is where the claim comes from: the hardware Back button and the
-      // edge gesture are the dismissals a phone always has in reach. The navigation sheet is a
-      // phone-only surface anyway, so a desktop viewport could not test it at all.
       viewport: { width: 390, height: 844 },
       routes: [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
@@ -614,7 +601,7 @@ export const SCENARIOS = [
         ...oauthManagementFixtures.routes,
       ],
     },
-    run: overlayBackDismisses,
+    run: browserNavigation,
   },
   /**
    * The console's touch rules, on a context that has a coarse pointer and no hover.
@@ -802,9 +789,7 @@ export const SCENARIOS = [
   },
   {
     id: 'request-list-touch',
-    // Asserts motion frame by frame; a sibling context on the same CPU drops frames (ADR 0095).
-    shouldRunAlone: true,
-    name: 'on a phone the request list is the only scroller, and a finger folds and unfolds its header',
+    name: 'on a phone the browser scrolls the request list, the only scroller, under a finger',
     options: {
       // A phone short enough that the unfolded header leaves the list less than half the screen.
       viewport: { width: 390, height: 664 },
@@ -920,13 +905,13 @@ export const SCENARIOS = [
   },
   {
     id: 'model-square',
-    name: 'advertised models form maker sections with copyable call names, price and request linkage, details and native Back',
+    name: 'advertised models form maker sections with copyable call names, price and request linkage, and details',
     options: { routes: [...modelSquareFixtures(), ...modelSquareLedgerFixtures()] },
     run: modelSquare,
   },
   {
     id: 'mobile-console',
-    name: 'every console route fits phones and the shared tools follow native Back',
+    name: 'every console route fits phones and the shared tools are reachable',
     options: {
       viewport: { width: 390, height: 844 },
       hasTouch: true,

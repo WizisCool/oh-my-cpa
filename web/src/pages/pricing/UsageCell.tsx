@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
-import { Tooltip } from 'antd';
+
 import { useT } from '../../i18n';
 import { formatTokensFull } from '../../types/tokenDisplay';
 import type { PricingUsage } from '../../types/pricing';
 import { formatUsd } from '../../types/pricingDisplay';
 import styles from './PricingPage.module.css';
+import { Tooltip } from '../../components/common/Tooltip';
 
 /** The request-records dimension a row's traffic was grouped on: the model for a price, the provider for a channel. */
 export interface UsageCellScope {

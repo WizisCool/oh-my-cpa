@@ -584,7 +584,7 @@ export async function requestListInteractions({ base, page, check }) {
   const fastCells = modeCells.filter((cell) => cell.isFast);
   check('the mode column carries the effort and the fast-lane mark, and the model cell neither',
     fastCells.length > 0 && fastCells.length < modeCells.length &&
-    modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'high')) &&
+    modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'High')) &&
     fastCells.every((cell) => cell.fastName.includes('priority')) &&
     fastCells.some((cell) => /outbound|出站/.test(cell.fastName)) &&
     fastCells.some((cell) => /requested|请求/.test(cell.fastName)),
@@ -683,6 +683,8 @@ export async function requestListInteractions({ base, page, check }) {
   await page.mouse.move(0, 0);
 
   const priceAction = page.locator('[data-testid="request-set-price"]').first();
+  // A keyboard focus: the popup answers a visible focus, not the one a click leaves behind.
+  await page.keyboard.press('Shift');
   await priceAction.focus();
   await cellPopup.waitFor({ state: 'visible' });
   await until(async () => (await cellPopup.innerText()) === (await priceAction.getAttribute('aria-label')),

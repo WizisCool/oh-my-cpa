@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Button, Space } from 'antd';
 import { CheckOutlined, CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { ConfirmAction } from '../common/ConfirmAction';
 import './config.css';
 
@@ -43,7 +42,6 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
     setIsConfirmOpen(false);
     saveRef.current?.focus({ preventScroll: true });
   };
-  useOverlayHistory({ isOpen: isConfirmOpen && isDirty, onClose: closeConfirmation });
   React.useEffect(() => {
     if (!isDirty) setIsConfirmOpen(false);
   }, [isDirty]);
@@ -124,7 +122,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               onOpenChange={setIsConfirmOpen}
               onCancel={closeConfirmation}
               onConfirm={() => {
-                // Close before saving so a conflict dialog becomes the top history overlay.
+                // Close before saving so a conflict dialog does not layer under the confirmation.
                 setIsConfirmOpen(false);
                 onSave();
               }}

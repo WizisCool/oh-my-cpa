@@ -1,6 +1,5 @@
 import React from 'react';
-import { Button, Image, Tooltip } from 'antd';
-import { LabelTip } from '../../components/common/LabelTip';
+import { Button, Image } from 'antd';
 import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
@@ -26,6 +25,7 @@ import { ToolFallback } from './tools/registry';
 import { OpenUIText, OpenUISurface } from './tools/openui';
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import styles from './AgentPage.module.css';
+import { Tooltip } from '../../components/common/Tooltip';
 
 // User text is plain content, not a paragraph with browser-default vertical margins.
 const USER_PART_COMPONENTS = { Text: () => <MessagePartPrimitive.Text smooth={false} /> };
@@ -210,28 +210,28 @@ function TurnFooter({ turn }: { turn: Turn }) {
       <ActionBarPrimitive.Root className={workspace['foot-actions']}>
         {replaceableTurnID === turn.id && (
           <>
-            <LabelTip title={t('agent.turn.retry')}>
+            <Tooltip title={t('agent.turn.retry')}>
               <Button type="text" size="small" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
-            </LabelTip>
-            <LabelTip title={t('agent.turn.edit')}>
+            </Tooltip>
+            <Tooltip title={t('agent.turn.edit')}>
               <Button type="text" size="small" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
-            </LabelTip>
+            </Tooltip>
           </>
         )}
-        <LabelTip title={t('conversation.copy_answer')}>
+        <Tooltip title={t('conversation.copy_answer')}>
           <ActionBarPrimitive.Copy asChild>
             <Button type="text" size="small" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
               <span className={styles['copy-idle']}><CopyOutlined /></span>
               <span className={styles['copy-done']}><CheckOutlined /></span>
             </Button>
           </ActionBarPrimitive.Copy>
-        </LabelTip>
-        <LabelTip title={t('agent.export.answer')}>
+        </Tooltip>
+        <Tooltip title={t('agent.export.answer')}>
           <Button type="text" size="small" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
             disabled={isExporting || turn.status === 'running'}
             onClick={() => void readTurnImages([turn]).then(images => exportSnapshot(agentSnapshot({ id: '', revision: 0, model: '', client_key_fingerprint: '', omitted: 0, turns: [turn] }, images), 'html'))}
           />
-        </LabelTip>
+        </Tooltip>
       </ActionBarPrimitive.Root>
     </div>
   );

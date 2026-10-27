@@ -5,7 +5,6 @@ import { DownloadOutlined } from '../icons';
 import dayjs from '../../utils/time';
 import { api, apiErrorCode } from '../../api/client';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
@@ -52,7 +51,6 @@ export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose })
   useTimeZone();
   const t = useT();
   const isOpen = target !== null;
-  useOverlayHistory({ isOpen, onClose });
   // The panel keeps its title and body while it slides out.
   const shownRef = React.useRef(target);
   if (target) shownRef.current = target;

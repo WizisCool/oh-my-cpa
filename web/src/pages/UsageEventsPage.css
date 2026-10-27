@@ -277,11 +277,7 @@
 }
 /* ── touch: one scroller, nothing to bounce ─────────────────────────────────
    On a phone, or wherever a finger is the main pointer, the page is exactly the content area
-   and the list is its only scroller. The list scrolls a finger itself, and at either end it
-   hands the drag on to the browser, which used to scroll the page around it and then bounce it
-   (or reload it, pulling down at the top). The page cannot scroll now, and over the list the
-   browser keeps only sideways panning and zoom. A header taller than the room left for the list
-   does not make the page scroll either: the first drag up folds it away (§7). */
+   and the list is its only scroller. */
 @media (max-width: 640px), (pointer: coarse) {
   .request-events-page,
   .request-stream,
@@ -289,7 +285,17 @@
   .request-list-host {
     min-height: 0;
   }
-  .request-list-host {
-    touch-action: pan-x pinch-zoom;
-  }
+}
+/* Where a finger can scroll, the browser scrolls the list itself (ADR 0109). A drag that reaches
+   either end stays with the list: handed on, it used to scroll the page around the list and bounce
+   it, or reload it when pulled down at the top. The list keeps the platform's own end bounce, which
+   is part of a native scroller's feel; `contain` rather than `none` is what leaves it that. Rows away from the view keep their place in the scroll
+   height without being laid out or painted, which is what lets a page of 500 records scroll as an
+   ordinary element; `auto` keeps a row's measured height once it has been drawn. */
+.request-list.is-native-scroll {
+  overscroll-behavior: contain;
+}
+.request-list.is-native-scroll .ant-listy-item {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 96px;
 }

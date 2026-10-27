@@ -37,7 +37,6 @@ import {
   summarizeAuthFileStatusMessage,
 } from './authFileLogic';
 import styles from './AuthFileDetailDrawer.module.css';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { copyText } from '../../utils/clipboard';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
@@ -69,6 +68,7 @@ import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
 import { Tag } from '../common/Tag';
 import { FactList } from '../common/FactList';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 const { Text } = Typography;
 
@@ -352,10 +352,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     }
   }, [isDirty, hasExternalDraft, modal, onClose, saveMutation.isPending, t]);
 
-  // Back goes through the same guard the drawer's own X does, so an edit in progress is never
-  // discarded by a physical key that the reader may have pressed by accident.
-  useOverlayHistory({ isOpen: open, onClose: handleAttemptClose });
-
   const safeFieldsQuery = useQuery({
     queryKey: ['auth-file-safe-fields', file?.name, file?.auth_index],
     queryFn: () => api.getManagementAuthFileSafeFields(file!.name, file!.auth_index),
@@ -566,7 +562,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     >
       {file ? (
         <div className={styles['drawer-content']}>
-          <Tabs
+          <Tabs more={TAB_OVERFLOW}
             activeKey={activeSection}
             onChange={(key) => setActiveSection(key as typeof activeSection)}
             items={[

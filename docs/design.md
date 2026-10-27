@@ -1076,8 +1076,7 @@ The analytical page at `/insights` puts one window on one quiet page of panels:
   one step of the platform's Back (see "Back undoes a view change"). Dragging across the trend makes
   the dragged buckets the next window.
 - **A key's detail is one click from anywhere it is named.** A row of the key table, the trailing
-  chevron of a key ranking row and a key's filter chip all open its detail drawer, which Back
-  dismisses.
+  chevron of a key ranking row and a key's filter chip all open its detail drawer.
 - **Legend entries are bounded.** Each trend legend entry sits in its own `border-soft` hairline box,
   so a swatch can only belong to the name inside it.
 - **Composition is a bar per key.** "What each key used" is a horizontal stacked bar per key, its
@@ -1241,7 +1240,7 @@ declare its own `max-width`: a rule of equal specificity wins by source order
 content area — measured at 1684px on a 1920px viewport, i.e. 244px wider than
 every other surface. Where a page genuinely needs a different column it states
 the reason next to the rule. Two surfaces do: the configuration workbench (a 920px
-reading column between a nav track and a balancing gutter) and the conversation workspaces
+reading column between the section rail and the card nav) and the conversation workspaces
 (a frame anchored to the viewport around a 760px reading column, §5).
 - **Lists do not change the column.** A list is its own frame and spans the
 content column; its width follows from the column, not from the viewport or from
@@ -1369,7 +1368,8 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - The project GitHub link uses the existing local Octicons mark and opens `https://github.com/WizisCool/oh-my-cpa` in a new tab with `noopener noreferrer`; it shows no tooltip — the mark names it and the unfolding count answers the hover — while its accessible name follows the reading language, and it remains available in the demonstration. At rest the link is the mark alone; pointed at or focused, it unfolds the project's star count before the mark over `base` — a star glyph and the count, exact below a thousand and truncated thousands with two decimals above (`1.23k`) — once the server has read one, and under reduced motion it still waits for the pointer or focus but appears at once, without the transition. It is the first control of a right-aligned row and the label leads, so unfolding widens it away from the others and the mark stays under the pointer; a device with no hover shows the count throughout. A hairline separates the link from the console's own actions. All five actions are one component, `web/src/components/common/HeaderAction.tsx`: 32px high, borderless at rest, the same hover and the same label treatment for the star count and the language code. **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
    - On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. Connection status and version are the System Information page's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 8. **Form Workbench & Setting Group Panels**
-   - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
+   - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + a 216px card nav, establishing an anchored layout that keeps forms focused and legible.
+   - **Card Nav**: From a 1600px viewport the settings column carries a second rail in its own grid, the navigation's second level: one row per card of the current section (or per matched card under a search), its first row level with the section rail's first row and the section heading, and stuck at the same line as the section rail once scrolled, so the three tops stay on one line. It mirrors the section rail's rows and ink washes; a row states its card - the number of settings it holds (matches under a search) and a warn dot when one is unsaved, a dot the section rail repeats on the section - instead of a position on the page. The current card is the one under a judging line that travels with the scroll, 30% down the visible band at the top of the page and its bottom edge at the end, so a tall card hands over once the next holds most of the view and the short cards at the end each get a turn; its wash slides between rows. The rows whose cards are on screen read in `--fg-2`, the rest in `--muted`: awareness of the view is carried by ink, because a drawn gauge beside the page's own scrollbar reads as a second scrollbar. Pointing at a row gives its card the stronger hairline. A section of one card shows no card nav, and below 1600px the rail is hidden.
    - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (one 1px hairline enclosure on the panel's `--bg` ground with the `lg` corner, rows parted by a dashed rule inset 20px from the edge) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
      1. **Form Grid**: Labels and descriptions on top, controls below; related short fields (such as Host and Port, retry counts and delays) sit side by side; short number inputs are bounded to 120px and picker selects to 280px, while a list field's tag editor fills its column and grows as its tags wrap, since it has no dropdown to open and no longest option to size against;
      2. **Settings List**: Toggles and flags use in-card row lists with "title and description on left + Switch on right", bounded by the panel container;
@@ -1581,6 +1581,15 @@ supplies content and layout width; what is inside the frame is not restyled per 
   selection does not send it out blank; its body holds a stable scrollbar gutter, so a section
   unfolding past the panel's height does not narrow every card mid-fold. The phone navigation sheet
   and the time-range sheet are not side panels and keep antd's `Drawer`.
+- **`Tooltip` - a hint the reader asked for.** Ant Design's popup, opened only on intent: a mouse
+  or pen that moved onto the trigger and rested there 450ms (at once within half a second of the
+  last hint closing, so a row of tools reads quickly), never a pointer a layout moved a control
+  under. Pressing the trigger puts the hint away until the pointer leaves, and it stays down while
+  the trigger has a menu or panel open. A tap opens it only on a trigger that is not a control -
+  text, a mark, an info glyph marked `isTapReadable` - and a touch elsewhere or a scroll closes it;
+  a tap on a control only operates it, which is also what spares iOS's second tap. A keyboard
+  focus opens it when the focus is visible, so the focus a click or a closing drawer leaves behind
+  does not. The request list's delegated cell popup follows the same rules (`tooltipIntent.ts`).
 - **`SearchInput` - a filter-as-you-type field.** The search glyph in `--muted`, the text, and a
   clear control. `label` is its accessible name and its placeholder unless a longer placeholder is
   given; `onChange` receives the text. Width is the caller's.
@@ -1723,7 +1732,7 @@ zone and not in the browser's.
 button has neither the width for a calendar nor a thumb's reach. The sheet shows one level at
 a time - the presets, or the custom range under a row that leads back to them - draws days
 at 40px and preset rows at 44px, puts Cancel and Apply at full width along the bottom edge,
-and is a Drawer-class overlay: the platform's Back dismisses it (§8).
+and opens as a Drawer-class overlay.
 
 Three kinds of window, and only the first two move:
 
@@ -1831,17 +1840,17 @@ changed - during a Playground run, or while an Agent turn waits on a decision - 
 and caret to `--meta` together, with a maker's mark at half opacity.
 
 **An action's name is a tooltip only for a pointer that can rest.** Icon actions in the
-conversation workspaces name themselves through `LabelTip`, which draws nothing where the primary
-pointer cannot hover: on a touch screen the browser keeps a hover at the last place touched, so a
-label opened over whatever the layout moved there - Send, once a tapped example raised the
-keyboard. A tooltip that says more than the control's name (a measurement's meaning) stays an
-ordinary Tooltip, since a tap is how a touch reader asks for it.
+conversation workspaces name themselves through the shared `Tooltip`, which a tap on a control
+never opens: on a touch screen the browser keeps a hover at the last place touched, so a label
+opened over whatever the layout moved there - Send, once a tapped example raised the keyboard. A
+tooltip on a measurement or a mark that is not a control opens on a tap, since a tap is how a
+touch reader asks for it.
 
 **The panel is resizable and it is a Drawer on a phone.** The separator is a keyboard-operable ARIA
 window splitter (arrows step it, Home and End jump to its bounds, a double click restores the
 default), and a drag writes the width to the panel directly and commits it once on release, so
 dragging does not re-render the transcript. The panel never takes more than half the viewport.
-Below 900px it becomes a Drawer joined to the platform Back gesture through `useOverlayHistory`. No
+Below 900px it becomes a Drawer. No
 breakpoint is added.
 
 **The transcript follows the newest message.** The thread viewport (assistant-ui's) keeps a growing
@@ -2038,7 +2047,7 @@ palette, `--border` grid rules, `--muted` tick and legend text formatted the way
 formats tokens, money, durations and shares; a table with `--muted` 12px heads that sort on click,
 `--border-soft` row rules and right-aligned tabular figures. Full screen fixes the same figure over
 the viewport on `--surface` without a border, the frame filling what the title bar leaves; Escape,
-the same button or the platform's Back gesture returns it, and a dashed hairline box holds its
+or the same button returns it, and a dashed hairline box holds its
 place in the answer meanwhile. The saved image is the frame's own document at 2x. While a display call's
 arguments arrive it is a draft figure in that position; a refused call remains an ordinary call row.
 
@@ -2638,7 +2647,7 @@ and leaves the *stream* alone (`web/src/utils/scrollSmoothing.ts`, ADR 0046):
 | --- | --- |
 | Wheel notch (line/page mode, or a pixel-mode notch off Apple platforms) | Glides over `scroll` to exactly where it would have jumped |
 | Arrow keys, Page Up/Down, Space, Home, End outside an editable control or widget | Glide over `scroll` |
-| Trackpad, Apple-platform pixel wheels, touch | Never glided. A finger on the request list moves it directly (§8) |
+| Trackpad, Apple-platform pixel wheels, touch | Never glided. Under a finger the request list is a native scroller (§8) |
 | Ctrl/⌘, Shift or Alt wheel; horizontal wheel | Native (zoom, sideways scroll) |
 | Programmatic scroll (a correction, `scrollIntoView`) | Native; it also stops any glide on that scroller |
 
@@ -2784,17 +2793,20 @@ Below the container threshold a record is three lines of two facts each (ADR 009
 | Line | Leading | Trailing | Tone |
 | --- | --- | --- | --- |
 | 1 | model, the substituted or routed model beside it, then the reasoning effort badge and mode marks | cost | primary: `--text-base`, weight 600 |
-| 2 | provider and account | total tokens | `--fg-2`, weight 400 |
-| 3 | time, the control that copies the request id, verdict | latency | `--muted`, `--text-sm` |
+| 2 | provider and account | cache rate, in the table's pill | `--fg-2`, weight 400 |
+| 3 | time, the control that copies the request id, verdict | TPS as the table computes it, or the latency when the record has none | `--muted`, `--text-sm` |
 
 A record in a list is there to be recognised; the detail drawer, one tap away, is where it is
-read. First-token time, the token breakdown, the cache rate, speed, the credential kind, the
-caller's key and the client label are therefore not drawn in a stacked record. A phone-wide
+read. First-token time, the token counts, the credential kind, the caller's key and the client
+label are therefore not drawn in a stacked record. The cache rate and the speed are: on one
+record the token total says little, while the cache rate explains its cost and the speed its
+wait. A phone-wide
 record that repeats every table column in small type cannot be scanned, however few pixels it
 takes.
 
 It is the table row's own DOM. The cells that hold two facts (time and id, total and breakdown,
-latency and first token) dissolve with `display: contents`, and the line breaks are those cells'
+latency and first token) dissolve with `display: contents`, the speed and latency share the third
+line's trailing slot by whichever the record states, and the line breaks are those cells'
 pseudo-elements. Each line has one cell with a zero flex basis that gives way first, so a line is
 cut short rather than wrapped; the record is the same height at 320px and at 390px. The checkbox
 is placed in the record's left padding, so the three lines share one left edge and the model and
@@ -2802,10 +2814,11 @@ provider marks form one column.
 
 **Hue is for the exception.** In the table each mark's tint has a column to itself. Folded into
 a few lines, a success fill, an effort hue and a credential kind land in one glance and none
-reads as a signal. A stacked record is therefore drawn in the text colours, and three things
-keep a hue: the verdict's pip, a failed verdict in full, and the reasoning effort badge, which
+reads as a signal. A stacked record is therefore drawn in the text colours, and four things
+keep a hue: the verdict's pip, a failed verdict in full, the reasoning effort badge, which
 is drawn exactly as the table draws it because it is the one mark that explains a record's cost
-and latency at a glance. The badge is never cut short: on its line the model's name gives way.
+and latency at a glance, and the cache rate's pill, whose hue is what lets a bare percentage
+read as the cache rate. The badge is never cut short: on its line the model's name gives way.
 The table above the threshold is unchanged.
 
 ### A page never moves sideways
@@ -2839,24 +2852,19 @@ is therefore the containing block for anything positioned inside it: row-level p
 belong to the list (the shared tooltip) or to a portal, never to an absolutely
 positioned child that must escape the row.
 
-The list is virtualized, so the browser cannot scroll it for a finger, and the library's own touch
-emulation ran up to four times ahead of the finger: it restarted a fixed-interval coast after every
-move, and that coast kept firing while the finger was still down. The console moves the list itself
-(`web/src/components/usage/requestListTouch.ts`, ADR 0048):
+Where a finger can scroll (`any-pointer: coarse`) the list is not virtualized: the browser
+scrolls it, with the platform's own tracking and momentum (ADR 0109). Script moving a virtualized
+list under the finger trailed it and dropped frames, because every move waited on a render.
 
-- **The list moves exactly as far as the finger**, drawn on the frame the finger moved.
-- **A flick coasts** at the speed the finger left with, slowing at iOS's normal rate, and a finger
-  that rested before lifting does not coast.
-- **A tap on a coasting list only stops it**, as on any native scroller; it does not open the row
-  under it. A tap elsewhere, on the pagination or the back-to-top pill, stops the coast and still
-  acts.
-- **The header folds and unfolds with the wheel's gestures.** The first drag up folds it away and
-  leaves row one in place, as the first notch does. A deliberate pull down past the top of the list
-  (48px) unfolds it, as the top bounce does; arriving at the top does not. Folding is what makes room
-  on a phone, where the unfolded filters take most of the screen; the pull is the only way back to
-  them that a finger has, since the back-to-top pill is not shown at the top. A page that is loading
-  or found nothing has no list to pull, so a drag there never folds the header, and a header folded
-  before the list went away unfolds on a 48px pull down anywhere on the page.
+- **Rows away from the view cost nothing.** Each row is `content-visibility: auto`, so a page of
+  500 records keeps its full scroll height while only the rows near the view are laid out and
+  painted; a row keeps its measured height once drawn.
+- **Either end stops the drag.** `overscroll-behavior: contain` keeps it from scrolling, bouncing
+  or reloading the page around the list.
+- **A finger never folds the header.** The first drag scrolls, as every drag does; folding moved
+  nothing and then resized the list under the finger. The header's full-screen toggle folds and
+  unfolds it. With a mouse alone the list stays virtualized, and the wheel folds the header on its
+  first notch down and unfolds it on a bounce at the top.
 - **The fold slides, and the list answers it once.** The header folds over `--motion-base` from
   its own height, and the list fills the height that frees, so every frame of the fold resizes the
   list's box. What made that drop frames - a wheel rocking across the top of the list stuttered at
@@ -2878,7 +2886,7 @@ it in, and a second navigation would be a second place for the grouping to drift
 
 **The sheet is bounded in `vw` as well as `px`** (`min(320px, 86vw)`). At a 320px viewport a fixed
 320px sheet leaves no page visible behind the mask, and the reader loses the sense that this is a
-layer over where they were — which is also what tells them Back will put it away.
+layer over where they were.
 
 A bottom tab bar was considered and rejected: it costs 56px of vertical space plus the home-indicator
 inset on every screen, in a console whose subject is dense tables, and it cannot express four groups
@@ -2894,6 +2902,13 @@ arrow is a row with no visible affordance at all. Reveal-on-hover rules therefor
 
 A tooltip is not an affordance either: it may *name* a control, never be the only way to
 reach one. Where a control's name is short enough to matter on a phone, the name is drawn.
+
+**Nothing opens on the hover a tap produces.** A touch browser reports a tap as a hover at the
+finger first, and iOS drops the tap's click when that hover changes what is on screen, so the
+control needs a second tap. Menus, popovers and a tab strip's overflow menu therefore open on a
+press (`TAB_OVERFLOW` for every `Tabs`, since `ConfigProvider` passes only the menu's icon), the
+shared `Tooltip` never answers a tap on a control, and hover previews such as the calendar's range
+listen to `pointerenter` from a pointer that is not a finger.
 
 ### The tap floor is a hit area, not a drawn size
 
@@ -2954,7 +2969,7 @@ because double-tap and pinch zoom are how a reader enlarges a dense table.
 At `640px` and below the shell header is one 48px row (`--app-header-height`; 52px above):
 navigation, the ellipsised current page name, refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
 repository and sign-out; demo mode keeps its marker and write restrictions. Menu rows are at least
-44px high. Back or Escape dismisses the menu and restores its trigger focus; an action opening a
+44px high. Escape dismisses the menu and restores its trigger focus; an action opening a
 modal gives focus to that modal. The `900px` navigation-sheet breakpoint is unchanged.
 
 `PageHeader.mobileActions` explicitly chooses primary phone actions and an `ActionMenu` for secondary
@@ -3006,8 +3021,8 @@ the default follows the current phone breakpoint.
 
 Focused editing fixes the **same source container** inside the usable viewport rather than mounting
 another editor. Draft, undo stack, selection and scroll survive entry and exit. Background application
-siblings become inert; body-level dialog portals remain usable. Back exits focus after closing any
-inner menu, confirmation or conflict dialog. The entry button regains focus after exit.
+siblings become inert; body-level dialog portals remain usable. The Return action exits focus and
+restores focus to the entry button.
 `useVisibleViewport` follows keyboard resize and caret panning through `visualViewport` resize/scroll,
 with layout viewport fallback and pinch-zoom left to the browser. The editor and dirty actions fit
 inside those bounds; their observers/listeners are effect-owned and cleaned under StrictMode.
@@ -3033,43 +3048,11 @@ remembers the record it showed, so what leaves is the record and not an emptied 
 - `touch-action: manipulation` is applied to controls, where it removes the double-tap delay
   the reader feels as lag. It is deliberately *not* applied to the page.
 
-### Back dismisses the overlay, and it is the platform's own Back
+### Browser navigation
 
-The console does not implement a swipe gesture, and the reason is not effort. iOS Safari and
-Android predictive back already own the screen edges: a JavaScript edge-swipe either loses the
-gesture to the browser or fights it, and it can only ever approximately follow the finger. The
-platform's Back is native, so joining it means the hardware button, the browser's back arrow and
-the edge gesture all dismiss an overlay at native frame rate with nothing to reconcile.
-
-**The contract.** Any Drawer- or Modal-class overlay is one history entry. Opening it pushes an
-entry that keeps the same URL and the router's own bookkeeping, marked with the overlay's id;
-the platform Back pops that entry, and the pop dismisses the topmost overlay. The route never
-changes, so Back on an open overlay cannot navigate. `useOverlayHistory`
-(`web/src/hooks/useOverlayHistory.ts`) is the whole wiring, and its policy lives in
-`web/src/hooks/overlayHistory.ts`:
-
-```tsx
-useOverlayHistory({ isOpen, onClose });
-```
-
-**The boundary is Drawer and Modal.** Popovers, dropdowns, selects and tooltips are not
-overlays: they are opened by a click that also says what they are for, they close on the same
-gesture that opened them, and giving each one a history entry would make Back traverse the
-toolbar instead of the page.
-
-Four consequences are designed for rather than discovered, and each is pinned by
-`scripts/test-overlay-history.ts` and the `overlay-back` browser scenario:
-
-| Situation | Behaviour | Why |
-| --- | --- | --- |
-| A router navigation happened after the overlay opened | The sentinel is abandoned, not consumed | History entries cannot be removed, so consuming it would traverse the entry that was just written - the filter drawer's Apply closing over its own filters |
-| The overlay is closed by its own UI | Its sentinel is consumed, so no dead entry is left | Otherwise the reader's next Back spends itself on an entry that holds nothing |
-| The overlay's page unmounts while it is open | The sentinel is abandoned in place | A dead entry costs one Back press at most and never a wrong navigation |
-| The overlay refuses to close (an unsaved-edit confirmation) | Its sentinel is re-armed | Without this the next Back would leave the page out from under an open editor |
-| The reader goes *forward* after a Back | Nothing reopens | A forward press is spent; reopening overlays on it would resurrect a dialog the reader dismissed |
-
-`prefers-reduced-motion` is not involved: the platform owns the animation, which is one more
-reason this is the right mechanism rather than a JS gesture.
+Drawers and dialogs are closed with their own controls. Browser Back follows page and view
+history; an open overlay does not add a history entry. Unsaved edits should be saved before
+leaving the page.
 
 ### Back undoes a view change
 
@@ -3298,12 +3281,11 @@ framed by a 1px `--border`, `--surface` and the 6px radius once the mark is 20px
 smaller marks are the bare glyph in `--muted`. They read as chrome beside the artwork, never
 as another brand. The navigation entry uses the boxes glyph, distinct from the dashboard's grid.
 
-The details are a Back-aware, viewport-bounded Drawer titled with the client name, with copy
+The details are a viewport-bounded Drawer titled with the client name, with copy
 beside the title. It opens with Cost & Usage: three tiles (input price, output price, requests
 in 24 hours - the one window every usage figure on this page uses), then the price action - primary "Set price" for an unpriced
 model, default "Edit price" otherwise - and a link to the request list narrowed to this call
-name over the same 24 hours. The price editor stacks above the Drawer and one Back closes it
-alone. Below, the Drawer names the connections serving the model (the upstream name where it
+name over the same 24 hours. The price editor stacks above the Drawer and closes independently. Below, the Drawer names the connections serving the model (the upstream name where it
 differs), then gives each distinct model its own models.dev profile (connections that reach the same
 source record under different upstream names share one): three limit
 tiles (context, output, input), a capability group (modalities, reasoning, tools, structured
@@ -3314,14 +3296,14 @@ license). A supported capability carries a `--success` check; an unsupported one
 omitted field are drawn in `--meta`, so what is known stands out and what is unknown stays
 explicitly stated. Weight links, source links and the models.dev, OpenRouter and pi.dev
 lookups are bordered link buttons that open a new tab with opener/referrer protection. The
-footer steps to the previous or next model of the filtered list without closing the Drawer;
-one Back still dismisses it. The source note and snapshot date close the Drawer. Local icons
+footer steps to the previous or next model of the filtered list without closing the Drawer.
+The source note and snapshot date close the Drawer. Local icons
 and the existing palette, typography, spacing and motion tokens are reused without new global
 design tokens.
 
 ### OAuth model rules
 
-The OAuth workspace's Model rules action opens a viewport-bounded, Back-aware
+The OAuth workspace's Model rules action opens a viewport-bounded
 Drawer. The close action sits at the trailing header edge, keeping it reachable
 beside centered save acknowledgements; the credential detail Drawer uses the same
 close placement. Its provider picker uses the same display names and local brand marks as
@@ -3332,8 +3314,7 @@ provider identity. Unknown providers keep a neutral mark and a readable name.
 
 Two full-width section tabs show aliases and exclusions with their draft counts
 and an unsaved indicator. Each section saves or reverts independently, and provider
-selection remains disabled while either has edits. Closing or native Back asks
-before discarding drafts. Aliases use the provider catalog as source suggestions,
+selection remains disabled while either has edits. Closing asks before discarding drafts. Aliases use the provider catalog as source suggestions,
 keep manual entry and default new mappings to retaining the original model (`fork`).
 Exclusions use open checkbox rows, searchable catalog bulk actions and a separate
 list for typed IDs and wildcard rules. A wildcard-covered row identifies its rule
@@ -3384,8 +3365,7 @@ unavailable figures keep a visible fallback note rather than silently disappeari
 ### Credential window warmup
 
 The OAuth toolbar opens a viewport-bounded Warmup settings Drawer with Codex and Claude
-section tabs. A draft prevents provider switching; close and native Back require a
-discard decision. Each provider edits a model, reset mode and one optional daily start,
+section tabs. A draft prevents provider switching; closing requires a discard decision. Each provider edits a model, reset mode and one optional daily start,
 showing the effective OMC timezone and daily-priority rule. Defaults are off and `06:00`.
 Saving confirms the effect on all current and future inheriting credentials.
 

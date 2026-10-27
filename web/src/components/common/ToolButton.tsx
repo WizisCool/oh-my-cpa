@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Tooltip, type ButtonProps } from 'antd';
+import { Button, type ButtonProps } from 'antd';
+import { Tooltip } from './Tooltip';
 
 /**
  * True inside an action menu's panel. A menu lists its actions as rows, where a glyph alone names

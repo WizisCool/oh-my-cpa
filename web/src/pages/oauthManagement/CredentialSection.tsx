@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Checkbox, Dropdown, Tooltip } from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown } from 'antd';
 import { Switch } from '../../components/common/Switch';
 import {
   AppstoreOutlined,
@@ -49,6 +49,7 @@ import {
 } from './credentialSections';
 import { maskAccount, maskAccountIn } from '../../utils/maskAccount';
 import styles from './CredentialSection.module.css';
+import { Tooltip } from '../../components/common/Tooltip';
 
 export interface CredentialRowActions {
   isBusy: (record: OAuthWorkspaceRecord) => boolean;

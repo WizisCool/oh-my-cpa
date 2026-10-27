@@ -26,7 +26,6 @@ import { excludedModelRulesEqual, normalizeExcludedModelRules } from './oauthExc
 import { OAuthExcludedModelsPanel, type OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
 import { OAuthModelAliasPanel } from './OAuthModelAliasPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { LoadFailure, Notice, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { PageLoading } from '../common/PageLoading';
@@ -293,9 +292,6 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       onOk: onClose,
     });
   };
-
-  // Native Back must honor unsaved drafts and re-arm the overlay when close is declined.
-  useOverlayHistory({ isOpen: open, onClose: handleAttemptClose });
 
   const typedProvider = normalizeOAuthModelAliasProvider(providerSearch);
   const providerSelectOptions = useMemo(() => {

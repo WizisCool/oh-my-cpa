@@ -1,13 +1,12 @@
 import { prefixedKey } from '../../i18n/catalog';
 import React from 'react';
 
-import { Button, InputNumber, Modal, Table, Tooltip, Typography } from 'antd';
+import { Button, InputNumber, Modal, Table, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
 import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
@@ -19,6 +18,7 @@ import styles from './ConfigBackupsButton.module.css';
 import { Tag } from '../common/Tag';
 import { ToolButton } from '../common/ToolButton';
 import { ConfirmAction } from '../common/ConfirmAction';
+import { Tooltip } from '../common/Tooltip';
 
 const { Text } = Typography;
 
@@ -49,7 +49,6 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
   const [isOpen, setIsOpen] = React.useState(false);
   const [downloadingID, setDownloadingID] = React.useState<number | null>(null);
   const [retentionDraft, setRetentionDraft] = React.useState<number | null>(null);
-  useOverlayHistory({ isOpen, onClose: () => setIsOpen(false) });
 
   const backupsQuery = useQuery({
     queryKey: BACKUPS_QUERY_KEY,

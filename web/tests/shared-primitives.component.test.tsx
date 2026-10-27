@@ -166,7 +166,7 @@ describe('ConfirmAction', () => {
       </I18nProvider>,
     );
     const trigger = screen.getByRole('button', { name: 'Remove' });
-    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger, { pointerType: 'mouse' });
     await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe('Delete key'));
 
     fireEvent.click(trigger);

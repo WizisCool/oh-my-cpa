@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   CopyOutlined,
@@ -24,6 +24,7 @@ import { useToast } from '../feedback';
 import type { ApiKeyRecord } from './keyOverview';
 import styles from './ApiKeysList.module.css';
 import './keys.css';
+import { Tooltip } from '../common/Tooltip';
 
 export type { ApiKeyRecord } from './keyOverview';
 

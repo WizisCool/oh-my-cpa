@@ -1,5 +1,4 @@
 import React from 'react';
-import { flushSync } from 'react-dom';
 
 import type { ListyRef } from 'antd';
 
@@ -7,8 +6,23 @@ import type { UsageEvent } from '../../types/usageEvents';
 import { consumeWheel } from '../../utils/scrollSmoothing';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../../utils/smoothScroll';
 import { pendingArrivalCount } from './pollingPolicy';
-import { installRequestListTouch, type RequestListTouch } from './requestListTouch';
 import { createViewFlag } from './viewFlag';
+
+/**
+ * A device a finger can scroll. There the list is an ordinary overflowing element the browser
+ * scrolls itself, with the platform's own tracking and momentum (ADR 0109): a virtualized list
+ * clips its overflow, so every finger move had to be redrawn by script, which trailed the finger
+ * and dropped frames however it was tuned.
+ */
+const TOUCH_SCROLL_QUERY = '(any-pointer: coarse)';
+
+function subscribeTouchScroll(onChange: () => void) {
+  const query = window.matchMedia(TOUCH_SCROLL_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+const readTouchScroll = () => window.matchMedia(TOUCH_SCROLL_QUERY).matches;
 
 /**
  * Distance from the top at which the list counts as "following the live edge".
@@ -80,8 +94,12 @@ export function useRequestListScroll({
   const lastScrollTopRef = React.useRef(0);
   /** The in-flight return-to-top animation, so a second gesture replaces it. */
   const scrollAnimationRef = React.useRef<ScrollAnimationHandle | null>(null);
-  /** The list under a finger, so a correction or a gesture can stop its coast. */
-  const touchRef = React.useRef<RequestListTouch | null>(null);
+  /**
+   * The browser scrolls the list natively. The header then never folds on its own: a fold resizes
+   * the list under a moving finger, and the first drag up spent on folding moved nothing, which is
+   * what read as the list sticking to the finger. The fold stays one tap away on its toggle.
+   */
+  const isNativeScroll = React.useSyncExternalStore(subscribeTouchScroll, readTouchScroll, () => false);
   const isNavigatingPageRef = React.useRef(false);
   const justCollapsedFromTopRef = React.useRef(false);
   const pageNavigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,9 +189,9 @@ export function useRequestListScroll({
         return;
       }
       // Scrolling down collapses header into full-screen mode
-      if (scrollTop > 50) collapse.set(true);
+      if (scrollTop > 50 && !isNativeScroll) collapse.set(true);
     },
-    [collapse, endReturnToTop, scrolledDown],
+    [collapse, endReturnToTop, scrolledDown, isNativeScroll],
   );
 
   // Wheel handling:
@@ -217,7 +235,6 @@ export function useRequestListScroll({
    * cannot be dragged back by an animation that outlived its click.
    */
   const scrollListToTop = React.useCallback(() => {
-    touchRef.current?.stopCoast();
     scrollAnimationRef.current?.cancel();
     scrollAnimationRef.current = null;
     listRef.current?.scrollTo({ top: 0 });
@@ -237,7 +254,6 @@ export function useRequestListScroll({
     // but the reader clicked "apply", so do not depend on event timing.
     heldBoundaryIDRef.current = undefined;
     setHeldItems(null);
-    touchRef.current?.stopCoast();
     scrollAnimationRef.current?.cancel();
     scrollAnimationRef.current = animateScrollToTop(
       lastScrollTopRef.current,
@@ -254,39 +270,6 @@ export function useRequestListScroll({
     scrolledDown.set(false);
     collapse.set(false);
   }, [collapse, endReturnToTop, scrolledDown]);
-
-  // Touch: the list follows the finger and the header folds and unfolds with the
-  // same gestures as the wheel; see `requestListTouch.ts`. Without the pull a phone
-  // had no way back to the filters but the back-to-top button, which is not shown at
-  // the top.
-  React.useEffect(() => {
-    const page = pageRef.current;
-    if (!page) return undefined;
-    const touch = installRequestListTouch({
-      page,
-      findHolder: () => {
-        const inner = page.querySelector('.request-list-host [class*="-holder-inner"]');
-        return inner?.parentElement?.parentElement ?? null;
-      },
-      isInList: (target) => target instanceof Element && target.closest('.request-list-host') !== null,
-      // Synchronously, so the rows under the finger are drawn on the frame the finger moved.
-      scrollListTo: (top) => flushSync(() => listRef.current?.scrollTo({ top })),
-      isCollapsed: collapse.get,
-      setCollapsed: collapse.set,
-      isPaused: () => isNavigatingPageRef.current,
-      // A finger on the list during the animated return to the top takes it over.
-      onDriveStart: () => {
-        scrollAnimationRef.current?.cancel();
-        scrollAnimationRef.current = null;
-        endReturnToTop();
-      },
-    });
-    touchRef.current = touch;
-    return () => {
-      touch.dispose();
-      touchRef.current = null;
-    };
-  }, [collapse, endReturnToTop]);
 
   const handleToggleExpand = React.useCallback(() => {
     collapse.set((isCollapsed) => !isCollapsed);
@@ -349,6 +332,7 @@ export function useRequestListScroll({
   return {
     pageRef,
     listRef,
+    isNativeScroll,
     collapse,
     scrolledDown,
     heldItems,

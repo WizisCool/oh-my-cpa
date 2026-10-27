@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -14,6 +14,7 @@ import { collectPluginPages, findPluginPage, pluginPageFrameURL } from '../compo
 import styles from '../components/plugins/PluginPageHost.module.css';
 import shellURL from '../components/plugins/pluginFrameShell.html?url&no-inline';
 import { EmptyState } from '../components/common/EmptyState';
+import { Tooltip } from '../components/common/Tooltip';
 
 /**
  * One page a plugin registered, shown inside the console.

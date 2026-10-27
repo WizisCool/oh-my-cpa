@@ -5,7 +5,6 @@ import { Button } from 'antd';
 import dayjs from '../../utils/time';
 import { DownOutlined, FilterOutlined, UpOutlined } from '../icons';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import {
   categoryOf,
   formatDetailValue,
@@ -45,7 +44,6 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
   useTimeZone();
   const t = useT();
   const isOpen = event !== undefined;
-  useOverlayHistory({ isOpen, onClose });
 
   // `[` and `]` step through the loaded trail, as they do in the request drawer.
   React.useEffect(() => {

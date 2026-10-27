@@ -1,9 +1,10 @@
-import { Tooltip } from 'antd';
+
 import { useI18n } from '../../i18n';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { CONTEXT_DANGER_SHARE, CONTEXT_WARNING_SHARE, contextShare } from './contextShare';
 import styles from './Workspace.module.css';
+import { Tooltip } from '../common/Tooltip';
 
 export interface ContextReadoutProps {
   /** The input the model last read for this conversation. */

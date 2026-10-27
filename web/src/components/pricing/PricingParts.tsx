@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Input, InputNumber, Segmented, Select, TimePicker, Tooltip } from 'antd';
+import { Button, Checkbox, Input, InputNumber, Segmented, Select, TimePicker } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
@@ -42,6 +42,7 @@ import styles from './Pricing.module.css';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { Pager } from '../common/Pager';
+import { Tooltip } from '../common/Tooltip';
 
 /** The words for one tier's condition, which every surface that names a tier shares. */
 export function describeTier(t: TFunc, tier: PriceTier): string {

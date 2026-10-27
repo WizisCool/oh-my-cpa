@@ -557,7 +557,7 @@ export function updateWorkspaceSearch(
   return next;
 }
 
-/** A one-shot action is consumed before the panel arms its own history entry. */
+/** Consume a one-shot action so a later render cannot reopen the panel it requested. */
 export function consumeOneShotIntent(params: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(params);
   next.delete('action');

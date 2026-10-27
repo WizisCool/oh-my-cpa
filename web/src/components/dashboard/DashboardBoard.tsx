@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Segmented, Tooltip } from 'antd';
+import { Button, Segmented } from 'antd';
 import { EyeInvisibleOutlined, HolderOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../icons';
 import { useT } from '../../i18n';
 import {
@@ -17,6 +17,7 @@ import {
   type DropSide,
 } from '../../types/dashboardLayout';
 import styles from './DashboardBoard.module.css';
+import { Tooltip } from '../common/Tooltip';
 
 export interface DashboardBoardProps {
   layout: DashboardLayout;

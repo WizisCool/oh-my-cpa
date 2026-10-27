@@ -1,7 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { Button, Dropdown } from 'antd';
-import { LabelTip } from '../../components/common/LabelTip';
 import { ThemeProvider as OpenUIThemeProvider } from '@openuidev/react-ui';
 import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,7 +25,6 @@ import { ASK_QUESTION } from '../../agent/types';
 import type { Presentation, Trace } from '../../agent/types';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { usePreference } from '../../hooks/usePreference';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
@@ -62,6 +60,7 @@ import { RunRejectedError, useAgentRun } from './useAgentRun';
 import styles from './AgentPage.module.css';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { AppDrawer } from '../../components/common/AppDrawer';
+import { Tooltip } from '../../components/common/Tooltip';
 
 /**
  * Starting questions, not templates.
@@ -114,7 +113,6 @@ export function AgentPage() {
 
   const [drawerView, setDrawerView] = React.useState<DrawerView>();
   const closeDrawer = React.useCallback(() => setDrawerView(undefined), []);
-  useOverlayHistory({ isOpen: !!drawerView, onClose: closeDrawer });
   // The drawer keeps drawing what it showed while it slides shut.
   const shownViewRef = React.useRef<DrawerView>('directory');
   if (drawerView) shownViewRef.current = drawerView;
@@ -491,11 +489,11 @@ export function AgentPage() {
   const bar = (
     <div className={styles['shell-bar']}>
       {hasTurns && (
-        <LabelTip title={isPhone ? t('agent.new') : undefined}>
+        <Tooltip title={isPhone ? t('agent.new') : undefined}>
           <Button type="text" className={styles['shell-new']} data-testid="agent-new" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning} onClick={() => void reset()}>
             <span>{t('agent.new')}</span>
           </Button>
-        </LabelTip>
+        </Tooltip>
       )}
       {hasTurns && <span className={styles['shell-bar-rule']} aria-hidden="true" />}
       {hasTurns && (
@@ -516,17 +514,17 @@ export function AgentPage() {
             },
           }}
         >
-          <LabelTip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
+          <Tooltip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
             <Button type="text" aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={!canExport} />
-          </LabelTip>
+          </Tooltip>
         </Dropdown>
       )}
-      <LabelTip title={t('agent.directory')}>
+      <Tooltip title={t('agent.directory')}>
         <Button type="text" data-testid="agent-directory-open" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />
-      </LabelTip>
-      <LabelTip title={t('agent.connect')}>
+      </Tooltip>
+      <Tooltip title={t('agent.connect')}>
         <Button type="text" aria-label={t('agent.connect')} icon={<LinkOutlined />} onClick={() => setDrawerView('connect')} />
-      </LabelTip>
+      </Tooltip>
     </div>
   );
 
@@ -580,18 +578,18 @@ export function AgentPage() {
             {editedMessage.files.map(file => <React.Fragment key={file.name}> · <code>{file.name}</code></React.Fragment>)}
             {!!newestTurn?.images?.length && <> · {t('agent.turn.images', { n: newestTurn.images.length })}</>}
           </span>
-          <LabelTip title={t('agent.turn.edit_cancel')}>
+          <Tooltip title={t('agent.turn.edit_cancel')}>
             <Button type="text" size="small" aria-label={t('agent.turn.edit_cancel')} icon={<CloseOutlined />} onClick={() => { setEditTarget(''); runtime.thread.composer.setText(''); }} />
-          </LabelTip>
+          </Tooltip>
         </span>
       )}
       {present && (
         <span className={workspace['composer-chip']} data-tone="accent" data-testid="agent-present" data-present={present}>
           {PRESENTATIONS[present].icon}
           <span className={workspace['composer-chip-text']}>{t(PRESENTATIONS[present].label)}</span>
-          <LabelTip title={t('agent.present.remove')}>
+          <Tooltip title={t('agent.present.remove')}>
             <Button type="text" size="small" aria-label={t('agent.present.remove')} icon={<CloseOutlined />} onClick={() => setPresent(undefined)} />
-          </LabelTip>
+          </Tooltip>
         </span>
       )}
     </>

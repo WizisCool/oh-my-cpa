@@ -1,6 +1,7 @@
 import React from 'react';
-import { Button, Tooltip, type ButtonProps } from 'antd';
+import { Button, type ButtonProps } from 'antd';
 import styles from './HeaderAction.module.css';
+import { Tooltip } from './Tooltip';
 
 interface HeaderActionProps extends Omit<ButtonProps, 'type' | 'size' | 'shape' | 'title'> {
   /** The accessible name. */
