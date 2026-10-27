@@ -111,7 +111,7 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 	}
 	if key == repository.PreferenceDisplayCurrency {
 		var code string
-		if json.Unmarshal(body, &code) != nil || !exchangerate.IsCurrency(code) {
+		if json.Unmarshal(body, &code) != nil || !exchangerate.IsDisplayCurrency(code) {
 			writeError(writer, http.StatusBadRequest, "invalid_display_currency")
 			return
 		}

@@ -119,6 +119,11 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 			{Currency: "JPY", Rate: 150, Date: now.Format(time.DateOnly)},
 			{Currency: "MYR", Rate: 4.2, Date: now.Format(time.DateOnly)},
 			{Currency: "SGD", Rate: 1.3, Date: now.Format(time.DateOnly)},
+			{Currency: "GBP", Rate: .78, Date: now.Format(time.DateOnly)},
+			{Currency: "HKD", Rate: 7.8, Date: now.Format(time.DateOnly)},
+			{Currency: "KRW", Rate: 1380, Date: now.Format(time.DateOnly)},
+			{Currency: "AUD", Rate: 1.52, Date: now.Format(time.DateOnly)},
+			{Currency: "CAD", Rate: 1.37, Date: now.Format(time.DateOnly)},
 		}, UpdatedAtMS: now.UnixMilli(), AttemptedAtMS: now.UnixMilli(),
 	}); err != nil {
 		return SeedStats{}, err

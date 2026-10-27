@@ -1,50 +1,57 @@
+.control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .currency-select {
   width: min(300px, 100%);
   min-width: 0;
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.source {
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  margin-block: 12px;
-}
-
-.table-scroll {
-  max-height: 52vh;
-  overflow: auto;
-}
-
-.rate-table {
-  width: 100%;
-  border-collapse: collapse;
+.status {
+  display: block;
   font-variant-numeric: tabular-nums;
 }
 
-.rate-table th,
-.rate-table td {
-  padding: 10px 8px;
-  text-align: left;
-  font-weight: normal;
-  border-bottom: 1px solid var(--border);
+/* Wide enough for the longest English name on one line; narrower screens wrap the name instead. */
+.currency-popup {
+  width: 320px;
+  max-width: calc(100vw - 32px);
 }
 
-.rate-table td {
+.currency-option {
+  display: grid;
+  grid-template-columns: 18px 4ch minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+}
+
+.currency-code {
+  color: var(--fg);
+}
+
+.currency-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rate-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--elevated);
+.currency-popup .currency-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.currency-symbol {
   color: var(--fg-2);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 600px) {
-  .currency-select { width: 100%; }
+  .control { width: 100%; }
+  .currency-select { flex: 1; width: auto; }
 }

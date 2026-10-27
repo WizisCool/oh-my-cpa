@@ -1,5 +1,5 @@
 {
-  "why": "Map USD-base v2 rates to a sorted allowlisted snapshot while ignoring unrelated source fields.",
+  "why": "Map USD-base v2 rates to a sorted snapshot of the display currencies, dropping other quotes and unrelated source fields.",
   "body": [
     {
       "date": "2026-10-27",
@@ -34,6 +34,42 @@
         "test"
       ],
       "ignored": "unlisted"
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "GBP",
+      "rate": 0.78
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "HKD",
+      "rate": 7.8
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "KRW",
+      "rate": 1380
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "AUD",
+      "rate": 1.52
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "CAD",
+      "rate": 1.37
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "PLN",
+      "rate": 3.9
     }
   ]
 }

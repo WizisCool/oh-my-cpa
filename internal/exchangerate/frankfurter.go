@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
 	"sort"
 	"time"
 
@@ -29,6 +30,15 @@ type Snapshot struct {
 	UpdatedAtMS   int64
 	AttemptedAtMS int64
 	LastError     string
+}
+
+// DISPLAY_CURRENCIES is the closed set an operator can read amounts in. The
+// console carries the same list with a flag and a symbol for each, so a code
+// outside it would have neither; the cache keeps only these quotes.
+var DISPLAY_CURRENCIES = []string{"USD", "CNY", "EUR", "JPY", "GBP", "HKD", "SGD", "MYR", "KRW", "AUD", "CAD"}
+
+func IsDisplayCurrency(code string) bool {
+	return slices.Contains(DISPLAY_CURRENCIES, code)
 }
 
 func IsCurrency(code string) bool {
@@ -63,12 +73,14 @@ func DecodeFrankfurter(body []byte) ([]Rate, error) {
 			return nil, fmt.Errorf("invalid Frankfurter rate")
 		}
 		seen[row.Quote] = true
-		if row.Quote != "USD" {
+		if row.Quote != "USD" && IsDisplayCurrency(row.Quote) {
 			rates = append(rates, Rate{Currency: row.Quote, Rate: row.Rate, Date: row.Date})
 		}
 	}
-	for _, required := range []string{"CNY", "EUR", "JPY", "MYR"} {
-		if !seen[required] {
+	// A snapshot replaces the whole table, so one missing quote would leave an
+	// operator who chose that currency with no reading until the next refresh.
+	for _, required := range DISPLAY_CURRENCIES {
+		if required != "USD" && !seen[required] {
 			return nil, fmt.Errorf("Frankfurter snapshot is missing %s", required)
 		}
 	}

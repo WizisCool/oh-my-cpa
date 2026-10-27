@@ -23,7 +23,7 @@ import {
 import { contrastRatio } from '../theme/colorMath';
 import { THEME_MODE_PREFERENCES, resolveModePreference, type ThemeModePreference } from '../theme/themePreference';
 import { ThemeSwatch } from '../components/common/ThemeSwatch';
-import { LanguageFlag } from '../components/common/LanguageFlag';
+import { CountryFlag, LANGUAGE_FLAGS } from '../components/common/CountryFlag';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TpsCalculationMode } from '../types/tpsCalculation';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
@@ -253,7 +253,7 @@ export const OmcSettingsPage: React.FC = () => {
                 value: language.id,
                 label: (
                   <span className="language-menu-item">
-                    <LanguageFlag country={language.country} />
+                    <CountryFlag markup={LANGUAGE_FLAGS[language.country]} />
                     <span>{language.name}</span>
                   </span>
                 ),

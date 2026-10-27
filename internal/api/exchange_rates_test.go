@@ -35,14 +35,14 @@ func TestExchangeRatesAreCachedAllowlistedReads(t *testing.T) {
 	}
 	testkit.Golden(t, "testdata/golden/exchange-rates/empty.golden.json", actual)
 	for _, entry := range []struct{ body, code string }{
-		{`"usd"`, "invalid_display_currency"}, {`null`, "invalid_display_currency"}, {`"MYR"`, "display_currency_unavailable"},
+		{`"usd"`, "invalid_display_currency"}, {`null`, "invalid_display_currency"}, {`"PLN"`, "invalid_display_currency"}, {`"MYR"`, "display_currency_unavailable"},
 	} {
 		response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/preferences/omc_display_currency", entry.body)
 		if response.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), entry.code) {
 			t.Fatalf("currency validation: %d %s", response.StatusCode, payload)
 		}
 	}
-	snapshot := exchangerate.Snapshot{Rates: []exchangerate.Rate{{Currency: "CNY", Rate: 6.7, Date: "2026-10-27"}, {Currency: "MYR", Rate: 4.1, Date: "2026-10-26"}}, UpdatedAtMS: 1793091600000, AttemptedAtMS: 1793091600000}
+	snapshot := exchangerate.Snapshot{Rates: []exchangerate.Rate{{Currency: "CNY", Rate: 6.7, Date: "2026-10-27"}, {Currency: "MYR", Rate: 4.1, Date: "2026-10-26"}, {Currency: "PLN", Rate: 3.9, Date: "2026-10-26"}}, UpdatedAtMS: 1793091600000, AttemptedAtMS: 1793091600000}
 	if err := repo.SaveExchangeRates(context.Background(), snapshot); err != nil {
 		t.Fatal(err)
 	}

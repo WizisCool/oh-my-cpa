@@ -18,7 +18,7 @@ export interface ExchangeRates {
 }
 
 export interface DisplayCurrency {
-  code: string;
+  code: DisplayCurrencyCode;
   /** Missing rates have no reading; an unavailable conversion must never look like USD at 1:1. */
   rate: number | null;
 }
@@ -26,13 +26,32 @@ export interface DisplayCurrency {
 export const DISPLAY_CURRENCY_PREFERENCE = 'omc_display_currency';
 export const USD_CURRENCY: DisplayCurrency = { code: 'USD', rate: 1 };
 export const EXCHANGE_RATES_QUERY_KEY = ['exchange-rates'] as const;
-export const PRIMARY_CURRENCIES = ['USD', 'CNY', 'MYR', 'JPY', 'EUR', 'GBP', 'SGD', 'HKD', 'AUD', 'CAD', 'CHF', 'KRW', 'TWD', 'THB', 'IDR', 'INR', 'NZD'] as const;
+/** Mirrors `exchangerate.DISPLAY_CURRENCIES`: the server accepts and caches only these. */
+export const DISPLAY_CURRENCIES = ['USD', 'CNY', 'EUR', 'JPY', 'GBP', 'HKD', 'SGD', 'MYR', 'KRW', 'AUD', 'CAD'] as const;
+export type DisplayCurrencyCode = typeof DISPLAY_CURRENCIES[number];
 
-export function parseDisplayCurrency(raw: unknown): string | undefined {
-  return typeof raw === 'string' && /^[A-Z]{3}$/.test(raw) ? raw : undefined;
+/**
+ * Every amount reads as one mark flush against the number. Intl's English symbols mix bare codes
+ * (`MYR 1.00`) with regional marks (`CN¥`), so each currency carries the mark its own market
+ * prints, with the dollar family kept apart.
+ */
+const CURRENCY_SYMBOLS: Readonly<Record<DisplayCurrencyCode, string>> = {
+  USD: '$', CNY: '¥', EUR: '€', JPY: '¥', GBP: '£', HKD: 'HK$', SGD: 'S$', MYR: 'RM', KRW: '₩', AUD: 'A$', CAD: 'C$',
+};
+
+export function isDisplayCurrency(raw: unknown): raw is DisplayCurrencyCode {
+  return DISPLAY_CURRENCIES.includes(raw as DisplayCurrencyCode);
 }
 
-export function resolveDisplayCurrency(code: string, rates: readonly ExchangeRate[]): DisplayCurrency {
+export function parseDisplayCurrency(raw: unknown): DisplayCurrencyCode | undefined {
+  return isDisplayCurrency(raw) ? raw : undefined;
+}
+
+export function currencySymbol(code: DisplayCurrencyCode): string {
+  return CURRENCY_SYMBOLS[code];
+}
+
+export function resolveDisplayCurrency(code: DisplayCurrencyCode, rates: readonly ExchangeRate[]): DisplayCurrency {
   if (code === 'USD') return USD_CURRENCY;
   const rate = rates.find((entry) => entry.currency === code)?.rate;
   return { code, rate: rate !== undefined && Number.isFinite(rate) && rate > 0 ? rate : null };
@@ -65,25 +84,35 @@ function convertUsd(usd: number | null | undefined, currency: DisplayCurrency): 
   return Number.isFinite(amount) ? amount : null;
 }
 
+/** Splits a formatted amount around its digits, with the currency mark swapped for `currencySymbol`. */
+function moneyParts(currency: DisplayCurrency, amount: number, precision: MoneyPrecision) {
+  const formatter = moneyFormatter(currency, amount, precision);
+  let prefix = '';
+  let digits = '';
+  let suffix = '';
+  for (const part of formatter.formatToParts(amount)) {
+    if (['integer', 'decimal', 'fraction', 'group'].includes(part.type)) { digits += part.value; continue; }
+    if (part.type === 'literal' && !part.value.trim()) continue;
+    const value = part.type === 'currency' ? currencySymbol(currency.code) : part.value;
+    if (digits) suffix += value;
+    else prefix += value;
+  }
+  return { formatter, prefix, digits, suffix };
+}
+
 /** Conversion is presentation-only: callers keep using the original USD values for math and APIs. */
 export function formatCurrency(usd: number | null | undefined, currency = USD_CURRENCY, precision: MoneyPrecision = 4): string {
   const amount = convertUsd(usd, currency);
-  return amount === null ? '—' : moneyFormatter(currency, amount, precision).format(amount);
+  if (amount === null) return '—';
+  const { prefix, digits, suffix } = moneyParts(currency, amount, precision);
+  return `${prefix}${digits}${suffix}`;
 }
 
-/** Derive both moving digits and surrounding currency marks from the same formatter as static copy. */
+/** Derive both moving digits and surrounding currency marks from the same parts as static copy. */
 export function currencyReadout(usd: number | null | undefined, currency = USD_CURRENCY, precision: MoneyPrecision = 2): RollingReadout | undefined {
   const amount = convertUsd(usd, currency);
   if (amount === null) return undefined;
-  const formatter = moneyFormatter(currency, amount, precision);
-  let prefix = '';
-  let suffix = '';
-  let hasNumber = false;
-  for (const part of formatter.formatToParts(amount)) {
-    if (['integer', 'decimal', 'fraction', 'group'].includes(part.type)) hasNumber = true;
-    else if (hasNumber) suffix += part.value;
-    else prefix += part.value;
-  }
+  const { formatter, prefix, suffix } = moneyParts(currency, amount, precision);
   const options = formatter.resolvedOptions();
   return { number: Math.abs(amount), prefix, suffix, format: { minimumFractionDigits: options.minimumFractionDigits, maximumFractionDigits: options.maximumFractionDigits, useGrouping: options.useGrouping } };
 }

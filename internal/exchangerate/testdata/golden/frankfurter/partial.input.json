@@ -1,5 +1,5 @@
 {
-  "why": "Require the currencies offered as core display choices before publishing a snapshot.",
+  "why": "Require every display currency before publishing a snapshot, so a refresh never drops a selectable rate.",
   "body": [
     {
       "date": "2026-10-27",
@@ -12,6 +12,18 @@
       "base": "USD",
       "quote": "EUR",
       "rate": 0.89
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "CNY",
+      "rate": 6.7
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "JPY",
+      "rate": 157.4
     }
   ]
 }
