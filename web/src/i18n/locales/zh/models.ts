@@ -52,7 +52,7 @@ export default {
   'models.resources': '更多资料',
   'models.external_resources': '外部模型检索',
   'models.metadata_unknown': 'models.dev 暂无此模型的确切资料，可通过下方入口检索。',
-  'models.reference_note': '资料来自 models.dev，仅供参考；实际限制以接入来源为准。开放权重不等于采用开源许可证，缺失资料不会推测补全。外部链接会在新标签页打开。',
+  'models.reference_note': '规格参数来自 models.dev，仅供参考，实际配置以服务商为准。',
   'models.snapshot_date': '资料快照：{date}',
   'models.supported': '支持',
   'models.unsupported': '不支持',

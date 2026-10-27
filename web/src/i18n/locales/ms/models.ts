@@ -55,7 +55,7 @@ export default {
   "models.resources": "Bacaan lanjut",
   "models.external_resources": "Carian model luaran",
   "models.metadata_unknown": "Tiada padanan metadata tepat di models.dev. Gunakan pautan di bawah untuk menerokai model ini.",
-  "models.reference_note": "Data rujukan daripada models.dev; had sebenar bergantung pada sambungan anda. Pemberat terbuka tidak bermaksud lesen sumber terbuka. Fakta yang tiada kekal tidak diketahui. Pautan luaran dibuka dalam tab baharu.",
+  "models.reference_note": "Spesifikasi daripada models.dev untuk rujukan; had sebenar bergantung pada penyedia yang disambungkan.",
   "models.snapshot_date": "Petikan metadata: {date}",
   "models.supported": "Disokong",
   "models.unsupported": "Tidak disokong",

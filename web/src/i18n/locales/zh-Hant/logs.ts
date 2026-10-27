@@ -46,7 +46,7 @@ export default {
   "logs.view_file": "查看",
   "logs.view_request": "查看請求 {id} 的日誌檔案",
   "logs.viewer_missing": "CPA 沒有保留這個請求的日誌檔案",
-  "logs.viewer_missing_desc": "開啟「記錄請求日誌」後每個請求都有日誌檔案；未開啟時 CPA 只保留最近幾份失敗請求的日誌。",
+  "logs.viewer_missing_desc": "未開啟「記錄請求記錄」時，閘道僅保留近期失敗請求的記錄。",
   "logs.viewer_failed": "日誌檔案讀取失敗",
   "logs.viewer_too_large": "檔案超過 {limit}，下載後查看",
   "logs.viewer_empty": "檔案為空",

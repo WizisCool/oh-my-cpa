@@ -49,3 +49,40 @@ rather than "操作失败".
 A label has one line. When a sentence does not fit in a control, the answer is a shorter sentence,
 not a wider control: the mobile console renders the same catalog. A tooltip may hold the longer
 explanation, and that is where a caveat belongs.
+
+## Subtitles, hints, and secondary copy (Captions)
+
+Secondary copy (form field hints, card subtitles, section descriptions, table footers) exists to help
+the operator act with clarity and confidence. It is a visual whisper that supports the interface,
+not a legal disclaimer, an architecture manual, or an agent safety cushion.
+
+### Invariants for secondary copy
+
+1. **User necessity over agent defense.** State what the field does, what format it accepts, or what
+   its immediate effect is. Never write defensive disclaimers ("并非解除所有限制", "请谨慎操作以免造成不可挽回的损失"),
+   passive-aggressive warnings, or historical gateway version lectures ("此优先级要求 CPA v8.0.33 或更高版本；依赖凭据覆盖前请先升级旧网关").
+   If an old gateway version is incompatible, enforce that via API/feature detection or graceful validation,
+   not by lecturing the user in the caption.
+2. **Concise precision on real gotchas.** When a real hazard or subtle rule exists (e.g. data deletion,
+   precedence overriding an upstream wildcard, restart required), state it in a single, calm sentence.
+   Do not explain the theoretical philosophy behind why the system was designed this way.
+3. **Typographic budget & visual rhythm.**
+   - A hint should typically be 1 concise sentence (maximum 2 short sentences).
+   - Chinese copy should generally not exceed 40–50 characters.
+   - Secondary copy must never dominate the vertical height or draw more visual attention than the control itself.
+4. **No negative preemption.** Do not write what something is *not* unless users regularly mistake it
+   for something destructive (e.g. "清空列表将恢复继承当前提供商规则" is complete and clean; adding "并非解除所有限制"
+   is redundant defensive clutter).
+
+### Bad vs Good Examples
+
+- **Bad (Defensive & bloated):**
+  > 以逗号或换行分隔模型 ID。非空列表会替代提供商禁用规则（包括 *）。清空列表将恢复继承当前提供商规则，并非解除所有限制。此优先级要求 CPA v8.0.33 或更高版本；依赖凭据覆盖前请先升级旧网关。
+- **Good (Direct & actionable):**
+  > 以逗号或换行分隔模型 ID；非空列表会替代提供商禁用规则（包括 *），清空列表将恢复继承当前提供商规则。
+
+- **Bad (Anxious disclaimers):**
+  > 注意：此操作具有较高风险，可能导致已有的鉴权配置失效并影响线上业务，请确保已做好配置备份后再行修改。
+- **Good (Calm statement of consequence):**
+  > 修改后立即生效，现有连接将使用新配置重新鉴权。
+
