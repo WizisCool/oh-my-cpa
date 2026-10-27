@@ -210,7 +210,8 @@ They are tuned on OMC Dark and OMC Light, and that tuning includes their contras
 3.3:1 on OMC Light's white and 3.1:1 on Fog's grey. So every semantic colour - the three status hues, the
 series and routing slots and the effort steps - is *held* per palette by `holdSignal`: it keeps the
 weakest of its contrasts against the reference palette's grounds by moving only its OKLCH lightness away
-from the ground; hue and chroma, and therefore its identity, stay. A mark is held against the page and the
+from the ground; the hue stays, and the chroma gives way only as far as the new lightness leaves the sRGB
+gamut, so a colour keeps its identity. A mark is held against the page and the
 card up to 4.5:1. An effort step is also held against the row hover, up to 6:1, because its badge prints
 it on a wash of itself that costs over a ratio point on a lifted dark ground. The two OMC palettes carry
 the constants unchanged; Pewter and Fog, whose grounds sit closer to the signals, move most of them, and

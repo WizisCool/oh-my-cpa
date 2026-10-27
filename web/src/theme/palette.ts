@@ -308,10 +308,12 @@ const SIGNAL_REFERENCE: Record<ThemeMode, BuiltInPaletteId> = { dark: 'omc-dark'
  *
  * A semantic hue is an identity, but its contrast belongs to the ground it was tuned on: the same
  * green that reads 3.3:1 on OMC Light's white falls to 3.1:1 on a grey page, and the same red that
- * reads 4.5:1 on OMC Dark falls below 4:1 on a lifted charcoal. So the hue and chroma stay, and only
- * the lightness moves, in the step the accent ladder uses, until the colour clears what it measured on
- * the reference again. On the reference itself, and on any palette whose ground already leaves the
- * colour that legible, the constant is returned unchanged.
+ * reads 4.5:1 on OMC Dark falls below 4:1 on a lifted charcoal. So it moves in lightness alone, in the
+ * step the accent ladder uses, until the colour clears what it measured on the reference again - never
+ * beyond the ceiling, since chasing a pastel's 7:1 would bleach it for legibility nobody needs. The
+ * hue stays, and chroma gives way only as far as the new lightness leaves the sRGB gamut. On the
+ * reference itself, and on any palette whose ground already leaves the colour that legible, the
+ * constant is returned unchanged.
  *
  * The direction is read from the grounds, not the mode: an operator may author a dark-mode palette on
  * a light page, and lightening a signal there walks it into the page. Both directions are tried a step
