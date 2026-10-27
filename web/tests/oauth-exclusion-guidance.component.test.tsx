@@ -25,17 +25,16 @@ it('scopes a provider catch-all and alias warning to inheriting credentials, inc
   const surface = mountGuidance('provider');
   try {
     const drawer = await screen.findByTestId('oauth-model-rules-drawer');
-    await waitFor(() => expect(drawer.textContent).toContain('A non-empty credential exclusion list replaces, rather than extends, these defaults.'));
-    expect(drawer.textContent).toContain('This precedence requires CPA v8.0.33 or later; upgrade older gateways before relying on credential overrides.');
+    await waitFor(() => expect(drawer.textContent).toContain('Provider exclusions serve as defaults for credentials.'));
+    expect(drawer.textContent).toContain('A custom list on a credential replaces these defaults.');
     const warning = await screen.findByTestId('oauth-model-alias-excluded-source');
-    expect(warning.textContent).toContain('Provider rule * hides this source only for credentials inheriting provider exclusions.');
-    expect(warning.textContent).toContain('Credentials with a non-empty own list may still serve this alias.');
+    expect(warning.textContent).toContain('Provider rule * hides this source model; credentials with custom lists use their own configuration.');
     fireEvent.click(screen.getByTestId('oauth-model-rules-tab-excluded'));
     expect(await screen.findByText('Provider defaults exclude every model')).toBeTruthy();
     expect(screen.getByTestId('oauth-excluded-models-summary').textContent).toBe('Provider defaults exclude 2 of 2 catalog models');
-    expect(await screen.findByText('The rule * matches every model for credentials inheriting provider exclusions; credentials with a non-empty own list use that list instead.')).toBeTruthy();
+    expect(await screen.findByText('Rule * excludes all models inheriting defaults; credentials with custom lists are not affected.')).toBeTruthy();
     fireEvent.click(screen.getByTestId('oauth-model-rules-clear'));
-    expect(await screen.findByText('This deletes the provider exclusion defaults for codex. Credentials with a non-empty own list are unchanged; CPA determines which models are available.')).toBeTruthy();
+    expect(await screen.findByText('Deletes default exclusions for codex. Credentials with custom lists are not affected.')).toBeTruthy();
   } finally {
     surface.unmount();
   }
@@ -47,7 +46,7 @@ it('clears a non-empty credential override with an empty array and explains rest
     fireEvent.click(await screen.findByRole('tab', { name: 'Configuration' }));
     const input = await screen.findByLabelText('Excluded Models');
     await waitFor(() => expect((input as HTMLTextAreaElement).value).toBe('model-b'));
-    expect(screen.getByText('Comma or newline separated model IDs. A non-empty list replaces provider exclusions, including *. Clearing this list restores inheritance of the current provider rules, not unrestricted access. This precedence requires CPA v8.0.33 or later; upgrade older gateways before relying on credential overrides.')).toBeTruthy();
+    expect(screen.getByText('Comma or newline separated model IDs. A non-empty list replaces provider exclusions (including *). Clearing the list restores inheritance of provider rules.')).toBeTruthy();
     fireEvent.change(input, { target: { value: '' } });
     const save = screen.getByRole('button', { name: 'Save Fields' });
     await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false));
@@ -55,7 +54,7 @@ it('clears a non-empty credential override with an empty array and explains rest
     await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
     expect(surface.writes).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, excluded_models: [] }]);
     expect((input as HTMLTextAreaElement).value).toBe('');
-    expect(screen.getByText(/Clearing this list restores inheritance of the current provider rules, not unrestricted access\./)).toBeTruthy();
+    expect(screen.getByText(/Clearing the list restores inheritance of provider rules/)).toBeTruthy();
   } finally {
     surface.unmount();
   }

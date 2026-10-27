@@ -46,7 +46,7 @@ export default {
   "logs.view_file": "Lihat",
   "logs.view_request": "Lihat fail log permintaan {id}",
   "logs.viewer_missing": "CPA tidak menyimpan fail log untuk permintaan ini",
-  "logs.viewer_missing_desc": "Apabila pengelogan permintaan dihidupkan, setiap permintaan mempunyai fail log; apabila dimatikan, CPA hanya menyimpan beberapa log permintaan gagal yang terbaharu.",
+  "logs.viewer_missing_desc": "Tanpa pengelogan permintaan didayakan, gerbang hanya mengekalkan log untuk permintaan yang gagal baru-baru ini.",
   "logs.viewer_failed": "Fail log tidak dapat dibaca",
   "logs.viewer_too_large": "Fail melebihi {limit}; muat turun untuk membacanya",
   "logs.viewer_empty": "Fail ini kosong",

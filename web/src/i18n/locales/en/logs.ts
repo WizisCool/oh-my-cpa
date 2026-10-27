@@ -46,7 +46,7 @@ export default {
   'logs.view_file': 'View',
   'logs.view_request': 'View the log file of request {id}',
   'logs.viewer_missing': 'CPA holds no log file for this request',
-  'logs.viewer_missing_desc': 'With request logging on, every request has a log file; with it off, CPA keeps only its newest few failed-request logs.',
+  'logs.viewer_missing_desc': 'Without request logging enabled, gateway only retains logs for recent failed requests.',
   'logs.viewer_failed': 'Could not read the log file',
   'logs.viewer_too_large': 'The file is larger than {limit}; download it to read it',
   'logs.viewer_empty': 'The file is empty',

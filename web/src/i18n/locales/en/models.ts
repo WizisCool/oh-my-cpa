@@ -55,7 +55,7 @@ export default {
   'models.resources': 'Further reading',
   'models.external_resources': 'External model lookup',
   'models.metadata_unknown': 'No exact metadata match in models.dev. Use the links below to explore this model.',
-  'models.reference_note': 'Reference data from models.dev; actual limits depend on your connection. Open weights do not imply an open-source license. Missing facts remain unknown. External links open in a new tab.',
+  'models.reference_note': 'Specifications from models.dev for reference; actual limits depend on the connected provider.',
   'models.snapshot_date': 'Metadata snapshot: {date}',
   'models.supported': 'Supported',
   'models.unsupported': 'Not supported',

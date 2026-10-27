@@ -55,7 +55,7 @@ export default {
   "models.resources": "更多資料",
   "models.external_resources": "外部模型檢索",
   "models.metadata_unknown": "models.dev 暫無此模型的確切資料，可透過下方入口檢索。",
-  "models.reference_note": "資料來自 models.dev，僅供參考；實際限制以接入來源為準。開放權重不等於採用開源授權，缺失資料不會推測補全。外部連結會在新分頁開啟。",
+  "models.reference_note": "規格參數來自 models.dev，僅供參考，實際設定以供應商為準。",
   "models.snapshot_date": "資料快照：{date}",
   "models.supported": "支援",
   "models.unsupported": "不支援",

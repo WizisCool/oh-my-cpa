@@ -43,7 +43,7 @@ export default {
   'logs.view_file': '查看',
   'logs.view_request': '查看请求 {id} 的日志文件',
   'logs.viewer_missing': 'CPA 没有保留这个请求的日志文件',
-  'logs.viewer_missing_desc': '开启"记录请求日志"后每个请求都有日志文件；未开启时 CPA 只保留最近几份失败请求的日志。',
+  'logs.viewer_missing_desc': '未开启“记录请求日志”时，网关仅保留近期失败请求的日志。',
   'logs.viewer_failed': '日志文件读取失败',
   'logs.viewer_too_large': '文件超过 {limit}，下载后查看',
   'logs.viewer_empty': '文件为空',
