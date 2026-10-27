@@ -182,6 +182,7 @@ export async function routeLazyError(fixtures) {
     const fill = page.locator('.shell-loading-progress .progress-bar-fill');
     const beforeMotionChange = await fill.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).a);
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'true');
     // Sample the bar's next drawing frame, not an arbitrary elapsed duration.
     const reduced = await fill.evaluate(element => new Promise(resolve => {
       const sample = () => requestAnimationFrame(() => {
@@ -199,6 +200,7 @@ export async function routeLazyError(fixtures) {
       reduced.scale >= beforeMotionChange && reduced.animation === 'none' && reduced.activity === 'none' &&
       await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === null, JSON.stringify(reduced));
     await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'false');
     const resumed = await fill.evaluate(element => new Promise(resolve => {
       const sample = () => requestAnimationFrame(() => {
         if (element.parentElement.hidden) { sample(); return; }

@@ -51,12 +51,25 @@ async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
     window.__scrollSamples = [node.scrollTop];
     window.__scrollSampleTimes = [performance.now()];
     window.__scrollInputAt = null;
+    window.__scrollInput = null;
     window.__scrollHanded = 0;
     // A glide drives a virtualized list with wheel events of its own; their deltas are what it asked
     // the list to travel, apart from anything the list adds while it measures rows.
     const noteInput = (event) => {
       if (!event.isTrusted && event.type === 'wheel') window.__scrollHanded += event.deltaY;
-      if (event.isTrusted && window.__scrollInputAt === null) window.__scrollInputAt = performance.now();
+      if (event.isTrusted && window.__scrollInputAt === null) {
+        window.__scrollInputAt = performance.now();
+        window.__scrollSamples = [node.scrollTop];
+        window.__scrollSampleTimes = [window.__scrollInputAt];
+        window.__scrollInput = {
+          type: event.type,
+          target: event.target instanceof Element ? event.target.className : null,
+          isInsideScroller: node.contains(event.target),
+          isCancelable: event.cancelable,
+        };
+        // Input dispatch can span frames. Measure the gesture, not the preceding protocol work.
+        requestAnimationFrame(record);
+      }
     };
     window.addEventListener('wheel', noteInput, { capture: true });
     window.addEventListener('keydown', noteInput, { capture: true });
@@ -70,14 +83,14 @@ async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
         window.removeEventListener('keydown', noteInput, { capture: true });
       }
     };
-    requestAnimationFrame(record);
   }, sampleFrames);
   await act();
+  await until(() => page.evaluate(() => window.__scrollInputAt !== null), { label: 'the trusted scroll input to arrive' });
   await until(
     () => page.evaluate((frames) => window.__scrollSamples.length > frames, sampleFrames),
     { label: 'scroll samples' },
   );
-  const { samples, times, framesBeforeMove, handed } = await page.evaluate(() => {
+  const { samples, times, framesBeforeMove, handed, input } = await page.evaluate(() => {
     const samples = window.__scrollSamples;
     const times = window.__scrollSampleTimes;
     // Frames that ran after the input and before the scroller first moved.
@@ -85,9 +98,9 @@ async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
     const framesBeforeMove = firstMove < 0 || window.__scrollInputAt === null
       ? null
       : times.slice(1, firstMove).filter((time) => time > window.__scrollInputAt).length;
-    return { samples, times, framesBeforeMove, handed: window.__scrollHanded };
+    return { samples, times, framesBeforeMove, handed: window.__scrollHanded, input: window.__scrollInput };
   });
-  return Object.assign(samples, { framesBeforeMove, times, handed });
+  return Object.assign(samples, { framesBeforeMove, times, handed, input });
 }
 
 /** Turns the wheel one notch over (x, y) and returns the offsets the marked scroller passed through. */
@@ -124,7 +137,7 @@ function describeNotch(samples) {
     framesBeforeMove: samples.framesBeforeMove,
     handed: samples.handed,
     detail: `samples=${samples.map(Math.round).join(',')} framesBeforeMove=${samples.framesBeforeMove}`
-      + ` handed=${Math.round(samples.handed * 10) / 10}`
+      + ` handed=${Math.round(samples.handed * 10) / 10} input=${JSON.stringify(samples.input)}`
       + ` frameMs=${times.slice(1).map((time, index) => Math.round(time - times[index])).join(',')}`,
   };
 }
@@ -203,8 +216,9 @@ export async function scrollSmoothing({ base, page, check }) {
     return true;
   }, NOTCH);
   check('the time zone popup is a virtualized list long enough to scroll', hasPopupHolder);
-  const popupBox = await popupHolder.boundingBox();
-  notch = describeNotch(await sampleNotch(page, { x: popupBox.x + popupBox.width / 2, y: popupBox.y + popupBox.height / 2 }));
+  // Wheel has no actionability wait; hover requires stable geometry and a receivable centre.
+  await popupHolder.hover();
+  notch = describeNotch(await sampleScroll(page, () => page.mouse.wheel(0, NOTCH)));
   check('a notch over a virtualized Select popup glides and lands one notch further', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   await page.keyboard.press('Escape');
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);

@@ -534,8 +534,10 @@ export async function agentStream({ base, page, check, expectProblem }) {
   check('the live label\'s glyphs are painted once, by a clipped background and no mask', sweep.mask !== 'text', JSON.stringify(sweep));
   check('the highlight is a glint narrower than its label, not a band as wide as it', parseFloat(sweep.band) > 0 && parseFloat(sweep.band) < sweep.width, JSON.stringify(sweep));
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'true');
   check('reduced motion leaves the live label as plain text', await liveLabel.evaluate(label => getComputedStyle(label).animationName === 'none' && getComputedStyle(label).backgroundImage === 'none'));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'false');
 
   const appendThought = async delta => {
     thought += delta;

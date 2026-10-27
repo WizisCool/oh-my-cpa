@@ -644,6 +644,7 @@ export async function requestListInteractions({ base, page, check }) {
     return false;
   }, { label: 'header unfolded before the fold is measured' });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'false');
   await page.evaluate(() => {
     const holder = document.querySelector('.request-list-host .ant-listy-holder');
     const header = document.querySelector('.request-collapsible-header');
