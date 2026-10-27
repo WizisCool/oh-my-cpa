@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
@@ -48,13 +51,42 @@ func TestWarmupActivationTellsSlidingFromFrozenCodexWindow(t *testing.T) {
 	}
 }
 
-func TestCodexWarmupActivationIgnoresCreditStatus(t *testing.T) {
-	before := &warmup.Observation{Provider: "codex", ObservedAtMS: 1, FiveHour: warmup.Window{State: "idle"}, Weekly: warmup.Window{State: "active"}}
+func TestCodexWarmupHTTPActivationIgnoresCreditStatus(t *testing.T) {
 	for _, paid := range []string{"unknown", "enabled"} {
-		after := &warmup.Observation{Provider: "codex", ObservedAtMS: 2, PaidFallback: paid, FiveHour: warmup.Window{State: "active"}, Weekly: warmup.Window{State: "active"}}
-		if !isWarmupActivated(before, after) {
-			t.Errorf("Codex activation rejected for paid status %q", paid)
-		}
+		t.Run(paid, func(t *testing.T) {
+			fixture := &warmupFixture{provider: "codex", isPaid: paid == "enabled", isPaidUnknown: paid == "unknown"}
+			handler := newWarmupHandler(t, fixture)
+			var clock atomic.Int64
+			clock.Store(time.Now().UnixMilli())
+			handler.nowFn = func() time.Time { return time.UnixMilli(clock.Load()).UTC() }
+			fixture.onSend = func() { clock.Add(1) }
+			client, baseURL := warmupHTTPClient(t, handler)
+			requestID := "manual-codex-" + paid
+			body, err := json.Marshal(map[string]any{"request_id": requestID, "revision": credentialWarmupRevision(t, handler), "confirmed": true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := client.Post(baseURL+"/api/v1/management/quota/warmup/credentials/exact-claude/run", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			var actual warmup.Result
+			if err := json.NewDecoder(response.Body).Decode(&actual); err != nil {
+				t.Fatal(err)
+			}
+			input, output := int64(5), int64(1)
+			expected := warmup.Result{RequestID: requestID, Status: "activated", Model: "gpt-codex-test", Trigger: "manual", StartedAtMS: clock.Load() - 1, FinishedAtMS: clock.Load(), InputTokens: &input, OutputTokens: &output}
+			if response.StatusCode != http.StatusOK || !reflect.DeepEqual(actual, expected) {
+				t.Fatalf("status=%d result=%+v; want %d %+v", response.StatusCode, actual, http.StatusOK, expected)
+			}
+			fixture.mu.Lock()
+			sends := fixture.sends
+			fixture.mu.Unlock()
+			if sends != 1 {
+				t.Fatalf("sent %d requests", sends)
+			}
+		})
 	}
 }
 
