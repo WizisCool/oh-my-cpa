@@ -23,8 +23,8 @@ type Fetcher interface {
 // Service owns only display rates. It has no access to price versions or usage
 // costs, so refreshing a rate cannot rewrite accounting history.
 type Service struct {
-	store   Store
-	fetcher Fetcher
+	store      Store
+	fetcher    Fetcher
 	logger     *slog.Logger
 	permit     chan struct{}
 	wake       chan struct{}
