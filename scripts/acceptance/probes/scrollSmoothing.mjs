@@ -188,8 +188,13 @@ export async function scrollSmoothing({ base, page, check }) {
 
   // A Select's virtualized option popup glides like the request list does.
   await page.getByRole('combobox', { name: 'Time zone' }).click();
-  const option = page.locator('.ant-select-dropdown .ant-select-item-option').nth(1);
-  await option.waitFor({ timeout: 10_000 });
+  const popupHolder = page.locator('.ant-select-dropdown .ant-select-dropdown-list-holder');
+  await popupHolder.waitFor({ timeout: 10_000 });
+  // Mounted virtual rows may be clipped or still awaiting popup alignment; target the hit-tested viewport.
+  await until(() => popupHolder.evaluate(holder => {
+    const box = holder.getBoundingClientRect();
+    return holder.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  }), { label: 'the popup scroll viewport to receive pointer input' });
   const hasPopupHolder = await markScroller(page, (notchPx) => {
     document.querySelector('[data-probe-scroller]')?.removeAttribute('data-probe-scroller');
     const holder = document.querySelector('.ant-select-dropdown .ant-select-dropdown-list-holder');
@@ -198,8 +203,8 @@ export async function scrollSmoothing({ base, page, check }) {
     return true;
   }, NOTCH);
   check('the time zone popup is a virtualized list long enough to scroll', hasPopupHolder);
-  const optionBox = await option.boundingBox();
-  notch = describeNotch(await sampleNotch(page, { x: optionBox.x + optionBox.width / 2, y: optionBox.y + optionBox.height / 2 }));
+  const popupBox = await popupHolder.boundingBox();
+  notch = describeNotch(await sampleNotch(page, { x: popupBox.x + popupBox.width / 2, y: popupBox.y + popupBox.height / 2 }));
   check('a notch over a virtualized Select popup glides and lands one notch further', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   await page.keyboard.press('Escape');
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
