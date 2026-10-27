@@ -139,6 +139,25 @@ export async function dashboardModelPanels({ base, page, check }) {
     && focusedRing.opacities.filter((opacity) => opacity < 1).length === 5
     && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'true'
     && await page.locator('.model-ring-unit').innerText() === list[0].share, JSON.stringify(focusedRing));
+  await until(async () => await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    // The chart applies its option in an effect, so the DOM selection above can land a frame first.
+    const series = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series;
+    return series.filter((line) => line.lineStyle.width === 2.75 && line.lineStyle.opacity === 1).length === 1;
+  }), { label: "the trend to paint the usage card's selection" });
+  const linkedTrend = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const series = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series;
+    return {
+      pressed: [...document.querySelectorAll('[data-testid="model-trend-legend"] button[aria-pressed="true"] .model-series-text')].map((node) => node.textContent),
+      lines: series.map((item) => ({ name: item.name, width: item.lineStyle.width, opacity: item.lineStyle.opacity })),
+    };
+  });
+  check('selecting a model in the usage ranking highlights the same model in the trend',
+    linkedTrend.pressed.length === 1 && linkedTrend.pressed[0] === list[0].name
+      && linkedTrend.lines.filter((line) => line.width === 2.75 && line.opacity === 1).map((line) => line.name).join() === list[0].name
+      && linkedTrend.lines.filter((line) => line.opacity === 0.35).length === 5,
+    JSON.stringify(linkedTrend));
   await firstRow.locator('.model-usage-name-button').click();
   await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'the usage selection to restore the centre' });
   const restoredRing = await page.evaluate(async () => {
@@ -146,8 +165,9 @@ export async function dashboardModelPanels({ base, page, check }) {
     const data = echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data;
     return { count: data.length, opacities: data.map((item) => item.itemStyle.opacity) };
   });
-  check('clearing the usage highlight restores every slice at full opacity', restoredRing.count === 6 && restoredRing.opacities.every((opacity) => opacity === 1)
-    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'false', JSON.stringify(restoredRing));
+  check('clearing the usage selection restores every slice and clears the trend highlight', restoredRing.count === 6 && restoredRing.opacities.every((opacity) => opacity === 1)
+    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'false'
+    && await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"]').count() === 0, JSON.stringify(restoredRing));
 
   const selectedLegend = page.locator('[data-testid="model-trend-legend"] button').nth(1);
   await selectedLegend.hover();
@@ -174,6 +194,13 @@ export async function dashboardModelPanels({ base, page, check }) {
       && focusedTrend.lines.filter((series) => series.opacity === 0.35).length === 5
       && focusedTrend.label === [...await page.locator('[data-testid="model-trend-legend"] button').allTextContents()].join(', '),
     JSON.stringify(focusedTrend));
+  const linkedUsage = await page.locator('.model-usage-name-button').evaluateAll((buttons) => buttons
+    .filter((button) => button.getAttribute('aria-pressed') === 'true')
+    .map((button) => button.querySelector('.model-series-text').textContent));
+  check('selecting a model in the trend selects the same row in the usage ranking',
+    linkedUsage.length === 1 && linkedUsage[0] === legend[1].name
+      && (await page.locator('.model-ring').getAttribute('aria-label')).includes(legend[1].name),
+    JSON.stringify({ linkedUsage, ring: await page.locator('.model-ring').getAttribute('aria-label') }));
   await page.locator('.model-trend').scrollIntoViewIfNeeded();
   const hoverSeries = focusedTrend.lines.find((series) => series.name !== legend[1].name);
   const capturePaintedTrend = () => page.evaluate(async (legendItems) => {
@@ -256,7 +283,9 @@ export async function dashboardModelPanels({ base, page, check }) {
     return echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series
       .map((series) => ({ width: series.lineStyle.width, opacity: series.lineStyle.opacity }));
   });
-  check('clearing the trend highlight restores every line to its resting weight', restoredTrend.every((series) => series.width === 1.75 && series.opacity === 1), JSON.stringify(restoredTrend));
+  check('clearing the trend highlight restores every line to its resting weight', restoredTrend.every((series) => series.width === 1.75 && series.opacity === 1)
+    && await page.locator('.model-usage-name-button[aria-pressed="true"]').count() === 0
+    && await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, JSON.stringify(restoredTrend));
   const lineTarget = await page.evaluate(async () => {
     const { echarts } = await import('/omc/src/charts/echarts/core.ts');
     const host = document.querySelector('.model-trend .omc-echart');
