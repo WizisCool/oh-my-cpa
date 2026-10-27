@@ -116,6 +116,7 @@ export default {
   'cfg.copy_failed': 'Copy failed',
   'cfg.lines_count': '{n} lines',
   'cfg.nav_aria': 'Settings section navigation',
+  'cfg.outline_aria': 'Settings group navigation',
   'cfg.save_shortcut': '{key} to save',
   'cfg.yaml_syntax_error': 'YAML syntax error, please inspect in Source mode',
   'cfg.api_key_empty_warning': 'API key cannot be empty',

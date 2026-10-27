@@ -289,6 +289,11 @@ export function renderToggleRow(view: ConfigSectionContext, field: ConfigFieldDe
     );
 }
 
+/** The element id of a group's card, which the section outline scrolls to. */
+export function groupAnchorId(groupId: string): string {
+  return `cfg-group-${groupId}`;
+}
+
   // Render a cohesive Setting Group Panel
   //
   // `context` says which heading the caller is already showing above this group,
@@ -331,7 +336,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     // field finds the panel that names it instead of nothing at all.
     if (grp.variant === 'managed-elsewhere') {
       return (
-        <div key={grp.id} className="settings-group">
+        <div key={grp.id} id={groupAnchorId(grp.id)} className="settings-group">
           <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           <div className="settings-group-body">
             <div className="settings-managed-elsewhere">
@@ -350,7 +355,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     // Payload Builder variant (structured JSON rules for models and parameters)
     if (grp.variant === 'payload-builder') {
       return (
-        <div key={grp.id} className="settings-group payload-builder-group">
+        <div key={grp.id} id={groupAnchorId(grp.id)} className="settings-group payload-builder-group">
           {context === 'search' && (
             <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           )}
@@ -388,7 +393,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
       const isOpen = isSearchActive ? true : tlsEnabled;
 
       return (
-        <div key={grp.id} className="settings-group">
+        <div key={grp.id} id={groupAnchorId(grp.id)} className="settings-group">
           <SectionHeading
             className="settings-group-head"
             title={t(grp.labelKey)}
@@ -415,7 +420,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     // Settings List variant (toggle switches and flags)
     if (grp.variant === 'settings-list') {
       return (
-        <div key={grp.id} className="settings-group">
+        <div key={grp.id} id={groupAnchorId(grp.id)} className="settings-group">
           <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           <div className="settings-list-rows">
             {groupFields.map((f) => renderToggleRow(view, f))}
@@ -432,7 +437,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     const combineHostPort = hasHost && hasPort && !visibleFieldIds;
 
     return (
-      <div key={grp.id} className="settings-group">
+      <div key={grp.id} id={groupAnchorId(grp.id)} className="settings-group">
         <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
         <div className="settings-group-body">
           <div className="settings-form-grid">

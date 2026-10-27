@@ -6,6 +6,7 @@ import {
   isConfigSemanticallyEqual,
 } from '../web/src/components/config/configDirty.ts';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition } from '../web/src/types/configSchema.ts';
+import { readOutline } from '../web/src/components/config/configOutline.ts';
 
 function schemaField(id: string): ConfigFieldDefinition {
   const found = ALL_CONFIG_FIELDS.find((item) => item.id === id);
@@ -183,4 +184,18 @@ test('State Machine: moving image generation from everywhere to chat-only stays 
   updateFieldWithBaseline(currentDoc, serverDoc, imageGeneration, 'chat');
   assert.equal(currentDoc.getIn(['multimedia', 'disable-image-generation']), 'chat');
   assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), false);
+});
+
+// The card nav names the card being read while the operator scrolls by hand. A tall card must hand
+// over once the next one holds most of the view, and the short cards at the end must each get a turn
+// even though none of them can be scrolled to the top.
+test('Card nav: the current card follows the view, and the reading spans what is on screen', () => {
+  const view = { top: 100, bottom: 900 };
+  const cards = [{ top: -500, bottom: 260 }, { top: 280, bottom: 1400 }, { top: 1420, bottom: 1600 }];
+  assert.deepEqual(readOutline(cards, view, 0.3), { current: 1, visible: { from: 600 / 760, to: 1 + 620 / 1120 } });
+
+  const end = [{ top: -900, bottom: 200 }, { top: 220, bottom: 400 }, { top: 420, bottom: 600 }, { top: 620, bottom: 800 }];
+  assert.equal(readOutline(end, view, 0.3).current, 2);
+  assert.equal(readOutline(end, view, 1).current, 3);
+  assert.deepEqual(readOutline([null, { top: 950, bottom: 1200 }], view, 0), { current: 0, visible: null });
 });
