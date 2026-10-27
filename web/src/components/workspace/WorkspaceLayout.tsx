@@ -8,6 +8,7 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useResizablePanel } from './useResizablePanel';
 import styles from './Workspace.module.css';
 import { AppDrawer } from '../common/AppDrawer';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 /** One tab of the side panel; the panel is where a workspace's secondary views register. */
 export interface WorkspaceAsideTab {
@@ -76,7 +77,7 @@ export function WorkspaceLayout({ testId, title, actions, notices, aside, childr
   // One tab needs no tab strip; several are Ant Design tabs, so the panel reads like every other
   // tabbed surface of the console.
   const content = aside.tabs.length === 1 ? aside.tabs[0].content : (
-    <Tabs
+    <Tabs more={TAB_OVERFLOW}
       className={styles['panel-tabs']}
       activeKey={aside.activeTab}
       onChange={aside.onTabChange}

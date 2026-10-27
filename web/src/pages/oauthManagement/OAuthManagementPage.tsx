@@ -738,6 +738,7 @@ export const OAuthManagementPage: React.FC = () => {
               {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
             </Button>
             <Dropdown
+              trigger={['click']}
               disabled={visibleRecords.length === 0}
               menu={{
                 items: [

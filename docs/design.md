@@ -2904,6 +2904,13 @@ arrow is a row with no visible affordance at all. Reveal-on-hover rules therefor
 A tooltip is not an affordance either: it may *name* a control, never be the only way to
 reach one. Where a control's name is short enough to matter on a phone, the name is drawn.
 
+**Nothing opens on the hover a tap produces.** A touch browser reports a tap as a hover at the
+finger first, and iOS drops the tap's click when that hover changes what is on screen, so the
+control needs a second tap. Menus, popovers and a tab strip's overflow menu therefore open on a
+press (`TAB_OVERFLOW` for every `Tabs`, since `ConfigProvider` passes only the menu's icon), the
+shared `Tooltip` never answers a tap on a control, and hover previews such as the calendar's range
+listen to `pointerenter` from a pointer that is not a finger.
+
 ### The tap floor is a hit area, not a drawn size
 
 `space scale 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px` (§4) is what the console's density *is*.

@@ -50,6 +50,7 @@ import { CopyButton } from '../common/CopyButton';
 import './UsageEventDrawer.css';
 import './requestMarks.css';
 import { Tooltip } from '../common/Tooltip';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -320,7 +321,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
               <strong>{event.cost_usd != null ? `$${event.cost_usd.toFixed(4)}` : '—'}</strong>
             </div>
           </div>
-          <Tabs
+          <Tabs more={TAB_OVERFLOW}
             activeKey={tab}
             onChange={setTab}
             animated={false}

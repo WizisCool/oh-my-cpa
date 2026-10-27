@@ -69,6 +69,7 @@ import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
 import { Tag } from '../common/Tag';
 import { FactList } from '../common/FactList';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 const { Text } = Typography;
 
@@ -566,7 +567,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     >
       {file ? (
         <div className={styles['drawer-content']}>
-          <Tabs
+          <Tabs more={TAB_OVERFLOW}
             activeKey={activeSection}
             onChange={(key) => setActiveSection(key as typeof activeSection)}
             items={[

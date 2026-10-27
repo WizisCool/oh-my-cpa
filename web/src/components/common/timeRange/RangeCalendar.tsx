@@ -176,7 +176,9 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
                   aria-label={formatCalendarDay(day, locale, { dateStyle: 'full' })}
                   aria-pressed={day === draft.startDay || day === draft.endDay}
                   aria-current={day === today ? 'date' : undefined}
-                  onMouseEnter={() => setHoverDay(day)}
+                  // A pointer that rests previews the range; a finger's tap is the pick itself, and a
+                  // preview drawn on the hover it reports would be a change iOS drops the click for.
+                  onPointerEnter={(event) => { if (event.pointerType !== 'touch') setHoverDay(day); }}
                   onFocus={() => setHoverDay(day)}
                   onClick={() => {
                     setFocusDay(day);

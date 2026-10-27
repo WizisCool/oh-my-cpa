@@ -60,6 +60,7 @@ import { Toolbar } from '../common/Toolbar';
 import { Count } from '../common/Count';
 import './logs.css';
 import { Tooltip } from '../common/Tooltip';
+import { TAB_OVERFLOW } from '../common/tabOverflow';
 
 const { Text } = Typography;
 
@@ -540,7 +541,7 @@ export const CpaLogPanel: React.FC = () => {
             </div>
           )}
 
-          <Tabs
+          <Tabs more={TAB_OVERFLOW}
             size="small"
             activeKey={tab}
             onChange={(key) => setTab(key as 'tail' | 'errors')}
