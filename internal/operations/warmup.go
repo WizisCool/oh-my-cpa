@@ -13,7 +13,7 @@ func (service *Service) registerWarmup(registry *capability.Registry) error {
 	if service.WarmupSettings == nil {
 		return nil
 	}
-	if err := read(registry, "quota_warmup_settings_get", "Read opt-in credential window warmup defaults, timezone and revision. Warmup consumes subscription quota; it never redeems reset entitlements.", func(ctx context.Context, _ Empty) (warmup.Settings, error) { return service.WarmupSettings(ctx) }); err != nil {
+	if err := read(registry, "quota_warmup_settings_get", "Read opt-in credential window warmup defaults, timezone and revision. Warmup consumes quota and Codex requests may incur charges; it never redeems reset entitlements.", func(ctx context.Context, _ Empty) (warmup.Settings, error) { return service.WarmupSettings(ctx) }); err != nil {
 		return err
 	}
 	type Target struct {
@@ -28,7 +28,7 @@ func (service *Service) registerWarmup(registry *capability.Registry) error {
 		Provider string        `json:"provider"`
 		Policy   warmup.Policy `json:"policy"`
 	}
-	metadata := Meta("quota_warmup_settings_set", "Change one provider's default warmup policy for existing and future inheriting credentials. Consumes a small amount of quota when enabled. Paid fallback must be explicitly disabled; unverified activation pauses automation.", "write", "high")
+	metadata := Meta("quota_warmup_settings_set", "Change one provider's default warmup policy for existing and future inheriting credentials. Requests consume quota and Codex may incur charges. Claude requires paid fallback to be disabled.", "write", "high")
 	metadata.Invalidates = []string{"quota-warmup-settings", "quota-warmup-credential"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input SettingsInput) (capability.Preview, error) {
 		if !warmup.IsProvider(input.Provider) || input.Policy.Validate() != nil {
@@ -59,7 +59,7 @@ func (service *Service) registerWarmup(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	metadata = Meta("quota_warmup_run", "Send one tiny request to the exact credential to start an idle subscription window. Human confirmation authorizes quota consumption and initial protocol validation. Unknown billing state, enabled paid fallback and active windows are refused; never retry an uncertain result.", "write", "high")
+	metadata = Meta("quota_warmup_run", "Send one tiny request to the exact credential to start an idle subscription window. Human confirmation authorizes quota consumption and possible Codex charges. Claude requires paid fallback to be disabled. Active windows are refused; never retry an uncertain result.", "write", "high")
 	metadata.Invalidates = []string{"management-quota", "quota-warmup-credential"}
 	return capability.Register(registry, metadata, func(ctx context.Context, input Target) (capability.Preview, error) {
 		current, err := service.WarmupCredential(ctx, input.AuthIndex)

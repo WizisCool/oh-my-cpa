@@ -146,7 +146,7 @@ function StatusCard({ credential, result }: { credential: WarmupCredential; resu
           {result.status !== 'activated' && result.reason && <span className={styles['last-reason']}>{warmupReason(result.reason, t)}</span>}
         </dd>
       </div>}
-      <div><dt>{t('warmup.row_billing')}</dt><dd>{t(`warmup.billing_${paid}`)}</dd></div>
+      <div><dt>{t('warmup.row_billing')}</dt><dd>{t(credential.provider === 'codex' ? 'warmup.billing_codex' : `warmup.billing_${paid}`)}</dd></div>
     </dl>
   </div>;
 }

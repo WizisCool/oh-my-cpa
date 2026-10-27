@@ -3399,8 +3399,8 @@ Saving confirms the effect on all current and future inheriting credentials.
 
 The credential Quota tab adds a Window warmup section with provider inheritance or a
 complete override, effective policy, next check, latest durable result and safe pause
-reason. Two quiet facts always show selected-model activation observations and the latest
-paid-fallback evidence, including unknown evidence. An absent activation observation is neutral
+reason. The cost row describes possible Codex charges or Claude paid-fallback evidence,
+including unknown evidence. An absent activation observation is neutral
 history, not an instruction or readiness gate. The reason explains current window or billing
 state. Saving an enabled policy authorizes eligible automatic requests; manual activation
 remains optional. Its drafts survive tab changes, remain

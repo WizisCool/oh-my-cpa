@@ -200,9 +200,8 @@ year, and mobile heatmaps start at the latest dates.
 
 OMC adds provider defaults and complete credential overrides for Codex/Claude reset
 warmup, one daily start and confirmed manual activation. Main-window scheduling, durable
-deduplication and strict paid-fallback checks are covered. Real upstream activation requires
+deduplication and provider-specific billing checks are covered. Real upstream activation requires
 post-request observation for the exact credential/model; a mock does not establish compatibility.
-An approved enabled policy admits its first automatic attempt through current billing and
-window evidence, without a manual prerequisite.
+An approved enabled policy admits its first automatic attempt through current window evidence and Claude billing evidence, without a manual prerequisite.
 Claude reset grants remain read-only and neither provider's reset entitlement is spent
 by warmup.

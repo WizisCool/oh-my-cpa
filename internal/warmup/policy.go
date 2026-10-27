@@ -74,10 +74,10 @@ func Eligibility(policy Policy, observation *Observation, nowMS int64) string {
 	if observation == nil || observation.ObservedAtMS > nowMS+1000 || nowMS-observation.ObservedAtMS > OBSERVATION_MAX_AGE_MS {
 		return "quota_unknown"
 	}
-	if observation.PaidFallback == "enabled" {
+	if observation.Provider != "codex" && observation.PaidFallback == "enabled" {
 		return "paid_usage_enabled"
 	}
-	if observation.PaidFallback != "disabled" {
+	if observation.Provider != "codex" && observation.PaidFallback != "disabled" {
 		return "paid_usage_unknown"
 	}
 	for family, window := range observation.ModelWindows {
@@ -110,7 +110,7 @@ func Eligibility(policy Policy, observation *Observation, nowMS int64) string {
 }
 
 // Decide combines simultaneous triggers. Manual runs intentionally bypass the
-// clock preference, but never billing, observation or already-active guards.
+// clock preference, but never provider-specific billing, observation or already-active guards.
 func Decide(policy Policy, state State, now time.Time, isManual bool) (trigger, reason, cycle string, next *int64) {
 	if !isManual && !policy.IsEnabled() {
 		return "", "disabled", "", nil

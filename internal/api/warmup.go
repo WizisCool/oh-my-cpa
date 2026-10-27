@@ -410,7 +410,7 @@ func isWarmupActivated(before, after *warmup.Observation) bool {
 			}
 		}
 	}
-	return after.PaidFallback == "disabled" && (before.FiveHour.State != "idle" || after.FiveHour.State == "active") && (before.Weekly.State != "idle" || after.Weekly.State == "active") && (before.FiveHour.State == "idle" || before.Weekly.State == "idle")
+	return (after.Provider == "codex" || after.PaidFallback == "disabled") && (before.FiveHour.State != "idle" || after.FiveHour.State == "active") && (before.Weekly.State != "idle" || after.Weekly.State == "active") && (before.FiveHour.State == "idle" || before.Weekly.State == "idle")
 }
 func (h *Handler) persistWarmupResult(ctx context.Context, authIndex string, state warmup.State, result warmup.Result) error {
 	// Latest receipts change during a recheck; the model's refusal survives until activation.

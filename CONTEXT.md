@@ -793,13 +793,13 @@ with normally distributed daily variation, quieter weekends and a small set of i
   off and the daily time defaults to `06:00` in the effective OMC Time Zone.
 - **Activation Observation** records a quota-observed activation for a credential identity
   and selected model. It describes a completed attempt, not automatic readiness. An enabled,
-  approved policy admits its first automatic attempt through current model, billing and
-  window evidence. HTTP completion without observed activation is pending, then uncertain
+  approved policy admits its first automatic attempt through current model and window evidence,
+  and Claude billing evidence. HTTP completion without observed activation is pending, then uncertain
   after bounded confirmation reads.
 - **Paid Fallback Evidence** is `disabled`, `enabled` or `unknown`, with its source and
   observation instant. Missing fields never mean disabled. Enabled or unknown paid
-  fallback pauses every consuming warmup request; reset credits are not billing evidence.
-  The console labels it "Paid overage" ("超额付费") and a policy "warmup settings"; console
+  fallback pauses Claude warmup; Codex warmup may incur charges regardless of credit
+  status. Reset credits are not billing evidence. The console labels a policy "warmup settings"; console
   copy describes what warmup does for the user (starts the credential's quota window) rather
   than restating its guards. A credential's warmup leads with a status (on, off or paused and
   why; next run; last run; charges), shows an inherited policy as plain rules, and reports a

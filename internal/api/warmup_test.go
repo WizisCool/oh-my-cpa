@@ -810,7 +810,7 @@ func TestWarmupAutomationStartsFromApprovedPolicy(t *testing.T) {
 	}
 }
 
-func TestWarmupAutomationRetainsBillingProtection(t *testing.T) {
+func TestWarmupAutomationUsesProviderBillingPolicy(t *testing.T) {
 	for _, provider := range []string{"claude", "codex"} {
 		for _, evidence := range []string{"enabled", "unknown"} {
 			t.Run(provider+"/"+evidence, func(t *testing.T) {
@@ -829,6 +829,15 @@ func TestWarmupAutomationRetainsBillingProtection(t *testing.T) {
 					t.Fatal(err)
 				}
 				credential, err := handler.warmupCredential(ctx, client, file, true)
+				if provider == "codex" {
+					fixture.mu.Lock()
+					sends := fixture.sends
+					fixture.mu.Unlock()
+					if err != nil || sends != 1 || credential.Reason == "paid_usage_enabled" || credential.Reason == "paid_usage_unknown" {
+						t.Fatalf("Codex warmup: sends=%d credential=%+v error=%v", sends, credential, err)
+					}
+					return
+				}
 				reason := "paid_usage_enabled"
 				if evidence == "unknown" {
 					reason = "paid_usage_unknown"

@@ -3685,7 +3685,8 @@ transport; neither browser nor model can supply an upstream URL or read OAuth to
 
 The quota service parses `warmup_evidence` from the same successful provider usage read.
 It carries paid fallback as a three-state value rather than collapsing omitted or false
-fields. `quota_snapshots.warmup_json` preserves that evidence through scheduled refresh,
+fields. Claude eligibility requires disabled paid fallback, while Codex eligibility does
+not depend on credit status and may incur charges. `quota_snapshots.warmup_json` preserves that evidence through scheduled refresh,
 manual refresh and reset-credit redemption. A per-reading service copy keeps evidence
 isolated when the existing batch refresh shares a service concurrently.
 
