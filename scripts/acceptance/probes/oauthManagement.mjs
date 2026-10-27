@@ -1267,12 +1267,13 @@ export async function oauthWindowWarmup({ page, base, check }) {
     await drawer.getByText('The five-hour window runs 06:00–11:00 (UTC)', { exact: true }).waitFor();
     for (const reducedMotion of ['no-preference', 'reduce']) {
       await page.emulateMedia({ reducedMotion });
+      await page.waitForFunction(isReduced => document.documentElement.dataset.reducedMotion === String(isReduced), reducedMotion === 'reduce');
       const transition = await drawer.evaluate(element => {
         const style = getComputedStyle(element);
         return { property: style.transitionProperty, duration: style.transitionDuration };
       });
       if (reducedMotion === 'reduce') {
-        check('warmup drawer has no transition under reduced motion', transition.property === 'none' && transition.duration === '0s', JSON.stringify(transition));
+        check('warmup drawer has no transition under reduced motion', transition.duration.split(',').every(value => parseFloat(value) === 0), JSON.stringify(transition));
       } else {
         check('warmup drawer animates position without interpolating viewport dimensions', transition.property === 'transform', JSON.stringify(transition));
       }

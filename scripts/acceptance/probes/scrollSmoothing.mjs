@@ -157,6 +157,7 @@ async function openRequestList(page, base) {
 }
 
 export async function scrollSmoothing({ base, page, check }) {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   // ---- an ordinary scroller: the content pane ----
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
@@ -187,8 +188,13 @@ export async function scrollSmoothing({ base, page, check }) {
 
   // A Select's virtualized option popup glides like the request list does.
   await page.getByRole('combobox', { name: 'Time zone' }).click();
-  const option = page.locator('.ant-select-dropdown .ant-select-item-option').nth(1);
-  await option.waitFor({ timeout: 10_000 });
+  const popupHolder = page.locator('.ant-select-dropdown .ant-select-dropdown-list-holder');
+  await popupHolder.waitFor({ timeout: 10_000 });
+  // Mounted virtual rows may be clipped or still awaiting popup alignment; target the hit-tested viewport.
+  await until(() => popupHolder.evaluate(holder => {
+    const box = holder.getBoundingClientRect();
+    return holder.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  }), { label: 'the popup scroll viewport to receive pointer input' });
   const hasPopupHolder = await markScroller(page, (notchPx) => {
     document.querySelector('[data-probe-scroller]')?.removeAttribute('data-probe-scroller');
     const holder = document.querySelector('.ant-select-dropdown .ant-select-dropdown-list-holder');
@@ -197,8 +203,8 @@ export async function scrollSmoothing({ base, page, check }) {
     return true;
   }, NOTCH);
   check('the time zone popup is a virtualized list long enough to scroll', hasPopupHolder);
-  const optionBox = await option.boundingBox();
-  notch = describeNotch(await sampleNotch(page, { x: optionBox.x + optionBox.width / 2, y: optionBox.y + optionBox.height / 2 }));
+  const popupBox = await popupHolder.boundingBox();
+  notch = describeNotch(await sampleNotch(page, { x: popupBox.x + popupBox.width / 2, y: popupBox.y + popupBox.height / 2 }));
   check('a notch over a virtualized Select popup glides and lands one notch further', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   await page.keyboard.press('Escape');
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
@@ -207,51 +213,53 @@ export async function scrollSmoothing({ base, page, check }) {
     document.querySelector('.app-content').setAttribute('data-probe-scroller', '');
   });
 
-  // Windows' "Animation effects" switch reports reduced motion; the default still glides, because
-  // that switch is also what turns the browser's own wheel animation off (ADR 0046).
+  // The default follows a live system change rather than keeping an installed glide enabled.
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'true');
   notch = describeNotch(await sampleNotch(page, paneAt));
-  check('the default glides even when the system reports reduced motion', notch.intermediateFrames >= 2, notch.detail);
+  check('Follow system removes the glide when the system reduces motion', notch.intermediateFrames === 0, notch.detail);
 
-  // `Follow system` hands the decision to that switch: the same notch now jumps.
-  const row = page.locator('.settings-toggle-row').filter({ hasText: 'Smooth scrolling' });
+  const row = page.locator('.settings-toggle-row').filter({ hasText: 'Reduce motion' });
   await row.scrollIntoViewIfNeeded();
-  await row.getByText('Follow system', { exact: true }).click();
-  await until(
-    () => page.evaluate(() => fetch('/omc/api/v1/preferences').then((response) => response.json()))
-      .then((body) => body.preferences?.omc_scroll_smoothing === 'system'),
-    { label: 'the scroll smoothing preference to be stored' },
-  );
-  await page.evaluate(() => { document.querySelector('[data-probe-scroller]').scrollTop = 0; });
-  notch = describeNotch(await sampleNotch(page, paneAt));
-  check('Follow system defers to reduced motion and the notch jumps', notch.intermediateFrames === 0 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  notch = describeNotch(await sampleNotch(page, paneAt));
-  check('Follow system glides again once the system allows motion', notch.intermediateFrames >= 2, notch.detail);
-
   await row.getByText('Off', { exact: true }).click();
   await until(
     () => page.evaluate(() => fetch('/omc/api/v1/preferences').then((response) => response.json()))
-      .then((body) => body.preferences?.omc_scroll_smoothing === 'off'),
-    { label: 'the scroll smoothing preference to be stored' },
+      .then((body) => body.preferences?.omc_reduced_motion === 'off'),
+    { label: 'the full-motion preference to be stored' },
   );
   await page.evaluate(() => { document.querySelector('[data-probe-scroller]').scrollTop = 0; });
   notch = describeNotch(await sampleNotch(page, paneAt));
-  check('Off leaves the native step', notch.intermediateFrames === 0 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+  check('Off restores the glide on a reduced-motion system', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  notch = describeNotch(await sampleNotch(page, paneAt));
+  check('Off keeps gliding when the system allows motion', notch.intermediateFrames >= 2, notch.detail);
+
+  await row.getByText('On', { exact: true }).click();
+  await until(
+    () => page.evaluate(() => fetch('/omc/api/v1/preferences').then((response) => response.json()))
+      .then((body) => body.preferences?.omc_reduced_motion === 'on'),
+    { label: 'the motion preference to be stored' },
+  );
+  await page.evaluate(() => { document.querySelector('[data-probe-scroller]').scrollTop = 0; });
+  notch = describeNotch(await sampleNotch(page, paneAt));
+  check('On leaves the native step', notch.intermediateFrames === 0 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+
+  const transition = await row.locator('.ant-segmented-item').first().evaluate(node => getComputedStyle(node).transitionDuration);
+  check('On removes control transitions as well as scrolling', transition.split(',').every(value => parseFloat(value) === 0), transition);
 
   // The request list's own jump, unsmoothed and sampled the same way: the frame a glide must not
   // start later than.
   let list = await openRequestList(page, base);
   const ownJump = describeNotch(await sampleNotch(page, list.listAt));
-  check('Off leaves the request list its own jump', list.hasHolder && ownJump.intermediateFrames === 0 && ownJump.framesBeforeMove !== null, ownJump.detail);
+  check('On leaves the request list its own jump', list.hasHolder && ownJump.intermediateFrames === 0 && ownJump.framesBeforeMove !== null, ownJump.detail);
 
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await row.scrollIntoViewIfNeeded();
-  await row.getByText('On', { exact: true }).click();
+  await row.getByText('Off', { exact: true }).click();
   await until(
     () => page.evaluate(() => fetch('/omc/api/v1/preferences').then((response) => response.json()))
-      .then((body) => body.preferences?.omc_scroll_smoothing === 'on'),
-    { label: 'the scroll smoothing preference to be stored' },
+      .then((body) => body.preferences?.omc_reduced_motion === 'off'),
+    { label: 'the motion preference to be stored' },
   );
 
   // ---- the virtualized request list ----

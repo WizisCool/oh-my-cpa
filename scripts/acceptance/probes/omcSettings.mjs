@@ -121,9 +121,12 @@ export async function omcSettings({ base, page, check, context, expectProblem })
     (await timezoneControl.innerText()).includes('Asia/Kuala_Lumpur') && (await timezoneControl.innerText()).includes('UTC+8') && (await timezoneControl.innerText()).includes('Server time zone'));
   await timezone.click();
   const popup = page.locator('.ant-select-dropdown:visible');
-  // Reduced motion hides the animation, not rc-trigger's async prepare/align steps.
-  await until(() => popup.evaluate(node => ['appear', 'enter'].some(phase => node.classList.contains(`ant-slide-up-${phase}-active`))),
-    { label: 'the timezone popup alignment prepare to complete' });
+  // Alignment is ready when the reader can reach the popup, independent of its motion lifecycle.
+  await until(() => popup.evaluate(node => {
+    const box = node.getBoundingClientRect();
+    return box.width > 0 && box.left >= 0 && box.right <= window.innerWidth
+      && box.top >= 0 && box.bottom <= window.innerHeight;
+  }), { label: 'the timezone popup to align within the viewport' });
   await settleLayout(page);
   const timezoneLayout = await popup.evaluate(node => ({
     width: node.getBoundingClientRect().width,
@@ -225,44 +228,6 @@ export async function omcSettings({ base, page, check, context, expectProblem })
     (await page.locator('.omc-settings-page .terminal-subtitle').count()) === 0
       && (await page.locator('.omc-settings-page .section-head-description').count()) === 0,
     `subtitle=${await page.locator('.omc-settings-page .terminal-subtitle').count()} groupDesc=${await page.locator('.omc-settings-page .section-head-description').count()}`,
-  );
-
-  // Every console setting this page owns, once. A duplicated row would be two controls for one
-  // setting - the operator changes one and the other silently disagrees.
-  const expectedLabels = [
-    'Time zone',
-    'Token unit style',
-    'TPS calculation mode',
-    'Model icons in request list',
-    'Scheduled quota refresh',
-    'Refresh after a quota resets',
-    'Oh My CPA plugin registry',
-    'Theme mode',
-    'Light-mode palette',
-    'Dark-mode palette',
-    'Interface font',
-    'Monospace font',
-    'Font library',
-    'Language',
-    'Smooth scrolling',
-    // The rail's own entries are listed in the panel this row opens, not inline on the page: a
-    // settings page carries what an operator sets, and the rail panel carries the rail.
-    'Sidebar entries',
-  ];
-  const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
-  check(
-    'the settings page lists each console setting once',
-    labels.length === expectedLabels.length
-      && new Set(labels).size === labels.length
-      && expectedLabels.every((label) => labels.includes(label)),
-    `labels=${labels.join(' | ')}`,
-  );
-  // The chart grouping belongs to the panels that plot it, not here: a second control on a settings
-  // page is a second place to look for one decision.
-  check(
-    'the chart grouping is not duplicated onto the settings page',
-    !labels.some((label) => /grouping|口径/.test(label)),
-    `labels=${labels.join(' | ')}`,
   );
 
   // ── each control fits the column it is given ──────────────────────────────

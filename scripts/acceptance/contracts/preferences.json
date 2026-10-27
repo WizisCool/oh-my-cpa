@@ -17,7 +17,7 @@
     "omc_models_view",
     "omc_request_model_icons",
     "omc_theme",
-    "omc_scroll_smoothing",
+    "omc_reduced_motion",
     "omc_nav_hidden",
     "omc_nav_order",
     "omc_sidebar_collapsed",

@@ -745,7 +745,7 @@
   .heatmap-cell::after { content: ''; position: absolute; inset: -1px; }
   .heatmap-head { align-items: flex-start; }
 }
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion='true'] {
   .heatmap-progress::after { animation: none; width: 100%; opacity: 0.6; }
   /* Keep the acknowledgement, drop the movement: the ring still marks the cell under the pointer. */
   .heatmap-cell-mark { transition: none; }

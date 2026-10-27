@@ -1,3 +1,4 @@
+import type { EChartsCoreOption } from './core';
 import type { ThemePalette } from '../../theme/palette';
 import { MOTION_FAST, MOTION_ROLL } from '../../theme/themeConfig';
 
@@ -68,5 +69,40 @@ export function echartsMotion(isReducedMotion: boolean): Record<string, unknown>
     animationDurationUpdate: MOTION_ROLL.duration,
     animationEasing: 'cubicOut',
     animationEasingUpdate: 'cubicOut',
+  };
+}
+
+/** Apply after page options so a chart cannot opt out of the console's accessibility policy. */
+export function applyEchartsMotion(option: EChartsCoreOption, isReducedMotion: boolean): EChartsCoreOption {
+  const motion = echartsMotion(isReducedMotion);
+  const mapOptions = (value: unknown, project: (entry: Record<string, unknown>) => Record<string, unknown>) =>
+    Array.isArray(value) ? value.map(project) : project((value ?? {}) as Record<string, unknown>);
+  return {
+    ...motion,
+    ...option,
+    ...(isReducedMotion ? motion : {}),
+    // Explicit normal values restore animations that ECharts would otherwise retain on merge.
+    series: option.series === undefined ? undefined : mapOptions(option.series, series => ({
+      ...motion,
+      ...series,
+      ...(isReducedMotion ? motion : { animation: series.animation ?? true }),
+    })),
+    ...(option.tooltip === undefined ? {} : {
+      tooltip: mapOptions(option.tooltip, tooltip => ({
+        ...tooltip,
+        transitionDuration: isReducedMotion ? 0 : tooltip.transitionDuration ?? MOTION_FAST.duration / 1000,
+        axisPointer: {
+          ...tooltip.axisPointer as object,
+          animation: !isReducedMotion,
+          animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration,
+        },
+      })),
+    }),
+    // ECharts always creates this model; axis-local pointers inherit its timing even without a tooltip.
+    axisPointer: mapOptions(option.axisPointer, pointer => ({
+      ...pointer,
+      animation: !isReducedMotion,
+      animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration,
+    })),
   };
 }

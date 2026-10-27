@@ -674,7 +674,7 @@
    platform to reduce motion should not have to receive it. The transition is removed rather
    than shortened: the colour still changes on hover, it simply stops animating, which is what
    the preference asks for - the same treatment `ApiKeysList.module.css` gives its own. */
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .repo-link {
     transition: none;
   }

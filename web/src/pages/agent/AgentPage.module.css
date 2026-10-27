@@ -517,7 +517,7 @@
   overflow: auto;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .fold {
     transition: none;
   }
@@ -1197,7 +1197,7 @@
   from { opacity: 0; transform: translateY(4px); }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .call {
     animation: none;
   }

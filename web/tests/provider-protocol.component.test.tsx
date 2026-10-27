@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { useT } from '../src/i18n';
 import { useState } from 'react';
@@ -10,6 +10,7 @@ import type { Toast } from '../src/components/feedback';
 import type { ProviderItem } from '../src/types/providers';
 import { installOmcApi } from './support/omcApi';
 import { createTestQueryClient, renderWithOmc } from './support/render';
+import { DEFAULT_REDUCED_MOTION, setReducedMotionPreference } from '../src/utils/motionPreference';
 
 const PROVIDER: ProviderItem = {
   id: 'openai-compat-0', family: 'openai-compatibility', name: 'Relay', upstream_name: 'relay',
@@ -35,6 +36,10 @@ function DraftProbes() {
       <button onClick={() => editor.setFormFamily('claude')}>Switch to Messages</button>
       <button onClick={() => { void editor.handleTestAllKeys(); }}>Probe draft</button>
       <button onClick={() => { void editor.handlePullModels(); }}>Pull draft models</button>
+      <button onClick={editor.handleAddModel}>Add draft model</button>
+      {editor.formModels.map(model => <div key={model.id} id={`model-card-${model.id}`}>
+        <button onClick={() => editor.toggleModelExpanded(model.id)}>{model.name || 'New model'}</button>
+      </div>)}
     </>}
   </>;
 }
@@ -58,6 +63,43 @@ it('uses the selected draft protocol for probes and model pulls without resolvin
     }
     expect(requests().slice(0, 2).map(request => request.api_key)).toEqual(['fixture-key-one', 'fixture-key-two']);
   } finally { view.unmount(); }
+});
+
+it('uses the live console motion policy when scrolling expanded and added model cards', () => {
+  installOmcApi();
+  vi.useFakeTimers();
+  const scrollIntoView = vi.fn();
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = scrollIntoView;
+  setReducedMotionPreference('off');
+  const view = renderWithOmc(<DraftProbes />);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Load draft' }));
+    const model = screen.getByRole('button', { name: 'model-one' });
+    fireEvent.click(model);
+    // A preference change before the deferred scroll must affect that scroll too.
+    setReducedMotionPreference('on');
+    act(() => { vi.advanceTimersByTime(80); });
+    fireEvent.click(screen.getByRole('button', { name: 'Add draft model' }));
+    act(() => { vi.advanceTimersByTime(80); });
+    fireEvent.click(model);
+    fireEvent.click(model);
+    setReducedMotionPreference('off');
+    act(() => { vi.advanceTimersByTime(80); });
+    fireEvent.click(screen.getByRole('button', { name: 'Add draft model' }));
+    act(() => { vi.advanceTimersByTime(80); });
+    expect(scrollIntoView.mock.calls).toEqual([
+      [{ behavior: 'instant', block: 'nearest' }],
+      [{ behavior: 'instant', block: 'end' }],
+      [{ behavior: 'smooth', block: 'nearest' }],
+      [{ behavior: 'smooth', block: 'end' }],
+    ]);
+  } finally {
+    view.unmount();
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+    setReducedMotionPreference(DEFAULT_REDUCED_MOTION);
+    vi.useRealTimers();
+  }
 });
 
 function Editor() {

@@ -139,7 +139,7 @@
    kill is on movement - a keyframe's transform, a disclosure's height - and the
    colour hints are left alone, because at the fast token they are three frames
    rather than motion. `index.css` splits the heatmap mark the same way. */
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion='true'] {
   .req-back-to-top-btn { animation: none; }
   .req-back-to-top-btn,
   .req-back-to-top-btn .anticon,

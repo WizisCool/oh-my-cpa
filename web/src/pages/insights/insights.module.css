@@ -355,7 +355,7 @@
   .ranking-change, .ranking-bar, .ranking-row .value-detail { display: none; }
   .rhythm { grid-template-columns: 24px repeat(24, minmax(0, 1fr)); gap: 2px; }
 }
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .ranking-bar > span, .ranking-list > li { transition: none; }
   .filter-chip { animation: none; }
 }

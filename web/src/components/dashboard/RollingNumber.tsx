@@ -1,5 +1,6 @@
 import React from 'react';
 import NumberFlow from '@number-flow/react';
+import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { MOTION_ROLL, MOTION_ROLL_PRESENCE } from '../../theme/themeConfig';
 import type { RollingReadout } from '../../types/rollingNumber';
 
@@ -26,14 +27,14 @@ interface RollingNumberProps {
  *   while the unit swapped underneath - digits that never described the window on their own. The
  *   frame where the unit word changes is therefore not animated; the next same-unit change sweeps
  *   normally.
- * - **Reduced motion wins.** `respectMotionPreference` is left at its default, so §7's
- *   `prefers-reduced-motion` override reaches the readout as well: the value still updates, it just
- *   arrives instead of travelling.
+ * - **The console's motion policy wins.** NumberFlow's independent system check is disabled so an
+ *   explicit console choice applies in either direction; reduced values update in place.
  *
  * The locale is pinned to `en` because that is what every formatter in this console prints in;
  * leaving it unset would silently follow the browser instead.
  */
 export const RollingNumber: React.FC<RollingNumberProps> = ({ readout }) => {
+  const isReducedMotion = usePrefersReducedMotion();
   const suffix = readout?.suffix ?? '';
   const previousSuffix = React.useRef(suffix);
   // The ref is advanced in an effect rather than during render so a StrictMode
@@ -57,7 +58,8 @@ export const RollingNumber: React.FC<RollingNumberProps> = ({ readout }) => {
       format={readout.format}
       prefix={readout.prefix}
       suffix={readout.suffix}
-      animated={!unitChanged}
+      animated={!isReducedMotion && !unitChanged}
+      respectMotionPreference={false}
       transformTiming={MOTION_ROLL}
       spinTiming={MOTION_ROLL}
       opacityTiming={MOTION_ROLL_PRESENCE}

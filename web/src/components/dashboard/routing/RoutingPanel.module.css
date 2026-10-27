@@ -602,3 +602,7 @@
 .row-failures {
   color: var(--danger);
 }
+
+:global(:root[data-reduced-motion='true']) {
+  .edge-flow-on { animation: none; }
+}

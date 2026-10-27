@@ -245,6 +245,11 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
   );
 
   // ── reduced motion keeps the value and drops the travel ─────────────────────
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(async () => {
+    const { setReducedMotionPreference } = await import('/omc/src/utils/motionPreference.ts');
+    setReducedMotionPreference('on');
+  });
   // A same-unit change on purpose: nothing here may be attributed to the unit freeze, so the only
   // reason this frame can be still is the reader's own preference.
   await page.evaluate(() => {
@@ -270,7 +275,7 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
   check('a reduced-motion readout does not sweep', reducedSweeps === 0, `sweeps=${reducedSweeps}`);
 
   // ── motion allowed: what sweeps, and what must not ──────────────────────────
-  const motionContext = await context.browser().newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+  const motionContext = await context.browser().newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   try {
     await motionContext.addInitScript(() => {
       localStorage.setItem('omc-theme', 'omc-light');
@@ -288,6 +293,10 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
     const motionPage = await motionContext.newPage();
     await motionPage.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await motionPage.locator('.dashboard-tile .tile-value number-flow-react').first().waitFor({ timeout: 20_000 });
+    await motionPage.evaluate(async () => {
+      const { setReducedMotionPreference } = await import('/omc/src/utils/motionPreference.ts');
+      setReducedMotionPreference('off');
+    });
     await motionPage.evaluate(() => {
       window.__readoutEvents = { started: [], finished: [] };
       document.querySelectorAll('.dashboard-tile .tile-value number-flow-react').forEach((host, index) => {
@@ -377,8 +386,16 @@ export async function dashboardChartMotion({ base, page, context, check }) {
     frame.style.maxWidth = 'none';
   });
   let revision = 0;
-  for (const isReduced of [false, true]) {
-    await page.emulateMedia({ reducedMotion: isReduced ? 'reduce' : 'no-preference' });
+  for (const { preference, system, isReduced } of [
+    { preference: 'system', system: 'no-preference', isReduced: false },
+    { preference: 'on', system: 'no-preference', isReduced: true },
+    { preference: 'off', system: 'reduce', isReduced: false },
+  ]) {
+    await page.emulateMedia({ reducedMotion: system });
+    await page.evaluate(async preference => {
+      const { setReducedMotionPreference } = await import('/omc/src/utils/motionPreference.ts');
+      setReducedMotionPreference(preference);
+    }, preference);
     await page.waitForFunction((reduced) => {
       const echarts = window.__echartsRuntime;
       return [...document.querySelectorAll('.omc-echart')].every((host) => echarts.getInstanceByDom(host)?.getOption().animation === !reduced);
@@ -425,6 +442,10 @@ export async function dashboardChartMotion({ base, page, context, check }) {
       check(`${name} ${isReduced ? 'paints no intermediate frame' : 'morphs through intermediate frames'}`, isReduced ? measured.intermediate === 0 : measured.intermediate > 0, JSON.stringify(measured));
     }
   }
+  await page.evaluate(async () => {
+    const { setReducedMotionPreference } = await import('/omc/src/utils/motionPreference.ts');
+    setReducedMotionPreference('system');
+  });
   await page.locator('.range-trigger').click();
   const popover = page.locator('.ant-popover:visible').first();
   await popover.waitFor({ state: 'visible' });

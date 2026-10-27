@@ -35,7 +35,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceModelView:           true,
 	repository.PreferenceRequestModelIcons:   true,
 	repository.PreferenceTheme:               true,
-	repository.PreferenceScrollSmoothing:     true,
+	repository.PreferenceReducedMotion:       true,
 	repository.PreferenceFonts:               true,
 	repository.PreferenceNavHidden:           true,
 	repository.PreferenceNavOrder:            true,

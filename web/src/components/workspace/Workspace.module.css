@@ -1072,7 +1072,7 @@
   white-space: nowrap;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .queue-item {
     animation: none;
   }
@@ -1735,7 +1735,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .latest {
     animation: none;
   }
@@ -1750,7 +1750,7 @@
    pale strokes - barely legible as dark ink on a light ground. Repainting one short line is the
    whole cost. Where a text clip is unavailable, and under reduced motion, the label is plain text. */
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  @media (prefers-reduced-motion: no-preference) {
+  :global(:root[data-reduced-motion='false']) {
     .live-text {
       --live-text-band: 3.2em;
       --live-text-glint: var(--fg);
@@ -1808,7 +1808,7 @@
   align-self: flex-end;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .live-text {
     animation: none;
   }
@@ -1823,13 +1823,13 @@
 /* The markdown renderer wraps each arriving run of text in a span that names its own fade. The
    thread replaces that fade with its own: new words land in the accent and settle into the ink,
    so the eye finds the end of the answer without a jump (ADR 0080). */
-@media (prefers-reduced-motion: no-preference) {
+:global(:root[data-reduced-motion='false']) {
   .markdown :global(span[style*='x-markdown-fade-in']) {
     animation: stream-arrive var(--motion-base) var(--ease-standard) both !important;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .markdown :global(span[style*='x-markdown-fade-in']) {
     animation: none !important;
   }
@@ -1859,7 +1859,7 @@
   50% { opacity: .25; }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .stream-caret {
     animation: none;
   }

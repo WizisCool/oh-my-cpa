@@ -8,10 +8,10 @@
  * not animate — is covered by the browser acceptance suite.
  */
 import assert from 'node:assert/strict';
+import { isMotionReduced, setReducedMotionPreference, parseReducedMotion, DEFAULT_REDUCED_MOTION } from '../web/src/utils/motionPreference.ts';
 import {
   animateScrollToTop,
   easeOutCubic,
-  prefersReducedMotion,
   scrollDurationFor,
   scrollTopAt,
   SCROLL_ANIMATION_MS,
@@ -20,7 +20,7 @@ import {
 // Node has no `window`, so this is the "no platform opinion" state: motion is
 // allowed, so a gesture animates and a correction does not.
 assert.equal(typeof globalThis.window, 'undefined', 'this test relies on running without a DOM');
-assert.equal(prefersReducedMotion(), false, 'no platform opinion means motion is allowed');
+assert.equal(isMotionReduced(), false, 'no platform opinion means motion is allowed');
 assert.ok(scrollDurationFor('smooth') > 0, 'a gesture animates');
 assert.equal(scrollDurationFor('instant'), 0, 'a correction never animates');
 
@@ -143,19 +143,31 @@ const originalWindow = globalThis.window;
 globalThis.window = {
   matchMedia: (query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' }),
 } as unknown as Window & typeof globalThis;
-assert.equal(prefersReducedMotion(), true);
+assert.equal(isMotionReduced(), true);
 assert.equal(scrollDurationFor('smooth'), 0, 'reduced motion collapses a gesture to a correction');
 assert.equal(scrollDurationFor('instant'), 0);
 assert.equal(scrollTopAt(1376, SCROLL_ANIMATION_MS / 2, scrollDurationFor('smooth')), 0);
 
+setReducedMotionPreference('off');
+assert.equal(scrollDurationFor('smooth'), SCROLL_ANIMATION_MS, 'Off overrides a reduced-motion system');
+setReducedMotionPreference('on');
+assert.equal(scrollDurationFor('smooth'), 0, 'On reduces gesture motion');
+globalThis.window = { matchMedia: () => ({ matches: false }) } as unknown as Window & typeof globalThis;
+assert.equal(scrollDurationFor('smooth'), 0, 'On also overrides a full-motion system');
+assert.equal(DEFAULT_REDUCED_MOTION, 'system');
+assert.equal(parseReducedMotion('system'), 'system');
+assert.equal(parseReducedMotion(true), undefined);
+assert.equal(parseReducedMotion('smooth'), undefined);
+setReducedMotionPreference('system');
+
 // A platform whose matchMedia disagrees, or is absent, must not throw: the
 // fallback is to animate, which is the default behaviour.
 globalThis.window = { matchMedia: () => ({ matches: false }) } as unknown as Window & typeof globalThis;
-assert.equal(prefersReducedMotion(), false);
+assert.equal(isMotionReduced(), false);
 assert.ok(scrollDurationFor('smooth') > 0);
 
 globalThis.window = {} as unknown as Window & typeof globalThis;
-assert.equal(prefersReducedMotion(), false, 'a platform without matchMedia still animates');
+assert.equal(isMotionReduced(), false, 'a platform without matchMedia still animates');
 assert.ok(scrollDurationFor('smooth') > 0);
 
 globalThis.window = originalWindow;

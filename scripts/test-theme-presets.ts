@@ -48,7 +48,8 @@ import {
   sameThemePreferences,
   writeStoredThemePreferences,
 } from '../web/src/theme/themePreference.ts';
-import { createThemeConfig, MOTION_LIVE_TEXT, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
+import { createThemeConfig, MOTION_FAST, MOTION_LIVE_TEXT, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
+import { applyEchartsMotion, echartsMotion } from '../web/src/charts/echarts/echartsTheme.ts';
 
 // ── the registry ─────────────────────────────────────────────────────────────
 
@@ -405,5 +406,16 @@ assert.equal(
   'a reference from the same mode is kept',
 );
 assert.equal(emptyCustomPalette('light', 'forest').base, 'omc-light', 'a cross-mode starting palette falls back to this mode');
+
+// Motion projection must not enable hover UI on a chart that did not request it.
+for (const isReducedMotion of [true, false]) {
+  const option = { series: [{ type: 'pie', data: [{ name: 'requests', value: 12 }] }] };
+  const motion = echartsMotion(isReducedMotion);
+  assert.deepEqual(applyEchartsMotion(option, isReducedMotion), {
+    ...motion,
+    series: option.series.map(series => ({ ...motion, ...series })),
+    axisPointer: { animation: !isReducedMotion, animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration },
+  }, 'motion projection preserves an omitted tooltip and supplies inherited axis-pointer timing');
+}
 
 console.log('theme contracts hold: derivation, preferences and Ant Design projection');

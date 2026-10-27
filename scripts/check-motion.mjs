@@ -17,11 +17,10 @@
  *      including the layout ones. §7 rule 1's list; the exceptions are disclosures and the bar whose
  *      width positions its own label. An exception is keyed by file, selector and property, and it
  *      must carry a reason - an unexplained exception is how a budget disappears.
- *   3. **Every keyframe animation has a reduced-motion counterpart**, unless the selector carries a
- *      `reduced` exception with the reason it is exempt. §7's override is a promise, and a keyframe
- *      cannot be reached by a media query written after the fact: the counterpart has to exist next
- *      to the motion. The exception exists for the live routing map, whose travelling request is the
- *      reading itself rather than decoration (ADR 0102). Scope note: transitions are not checked
+ *   3. **Every keyframe animation has a reduced-motion counterpart.** A keyframe must have an
+ *      explicit settled state under the console's resolved motion policy; the library motion
+ *      provider completes focus and unmount without waiting for a CSS lifecycle fade.
+ *      Scope note: transitions are not checked
  *      here, because the console kills them per-rule where the motion is intrusive (the heatmap mark
  *      scales, so its colour fade would smear) and a blanket requirement would flag every 50ms hover.
  *   4. **A hover may transition colour only within the fast token.** §7 rule 7 was written as a ban
@@ -72,8 +71,7 @@ const LAYOUT_PROPERTIES = [
  * The exceptions, each with the reason it is one.
  *
  * `duration` waives rule 1 (an indeterminate bar's period is not a state transition); `layout` waives
- * rule 2 (a disclosure cannot be composited); `reduced` waives rule 3 for one selector that carries
- * information rather than decoration. All three are asserted to be *used*, so the table cannot rot
+ * rule 2 (a disclosure cannot be composited). Both are asserted to be *used*, so the table cannot rot
  * into a list of things nobody remembers reading.
  */
 const EXCEPTIONS = [
@@ -118,27 +116,6 @@ const EXCEPTIONS = [
     selector: '.edge-flow-on',
     property: 'animation',
     why: 'A routing lane flows for as long as a request travels it or waits at its end; 540ms is one dash period of the flow, not a transition between two states (docs/design.md §7 rule 9).',
-  },
-  {
-    kind: 'reduced',
-    file: 'index.css',
-    selector: '.ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active',
-    property: 'animation',
-    why: 'rc-dialog moves focus into a dialog when its entrance ends, so an entrance with no animation never ends and focus stays behind the dialog. Reduced motion swaps the settle for an opacity-only fade rather than removing it.',
-  },
-  {
-    kind: 'reduced',
-    file: 'index.css',
-    selector: '.ant-modal.ant-zoom-leave.ant-zoom-leave-active',
-    property: 'animation',
-    why: 'rc-dialog unmounts the dialog wrapper when its exit ends; with no animation the transparent wrapper stays over the page and swallows every click. Reduced motion keeps an opacity-only fade rather than removing it.',
-  },
-  {
-    kind: 'reduced',
-    file: 'components/dashboard/routing/RoutingPanel.module.css',
-    selector: '.edge-flow-on',
-    property: 'animation',
-    why: 'The live routing map carries its reading in the travelling request, and Windows reports its "Animation effects" switch as reduced motion. The trip therefore plays in full for every reader; ADR 0102 records the scoped exception and the trade-off.',
   },
   {
     kind: 'layout',
@@ -287,12 +264,13 @@ function parseStylesheet(css) {
       const body = source.slice(start, index);
       const selector = stack.pop() ?? '';
       const media = stack.filter((entry) => entry.startsWith('@media')).join(' ');
+      const isReduced = isReducedMedia(media) || stack.some(entry => entry.includes("data-reduced-motion='true'"));
       const frame = stack.find((entry) => entry.startsWith('@keyframes'));
       if (frame) {
         // Inside a keyframe block: these declarations say what the motion animates.
         keyframes.push({ selector, media, declarations: declarations(body), frame });
       } else if (selector && !selector.startsWith('@')) {
-        rules.push({ selector, media, declarations: declarations(body) });
+        rules.push({ selector, media, isReduced, declarations: declarations(body) });
       }
       start = index + 1;
     } else if (char === ';' && stack.length === 0) {
@@ -422,13 +400,13 @@ for (const { absolute, file, text } of sources) {
   // match depend on their formatting.
   const reducedKills = new Set(
     rules
-      .filter((rule) => isReducedMedia(rule.media))
+      .filter((rule) => rule.isReduced)
       .filter((rule) => /^none\b/.test(rule.declarations.find((entry) => entry.property === 'animation')?.value ?? ''))
-      .flatMap((rule) => selectorList(rule.selector)),
+      .flatMap((rule) => selectorList(rule.selector).map(entry => entry.replace(/^&/, '').trim())),
   );
 
   for (const rule of rules) {
-    const isReducedBlock = isReducedMedia(rule.media);
+    const isReducedBlock = rule.isReduced;
     const transition = rule.declarations.find(
       (entry) => entry.property === 'transition' || entry.property === 'transition-duration',
     );
@@ -479,8 +457,8 @@ for (const { absolute, file, text } of sources) {
         (declaration) => declaration && !/^none\b/.test(declaration.value),
       );
       const killed = selectorList(rule.selector).every((entry) => reducedKills.has(entry));
-      if (animates && !killed && !used('reduced', file, rule.selector, 'animation')) {
-        record('animates with no `prefers-reduced-motion` counterpart', file, rule.selector, 'animation');
+      if (animates && !killed) {
+        record('animates with no reduced-motion counterpart', file, rule.selector, 'animation');
       }
     }
   }
@@ -519,7 +497,7 @@ for (const violation of violations) {
 if (violations.length === 0) {
   output.log(`Sources checked: ${filesScanned} (stylesheets and inline transition strings)`);
   output.log(`Motion exceptions in use: ${usedExceptions.size} of ${exceptions.length}`);
-  output.log('Every duration is a token, no transition animates layout, and every keyframe animation is either reduced-motion safe or explicitly exempt.');
+  output.log('Every duration is a token, no transition animates layout, and every keyframe animation is reduced-motion safe.');
 } else {
   output.error(`\n${violations.length} motion violation(s) across ${filesScanned} files.`);
   output.error('Every duration must be a --motion-* token, and every exception must be listed in EXCEPTIONS with a reason.');

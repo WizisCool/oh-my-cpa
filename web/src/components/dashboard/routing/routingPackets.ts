@@ -1,3 +1,5 @@
+import { isMotionReduced, subscribeMotionPreference } from '../../../utils/motionPreference';
+
 import { MOTION_ROUTE, MOTION_ROUTE_GLOW, MOTION_ROUTE_LAND } from '../../../theme/themeConfig';
 import type { RoutingRoute } from '../../../types/usageRouting';
 
@@ -380,18 +382,21 @@ export function createPacketPlayer(stage: PacketStage) {
     if (isPageHidden()) halt();
   };
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibilityChange);
+  const unsubscribeMotion = subscribeMotionPreference(() => {
+    if (isMotionReduced()) halt();
+  });
 
   return {
     /** Replays routes oldest first; a read with more than the cap replays its newest. */
     play(routes: readonly RoutingRoute[]) {
       // Nobody is watching a hidden page, and the trip could not run there anyway.
-      if (isDisposed || isPageHidden()) return;
+      if (isDisposed || isPageHidden() || isMotionReduced()) return;
       routes.slice(-MAX_REPLAYED_ROUTES).forEach((route, index) => {
         // Even the first starts on a timer: a model that arrived with this read gets
         // its row and lane in the render after the one that delivered the read.
         const timer = setTimeout(() => {
           timers.delete(timer);
-          if (isDisposed || isPageHidden() || inFlight >= MAX_LIVE_PACKETS) return;
+          if (isDisposed || isPageHidden() || isMotionReduced() || inFlight >= MAX_LIVE_PACKETS) return;
           void replay(route);
         }, index * ROUTE_STAGGER_MS);
         timers.add(timer);
@@ -399,6 +404,7 @@ export function createPacketPlayer(stage: PacketStage) {
     },
     dispose() {
       isDisposed = true;
+      unsubscribeMotion();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibilityChange);
       halt();
     },
