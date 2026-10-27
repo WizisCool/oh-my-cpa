@@ -39,7 +39,12 @@ func projectExchangeRates(snapshot exchangerate.Snapshot) exchangeRatesDTO {
 	if snapshot.AttemptedAtMS > 0 {
 		result.NextRefreshAtMS = snapshot.AttemptedAtMS + exchangerate.RefreshInterval.Milliseconds()
 	}
+	// A snapshot cached before the display set was closed can still hold other
+	// quotes until its next successful refresh.
 	for _, rate := range snapshot.Rates {
+		if !exchangerate.IsDisplayCurrency(rate.Currency) {
+			continue
+		}
 		result.Rates = append(result.Rates, exchangeRateDTO{Currency: rate.Currency, Rate: rate.Rate, Date: rate.Date})
 	}
 	return result

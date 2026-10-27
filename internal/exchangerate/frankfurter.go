@@ -77,8 +77,10 @@ func DecodeFrankfurter(body []byte) ([]Rate, error) {
 			rates = append(rates, Rate{Currency: row.Quote, Rate: row.Rate, Date: row.Date})
 		}
 	}
-	for _, required := range []string{"CNY", "EUR", "JPY", "MYR"} {
-		if !seen[required] {
+	// A snapshot replaces the whole table, so one missing quote would leave an
+	// operator who chose that currency with no reading until the next refresh.
+	for _, required := range DISPLAY_CURRENCIES {
+		if required != "USD" && !seen[required] {
 			return nil, fmt.Errorf("Frankfurter snapshot is missing %s", required)
 		}
 	}

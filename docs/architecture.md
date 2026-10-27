@@ -125,8 +125,9 @@ failure code. Failed downloads retain the last complete table; restarts reuse it
 schedule. The authenticated facade exposes `GET /api/v1/exchange-rates` and
 `POST /api/v1/exchange-rates/refresh`. Reads use SQLite only. Refreshes never accept a
 source URL, send CPA credentials or run in demo mode. `exchangerate.DISPLAY_CURRENCIES`
-closes the set: the decoder caches only those quotes and `omc_display_currency` accepts
-only those codes. USD is the identity; other choices require a cached rate at
+closes the set: the decoder requires and caches exactly those quotes, the facade projects
+only those (a snapshot cached before the set closed may hold others until it is
+replaced), and `omc_display_currency` accepts only those codes. USD is the identity; other choices require a cached rate at
 preference-write time. The console mirrors the list with a `country-flag-icons` flag
 and a fixed symbol per currency.
 

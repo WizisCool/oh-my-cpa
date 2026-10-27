@@ -370,7 +370,8 @@ follow the displayed currency.
 
 The server reads the fixed Frankfurter v2 USD-base rates endpoint every 24 hours,
 including an initial download when no attempt is cached, and keeps only the eleven
-display currencies. The refresh glyph beside the picker updates them immediately; a
+display currencies; a snapshot missing any of them is refused like any other
+incomplete one. The refresh glyph beside the picker updates them immediately; a
 non-USD choice states its rate for 1 USD and that quote's observation date, which
 can trail the download.
 
