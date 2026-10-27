@@ -589,7 +589,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
     label: 'the recorded dark palette to apply when dark mode arrives',
   });
   const pewterBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
-  check('the recorded palette paints the console when its mode arrives', pewterBg === '#222226', `--bg=${pewterBg}`);
+  check('the recorded palette paints the console when its mode arrives', pewterBg === '#1f2329', `--bg=${pewterBg}`);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   check(

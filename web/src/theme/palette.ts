@@ -550,44 +550,47 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
     },
   },
   {
-    // A dimmed dark: the page sits ΔL +0.07 above OMC Dark, so bright text no longer halates on a
-    // near-black ground, and the foreground eases off pure white for the same reason. The neutral
-    // carries OMC Dark's faint cool cast, and the accent is the console's blue lifted to keep its
-    // margin on the lighter page.
+    // A dimmed slate. Every neutral shares one steel-blue hue (OKLCH 255) at a low chroma, so the
+    // page, the cards, the rules and the text ladder read as one material rather than as OMC Dark
+    // with its lightness raised. The page sits at L 0.255, where a bright glyph no longer halates, and
+    // the foreground eases off white for the same reason. The accent is an iris blue (hue 262) whose
+    // chroma is held low enough to sit on slate without glowing.
     id: 'pewter',
     mode: 'dark',
     nameKey: 'theme.pewter',
     descriptionKey: 'theme.pewter_desc',
     core: {
-      bg: '#222226',
-      surface: '#2c2c2f',
-      elevated: '#333336',
-      fg: '#e9e9ed',
-      fg2: '#bababe',
-      muted: '#8a8a8e',
-      meta: '#68686c',
-      border: '#3f3f43',
-      accent: '#47b5fa',
+      bg: '#1f2329',
+      surface: '#272c32',
+      elevated: '#2e3339',
+      fg: '#e7eaed',
+      fg2: '#b9bec6',
+      muted: '#8a919b',
+      meta: '#676e77',
+      border: '#383e46',
+      accent: '#86b1ff',
     },
   },
   {
-    // A light grey that stays light: the page is OKLCH 0.93, and the cards are lifted toward white
-    // rather than sunk below it, so elevation still reads as light. The text ladder is deepened by
-    // the distance the page gave up, keeping every step at OMC Light's contrast or above.
+    // A cool mist. The page is a near-white (L 0.978) carrying the same faint blue-grey hue (OKLCH
+    // 248) as its rules and its ink, so the derived canvas behind it reads as a tinted sidebar and the
+    // console keeps a light theme's clarity; a mid-grey page would only lower every contrast at once.
+    // The ink is a cool near-black rather than pure black, and the accent is a saturated cobalt
+    // (hue 260) that carries a link at 5.8:1.
     id: 'fog',
     mode: 'light',
     nameKey: 'theme.fog',
     descriptionKey: 'theme.fog_desc',
     core: {
-      bg: '#e7e7eb',
-      surface: '#f0f0f4',
-      elevated: '#f6f6fa',
-      fg: '#19191c',
-      fg2: '#47474a',
-      muted: '#666669',
-      meta: '#868689',
-      border: '#c8c8cc',
-      accent: '#005b8b',
+      bg: '#f5f8fb',
+      surface: '#edf1f5',
+      elevated: '#fcfeff',
+      fg: '#1a2026',
+      fg2: '#495158',
+      muted: '#6c767f',
+      meta: '#9199a2',
+      border: '#d5dce2',
+      accent: '#225ebf',
     },
   },
   {
