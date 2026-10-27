@@ -2648,7 +2648,7 @@ and leaves the *stream* alone (`web/src/utils/scrollSmoothing.ts`, ADR 0046):
 | --- | --- |
 | Wheel notch (line/page mode, or a pixel-mode notch off Apple platforms) | Glides over `scroll` to exactly where it would have jumped |
 | Arrow keys, Page Up/Down, Space, Home, End outside an editable control or widget | Glide over `scroll` |
-| Trackpad, Apple-platform pixel wheels, touch | Never glided. A finger on the request list moves it directly (§8) |
+| Trackpad, Apple-platform pixel wheels, touch | Never glided. Under a finger the request list is a native scroller (§8) |
 | Ctrl/⌘, Shift or Alt wheel; horizontal wheel | Native (zoom, sideways scroll) |
 | Programmatic scroll (a correction, `scrollIntoView`) | Native; it also stops any glide on that scroller |
 
@@ -2853,24 +2853,19 @@ is therefore the containing block for anything positioned inside it: row-level p
 belong to the list (the shared tooltip) or to a portal, never to an absolutely
 positioned child that must escape the row.
 
-The list is virtualized, so the browser cannot scroll it for a finger, and the library's own touch
-emulation ran up to four times ahead of the finger: it restarted a fixed-interval coast after every
-move, and that coast kept firing while the finger was still down. The console moves the list itself
-(`web/src/components/usage/requestListTouch.ts`, ADR 0048):
+Where a finger can scroll (`any-pointer: coarse`) the list is not virtualized: the browser
+scrolls it, with the platform's own tracking and momentum (ADR 0109). Script moving a virtualized
+list under the finger trailed it and dropped frames, because every move waited on a render.
 
-- **The list moves exactly as far as the finger**, drawn on the frame the finger moved.
-- **A flick coasts** at the speed the finger left with, slowing at iOS's normal rate, and a finger
-  that rested before lifting does not coast.
-- **A tap on a coasting list only stops it**, as on any native scroller; it does not open the row
-  under it. A tap elsewhere, on the pagination or the back-to-top pill, stops the coast and still
-  acts.
-- **The header folds and unfolds with the wheel's gestures.** The first drag up folds it away and
-  leaves row one in place, as the first notch does. A deliberate pull down past the top of the list
-  (48px) unfolds it, as the top bounce does; arriving at the top does not. Folding is what makes room
-  on a phone, where the unfolded filters take most of the screen; the pull is the only way back to
-  them that a finger has, since the back-to-top pill is not shown at the top. A page that is loading
-  or found nothing has no list to pull, so a drag there never folds the header, and a header folded
-  before the list went away unfolds on a 48px pull down anywhere on the page.
+- **Rows away from the view cost nothing.** Each row is `content-visibility: auto`, so a page of
+  500 records keeps its full scroll height while only the rows near the view are laid out and
+  painted; a row keeps its measured height once drawn.
+- **Either end stops the drag.** `overscroll-behavior: contain` keeps it from scrolling, bouncing
+  or reloading the page around the list.
+- **A finger never folds the header.** The first drag scrolls, as every drag does; folding moved
+  nothing and then resized the list under the finger. The header's full-screen toggle folds and
+  unfolds it. With a mouse alone the list stays virtualized, and the wheel folds the header on its
+  first notch down and unfolds it on a bounce at the top.
 - **The fold slides, and the list answers it once.** The header folds over `--motion-base` from
   its own height, and the list fills the height that frees, so every frame of the fold resizes the
   list's box. What made that drop frames - a wheel rocking across the top of the list stuttered at

@@ -68,9 +68,8 @@ credential kind, a cache tint) land in one glance and none reads as a signal.
 
 ## Alternatives considered
 
-- **A persistent compact head instead of the fold.** The fold and its 48px pull are ADR 0048's
-  contract and are pinned by `request-list-touch`; a 117px head makes the fold cheap rather than
-  unnecessary.
+- **A persistent compact head instead of the fold.** A 117px head makes the fold cheap rather
+  than unnecessary. (Since ADR 0109 a finger never folds it; its toggle does.)
 - **A second, phone-only row component.** Two renderings of one record drift; the table row's
   DOM, rearranged, cannot.
 - **Keeping every table field in the stacked record.** Packing every table column into four

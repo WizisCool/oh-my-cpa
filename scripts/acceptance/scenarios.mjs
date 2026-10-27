@@ -802,9 +802,7 @@ export const SCENARIOS = [
   },
   {
     id: 'request-list-touch',
-    // Asserts motion frame by frame; a sibling context on the same CPU drops frames (ADR 0095).
-    shouldRunAlone: true,
-    name: 'on a phone the request list is the only scroller, and a finger folds and unfolds its header',
+    name: 'on a phone the browser scrolls the request list, the only scroller, under a finger',
     options: {
       // A phone short enough that the unfolded header leaves the list less than half the screen.
       viewport: { width: 390, height: 664 },

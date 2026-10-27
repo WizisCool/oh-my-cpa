@@ -1,6 +1,6 @@
 # ADR 0048: The request list moves under a finger itself
 
-- Status: Accepted
+- Status: Superseded in part by ADR 0109 (2026-10-27): a finger now scrolls the list natively; decision 1 stands.
 - Date: 2026-10-01
 
 ## Context
