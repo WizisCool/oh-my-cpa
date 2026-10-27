@@ -1,0 +1,17 @@
+{
+  "why": "Require the currencies offered as core display choices before publishing a snapshot.",
+  "body": [
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "MYR",
+      "rate": 4.1
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "EUR",
+      "rate": 0.89
+    }
+  ]
+}

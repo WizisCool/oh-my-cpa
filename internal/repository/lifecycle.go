@@ -111,6 +111,7 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"data_lifecycle_state":          {Kind: LifecycleReplaced, Reason: "one row per rolling policy"},
 	"pricing_catalog_state":         {Kind: LifecycleReplaced, Reason: "current catalog state"},
 	"pricing_model_catalog":         {Kind: LifecycleReplaced, Reason: "replaced whole on reconciliation"},
+	"exchange_rate_cache":           {Kind: LifecycleReplaced, Reason: "latest complete display-currency reference snapshot and refresh state"},
 	"pricing_sync_state":            {Kind: LifecycleReplaced, Reason: "current sync state"},
 	"pricing_upstream_catalog":      {Kind: LifecycleReplaced, Reason: "replaced whole on every successful sync"},
 	"release_check_state":           {Kind: LifecycleReplaced, Reason: "current release-check state"},

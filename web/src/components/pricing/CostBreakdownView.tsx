@@ -1,3 +1,5 @@
+import { formatCurrency } from '../../types/currencyDisplay';
+import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from '../usage/TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
@@ -7,7 +9,7 @@ import { DollarOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { formatTokensFull } from '../../types/tokenDisplay';
 import type { RequestCostBreakdown } from '../../types/pricing';
-import { formatMultiplier, formatRatePer1M, formatUsd, nanosToUsd } from '../../types/pricingDisplay';
+import { formatMultiplier, nanosToUsd } from '../../types/pricingDisplay';
 import { describeTier } from './PricingParts';
 import { channelIdentity } from './pricingIdentity';
 import { useOpenPriceEditor } from './PricingEditorContext';
@@ -33,6 +35,8 @@ export interface CostBreakdownViewProps {
  */
 export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown, model, costUsd }) => {
   useTimeZone();
+  const { currency } = useDisplayCurrency();
+  const formatCost = (usd: number | null | undefined) => formatCurrency(usd, currency, 'amount');
   const t = useT();
   const openEditor = useOpenPriceEditor();
   const setPrice = openEditor ? (
@@ -49,7 +53,7 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
       <div className={styles.breakdown}>
         <div className={styles['breakdown-total']}>
           <span>{t('cost.total')}</span>
-          <strong>{costUsd == null ? '—' : formatUsd(costUsd)}</strong>
+          <strong>{costUsd == null ? '—' : formatCost(costUsd)}</strong>
         </div>
         <p className={styles['mode-hint']}>{t('cost.unavailable')}</p>
       </div>
@@ -97,8 +101,8 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
               <tr key={bucket.kind}>
                 <th scope="row">{t(`cost.bucket.${bucket.kind}`)}</th>
                 <td>{formatTokensFull(bucket.tokens)}</td>
-                <td>{formatRatePer1M(bucket.rate_per_1m)}</td>
-                <td>{formatUsd(nanosToUsd(bucket.nanos))}</td>
+                <td>{formatCurrency(bucket.rate_per_1m, currency, 'rate')}</td>
+                <td>{formatCost(nanosToUsd(bucket.nanos))}</td>
               </tr>
             ))}
             {quote.model_multiplier !== 1 && (
@@ -118,7 +122,7 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
       )}
       <div className={styles['breakdown-total']}>
         <span>{t('cost.total')}</span>
-        <strong>{stored === null ? '—' : formatUsd(stored)}</strong>
+        <strong>{stored === null ? '—' : formatCost(stored)}</strong>
       </div>
       {quote && breakdown.status === 'priced' && !breakdown.recomputed_matches && (
         <p className={styles['field-error']}>{t('cost.mismatch')}</p>

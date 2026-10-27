@@ -1,3 +1,4 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import { translateOr, type TFunc } from '../../../i18n/catalog';
 import React from 'react';
 import { Segmented } from 'antd';
@@ -8,7 +9,7 @@ import { useT } from '../../../i18n';
 import { heatmapRampMix } from '../../../theme/heatmapRamp';
 import type { InsightsRhythmCell, InsightsRhythmResponse } from '../../../types/insights';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { formatMetric } from '../insightsFormat';
+
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../insightsRhythm';
 import styles from '../insights.module.css';
 
@@ -44,6 +45,7 @@ const clock = (hour: number) => `${String(hour % 24).padStart(2, '0')}:00`;
 export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading, isUncaptured }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric } = useInsightsFormat();
   const [chosenView, setView] = React.useState<'hours' | 'week'>('hours');
   const canShowWeek = Boolean(data) && canShowWeekView(data!.window);
   const view = canShowWeek ? chosenView : 'hours';

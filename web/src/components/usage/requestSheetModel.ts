@@ -1,3 +1,4 @@
+import { formatCurrency, type DisplayCurrency } from '../../types/currencyDisplay';
 import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { formatCacheRate } from '../../theme/cacheScale';
 import { effortBadgeName, effortStep } from '../../theme/effortScale';
@@ -159,6 +160,7 @@ export function resolveSheetColumns(
 }
 
 export interface RequestSheetInput {
+  currency?: DisplayCurrency;
   rows: readonly UsageEvent[];
   masks: ReadonlySet<RequestMaskId>;
   colWidths: RequestColumnWidths;
@@ -308,7 +310,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         lines: [
           [
             event.cost_usd != null
-              ? text(`$${event.cost_usd.toFixed(4)}`, 'fg', 13, 500)
+              ? text(formatCurrency(event.cost_usd, input.currency), 'fg', 13, 500)
               : text('—', 'muted', 13),
           ],
         ],

@@ -1,3 +1,4 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import clsx from 'clsx';
 import { Button } from 'antd';
@@ -11,7 +12,7 @@ import { PanelNarrowing } from './PanelNarrowing';
 import { useT } from '../../../i18n';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { metricValue, rankingMetric, relativeChange, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../insightsCube';
-import { changeTrend, formatChange, formatMetric, formatMetricExact, formatShare } from '../insightsFormat';
+import { changeTrend, formatChange, formatShare } from '../insightsFormat';
 import type { InsightsLabels } from '../useInsightsLabels';
 import styles from '../insights.module.css';
 
@@ -53,6 +54,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
 }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
   const [isExpanded, setExpanded] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const ranking = rankingMetric(metric);

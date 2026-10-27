@@ -27,7 +27,8 @@
     "agent_target",
     "update_dismissals",
     "omc_quota_auto_refresh",
-    "omc_plugin_source_enabled"
+    "omc_plugin_source_enabled",
+    "omc_display_currency"
   ],
   "cases": [
     {
@@ -527,6 +528,18 @@
           "server_timezone": "UTC",
           "effective_timezone": "UTC"
         }
+      }
+    },
+    {
+      "id": "display-currency-default-usd",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_display_currency",
+      "body": "\"USD\"",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_display_currency",
+        "value": "USD"
       }
     }
   ],

@@ -1,3 +1,5 @@
+import { formatCurrency } from '../../types/currencyDisplay';
+import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
@@ -67,6 +69,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   onSelectEvent,
 }) => {
   useTimeZone();
+  const { currency } = useDisplayCurrency();
   const t = useT();
   const isDemo = isDemoMode();
   // The drawer's token cards follow the console's unit style; the values are
@@ -310,7 +313,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             </div>
             <div>
               <span>{t('events.col_cost')}</span>
-              <strong>{event.cost_usd != null ? `$${event.cost_usd.toFixed(4)}` : '—'}</strong>
+              <strong>{event.cost_usd != null ? formatCurrency(event.cost_usd, currency) : '—'}</strong>
             </div>
           </div>
           <Tabs more={TAB_OVERFLOW}

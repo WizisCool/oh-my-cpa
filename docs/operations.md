@@ -358,6 +358,30 @@ The authenticated API adds `/custom-icons` (GET/POST), `/custom-icons/preview` (
 the configured API base. Image content is not included in ordinary list or preference
 responses.
 
+## Display currency and exchange rates
+
+OMC Settings → Data display → Display currency selects USD (default), CNY, MYR,
+JPY, EUR or another currency in the cached reference table. The preference follows
+this deployment across browsers. Dashboard, Request Records and Insights convert
+at the latest cached rate; Cost & Usage, price editing and accounting remain USD.
+JSON exports and USD-denominated filters retain their stored units. Image exports
+follow the displayed currency.
+
+The server reads the fixed Frankfurter v2 USD-base rates endpoint every 24 hours,
+including an initial download when no attempt is cached. **Update now** refreshes
+the table immediately; **Rate table** shows each currency's rate for 1 USD and its
+observation date. Last-update and next-update times use the console timezone.
+Reference dates can differ by currency and do not indicate when OMC downloaded them.
+
+Rates, last-attempt/last-success times and refresh failure state live in SQLite's
+`exchange_rate_cache` and are included in normal database backups. A failed refresh
+keeps the complete last successful table, including across a restart. Refreshing does
+not rewrite historical costs; historical windows display at the latest cached rate.
+With no usable rate, non-USD display amounts remain unavailable until a successful
+update. Ordinary reads and cached conversions require no internet access; the optional
+refresh needs outbound HTTPS to `api.frankfurter.dev`, without an API key. Demo mode
+uses synthetic cached rates and never downloads them.
+
 ## TPS calculation mode
 
 OMC Settings → Display chooses whether request-record and Playground TPS includes

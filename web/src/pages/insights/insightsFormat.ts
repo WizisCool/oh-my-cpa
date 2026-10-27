@@ -1,3 +1,4 @@
+import { formatCurrency, USD_CURRENCY, type DisplayCurrency } from '../../types/currencyDisplay';
 /**
  * How the Insights page writes a metric. One place, so a tile, a ranking row, a matrix cell and a
  * tooltip print the same value the same way.
@@ -9,9 +10,8 @@ import type { InsightsMetric } from './insightsCube';
 const COUNT = new Intl.NumberFormat('en');
 
 /** Money at two decimals; a fraction of a cent keeps four, so a small spend never reads as $0.00. */
-export function formatSpend(usd: number): string {
-  if (usd !== 0 && Math.abs(usd) < 0.01) return `$${usd.toFixed(4)}`;
-  return `$${usd.toFixed(2)}`;
+export function formatSpend(usd: number, currency = USD_CURRENCY): string {
+  return formatCurrency(usd, currency, 'adaptive');
 }
 
 export function formatLatency(ms: number): string {
@@ -19,11 +19,11 @@ export function formatLatency(ms: number): string {
 }
 
 /** A metric's readout; null is written as a dash, never as zero. */
-export function formatMetric(metric: InsightsMetric, value: number | null, style: TokenNumberStyle): string {
+export function formatMetric(metric: InsightsMetric, value: number | null, style: TokenNumberStyle, currency: DisplayCurrency = USD_CURRENCY): string {
   if (value === null || !Number.isFinite(value)) return '—';
   switch (metric) {
     case 'cost':
-      return formatSpend(value);
+      return formatSpend(value, currency);
     case 'tokens':
       return formatTokens(value, style);
     case 'requests':
@@ -34,10 +34,10 @@ export function formatMetric(metric: InsightsMetric, value: number | null, style
 }
 
 /** The exact form behind a rounded readout, for its title. */
-export function formatMetricExact(metric: InsightsMetric, value: number | null): string | undefined {
+export function formatMetricExact(metric: InsightsMetric, value: number | null, currency: DisplayCurrency = USD_CURRENCY): string | undefined {
   if (value === null || !Number.isFinite(value)) return undefined;
   if (metric === 'tokens') return formatTokensFull(value);
-  if (metric === 'cost') return `$${value.toFixed(6)}`;
+  if (metric === 'cost') return formatCurrency(value, currency, 6);
   if (metric === 'requests') return COUNT.format(value);
   return undefined;
 }

@@ -1,3 +1,4 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import { Button } from 'antd';
 import { AppDrawer } from '../../../components/common/AppDrawer';
@@ -10,7 +11,7 @@ import {
   filterRows, groupTotals, metricValue, rankGroups, sumMeasures,
   type InsightsCube, type InsightsDimension, type InsightsFilters, type InsightsMetric,
 } from '../insightsCube';
-import { formatMetric } from '../insightsFormat';
+
 import type { InsightsLabels } from '../useInsightsLabels';
 import { RankingPanel } from './RankingPanel';
 import { RhythmGrid } from './RhythmGrid';
@@ -40,6 +41,7 @@ export const KeyDetailDrawer: React.FC<KeyDetailDrawerProps> = ({
 }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric } = useInsightsFormat();
   const rows = React.useMemo(
     () => (cube && keyId ? filterRows(cube, cube.rows, { ...filters, key: [keyId] }) : []),
     [cube, filters, keyId],

@@ -1,0 +1,21 @@
+{
+  "attempted_at_ms": 1793091600000,
+  "base_currency": "USD",
+  "last_error": "",
+  "next_refresh_at_ms": 1793178000000,
+  "rates": [
+    {
+      "currency": "CNY",
+      "date": "2026-10-27",
+      "rate": 6.7
+    },
+    {
+      "currency": "MYR",
+      "date": "2026-10-26",
+      "rate": 4.1
+    }
+  ],
+  "refresh_interval_hours": 24,
+  "source": "frankfurter_v2",
+  "updated_at_ms": 1793091600000
+}

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -108,6 +109,18 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	stats := SeedStats{}
 	now = now.UTC()
 	if err := ensureInstance(ctx, repo, now); err != nil {
+		return SeedStats{}, err
+	}
+	// Synthetic display rates keep the demonstration self-contained.
+	if err := repo.SaveExchangeRates(ctx, exchangerate.Snapshot{
+		Rates: []exchangerate.Rate{
+			{Currency: "CNY", Rate: 7.1, Date: now.Format(time.DateOnly)},
+			{Currency: "EUR", Rate: .9, Date: now.Format(time.DateOnly)},
+			{Currency: "JPY", Rate: 150, Date: now.Format(time.DateOnly)},
+			{Currency: "MYR", Rate: 4.2, Date: now.Format(time.DateOnly)},
+			{Currency: "SGD", Rate: 1.3, Date: now.Format(time.DateOnly)},
+		}, UpdatedAtMS: now.UnixMilli(), AttemptedAtMS: now.UnixMilli(),
+	}); err != nil {
 		return SeedStats{}, err
 	}
 	prices, err := seedPrices(ctx, repo, now)

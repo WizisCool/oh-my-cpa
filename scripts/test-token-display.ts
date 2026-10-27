@@ -1,10 +1,10 @@
+import { formatCurrency as formatCost, currencyReadout, resolveDisplayCurrency, parseDisplayCurrency, USD_CURRENCY } from '../web/src/types/currencyDisplay.ts';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_MODEL_CHART_VIEW,
   DEFAULT_TOKEN_NUMBER_STYLE,
   MODEL_CHART_VIEWS,
   TOKEN_NUMBER_STYLES,
-  formatCost,
   formatTokenRate,
   formatTokens,
   formatTokensFull,
@@ -235,4 +235,31 @@ for (const rate of [null, undefined, NaN, -5, 0, 0.04, 0.4, 40, 40.05, 40.5, 99.
 assert.equal(resolveCacheRateReadout(40)?.format.minimumFractionDigits, 1);
 assert.equal(resolveCacheRateReadout(0)?.format.minimumFractionDigits, 0);
 
-console.log('token display: all assertions passed');
+// One accounting USD is converted exactly once for presentation, with no rate
+// guess when a selected currency is absent from the last cached snapshot.
+const cachedRates = [
+  { currency: 'CNY', rate: 7, date: '2026-10-27' },
+  { currency: 'MYR', rate: 4.25, date: '2026-10-27' },
+  { currency: 'JPY', rate: 150, date: '2026-10-27' },
+  { currency: 'EUR', rate: 0.9, date: '2026-10-27' },
+];
+assert.equal(parseDisplayCurrency('MYR'), 'MYR');
+for (const invalid of [null, 1, {}, 'usd', 'US', 'USDD']) assert.equal(parseDisplayCurrency(invalid), undefined);
+assert.deepEqual(resolveDisplayCurrency('USD', []), USD_CURRENCY);
+assert.equal(formatCost(2, resolveDisplayCurrency('MYR', cachedRates)), 'MYR\u00a08.5000');
+assert.equal(formatCost(2, resolveDisplayCurrency('CNY', cachedRates)), 'CN¥14.0000');
+assert.equal(formatCost(2, resolveDisplayCurrency('JPY', cachedRates)), '¥300.0000');
+assert.equal(formatCost(2, resolveDisplayCurrency('EUR', cachedRates)), '€1.8000');
+assert.equal(formatCost(2, resolveDisplayCurrency('SGD', cachedRates)), '—');
+assert.equal(formatCost(null, resolveDisplayCurrency('MYR', cachedRates)), '—');
+for (const code of ['USD', ...cachedRates.map(rate => rate.currency)]) {
+  const currency = resolveDisplayCurrency(code, cachedRates);
+  for (const usd of [0, 0.000003, 0.1, 2, 12345.678, -1.2]) {
+    assert.equal(renderReadout(currencyReadout(usd, currency, 4)), formatCost(usd, currency));
+    assert.equal(renderReadout(currencyReadout(usd, currency, 'adaptive')), formatCost(usd, currency, 'adaptive'));
+  }
+}
+assert.equal(currencyReadout(1, resolveDisplayCurrency('SGD', cachedRates)), undefined);
+assert.equal(formatCost(0.075, USD_CURRENCY, 'rate'), '$0.075');
+assert.equal(formatCost(0.000012, USD_CURRENCY, 'amount'), '$0.000012');
+console.log('token and currency display: all assertions passed');
