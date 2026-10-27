@@ -120,6 +120,9 @@ type Handler struct {
 	Location func() *time.Location
 }
 
+// Unwrap preserves access to the inner handler for consumers inspecting the chain.
+func (h Handler) Unwrap() slog.Handler { return h.Handler }
+
 func (h Handler) Handle(ctx context.Context, record slog.Record) error {
 	record.Time = record.Time.In(h.Location())
 	return h.Handler.Handle(ctx, record)

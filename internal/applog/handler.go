@@ -36,12 +36,20 @@ func NewHandler(next slog.Handler, buffer *Buffer) *Handler {
 }
 
 // BufferOf returns the buffer behind a logger built with NewHandler, or nil.
+// Wrappers expose Unwrap so capture stays discoverable without coupling to them.
 func BufferOf(logger *slog.Logger) *Buffer {
 	if logger == nil {
 		return nil
 	}
-	if handler, ok := logger.Handler().(*Handler); ok {
-		return handler.buffer
+	for handler := logger.Handler(); handler != nil; {
+		if capture, ok := handler.(*Handler); ok {
+			return capture.buffer
+		}
+		wrapper, ok := handler.(interface{ Unwrap() slog.Handler })
+		if !ok {
+			return nil
+		}
+		handler = wrapper.Unwrap()
 	}
 	return nil
 }
