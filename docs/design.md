@@ -134,10 +134,10 @@ reading palettes *for* dark, whichever mode is in force.
 | Palette | Mode | Authored `bg` | Accent |
 | --- | --- | --- | --- |
 | OMC Dark | dark | `#121214` | `#00a2fb` |
-| Pewter | dark | `#222226` | `#47b5fa` |
+| Pewter | dark | `#1f2329` | `#86b1ff` |
 | Forest | dark | `#0e1411` | `#6ee7a8` |
 | OMC Light | light | `#ffffff` | `#005d8f` |
-| Fog | light | `#e7e7eb` | `#005b8b` |
+| Fog | light | `#f5f8fb` | `#225ebf` |
 | Sandstone | light | `#f8f3e8` | `#0f766e` |
 
 A **theme mode** is light, dark or follow-the-system; each mode holds one palette. The resolved palette is
@@ -218,12 +218,13 @@ the constants unchanged; Pewter and Fog, whose grounds sit closer to the signals
 Forest and Sandstone move a few by a hair. `scripts/test-theme-presets.ts` asserts the floor for every
 registered palette and `scripts/test-effort-scale.ts` the badges.
 
-The two grey palettes take their shape from the same reasoning. Pewter is a dimmed dark - its page sits
-ΔL +0.07 above OMC Dark, the elevation steps keep OMC Dark's spacing, and the foreground eases off white -
-for the halation a bright glyph has on a near-black ground. Fog is a grey that stays a light theme: the
-page is OKLCH 0.93, its cards lift toward white rather than sinking below the page, and its text ladder is
-deepened so `muted` and `meta` read above OMC Light's. Both keep OMC's faint cool neutral and its blue
-accent, moved in lightness to keep a link's margin on the new page.
+Pewter and Fog are each built on one hue: every neutral - page, cards, rules and the text ladder -
+carries it at a low chroma, so the layers read as one material. Pewter is a dimmed slate: steel blue
+(OKLCH hue 255), a page at L 0.255 where a bright glyph does not halate, a foreground eased off white,
+and an iris accent (hue 262) soft enough to sit on slate. Fog is a cool mist that stays a light theme:
+a near-white page (L 0.978) in the same faint blue-grey (hue 248) as its rules and its near-black ink,
+so the derived canvas reads as a tinted sidebar, and a saturated cobalt accent (hue 260) that carries a
+link at 5.8:1.
 
 ### Status pip semantics
 
