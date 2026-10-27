@@ -120,6 +120,7 @@ export default {
   'header.collapse_sidebar': '收起侧栏',
   'header.expand_sidebar': '展开侧栏',
   'header.open_nav': '打开导航',
+  'header.nav_sheet': '导航',
   'header.open_repository': '打开项目 GitHub 仓库',
   'header.refresh_all': '刷新全部',
   'mobile.filters': '筛选',

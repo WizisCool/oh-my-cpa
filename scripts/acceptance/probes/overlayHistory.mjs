@@ -17,7 +17,7 @@ const OVERLAY_STATE = `(() => {
     return element.getBoundingClientRect().width > 0;
   }).length;
   return {
-    drawers: visible('.ant-drawer-content-wrapper'),
+    drawers: visible('.ant-drawer-content-wrapper, .mobile-nav-sheet-panel'),
     modals: visible('.ant-modal'),
     route: location.pathname + location.search,
   };
@@ -77,7 +77,7 @@ export async function overlayBackDismisses({ base, page, check }) {
   await arriveFrom(base, page, '/dashboard');
   const dashboardURL = page.url();
   await page.locator('.app-header-left button').first().click();
-  await page.locator('.ant-drawer-content-wrapper').first().waitFor({ state: 'visible', timeout: 5_000 });
+  await page.locator('.mobile-nav-sheet-panel').waitFor({ state: 'visible', timeout: 5_000 });
   let state = await routeAfterBack(base, page);
   check(
     'a Back closes the navigation sheet and leaves the route alone',
@@ -184,7 +184,7 @@ export async function overlayBackDismisses({ base, page, check }) {
   // route Back; with a dead entry left behind, it is a press that does nothing.
   await arriveFrom(base, page, '/dashboard');
   await page.locator('.app-header-left button').first().click();
-  await page.locator('.ant-drawer-content-wrapper').first().waitFor({ state: 'visible', timeout: 5_000 });
+  await page.locator('.mobile-nav-sheet-panel').waitFor({ state: 'visible', timeout: 5_000 });
   await page.keyboard.press('Escape');
   const afterEscape = await settled(page);
   // The traversal itself is awaited; the condition is on the *route* changing, because a spent

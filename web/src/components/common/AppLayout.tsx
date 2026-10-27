@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Drawer, Button, Breadcrumb } from 'antd';
+import { Layout, Menu, Button, Breadcrumb } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
 import { OverlayScrollArea } from './OverlayScrollArea';
+import { MobileNavSheet } from './MobileNavSheet';
 import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
@@ -123,6 +124,7 @@ export const AppLayout: React.FC = () => {
   };
   const [isMobile, setIsMobile] = React.useState(isNarrowViewport);
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
+  const bodyRef = React.useRef<HTMLDivElement>(null);
 
   // The sheet is an overlay like any other: Back puts it away rather than leaving the route,
   // which on a phone is what the hardware button is expected to do. Gated on `isMobile`
@@ -286,7 +288,7 @@ export const AppLayout: React.FC = () => {
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
         </Sider>
       )}
-      <Layout className="app-body">
+      <Layout className="app-body" ref={bodyRef}>
         <header className="app-header">
           <div className="app-header-left">
             {isMobile ? (
@@ -340,22 +342,12 @@ export const AppLayout: React.FC = () => {
       </Layout>
       {isMobile && (
         /* The sheet carries the same parts as the rail - brand and nav - because it is the
-           rail at a phone width, not a menu of links. Its width is bounded in `vw` as well as `px:`
-           at a 320px viewport a fixed 320px sheet leaves no page visible behind the mask, and the
-           reader loses the sense that this is a layer over where they were. The safe-area inset
-           keeps the rail's labels clear of a landscape notch. */
-        <Drawer
-          placement="left"
-          open={isMobileNavOpen}
-          onClose={() => setIsMobileNavOpen(false)}
-          size="min(320px, 86vw)"
-          closable={false}
-          className="mobile-nav-drawer"
-          styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
-        >
+           rail at a phone width, not a menu of links. A sideways swipe across the page draws it
+           out under the finger (`MobileNavSheet`). */
+        <MobileNavSheet isOpen={isMobileNavOpen} onOpenChange={setIsMobileNavOpen} pageRef={bodyRef} label={t('header.nav_sheet')}>
           {brand}
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
-        </Drawer>
+        </MobileNavSheet>
       )}
     </Layout>
   );

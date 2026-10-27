@@ -123,6 +123,7 @@ export default {
   'header.collapse_sidebar': 'Collapse sidebar',
   'header.expand_sidebar': 'Expand sidebar',
   'header.open_nav': 'Open navigation',
+  'header.nav_sheet': 'Navigation',
   'header.open_repository': 'Open project on GitHub',
   'header.refresh_all': 'Refresh all',
   'mobile.filters': 'Filters',

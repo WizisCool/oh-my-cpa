@@ -123,6 +123,7 @@ export default {
   "header.collapse_sidebar": "收起側欄",
   "header.expand_sidebar": "展開側欄",
   "header.open_nav": "開啟導航",
+  "header.nav_sheet": "導航",
   "header.open_repository": "開啟專案 GitHub 儲存庫",
   "header.refresh_all": "重新整理全部",
   "mobile.filters": "篩選",

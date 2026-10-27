@@ -123,6 +123,7 @@ export default {
   "header.collapse_sidebar": "Runtuhkan bar sisi",
   "header.expand_sidebar": "Kembangkan bar sisi",
   "header.open_nav": "Buka navigasi",
+  "header.nav_sheet": "Navigasi",
   "header.open_repository": "Buka projek di GitHub",
   "header.refresh_all": "Muat semula semua",
   "mobile.filters": "Penapis",

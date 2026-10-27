@@ -1580,8 +1580,9 @@ supplies content and layout width; what is inside the frame is not restyled per 
   work, at the trailing edge - and wraps instead of squeezing. Closing, it keeps the title, body and
   footer it last showed open until it has slid away, so a caller that closes it by clearing its
   selection does not send it out blank; its body holds a stable scrollbar gutter, so a section
-  unfolding past the panel's height does not narrow every card mid-fold. The phone navigation sheet
-  and the time-range sheet are not side panels and keep antd's `Drawer`.
+  unfolding past the panel's height does not narrow every card mid-fold. The time-range sheet is
+  not a side panel and keeps antd's `Drawer`; the phone navigation sheet is `MobileNavSheet`,
+  because it follows a finger.
 - **`Tooltip` - a hint the reader asked for.** Ant Design's popup, opened only on intent: a mouse
   or pen that moved onto the trigger and rested there 450ms (at once within half a second of the
   last hint closing, so a row of tools reads quickly), never a pointer a layout moved a control
@@ -2885,6 +2886,19 @@ There is no bottom bar and no phone-specific menu. The sheet carries the rail's 
 brand and grouped nav — because a phone does not have less to navigate, it has less room to show
 it in, and a second navigation would be a second place for the grouping to drift.
 
+**The sheet follows the finger** (`MobileNavSheet`). A sideways swipe anywhere on the page draws
+it out under the finger, the page dimming with it, and a swipe back on the sheet or the dimmed
+page puts it away. On release it settles by where it stands - past halfway open - unless it was
+thrown faster than 0.35px/ms, when it settles the way it was moving. A swipe towards the trailing
+edge on the open sheet cannot draw it further, so it reads as Back and closes it. A swipe that is mostly
+vertical is the page's scroll, and a swipe that starts in a field, an editor, a chart, a slider,
+something that handles touch itself, or a strip scrolled away from its start is left to that.
+The drag writes one custom property per move; the panel's transform and the mask's opacity are
+derived from it, so no move renders. The hamburger, a tap on the dimmed page, Escape and Back
+still open and close it, and while it is open the page is inert. Gesture recognition (axis lock,
+threshold, release speed) is `@use-gesture/react`'s; its `filterTaps` stays off, because it
+swallows the first click after any drag, and that click is the reader's next tap.
+
 **The sheet is bounded in `vw` as well as `px`** (`min(320px, 86vw)`). At a 320px viewport a fixed
 320px sheet leaves no page visible behind the mask, and the reader loses the sense that this is a
 layer over where they were — which is also what tells them Back will put it away.
@@ -3051,11 +3065,13 @@ remembers the record it showed, so what leaves is the record and not an emptied 
 
 ### Back dismisses the overlay, and it is the platform's own Back
 
-The console does not implement a swipe gesture, and the reason is not effort. iOS Safari and
+The console does not implement an edge swipe, and the reason is not effort. iOS Safari and
 Android predictive back already own the screen edges: a JavaScript edge-swipe either loses the
-gesture to the browser or fights it, and it can only ever approximately follow the finger. The
-platform's Back is native, so joining it means the hardware button, the browser's back arrow and
-the edge gesture all dismiss an overlay at native frame rate with nothing to reconcile.
+gesture to the browser or fights it. The platform's Back is native, so joining it means the
+hardware button, the browser's back arrow and the edge gesture all dismiss an overlay at native
+frame rate with nothing to reconcile. The one swipe the console has, the navigation sheet's, is a
+sideways drag across the page rather than from its edge; it opens and closes the same overlay
+entry, and a touch the platform takes over (`touchcancel`) leaves the sheet where it stood.
 
 **The contract.** Any Drawer- or Modal-class overlay is one history entry. Opening it pushes an
 entry that keeps the same URL and the router's own bookkeeping, marked with the overlay's id;

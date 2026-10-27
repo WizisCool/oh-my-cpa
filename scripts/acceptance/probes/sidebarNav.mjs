@@ -65,13 +65,13 @@ export async function sidebarNavCustomization({ base, page, check }) {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
-  await page.locator('.mobile-nav-drawer .app-menu').waitFor();
+  await page.locator('.mobile-nav-sheet .app-menu').waitFor();
   check('a fresh phone sheet keeps full navigation groups with a collapsed desktop preference',
-    await page.locator('.mobile-nav-drawer .ant-menu-item-group-title').count() > 0);
+    await page.locator('.mobile-nav-sheet .ant-menu-item-group-title').count() > 0);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Open navigation', exact: true }).waitFor();
   check('the phone sheet reopens closed without rewriting the desktop preference',
-    await page.locator('.mobile-nav-drawer .app-menu').count() === 0
+    await page.locator('.mobile-nav-sheet .app-menu').count() === 0
       && collapsedWrites().length === 1 && preferences.omc_sidebar_collapsed === true);
   await page.setViewportSize(desktopViewport);
   await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
@@ -284,7 +284,7 @@ export async function sidebarNavCustomization({ base, page, check }) {
   await closePanel();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('.app-header-left button').first().click();
-  await page.locator('.mobile-nav-drawer:visible').waitFor({ timeout: 10_000 });
+  await page.locator('.mobile-nav-sheet-panel:visible').waitFor({ timeout: 10_000 });
   await until(async () => (await railEntry('/dashboard').count()) === 1, { label: 'the phone sheet to draw the rail' });
   const sheetGroups = await railGroups();
   check('the phone sheet draws the same set the rail does',

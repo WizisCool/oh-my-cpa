@@ -1163,17 +1163,54 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* ── mobile navigation sheet ────────────────────────────────────────────────
-   The sheet is the side rail at a phone width, so it carries the rail's three parts -
-   brand, nav, foot - and its rules are the rail's, not a second set. All this adds is
-   what a full-height overlay needs and a rail does not: the notch inset, and a scroll
-   region that cannot drag the sheet itself. */
-.mobile-nav-drawer .ant-drawer-body {
-  padding: 0;
-  padding-left: env(safe-area-inset-left);
-  /* The mask is transparent, so the sheet's own edge is what separates it from the page. */
-  border-right: 1px solid var(--border);
+   The sheet is the side rail at a phone width, so it carries the rail's parts and its rules are
+   the rail's, not a second set. `--nav-sheet-progress` (0 closed, 1 open) is the one value a drag
+   writes; the panel's slide and the mask's dimming both follow it, and transition between ends
+   only when no finger holds the sheet (`MobileNavSheet.tsx`). The panel keeps vertical panning
+   for its own list and leaves sideways drags to the sheet. */
+.mobile-nav-sheet {
+  --nav-sheet-progress: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  visibility: hidden;
+  pointer-events: none;
 }
-.mobile-nav-drawer .app-brand { cursor: default; }
+.mobile-nav-sheet.is-active {
+  visibility: visible;
+  pointer-events: auto;
+}
+.mobile-nav-sheet-mask {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-mask);
+  opacity: var(--nav-sheet-progress);
+  touch-action: none;
+  transition: opacity var(--motion-slow) var(--ease-out);
+}
+.mobile-nav-sheet-panel {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  /* Bounded in `vw` as well: a fixed 320px sheet at a 320px viewport hides the page it covers. */
+  width: min(320px, 86vw);
+  padding-left: env(safe-area-inset-left);
+  background: var(--elevated);
+  border-right: 1px solid var(--border);
+  outline: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  transform: translateX(calc((var(--nav-sheet-progress) - 1) * 100%));
+  transition: transform var(--motion-slow) var(--ease-out);
+  will-change: transform;
+}
+.mobile-nav-sheet.is-dragging .mobile-nav-sheet-panel,
+.mobile-nav-sheet.is-dragging .mobile-nav-sheet-mask {
+  transition: none;
+}
+.mobile-nav-sheet .app-brand { cursor: default; }
 /* ── sign-in ──────────────────────────────────────────────────────────────
    One centred column on the page itself: no card, no texture, no rule under the header. The
    wordmark, the title, the field and the button are the whole page. */
