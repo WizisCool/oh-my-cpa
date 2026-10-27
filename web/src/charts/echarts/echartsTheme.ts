@@ -87,15 +87,18 @@ export function applyEchartsMotion(option: EChartsCoreOption, isReducedMotion: b
       ...series,
       ...(isReducedMotion ? motion : { animation: series.animation ?? true }),
     })),
-    tooltip: mapOptions(option.tooltip, tooltip => ({
-      ...tooltip,
-      transitionDuration: isReducedMotion ? 0 : tooltip.transitionDuration ?? MOTION_FAST.duration / 1000,
-      axisPointer: {
-        ...tooltip.axisPointer as object,
-        animation: !isReducedMotion,
-        animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration,
-      },
-    })),
+    ...(option.tooltip === undefined ? {} : {
+      tooltip: mapOptions(option.tooltip, tooltip => ({
+        ...tooltip,
+        transitionDuration: isReducedMotion ? 0 : tooltip.transitionDuration ?? MOTION_FAST.duration / 1000,
+        axisPointer: {
+          ...tooltip.axisPointer as object,
+          animation: !isReducedMotion,
+          animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration,
+        },
+      })),
+    }),
+    // ECharts always creates this model; axis-local pointers inherit its timing even without a tooltip.
     axisPointer: mapOptions(option.axisPointer, pointer => ({
       ...pointer,
       animation: !isReducedMotion,

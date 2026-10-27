@@ -2288,8 +2288,10 @@ ease-out cubic-bezier(0.16, 1, 0.3, 1)  entrances: most of the move lands in the
 **The table is the motion budget.** `web/src/index.css` declares `fast`, `float`, `base` and
 `slow` as `--motion-fast`, `--motion-float`, `--motion-base` and `--motion-slow` for CSS transitions
 and animations. `scripts/check-motion.mjs` enforces declared-token use at call sites, layout-property
-restrictions and reduced-motion counterparts. `roll` and `route` have exceptions attached, both scoped to the dashboard: `roll` by rules 5 and 8, `route`, `land`, `glow`, `enter`,
-`exit` and `presence` by rule 9. The rule-9 tokens are JavaScript-only (`MOTION_ROUTE`,
+restrictions and reduced-motion counterparts. The longer `roll` budget is scoped to Dashboard and
+Insights by rules 5 and 8; `route`, `land`, `glow`, `enter`, `exit` and `presence` are scoped to the
+routing map by rule 9. These timing allowances all follow the resolved motion policy.
+The rule-9 tokens are JavaScript-only (`MOTION_ROUTE`,
 `MOTION_ROUTE_LAND`, `MOTION_ROUTE_GLOW`, `MOTION_ROUTE_ENTER`, `MOTION_ROUTE_EXIT` and
 `MOTION_ROUTE_PRESENCE` in `themeConfig.ts`) and drive Web Animations rather than a stylesheet; the
 gateway's 600ms settle is the routing panel's own `--motion-route-cool`. `scroll` is a JavaScript-only token
@@ -2308,8 +2310,10 @@ back with a refused preference write. Migration 049 preserves explicitly chosen 
 by inverting the old preference's `on` and `off` values (ADR 0108).
 
 New React consumers use `usePrefersReducedMotion`; imperative consumers use `isMotionReduced`
-from `utils/motionPreference.ts`. Only that shared layer reads the system query. `MotionPreferenceSync`
-applies the persisted preference before paint, and the same layer publishes
+from `utils/motionPreference.ts`. Within the SPA, only that shared layer reads the system query.
+Standalone conversation HTML exports use the viewing environment's system preference through
+`web/src/agent/conversationStyles.ts`; those saved documents run independently of the console.
+`MotionPreferenceSync` applies the persisted preference before paint, and the same layer publishes
 `data-reduced-motion="true|false"` on the document root for CSS, including portalled surfaces.
 A permanently mounted `MotionProvider` projects the same policy into `@rc-component/motion`,
 which Ant Design uses for portal, notification, dialog and segmented-control lifecycles. It disables
@@ -2397,8 +2401,9 @@ Hard rules:
    it. First paint reveals sparklines left to right and presents the complete ring; subsequent
    revisions morph.
    Chart emphasis uses the 120ms `fast` token, and each series pins its update timing to `roll`.
-   The reduced-motion switch is app-owned (`usePrefersReducedMotion` through `applyEchartsMotion`) because
-   library geometry animation is not controlled by CSS. It disables first-paint and update animation.
+   The shared motion policy reaches charts through `usePrefersReducedMotion` and `applyEchartsMotion`
+   because library geometry animation is not controlled by CSS. Reduced motion disables first-paint,
+   update and emphasis animation, while retaining the chart's requested hover components.
    SVG geometry updates are not compositor-only, so these `roll`-bounded charts remain an explicit
    exception to rule 1 (ADRs 0008 and 0106).
 6. **Acknowledge actions immediately.** Button `loading` and optimistic
