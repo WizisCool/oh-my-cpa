@@ -584,7 +584,7 @@ export async function requestListInteractions({ base, page, check }) {
   const fastCells = modeCells.filter((cell) => cell.isFast);
   check('the mode column carries the effort and the fast-lane mark, and the model cell neither',
     fastCells.length > 0 && fastCells.length < modeCells.length &&
-    modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'high')) &&
+    modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'High')) &&
     fastCells.every((cell) => cell.fastName.includes('priority')) &&
     fastCells.some((cell) => /outbound|出站/.test(cell.fastName)) &&
     fastCells.some((cell) => /requested|请求/.test(cell.fastName)),

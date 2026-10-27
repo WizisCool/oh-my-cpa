@@ -1,6 +1,6 @@
 import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { formatCacheRate } from '../../theme/cacheScale';
-import { displayEffortName, effortStep } from '../../theme/effortScale';
+import { effortBadgeName, effortStep } from '../../theme/effortScale';
 import { modelMarkIconId } from '../../types/modelSquare';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
@@ -187,8 +187,6 @@ const text = (
   isMono = false,
 ): SheetSegment => ({ kind: 'text', text: value, tone, size, weight, isMono });
 
-/** The list sets an effort in `text-transform: capitalize`; a canvas has no such property. */
-const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 /** buildRequestSheet lays the selected records out as the sheet the painter draws. */
 export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
@@ -267,7 +265,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
           event.reasoning_effort || isFastTierEvent(event) || isNonStreamingEvent(event)
             ? [
                 ...(event.reasoning_effort
-                  ? [{ kind: 'tag', text: capitalize(displayEffortName(event.reasoning_effort)), tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
+                  ? [{ kind: 'tag', text: effortBadgeName(event.reasoning_effort), tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
                   : []),
                 ...(isFastTierEvent(event)
                   ? [{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true } as const]

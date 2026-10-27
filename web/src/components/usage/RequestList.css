@@ -448,7 +448,6 @@
   font-size: var(--text-xs);
   font-weight: 500;
   line-height: 18px;
-  text-transform: capitalize;
   padding: 0 7px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
