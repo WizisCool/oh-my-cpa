@@ -281,6 +281,15 @@ func TestBackupRestoreSmokeAndFreeSpaceCheck(t *testing.T) {
 		},
 	}
 	db.backup = sufficientPolicy
+
+	// A release container only guarantees a writable data volume, not system temp.
+	unavailableTemporaryPath := filepath.Join(tempDir, "unavailable-system-temp")
+	if err := os.WriteFile(unavailableTemporaryPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, unavailableTemporaryPath)
+	}
 	if err := db.createMigrationBackup(context.Background(), 100); err != nil {
 		t.Fatalf("createMigrationBackup failed: %v", err)
 	}
@@ -292,6 +301,9 @@ func TestBackupRestoreSmokeAndFreeSpaceCheck(t *testing.T) {
 	}
 	var backupPath string
 	for _, e := range entries {
+		if e.IsDir() {
+			t.Fatalf("backup left a plaintext workspace behind: %s", e.Name())
+		}
 		if strings.HasSuffix(e.Name(), ".db.enc") {
 			backupPath = filepath.Join(backupDir, e.Name())
 			break

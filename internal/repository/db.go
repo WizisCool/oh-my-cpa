@@ -466,7 +466,9 @@ func RestoreBackupSmoke(ctx context.Context, backupPath string, cipher *appcrypt
 	if err != nil {
 		return fmt.Errorf("decrypt backup: %w", err)
 	}
-	temporaryDirectory, err := os.MkdirTemp("", "oh-my-cpa-restore-")
+	// The backup volume is writable even when the container's root filesystem is not.
+	// Keep decrypted scratch data private and remove it before returning.
+	temporaryDirectory, err := os.MkdirTemp(filepath.Dir(backupPath), ".restore-")
 	if err != nil {
 		return fmt.Errorf("create restore directory: %w", err)
 	}
