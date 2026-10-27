@@ -38,7 +38,7 @@ import {
   CREDENTIAL_FILES_QUERY_KEY,
   CREDENTIAL_QUOTA_QUERY_KEY,
 } from '../components/dashboard/CredentialQuota';
-import { ModelTrendPanel, ModelUsagePanel, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
+import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import { DashboardBoard } from '../components/dashboard/DashboardBoard';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
 import {
@@ -657,13 +657,15 @@ export const DashboardPage: React.FC = () => {
         />
       )}
 
-      <DashboardBoard
-        layout={layout}
-        isEditing={isArranging}
-        isPhone={isPhone}
-        renderWidget={renderWidget}
-        onChange={setLayoutDraft}
-      />
+      <ModelSeriesFocusProvider>
+        <DashboardBoard
+          layout={layout}
+          isEditing={isArranging}
+          isPhone={isPhone}
+          renderWidget={renderWidget}
+          onChange={setLayoutDraft}
+        />
+      </ModelSeriesFocusProvider>
 
       {/* has_usage is false when the server could not tell, too; a partial
           response must not claim the deployment has never been used. */}

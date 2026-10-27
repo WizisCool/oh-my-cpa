@@ -69,6 +69,11 @@ export interface ModelUsagePanelsProps {
  * a client-side regroup: the ranking, the fold and the colour assignment are the server's single
  * answer for exactly the grouping on screen. Switching views re-reads the window's ranking, and each
  * view keeps its own cache entry so the two never patch into each other.
+ *
+ * **One selection, two views.** The trend's line and the ring's slice are two drawings of one group,
+ * so the focus the operator clicks is one fact rather than two: choosing a model in either card
+ * chooses it in both. The selection lives in `ModelSeriesFocusProvider` above the cards because they
+ * are placed independently - either can be hidden - so no card may own the selection for the other.
  */
 function useDashboardModels({ query, range, enabled }: ModelUsagePanelsProps) {
   const { modelView } = useTokenDisplayStyle();
@@ -154,20 +159,59 @@ export interface ModelTrendPanelProps extends ModelUsagePanelsProps {
 }
 
 /**
- * Click focus shared by the two cards. Focus is a reading aid, never a filter: the other groups stay
- * on screen and in the tooltip, because the selected model's shape only means something beside them.
+ * One focused model and the controls both cards drive it with. Focus is a reading aid, never a
+ * filter: the other groups stay on screen and in the tooltip, because the selected model's shape only
+ * means something beside them.
  */
-function useSeriesFocus(groups: DashboardModelUsage[]) {
+interface ModelSeriesFocus {
+  focusedKey: string | null;
+  toggleSeries: (key: string) => void;
+  clearFocus: () => void;
+}
+
+const ModelSeriesFocusContext = React.createContext<ModelSeriesFocus | null>(null);
+
+/**
+ * Holds the selection the trend and the usage card read together.
+ *
+ * The two cards are two views of one ranking, so "the model I am reading" is one fact: choosing it in
+ * either card chooses it in both, and a reader compares the line's shape with its slice without
+ * finding the name twice. The state sits above the cards because the operator places them
+ * independently - either can be hidden - so neither card may own the selection for the other.
+ */
+export const ModelSeriesFocusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [focusedKey, setFocusedKey] = React.useState<string | null>(null);
-  const availableKeys = React.useMemo(() => new Set(groups.map(seriesDomainKey)), [groups]);
-  React.useEffect(() => {
-    setFocusedKey((current) => (current !== null && !availableKeys.has(current) ? null : current));
-  }, [availableKeys]);
   const toggleSeries = React.useCallback((key: string) => {
     setFocusedKey((current) => (current === key ? null : key));
   }, []);
   const clearFocus = React.useCallback(() => setFocusedKey(null), []);
-  return { focusedKey, toggleSeries, clearFocus };
+  const focus = React.useMemo<ModelSeriesFocus>(
+    () => ({ focusedKey, toggleSeries, clearFocus }),
+    [focusedKey, toggleSeries, clearFocus],
+  );
+  return <ModelSeriesFocusContext.Provider value={focus}>{children}</ModelSeriesFocusContext.Provider>;
+};
+
+/**
+ * The shared selection, resolved against the ranking the calling card is drawing.
+ *
+ * A key that is no longer in the ranking - the grouping changed, the window no longer ranks that
+ * model, or it fell out of the fold - is cleared rather than kept: a focus with no matching group
+ * would fade every remaining series and leave the reader looking at a dim chart with nothing
+ * highlighted. A ranking that has not been read yet proves nothing about the key: a card mounting
+ * after the shared read expired must not be what drops a selection the model would keep.
+ */
+function useSeriesFocus(groups: DashboardModelUsage[], hasRanking: boolean): ModelSeriesFocus {
+  const focus = React.useContext(ModelSeriesFocusContext);
+  if (focus === null) {
+    throw new Error('The dashboard model panels must be rendered inside ModelSeriesFocusProvider');
+  }
+  const { focusedKey, clearFocus } = focus;
+  const availableKeys = React.useMemo(() => new Set(groups.map(seriesDomainKey)), [groups]);
+  React.useEffect(() => {
+    if (hasRanking && focusedKey !== null && !availableKeys.has(focusedKey)) clearFocus();
+  }, [availableKeys, clearFocus, focusedKey, hasRanking]);
+  return focus;
 }
 
 const ModelSeriesName: React.FC<{
@@ -191,7 +235,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
   const foldedLabel = t('dash.models.folded');
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
-  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups);
+  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups, models.data !== undefined);
 
   return (
     <Panel
@@ -239,7 +283,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
   const total = models.data?.total_tokens ?? 0;
-  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups);
+  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups, models.data !== undefined);
 
   return (
     <Panel

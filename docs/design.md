@@ -860,7 +860,7 @@ lanes, the accent on the gateway, and status colour on a node surface where some
 ### Dashboard model panels
 
 Two peer widgets, by default sharing the row under the KPI tiles and above live routing, both driven
-by the window picker. They are placed independently and read one shared query:
+by the window picker. They are placed independently, read one shared query, and share one selection:
 
 ```text
 ┌─ Token trend ──────────────────┐ ┌─ Model usage ─────────────────────────┐
@@ -907,6 +907,13 @@ ranking for comparison. Clicking the same entry or the plot background clears th
 a name does not change the highlight; the tooltip retains legend order and explicitly lists quiet
 groups as zero.
 
+**One selection covers both cards.** A group's line and its slice are two drawings of one ranking
+entry, so focusing it is one act rather than two: selecting a model in the trend selects the same
+model in the usage card, and selecting it there highlights the line. A reader can follow a model's
+shape and its share without finding the name twice. A key that is no longer in the ranking - the
+grouping changed, the window no longer ranks that model, or it fell out of the fold - drops the
+selection instead of leaving every series dimmed with nothing highlighted.
+
 **Four x ticks, chosen by position.** The bucket grid runs to ~48 points; a tick per bucket printed the
 same instant forty-eight times across a half-width card. The first and last bucket are always among the
 four, because those are the two a reader places the window with. The label format follows the span -
@@ -925,7 +932,7 @@ slices drawn around it. With no selection the centre, the ring and the ranked li
 window total. Clicking a ranked name or a slice pins that group without removing any slice: the
 selected slice stays fully opaque, the centre reports its tokens and share of the full window, and
 the other slices remain readable for comparison. Clicking the same entry or the ring background
-restores the total.
+restores the total, and the trend card's highlight clears with it.
 
 **The ranked list is the ring's legend and its values in one.** A separate library legend would print
 the same ranking a second time with no numbers, and a reader comparing two models needs the numbers: a
