@@ -172,9 +172,10 @@ controls must not introduce a second palette source: both read the registry, so 
 
 ### Accent ladder
 
-The accent is **not** mode-invariant. It is one hue (201) at three lightness steps, and each theme
-uses a different assignment because the same blue cannot be both legible as text on a light page and
-legible as text on a dark one:
+The accent is **not** mode-invariant. OMC Dark and OMC Light share one hue (201) at three lightness
+steps, and each uses a different assignment because the same blue cannot be both legible as text on a
+light page and legible as text on a dark one; the other registered palettes author an accent of their
+own (Pewter's iris, Fog's cobalt, Forest's green, Sandstone's teal) and derive the same ladder from it:
 
 | Step | Dark | Light | Measured use |
 | --- | --- | --- | --- |
@@ -183,7 +184,7 @@ legible as text on a dark one:
 | `--accent-active` | `#025e94` | `#023b5d` | pressed state: the same label reads **6.93:1** and **11.76:1** |
 | `--accent-on` | `#ffffff` | `#ffffff` | the label on a filled control — the colour both filled-control steps above are measured against |
 
-The two modes share the hue and no value. Each palette authors its own link step, and `derivePalette`
+The two OMC palettes share the hue and no value. Each palette authors its own link step, and `derivePalette`
 computes the two filled-control steps from it: a proportional OKLCH lightness step, then both fills
 deepened together until one label ink clears 4.5:1 on the resting fill and the pressed one alike. OMC
 Light's link step is the deeper `#005d8f` because the bright `#00a2fb` reads **2.78:1** against white -
