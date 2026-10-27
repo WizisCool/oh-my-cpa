@@ -8,10 +8,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 )
 
 type serviceLogResponse struct {
@@ -36,7 +38,10 @@ func readServiceLogs(t *testing.T, handler *Handler, query string) (int, service
 
 func TestServiceLogsResumeFromTheLastSequence(t *testing.T) {
 	buffer := applog.NewBuffer(10)
-	logger := slog.New(applog.NewHandler(slog.NewJSONHandler(io.Discard, nil), buffer))
+	logger := slog.New(timezone.Handler{
+		Handler:  applog.NewHandler(slog.NewJSONHandler(io.Discard, nil), buffer),
+		Location: timezone.New(time.UTC).Location,
+	})
 	handler := NewHandler(config.Config{}, nil, nil, logger, nil)
 
 	logger.Info("first", "management_key", "plain-secret-value")
@@ -49,8 +54,10 @@ func TestServiceLogsResumeFromTheLastSequence(t *testing.T) {
 		t.Fatalf("a credential-named field reached the console: %#v", page.Records[0].Attrs)
 	}
 
-	logger.Error("third")
-	_, page = readServiceLogs(t, handler, "?after=2")
+	workerLogger := logger.With("component", "worker").WithGroup("request")
+	workerHandler := NewHandler(config.Config{}, nil, nil, workerLogger, nil)
+	workerLogger.Error("third")
+	_, page = readServiceLogs(t, workerHandler, "?after=2")
 	if len(page.Records) != 1 || page.Records[0].Message != "third" || page.Records[0].Level != "error" {
 		t.Fatalf("resumed read = %#v, want only the new error", page.Records)
 	}
@@ -61,7 +68,11 @@ func TestServiceLogsResumeFromTheLastSequence(t *testing.T) {
 }
 
 func TestServiceLogsWithoutCaptureIsAStateNotAnError(t *testing.T) {
-	handler := NewHandler(config.Config{}, nil, nil, slog.New(slog.NewJSONHandler(io.Discard, nil)), nil)
+	logger := slog.New(timezone.Handler{
+		Handler:  slog.NewJSONHandler(io.Discard, nil),
+		Location: timezone.New(time.UTC).Location,
+	})
+	handler := NewHandler(config.Config{}, nil, nil, logger, nil)
 	status, page := readServiceLogs(t, handler, "")
 	if status != http.StatusOK || page.Capturing || len(page.Records) != 0 {
 		t.Fatalf("uncaptured read = %d %#v", status, page)

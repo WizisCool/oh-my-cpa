@@ -1011,7 +1011,9 @@ than by following a tail. An older `/logs?source=audit` link redirects there.
 - **Service log** — Oh My CPA's own process log. `cmd/oh-my-cpa` builds the logger as
   `applog.NewHandler(jsonStderrHandler, buffer)`, so stderr remains the durable log a
   deployment collects, and `NewHandler` in `internal/api` finds the buffer through
-  `applog.BufferOf`. The buffer keeps the latest `applog.DefaultCapacity` records,
+  `applog.BufferOf`, following `Unwrap() slog.Handler` through wrappers such as
+  `timezone.Handler`. Attribute and group loggers retain the same capture buffer.
+  The buffer keeps the latest `applog.DefaultCapacity` records,
   numbers them with a sequence that only grows for the life of the process, and is
   served by `GET /api/v1/management/service-logs?after=<seq>&limit=`. A reader that fell
   more than a page behind jumps to the newest records and is told `gap: true` rather
