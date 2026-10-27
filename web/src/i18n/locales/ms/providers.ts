@@ -42,7 +42,7 @@ export default {
   "pro.provider_updated": "Penyedia berjaya dikemas kini",
   "pro.provider_deleted": "Penyedia dipadamkan",
   "pro.delete_provider_confirm": "Padamkan penyedia ini? CPA akan berhenti mengirim semula permintaan ke titik akhir ini.",
-  "pro.field_base_url_desc": "URL perkhidmatan hulu; HTTPS disyorkan untuk alamat bukan tempatan.",
+  "pro.field_base_url_desc": "URL perkhidmatan penyedia. Pengambilan model memerlukan HTTPS, kecuali untuk localhost atau IP peribadi.",
   "pro.opencode_session_title": "Titik akhir OpenCode ini memerlukan pengepala sesi",
   "pro.opencode_session_desc": "OpenCode mengenal pasti perbualan melalui {header}. Gerbang mengembangkan {value} menjadi pengenalpasti sesi untuk menyokong caching prompt.",
   "pro.opencode_session_add": "Tambah {header}",

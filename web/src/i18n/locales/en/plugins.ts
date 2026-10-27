@@ -100,7 +100,7 @@ export default {
   'plugin.omc_plugin_title': 'Oh My CPA plugin',
   'plugin.omc_plugin_desc': 'Provided by Oh My CPA source; runs with gateway privileges.',
   'plugin.official_source_plugin_title': 'Community plugin from the official source',
-  'plugin.official_source_plugin_desc': 'Community plugin cataloged in official registry; runs with gateway privileges.',
+  'plugin.official_source_plugin_desc': 'Community plugin cataloged in official registry; code is unreviewed and runs with gateway privileges.',
   'plugin.config_title': 'Configure “{name}”',
   'plugin.config_mode_form': 'Form',
   'plugin.config_mode_json': 'JSON',

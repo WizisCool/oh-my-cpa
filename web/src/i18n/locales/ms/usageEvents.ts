@@ -238,7 +238,7 @@ export default {
   "events.filter_failed": "Gagal",
   "events.load_error": "Gagal memuatkan acara permintaan",
   "events.ingest_healthy": "Ambil secara sihat",
-  "events.delivery_semantics_hint": "Gerbang menggunakan penggunaan sekurang-kurangnya sekali; ralat penyerapan direkodkan dalam Ingest Gaps.",
+  "events.delivery_semantics_hint": "Gerbang menggunakan penggunaan paling banyak sekali (at-most-once); ralat penyerapan direkodkan dalam Ingest Gaps.",
   "events.auto_refresh": "Muat Semula Auto",
   "events.live_pushed": "Rekod muncul sebaik sahaja disimpan",
   "events.live_polling": "Kemas kini langsung tidak tersedia; dimuat semula setiap 10 s",

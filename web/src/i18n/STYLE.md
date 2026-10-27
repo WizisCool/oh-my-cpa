@@ -79,7 +79,7 @@ not a legal disclaimer, an architecture manual, or an agent safety cushion.
 - **Bad (Defensive & bloated):**
   > 以逗号或换行分隔模型 ID。非空列表会替代提供商禁用规则（包括 *）。清空列表将恢复继承当前提供商规则，并非解除所有限制。此优先级要求 CPA v8.0.33 或更高版本；依赖凭据覆盖前请先升级旧网关。
 - **Good (Direct & actionable):**
-  > 以逗号或换行分隔模型 ID。非空列表会替代提供商禁用规则（包括 *）。清空列表将恢复继承当前提供商规则。
+  > 以逗号或换行分隔模型 ID；非空列表会替代提供商禁用规则（包括 *），清空列表将恢复继承当前提供商规则。
 
 - **Bad (Anxious disclaimers):**
   > 注意：此操作具有较高风险，可能导致已有的鉴权配置失效并影响线上业务，请确保已做好配置备份后再行修改。

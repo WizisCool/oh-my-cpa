@@ -97,7 +97,7 @@ export default {
   'plugin.omc_plugin_title': 'Oh My CPA 插件',
   'plugin.omc_plugin_desc': '该插件由第三方插件源提供，安装后以网关权限运行。',
   'plugin.official_source_plugin_title': '官方源社区插件',
-  'plugin.official_source_plugin_desc': '该插件由社区独立维护发布，安装后以网关权限运行。',
+  'plugin.official_source_plugin_desc': '该插件由社区独立维护发布，未经审查，安装后以网关权限运行。',
   'plugin.config_title': '配置「{name}」',
   'plugin.config_mode_form': '表单',
   'plugin.config_mode_json': 'JSON',

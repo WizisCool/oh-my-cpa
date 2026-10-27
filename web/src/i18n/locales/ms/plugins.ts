@@ -100,7 +100,7 @@ export default {
   "plugin.omc_plugin_title": "Pemalam Oh My CPA",
   "plugin.omc_plugin_desc": "Disediakan oleh sumber Oh My CPA; berjalan dengan keistimewaan gerbang.",
   "plugin.official_source_plugin_title": "Pemalam komuniti dari sumber rasmi",
-  "plugin.official_source_plugin_desc": "Pemalam komuniti dikatalogkan dalam pendaftaran rasmi; berjalan dengan keistimewaan gerbang.",
+  "plugin.official_source_plugin_desc": "Pemalam komuniti dikatalogkan dalam pendaftaran rasmi; kod tidak disemak dan berjalan dengan keistimewaan gerbang.",
   "plugin.config_title": "Konfigurasi “{name}”",
   "plugin.config_mode_form": "Borang",
   "plugin.config_mode_json": "JSON",

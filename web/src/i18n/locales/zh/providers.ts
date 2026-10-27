@@ -39,7 +39,7 @@ export default {
   'pro.provider_updated': '提供商已成功更新',
   'pro.provider_deleted': '提供商已删除',
   'pro.delete_provider_confirm': '确定删除该提供商？删除后 CPA 将停止向该端点转发请求。',
-  'pro.field_base_url_desc': '上游服务地址，非本地环境建议使用 HTTPS。',
+  'pro.field_base_url_desc': '提供商服务地址。拉取模型要求 HTTPS，仅 localhost 或私有 IP 可使用 HTTP。',
   'pro.opencode_session_title': '该 OpenCode 端点需要会话请求头',
   'pro.opencode_session_desc': 'OpenCode 用 {header} 识别会话。网关会将 {value} 展开为会话标识以支持提示缓存。',
   'pro.opencode_session_add': '添加 {header}',

@@ -42,7 +42,7 @@ export default {
   "pro.provider_updated": "供應商已成功更新",
   "pro.provider_deleted": "供應商已刪除",
   "pro.delete_provider_confirm": "確定刪除該供應商？刪除後 CPA 將停止向該端點轉發請求。",
-  "pro.field_base_url_desc": "上游服務位址，非本機環境建議使用 HTTPS。",
+  "pro.field_base_url_desc": "供應商服務位址。拉取模型要求 HTTPS，僅 localhost 或私有 IP 可使用 HTTP。",
   "pro.opencode_session_title": "此 OpenCode 端點需要工作階段請求標頭",
   "pro.opencode_session_desc": "OpenCode 用 {header} 識別工作階段。閘道會將 {value} 展開為工作階段標識以支援提示快取。",
   "pro.opencode_session_add": "新增 {header}",

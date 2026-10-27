@@ -100,7 +100,7 @@ export default {
   "plugin.omc_plugin_title": "Oh My CPA 外掛",
   "plugin.omc_plugin_desc": "該外掛程式由 Oh My CPA 外掛程式來源提供，安裝後以閘道權限執行。",
   "plugin.official_source_plugin_title": "官方來源社群外掛",
-  "plugin.official_source_plugin_desc": "該外掛程式由社群獨立維護發布，安裝後以閘道權限執行。",
+  "plugin.official_source_plugin_desc": "該外掛程式由社群獨立維護發布，未經審查，安裝後以閘道權限執行。",
   "plugin.config_title": "設定「{name}」",
   "plugin.config_mode_form": "表單",
   "plugin.config_mode_json": "JSON",
