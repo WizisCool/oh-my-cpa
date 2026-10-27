@@ -37,16 +37,34 @@ export type ThemeMode = 'dark' | 'light';
 
 export const THEME_MODES: readonly ThemeMode[] = ['dark', 'light'];
 
-export type BuiltInPaletteId = 'omc-dark' | 'omc-light' | 'midnight' | 'porcelain' | 'forest' | 'sandstone';
+export type BuiltInPaletteId = 'omc-dark' | 'omc-light' | 'pewter' | 'fog' | 'forest' | 'sandstone';
 
 export const BUILT_IN_PALETTE_IDS: readonly BuiltInPaletteId[] = [
   'omc-dark',
   'omc-light',
-  'midnight',
-  'porcelain',
+  'pewter',
+  'fog',
   'forest',
   'sandstone',
 ];
+
+/**
+ * Registered palettes that were withdrawn, and the palette of the same mode that took each one's place.
+ *
+ * A stored preference outlives a release: `omc-theme` and `ui_preferences` can still name a withdrawn
+ * palette, and an operator's own palette records the one it started from. Reading such a document as
+ * the successor keeps the operator on the nearest look - and keeps their authored palette - where
+ * refusing the id would silently drop both.
+ */
+const RETIRED_PALETTE_IDS: Readonly<Record<string, BuiltInPaletteId>> = {
+  midnight: 'pewter',
+  porcelain: 'fog',
+};
+
+/** The registered palette a stored id means today, or the value unchanged when it is not a retired id. */
+export function currentPaletteId(value: unknown): unknown {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(RETIRED_PALETTE_IDS, value) ? RETIRED_PALETTE_IDS[value] : value;
+}
 
 /** What a mode's palette selection can point at: one registered palette, or the operator's own. */
 export type PaletteRef = BuiltInPaletteId | 'custom';
@@ -249,7 +267,8 @@ type LadderDirection = 'deeper' | 'lighter';
  * one ordered sweep. Deriving them
  * from an operator's accent would make "green" depend on a colour choice, which is the one
  * thing `docs/design.md` §1 forbids. They are constants here, and a custom palette inherits
- * its mode's set.
+ * its mode's set - tuned on the mode's own palette and held to that contrast elsewhere by
+ * `holdSignal`.
  */
 const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; series: readonly string[]; route: readonly string[]; effort: readonly string[] }> = {
   dark: {
@@ -272,6 +291,56 @@ const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger:
     effort: ['#39626e', '#00686c', '#3057a3', '#6343a4', '#8a2b8a', '#9b2065'],
   },
 };
+
+/**
+ * The most contrast a held colour is asked for. A mark or a label on the page is held up to body
+ * text's floor. An effort badge prints its step on a 12-14% wash of the step itself, and on a lifted
+ * dark ground that wash costs well over a ratio point - measured, 5.8:1 on the bare row hover became
+ * 4.4:1 on the badge - so its steps are held to a ceiling that leaves the badge above the floor.
+ */
+const SIGNAL_CONTRAST_CEILING = { mark: 4.5, badge: 6 } as const;
+
+/** The palette each mode's semantics were tuned on, whose page and surface set the contrast they keep. */
+const SIGNAL_REFERENCE: Record<ThemeMode, BuiltInPaletteId> = { dark: 'omc-dark', light: 'omc-light' };
+
+/**
+ * holdSignal keeps a semantic colour as legible on this palette as on its mode's reference.
+ *
+ * A semantic hue is an identity, but its contrast belongs to the ground it was tuned on: the same
+ * green that reads 3.3:1 on OMC Light's white falls to 3.1:1 on a grey page, and the same red that
+ * reads 4.5:1 on OMC Dark falls below 4:1 on a lifted charcoal. So it moves in lightness alone, in the
+ * step the accent ladder uses, until the colour clears what it measured on the reference again - never
+ * beyond the ceiling, since chasing a pastel's 7:1 would bleach it for legibility nobody needs. The
+ * hue stays, and chroma gives way only as far as the new lightness leaves the sRGB gamut. On the
+ * reference itself, and on any palette whose ground already leaves the colour that legible, the
+ * constant is returned unchanged.
+ *
+ * The direction is read from the grounds, not the mode: an operator may author a dark-mode palette on
+ * a light page, and lightening a signal there walks it into the page. Both directions are tried a step
+ * at a time and the smaller move that clears the target wins. Grounds that straddle the colour may
+ * leave no move that clears it, and then the most legible candidate seen is kept.
+ *
+ * The contrast held is capped (`SIGNAL_CONTRAST_CEILING`): a pastel effort step reads 7:1 on OMC
+ * Dark, and chasing that on a lighter ground would bleach it toward white for legibility nobody needs.
+ */
+function holdSignal(color: string, grounds: readonly string[], reference: readonly string[], ceiling: number): string {
+  const weakest = (candidate: string, on: readonly string[]) => Math.min(...on.map((ground) => contrastRatio(candidate, ground)));
+  const target = Math.min(weakest(color, reference), ceiling);
+  let best = { color, ratio: weakest(color, grounds) };
+  if (best.ratio >= target) return color;
+  const lightness = oklchLightness(color);
+  for (let stepIndex = 1; stepIndex <= MAX_LADDER_STEPS; stepIndex += 1) {
+    for (const travel of [LADDER_STEP, -LADDER_STEP]) {
+      const moved = lightness + travel * stepIndex;
+      if (moved < 0 || moved > 1) continue;
+      const candidate = withLightness(color, moved);
+      const ratio = weakest(candidate, grounds);
+      if (ratio >= target) return candidate;
+      if (ratio > best.ratio) best = { color: candidate, ratio };
+    }
+  }
+  return best.color;
+}
 
 /**
  * The editor's contrast readout, per authored token.
@@ -330,13 +399,13 @@ function bestInkAcross(fills: readonly string[]): InkChoice {
  * accentLadder derives the filled control's three states and the one label they share.
  *
  * The loop is the contract. A fixed lightness step can land a fill in the dead zone where neither
- * white nor near-black clears 4.5:1 - measured on the six built-ins, a −0.075 step puts OMC Dark's
- * label at 3.73:1 and Midnight's at 3.38:1 - and no label choice rescues that pair. So the step is the
+ * white nor near-black clears 4.5:1 - measured on the built-ins of the time, a −0.075 step puts OMC Dark's
+ * label at 3.73:1 and a `#58a6ff` accent's at 3.38:1 - and no label choice rescues that pair. So the step is the
  * *starting point*, and both fills keep moving along one direction until a single ink clears the target
  * on *both* of them.
  *
  * Solving the two fills together, rather than each on its own, is what this owes the operator: the
- * pressed state is a state the same label is read in, and solving only the hover fill left Midnight's
+ * pressed state is a state the same label is read in, and solving only the hover fill left a `#58a6ff` accent's
  * near-black label at 3.14:1 the moment the button was pressed. Because both moves are in one
  * direction, the ink that wins on the deeper fill is the one being tested on the lighter one.
  *
@@ -384,6 +453,14 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
   const borderSoft = standOff(core.bg, mixOklch(core.bg, core.border, blend.borderSoft), core.fg, BORDER_SOFT_FLOOR);
   const ladder = accentLadder(mode, core.accent);
   const canvasBlend = CANVAS_BLEND[mode];
+  const reference = getBuiltInPalette(SIGNAL_REFERENCE[mode]).core;
+  const referenceHover = mixOklch(reference.bg, reference.fg, blend.hover);
+  const hold = (color: string) => holdSignal(color, [core.bg, core.surface], [reference.bg, reference.surface], SIGNAL_CONTRAST_CEILING.mark);
+  // An effort badge also sits on a hovered row, so the hover fill is one of its grounds.
+  const holdBadge = (color: string) =>
+    holdSignal(color, [core.bg, core.surface, hover], [reference.bg, reference.surface, referenceHover], SIGNAL_CONTRAST_CEILING.badge);
+  const success = hold(semantics.success);
+  const warn = hold(semantics.warn);
   return {
     ...core,
     canvas: mixOklch(core.bg, canvasBlend.toward === 'fg' ? core.fg : '#000000', canvasBlend.share),
@@ -399,11 +476,11 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     accentHover: ladder.hover,
     accentActive: ladder.active,
     accentOn: ladder.ink,
-    success: semantics.success,
-    warn: semantics.warn,
-    danger: semantics.danger,
-    cacheRateYellow: semantics.warn,
-    cacheRateGreen: semantics.success,
+    success,
+    warn,
+    danger: hold(semantics.danger),
+    cacheRateYellow: warn,
+    cacheRateGreen: success,
     // A dark tooltip sits on the surface it floats over; a light page's tooltip is the
     // inverse block, which is its own foreground step.
     tooltipBg: mode === 'light' ? core.fg : core.surface,
@@ -414,10 +491,10 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     // "there is a slot here and nothing in it".
     heatmapZeroRecorded: core.border,
     heatmapTipLink: core.accent,
-    series: semantics.series,
-    route: semantics.route,
+    series: semantics.series.map(hold),
+    route: semantics.route.map(hold),
     seriesTrack: core.border,
-    effort: semantics.effort,
+    effort: semantics.effort.map(holdBadge),
   };
 }
 
@@ -473,37 +550,44 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
     },
   },
   {
-    id: 'midnight',
+    // A dimmed dark: the page sits ΔL +0.07 above OMC Dark, so bright text no longer halates on a
+    // near-black ground, and the foreground eases off pure white for the same reason. The neutral
+    // carries OMC Dark's faint cool cast, and the accent is the console's blue lifted to keep its
+    // margin on the lighter page.
+    id: 'pewter',
     mode: 'dark',
-    nameKey: 'theme.midnight',
-    descriptionKey: 'theme.midnight_desc',
+    nameKey: 'theme.pewter',
+    descriptionKey: 'theme.pewter_desc',
     core: {
-      bg: '#0d1117',
-      surface: '#161b22',
-      elevated: '#1f242c',
-      fg: '#e6edf3',
-      fg2: '#9da7b3',
-      muted: '#6e7681',
-      meta: '#484f58',
-      border: '#30363d',
-      accent: '#58a6ff',
+      bg: '#222226',
+      surface: '#2c2c2f',
+      elevated: '#333336',
+      fg: '#e9e9ed',
+      fg2: '#bababe',
+      muted: '#8a8a8e',
+      meta: '#68686c',
+      border: '#3f3f43',
+      accent: '#47b5fa',
     },
   },
   {
-    id: 'porcelain',
+    // A light grey that stays light: the page is OKLCH 0.93, and the cards are lifted toward white
+    // rather than sunk below it, so elevation still reads as light. The text ladder is deepened by
+    // the distance the page gave up, keeping every step at OMC Light's contrast or above.
+    id: 'fog',
     mode: 'light',
-    nameKey: 'theme.porcelain',
-    descriptionKey: 'theme.porcelain_desc',
+    nameKey: 'theme.fog',
+    descriptionKey: 'theme.fog_desc',
     core: {
-      bg: '#f7f8fa',
-      surface: '#ffffff',
-      elevated: '#ffffff',
-      fg: '#17212b',
-      fg2: '#4b5563',
-      muted: '#6b7280',
-      meta: '#9ca3af',
-      border: '#d8dee7',
-      accent: '#0b6e99',
+      bg: '#e7e7eb',
+      surface: '#f0f0f4',
+      elevated: '#f6f6fa',
+      fg: '#19191c',
+      fg2: '#47474a',
+      muted: '#666669',
+      meta: '#868689',
+      border: '#c8c8cc',
+      accent: '#005b8b',
     },
   },
   {

@@ -7,7 +7,7 @@
  * - **mode** - light, dark, or following the operating system. This is what the header's single
  *   control cycles and what a reader means by "switch to dark".
  * - **palettes** - one selection per mode. A palette belongs to a mode, so an operator who prefers
- *   Porcelain by day and Midnight at night sets both once and then only flips the mode.
+ *   Fog by day and Pewter at night sets both once and then only flips the mode.
  * - **custom** - the palettes they authored, each with the built-in it started from (which is what
  *   "reset" means) and an optional name.
  *
@@ -19,6 +19,8 @@
 
 import {
   CORE_TOKEN_KEYS,
+  currentPaletteId,
+  getBuiltInPalette,
   isBuiltInPaletteId,
   isPaletteRefForMode,
   type CustomPalette,
@@ -80,11 +82,12 @@ function parseCustomPalette(mode: ThemeMode, value: unknown): CustomPalette | un
   if (typeof value !== 'object' || value === null) return undefined;
   const candidate = value as Record<string, unknown>;
   const core = parseCore(candidate.core);
+  const base = currentPaletteId(candidate.base);
   // An unreadable palette is dropped rather than repaired: inventing nine tokens would put a
   // palette the operator never authored in front of them. The starting palette has to belong to this
   // mode for the same reason a reference does - it is what reset returns to.
-  if (!core || !isBuiltInPaletteId(candidate.base) || !isPaletteRefForMode(mode, candidate.base)) return undefined;
-  return { base: candidate.base, core };
+  if (!core || !isBuiltInPaletteId(base) || !isPaletteRefForMode(mode, base)) return undefined;
+  return { base, core };
 }
 
 /**
@@ -102,7 +105,8 @@ export function parseThemePreferences(value: unknown): ThemePreferences | undefi
   if (typeof candidate.palettes === 'object' && candidate.palettes !== null) {
     const stored = candidate.palettes as Record<string, unknown>;
     for (const mode of ['dark', 'light'] as const) {
-      if (isPaletteRefForMode(mode, stored[mode])) palettes[mode] = stored[mode];
+      const ref = currentPaletteId(stored[mode]);
+      if (isPaletteRefForMode(mode, ref)) palettes[mode] = ref;
     }
   }
   const custom: Partial<Record<ThemeMode, CustomPalette>> = {};
@@ -129,11 +133,11 @@ export function parseThemePreferences(value: unknown): ThemePreferences | undefi
  */
 export function migrateLegacyThemeValue(raw: string | null | undefined): ThemePreferences | undefined {
   if (typeof raw !== 'string') return undefined;
-  const normalized = raw.trim().toLowerCase();
+  const normalized = currentPaletteId(raw.trim().toLowerCase());
   if (normalized === 'dark') return { ...DEFAULT_THEME_PREFERENCES, mode: 'dark' };
   if (normalized === 'light') return { ...DEFAULT_THEME_PREFERENCES, mode: 'light' };
   if (!isBuiltInPaletteId(normalized)) return undefined;
-  const mode: ThemeMode = normalized.startsWith('omc-light') || normalized === 'porcelain' || normalized === 'sandstone' ? 'light' : 'dark';
+  const mode = getBuiltInPalette(normalized).mode;
   return {
     mode,
     palettes: { ...DEFAULT_THEME_PREFERENCES.palettes, [mode]: normalized },
