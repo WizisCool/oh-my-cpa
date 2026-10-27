@@ -19,7 +19,8 @@ import {
   type DashboardModelUsage,
   type DashboardModelsResponse,
 } from '../../types/dashboardModels';
-import { formatCost } from '../../types/tokenDisplay';
+import { formatCurrency } from '../../types/currencyDisplay';
+import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
 import { LoadFailure } from '../feedback';
 import { Panel } from '../common/Panel';
@@ -362,9 +363,10 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
  */
 const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> = ({ group, onPrice }) => {
   const t = useT();
+  const { currency } = useDisplayCurrency();
   const isUnpriced = group.priced_requests <= 0 || group.cost_usd == null;
   const isPartial = !isUnpriced && group.priced_requests < group.requests;
-  const text = isUnpriced ? '—' : formatCost(group.cost_usd);
+  const text = isUnpriced ? '—' : formatCurrency(group.cost_usd, currency);
   const className = `model-usage-cost${isUnpriced ? ' is-unpriced' : isPartial ? ' is-partial' : ''}`;
   if (!isUnpriced && !isPartial) return <span className={className}>{text}</span>;
   const note = isUnpriced

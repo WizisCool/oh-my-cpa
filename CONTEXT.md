@@ -368,6 +368,19 @@ rather than named, and it carries the registered palette it started from, which
 is what its reset returns to. See ADR 0011 for the derivation, its constants,
 and the places it deliberately differs from the hand-tuned values it replaced.
 
+## Display currency
+
+Accounting and price configuration use USD. The deployment-wide `omc_display_currency`
+preference defaults to `USD` and changes only observability presentation: Dashboard,
+Request Records and their cost details/image exports, and Insights. Raw API amounts,
+`cost_usd`, USD nanos, JSON exports, filters and Cost & Usage stay in USD.
+
+A display amount is its stored USD value multiplied by the selected currency's latest
+cached USD-base reference rate. This is not historical FX accounting: a new snapshot
+changes how all windows are displayed, not their stored costs. Frankfurter v2 supplies
+the rates; the server persists each currency's observation date separately from its
+fetch time. Missing conversion data has no reading, never an invented 1:1 rate.
+
 ## Time windows
 
 - **Range Preset**: A relative window — Live (last 15m), 1h, 6h, 24h, 7d, 30d,

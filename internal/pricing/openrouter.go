@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/remotedata"
 )
 
 // OpenRouterModelsURL is the single fixed price source. It is public, needs no
@@ -83,26 +84,9 @@ func (c *OpenRouterClient) Fetch(ctx context.Context) (Catalog, error) {
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
 		return Catalog{}, fmt.Errorf("pricing source URL must be http(s)")
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
-	if err != nil {
-		return Catalog{}, err
-	}
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "oh-my-cpa-pricing/3")
-	response, err := c.client.Do(request)
+	body, err := remotedata.Fetch(ctx, c.client, c.baseURL, "oh-my-cpa-pricing/3", upstreamMaxBytes)
 	if err != nil {
 		return Catalog{}, fmt.Errorf("fetch OpenRouter prices: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return Catalog{}, fmt.Errorf("fetch OpenRouter prices: status %d", response.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, upstreamMaxBytes+1))
-	if err != nil {
-		return Catalog{}, fmt.Errorf("read OpenRouter prices: %w", err)
-	}
-	if int64(len(body)) > upstreamMaxBytes {
-		return Catalog{}, errors.New("OpenRouter price list exceeds size limit")
 	}
 	models, err := DecodeOpenRouter(body)
 	if err != nil {

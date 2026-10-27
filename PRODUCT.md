@@ -131,6 +131,14 @@ are also available through the read-only `models_list` capability.
 - Touch accessibility on a coarse pointer: nothing is reachable only by hovering, every control a finger must hit is about 40px after its hit area without the drawn size changing, and every focusable text control is at least 16px so iOS Safari does not zoom the page on focus. Pinch-zoom is never disabled;
 - Every icon-only control carries an accessible name rather than only a tooltip.
 
+### Display currency
+
+OMC Settings selects the display currency for Dashboard, Request Records, cost details,
+image exports and Insights. USD remains the default and the accounting currency;
+Cost & Usage, price editing, API fields, filters and JSON exports retain USD semantics.
+Frankfurter v2 reference rates refresh daily or on demand and persist in SQLite for
+offline use. A new rate changes display conversion, not historical request costs.
+
 ### Deployment-wide timezone
 
 OMC Settings provides a shared IANA timezone selection for timestamps and calendar-day totals across browsers. The default is the deployment's timezone (`TZ` in Docker); a manual choice persists on the server. The picker identifies the server zone and shows current UTC offsets, including fractional offsets and daylight saving. Historical instants and raw upstream evidence remain unchanged. Agents can read and change the same setting through declared capabilities.

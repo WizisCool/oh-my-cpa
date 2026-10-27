@@ -1,3 +1,4 @@
+import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import React from 'react';
 import { Button, Checkbox, Modal, Segmented, Select } from 'antd';
 
@@ -69,6 +70,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   const t = useT();
   const toast = useToast();
   const { theme } = useTheme();
+  const { currency } = useDisplayCurrency();
   const { style: tokenStyle, tpsMode, modelView, showModelIcons } = useTokenDisplayStyle();
   const customIcons = useCustomIcons(open).data;
 
@@ -88,6 +90,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
     () =>
       open && isImage
         ? buildRequestSheet({
+            currency,
             rows,
             masks,
             colWidths,
@@ -105,7 +108,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
           })
         : null,
     [
-      open, isImage, rows, masks, colWidths, t, tokenStyle, tpsMode, modelView, showModelIcons,
+      open, isImage, rows, masks, colWidths, t, tokenStyle, currency, tpsMode, modelView, showModelIcons,
       credentials, providerIcons, configuredProviders, pluginLogos,
     ],
   );

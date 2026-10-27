@@ -1,10 +1,11 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import { EChart } from '../../../charts/echarts/EChart';
 import { renderChartTooltip } from '../../../charts/chartTooltip';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { FlowLink, FlowNode, InsightsDimension, InsightsMetric } from '../insightsCube';
-import { formatMetric, formatMetricExact } from '../insightsFormat';
+
 
 export interface InsightsFlowChartProps {
   nodes: readonly FlowNode[];
@@ -36,6 +37,7 @@ interface FlowEventParams {
 const InsightsFlowChartView: React.FC<InsightsFlowChartProps> = ({ nodes, links, metric, colorOf, labelOf, isDimmed, onSelect, label, height = 320 }) => {
   const { theme } = useTheme();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
   const byId = React.useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const selectRef = React.useRef(onSelect);
   selectRef.current = onSelect;
@@ -102,7 +104,7 @@ const InsightsFlowChartView: React.FC<InsightsFlowChartProps> = ({ nodes, links,
         };
       }),
     }],
-  }), [byId, colorOf, isDimmed, labelOf, links, metric, nodes, style, theme.palette.fg]);
+  }), [byId, colorOf, isDimmed, labelOf, links, metric, nodes, style, theme.palette.fg, formatMetric, formatMetricExact]);
 
   const handlers = React.useMemo(() => ({
     click: (params: unknown) => {

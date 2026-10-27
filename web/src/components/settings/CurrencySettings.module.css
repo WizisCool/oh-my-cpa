@@ -1,0 +1,50 @@
+.currency-select {
+  width: min(300px, 100%);
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  margin-block: 12px;
+}
+
+.table-scroll {
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.rate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.rate-table th,
+.rate-table td {
+  padding: 10px 8px;
+  text-align: left;
+  font-weight: normal;
+  border-bottom: 1px solid var(--border);
+}
+
+.rate-table td {
+  white-space: nowrap;
+}
+
+.rate-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--elevated);
+  color: var(--fg-2);
+}
+
+@media (max-width: 600px) {
+  .currency-select { width: 100%; }
+}

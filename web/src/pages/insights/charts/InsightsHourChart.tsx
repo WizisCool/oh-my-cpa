@@ -1,10 +1,11 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import { EChart } from '../../../charts/echarts/EChart';
 import { renderChartTooltip } from '../../../charts/chartTooltip';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../insightsCube';
-import { formatMetric, formatMetricExact, formatShare } from '../insightsFormat';
+import { formatShare } from '../insightsFormat';
 
 export interface InsightsHourChartProps {
   /** Twenty-four values, local hour 0 first. */
@@ -27,6 +28,7 @@ const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padS
 const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({ values, peakHours, peakLabel, metric, label }) => {
   const { theme } = useTheme();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
 
   const option = React.useMemo(() => {
     const total = values.reduce((sum, value) => sum + value, 0);
@@ -77,7 +79,7 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({ values, peakH
         })),
       }],
     };
-  }, [metric, peakHours, peakLabel, style, theme.palette, values]);
+  }, [metric, peakHours, peakLabel, style, theme.palette, values, formatMetric, formatMetricExact]);
 
   return <EChart option={option} height={200} label={label} testId="insights-hour-chart" />;
 };

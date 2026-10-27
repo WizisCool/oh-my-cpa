@@ -1,3 +1,5 @@
+import { useDisplayCurrency } from '../types/CurrencyDisplayContext';
+import { currencyReadout, formatCurrency } from '../types/currencyDisplay';
 import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
@@ -27,7 +29,6 @@ import {
   resolveTokenFlowReadout,
   resolveTokenRateFlowReadout,
 } from '../types/tokenDisplay';
-import type { RollingReadout } from '../types/rollingNumber';
 import { successRateTone } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
@@ -83,28 +84,12 @@ function formatRate(value: number | null | undefined): string {
   return `${value.toFixed(2)}%`;
 }
 
-/**
- * The spend tile's own reading: two decimals.
- *
- * `formatCost` keeps four because a list row's fraction of a cent has to stay
- * visible; a headline amount reads as money at two.
- */
-function resolveTileCostReadout(cost: number): RollingReadout {
-  return {
-    number: cost,
-    prefix: '$',
-    suffix: '',
-    format: { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-  };
-}
-
 // Parent query status changes must not turn unchanged series into chart revisions.
 function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
 function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
 function pickCacheReads(point: DashboardSeriesPoint): number { return point.cache_read ?? 0; }
 function pickCost(point: DashboardSeriesPoint): number { return (point.cost_nanos ?? 0) / 1_000_000_000; }
 function formatTrendTime(timeMs: number): string { return dayjs(timeMs).format('MM-DD HH:mm'); }
-function formatTrendCost(value: number): string { return `$${value.toFixed(2)}`; }
 
 const LazyDashboardTrendChart = React.lazy(() =>
   import('../charts/DashboardTrendChart').then((m) => ({ default: m.DashboardTrendChart }))
@@ -151,6 +136,8 @@ export const DashboardPage: React.FC = () => {
   // The console's token unit style: one setting shared with the model panels and
   // the request records, so every token readout on this page follows it.
   const { style: tokenStyle } = useTokenDisplayStyle();
+  const { currency } = useDisplayCurrency();
+  const formatTrendCost = React.useCallback((value: number) => formatCurrency(value, currency, 2), [currency]);
   // The chosen window is the operator's working context, so it lives in the
   // database: a reload, a service restart and a container rebuild all drop
   // browser storage, and none of them should reset what they are looking at.
@@ -525,7 +512,7 @@ export const DashboardPage: React.FC = () => {
               </Tooltip>
             </div>
             <div className="tile-value is-small">
-              <RollingNumber readout={resolveTileCostReadout(data.metrics.cost)} />
+              <RollingNumber readout={currencyReadout(data.metrics.cost, currency)} />
             </div>
             <div className="tile-caption">
               {/* The backend distinguishes a complete total from a partial estimate and
