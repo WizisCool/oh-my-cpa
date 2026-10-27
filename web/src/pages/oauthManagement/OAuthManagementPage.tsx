@@ -188,8 +188,7 @@ export const OAuthManagementPage: React.FC = () => {
     resetSearchToken,
   );
 
-  // Consume one-shot navigation intent before the connect panel arms overlay history,
-  // so Back closes the panel once instead of reopening it from a stale query value.
+  // Consume one-shot navigation intent so it cannot reopen the panel on a later render.
   const [pendingIntent, setPendingIntent] = React.useState<{ connect: boolean; provider?: string; focusQuota: boolean }>();
   const [pendingFocusQuota, setPendingFocusQuota] = React.useState(false);
   React.useEffect(() => {

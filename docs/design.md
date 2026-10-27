@@ -1076,8 +1076,7 @@ The analytical page at `/insights` puts one window on one quiet page of panels:
   one step of the platform's Back (see "Back undoes a view change"). Dragging across the trend makes
   the dragged buckets the next window.
 - **A key's detail is one click from anywhere it is named.** A row of the key table, the trailing
-  chevron of a key ranking row and a key's filter chip all open its detail drawer, which Back
-  dismisses.
+  chevron of a key ranking row and a key's filter chip all open its detail drawer.
 - **Legend entries are bounded.** Each trend legend entry sits in its own `border-soft` hairline box,
   so a swatch can only belong to the name inside it.
 - **Composition is a bar per key.** "What each key used" is a horizontal stacked bar per key, its
@@ -1580,9 +1579,8 @@ supplies content and layout width; what is inside the frame is not restyled per 
   work, at the trailing edge - and wraps instead of squeezing. Closing, it keeps the title, body and
   footer it last showed open until it has slid away, so a caller that closes it by clearing its
   selection does not send it out blank; its body holds a stable scrollbar gutter, so a section
-  unfolding past the panel's height does not narrow every card mid-fold. The time-range sheet is
-  not a side panel and keeps antd's `Drawer`; the phone navigation sheet is `MobileNavSheet`,
-  because it follows a finger.
+  unfolding past the panel's height does not narrow every card mid-fold. The phone navigation sheet
+  and the time-range sheet are not side panels and keep antd's `Drawer`.
 - **`Tooltip` - a hint the reader asked for.** Ant Design's popup, opened only on intent: a mouse
   or pen that moved onto the trigger and rested there 450ms (at once within half a second of the
   last hint closing, so a row of tools reads quickly), never a pointer a layout moved a control
@@ -1734,7 +1732,7 @@ zone and not in the browser's.
 button has neither the width for a calendar nor a thumb's reach. The sheet shows one level at
 a time - the presets, or the custom range under a row that leads back to them - draws days
 at 40px and preset rows at 44px, puts Cancel and Apply at full width along the bottom edge,
-and is a Drawer-class overlay: the platform's Back dismisses it (§8).
+and opens as a Drawer-class overlay.
 
 Three kinds of window, and only the first two move:
 
@@ -1852,7 +1850,7 @@ touch reader asks for it.
 window splitter (arrows step it, Home and End jump to its bounds, a double click restores the
 default), and a drag writes the width to the panel directly and commits it once on release, so
 dragging does not re-render the transcript. The panel never takes more than half the viewport.
-Below 900px it becomes a Drawer joined to the platform Back gesture through `useOverlayHistory`. No
+Below 900px it becomes a Drawer. No
 breakpoint is added.
 
 **The transcript follows the newest message.** The thread viewport (assistant-ui's) keeps a growing
@@ -2049,7 +2047,7 @@ palette, `--border` grid rules, `--muted` tick and legend text formatted the way
 formats tokens, money, durations and shares; a table with `--muted` 12px heads that sort on click,
 `--border-soft` row rules and right-aligned tabular figures. Full screen fixes the same figure over
 the viewport on `--surface` without a border, the frame filling what the title bar leaves; Escape,
-the same button or the platform's Back gesture returns it, and a dashed hairline box holds its
+or the same button returns it, and a dashed hairline box holds its
 place in the answer meanwhile. The saved image is the frame's own document at 2x. While a display call's
 arguments arrive it is a draft figure in that position; a refused call remains an ordinary call row.
 
@@ -2886,22 +2884,9 @@ There is no bottom bar and no phone-specific menu. The sheet carries the rail's 
 brand and grouped nav — because a phone does not have less to navigate, it has less room to show
 it in, and a second navigation would be a second place for the grouping to drift.
 
-**The sheet follows the finger** (`MobileNavSheet`). A sideways swipe anywhere on the page draws
-it out under the finger, the page dimming with it, and a swipe back on the sheet or the dimmed
-page puts it away. On release it settles by where it stands - past halfway open - unless it was
-thrown faster than 0.35px/ms, when it settles the way it was moving. A swipe towards the trailing
-edge on the open sheet cannot draw it further, so it reads as Back and closes it. A swipe that is mostly
-vertical is the page's scroll, and a swipe that starts in a field, an editor, a chart, a slider,
-something that handles touch itself, or a strip scrolled away from its start is left to that.
-The drag writes one custom property per move; the panel's transform and the mask's opacity are
-derived from it, so no move renders. The hamburger, a tap on the dimmed page, Escape and Back
-still open and close it, and while it is open the page is inert. Gesture recognition (axis lock,
-threshold, release speed) is `@use-gesture/react`'s; its `filterTaps` stays off, because it
-swallows the first click after any drag, and that click is the reader's next tap.
-
 **The sheet is bounded in `vw` as well as `px`** (`min(320px, 86vw)`). At a 320px viewport a fixed
 320px sheet leaves no page visible behind the mask, and the reader loses the sense that this is a
-layer over where they were — which is also what tells them Back will put it away.
+layer over where they were.
 
 A bottom tab bar was considered and rejected: it costs 56px of vertical space plus the home-indicator
 inset on every screen, in a console whose subject is dense tables, and it cannot express four groups
@@ -2984,7 +2969,7 @@ because double-tap and pinch zoom are how a reader enlarges a dense table.
 At `640px` and below the shell header is one 48px row (`--app-header-height`; 52px above):
 navigation, the ellipsised current page name, refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
 repository and sign-out; demo mode keeps its marker and write restrictions. Menu rows are at least
-44px high. Back or Escape dismisses the menu and restores its trigger focus; an action opening a
+44px high. Escape dismisses the menu and restores its trigger focus; an action opening a
 modal gives focus to that modal. The `900px` navigation-sheet breakpoint is unchanged.
 
 `PageHeader.mobileActions` explicitly chooses primary phone actions and an `ActionMenu` for secondary
@@ -3036,8 +3021,8 @@ the default follows the current phone breakpoint.
 
 Focused editing fixes the **same source container** inside the usable viewport rather than mounting
 another editor. Draft, undo stack, selection and scroll survive entry and exit. Background application
-siblings become inert; body-level dialog portals remain usable. Back exits focus after closing any
-inner menu, confirmation or conflict dialog. The entry button regains focus after exit.
+siblings become inert; body-level dialog portals remain usable. The Return action exits focus and
+restores focus to the entry button.
 `useVisibleViewport` follows keyboard resize and caret panning through `visualViewport` resize/scroll,
 with layout viewport fallback and pinch-zoom left to the browser. The editor and dirty actions fit
 inside those bounds; their observers/listeners are effect-owned and cleaned under StrictMode.
@@ -3063,45 +3048,11 @@ remembers the record it showed, so what leaves is the record and not an emptied 
 - `touch-action: manipulation` is applied to controls, where it removes the double-tap delay
   the reader feels as lag. It is deliberately *not* applied to the page.
 
-### Back dismisses the overlay, and it is the platform's own Back
+### Browser navigation
 
-The console does not implement an edge swipe, and the reason is not effort. iOS Safari and
-Android predictive back already own the screen edges: a JavaScript edge-swipe either loses the
-gesture to the browser or fights it. The platform's Back is native, so joining it means the
-hardware button, the browser's back arrow and the edge gesture all dismiss an overlay at native
-frame rate with nothing to reconcile. The one swipe the console has, the navigation sheet's, is a
-sideways drag across the page rather than from its edge; it opens and closes the same overlay
-entry, and a touch the platform takes over (`touchcancel`) leaves the sheet where it stood.
-
-**The contract.** Any Drawer- or Modal-class overlay is one history entry. Opening it pushes an
-entry that keeps the same URL and the router's own bookkeeping, marked with the overlay's id;
-the platform Back pops that entry, and the pop dismisses the topmost overlay. The route never
-changes, so Back on an open overlay cannot navigate. `useOverlayHistory`
-(`web/src/hooks/useOverlayHistory.ts`) is the whole wiring, and its policy lives in
-`web/src/hooks/overlayHistory.ts`:
-
-```tsx
-useOverlayHistory({ isOpen, onClose });
-```
-
-**The boundary is Drawer and Modal.** Popovers, dropdowns, selects and tooltips are not
-overlays: they are opened by a click that also says what they are for, they close on the same
-gesture that opened them, and giving each one a history entry would make Back traverse the
-toolbar instead of the page.
-
-Four consequences are designed for rather than discovered, and each is pinned by
-`scripts/test-overlay-history.ts` and the `overlay-back` browser scenario:
-
-| Situation | Behaviour | Why |
-| --- | --- | --- |
-| A router navigation happened after the overlay opened | The sentinel is abandoned, not consumed | History entries cannot be removed, so consuming it would traverse the entry that was just written - the filter drawer's Apply closing over its own filters |
-| The overlay is closed by its own UI | Its sentinel is consumed, so no dead entry is left | Otherwise the reader's next Back spends itself on an entry that holds nothing |
-| The overlay's page unmounts while it is open | The sentinel is abandoned in place | A dead entry costs one Back press at most and never a wrong navigation |
-| The overlay refuses to close (an unsaved-edit confirmation) | Its sentinel is re-armed | Without this the next Back would leave the page out from under an open editor |
-| The reader goes *forward* after a Back | Nothing reopens | A forward press is spent; reopening overlays on it would resurrect a dialog the reader dismissed |
-
-`prefers-reduced-motion` is not involved: the platform owns the animation, which is one more
-reason this is the right mechanism rather than a JS gesture.
+Drawers and dialogs are closed with their own controls. Browser Back follows page and view
+history; an open overlay does not add a history entry. Unsaved edits should be saved before
+leaving the page.
 
 ### Back undoes a view change
 
@@ -3330,12 +3281,11 @@ framed by a 1px `--border`, `--surface` and the 6px radius once the mark is 20px
 smaller marks are the bare glyph in `--muted`. They read as chrome beside the artwork, never
 as another brand. The navigation entry uses the boxes glyph, distinct from the dashboard's grid.
 
-The details are a Back-aware, viewport-bounded Drawer titled with the client name, with copy
+The details are a viewport-bounded Drawer titled with the client name, with copy
 beside the title. It opens with Cost & Usage: three tiles (input price, output price, requests
 in 24 hours - the one window every usage figure on this page uses), then the price action - primary "Set price" for an unpriced
 model, default "Edit price" otherwise - and a link to the request list narrowed to this call
-name over the same 24 hours. The price editor stacks above the Drawer and one Back closes it
-alone. Below, the Drawer names the connections serving the model (the upstream name where it
+name over the same 24 hours. The price editor stacks above the Drawer and closes independently. Below, the Drawer names the connections serving the model (the upstream name where it
 differs), then gives each distinct model its own models.dev profile (connections that reach the same
 source record under different upstream names share one): three limit
 tiles (context, output, input), a capability group (modalities, reasoning, tools, structured
@@ -3346,14 +3296,14 @@ license). A supported capability carries a `--success` check; an unsupported one
 omitted field are drawn in `--meta`, so what is known stands out and what is unknown stays
 explicitly stated. Weight links, source links and the models.dev, OpenRouter and pi.dev
 lookups are bordered link buttons that open a new tab with opener/referrer protection. The
-footer steps to the previous or next model of the filtered list without closing the Drawer;
-one Back still dismisses it. The source note and snapshot date close the Drawer. Local icons
+footer steps to the previous or next model of the filtered list without closing the Drawer.
+The source note and snapshot date close the Drawer. Local icons
 and the existing palette, typography, spacing and motion tokens are reused without new global
 design tokens.
 
 ### OAuth model rules
 
-The OAuth workspace's Model rules action opens a viewport-bounded, Back-aware
+The OAuth workspace's Model rules action opens a viewport-bounded
 Drawer. The close action sits at the trailing header edge, keeping it reachable
 beside centered save acknowledgements; the credential detail Drawer uses the same
 close placement. Its provider picker uses the same display names and local brand marks as
@@ -3364,8 +3314,7 @@ provider identity. Unknown providers keep a neutral mark and a readable name.
 
 Two full-width section tabs show aliases and exclusions with their draft counts
 and an unsaved indicator. Each section saves or reverts independently, and provider
-selection remains disabled while either has edits. Closing or native Back asks
-before discarding drafts. Aliases use the provider catalog as source suggestions,
+selection remains disabled while either has edits. Closing asks before discarding drafts. Aliases use the provider catalog as source suggestions,
 keep manual entry and default new mappings to retaining the original model (`fork`).
 Exclusions use open checkbox rows, searchable catalog bulk actions and a separate
 list for typed IDs and wildcard rules. A wildcard-covered row identifies its rule
@@ -3416,8 +3365,7 @@ unavailable figures keep a visible fallback note rather than silently disappeari
 ### Credential window warmup
 
 The OAuth toolbar opens a viewport-bounded Warmup settings Drawer with Codex and Claude
-section tabs. A draft prevents provider switching; close and native Back require a
-discard decision. Each provider edits a model, reset mode and one optional daily start,
+section tabs. A draft prevents provider switching; closing requires a discard decision. Each provider edits a model, reset mode and one optional daily start,
 showing the effective OMC timezone and daily-priority rule. Defaults are off and `06:00`.
 Saving confirms the effect on all current and future inheriting credentials.
 

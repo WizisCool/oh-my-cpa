@@ -4,7 +4,6 @@ import { clsx } from 'clsx';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useResizablePanel } from './useResizablePanel';
 import styles from './Workspace.module.css';
 import { AppDrawer } from '../common/AppDrawer';
@@ -50,7 +49,7 @@ export interface WorkspaceLayoutProps {
  * viewport, and the conversation centres its own reading column inside what is left. Capping the
  * frame would float the panel in the middle of a wide screen with the transcript beside it.
  *
- * Below the narrow breakpoint the panel becomes a Drawer joined to the platform Back gesture. What
+ * Below the narrow breakpoint the panel becomes a Drawer. What
  * a message is sent with is named in the composer, so it is in view at every width.
  */
 export function WorkspaceLayout({ testId, title, actions, notices, aside, children }: WorkspaceLayoutProps) {
@@ -73,7 +72,6 @@ export function WorkspaceLayout({ testId, title, actions, notices, aside, childr
   });
   const { onOpenChange } = aside;
   const close = React.useCallback(() => onOpenChange(false), [onOpenChange]);
-  useOverlayHistory({ isOpen: isNarrow && aside.isOpen, onClose: close });
   // One tab needs no tab strip; several are Ant Design tabs, so the panel reads like every other
   // tabbed surface of the console.
   const content = aside.tabs.length === 1 ? aside.tabs[0].content : (

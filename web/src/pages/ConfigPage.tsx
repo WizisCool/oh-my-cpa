@@ -28,7 +28,6 @@ import { useConfigDraft } from '../components/config/useConfigDraft';
 import { ConfigBackupsButton } from '../components/config/ConfigBackupsButton';
 import { ConfigOutline, type ConfigOutlineEntry } from '../components/config/ConfigOutline';
 import { areValuesSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
-import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { useVisibleViewport } from '../hooks/useVisibleViewport';
 import { useFocusedRegion } from '../hooks/useFocusedRegion';
@@ -79,7 +78,6 @@ export const ConfigPage: React.FC = () => {
   const sourceFocusTriggerRef = React.useRef<HTMLButtonElement>(null);
   const visibleViewport = useVisibleViewport(isPhone || isSourceFocused);
   useFocusedRegion(isSourceFocused, sourceRef);
-  useOverlayHistory({ isOpen: isSourceFocused, onClose: () => setIsSourceFocused(false) });
 
   const {
     editorRef,
@@ -144,11 +142,6 @@ export const ConfigPage: React.FC = () => {
     else if (wasSourceFocused.current) sourceFocusTriggerRef.current?.focus({ preventScroll: true });
     wasSourceFocused.current = isSourceFocused;
   }, [isSourceFocused, editorRef]);
-
-  // The revision-conflict dialog is a decision the operator must make before the draft can be
-  // saved, so Back dismissing it is the same as its own Cancel: the draft is untouched and the
-  // conflict stays reported by the save flow.
-  useOverlayHistory({ isOpen: Boolean(conflictState), onClose: () => setConflictState(null) });
 
   // ── API Keys ────────────────────────────────────────────
   // The key list is edited on its own page (/api-keys), which is the only editor

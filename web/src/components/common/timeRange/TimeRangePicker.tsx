@@ -4,7 +4,6 @@ import { Button, Checkbox, Drawer, Popover } from 'antd';
 import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
 import { languageLocale, useI18n } from '../../../i18n';
 import { useIsNarrowViewport } from '../../../hooks/useIsNarrowViewport';
-import { useOverlayHistory } from '../../../hooks/useOverlayHistory';
 import dayjs, { formatTimeZoneOffset } from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { RangeCalendar } from './RangeCalendar';
@@ -67,7 +66,7 @@ const ERROR_KEYS: Record<string, MessageKey | undefined> = {
  *
  * The surface is a popover beside the trigger on a desktop and a bottom sheet below the
  * shell's narrow breakpoint, where a popover anchored to a toolbar button has neither the
- * width for a calendar nor a thumb's reach. The sheet is a Drawer-class overlay, so the platform's Back dismisses it.
+ * width for a calendar nor a thumb's reach.
  */
 export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   preset,
@@ -98,7 +97,6 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   const [viewMonth, setViewMonth] = React.useState(() => monthOf(today));
 
   const close = React.useCallback(() => setIsOpen(false), []);
-  useOverlayHistory({ isOpen: isSheet && isOpen, onClose: close });
 
   // A popover is not a focus trap, so Escape is heard on the document: focus may still be on
   // the trigger, or on nothing at all after a press on the calendar's padding. The sheet

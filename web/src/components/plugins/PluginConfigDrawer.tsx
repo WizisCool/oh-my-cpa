@@ -10,7 +10,6 @@ import { SecretInput } from '../common/SecretInput';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { PluginConfigEditor } from './PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual, pluginConfigSummary } from './pluginConfig';
 import {
@@ -138,7 +137,6 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
       onOk: onClose,
     });
   };
-  useOverlayHistory({ isOpen: plugin !== null, onClose: requestClose });
 
   const switchMode = (next: EditorMode) => {
     if (next === mode) return;

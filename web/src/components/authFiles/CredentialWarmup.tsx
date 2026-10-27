@@ -7,7 +7,6 @@ import { api, ApiError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
 import { createID } from '../../utils/ids';
 import { languageLocale } from '../../i18n/language';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
 import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, isWarmupPolicyEnabled, type WarmupPolicy, type WarmupResult, type WarmupSettings, type WarmupCredential } from '../../types/warmup';
 import { AppDrawer } from '../common/AppDrawer';
@@ -171,7 +170,6 @@ export function WarmupSettingsDrawer({ open, onClose }: { open: boolean; onClose
     if (!isDirty) { setDraft(undefined); onClose(); return; }
     modal.confirm({ title: t('af.unsaved_confirm_title'), content: t('af.unsaved_confirm_desc'), okText: t('common.confirm'), cancelText: t('common.cancel'), onOk: () => { setDraft(undefined); onClose(); } });
   }, [isDirty, modal, onClose, saveMutation.isPending, t]);
-  useOverlayHistory({ isOpen: open, onClose: attemptClose });
   const save = () => {
     if (!settingsQuery.data || !canSaveWarmupPolicy(policy)) return;
     const revision = draftRevision.current ?? settingsQuery.data.revision; const selectedPolicy = { ...policy };

@@ -30,7 +30,6 @@ import {
 } from '../../types/usageEventFilters';
 import { useT } from '../../i18n';
 import { displayEffortName } from '../../theme/effortScale';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { AppDrawer } from '../common/AppDrawer';
 import styles from './RequestFilterDrawer.module.css';
@@ -143,11 +142,6 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   onApply,
 }) => {
   const t = useT();
-  // Apply navigates and *then* closes the drawer, and that order is what makes the close safe:
-  // the router has already replaced the entry this sentinel was opened over, so the module
-  // abandons the sentinel instead of traversing. Traversing would pop the entry the filters
-  // were just written to and visibly revert them. The browser suite pins this pair.
-  useOverlayHistory({ isOpen: open, onClose });
   const [draft, setDraft] = React.useState<UsageEventsFilterDraft>(EMPTY_FILTER_DRAFT);
   const [pendingRegexField, setPendingRegexField] = React.useState<UsageRegexField>('model');
 

@@ -37,7 +37,7 @@ by opening a management page.
    open weight flag or a download link alone does not establish one. Reference token
    limits do not guarantee the limits a particular connection enforces.
 5. The default page groups client model names vertically by maker and offers search.
-   A Back-aware Drawer shows facts and explicit models.dev, OpenRouter and pi.dev
+   A Drawer shows facts and explicit models.dev, OpenRouter and pi.dev
    navigation. External references open only on user action with opener/referrer
    protection; all icon artwork is local.
 

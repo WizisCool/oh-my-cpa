@@ -21,7 +21,6 @@ import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { isDemoMode } from '../../types/demoMode';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { OAuthProviderChoice } from '../oauthProviderLogic';
 import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
@@ -84,8 +83,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     setProxyUrl('');
     void sessions.startDefaultRoute(choice.id);
   };
-
-  useOverlayHistory({ isOpen: open, onClose });
 
   const copyValue = async (value?: string, successKey: MessageKey = 'oauth.link_copied') => {
     if (!value) return;

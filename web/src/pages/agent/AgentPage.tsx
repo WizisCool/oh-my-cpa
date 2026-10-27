@@ -25,7 +25,6 @@ import { ASK_QUESTION } from '../../agent/types';
 import type { Presentation, Trace } from '../../agent/types';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { usePreference } from '../../hooks/usePreference';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
@@ -114,7 +113,6 @@ export function AgentPage() {
 
   const [drawerView, setDrawerView] = React.useState<DrawerView>();
   const closeDrawer = React.useCallback(() => setDrawerView(undefined), []);
-  useOverlayHistory({ isOpen: !!drawerView, onClose: closeDrawer });
   // The drawer keeps drawing what it showed while it slides shut.
   const shownViewRef = React.useRef<DrawerView>('directory');
   if (drawerView) shownViewRef.current = drawerView;

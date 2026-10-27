@@ -250,11 +250,11 @@ export async function playgroundNarrow({ base, page, check }) {
   await page.locator('[data-testid="playground-page"]').waitFor();
   await page.getByRole('button', { name: 'Parameters', exact: true }).click();
   await page.locator('.ant-drawer-section').waitFor();
-  await page.goBack();
+  await page.locator('.ant-drawer:visible .ant-drawer-close').click();
   await until(async () => await page.locator('.ant-drawer-section:visible').count() === 0, {
-    label: 'Back to close the settings drawer',
+    label: 'settings drawer to close',
   });
-  check('Back closes playground settings without leaving the page', new URL(page.url()).pathname.endsWith('/playground'), page.url());
+  check('closing playground settings leaves the page in place', new URL(page.url()).pathname.endsWith('/playground'), page.url());
   const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, body: document.body.scrollHeight, height: innerHeight,
     page: document.querySelector('[data-testid="playground-page"]').getBoundingClientRect().bottom }));
   check('playground fits a 320px phone and keeps its composer inside the viewport', geometry.scroll <= geometry.width && geometry.page <= geometry.height + 1, JSON.stringify(geometry));

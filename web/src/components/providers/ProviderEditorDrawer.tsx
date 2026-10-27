@@ -22,7 +22,6 @@ import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { maskKeyText } from '../../utils/maskKey';
 import { modelOptionsFor } from '../../utils/modelOptions';
 import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFamilies';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { useProviderManagement } from './useProviderManagement';
 import { EditorSection } from './EditorSection';
 import { Fold } from '../common/Fold';
@@ -228,10 +227,6 @@ export function ProviderEditorDrawer({
   const iconName = selectedCustomID
     ? customIcons.data?.find((icon) => icon.id === selectedCustomID)?.name ?? t('pro.field_icon')
     : formIcon;
-
-  // The provider editor is the deepest surface on this page, so Back closing it is the
-  // difference between abandoning an edit and losing the page it was made on.
-  useOverlayHistory({ isOpen: providerDrawerOpen, onClose: handleCloseProviderDrawer });
 
   // The picker's options come from the family registry, so a family the console
   // manages cannot appear in one control and not the other.

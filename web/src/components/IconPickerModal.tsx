@@ -8,7 +8,6 @@ import {
 } from '../types/lobeIconCatalog';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
-import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { SearchInput } from './common/SearchInput';
 import { EmptyState } from './common/EmptyState';
 import { ToggleTag } from './common/Tag';
@@ -49,12 +48,6 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   const t = useT();
   const [isLibraryBusy, setIsLibraryBusy] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
-  useOverlayHistory({
-    isOpen: open,
-    onClose: () => {
-      if (!isSelecting && !isLibraryBusy) onClose();
-    },
-  });
   const { token } = theme.useToken();
   // Derived from the live theme token, so a themed z-index base is respected
   // rather than pinned to today's default of 1000.

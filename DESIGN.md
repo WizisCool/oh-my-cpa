@@ -304,7 +304,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 
 - **Top Header**: Fixed 52px height (48px at 640px and below, `--app-header-height`), the top of the content panel, with no rule of its own. Contains the navigation toggle, breadcrumb hierarchy, and five right-aligned actions: the project GitHub link, refresh, the theme mode control, the language menu, and sign out. The mode control is a **cycling button** — light → dark → follow-the-system, one icon per state (sun, moon, desktop) — because the palettes belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the console as it is picked; the language stays a **menu** over `LANGUAGES`, because four languages, one of which the reader may not read, is exactly the case a list answers. The project GitHub link uses the existing local Octicons mark and opens `https://github.com/WizisCool/oh-my-cpa` in a new tab with `noopener noreferrer`; it shows no tooltip — the mark names it and the unfolding count answers the hover — while its accessible name follows the reading language, and it remains available in the demonstration. At rest the link is the mark alone; pointed at or focused, it unfolds the project's star count before the mark over `base` — a star glyph and the count, exact below a thousand and truncated thousands with two decimals above (`1.23k`) — once the server has read one, and under reduced motion it still waits for the pointer or focus but appears at once, without the transition. It is the first control of a right-aligned row and the label leads, so unfolding widens it away from the others and the mark stays under the pointer; a device with no hover shows the count throughout. A hairline separates the link from the console's own actions. All five actions are one component, `web/src/components/common/HeaderAction.tsx`: 32px high, borderless at rest, the same hover and the same label treatment for the star count and the language code. Each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. CPA connection status and version are reported on the System Information page only.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), on `--canvas` with no border: the panel's edge is the separation. Below 900px the panel loses its inset and corners and becomes the screen. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
-- **Navigation Sheet (phone)**: Below 900px the rail becomes a left sheet of `min(320px, 86vw)`, carrying the same two parts — brand and grouped nav. There is no bottom bar and no phone-specific menu: a phone has less room, not less to navigate, and a second navigation is a second place for the grouping to drift. The `vw` bound matters at a 320px viewport, where a fixed 320px sheet would leave no page visible behind the mask. The sheet follows the finger: a sideways swipe across the page draws it out and a swipe back puts it away, settling by position or by a fling; a swipe towards the trailing edge on the open sheet is Back and closes it; vertical swipes stay the page's scroll.
+- **Navigation Sheet (phone)**: Below 900px the rail becomes a left sheet of `min(320px, 86vw)`, carrying the same two parts — brand and grouped nav. There is no bottom bar and no phone-specific menu: a phone has less room, not less to navigate, and a second navigation is a second place for the grouping to drift. The `vw` bound matters at a 320px viewport, where a fixed 320px sheet would leave no page visible behind the mask.
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile), inside a 1440px content column. The widths that follow: content column 1376px (1440 − 2×32), and a list frame 1376px (every list is its own hairline frame, or the body of a card that is). Every page measures these; a page that needs a different column states why where the rule is written (the configuration workbench's 920px reading column is the one case).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px card nav — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens. The card nav, from a 1600px viewport, lists the current section's cards with their setting counts and unsaved marks; below 1600px it is hidden.
 
@@ -320,7 +320,7 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 - **Pinch-zoom is never disabled.** `maximum-scale=1` and `user-scalable=no` are absent on purpose.
 - **A page never moves sideways.** The content pane scrolls vertically only on a phone; a code block, a wide table, the heatmap, and a strip of choices that cannot wrap (price-book filters, configuration section nav) swipe inside their own frames with `overscroll-behavior-x: contain`. The conversation transcript clips horizontally as a backstop, and its capability steps are bounded by the column.
 - **The composer starts at one line.** It grows to ten lines on desktop, with the action in its foot. Below 640px it grows to five lines with the action beside the input, and keeps a foot row only for a control that needs one. User message text has no paragraph margins inside its padded bubble.
-- **The source editor is a phone surface too.** Monaco owns text/widget geometry through its API. At 640px and below use 16px text / 24px lines, a two-character number gutter, no folding/decorations/minimap/overview ruler, and `wrappingIndent: 'none'`. Wrapping defaults on for phones and off for desktop; a visible manual choice lasts for the source session. Find/wrap/focus are direct; format/copy/statistics use tools. The same Monaco instance enters a focused region bounded by `visualViewport`, with dirty-only measured actions and Back/focus restoration. See the content-first phone contract below.
+- **The source editor is a phone surface too.** Monaco owns text/widget geometry through its API. At 640px and below use 16px text / 24px lines, a two-character number gutter, no folding/decorations/minimap/overview ruler, and `wrappingIndent: 'none'`. Wrapping defaults on for phones and off for desktop; a visible manual choice lasts for the source session. Find/wrap/focus are direct; format/copy/statistics use tools. The same Monaco instance enters a focused region bounded by `visualViewport`, with dirty-only measured actions and focus restoration. See the content-first phone contract below.
 - **The viewport is not a fixed rectangle.** `viewport-fit=cover` is declared so `env(safe-area-inset-*)` resolves, and the insets go on chrome that touches a screen edge — never on a scroll container. Heights that decide how much data fits use `dvh`, not `vh`, because the mobile URL bar changes `100vh` continuously. `touch-action: manipulation` goes on controls, not on the page.
 
 ### Named Rules
@@ -475,7 +475,6 @@ Corners nest on one scale, **2 · 6 · 8 · 12**; a shape inside another takes t
 - **Do** preserve previous rendered content during query filter updates using `placeholderData: keepPreviousData`.
 - **Do** give a `:hover` reveal a `@media (hover: none)` counterpart, and express a phone arrangement as a `640px` viewport rule (or a `920px` container query on the box the layout is about) rather than a new magic number.
 - **Do** size focusable text controls at 16px under `(pointer: coarse)`, and give touch-only hit areas to controls whose drawn box stays at its token size.
-- **Do** wire a Drawer or Modal to `useOverlayHistory({ isOpen, onClose })` so the platform's Back dismisses it, and leave Popovers, dropdowns, selects and tooltips out of the history — Back traverses pages, not the toolbar.
 - **Do** let the loading bar hint at counted work (queries and module downloads) and separately mark pending activity and wait 200ms before painting, so a fast response never flickers; draw a first load as placeholders at the content's own geometry (`Placeholder.tsx`), never as a centred spinner.
 
 ### Don't:
@@ -491,7 +490,7 @@ Corners nest on one scale, **2 · 6 · 8 · 12**; a shape inside another takes t
 The Playground and the Agent share one frame from `web/src/components/workspace`: a head carrying
 the title, the key-and-model target as one joined control and the page actions; a main column whose
 transcript, notices and composer share a centred 760px reading column; and a resizable side panel
-(a keyboard-operable splitter, never wider than half the viewport) that becomes a Back-aware Drawer
+(a keyboard-operable splitter, never wider than half the viewport) that becomes a Drawer
 below 900px, where the target moves onto its own head row. The frame spans the content area, like
 the configuration workbench.
 
@@ -541,7 +540,7 @@ the configuration workbench.
   and shrinks with content between 48px and 16384px so normal content scrolls with the
   transcript, not inside a nested root viewport. Local filters, forms and calculators operate
   on frozen content; new-data or write follow-ups are reviewed in the composer. Full screen is the same figure fixed over
-  the viewport on `--surface`, left with Escape or Back; a dashed hairline box holds its place.
+  the viewport on `--surface`, left with Escape or the return control; a dashed hairline box holds its place.
 - **Target**: each model is led by its maker's mark, or a neutral box when the maker is unknown.
 - **Retry, edit, files**: the newest answer's foot offers retry and edit while its turn changed
   nothing; an edit shows an "editing" chip above the input. A message sent with a presentation carries an
@@ -769,7 +768,7 @@ do not consume space. Missing observations remain explicit.
 
 - Phone breakpoint: 640px; navigation sheet: 900px. One-row header: navigation, ellipsised page
   name, refresh, More. Click-open theme/language/repository/sign-out tools show selected preferences,
-  use 44px rows and dismiss with Back/Escape. Demo mode retains its marker and restrictions.
+  use 44px rows and dismiss with Escape. Demo mode retains its marker and restrictions.
 - The top bar names the page, so the page `h1` stays in the document and is not drawn (ADR 0096);
   a live subtitle and the actions take its row. Horizontal content padding: 12px; compact
   gaps/padding: existing 8/12/16px scale. `PageHeader.mobileActions` chooses primary phone actions explicitly. Secondary tools use
@@ -794,8 +793,8 @@ do not consume space. Missing observations remain explicit.
   format/copy/statistics use tools. Desktop shortcut hints stay desktop-only.
 - Focused editing keeps the same Monaco DOM/model, undo stack, selection and scroll. Its fixed region
   follows the visible viewport (keyboard resize/caret pan); dirty actions fit inside it. Background
-  siblings are inert while dialog portals remain active. Nested overlays close before focus on Back,
-  and exit restores entry-button focus. Palette/font/token derivation stays unchanged.
+  siblings are inert while dialog portals remain active. The Return action exits focus and restores
+  entry-button focus. Palette/font/token derivation stays unchanged.
 
 ### Model Square directory
 
@@ -841,12 +840,11 @@ framed by a 1px `--border`, `--surface` and the 6px radius once the mark is 20px
 smaller marks are the bare glyph in `--muted`. They read as chrome beside the artwork, never
 as another brand. The navigation entry uses the boxes glyph, distinct from the dashboard's grid.
 
-The details are a Back-aware, viewport-bounded Drawer titled with the client name, with copy
+The details are a viewport-bounded Drawer titled with the client name, with copy
 beside the title. It opens with Cost & Usage: three tiles (input price, output price, requests
 in 24 hours - the one window every usage figure on this page uses), then the price action - primary "Set price" for an unpriced
 model, default "Edit price" otherwise - and a link to the request list narrowed to this call
-name over the same 24 hours. The price editor stacks above the Drawer and one Back closes it
-alone. Below, the Drawer names the connections serving the model (the upstream name where it
+name over the same 24 hours. The price editor stacks above the Drawer and closes independently. Below, the Drawer names the connections serving the model (the upstream name where it
 differs), then gives each distinct model its own models.dev profile (connections that reach the same
 source record under different upstream names share one): three limit
 tiles (context, output, input), a capability group (modalities, reasoning, tools, structured
@@ -857,14 +855,14 @@ license). A supported capability carries a `--success` check; an unsupported one
 omitted field are drawn in `--meta`, so what is known stands out and what is unknown stays
 explicitly stated. Weight links, source links and the models.dev, OpenRouter and pi.dev
 lookups are bordered link buttons that open a new tab with opener/referrer protection. The
-footer steps to the previous or next model of the filtered list without closing the Drawer;
-one Back still dismisses it. The source note and snapshot date close the Drawer. Local icons
+footer steps to the previous or next model of the filtered list without closing the Drawer.
+The source note and snapshot date close the Drawer. Local icons
 and the existing palette, typography, spacing and motion tokens are reused without new global
 design tokens.
 
 ### OAuth model rules
 
-The OAuth workspace's Model rules action opens a viewport-bounded, Back-aware
+The OAuth workspace's Model rules action opens a viewport-bounded
 Drawer. The close action sits at the trailing header edge, keeping it reachable
 beside centered save acknowledgements; the credential detail Drawer uses the same
 close placement. Its provider picker uses the same display names and local brand marks as
@@ -875,8 +873,7 @@ provider identity. Unknown providers keep a neutral mark and a readable name.
 
 Two full-width section tabs show aliases and exclusions with their draft counts
 and an unsaved indicator. Each section saves or reverts independently, and provider
-selection remains disabled while either has edits. Closing or native Back asks
-before discarding drafts. Aliases use the provider catalog as source suggestions,
+selection remains disabled while either has edits. Closing asks before discarding drafts. Aliases use the provider catalog as source suggestions,
 keep manual entry and default new mappings to retaining the original model (`fork`).
 Exclusions use open checkbox rows, searchable catalog bulk actions and a separate
 list for typed IDs and wildcard rules. A wildcard-covered row identifies its rule
@@ -933,7 +930,7 @@ unavailable figures keep a visible fallback note rather than silently disappeari
 
 The OAuth toolbar offers a Warmup settings Drawer with Codex/Claude tabs, explicit model
 selection, reset mode and one daily time. Provider defaults are off; daily time is 06:00
-in the OMC timezone. Unsaved drafts guard close, native Back and provider switching.
+in the OMC timezone. Unsaved drafts guard close and provider switching.
 The credential Quota tab shows full-policy inheritance/override, next check, last result
 and pause reason, with an optional confirmed Warm up now action. Selected-model activation
 observations and paid-fallback evidence are always visible as two quiet facts. An absent

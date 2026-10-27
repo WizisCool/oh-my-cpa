@@ -747,9 +747,9 @@ export async function agentNarrow({ base, page, check }) {
   await page.getByRole('button', { name: 'Capabilities', exact: true }).click();
   const directory = page.locator('[data-testid="agent-directory"]');
   await directory.waitFor();
-  await page.goBack();
+  await page.locator('.ant-drawer:visible .ant-drawer-close').click();
   await until(async () => await page.locator('[data-testid="agent-directory"]:visible').count() === 0);
-  check('Back dismisses the drawer without navigating', new URL(page.url()).pathname.endsWith('/agent'));
+  check('closing the drawer leaves the workspace in place', new URL(page.url()).pathname.endsWith('/agent'));
   const queryCall = page.locator('[data-testid="agent-trace"]').first();
   await queryCall.getByRole('button').first().click();
   const details = queryCall.locator('[data-testid="agent-call-panel"]');

@@ -58,7 +58,7 @@ the palette and its light and dark schemes without the model naming a colour.
 
 **A canvas can fill the viewport and be saved as an image.** The figure's own bar
 offers both. The full-screen view is the same frame, drawn over the console and left
-with Escape or the platform's Back gesture. The image is produced by the kit: the
+with Escape or its close control. The image is produced by the kit: the
 console posts a capture request into the frame, the kit answers with an SVG of its
 own document, and the console validates the reply's shape and size and rasterises it.
 The frame stays as sandboxed as before - the console never reads the frame's DOM, and

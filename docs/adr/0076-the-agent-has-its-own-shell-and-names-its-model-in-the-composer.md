@@ -54,7 +54,7 @@ states the data boundary. `/` and `@` have no buttons; the placeholder names the
 **What sits beside the conversation is asked for.** One Drawer on the right shows
 the capability directory or the connection guide - opened by the two icon actions
 at the page's top edge, or by `/capabilities` and `/connect`. A call's own details
-open in the conversation ([ADR 0084](0084-calls-are-a-timeline-of-disclosures-in-the-answer.md)). It closes with Escape, its close control or the platform's Back gesture,
+open in the conversation ([ADR 0084](0084-calls-are-a-timeline-of-disclosures-in-the-answer.md)). It closes with Escape or its close control,
 at every viewport width.
 
 **Page actions float together at the conversation's top trailing corner.** "New

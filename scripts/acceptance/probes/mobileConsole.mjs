@@ -12,63 +12,21 @@ const ROUTES = [
   ['/playground', '[data-testid="playground-page"]'],
 ];
 
-/**
- * The navigation sheet follows a finger: a sideways swipe across the page draws it out under the
- * finger and a swipe back on it puts it away, each settling by where it was released. A swipe on to
- * the trailing edge across the open sheet is Back and closes it. A swipe that is mostly vertical is
- * the page's scroll and leaves the sheet alone.
- */
-async function swipeNavigation({ page, check }) {
-  const cdp = await page.context().newCDPSession(page);
-  const frame = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
-  const panelLeft = () => page.evaluate(() => Math.round(document.querySelector('.mobile-nav-sheet-panel').getBoundingClientRect().left));
-  const isOpen = () => page.evaluate(() => document.querySelector('.mobile-nav-sheet.is-active:not(.is-dragging)') !== null
-    && document.querySelector('.app-body').hasAttribute('inert'));
-  const drag = async ({ fromX, toX, fromY = 500, toY = fromY, isLanding = true, lift = true }) => {
-    if (isLanding) await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fromX, y: fromY, id: 1 }] });
-    for (let step = 1; step <= 10; step += 1) {
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: fromX + ((toX - fromX) * step) / 10, y: fromY + ((toY - fromY) * step) / 10, id: 1 }] });
-      await frame();
-    }
-    if (lift) await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  };
-  const settled = async (label) => {
-    let previous;
-    await until(async () => { const current = await panelLeft(); const isStill = current === previous; previous = current; return isStill; }, { label });
-  };
-
-  await drag({ fromX: 60, toX: 180, fromY: 600, toY: 300 });
-  await settled('a vertical swipe to settle');
-  check('a vertical swipe leaves the navigation sheet closed', !(await isOpen()));
-
-  await drag({ fromX: 40, toX: 140, lift: false });
-  const width = await page.evaluate(() => document.querySelector('.mobile-nav-sheet-panel').offsetWidth);
-  const left = await panelLeft();
-  check('a sideways swipe draws the navigation sheet out under the finger', Math.abs(left - (100 - width)) <= 2, `left=${left} width=${width}`);
-  await drag({ fromX: 140, toX: 240, isLanding: false });
-  await settled('the released sheet to settle');
-  check('released past halfway, the sheet settles open', await isOpen() && await panelLeft() === 0);
-
-  await drag({ fromX: 240, toX: 40, fromY: 400 });
-  await settled('the sheet swiped back to settle');
-  await until(async () => !(await isOpen()) && await page.locator('.mobile-nav-sheet-panel').isHidden(), { label: 'the navigation sheet to close' });
-  check('a swipe back on the sheet puts it away', true);
-
-  await drag({ fromX: 40, toX: 240 });
-  await settled('the sheet swiped out to settle');
-  await drag({ fromX: 100, toX: 220, fromY: 400 });
-  await until(async () => !(await isOpen()) && await page.locator('.mobile-nav-sheet-panel').isHidden(), { label: 'the sheet swiped as Back to close' });
-  check('a swipe towards the trailing edge on the open sheet is Back', true);
-}
-
 export async function mobileConsole({ base, page, check, errors }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.dashboard-page').waitFor({ state: 'visible' });
   await page.setViewportSize({ width: 320, height: 844 });
-  await swipeNavigation({ page, check });
+  await page.locator('.app-header-left button').click();
+  const initialNavigation = page.locator('.mobile-nav-drawer:visible');
+  await initialNavigation.locator('.app-brand').click();
+  await initialNavigation.waitFor({ state: 'hidden' });
+  check('the navigation sheet closes when its brand navigates', new URL(page.url()).pathname.endsWith('/dashboard'));
   for (const [route, contentSelector] of ROUTES) {
     await page.locator('.app-header-left button').click();
-    const navigation = page.locator('.mobile-nav-sheet-panel:visible');
+    const navigation = page.locator('.mobile-nav-drawer:visible');
+    if (route === '/dashboard') {
+      check('the phone navigation sheet has an accessible name', await page.getByRole('dialog', { name: 'Navigation', exact: true }).count() === 1);
+    }
     await navigation.locator(`[data-route-path="${route}"]`).click();
     await page.waitForURL(`${base}${route}`);
     await navigation.waitFor({ state: 'hidden' });
@@ -106,9 +64,9 @@ export async function mobileConsole({ base, page, check, errors }) {
   check('the header menu names the selected language and theme', await popup.getByRole('button', { name: 'English', exact: true }).getAttribute('aria-pressed') === 'true' && await popup.getByRole('button', { name: 'Light', exact: true }).getAttribute('aria-pressed') === 'true');
   const heights = await popup.locator('button, a').evaluateAll((controls) => controls.map((control) => control.getBoundingClientRect().height));
   check('header menu rows have 44px hit areas', heights.length >= 9 && heights.every((height) => height >= 44), JSON.stringify(heights));
-  await page.goBack();
-  await until(async () => await tools.getAttribute('aria-expanded') === 'false', { label: 'Back dismisses header tools' });
-  check('Back closes tools without leaving the page and restores focus', page.url().endsWith('/config') && await tools.evaluate((control) => control === document.activeElement));
+  await page.keyboard.press('Escape');
+  await until(async () => await tools.getAttribute('aria-expanded') === 'false', { label: 'header tools to close' });
+  check('closing tools leaves the page in place and restores focus', page.url().endsWith('/config') && await tools.evaluate((control) => control === document.activeElement));
 
   for (const width of [640, 641, 900, 901, 1440]) {
     await page.setViewportSize({ width, height: 900 });

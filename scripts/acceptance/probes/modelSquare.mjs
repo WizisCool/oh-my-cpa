@@ -113,7 +113,7 @@ export async function modelSquare({ base, page, context, check }) {
   await rowOf('gpt-5-mini').getByRole('button', { name: 'Set price' }).click();
   await until(async () => (await drawer.locator('.ant-drawer-title').allInnerTexts()).some(title => title.includes('gpt-5-mini')), { label: 'price editor' });
   check('Set price opens the shared price editor for that call name alone', await drawer.count() === 1 && !(await drawer.innerText()).includes('Served by'));
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   await drawer.waitFor({ state: 'hidden' });
 
   const status = page.locator('.model-square-page [role="status"]');
@@ -146,9 +146,9 @@ export async function modelSquare({ base, page, context, check }) {
   await until(async () => (await stepping.locator('.ant-drawer-title').innerText()) === 'gpt-5-codex', { label: 'next model' });
   check('Next steps through the filtered list without leaving the details', (await stepping.innerText()).includes('2 / 4'));
   check('an unpriced model’s details lead with setting its price', await cost.getByRole('button', { name: 'Set price' }).count() === 1 && (await cost.innerText()).includes('No price yet'));
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   await stepping.waitFor({ state: 'hidden' });
-  check('one Back dismisses details after stepping and keeps the maker filter', new URL(page.url()).searchParams.get('maker') === 'openai' && await entries.count() === 4);
+  check('closing details after stepping keeps the maker filter', new URL(page.url()).searchParams.get('maker') === 'openai' && await entries.count() === 4);
   await page.locator('[data-maker="openai"]').click();
   await until(async () => await entries.count() === DIRECTORY.models.length, { label: 'maker filter released' });
 
@@ -161,20 +161,20 @@ export async function modelSquare({ base, page, context, check }) {
   const externalLinks = drawer.locator('a[target="_blank"]');
   check('reference navigation uses new-tab links without opener access', await externalLinks.evaluateAll(links => links.length === 6 && links.every(link => link.rel.includes('noopener') && link.rel.includes('noreferrer'))));
   check('pi search uses the canonical model name', await drawer.locator('a[href="https://pi.dev/models?name=gpt-5"]').count() === 1);
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   await drawer.waitFor({ state: 'hidden' });
-  check('native Back dismisses details and preserves search', page.url().includes('/model-square') && new URL(page.url()).searchParams.get('q') === 'team/fast');
+  check('closing details preserves search', page.url().includes('/model-square') && new URL(page.url()).searchParams.get('q') === 'team/fast');
   await search.fill('');
   await until(async () => await entries.count() === DIRECTORY.models.length, { label: 'full model directory' });
   await page.getByRole('button', { name: 'View information for reasoner', exact: true }).click();
   await drawer.waitFor({ state: 'visible' });
   check('a model with downloadable weights under an open-source license is named an open-source model', (await drawer.innerText()).includes('Open-source model') && (await drawer.innerText()).includes('MIT') && await drawer.locator('a[href="https://huggingface.co/deepseek-ai/DeepSeek-R1"]').count() === 1);
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   await drawer.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'View information for runtime-only', exact: true }).click();
   await drawer.waitFor({ state: 'visible' });
   check('unmatched model keeps explicit unknown data and usable search links', (await drawer.innerText()).includes('No exact metadata match') && await drawer.locator('a[href="https://pi.dev/models?name=runtime-only"]').count() === 1);
-  await page.goBack();
+  await drawer.locator('.ant-drawer-close').click();
   await drawer.waitFor({ state: 'hidden' });
 
   for (const width of [390, 320]) {
@@ -203,7 +203,7 @@ export async function modelSquare({ base, page, context, check }) {
     const drawerGeometry = await drawer.locator('.ant-drawer-body').evaluate(element => ({ overflow: element.scrollWidth - element.clientWidth, right: element.getBoundingClientRect().right }));
     check(`model specifications fit the ${width}px drawer`, drawerGeometry.overflow <= 1 && drawerGeometry.right <= width + 1, JSON.stringify(drawerGeometry));
     if (width === 320) await page.screenshot({ path: 'tmp/model-square-preview/details-phone.png', fullPage: true });
-    await page.goBack();
+    await drawer.locator('.ant-drawer-close').click();
     await drawer.waitFor({ state: 'hidden' });
   }
 }

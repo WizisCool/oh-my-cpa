@@ -15,7 +15,6 @@ import {
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { PluginStoreResponse, StorePluginItem } from '../../types/plugin';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import {
   filterStorePlugins,
   isStoreInstallBlocked,
@@ -353,7 +352,6 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
   const handleClose = () => {
     if (!installMutation.isPending) onClose();
   };
-  useOverlayHistory({ isOpen: entry !== null, onClose: handleClose });
 
   if (!entry) return null;
 

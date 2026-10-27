@@ -22,8 +22,8 @@
  * - `Switch` is refused everywhere, because `components/common/Switch` is drawn without it;
  * - `Empty` is refused everywhere, because `components/common/EmptyState` is;
  * - `Tag` is refused everywhere, because `components/common/Tag` is;
- * - `Drawer` is refused outside `components/common/AppDrawer` and the time-range sheet, which is
- *   not a side panel (`PRIMITIVE_OWNERS`);
+ * - `Drawer` is refused outside `components/common/AppDrawer` and the two sheets that are not side
+ *   panels - the navigation sheet and the time-range sheet (`PRIMITIVE_OWNERS`);
  * - `Popconfirm` is refused outside `components/common/ConfirmAction`, which fixes the cancel
  *   label and colours a destructive confirmation;
  * - `Card` is refused outside `components/common/Panel`, which keeps the inset in the stylesheet
@@ -49,6 +49,7 @@ const FEEDBACK_MODULE = 'web/src/components/feedback/';
 const PRIMITIVE_OWNERS = {
   'raw-drawer': [
     'web/src/components/common/AppDrawer.tsx',
+    'web/src/components/common/AppLayout.tsx',
     'web/src/components/common/timeRange/TimeRangePicker.tsx',
   ],
   'raw-popconfirm': ['web/src/components/common/ConfirmAction.tsx'],

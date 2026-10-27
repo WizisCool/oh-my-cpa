@@ -16,7 +16,6 @@ import {
   renderTypedCategoryContent,
 } from './payloadRuleSections';
 import { usePayloadRulesDraft } from './usePayloadRulesDraft';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { Tag } from '../common/Tag';
 import './config.css';
 
@@ -52,11 +51,6 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
     updateModelInRule,
     t,
   } = draft;
-
-  useOverlayHistory({
-    isOpen: Boolean(advModalState?.open),
-    onClose: () => setAdvModalState(null),
-  });
 
   const items = [
     {

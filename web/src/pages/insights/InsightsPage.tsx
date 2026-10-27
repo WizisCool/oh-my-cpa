@@ -6,7 +6,6 @@ import { useT } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
 import { usePreference } from '../../hooks/usePreference';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useViewSearchParams } from '../../hooks/useViewSearchParams';
 import { useScrollAnchor } from '../../hooks/useScrollAnchor';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -152,7 +151,6 @@ export const InsightsPage: React.FC = () => {
   const labels = useInsightsLabels(cube);
 
   const [openKey, setOpenKey] = React.useState<string | null>(null);
-  useOverlayHistory({ isOpen: openKey !== null, onClose: () => setOpenKey(null) });
   const rhythmQueryString = rhythmParams(range, view.filters);
   const rhythmQuery = useQuery({
     queryKey: ['insights-rhythm', rhythmQueryString],

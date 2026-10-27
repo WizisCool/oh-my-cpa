@@ -7,7 +7,6 @@ import dayjs from 'dayjs';
 
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
 import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
@@ -50,7 +49,6 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
   const [isOpen, setIsOpen] = React.useState(false);
   const [downloadingID, setDownloadingID] = React.useState<number | null>(null);
   const [retentionDraft, setRetentionDraft] = React.useState<number | null>(null);
-  useOverlayHistory({ isOpen, onClose: () => setIsOpen(false) });
 
   const backupsQuery = useQuery({
     queryKey: BACKUPS_QUERY_KEY,
