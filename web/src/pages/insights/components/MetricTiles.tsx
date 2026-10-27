@@ -1,3 +1,6 @@
+import { currencyReadout, type DisplayCurrency } from '../../../types/currencyDisplay';
+import { useDisplayCurrency } from '../../../types/CurrencyDisplayContext';
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import clsx from 'clsx';
 import { RollingNumber } from '../../../components/dashboard/RollingNumber';
@@ -7,7 +10,7 @@ import { resolveCountFlowReadout, resolveTokenFlowReadout, type TokenNumberStyle
 import type { RollingReadout } from '../../../types/rollingNumber';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { INSIGHTS_METRICS, metricValue, relativeChange, type InsightsMetric, type Measures } from '../insightsCube';
-import { changeTrend, formatChange, formatMetric, formatMetricExact } from '../insightsFormat';
+import { changeTrend, formatChange } from '../insightsFormat';
 import styles from '../insights.module.css';
 
 interface MetricTilesProps {
@@ -18,11 +21,11 @@ interface MetricTilesProps {
   onMetricChange: (metric: InsightsMetric) => void;
 }
 
-function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNumberStyle): RollingReadout | undefined {
+function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNumberStyle, currency: DisplayCurrency): RollingReadout | undefined {
   if (value === null) return undefined;
   switch (metric) {
     case 'cost':
-      return { number: value, prefix: '$', suffix: '', format: { minimumFractionDigits: 2, maximumFractionDigits: value !== 0 && value < 0.01 ? 4 : 2 } };
+      return currencyReadout(value, currency, 'adaptive');
     case 'tokens':
       return resolveTokenFlowReadout(value, style);
     case 'requests':
@@ -43,7 +46,9 @@ function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNum
  */
 export const MetricTiles: React.FC<MetricTilesProps> = ({ current, previous, metric, onMetricChange }) => {
   const t = useT();
+  const { currency } = useDisplayCurrency();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
 
   return (
     <div className={styles['tiles']} role="tablist" aria-label={t('insights.metric_switch')} data-testid="insights-tiles">
@@ -65,7 +70,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, previous, met
           >
             <span className={styles['tile-label']}>{t(`insights.metric.${item}`)}</span>
             <span className={styles['tile-value']} title={formatMetricExact(item, value)}>
-              <RollingNumber readout={readoutOf(item, value, style)} />
+              <RollingNumber readout={readoutOf(item, value, style, currency)} />
             </span>
             <span className={styles['tile-change']} data-trend={previous === null ? undefined : changeTrend(change)}>
               {previous === null ? null : changeText === null ? (

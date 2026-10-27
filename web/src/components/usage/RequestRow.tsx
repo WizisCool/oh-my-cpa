@@ -1,3 +1,5 @@
+import { formatCurrency } from '../../types/currencyDisplay';
+import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { tokenAccountingMessage } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
@@ -75,7 +77,8 @@ export const RequestRow = React.memo<RequestRowProps>(
     const openPriceEditor = useOpenPriceEditor();
     // The console-wide token unit style: the list scans compactly while every
     // accessible name keeps the exact count.
-    const { style: tokenStyle, tpsMode, modelView, showModelIcons } = useTokenDisplayStyle();
+    const { currency } = useDisplayCurrency();
+  const { style: tokenStyle, tpsMode, modelView, showModelIcons } = useTokenDisplayStyle();
     const isCallView = modelView === 'call';
     const callModel = event.model_alias || event.model;
     const requestModel = event.model;
@@ -423,7 +426,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         <div className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
-            <strong className="req-cost-val">${event.cost_usd.toFixed(4)}</strong>
+            <strong className="req-cost-val">{formatCurrency(event.cost_usd, currency)}</strong>
           ) : (
             <>
               <RequestTooltip title={event.token_accounting && event.token_accounting.status !== 'complete' ? tokenAccountingMessage(t, event.token_accounting) : t('events.cost_unpriced')}>

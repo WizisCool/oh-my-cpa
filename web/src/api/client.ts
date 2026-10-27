@@ -1,3 +1,4 @@
+import type { ExchangeRates } from '../types/currencyDisplay';
 import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
 import type { ModelSquareDirectory } from '../types/modelSquare';
@@ -494,6 +495,14 @@ export const api = {
   }> {
     const search = query ? (query.startsWith('?') ? query : `?${query}`) : '';
     return request(`/management/dashboard/providers${search}`, { method: 'GET' });
+  },
+
+  async getExchangeRates(): Promise<ExchangeRates> {
+    return request('/exchange-rates', { method: 'GET' });
+  },
+
+  async refreshExchangeRates(): Promise<ExchangeRates> {
+    return request('/exchange-rates/refresh', { method: 'POST' });
   },
 
   /**

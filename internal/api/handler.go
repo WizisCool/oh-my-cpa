@@ -28,6 +28,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/fontasset"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -56,7 +57,8 @@ type Handler struct {
 	// usage reports the background capture pipeline; nil when ingestion is off.
 	usage usagePipeline
 	// pricing serves model prices and the OpenRouter sync; nil until SetPricing.
-	pricing PricingManager
+	pricing       PricingManager
+	exchangeRates *exchangerate.Service
 	// release observes both products' published versions; nil until SetRelease. Nil
 	// means the page reports "not checked yet" rather than failing.
 	release ReleaseManager
@@ -259,6 +261,8 @@ func (h *Handler) routes() chi.Router {
 				v1.Delete("/fonts/{id}", h.deleteFont)
 				v1.Get("/fonts/{id}/faces/{faceId}", h.fontFaceContent)
 				v1.Head("/fonts/{id}/faces/{faceId}", h.fontFaceContent)
+				v1.Get("/exchange-rates", h.listExchangeRates)
+				v1.Post("/exchange-rates/refresh", h.refreshExchangeRates)
 				v1.Get("/preferences", h.listPreferences)
 				v1.Put("/preferences/{key}", h.putPreference)
 				v1.Get("/usage/ingest-status", h.dashboardIngestStatus)

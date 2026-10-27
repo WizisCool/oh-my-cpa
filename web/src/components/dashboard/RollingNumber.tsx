@@ -22,7 +22,7 @@ interface RollingNumberProps {
  *
  * Two behaviours are deliberate rather than inherited:
  *
- * - **A unit change prints in place.** `en-compact` and `zh` print a different unit word at a
+ * - **A unit change prints in place.** Currency changes replace the leading mark; `en-compact` and `zh` print a different unit word at a
  *   different magnitude, and a tile sliding from `1.2B` to `900M` would otherwise roll 1.2 into 900
  *   while the unit swapped underneath - digits that never described the window on their own. The
  *   frame where the unit word changes is therefore not animated; the next same-unit change sweeps
@@ -35,14 +35,14 @@ interface RollingNumberProps {
  */
 export const RollingNumber: React.FC<RollingNumberProps> = ({ readout }) => {
   const isReducedMotion = usePrefersReducedMotion();
-  const suffix = readout?.suffix ?? '';
-  const previousSuffix = React.useRef(suffix);
+  const unit = `${readout?.prefix ?? ''}\0${readout?.suffix ?? ''}`;
+  const previousUnit = React.useRef(unit);
   // The ref is advanced in an effect rather than during render so a StrictMode
   // double render compares the same pair of readings twice and both passes agree.
-  const unitChanged = previousSuffix.current !== suffix;
+  const unitChanged = previousUnit.current !== unit;
   React.useEffect(() => {
-    previousSuffix.current = suffix;
-  }, [suffix]);
+    previousUnit.current = unit;
+  }, [unit]);
 
   if (!readout) {
     // The console's shared "no reading" mark. A missing reading is not a zero reading - "nothing

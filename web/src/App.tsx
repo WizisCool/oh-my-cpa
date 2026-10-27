@@ -1,3 +1,4 @@
+import { CurrencyDisplayProvider } from './types/CurrencyDisplayContext';
 import { TimeZoneProvider } from './utils/TimeZoneProvider';
 import React from 'react';
 import {
@@ -136,7 +137,9 @@ const ThemedShell: React.FC = () => {
           <FontSync />
           <DemoNotice />
           <TokenDisplayProvider>
-            <AppRoutes />
+            <CurrencyDisplayProvider>
+              <AppRoutes />
+            </CurrencyDisplayProvider>
           </TokenDisplayProvider>
         </AntdApp>
       </MotionProvider>

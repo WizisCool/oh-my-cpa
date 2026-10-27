@@ -1,3 +1,4 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
@@ -9,7 +10,7 @@ import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsBucket } from '../../../types/insights';
 import { isAdditiveMetric, type InsightsMetric, type TrendGroup } from '../insightsCube';
-import { formatMetric, formatMetricExact, formatShare } from '../insightsFormat';
+import { formatShare } from '../insightsFormat';
 
 export interface InsightsTrendChartProps {
   bucketStarts: readonly number[];
@@ -67,6 +68,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
   const t = useT();
   const { theme } = useTheme();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
   const isAdditive = isAdditiveMetric(metric);
   const brushRef = React.useRef(onBrush);
   brushRef.current = onBrush;
@@ -223,7 +225,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
       brush: onBrush ? { xAxisIndex: 0, brushType: 'lineX', brushMode: 'single', transformable: false, throttleType: 'debounce', throttleDelay: 120 } : undefined,
       series,
     };
-  }, [bucket, bucketStarts, colorOf, groups, isAdditive, labelOf, metric, onBrush, showTotal, style, t, theme.palette, tooltipGroups, totalLabel, totalSamples, totals]);
+  }, [bucket, bucketStarts, colorOf, groups, isAdditive, labelOf, metric, onBrush, showTotal, style, t, theme.palette, tooltipGroups, totalLabel, totalSamples, totals, formatMetric, formatMetricExact]);
 
   const armBrush = React.useCallback((chart: ECharts) => {
     if (!brushRef.current) return;

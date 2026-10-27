@@ -1,3 +1,4 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import clsx from 'clsx';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -5,7 +6,7 @@ import { useT } from '../../../i18n';
 import { heatmapRampMix, heatmapRampPosition } from '../../../theme/heatmapRamp';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { matrixCellKey, metricValue, type InsightsDimension, type InsightsMatrix, type InsightsMetric } from '../insightsCube';
-import { formatMetric, formatMetricExact } from '../insightsFormat';
+
 import type { InsightsLabels } from '../useInsightsLabels';
 import { InsightsValue } from './InsightsValue';
 import styles from '../insights.module.css';
@@ -36,6 +37,7 @@ interface MatrixTableProps {
 export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, columnDimension, metric, labels, isDimmed, onSelectCell }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
   const shadeMetric: InsightsMetric = metric === 'cost' || metric === 'tokens' || metric === 'requests' ? metric : 'requests';
   const shadeMax = React.useMemo(() => {
     let max = 0;

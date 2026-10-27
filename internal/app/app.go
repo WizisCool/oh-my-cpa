@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/api"
@@ -20,6 +21,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/demo"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -40,7 +42,8 @@ type App struct {
 	// ingestion is disabled or no CPA instance is configured yet.
 	pipeline *ingest.Pipeline
 	// pricing keeps model prices fresh from OpenRouter; nil-safe service.
-	pricing *pricing.Service
+	pricing       *pricing.Service
+	exchangeRates *exchangerate.Service
 	// release observes both products' published versions. It is nil in demo mode,
 	// where nothing may leave the process at all.
 	release *release.Service
@@ -158,6 +161,10 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 	pricingService := pricing.NewService(repo, pricing.NewOpenRouterClient(), logger)
 	pricingService.SetModelLister(&cpaModelLister{repo: repo, cipher: cipher, cfg: cfg})
 	handler.SetPricing(pricingService)
+	exchangeRateService := exchangerate.NewService(repo, nil, logger)
+	if !cfg.IsDemoMode {
+		handler.SetExchangeRates(exchangeRateService)
+	}
 
 	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger, cipher)
 	if err != nil {
@@ -238,9 +245,10 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 
 		pipeline: pipeline,
 
-		pricing:     pricingService,
-		release:     releaseService,
-		maintenance: maintenanceService,
+		pricing:       pricingService,
+		exchangeRates: exchangeRateService,
+		release:       releaseService,
+		maintenance:   maintenanceService,
 	}, nil
 }
 
@@ -399,15 +407,31 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
-	// The pricing loop is best-effort: losing it keeps prices stale but never
-	// stops request capture or the HTTP server. A demo does not run it at all: its
-	// prices are part of the fixture, and syncing them would make the process
-	// reach openrouter.ai, which a public demonstration must not do.
-	if !a.cfg.IsDemoMode {
+	// Public reference data shares lifecycle ownership, not business scheduling:
+	// pricing also reconciles CPA changes, while FX uses its persisted daily clock.
+	// Independent workers keep a slow source from blocking the other source.
+	dataRefreshDone := make(chan struct{})
+	if a.cfg.IsDemoMode {
+		close(dataRefreshDone)
+	} else {
 		go func() {
-			if err := a.pricing.Run(runCtx); err != nil {
-				a.logger.Warn("pricing sync loop stopped", "error", err)
+			defer close(dataRefreshDone)
+			var workers sync.WaitGroup
+			for _, job := range []struct {
+				name string
+				run  func(context.Context) error
+			}{
+				{"pricing", a.pricing.Run}, {"exchange_rates", a.exchangeRates.Run},
+			} {
+				workers.Add(1)
+				go func() {
+					defer workers.Done()
+					if err := job.run(runCtx); err != nil {
+						a.logger.Warn("reference data loop stopped", "source", job.name, "error", err)
+					}
+				}()
 			}
+			workers.Wait()
 		}()
 	}
 
@@ -483,6 +507,11 @@ func (a *App) Run(ctx context.Context) error {
 	defer cancel()
 	a.handler.CloseBrowserRuns()
 	a.handler.CloseUpdateWatchers()
+	select {
+	case <-dataRefreshDone:
+	case <-shutdownContext.Done():
+		a.logger.Warn("reference data refresh did not stop before the shutdown deadline")
+	}
 	if err := a.httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
 		runErr = fmt.Errorf("shutdown HTTP server: %w", err)
 	}

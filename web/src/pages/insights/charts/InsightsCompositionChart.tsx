@@ -1,9 +1,10 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import { EChart } from '../../../charts/echarts/EChart';
 import { renderChartTooltip } from '../../../charts/chartTooltip';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../insightsCube';
-import { formatMetric, formatMetricExact, formatShare } from '../insightsFormat';
+import { formatShare } from '../insightsFormat';
 
 export interface CompositionSegment {
   /** The column value (a model), or null for the row's remainder. */
@@ -42,6 +43,7 @@ const ROW_HEIGHT = 30;
  */
 const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({ rows, segments, values, metric, totalLabel, label, isDimmed, onSelect }) => {
   const { style } = useTokenDisplayStyle();
+  const { formatMetric, formatMetricExact } = useInsightsFormat();
   const selectRef = React.useRef(onSelect);
   selectRef.current = onSelect;
 
@@ -83,7 +85,7 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
           : values[index],
       })),
     };
-  }, [isDimmed, metric, rows, segments, style, totalLabel, values]);
+  }, [isDimmed, metric, rows, segments, style, totalLabel, values, formatMetric, formatMetricExact]);
 
   const handlers = React.useMemo(() => ({
     click: (params: unknown) => {

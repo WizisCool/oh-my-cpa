@@ -111,6 +111,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "session", Path: "/api/auth/session"},
 		{Name: "resources", Path: "/api/v1/resources"},
 		{Name: "preferences", Path: "/api/v1/preferences"},
+		{Name: "exchange-rates", Path: "/api/v1/exchange-rates"},
 		{Name: "custom-icons", Path: "/api/v1/custom-icons"},
 		{Name: "fonts", Path: "/api/v1/fonts"},
 		{Name: "custom-icon-content", Path: "/api/v1/custom-icons/00000000000000000000000000000001/content", Route: "/api/v1/custom-icons/{id}/content"},
@@ -614,6 +615,10 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 		// Quota reads and their seeded history already use the fixed handler clock,
 		// including future reset bounds. Moving them again would expire valid cycles.
 		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) {
+			deltaMS = 0
+		}
+		// The FX cache is seeded reference data, not an attempt made during export.
+		if typed["base_currency"] == "USD" && typed["source"] == "frankfurter_v2" && typed["rates"] != nil {
 			deltaMS = 0
 		}
 		for key, item := range typed {

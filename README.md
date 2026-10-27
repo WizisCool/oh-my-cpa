@@ -328,6 +328,7 @@ troubleshooting.
 - **Live routing**: a rolling minute of which models were called and which credentials and providers CPA sent them to. Each new request travels the map out to its credential and back, rerouted attempts and cooldowns included. The panel updates as records are stored, falls back to a short poll when the live stream is unavailable, and is shown on desktop widths.
 - **Model panels**: token trend and usage ring by call model or by requested model, with cost shares.
 - **Request records**: multi-select facets and full-text search; with auto-refresh on, new records appear as soon as they are stored; a detail drawer with duration, TTFT, token breakdown and the raw per-request log. Each record keeps the model the upstream reported serving, and flags the ones where it differs from the model requested.
+- **Display currency**: choose USD, CNY, MYR, JPY, EUR or another cached currency in OMC Settings. Dashboard, request records and Insights use Frankfurter v2 rates, refreshed daily or manually and cached in SQLite; accounting and Cost & Usage stay in USD.
 - **Background collection**: usage is ingested by stream or polling, even with no browser open.
 - **Logs and audit trail**: tail the gateway log, read the console's own service log, and review an append-only audit trail with filters and JSON export.
 

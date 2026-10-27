@@ -147,6 +147,8 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/fonts/google", demoRefuse, "Installing fonts is unavailable in the demo"},
 	{http.MethodPost, "/api/v1/fonts/upload", demoRefuse, "Font uploads are unavailable in the demo"},
 	{http.MethodDelete, "/api/v1/fonts/{id}", demoRefuse, "Font deletion is unavailable in the demo"},
+	{http.MethodGet, "/api/v1/exchange-rates", demoAllow, ""},
+	{http.MethodPost, "/api/v1/exchange-rates/refresh", demoRefuse, "Exchange rate updates are unavailable in the demo"},
 	{http.MethodGet, "/api/v1/preferences", demoAllow, ""},
 	{http.MethodPut, "/api/v1/preferences/{key}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/client-key-aliases", demoAllow, ""},

@@ -1,3 +1,4 @@
+import { CurrencySettings } from '../components/settings/CurrencySettings';
 import type { MessageKey } from '../i18n/catalog';
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
@@ -162,6 +163,7 @@ export const OmcSettingsPage: React.FC = () => {
           description={t('omc.timezone_desc')}
           control={<TimeZoneSelect value={timezone.value} serverTimezone={timezone.server} onChange={(zone) => { void timezone.set(zone === timezone.server ? '' : zone); }} />}
         />
+        <CurrencySettings />
         <SettingRow
           label={t('omc.token_style')}
           description={t('omc.token_style_desc')}

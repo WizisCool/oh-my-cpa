@@ -1,0 +1,29 @@
+{
+  "why": "Zero is not a usable currency conversion.",
+  "body": [
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "MYR",
+      "rate": 0
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "EUR",
+      "rate": 0.89
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "CNY",
+      "rate": 6.7
+    },
+    {
+      "date": "2026-10-27",
+      "base": "USD",
+      "quote": "JPY",
+      "rate": 157.4
+    }
+  ]
+}

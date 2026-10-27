@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
@@ -30,6 +31,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceUsageEventsColumns:  true,
 	repository.PreferenceOAuthManagementView: true,
 	repository.PreferenceTimezone:            true,
+	repository.PreferenceDisplayCurrency:     true,
 	repository.PreferenceTokenStyle:          true,
 	repository.PreferenceTpsCalculationMode:  true,
 	repository.PreferenceModelView:           true,
@@ -106,6 +108,31 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 	if !json.Valid(body) {
 		writeError(writer, http.StatusBadRequest, "preference value must be a JSON document")
 		return
+	}
+	if key == repository.PreferenceDisplayCurrency {
+		var code string
+		if json.Unmarshal(body, &code) != nil || !exchangerate.IsCurrency(code) {
+			writeError(writer, http.StatusBadRequest, "invalid_display_currency")
+			return
+		}
+		if code != "USD" {
+			snapshot, err := h.repo.ReadExchangeRates(request.Context())
+			if err != nil {
+				writeInternalError(writer, err)
+				return
+			}
+			isAvailable := false
+			for _, rate := range snapshot.Rates {
+				if rate.Currency == code {
+					isAvailable = true
+					break
+				}
+			}
+			if !isAvailable {
+				writeError(writer, http.StatusBadRequest, "display_currency_unavailable")
+				return
+			}
+		}
 	}
 	// The automatic quota refresh policy decides when the server makes provider requests on
 	// its own, so its shape is enforced on the way in rather than guessed at by the loop.

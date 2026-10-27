@@ -1,0 +1,10 @@
+{
+  "attempted_at_ms": 0,
+  "base_currency": "USD",
+  "last_error": "",
+  "next_refresh_at_ms": 0,
+  "rates": [],
+  "refresh_interval_hours": 24,
+  "source": "frankfurter_v2",
+  "updated_at_ms": 0
+}

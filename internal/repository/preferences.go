@@ -25,13 +25,14 @@ const (
 	PreferenceUsageEventsColumns  = "usage_events_columns"
 	PreferenceOAuthManagementView = "oauth_management_view_v1"
 
-	// PreferenceTokenStyle, PreferenceTpsCalculationMode, PreferenceModelView, PreferenceTheme and PreferenceReducedMotion
+	// PreferenceDisplayCurrency, PreferenceTokenStyle, PreferenceTpsCalculationMode, PreferenceModelView, PreferenceTheme and PreferenceReducedMotion
 	// are Oh My CPA's own display settings: how token counts are abbreviated across the
-	// console, how TPS accounts for first-token latency, how the dashboard's model panels group their series (by call point or by
+	// console, which currency displays USD costs, how TPS accounts for first-token latency, how the dashboard's model panels group their series (by call point or by
 	// upstream model), which palette each theme mode uses along with any palette the operator
 	// authored, and whether console animation is reduced. They
 	// are preferences rather than configuration because they describe how the operator reads
 	// the console, not how anything is served.
+	PreferenceDisplayCurrency    = "omc_display_currency"
 	PreferenceTokenStyle         = "omc_token_style"
 	PreferenceTpsCalculationMode = "omc_tps_calculation_mode"
 	PreferenceModelView          = "omc_models_view"

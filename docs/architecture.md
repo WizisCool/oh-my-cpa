@@ -12,7 +12,8 @@ browser ──▶ direct listener, existing HTTPS ingress or Vite ──▶ Go p
                                         ├─ embedded React SPA (internal/web/dist)
                                         ├─ SQLite (WAL, one connection)
                                         ├─ usage collector  ──▶ CPA
-                                        └─ pricing sync loop ──▶ openrouter.ai
+                                        ├─ pricing sync loop ──▶ openrouter.ai
+                                        └─ display FX refresh ──▶ api.frankfurter.dev
 
 Go process ──▶ CPA management API (/v8/management; CPA v8+) ──▶ upstream providers
 Go process ──▶ CPA RESP usage channel
@@ -107,6 +108,33 @@ neither the pricing sync nor any capture loop, and the fixture answers the quota
 reads from its own catalogue instead of forwarding them. It does listen: the console
 is served on the port the platform routes to. What it never does is connect anywhere
 but its own fixture.
+
+### Display currency reference data
+
+`internal/exchangerate` owns Frankfurter v2 downloading, complete-snapshot validation
+and a daily schedule derived from the last persisted attempt. `internal/remotedata`
+provides the bounded, context-cancellable public downloads shared with OpenRouter;
+each domain owns its decoder and publication rules. Application lifecycle wiring
+starts both reference-data workers independently and joins them before closing SQLite.
+Pricing retains its model-change reconciliation and operator-configurable cadence;
+a slow or failing source never holds the other source's scheduler.
+
+Migration `050_exchange_rate_cache.sql` adds one atomic SQLite cache snapshot with
+allowlisted currency/rate/date rows, success and attempt timestamps and a bounded
+failure code. Failed downloads retain the last complete table; restarts reuse its
+schedule. The authenticated facade exposes `GET /api/v1/exchange-rates` and
+`POST /api/v1/exchange-rates/refresh`. Reads use SQLite only. Refreshes never accept a
+source URL, send CPA credentials or run in demo mode. USD is the identity; other
+`omc_display_currency` choices require a cached rate at preference-write time.
+
+`web/src/types/currencyDisplay.ts` owns conversion and static/animated formatting.
+`CurrencyDisplayProvider` shares the server-stored preference and cached rate query;
+`useInsightsFormat` binds the same pure formatter for Insights. Dashboard and request
+readouts consume that provider, while price editors and Cost & Usage keep their USD
+formatters. No accounting query, immutable price version, stored cost or JSON export
+is converted. Missing display rates render unavailable rather than labelling USD
+values as another currency. Demo seed and exported responses provide synthetic rates
+without an external download.
 
 ## 2. Go package map
 

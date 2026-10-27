@@ -1,3 +1,4 @@
+import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from '../../../utils/time';
@@ -6,7 +7,7 @@ import { useT } from '../../../i18n';
 import { formatTokens, formatTokensFull } from '../../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { metricValue, rankingMetric, relativeChange, type InsightsMetric, type RankedGroup } from '../insightsCube';
-import { changeTrend, formatChange, formatMetric, formatShare } from '../insightsFormat';
+import { changeTrend, formatChange, formatShare } from '../insightsFormat';
 import type { InsightsLabels } from '../useInsightsLabels';
 import { Sparkline } from './Sparkline';
 import { InsightsValue } from './InsightsValue';
@@ -36,6 +37,7 @@ function byNumber(pick: (group: RankedGroup) => number | null) {
 export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActive, metric, labels, isLoading, onOpen }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
+  const { formatMetric } = useInsightsFormat();
   const ranking = rankingMetric(metric);
 
   const columns = React.useMemo<ColumnsType<RankedGroup>>(() => [
@@ -115,7 +117,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
         return last === undefined ? '—' : dayjs(last).format('MM-DD HH:mm');
       },
     },
-  ], [labels, lastActive, onOpen, ranking, sparklines, style, t]);
+  ], [labels, lastActive, onOpen, ranking, sparklines, style, t, formatMetric]);
 
   return (
     <ResponsiveList<RankedGroup>

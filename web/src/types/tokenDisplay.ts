@@ -237,15 +237,3 @@ export function formatTokenRate(value: number): string {
   if (!Number.isFinite(value)) return '—';
   return COMPACT_RATE.format(value);
 }
-
-/**
- * formatCost renders a USD amount for a list readout.
- *
- * Four decimals, because request costs are commonly fractions of a cent and
- * two decimals would collapse a thousand small calls into "$0.00" - a row that
- * reads as free is a different claim from one that reads as cheap.
- */
-export function formatCost(usd: number | null | undefined): string {
-  if (usd === null || usd === undefined || !Number.isFinite(usd)) return '—';
-  return `$${usd.toFixed(4)}`;
-}
