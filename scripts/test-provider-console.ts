@@ -355,7 +355,7 @@ assert.equal(overviewTraffic.get('claude-0')?.total, 0, 'a provider absent from 
 // An unreadable window is unknown, not zero: the page must not claim a provider was idle.
 assert.equal(providerTrafficById(overviewRows, undefined), undefined);
 assert.equal(totalProviderTraffic(overviewRows, undefined), undefined);
-assert.deepEqual(totalProviderTraffic(overviewRows, overviewTraffic), { total: 20, success: 14, failure: 6, successRate: 70 });
+assert.deepEqual(totalProviderTraffic(overviewRows, overviewTraffic), { total: 20, success: 14, successRate: 70 });
 
 // Attention is a switched-on row that cannot serve well: no key, or a rate below the healthy band.
 const enabledOf = (row: ProviderItem) => !row.disabled;

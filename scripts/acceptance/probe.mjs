@@ -117,7 +117,7 @@ export function defaultRoutes() {
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/api-keys', () => ({ keys: [], total: 0 })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/pricing/attention', () => ({ unpriced: [] })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/models', () => ({ window: dashboardBody().window, total_tokens: 0, models: [], partial_errors: [] })],
-    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/providers', () => ({ window: dashboardBody().window, providers: [], partial_errors: [] })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/providers', () => ({ window: dashboardBody().window, bucket_ms: dashboardBody().window.bucket_ms, providers: [], partial_errors: [] })],
     // The shell every route mounts reads these, so they are defaults rather than
     // per-scenario fixtures.
     [(url, method) => method === 'GET' && url.pathname.endsWith('/dashboard'), () => dashboardBody()],

@@ -1,6 +1,6 @@
 import type { ManagementOverviewProvider, ManagementOverviewTypeCount } from '../../types/management';
 import type { ProviderItem } from '../../types/providers';
-import type { WindowCredentialTraffic } from '../../types/dashboard';
+import type { TrafficBucket, WindowCredentialTraffic, WindowProviderTraffic } from '../../types/dashboard';
 import { getProviderDefaultIcon } from '../../types/providerIconIds';
 import { resolveProviderIcon } from '../../types/providerIcons';
 import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
@@ -35,6 +35,8 @@ export interface AggregatedProvider {
   failure: number;
   /** Success rate (0 - 100), or null if no requests */
   successRate: number | null;
+  /** The same traffic per bucket of the window's activity grid, ascending, idle buckets omitted */
+  buckets: TrafficBucket[];
   /** Whether the channel is disabled: its own toggle is off, or the gateway
    *  holds no enabled credential for it */
   disabled: boolean;
@@ -57,14 +59,6 @@ export interface ProviderSummaryStats {
   overallSuccessRate: number | null;
   oauthCount: number;
   aiProviderCount: number;
-}
-
-export interface WindowProviderTraffic {
-  id: string;
-  total: number;
-  success: number;
-  failure: number;
-  success_rate: number | null;
 }
 
 const OPENAI_COMPATIBILITY_FAMILY = 'openai-compatibility';
@@ -119,6 +113,80 @@ export function resolveChannelName(id: string, fallbackName?: string): string {
     return fallbackName.trim();
   }
   return capitalize(id);
+}
+
+/**
+ * mergeTrafficBuckets sums the buckets of every share a row is credited with - several keys, or a
+ * key and its label - into one ascending list, one entry per bucket start.
+ */
+export function mergeTrafficBuckets(buckets: readonly TrafficBucket[]): TrafficBucket[] {
+  const byStart = new Map<number, TrafficBucket>();
+  for (const bucket of buckets) {
+    const merged = byStart.get(bucket.start_ms);
+    if (merged) {
+      merged.total += bucket.total;
+      merged.failure += bucket.failure;
+    } else {
+      byStart.set(bucket.start_ms, { ...bucket });
+    }
+  }
+  return [...byStart.values()].sort((a, b) => a.start_ms - b.start_ms);
+}
+
+/** One block of a provider's activity strip: a bucket of the grid, idle or not. */
+export interface ActivityBlock {
+  startMs: number;
+  endMs: number;
+  total: number;
+  failure: number;
+  /** 0-100, or null for a bucket that served nothing. */
+  successRate: number | null;
+}
+
+/**
+ * activityBlocks lays a row's sparse buckets on the window's grid, oldest first.
+ *
+ * The grid is the server's: buckets start on multiples of `bucketMs` since the epoch, so the first
+ * block can begin before the window does and covers only its later part. A bucket outside the grid
+ * cannot occur for the window it was read with; one that does is dropped rather than folded into a
+ * neighbour, which would move its failures in time.
+ */
+export function activityBlocks(buckets: readonly TrafficBucket[], fromMs: number, toMs: number, bucketMs: number): ActivityBlock[] {
+  if (!(bucketMs > 0) || toMs <= fromMs) return [];
+  const byStart = new Map<number, TrafficBucket>();
+  let boundaryTotal = 0;
+  let boundaryFailure = 0;
+  for (const bucket of buckets) {
+    // The dashboard's range is inclusive at its closing instant. When that instant is also a
+    // bucket edge, the server reports the final bucket at `toMs`, outside the half-open display
+    // grid. Fold it into the closing block so the strip's totals agree with the row's total.
+    if (bucket.start_ms === toMs) {
+      boundaryTotal += bucket.total;
+      boundaryFailure += bucket.failure;
+      continue;
+    }
+    byStart.set(bucket.start_ms, bucket);
+  }
+  const blocks: ActivityBlock[] = [];
+  for (let start = Math.floor(fromMs / bucketMs) * bucketMs; start < toMs; start += bucketMs) {
+    const bucket = byStart.get(start);
+    const total = bucket?.total ?? 0;
+    const failure = bucket?.failure ?? 0;
+    blocks.push({
+      startMs: Math.max(start, fromMs),
+      endMs: Math.min(start + bucketMs, toMs),
+      total,
+      failure,
+      successRate: total > 0 ? (Math.max(0, total - failure) / total) * 100 : null,
+    });
+  }
+  const closing = blocks.at(-1);
+  if (closing && boundaryTotal > 0) {
+    closing.total += boundaryTotal;
+    closing.failure += boundaryFailure;
+    closing.successRate = (Math.max(0, closing.total - closing.failure) / closing.total) * 100;
+  }
+  return blocks;
 }
 
 export interface AggregateProvidersOptions {
@@ -196,6 +264,7 @@ export function aggregateProviders({
     success: number;
     failure: number;
     successRate: number | null;
+    buckets: TrafficBucket[];
     consumed: boolean;
   };
   const trafficMap = new Map<string, ProviderTrafficEntry>();
@@ -204,8 +273,15 @@ export function aggregateProviders({
   /** foldedLabel is the identity the server folds a label to: lowercase, trimmed, prefix removed. */
   const foldedLabel = (value: string): string => value.toLowerCase().trim().replace(/^openai-compatible-/, '').trim();
 
-  const addTraffic = (id: string, total: number, success: number, failure: number, successRate: number | null): void => {
-    const entry: ProviderTrafficEntry = { label: foldedLabel(id), total, success, failure, successRate, consumed: false };
+  const addTraffic = (
+    id: string,
+    total: number,
+    success: number,
+    failure: number,
+    successRate: number | null,
+    buckets: TrafficBucket[] = [],
+  ): void => {
+    const entry: ProviderTrafficEntry = { label: foldedLabel(id), total, success, failure, successRate, buckets, consumed: false };
     const key = normalizeProviderKey(id);
     if (!trafficMap.has(key)) trafficMap.set(key, entry);
     if (entry.label && !exactTrafficMap.has(entry.label)) exactTrafficMap.set(entry.label, entry);
@@ -214,7 +290,7 @@ export function aggregateProviders({
   const hasWindowData = Array.isArray(windowProviders);
   if (hasWindowData) {
     for (const wp of windowProviders!) {
-      addTraffic(wp.id, wp.total, wp.success, wp.failure, wp.success_rate);
+      addTraffic(wp.id, wp.total, wp.success, wp.failure, wp.success_rate, wp.buckets);
     }
   } else {
     // The overview totals are not split by serving key: this path is taken while the windowed read is
@@ -253,6 +329,7 @@ export function aggregateProviders({
       success: 0,
       failure: 0,
       successRate: null,
+      buckets: [] as TrafficBucket[],
     };
   };
 
@@ -287,6 +364,7 @@ export function aggregateProviders({
   const takeOwnKeyTraffic = (provider: ProviderItem) => {
     let total = 0;
     let failure = 0;
+    const buckets: TrafficBucket[] = [];
     for (const index of providerIndexes(provider)) {
       const credential = credentialTraffic.get(index);
       if (!credential) continue;
@@ -294,8 +372,9 @@ export function aggregateProviders({
       if ((sharedIndexCount.get(index) ?? 0) > 1) continue;
       total += credential.total;
       failure += credential.failure;
+      buckets.push(...(credential.buckets ?? []));
     }
-    return { total, failure };
+    return { total, failure, buckets };
   };
 
   /**
@@ -306,18 +385,25 @@ export function aggregateProviders({
    * with the shared `openai-compatibility` bucket instead, which no one provider can claim.
    */
   const takeCompatibilityLabelTraffic = (provider: ProviderItem) => {
-    if (provider.family !== OPENAI_COMPATIBILITY_FAMILY || !provider.upstream_name) return { total: 0, failure: 0 };
+    const none = { total: 0, failure: 0, buckets: [] as TrafficBucket[] };
+    if (provider.family !== OPENAI_COMPATIBILITY_FAMILY || !provider.upstream_name) return none;
     const entry = exactTrafficMap.get(foldedLabel(provider.upstream_name));
-    if (!entry || entry.consumed) return { total: 0, failure: 0 };
+    if (!entry || entry.consumed) return none;
     entry.consumed = true;
-    return { total: entry.total, failure: entry.failure };
+    return { total: entry.total, failure: entry.failure, buckets: entry.buckets };
   };
 
-  const summarizeTraffic = (...shares: { total: number; failure: number }[]) => {
+  const summarizeTraffic = (...shares: { total: number; failure: number; buckets: TrafficBucket[] }[]) => {
     const total = shares.reduce((sum, share) => sum + share.total, 0);
     const failure = shares.reduce((sum, share) => sum + share.failure, 0);
     const success = Math.max(0, total - failure);
-    return { total, success, failure, successRate: total > 0 ? (success / total) * 100 : null };
+    return {
+      total,
+      success,
+      failure,
+      successRate: total > 0 ? (success / total) * 100 : null,
+      buckets: mergeTrafficBuckets(shares.flatMap((share) => share.buckets)),
+    };
   };
 
   // 2. Build credentials lookup map. The gateway's own per-type tally - how many
@@ -507,6 +593,7 @@ export function aggregateProviders({
       success: traffic.success,
       failure: traffic.failure,
       successRate: traffic.successRate,
+      buckets: traffic.buckets,
       disabled,
       models: cp.models,
       modelsCount: cp.models?.length,
@@ -550,6 +637,7 @@ export function aggregateProviders({
       success: traffic.success,
       failure: traffic.failure,
       successRate: traffic.successRate,
+      buckets: traffic.buckets,
       disabled: areAllCredentialsDisabled([item.type]),
       protocol: meta?.protocol || 'OAuth',
     });
@@ -591,6 +679,7 @@ export function aggregateProviders({
       success: traffic.success,
       failure: traffic.failure,
       successRate: traffic.successRate,
+      buckets: traffic.buckets,
       disabled: areAllCredentialsDisabled([op.id]),
       protocol: isOAuth ? (meta?.protocol || 'OAuth') : undefined,
     });

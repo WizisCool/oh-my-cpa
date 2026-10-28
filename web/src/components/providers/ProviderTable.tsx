@@ -284,9 +284,6 @@ export function ProviderTable({
               <span className={clsx(styles['traffic-rate'], styles[`tone-${tone}`])}>{`${rate.toFixed(1)}%`}</span>
             </div>
             <Meter className={styles['traffic-meter']} value={rate} color={`var(--${tone === 'neutral' ? 'meta' : tone})`} />
-            {row.failure > 0 && (
-              <span className={styles['traffic-failed']}>{t('pro.traffic_failed', { n: row.failure.toLocaleString() })}</span>
-            )}
           </div>
         );
       },

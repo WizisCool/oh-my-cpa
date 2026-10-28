@@ -11,6 +11,7 @@ import { parseProviderIcons, PROVIDER_ICONS_PREFERENCE } from '../../types/provi
 import type { ManagementOverview, ManagementOverviewProvider } from '../../types/management';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
 import {
+  activityBlocks,
   aggregateProviders,
   type AggregatedProvider,
 } from './dashboardProvidersLogic';
@@ -18,7 +19,8 @@ import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics
 import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
 import { Tag } from '../common/Tag';
-import { Meter } from '../common/Meter';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { ProviderActivityStrip } from './ProviderActivityStrip';
 import './dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -71,6 +73,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
   const t = useT();
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
+  const isPhone = useIsPhoneViewport();
   const sliding = range ? isSlidingRange(range) : true;
 
   // Custom provider icon overrides
@@ -129,6 +132,11 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
   // If the windowed query failed with partial errors, avoid fabricating zero traffic and fall back to overview
   const windowProviders = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.providers;
   const windowCredentials = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.credentials;
+  // The strip is drawn only on the grid the windowed read was answered on: the overview fallback
+  // carries no buckets, and an empty strip would claim the providers sat idle.
+  const activityGrid = windowProviders && windowProvidersData
+    ? { fromMs: windowProvidersData.window.from, toMs: windowProvidersData.window.to, bucketMs: windowProvidersData.bucket_ms }
+    : undefined;
 
   // Aggregated list: windowed traffic (or live overview fallback) + configured AI providers + OAuth channels
   const aggregated = useMemo<AggregatedProvider[]>(() => {
@@ -168,9 +176,8 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
           <div className="provider-list-items">
             {visibleProviders.map((provider) => {
               const isOAuth = provider.kind === 'oauth';
-              // The rate's band colour is carried by the number as well as by the meter, because a
-              // meter's fill *is* the rate: at a measured 0% it has no width, and without the number
-              // the worst row on the page would carry no red at all and would read as an idle one.
+              // The window rate carries its band colour itself: the strip beside it colours each
+              // bucket, and a phone does not draw the strip at all.
               const rateColor = RATE_TONE_COLOR[successRateTone(provider.successRate)];
               return (
                 <div
@@ -232,10 +239,18 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                     </span>
                   </div>
 
-                  {/* The same rate, drawn as a meter. */}
-                  <div className="provider-visual-col">
-                    <Meter className="dashboard-meter" value={provider.successRate ?? 0} color={rateColor} />
-                  </div>
+                  {/* The rate across the window, bucket by bucket. A phone omits it: two dozen blocks
+                      in a phone's width are too narrow to read or to touch, and the rate stays. */}
+                  {!isPhone && (
+                    <div className="provider-visual-col">
+                      {activityGrid && (
+                        <ProviderActivityStrip
+                          name={provider.name}
+                          blocks={activityBlocks(provider.buckets, activityGrid.fromMs, activityGrid.toMs, activityGrid.bucketMs)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

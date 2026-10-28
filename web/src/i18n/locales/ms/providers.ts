@@ -165,5 +165,4 @@ export default {
   "pro.traffic_unknown": "Data trafik tidak tersedia",
   "pro.traffic_none": "Tiada permintaan",
   "pro.traffic_requests": "{n} permintaan",
-  "pro.traffic_failed": "{n} gagal",
 } satisfies Translation<typeof source>;

@@ -257,10 +257,16 @@ page and amber on another:
 | < 50%, including exactly 0% | `danger` — broken |
 
 The dashboard's request tile takes that tone for its pip; the provider rows take
-it as the colour of both marks that read one rate — the rate's own number and the
-meter beside it. The number carries it as well as the meter because a meter's
-fill *is* the rate: at a measured 0% it has no width, so without the number the
-worst row on the page would show no red at all and would read as an idle one. A
+it as the colour of the window rate's own number, and of every block in the
+activity strip beside it. The strip cuts the window into about two dozen buckets,
+oldest on the left, and each block reads its own bucket's rate on the same band:
+a window rate averages the present into the past, so a provider that served all
+day and has failed for the last hour still reads green, and only the blocks show
+where the failures sit. An idle bucket is the plain meter track (`--border`), not
+`neutral`: no traffic is not a reading, and the strip must not suggest one. Phones
+omit the strip and keep the number. The strip is one keyboard focus stop and names
+every active bucket in its accessible summary, so the history is not pointer-only
+and colour is not its only carrier. A
 window with no traffic is *unknowable* rather than bad, so it stays `neutral` and
 does not fall into the alarm step, while a measured 0% is a real outage and does.
 The request list does not show a verdict of its own, for the reason below.

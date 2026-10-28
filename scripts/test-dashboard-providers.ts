@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  activityBlocks,
   aggregateProviders,
   computeProviderSummary,
   OAUTH_CHANNEL_META,
@@ -416,8 +417,14 @@ console.log('✓ A configured key provider leaves its family\'s OAuth channel in
 // that row into `credentials[]`, which means a row credited only by the label would silently lose
 // every request one of its keys served.
 const relay = aggregateProviders({
-  windowProviders: [{ id: 'codex', total: 4, success: 4, failure: 0, success_rate: 100 }],
-  windowCredentials: [{ auth_index: 'relay-key', total: 6, failure: 1 }],
+  windowProviders: [{
+    id: 'codex', total: 4, success: 4, failure: 0, success_rate: 100,
+    buckets: [{ start_ms: 0, total: 1, failure: 0 }, { start_ms: 60_000, total: 3, failure: 0 }],
+  }],
+  windowCredentials: [{
+    auth_index: 'relay-key', total: 6, failure: 1,
+    buckets: [{ start_ms: 60_000, total: 2, failure: 1 }, { start_ms: 120_000, total: 4, failure: 0 }],
+  }],
   authFilesByType: [{ type: 'codex', count: 1, disabled: 0 }],
   configuredProviders: [{
     id: 'openai-compat-0',
@@ -434,6 +441,12 @@ const channelRelayRow = relay.find((row) => row.providerId === 'openai-compat-0'
 assert.ok(channelRelayRow, 'the relay renders as the channel');
 assert.equal(channelRelayRow.total, 10, 'the relay takes its keys\' requests and the unindexed label traffic');
 assert.equal(channelRelayRow.failure, 1);
+// Its activity is the same two halves bucket by bucket: a bucket both halves served is one block.
+assert.deepEqual(channelRelayRow.buckets, [
+  { start_ms: 0, total: 1, failure: 0 },
+  { start_ms: 60_000, total: 5, failure: 1 },
+  { start_ms: 120_000, total: 4, failure: 0 },
+]);
 assert.equal(relay.length, 1, 'the auth-file channel does not appear a second time beside it');
 console.log('✓ A relay that stands for a channel is credited from both its keys and its label');
 
@@ -597,5 +610,40 @@ assert.equal(summary.oauthCount, 3); // antigravity + codex + codebuddy
 assert.equal(summary.aiProviderCount, 3); // cline + inception + deepseek
 assert.ok(summary.overallSuccessRate !== null && summary.overallSuccessRate > 97);
 console.log('✓ Summary statistics verified');
+
+// Test 9: the activity strip lays sparse buckets on the server's epoch grid
+//
+// The window rarely starts on the grid, so the first block starts with the window and covers only
+// its later part; an idle bucket is a block with no rate rather than a missing one, so every strip of
+// a window has the same length and its blocks line up row to row.
+const minute = 60_000;
+const blocks = activityBlocks(
+  [{ start_ms: 2 * minute, total: 4, failure: 1 }, { start_ms: 4 * minute, total: 2, failure: 2 }],
+  1.5 * minute,
+  4.5 * minute,
+  minute,
+);
+assert.deepEqual(blocks, [
+  { startMs: 1.5 * minute, endMs: 2 * minute, total: 0, failure: 0, successRate: null },
+  { startMs: 2 * minute, endMs: 3 * minute, total: 4, failure: 1, successRate: 75 },
+  { startMs: 3 * minute, endMs: 4 * minute, total: 0, failure: 0, successRate: null },
+  { startMs: 4 * minute, endMs: 4.5 * minute, total: 2, failure: 2, successRate: 0 },
+]);
+console.log('✓ Activity blocks fill the window grid');
+
+// The API's window includes its closing instant. When that instant lands on a bucket edge, the
+// sparse response carries a bucket the visible half-open grid cannot start; it belongs to the
+// closing block, otherwise the strip's traffic would end one block short of the row total.
+const closingEdgeBlocks = activityBlocks(
+  [{ start_ms: 3 * minute, total: 1, failure: 1 }],
+  1 * minute,
+  3 * minute,
+  minute,
+);
+assert.deepEqual(closingEdgeBlocks, [
+  { startMs: 1 * minute, endMs: 2 * minute, total: 0, failure: 0, successRate: null },
+  { startMs: 2 * minute, endMs: 3 * minute, total: 1, failure: 1, successRate: 0 },
+]);
+console.log('✓ A closing-edge bucket is folded into the final activity block');
 
 console.log('All dashboard provider logic tests passed successfully!');

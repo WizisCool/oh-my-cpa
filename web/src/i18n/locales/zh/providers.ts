@@ -162,5 +162,4 @@ export default {
   'pro.traffic_unknown': '流量数据暂不可用',
   'pro.traffic_none': '无请求',
   'pro.traffic_requests': '{n} 次请求',
-  'pro.traffic_failed': '失败 {n}',
 };

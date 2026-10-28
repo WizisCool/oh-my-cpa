@@ -1,0 +1,81 @@
+{
+  "bucket_ms": 60000,
+  "credentials": [
+    {
+      "auth_index": "codex-key-1",
+      "buckets": [
+        {
+          "failure": 1,
+          "start_ms": 1789041840000,
+          "total": 1
+        }
+      ],
+      "failure": 1,
+      "total": 1
+    }
+  ],
+  "partial_errors": [],
+  "providers": [
+    {
+      "buckets": [
+        {
+          "failure": 0,
+          "start_ms": 1789041600000,
+          "total": 1
+        },
+        {
+          "failure": 1,
+          "start_ms": 1789041660000,
+          "total": 1
+        },
+        {
+          "failure": 1,
+          "start_ms": 1789042200000,
+          "total": 1
+        }
+      ],
+      "failure": 2,
+      "id": "codex",
+      "success": 1,
+      "success_rate": 33.33333333333333,
+      "total": 3
+    },
+    {
+      "buckets": [
+        {
+          "failure": 0,
+          "start_ms": 1789041780000,
+          "total": 1
+        }
+      ],
+      "failure": 0,
+      "id": "antigravity",
+      "success": 1,
+      "success_rate": 100,
+      "total": 1
+    },
+    {
+      "buckets": [
+        {
+          "failure": 0,
+          "start_ms": 1789041720000,
+          "total": 1
+        }
+      ],
+      "failure": 0,
+      "id": "cline",
+      "success": 1,
+      "success_rate": 100,
+      "total": 1
+    }
+  ],
+  "window": {
+    "bucket_ms": 60000,
+    "complete": true,
+    "from": 1789041000000,
+    "minutes": 20,
+    "open_end": false,
+    "preset": "custom",
+    "to": 1789042200000
+  }
+}

@@ -293,9 +293,30 @@ export function applyTail(base: DashboardResponse, patch?: DashboardTailResponse
   };
 }
 
+/**
+ * One bucket of a row's traffic on the provider list's activity grid. Only buckets that served a
+ * request travel; an absent one was idle.
+ */
+export interface TrafficBucket {
+  start_ms: number;
+  total: number;
+  failure: number;
+}
+
+/** The window's traffic one channel label carried, for the records no API key answered. */
+export interface WindowProviderTraffic {
+  id: string;
+  total: number;
+  success: number;
+  failure: number;
+  success_rate: number | null;
+  buckets?: TrafficBucket[];
+}
+
 /** The window's traffic one upstream API key answered, by the key's runtime auth index. */
 export interface WindowCredentialTraffic {
   auth_index: string;
   total: number;
   failure: number;
+  buckets?: TrafficBucket[];
 }

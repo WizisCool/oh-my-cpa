@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/testkit"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -34,7 +35,7 @@ func TestDashboardProvidersRequiresAuthentication(t *testing.T) {
 // the traffic split between them and each rate computed over part of the window. Blank labels are
 // the query's own "unknown" bucket, and must fold with everything else rather than becoming a row.
 func TestFoldProviderTrafficCanonicalisesLabels(t *testing.T) {
-	rows := []repository.UsageProviderTotalsRow{
+	rows := []repository.UsageProviderBucketRow{
 		// Same channel, three spellings: only one row may come out.
 		{Provider: "openai-compatible-cline", Requests: 10, Failures: 1},
 		{Provider: "cline", Requests: 4, Failures: 0},
@@ -91,7 +92,7 @@ func TestFoldProviderTrafficCanonicalisesLabels(t *testing.T) {
 // the console distinguishes the two - an absent rate reads neutral, a measured zero reads red. The
 // fold is where that distinction is made, so it is asserted here rather than left to the client.
 func TestFoldProviderTrafficReportsNoRateForAnEmptyRow(t *testing.T) {
-	traffic, _ := foldProviderTraffic([]repository.UsageProviderTotalsRow{
+	traffic, _ := foldProviderTraffic([]repository.UsageProviderBucketRow{
 		{Provider: "silent", Requests: 0, Failures: 0},
 	})
 	if len(traffic) != 1 {
@@ -111,7 +112,7 @@ func TestFoldProviderTrafficReportsNoRateForAnEmptyRow(t *testing.T) {
 // list that joined on the label credited every codex API-key provider - one just created and
 // never used included - with the OAuth channel's traffic.
 func TestFoldProviderTrafficSeparatesAPIKeyTrafficByAuthIndex(t *testing.T) {
-	providers, credentials := foldProviderTraffic([]repository.UsageProviderTotalsRow{
+	providers, credentials := foldProviderTraffic([]repository.UsageProviderBucketRow{
 		{Provider: "codex", Requests: 7, Failures: 2},
 		{Provider: "codex", CredentialIndex: "key-a", Requests: 3, Failures: 1},
 		{Provider: "codex", CredentialIndex: "key-b", Requests: 1, Failures: 0},
@@ -119,7 +120,9 @@ func TestFoldProviderTrafficSeparatesAPIKeyTrafficByAuthIndex(t *testing.T) {
 	if len(providers) != 1 || providers[0].ID != "codex" || providers[0].Total != 7 || providers[0].Failure != 2 {
 		t.Fatalf("the codex label must carry only the traffic no API key answered: %#v", providers)
 	}
-	if len(credentials) != 2 || credentials[0] != (dashboardCredentialTraffic{AuthIndex: "key-a", Total: 3, Failure: 1}) || credentials[1] != (dashboardCredentialTraffic{AuthIndex: "key-b", Total: 1}) {
+	if len(credentials) != 2 ||
+		!reflect.DeepEqual(credentials[0], dashboardCredentialTraffic{AuthIndex: "key-a", Total: 3, Failure: 1, Buckets: []dashboardTrafficBucket{{Total: 3, Failure: 1}}}) ||
+		!reflect.DeepEqual(credentials[1], dashboardCredentialTraffic{AuthIndex: "key-b", Total: 1, Buckets: []dashboardTrafficBucket{{Total: 1}}}) {
 		t.Fatalf("API-key traffic must be reported per auth index: %#v", credentials)
 	}
 }
@@ -128,6 +131,7 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 
 	baseTime := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	toMS := baseTime.Add(10 * time.Minute).UnixMilli()
 	events := []usage.Event{
 		{
 			InstanceID:  "default",
@@ -177,6 +181,17 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 			Failed:      true,
 			TotalTokens: 10,
 		},
+		// The dashboard window is inclusive at both ends. A request at the closing
+		// instant belongs to the same totals as every other request in the window.
+		{
+			InstanceID:  "default",
+			EventKey:    "evt-window-end",
+			Provider:    "codex",
+			Model:       "gpt-4o",
+			TimestampMS: toMS,
+			Failed:      true,
+			TotalTokens: 25,
+		},
 		// Outside window
 		{
 			InstanceID:  "default",
@@ -194,7 +209,6 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 	}
 
 	fromMS := baseTime.Add(-10 * time.Minute).UnixMilli()
-	toMS := baseTime.Add(10 * time.Minute).UnixMilli()
 	query := fmt.Sprintf("?from=%d&to=%d", fromMS, toMS)
 
 	resp, body := getJSON(t, client, baseURL+providersDashboardPath+query)
@@ -202,56 +216,11 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
 	}
 
-	var parsed dashboardProvidersResponse
-	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+	// The wire is one contract: the window, its activity grid, every row's totals and sparse
+	// buckets, and the credentials split are reviewed together as one response.
+	var actual any
+	if err := json.Unmarshal(body, &actual); err != nil {
 		t.Fatal(err)
 	}
-
-	if len(parsed.Providers) != 3 {
-		t.Fatalf("expected 3 providers in window, got %d: %#v", len(parsed.Providers), parsed.Providers)
-	}
-
-	var codex *dashboardProviderTraffic
-	var cline *dashboardProviderTraffic
-	var antigravity *dashboardProviderTraffic
-
-	for i := range parsed.Providers {
-		p := &parsed.Providers[i]
-		switch p.ID {
-		case "codex":
-			codex = p
-		case "cline":
-			cline = p
-		case "antigravity":
-			antigravity = p
-		}
-	}
-
-	if codex == nil || codex.Total != 2 || codex.Success != 1 || codex.Failure != 1 {
-		t.Fatalf("unexpected codex traffic: %#v", codex)
-	}
-	if codex.SuccessRate == nil || *codex.SuccessRate != 50.0 {
-		t.Fatalf("expected codex success rate 50%%, got %#v", codex.SuccessRate)
-	}
-
-	if cline == nil || cline.Total != 1 || cline.Success != 1 || cline.Failure != 0 {
-		t.Fatalf("unexpected cline traffic: %#v", cline)
-	}
-	if cline.SuccessRate == nil || *cline.SuccessRate != 100.0 {
-		t.Fatalf("expected cline success rate 100%%, got %#v", cline.SuccessRate)
-	}
-
-	if antigravity == nil || antigravity.Total != 1 || antigravity.Success != 1 {
-		t.Fatalf("unexpected antigravity traffic: %#v", antigravity)
-	}
-	if len(parsed.Credentials) != 1 || parsed.Credentials[0] != (dashboardCredentialTraffic{AuthIndex: "codex-key-1", Total: 1, Failure: 1}) {
-		t.Fatalf("unexpected API-key traffic: %#v", parsed.Credentials)
-	}
-
-	// The row carries no per-bucket grid. It used to, for a sparkline this list drew; asserting the
-	// field is absent from the wire keeps a later change from quietly reinstating the group-by query
-	// that produced it.
-	if strings.Contains(string(body), `"buckets"`) {
-		t.Fatalf("the provider response still carries a buckets grid: %s", string(body))
-	}
+	testkit.Golden(t, "testdata/golden/dashboard-providers/window.golden.json", actual)
 }
