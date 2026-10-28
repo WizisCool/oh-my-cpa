@@ -6,8 +6,9 @@ import { ResponsiveList } from '../../../components/common/ResponsiveList';
 import { useT } from '../../../i18n';
 import { formatTokens, formatTokensFull } from '../../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { metricValue, rankingMetric, relativeChange, type InsightsMetric, type RankedGroup } from '../insightsCube';
-import { changeTrend, formatChange, formatShare } from '../insightsFormat';
+import { compareMetric, metricValue, NO_COMPARISON, rankingMetric, type InsightsMetric, type RankedGroup } from '../insightsCube';
+import { formatShare } from '../insightsFormat';
+import { ComparisonText } from './ComparisonText';
 import type { InsightsLabels } from '../useInsightsLabels';
 import { Sparkline } from './Sparkline';
 import { InsightsValue } from './InsightsValue';
@@ -102,10 +103,9 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       key: 'change',
       title: t('insights.col.change'),
       align: 'right',
-      render: (_, group) => {
-        const change = group.previous ? relativeChange(group.value, metricValue(group.previous, ranking)) : null;
-        return <span className={styles['change-text']} data-trend={changeTrend(change)}>{formatChange(change) ?? '—'}</span>;
-      },
+      render: (_, group) => (
+        <ComparisonText comparison={group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON} className={styles['change-text']} />
+      ),
     },
     {
       key: 'last',

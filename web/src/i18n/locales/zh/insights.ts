@@ -25,6 +25,7 @@ export default {
   'insights.metric.requests': '请求',
   'insights.metric.latency': '平均延迟',
   'insights.change_new': '新增',
+  'insights.change_noise': '在正常波动范围内',
   'insights.change_was': '上期 {value}',
   'insights.dim.key': '密钥',
   'insights.dim.call_point': '调用模型',

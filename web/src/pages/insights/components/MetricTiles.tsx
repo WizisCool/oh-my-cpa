@@ -9,7 +9,7 @@ import { useT } from '../../../i18n';
 import { resolveCountFlowReadout, resolveTokenFlowReadout, type TokenNumberStyle } from '../../../types/tokenDisplay';
 import type { RollingReadout } from '../../../types/rollingNumber';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { INSIGHTS_METRICS, metricValue, relativeChange, type InsightsMetric, type Measures } from '../insightsCube';
+import { compareMetric, INSIGHTS_METRICS, metricValue, type InsightsMetric, type Measures } from '../insightsCube';
 import { changeTrend, formatChange } from '../insightsFormat';
 import styles from '../insights.module.css';
 
@@ -41,7 +41,7 @@ function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNum
  * The window's four headline numbers, each also the switch for what the trend plots.
  *
  * The change against the comparison window carries an arrow and a muted red for a rise or green for
- * a fall. The tones are mixed well toward the ink: they say which way a figure moved, and stay
+ * a fall, unless it is within chance. The tones are mixed well toward the ink: they say which way a figure moved, and stay
  * clear of the saturated state colours that mark a failure.
  */
 export const MetricTiles: React.FC<MetricTilesProps> = ({ current, previous, metric, onMetricChange }) => {
@@ -55,8 +55,8 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, previous, met
       {INSIGHTS_METRICS.map((item) => {
         const value = metricValue(current, item);
         const before = previous ? metricValue(previous, item) : null;
-        const change = previous ? relativeChange(value, before) : null;
-        const changeText = formatChange(change);
+        const comparison = previous ? compareMetric(current, previous, item) : null;
+        const changeText = comparison?.kind === 'change' ? formatChange(comparison.change) : null;
         const isActive = item === metric;
         return (
           <button
@@ -72,17 +72,21 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, previous, met
             <span className={styles['tile-value']} title={formatMetricExact(item, value)}>
               <RollingNumber readout={readoutOf(item, value, style, currency)} />
             </span>
-            <span className={styles['tile-change']} data-trend={previous === null ? undefined : changeTrend(change)}>
-              {previous === null ? null : changeText === null ? (
+            <span
+              className={styles['tile-change']}
+              data-trend={comparison ? changeTrend(comparison) : undefined}
+              title={comparison?.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : undefined}
+            >
+              {comparison === null ? null : comparison.kind !== 'change' || changeText === null ? (
                 <span className={styles['tile-change-none']}>
-                  {(before === null || before === 0) && (value ?? 0) > 0 ? t('insights.change_new') : '—'}
+                  {comparison.kind === 'new' ? t('insights.change_new') : '—'}
                 </span>
               ) : (
                 <>
-                  {change !== null && change > 0 && <ArrowUpOutlined aria-hidden="true" />}
-                  {change !== null && change < 0 && <ArrowDownOutlined aria-hidden="true" />}
+                  {comparison.change > 0 && <ArrowUpOutlined aria-hidden="true" />}
+                  {comparison.change < 0 && <ArrowDownOutlined aria-hidden="true" />}
                   {/* The arrow carries the direction, so the figure drops its sign rather than saying it twice. */}
-                  <span>{change === 0 ? changeText : changeText.replace(/^[+−]/, '')}</span>
+                  <span>{comparison.change === 0 ? changeText : changeText.replace(/^[+−]/, '')}</span>
                 </>
               )}
               {previous !== null && (

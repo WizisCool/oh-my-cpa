@@ -186,10 +186,53 @@ export function metricValue(measures: Measures, metric: InsightsMetric): number 
   }
 }
 
-/** The relative change from a previous value, or null when there is nothing to compare against. */
-export function relativeChange(current: number | null, previous: number | null): number | null {
-  if (current === null || previous === null || previous === 0) return null;
-  return (current - previous) / Math.abs(previous);
+/** The two-sided 95% normal quantile: how far a reading may wander by chance alone. */
+const CONFIDENCE_Z = 1.96;
+
+/**
+ * A metric compared with the previous window. `new` is growth from a baseline too small to divide
+ * by; `isNoise` marks a change the request counts behind it cannot tell from chance.
+ */
+export type MetricComparison =
+  | { kind: 'none' }
+  | { kind: 'new' }
+  | { kind: 'change'; change: number; isNoise: boolean };
+
+export const NO_COMPARISON: MetricComparison = { kind: 'none' };
+
+/**
+ * Compares a metric across the two windows by the evidence behind it, so neither a negligible
+ * baseline nor ordinary wobble reads as a trend. Both windows span the same length, and requests are
+ * the independent events every metric sums or averages, so each window's count of requests carrying
+ * the metric is a Poisson draw and the evidence scales with it - no fixed floor in tokens, spend or
+ * requests.
+ *
+ * - A baseline below the current reading's own sampling noise (z/√n of it), under a rise outside
+ *   chance, cannot be told apart from absence at today's scale, so the group arrived rather than
+ *   grew: dividing by it only measures the baseline's smallness. The largest ratio this lets through
+ *   is √n/z, so the bar rises with evidence.
+ * - A change whose log ratio lies within z standard errors, √(1/n + 1/m) with Haldane's ½
+ *   correction, is within chance. It still prints, but carries no trend. The error is the Poisson one
+ *   for counts; for tokens and spend it is a lower bound (per-request size adds variance), and for a
+ *   mean latency it assumes a spread about as wide as the mean.
+ */
+export function compareMetric(current: Measures, previous: Measures, metric: InsightsMetric): MetricComparison {
+  const now = metricValue(current, metric);
+  const before = metricValue(previous, metric);
+  if (now === null) return NO_COMPARISON;
+  if (before === null || before <= 0) return now > 0 ? { kind: 'new' } : NO_COMPARISON;
+  // Only priced requests say anything about spend. A reading that fell to zero is still measured by
+  // every request that ran: a thousand that cost nothing are a firm fall, one that did is not.
+  const evidence = (measures: Measures) => (metric === 'cost' ? measures.costedRequests : measures.requests);
+  const n = evidence(current);
+  const m = evidence(previous);
+  const logRatio = now > 0 ? Math.log(now / before) : Math.log(0.5 / (m + 0.5));
+  const standardError = Math.sqrt(1 / (n + 0.5) + 1 / (m + 0.5));
+  const isNoise = Math.abs(logRatio) < CONFIDENCE_Z * standardError;
+  // Below z² requests the noise floor exceeds the reading itself, so an arrival must first be a rise
+  // the evidence supports; otherwise a single request a side would read as new.
+  if (!isNoise && logRatio > 0 && isAdditiveMetric(metric) && before / now < CONFIDENCE_Z / Math.sqrt(n)) return { kind: 'new' };
+  return { kind: 'change', change: now / before - 1, isNoise };
 }
 
 export interface GroupTotal {

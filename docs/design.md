@@ -1059,7 +1059,10 @@ The analytical page at `/insights` puts one window on one quiet page of panels:
   the change. A rise is drawn in a muted red and a fall in a muted green (`--trend-up` and
   `--trend-down`: `danger` and `success` mixed 64% toward `fg-2`), so the direction reads at a
   glance while staying clear of the saturated hues that mark a failure. The same tones colour the
-  rankings' and the key table's change columns. The comparison lives only here and in those columns; the
+  rankings' and the key table's change columns. A change is weighed by the requests behind it
+  (`compareMetric`): one within chance prints without a tone, and growth from a baseline below the
+  current reading's sampling noise reads "New" instead of a percentage divided by almost nothing.
+  The comparison lives only here and in those columns; the
   previous period is not drawn as a reference line, because a level line on a stacked chart needed
   explaining.
 - **Every value carries its mark.** A model shows its maker's mark, a provider and a credential their

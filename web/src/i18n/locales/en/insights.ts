@@ -28,6 +28,7 @@ export default {
   'insights.metric.requests': 'Requests',
   'insights.metric.latency': 'Avg latency',
   'insights.change_new': 'New',
+  'insights.change_noise': 'Within normal variation',
   'insights.change_was': 'Prev. {value}',
   'insights.dim.key': 'Key',
   'insights.dim.call_point': 'Call model',

@@ -5,7 +5,7 @@ import { formatCurrency, USD_CURRENCY, type DisplayCurrency } from '../../types/
  */
 
 import { formatTokens, formatTokensFull, type TokenNumberStyle } from '../../types/tokenDisplay';
-import type { InsightsMetric } from './insightsCube';
+import type { InsightsMetric, MetricComparison } from './insightsCube';
 
 const COUNT = new Intl.NumberFormat('en');
 
@@ -54,11 +54,11 @@ export function formatChange(change: number | null): string | null {
 /**
  * Which way a change went, for its colour: a rise in a muted red, a fall in a muted green. The
  * tones are mixed toward the ink so a change reads as a direction, not as an alarm; a change too
- * small to print has none.
+ * small to print, or within chance, has none.
  */
-export function changeTrend(change: number | null): 'up' | 'down' | undefined {
-  if (change === null || !Number.isFinite(change) || Math.abs(change) < 0.0005) return undefined;
-  return change > 0 ? 'up' : 'down';
+export function changeTrend(comparison: MetricComparison): 'up' | 'down' | undefined {
+  if (comparison.kind !== 'change' || comparison.isNoise || Math.abs(comparison.change) < 0.0005) return undefined;
+  return comparison.change > 0 ? 'up' : 'down';
 }
 
 export function formatShare(share: number | null): string {
