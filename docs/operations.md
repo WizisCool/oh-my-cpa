@@ -113,7 +113,10 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   a 308 redirect to it. An operator-owned proxy must preserve a configured prefix and
   route both the bare prefix and everything beneath it. At the root, the proxy forwards
   the site unchanged (`deploy/nginx.conf` and `docs/install.md` show examples); CPA
-  keeps its separate port regardless of OMC's base path.
+  keeps its separate port regardless of OMC's base path. A deployment copied from an
+  older minimal example that relied on the former implicit `/omc` default without
+  setting the variable must add `OMCPA_BASE_PATH=/omc` before replacing the image if
+  it must retain that URL.
 - **Container image**: Compose pulls `wiziscool/oh-my-cpa:latest` from Docker Hub by
   default; the full-stack CPA image also defaults to `:latest`. Pin `OMCPA_IMAGE` to the desired version or digest; updates recreate only
   OMC with its existing data and master key. The image runs as uid/gid `10001:10001`,

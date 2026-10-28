@@ -1,6 +1,6 @@
 # ADR 0001: Go backend with embedded React and SQLite
 
-- Status: Accepted
+- Status: Accepted; the default console mount is superseded by ADR 0110
 - Date: 2026-02-20
 
 ## Context

@@ -108,6 +108,7 @@ these under `services:` and leave every existing line as it is:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      OMCPA_BASE_PATH: /
       OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -278,7 +279,9 @@ For a container installation, find the existing Compose file, data directory and
 An existing container's explicit `OMCPA_BASE_PATH` is preserved by both the updater and
 `docker compose pull` with `docker compose up -d`. Do not remove or rewrite it: the
 deployment's current URL and reverse-proxy rule remain valid. Only a new installation
-that does not set the variable uses the site root.
+that does not set the variable uses the site root. Before replacing a container that
+has no `OMCPA_BASE_PATH`, determine the path its current public URL and proxy use; add
+that value explicitly if the deployment must keep its existing entry point.
 
 Then check for the updater:
 

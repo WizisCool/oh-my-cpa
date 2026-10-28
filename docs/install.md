@@ -49,6 +49,7 @@ Deploys CPA and OMC together.
        ports:
          - "127.0.0.1:8080:8080"
        environment:
+         OMCPA_BASE_PATH: /
          OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
          OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?}
          OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -129,6 +130,7 @@ Runs OMC as one more service in the Compose file that already runs CPA.
        ports:
          - "127.0.0.1:8080:8080"
        environment:
+         OMCPA_BASE_PATH: /
          OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
          OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
          OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -208,6 +210,7 @@ changed.
        extra_hosts:
          - host.docker.internal:host-gateway
        environment:
+         OMCPA_BASE_PATH: /
          OMCPA_CPA_BASE_URL: http://host.docker.internal:8317
          OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
          OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -592,7 +595,9 @@ hand, and for restoring one. Back up `.env` separately.
 An existing container keeps its explicit `OMCPA_BASE_PATH` through the console updater
 and through `docker compose pull` followed by `docker compose up -d`, so its current
 URL and reverse-proxy rule remain valid. If you replace the Compose file itself, carry
-that setting over. A new installation that does not set it uses the site root.
+that setting over. If an older minimal example did not set the variable, add it with
+the path its current public URL and proxy already use before replacing the image. A
+new installation that does not set it uses the site root.
 
 ### From the console
 

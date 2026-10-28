@@ -162,6 +162,14 @@ describe('routing', () => {
     );
   });
 
+  it('serves the captured data-retention response', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const response = await worker.fetch(request('/api/v1/management/system/data-retention'), env);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).source, JSON.parse(DATASET.responses['system-data-retention'].body).source);
+  });
+
   it('serves both model groupings', () => {
     const byCall = responseNameFor(
       request('/api/v1/management/dashboard/models?preset=24h&group_by=call'),

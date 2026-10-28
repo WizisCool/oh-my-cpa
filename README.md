@@ -138,6 +138,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      OMCPA_BASE_PATH: /
       OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
       OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -187,6 +188,7 @@ differently.
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      OMCPA_BASE_PATH: /
       OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -237,6 +239,7 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     environment:
+      OMCPA_BASE_PATH: /
       OMCPA_CPA_BASE_URL: http://host.docker.internal:8317
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}

@@ -1,4 +1,4 @@
-// Resolves the Go API address the Vite dev server proxies /api to.
+// Resolves the Vite development base path and the Go API address it proxies to.
 //
 // The Go process reads OMCPA_LISTEN_ADDR from its dotenv file (internal/config:
 // OMCPA_ENV_FILE selects the file, real environment variables win over it), so
@@ -10,6 +10,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_LISTEN_ADDR = '127.0.0.1:8080';
+
+/** Mirrors config.NormalizeBasePath, then adds the trailing slash Vite expects. */
+export function normalizeViteBasePath(raw) {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed || trimmed === '/') return '/';
+  if (trimmed.includes('?') || trimmed.includes('#')) {
+    throw new Error('OMCPA_BASE_PATH must not contain a query or fragment');
+  }
+  const absolute = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  if (absolute.split('/').includes('..')) {
+    throw new Error('OMCPA_BASE_PATH must not contain parent traversal');
+  }
+  const clean = path.posix.normalize(absolute).replace(/\/+$/, '');
+  return clean === '/' ? '/' : `${clean}/`;
+}
 
 // Mirrors config.DotEnvPath: a relative override resolves against the process
 // working directory, which is the repository root for `pnpm dev` and Vite.
@@ -70,6 +85,10 @@ function readEnvOrFile(root, name) {
 
 export function resolveListenAddr(root) {
   return readEnvOrFile(root, 'OMCPA_LISTEN_ADDR') || DEFAULT_LISTEN_ADDR;
+}
+
+export function resolveBasePath(root) {
+  return normalizeViteBasePath(readEnvOrFile(root, 'OMCPA_BASE_PATH'));
 }
 
 export function resolveApiTarget(root) {

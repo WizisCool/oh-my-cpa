@@ -1,12 +1,16 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { resolveApiTarget } from '../scripts/api-target.mjs';
+import { resolveApiTarget, resolveBasePath } from '../scripts/api-target.mjs';
 import { syncLobeIcons } from '../scripts/sync-lobe-icons.mjs';
 import { bundleGraphPlugin } from '../scripts/bundle-graph.mjs';
+import { bareBaseRedirectPlugin, devRuntimeConfigPlugin } from '../scripts/dev-base-redirect.mjs';
 import { compactEnglishCatalogPlugin } from '../scripts/compact-locales.mjs';
 
 const repoRoot = path.resolve(__dirname, '..');
+const devBasePath = resolveBasePath(repoRoot);
+const apiPrefix = `${devBasePath}api/`;
+const apiProxyPattern = `^${apiPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
@@ -20,12 +24,14 @@ export default defineConfig(({ command }) => ({
     },
     react(),
     bundleGraphPlugin(repoRoot),
+    bareBaseRedirectPlugin(),
+    devRuntimeConfigPlugin(devBasePath),
     compactEnglishCatalogPlugin(repoRoot),
   ],
-  // Development serves the console at the root, matching a new installation. Vite
-  // proxies only API calls to Go. Production output stays relative so Go can embed
-  // it at the root or any configured sub-path.
-  base: command === 'serve' ? '/' : './',
+  // Development follows OMCPA_BASE_PATH so an existing local environment and the
+  // backend agree on the entry, runtime API paths and proxy. New environments use
+  // the root. Production output stays relative so Go can embed it at either location.
+  base: command === 'serve' ? devBasePath : './',
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },
@@ -75,7 +81,7 @@ export default defineConfig(({ command }) => ({
       // route '/api-keys'. The API surface is always '/api/<something>' (the Go
       // router hangs every route off '/api/'), so requiring the trailing slash
       // keeps the two apart.
-      '^/api/': {
+      [apiProxyPattern]: {
         // Follow OMCPA_LISTEN_ADDR so a taken default port only needs a .env
         // change; OMCPA_API_TARGET overrides the resolved address.
         target: resolveApiTarget(repoRoot),
