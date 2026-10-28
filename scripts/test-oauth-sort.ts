@@ -27,6 +27,17 @@ test('name ordering is numeric and base-sensitive with stable equivalent labels'
   assert.deepEqual(sortOAuthWorkspaceRecords(records, 'name-desc').map(record => record.file.name), ['a10', 'A2', 'á2', 'a02']);
 });
 
+test('an operator name leads its sort, an unnamed credential keeps its file-name order', () => {
+  const records = createOAuthSortRecords(3);
+  ['zeta.json', 'alpha.json', 'mid.json'].forEach((name, index) => { records[index].file.name = name; });
+  records[1].file.display_name = 'Beta seat';
+  records[0].file.display_name = 'Able seat';
+  assert.deepEqual(sortOAuthWorkspaceRecords(records, 'name-asc').map(record => record.file.name), ['zeta.json', 'alpha.json', 'mid.json']);
+  // Equal priorities fall back to the same label, so the name decides the tie, not the file.
+  records.forEach((record) => { record.file.priority = 1; });
+  assert.deepEqual(sortOAuthWorkspaceRecords(records, 'priority-desc').map(record => record.file.name), ['zeta.json', 'alpha.json', 'mid.json']);
+});
+
 test('numeric ranking keeps absent priority and weight defaults and name tiebreaks', () => {
   const records = createOAuthSortRecords(3);
   ['credential-10', 'credential-2', 'credential-1'].forEach((name, index) => { records[index].file.name = name; });

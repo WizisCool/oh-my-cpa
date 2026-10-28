@@ -30,10 +30,12 @@ import type {
   ManagementAuthFileSafeFields,
 } from '../../types/managementAuthFile';
 import {
+  credentialNameProblem,
   deriveAuthFileIdentity,
   hasAuthFileStatusWarning,
   isAuthFileDisabled,
   isAuthFileProblem,
+  MAX_CREDENTIAL_NAME_LENGTH,
   summarizeAuthFileStatusMessage,
 } from './authFileLogic';
 import styles from './AuthFileDetailDrawer.module.css';
@@ -91,6 +93,7 @@ interface AuthFileDetailDrawerProps {
 }
 
 interface FormValues {
+  display_name?: string;
   priority?: number;
   weight?: number;
   note?: string;
@@ -145,6 +148,7 @@ function formValues(
   safeFields?: ManagementAuthFileSafeFields,
 ): FormValues {
   return {
+    display_name: file.display_name ?? '',
     priority: safeFields && Number.isSafeInteger(safeFields.priority) ? safeFields.priority : file.priority ?? 0,
     weight: safeFields && Number.isSafeInteger(safeFields.weight) ? safeFields.weight : file.weight ?? 1,
     note: safeFields?.note ?? file.note ?? '',
@@ -168,7 +172,8 @@ function vertexDraft(values: FormValues): VertexOpenAPIDraft {
 }
 
 function sameFormValues(left: FormValues, right: FormValues): boolean {
-  return left.priority === right.priority
+  return (left.display_name ?? '') === (right.display_name ?? '')
+    && left.priority === right.priority
     && left.weight === right.weight
     && (left.note ?? '') === (right.note ?? '')
     && (left.prefix ?? '') === (right.prefix ?? '')
@@ -283,13 +288,29 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       fileName,
       authIndex,
       patch,
+      displayName,
+      nameVersion,
     }: {
       fileName: string;
+      displayName?: string;
+      nameVersion: number;
       authIndex?: string;
       patch: Record<string, unknown>;
       sessionId: number;
     }) => {
-      return api.patchManagementAuthFileFields(fileName, patch, authIndex);
+      let savedName: { display_name?: string; display_name_version?: number } | undefined;
+      if (displayName !== undefined) {
+        savedName = await api.setManagementAuthFileDisplayName(fileName, displayName, nameVersion);
+        // Keep the successful half of a combined save as the next baseline if CPA rejects its half.
+        setBaseline((previous) => ({ ...previous, display_name: savedName?.display_name ?? '' }));
+        await queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
+      }
+      if (Object.keys(patch).length === 0) return { file: file ? { ...file, display_name: savedName?.display_name, display_name_version: savedName?.display_name_version } : undefined, fields: undefined };
+      const response = await api.patchManagementAuthFileFields(fileName, patch, authIndex);
+      if (response.file) response.file = { ...response.file,
+        display_name: savedName?.display_name ?? file?.display_name,
+        display_name_version: savedName?.display_name_version ?? file?.display_name_version };
+      return response;
     },
     onSuccess: (response, variables) => {
       isPendingRef.current = false;
@@ -441,7 +462,18 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       patch.excluded_models = excludedModels;
     }
 
-    if (Object.keys(patch).length === 0) {
+    const nextName = (values.display_name ?? '').trim();
+    const hasNameChange = nextName !== (baseline.display_name ?? '');
+    // The server counts code points and refuses control characters; validating here keeps the
+    // fields patch from succeeding while the name half of the same save is rejected.
+    const nameProblem = hasNameChange ? credentialNameProblem(nextName) : null;
+    if (nameProblem) {
+      toast.warning(nameProblem === 'too_long'
+        ? t('af.rename_too_long', { n: MAX_CREDENTIAL_NAME_LENGTH })
+        : t('af.rename_control'));
+      return;
+    }
+    if (Object.keys(patch).length === 0 && !hasNameChange) {
       isPendingRef.current = false;
       form.setFieldsValue(baseline);
       setIsDirty(false);
@@ -451,6 +483,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
     saveMutation.mutate({
       fileName: file.name,
+      displayName: hasNameChange ? nextName : undefined,
+      nameVersion: file.display_name_version ?? 0,
       authIndex: file.auth_index,
       patch,
       sessionId: currentSessionRef.current,
@@ -555,7 +589,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   return (
     <AppDrawer
-      title={identity?.primary || t('af.drawer_title')}
+      title={file?.display_name || identity?.primary || t('af.drawer_title')}
       width="wide"
       open={open}
       onClose={handleAttemptClose}
@@ -672,6 +706,9 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                         onFinish={handleFinish}
                         disabled={saveMutation.isPending || file.runtime_only || !canEdit}
                       >
+                        <Form.Item name="display_name" label={t('af.field_display_name')}>
+                          <Input placeholder={t('af.display_name_placeholder')} />
+                        </Form.Item>
                         <div className={styles['field-grid']}>
                           <Form.Item
                             name="priority"

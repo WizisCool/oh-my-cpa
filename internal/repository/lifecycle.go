@@ -91,6 +91,7 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"pricing_channel_versions":      {Kind: LifecyclePermanent, Reason: "every stored request cost references the multiplier it was locked against"},
 	"schema_migrations":             {Kind: LifecyclePermanent, Reason: "the record of applied migrations"},
 	"client_key_aliases":            {Kind: LifecyclePermanent, Reason: "requests keep their client key fingerprint, so its name must stay resolvable"},
+	"credential_display_names":      {Kind: LifecyclePermanent, Reason: "operator-owned names; a credential signed in again under the same file keeps its name"},
 	"connections":                   {Kind: LifecyclePermanent, Reason: "operator-owned identity"},
 	"cpa_bindings":                  {Kind: LifecyclePermanent, Reason: "operator-owned identity; upstream removal marks a binding missing"},
 	"cpa_instances":                 {Kind: LifecyclePermanent, Reason: "configured gateways"},

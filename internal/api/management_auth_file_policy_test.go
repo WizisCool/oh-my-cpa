@@ -269,3 +269,37 @@ func TestCredentialModelAliasesRoundTrip(t *testing.T) {
 		t.Fatalf("read back = %+v, want the aliases cleared", cleared.Fields.ModelAliases)
 	}
 }
+
+// A credential's name is Oh My CPA's own: it is written without touching CPA, read
+// back on the auth-file list, guarded by the version the writer read, and refused
+// for a file CPA does not report.
+func TestCredentialDisplayNameRoundTrip(t *testing.T) {
+	upstream := &credentialPolicyUpstream{stored: map[string]any{"type": "codex"}}
+	client, baseURL, recorder := startAuthFilesTestServer(t, "management-secret-value", upstream.serve(t))
+	base := baseURL + "/omc/api/v1/management/auth-files"
+
+	response, raw := doJSON(t, client, http.MethodPut, base+"/display-name", `{"name":"codex.json","display_name":" Team seat ","version":0}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("rename = %d %s", response.StatusCode, raw)
+	}
+	_, raw = doJSON(t, client, http.MethodGet, base, "")
+	var listed managementAuthFilesResponse
+	if err := json.Unmarshal(raw, &listed); err != nil || len(listed.Files) != 1 {
+		t.Fatalf("list = %s", raw)
+	}
+	if listed.Files[0].DisplayName != "Team seat" || listed.Files[0].DisplayNameVersion != 1 {
+		t.Fatalf("listed file = %+v, want the name at version 1", listed.Files[0])
+	}
+
+	if response, raw = doJSON(t, client, http.MethodPut, base+"/display-name", `{"name":"codex.json","display_name":"Other","version":0}`); response.StatusCode != http.StatusConflict {
+		t.Fatalf("stale rename = %d %s, want 409", response.StatusCode, raw)
+	}
+	if response, raw = doJSON(t, client, http.MethodPut, base+"/display-name", `{"name":"absent.json","display_name":"Ghost","version":0}`); response.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown file = %d %s, want 404", response.StatusCode, raw)
+	}
+	for _, request := range recorder.all() {
+		if request.Method != http.MethodGet {
+			t.Fatalf("naming a credential wrote to CPA: %+v", request)
+		}
+	}
+}

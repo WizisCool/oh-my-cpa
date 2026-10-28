@@ -35,6 +35,7 @@ import {
   isAuthFileProblem,
 } from '../../components/authFiles/authFileLogic';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
+import { useCredentialRename } from '../../components/authFiles/useCredentialRename';
 import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { oauthProviderChoices } from '../oauthProviderLogic';
@@ -516,6 +517,7 @@ export const OAuthManagementPage: React.FC = () => {
     );
   };
 
+  const renameCredential = useCredentialRename();
   const sections = buildCredentialSections(pagedRecords, visibleRecords);
   const rowActions: CredentialRowActions = {
     isBusy: (record) => actions.isRecordBusy(record),
@@ -531,6 +533,7 @@ export const OAuthManagementPage: React.FC = () => {
     onDownload: (record) => actions.download(record),
     onDelete: (record) => void actions.deleteOne(record),
     onOpen: openCredential,
+    onRename: (record, displayName) => renameCredential(record.file, displayName),
     onRefreshQuota: (record) => void actions.refreshQuotaForRecord(record),
     onClearCooldown: (record) => void actions.clearCooldown(record),
     onReauthenticate: openConnectForRecord,

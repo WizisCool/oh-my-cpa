@@ -370,6 +370,33 @@ describe('a failed refresh stays on the page', () => {
   });
 });
 
+function renderCredentialRow(
+  item: QuotaItem,
+  { onRefresh, onRename = vi.fn(async () => true), fileOverrides = {} }: {
+    onRefresh?: () => void;
+    onRename?: CredentialRowActions['onRename'];
+    fileOverrides?: Partial<ManagementAuthFile>;
+  } = {},
+) {
+  const { records } = buildOAuthWorkspaceProjection([file(item.auth_index, fileOverrides)], [item], []);
+  const [section] = buildCredentialSections(records, records);
+  const actions: CredentialRowActions = {
+    isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
+    onSelect: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen: vi.fn(), onRename,
+    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
+  };
+  if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
+  return render(
+    <MemoryRouter>
+      <I18nProvider>
+        <AntdApp>
+          <CredentialSection section={section} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} onSort={vi.fn()} />
+        </AntdApp>
+      </I18nProvider>
+    </MemoryRouter>,
+  );
+}
+
 describe('a row that says it is out of date', () => {
   const staleItem = (overrides: Partial<QuotaItem> = {}): QuotaItem =>
     quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
@@ -379,25 +406,7 @@ describe('a row that says it is out of date', () => {
       ...overrides,
     });
 
-  const renderRow = (item: QuotaItem, onRefresh?: () => void) => {
-    const { records } = buildOAuthWorkspaceProjection([file(item.auth_index)], [item], []);
-    const [section] = buildCredentialSections(records, records);
-    const actions: CredentialRowActions = {
-      isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
-      onSelect: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen: vi.fn(),
-      onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
-    };
-    if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
-    return render(
-      <MemoryRouter>
-        <I18nProvider>
-          <AntdApp>
-            <CredentialSection section={section} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} onSort={vi.fn()} />
-          </AntdApp>
-        </I18nProvider>
-      </MemoryRouter>,
-    );
-  };
+  const renderRow = (item: QuotaItem, onRefresh?: () => void) => renderCredentialRow(item, { onRefresh });
 
   it('answers its own complaint with the row\'s refresh, without opening the drawer', () => {
     const refresh = vi.fn();
@@ -426,6 +435,42 @@ describe('a row that says it is out of date', () => {
   });
 });
 
+
+describe("a credential row's name", () => {
+  const named = { name: 'codex-1a2b-operator@example.com-plus.json', email: 'operator@example.com', note: 'two months at half price' };
+
+  it('leads with the name, keeps the masked account under it and the note behind a glyph, and never prints the file', () => {
+    const { container } = renderCredentialRow(quota('codex-named', [quotaWindow('five_hour', 80, 2)]), {
+      fileOverrides: { ...named, display_name: 'Team seat', display_name_version: 1 },
+    });
+    const row = container.querySelector('[data-testid="oauth-credential-record"]')!;
+    expect(row.querySelector('[data-credential-display-name]')?.textContent).toBe('Team seat');
+    expect(row.querySelector('[data-account-masked="true"]')?.textContent).toBe('op•••r@example.com');
+    expect(row.querySelector('[data-credential-note]')?.getAttribute('aria-label')).toBe('Note: two months at half price');
+    expect(row.textContent).not.toContain('.json');
+  });
+
+  it('names an unnamed credential where it stands: Enter saves, Escape abandons', async () => {
+    const onRename = vi.fn<CredentialRowActions['onRename']>(async () => true);
+    const { container } = renderCredentialRow(quota('codex-unnamed', [quotaWindow('five_hour', 80, 2)]), {
+      fileOverrides: named, onRename,
+    });
+    expect(container.querySelector('[data-account-masked="true"]')?.textContent).toBe('op•••r@example.com');
+
+    fireEvent.click(screen.getByTestId('oauth-credential-rename'));
+    fireEvent.keyDown(screen.getByTestId('oauth-credential-name-input'), { key: 'Escape' });
+    expect(screen.queryByTestId('oauth-credential-name-input')).toBeNull();
+    expect(onRename).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('oauth-credential-rename'));
+    const input = screen.getByTestId('oauth-credential-name-input');
+    fireEvent.change(input, { target: { value: 'Team seat' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    await waitFor(() => expect(screen.queryByTestId('oauth-credential-name-input')).toBeNull());
+    expect(onRename).toHaveBeenCalledTimes(1);
+    expect(onRename.mock.calls[0][1]).toBe('Team seat');
+  });
+});
 
 describe('provider sections across pages', () => {
   function mountPages() {

@@ -184,8 +184,6 @@ export default {
   "omc.quota_family_code_review": "Semakan kod",
   "omc.section_count": "{n} kelayakan",
   "omc.section_select": "Pilih setiap kelayakan {provider} pada halaman ini",
-  "omc.section_quota_unsupported": "Tiada bacaan kuota",
-  "omc.section_quota_unobserved": "Belum ada bacaan kuota",
   "omc.col_reset_credits": "Kredit set semula",
   "omc.account_reveal": "Tunjukkan akaun",
   "omc.account_hide": "Sembunyikan akaun",

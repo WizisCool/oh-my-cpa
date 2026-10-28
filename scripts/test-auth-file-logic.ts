@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  credentialNameProblem,
+  MAX_CREDENTIAL_NAME_LENGTH,
   isAuthFileDisabled,
   isAuthFileProblem,
   isAuthFileHealthy,
@@ -59,18 +61,15 @@ test('Identity derivation: account-first display', () => {
   const emailFile: ManagementAuthFile = { ...baseFile, email: 'user@example.com' };
   const identity1 = deriveAuthFileIdentity(emailFile);
   assert.equal(identity1.primary, 'user@example.com');
-  assert.equal(identity1.secondary, 'claude-1.json');
   assert.equal(identity1.isAccountPrimary, true);
 
   const projectFile: ManagementAuthFile = { ...baseFile, project_id: 'gcp-proj-123' };
   const identity2 = deriveAuthFileIdentity(projectFile);
   assert.equal(identity2.primary, 'gcp-proj-123');
-  assert.equal(identity2.secondary, 'claude-1.json');
 
   const plainFile: ManagementAuthFile = { ...baseFile };
   const identity3 = deriveAuthFileIdentity(plainFile);
   assert.equal(identity3.primary, 'claude-1.json');
-  assert.equal(identity3.secondary, undefined);
   assert.equal(identity3.isAccountPrimary, false);
 });
 
@@ -186,4 +185,16 @@ test('Status message summary lifts the sentence out of an upstream JSON error bo
   assert.equal(summarizeAuthFileStatusMessage('token expired'), 'token expired');
   assert.equal(summarizeAuthFileStatusMessage('{not json'), '{not json');
   assert.equal(summarizeAuthFileStatusMessage('{"unrelated":true}'), '{"unrelated":true}');
+});
+
+test('Credential name validation counts code points, not UTF-16 units', () => {
+  assert.equal(credentialNameProblem('Team seat'), null);
+  assert.equal(credentialNameProblem('  '), null);
+  // 64 astral characters are 128 UTF-16 units and still a legal name.
+  const astral = '𝔞'.repeat(MAX_CREDENTIAL_NAME_LENGTH);
+  assert.equal(astral.length, MAX_CREDENTIAL_NAME_LENGTH * 2);
+  assert.equal(credentialNameProblem(astral), null);
+  assert.equal(credentialNameProblem('名'.repeat(MAX_CREDENTIAL_NAME_LENGTH + 1)), 'too_long');
+  assert.equal(credentialNameProblem('line\nbreak'), 'control');
+  assert.equal(credentialNameProblem('seat\u202eevil'), 'control');
 });

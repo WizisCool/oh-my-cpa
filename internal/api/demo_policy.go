@@ -240,6 +240,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/auth-files/models", demoAllow, ""},
 	{http.MethodPatch, "/api/v1/management/auth-files/status", demoAllow, ""},
 	{http.MethodPatch, "/api/v1/management/auth-files/fields", demoAllow, ""},
+	{http.MethodPut, "/api/v1/management/auth-files/display-name", demoAllow, ""},
 
 	// Quota reads. The refresh is answered by the fixture's own provider payloads,
 	// so it performs no upstream request.

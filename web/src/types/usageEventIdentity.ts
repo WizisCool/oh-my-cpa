@@ -21,6 +21,8 @@ export type CredentialFile = {
   type?: string;
   email?: string;
   project_id?: string;
+  /** The operator's own name for the credential, kept by Oh My CPA. */
+  display_name?: string;
 };
 
 export type CredentialIndex = ReadonlyMap<string, CredentialFile | null>;
@@ -45,8 +47,21 @@ export type CredentialIdentity = {
  * accounts apart.
  */
 export function credentialAccount(file: CredentialFile | null | undefined): string {
-  const account = (file?.email || file?.project_id || '').trim();
+  // Each candidate is trimmed before it is chosen, so a blank address cannot shadow the
+  // project id beside it.
+  const account = file?.email?.trim() || file?.project_id?.trim() || '';
   return account ? maskAccount(account) : '';
+}
+
+/**
+ * The name a surface prints for a credential: the operator's own name when it has
+ * one, otherwise the masked account.
+ *
+ * The operator chose the name and it is not identity material, so it is printed
+ * whole; the account behind it keeps the mask wherever it still appears.
+ */
+export function credentialTitle(file: CredentialFile | null | undefined): string {
+  return file?.display_name?.trim() || credentialAccount(file);
 }
 
 /**
@@ -86,6 +101,11 @@ export function credentialFileName(file: CredentialFile | null | undefined): str
   return maskCredentialIdentities(name, file);
 }
 
+/** How a filter option names a credential: the operator's name, else its masked file name. */
+export function credentialOptionLabel(file: CredentialFile | null | undefined): string {
+  return credentialTitle(file) || credentialFileName(file);
+}
+
 /** Ambiguous indexes must never be guessed, even if one filename looks likely. */
 export function indexCredentialFiles(files: readonly CredentialFile[]): CredentialIndex {
   const index = new Map<string, CredentialFile | null>();
@@ -105,22 +125,40 @@ export function indexCredentialFiles(files: readonly CredentialFile[]): Credenti
  * an identity CPA reports for the credential. The two are separate on purpose: a mask
  * is not unique, so making it the bucket would merge two accounts into one group.
  */
-export function resolveCredential(event: UsageEvent, files: CredentialIndex): CredentialIdentity {
+function matchingCredential(event: UsageEvent, files: CredentialIndex): CredentialFile | undefined {
   const file = event.auth_index ? files.get(event.auth_index) : undefined;
+  if (!file) return undefined;
+  const provider = (file.provider || (file.type?.toLowerCase() === 'oauth' ? '' : file.type) || '').toLowerCase();
+  return !provider || !event.provider || provider === event.provider.toLowerCase() ? file : undefined;
+}
+
+export function resolveCredential(event: UsageEvent, files: CredentialIndex): CredentialIdentity {
+  const file = matchingCredential(event, files);
+  // Masking is not attribution: whatever the index resolves to can repeat an identity the
+  // resource or file name also prints, so it is applied whenever a file exists for the
+  // index. A name is attribution, and only a file that names this record may supply one.
+  const maskFile = event.auth_index ? files.get(event.auth_index) : undefined;
   // A discovered resource is named after the auth file CPA saw, so its name repeats the
   // same identities the live file reports; mask it through the same projection. The
   // stored name stays the bucket, even when masking changes what a surface prints.
-  const identity = (name: string, kind: CredentialIdentity['kind']): CredentialIdentity => {
-    const displayName = maskCredentialIdentities(name, file);
+  // The operator's own name for the file, when it has one, is what every surface prints.
+  // An operator name, or the account the file reports, replaces the label; the account branch
+  // keeps one mask and one shape for a named and an unnamed credential. Without either, the
+  // label is the name itself, masked in place, which is what every surface prints for a resource.
+  const identity = (name: string, kind: CredentialIdentity['kind'], shownName: string): CredentialIdentity => {
+    const displayName = shownName || maskCredentialIdentities(name, maskFile);
     return { name, ...(displayName !== name ? { displayName } : {}), kind };
   };
-  if (event.resource_name?.trim()) return identity(event.resource_name.trim(), 'resource');
-  const provider = (file?.provider || file?.type || '').toLowerCase();
-  // Never assign a current file belonging to a different provider to history.
-  if (file && (!provider || !event.provider || provider === event.provider.toLowerCase()))
-    return identity(file.name, 'current_file');
-  if (event.auth_index?.trim()) return identity(event.auth_index.trim(), 'index');
-  if (event.source?.trim()) return identity(event.source.trim(), 'source');
+  const resourceName = event.resource_name?.trim();
+  const isFileOfResource = Boolean(file?.name.trim() && file.name.trim() === resourceName);
+  if (resourceName)
+    // A resource names the file CPA recorded, so the live file's own name must match it
+    // before the operator's name for that file can stand in for the resource's label.
+    return identity(resourceName, 'resource', isFileOfResource ? credentialTitle(file) : '');
+  if (file)
+    return identity(file.name, 'current_file', credentialTitle(file));
+  if (event.auth_index?.trim()) return identity(event.auth_index.trim(), 'index', '');
+  if (event.source?.trim()) return identity(event.source.trim(), 'source', '');
   return { kind: 'unknown' };
 }
 
@@ -213,7 +251,7 @@ export function resolveProviderInfo(
   fallbackIconResolver?: (family: string, name?: string, url?: string) => string,
   pluginLogos: PluginOAuthLogos = {},
 ): ResolvedProviderInfo {
-  const file = event.auth_index ? credentials.get(event.auth_index) : undefined;
+  const file = matchingCredential(event, credentials);
   const isOAuth =
     event.auth_type?.toLowerCase() === 'oauth' ||
     file?.type?.toLowerCase() === 'oauth' ||
@@ -254,7 +292,7 @@ export function resolveProviderInfo(
     // The account is the one display value masking must reach here: the API-key half
     // of the same line is already a server-side mask, and a request record carries no
     // reveal, so this is the only form the row can print.
-    const credential = credentialAccount(file) || fileName || event.resource_name?.trim() || event.auth_index?.trim() || undefined;
+    const credential = credentialTitle(file) || fileName || event.resource_name?.trim() || event.auth_index?.trim() || undefined;
 
     return {
       isOAuth: true,

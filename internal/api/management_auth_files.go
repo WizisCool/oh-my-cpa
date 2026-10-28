@@ -56,6 +56,10 @@ type managementAuthFileResponse struct {
 	Priority          int                                   `json:"priority,omitempty"`
 	Weight            int64                                 `json:"weight,omitempty"`
 	Note              string                                `json:"note,omitempty"`
+	// DisplayName is the operator's own name for the credential, kept by Oh My
+	// CPA rather than CPA; DisplayNameVersion is what a rename must quote back.
+	DisplayName        string `json:"display_name,omitempty"`
+	DisplayNameVersion int64  `json:"display_name_version,omitempty"`
 }
 
 type managementAuthFileRequestBucket struct {
@@ -162,6 +166,19 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 		projected = append(projected, projectManagementAuthFile(file))
 		if len(projected) >= managementAuthFileListLimit {
 			break
+		}
+	}
+	if h.repo != nil {
+		names, namesErr := h.repo.ListCredentialDisplayNames(request.Context(), defaultInstanceID())
+		if namesErr != nil {
+			writeError(writer, http.StatusInternalServerError, "failed to read credential names")
+			return
+		}
+		for index := range projected {
+			if stored, isNamed := names[projected[index].Name]; isNamed {
+				projected[index].DisplayName = stored.DisplayName
+				projected[index].DisplayNameVersion = stored.Version
+			}
 		}
 	}
 	sort.Slice(projected, func(i, j int) bool {

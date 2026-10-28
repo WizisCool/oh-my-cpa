@@ -401,6 +401,7 @@ export function filterOAuthWorkspaceRecords(
       fileText(record.file.provider),
       fileText(record.file.auth_index),
       fileText(record.file.note),
+      fileText(record.file.display_name),
       fileText(record.file.status_message),
       fileText(record.quota?.plan?.plan_label),
       fileText(record.quota?.error),
@@ -422,8 +423,10 @@ export function sortOAuthWorkspaceRecords(
   // Reuse comparison setup within this sort only; each invocation still resolves the default locale.
   let nameCollator: Intl.Collator | undefined;
   const byName = (left: OAuthWorkspaceRecord, right: OAuthWorkspaceRecord) => {
+    // The operator's name leads when it exists; an unnamed credential keeps its file-name order.
+    // A masked account is not a name and must not decide the order: two accounts can mask alike.
     nameCollator ??= new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    return nameCollator.compare(left.file.name, right.file.name);
+    return nameCollator.compare(left.file.display_name || left.file.name, right.file.display_name || right.file.name);
   };
   switch (sort) {
     case 'name-desc':

@@ -16,8 +16,10 @@ export function createOAuthSortRecords(count: number): OAuthWorkspaceRecord[] {
 // Frozen baseline algorithm: the oracle deliberately does not share the optimized comparator.
 export function legacyOAuthSort(records: OAuthWorkspaceRecord[], sort: AuthFileSortKey): OAuthWorkspaceRecord[] {
   const copy = [...records];
+  // An operator name leads, an unnamed credential stays ordered by its file name.
+  const label = (record: OAuthWorkspaceRecord) => record.file.display_name || record.file.name;
   const byName = (left: OAuthWorkspaceRecord, right: OAuthWorkspaceRecord) =>
-    left.file.name.localeCompare(right.file.name, undefined, {numeric: true, sensitivity: 'base'});
+    label(left).localeCompare(label(right), undefined, {numeric: true, sensitivity: 'base'});
   switch (sort) {
     case 'name-desc': return copy.sort((left, right) => byName(right, left));
     case 'priority-desc': return copy.sort((left, right) => (right.file.priority ?? 0) - (left.file.priority ?? 0) || byName(left, right));

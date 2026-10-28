@@ -1935,6 +1935,16 @@ Request *time* is also the windowing key (`timestamp_ms >= from AND <= to`) and 
 axis of every rollup and chart, so the list, the window and the charts all agree on
 what the numbers mean.
 
+### Credential display names
+
+`credential_display_names` (migration 052) stores operator-assigned OAuth credential names by
+`(instance_id, file_name)`. These names are separate from CPA notes and do not rewrite auth files.
+The auth-file facade joins them onto its handwritten DTO as `display_name` and
+`display_name_version`. `PUT /api/v1/management/auth-files/display-name` validates a unique current
+file and the observed version, records an audit attempt before writing, and rejects stale changes.
+Frontend credential readers resolve the label without changing grouping or filtering identities.
+Names survive removal of a CPA credential; clearing a name restores the masked-account fallback.
+
 ### Client key aliases: one identity, two purposes
 
 Operator-assigned names for gateway client keys live in `client_key_aliases`

@@ -1,6 +1,6 @@
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../../types/quota';
-import { maskAccount } from '../../utils/maskAccount';
+import { credentialTitle } from '../../types/usageEventIdentity';
 
 /*
  * This module reads the two management responses directly and shares no code with the credential
@@ -74,19 +74,15 @@ function pickRowWindows(windows: QuotaWindow[]): QuotaWindow[] {
 }
 
 /**
- * The name a row prints: the account behind the credential in the console's one mask, or the file
- * name when it reports no account.
+ * The name a row prints: the operator's own name for the credential, else the account behind it in
+ * the console's one mask, else the file name when it reports no account.
  *
  * The dashboard is screenshotted and shared like the request list, so it prints the mask every
  * other surface prints; the whole address stays in the credential workspace, whose row reveal owns
  * it. Masking where the row is built means the label and its tooltip cannot disagree.
  */
 function credentialLabel(file: ManagementAuthFile): string {
-  // Each candidate is trimmed before it is chosen, so a blank address cannot shadow the project id
-  // beside it. `credentialAccount` and `deriveAuthFileIdentity` select the same way.
-  const account = file.email?.trim() || file.project_id?.trim() || '';
-  if (account) return maskAccount(account);
-  return (file.name || '').trim() || '—';
+  return credentialTitle(file) || (file.name || '').trim() || '—';
 }
 
 function isDisabled(file: ManagementAuthFile): boolean {

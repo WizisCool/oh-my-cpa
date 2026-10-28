@@ -11,7 +11,7 @@ import { mergeFacetOptions } from '../../types/usageEventQuery';
 import type { EventGrouping } from '../../types/usageEventViewPreference';
 import { EVENT_GROUPING_VALUES } from '../../types/usageEventViewPreference';
 import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventLabels';
-import { credentialFileName, type CredentialIndex } from '../../types/usageEventIdentity';
+import { credentialOptionLabel, type CredentialIndex } from '../../types/usageEventIdentity';
 import type {
   UsageEventQuery,
   UsageFacets,
@@ -116,7 +116,7 @@ export function RequestToolbar({
             key === 'provider'
               ? resolveProviderName(value)
               : key === 'auth_index'
-                ? `${credentialFileName(credentials.get(value)) || value} · ${value}`
+                ? `${credentialOptionLabel(credentials.get(value)) || value} · ${value}`
                 : value,
         )}
         notFoundContent={facetsFailed ? t('events.facets_error') : undefined}

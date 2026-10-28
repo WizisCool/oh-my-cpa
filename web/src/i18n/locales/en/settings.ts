@@ -184,8 +184,6 @@ export default {
   'omc.quota_family_code_review': 'Code review',
   'omc.section_count': '{n} credentials',
   'omc.section_select': 'Select every {provider} credential on this page',
-  'omc.section_quota_unsupported': 'No quota reading available',
-  'omc.section_quota_unobserved': 'No quota reading yet',
   'omc.col_reset_credits': 'Reset credits',
   'omc.account_reveal': 'Show account',
   'omc.account_hide': 'Hide account',

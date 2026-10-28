@@ -943,6 +943,22 @@ export const api = {
     return request<ManagementAuthFileSafeFields>(`/management/auth-files/safe-fields?${search.toString()}`, { method: 'GET' });
   },
 
+  /**
+   * Names or clears one credential. The name is Oh My CPA's own metadata, so this
+   * never rewrites the auth file; `version` is the `display_name_version` the list
+   * reported, which turns a concurrent rename into a 409.
+   */
+  async setManagementAuthFileDisplayName(
+    name: string,
+    displayName: string,
+    version: number,
+  ): Promise<{ status: string; display_name?: string; display_name_version?: number }> {
+    return request<{ status: string; display_name?: string; display_name_version?: number }>(
+      '/management/auth-files/display-name',
+      { method: 'PUT', body: JSON.stringify({ name, display_name: displayName, version }) },
+    );
+  },
+
   async deleteManagementAuthFiles(names: string[]): Promise<ManagementAuthFileMutationResponse> {
     return request<ManagementAuthFileMutationResponse>('/management/auth-files', {
       method: 'DELETE',

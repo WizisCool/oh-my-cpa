@@ -153,6 +153,9 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 		return SeedStats{}, err
 	}
 	stats.Aliases = aliases
+	if err := seedCredentialDisplayNames(ctx, repo); err != nil {
+		return SeedStats{}, err
+	}
 	audits, err := seedAudit(ctx, repo, now)
 	if err != nil {
 		return SeedStats{}, err
@@ -331,6 +334,21 @@ func seedClientKeyAliases(ctx context.Context, repo *repository.Repository) (int
 		}
 	}
 	return len(gatewayKeyCatalog()), nil
+}
+
+// seedCredentialDisplayNames names some of the fixture's credentials and leaves
+// the rest unnamed, so the demo shows both a name and the masked account it
+// stands in for.
+func seedCredentialDisplayNames(ctx context.Context, repo *repository.Repository) error {
+	for _, item := range credentialCatalog() {
+		if item.displayName == "" {
+			continue
+		}
+		if _, err := repo.SetCredentialDisplayName(ctx, instanceID, item.name, item.displayName, 0); err != nil {
+			return fmt.Errorf("seed credential display name: %w", err)
+		}
+	}
+	return nil
 }
 
 // seedRequests writes the request history. Records are generated hour by hour so

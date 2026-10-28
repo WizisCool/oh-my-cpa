@@ -181,8 +181,6 @@ export default {
   'omc.quota_family_code_review': '代码审查',
   'omc.section_count': '{n} 个凭据',
   'omc.section_select': '选择本页全部 {provider} 凭据',
-  'omc.section_quota_unsupported': '不提供额度查询',
-  'omc.section_quota_unobserved': '尚无额度读数',
   'omc.col_reset_credits': '可用重置',
   'omc.account_reveal': '点击显示账号',
   'omc.account_hide': '点击隐藏账号',
