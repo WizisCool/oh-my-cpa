@@ -2129,9 +2129,12 @@ without publishing it, so they print the mask
 part, the whole domain, a constant filler), and a file name that repeats either
 reported identity - the address or a Vertex project id - is masked in place. A
 discovered resource is named after the auth file CPA saw, so a resource name goes
-through the same projection before a header or the drawer prints it.
+through the same projection before a header or the drawer prints it. The dashboard's
+credential quota rows print the same mask, though they read a fleet's state rather
+than one request: that panel keeps its own reading of the two responses, so it calls
+`maskAccount` directly rather than going through the request-record projection.
 
-The projection that makes this uniform is
+The projection that makes this uniform across request records is
 `web/src/types/usageEventIdentity.ts`, not any single component:
 
 - **`resolveProviderInfo`** returns the masked account as `credential`; the raw

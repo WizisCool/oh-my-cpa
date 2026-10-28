@@ -1,5 +1,6 @@
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../../types/quota';
+import { maskAccount } from '../../utils/maskAccount';
 
 /*
  * This module reads the two management responses directly and shares no code with the credential
@@ -72,6 +73,22 @@ function pickRowWindows(windows: QuotaWindow[]): QuotaWindow[] {
     .slice(0, 2);
 }
 
+/**
+ * The name a row prints: the account behind the credential in the console's one mask, or the file
+ * name when it reports no account.
+ *
+ * The dashboard is screenshotted and shared like the request list, so it prints the mask every
+ * other surface prints; the whole address stays in the credential workspace, whose row reveal owns
+ * it. Masking where the row is built means the label and its tooltip cannot disagree.
+ */
+function credentialLabel(file: ManagementAuthFile): string {
+  // Each candidate is trimmed before it is chosen, so a blank address cannot shadow the project id
+  // beside it. `credentialAccount` and `deriveAuthFileIdentity` select the same way.
+  const account = file.email?.trim() || file.project_id?.trim() || '';
+  if (account) return maskAccount(account);
+  return (file.name || '').trim() || '—';
+}
+
 function isDisabled(file: ManagementAuthFile): boolean {
   return file.disabled === true || file.status?.trim().toLowerCase() === 'disabled';
 }
@@ -83,7 +100,7 @@ function isUnavailable(file: ManagementAuthFile): boolean {
 export interface CredentialQuotaRow {
   key: string;
   fileName: string;
-  /** The account when the credential names one, otherwise its file name. */
+  /** The masked account when the credential names one, otherwise its file name. */
   primary: string;
   provider: string;
   state: CredentialQuotaState;
@@ -170,7 +187,7 @@ export function buildCredentialQuotaBoard(files: ManagementAuthFile[], quotas: Q
     rows.push({
       key: file.auth_index || file.name,
       fileName: file.name,
-      primary: (file.email || file.project_id || file.name || '').trim() || '—',
+      primary: credentialLabel(file),
       provider: (file.type || file.provider || 'unknown').trim().toLowerCase(),
       state,
       windows,

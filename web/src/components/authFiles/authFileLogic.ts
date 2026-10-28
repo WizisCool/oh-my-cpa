@@ -77,7 +77,9 @@ export interface AuthFileIdentity {
 }
 
 export function deriveAuthFileIdentity(file: ManagementAuthFile): AuthFileIdentity {
-  const account = (file.email || file.project_id || '').trim();
+  // Trimmed before the fallback, like the dashboard's quota label and `credentialAccount`: a blank
+  // address must not hide the project id the same credential also reports.
+  const account = file.email?.trim() || file.project_id?.trim() || '';
   const name = (file.name || '').trim();
   if (account) {
     return {
