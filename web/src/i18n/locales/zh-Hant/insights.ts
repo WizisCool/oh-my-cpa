@@ -30,6 +30,7 @@ export default {
   "insights.change_new": "新增",
   "insights.change_noise": "在正常波動範圍內",
   "insights.change_was": "上期 {value}",
+  "insights.change_was_same_stretch": "上期同時段 {value}",
   "insights.dim.key": "金鑰",
   "insights.dim.call_point": "呼叫模型",
   "insights.dim.model": "請求模型",

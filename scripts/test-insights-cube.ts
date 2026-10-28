@@ -16,7 +16,7 @@ import {
   sumMeasures,
   trendSeries,
 } from '../web/src/pages/insights/insightsCube.ts';
-import { insightsRangeParams, parseInsightsRange } from '../web/src/types/insights.ts';
+import { comparesSameStretch, insightsRangeParams, parseInsightsRange } from '../web/src/types/insights.ts';
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../web/src/pages/insights/insightsRhythm.ts';
 import { DEFAULT_INSIGHTS_VIEW, readInsightsView, toggleFilter, writeInsightsView } from '../web/src/pages/insights/insightsViewState.ts';
 import type { InsightsCubeResponse } from '../web/src/types/insights.ts';
@@ -163,6 +163,17 @@ assert.deepEqual(parseInsightsRange({ from: 10, to: null }), { from: 10, to: nul
 assert.equal(parseInsightsRange({ from: 10, to: 5 }), undefined);
 assert.equal(insightsRangeParams({ preset: 'today' }), 'preset=today');
 assert.equal(insightsRangeParams({ from: 1, to: null }, 'day'), 'from=1&bucket=day', 'an open range sends no end');
+
+// A running calendar unit compares against the same stretch of the previous one; every other window
+// compares against a whole period, so its figure is not a partial reading that needs saying.
+const resolvedWindow = (preset: string, isOpen: boolean) => ({
+  preset, from: 0, to: 1, open_end: isOpen, bucket: 'hour' as const, timezone: 'UTC', widened: false,
+});
+assert.equal(comparesSameStretch(resolvedWindow('today', true)), true);
+assert.equal(comparesSameStretch(resolvedWindow('this_month', true)), true);
+assert.equal(comparesSameStretch(resolvedWindow('yesterday', false)), false, 'a closed unit compares against a whole period');
+assert.equal(comparesSameStretch(resolvedWindow('7d', true)), false, 'a relative window compares against a whole span');
+assert.equal(comparesSameStretch(resolvedWindow('custom', true)), false, 'an open-ended range compares against the span before it');
 
 // ── the view in the URL ───────────────────────────────────────────────────────
 

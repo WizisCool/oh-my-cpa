@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from '../../../utils/time';
 import { ResponsiveList } from '../../../components/common/ResponsiveList';
 import { useT } from '../../../i18n';
+import type { InsightsCompareWindow } from '../../../types/insights';
 import { formatTokens, formatTokensFull } from '../../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { compareMetric, metricValue, NO_COMPARISON, rankingMetric, type InsightsMetric, type RankedGroup } from '../insightsCube';
@@ -20,6 +21,8 @@ interface KeyTableProps {
   lastActive: Map<string, number>;
   metric: InsightsMetric;
   labels: InsightsLabels;
+  /** The window the change column is measured against, so its title can name it. */
+  compare?: InsightsCompareWindow | null;
   isLoading: boolean;
   onOpen: (id: string) => void;
 }
@@ -35,7 +38,7 @@ function byNumber(pick: (group: RankedGroup) => number | null) {
  * The order is the page's ranking; each column sorts. Anywhere on a row opens the key's detail; the
  * name stays a button so the keyboard reaches it too.
  */
-export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActive, metric, labels, isLoading, onOpen }) => {
+export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActive, metric, labels, compare, isLoading, onOpen }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
   const { formatMetric } = useInsightsFormat();
@@ -104,7 +107,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       title: t('insights.col.change'),
       align: 'right',
       render: (_, group) => (
-        <ComparisonText comparison={group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON} className={styles['change-text']} />
+        <ComparisonText comparison={group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON} compare={compare} className={styles['change-text']} />
       ),
     },
     {
@@ -117,7 +120,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
         return last === undefined ? '—' : dayjs(last).format('MM-DD HH:mm');
       },
     },
-  ], [labels, lastActive, onOpen, ranking, sparklines, style, t, formatMetric]);
+  ], [compare, labels, lastActive, onOpen, ranking, sparklines, style, t, formatMetric]);
 
   return (
     <ResponsiveList<RankedGroup>

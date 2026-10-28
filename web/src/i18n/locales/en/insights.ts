@@ -30,6 +30,7 @@ export default {
   'insights.change_new': 'New',
   'insights.change_noise': 'Within normal variation',
   'insights.change_was': 'Prev. {value}',
+  'insights.change_was_same_stretch': 'Prev. same time {value}',
   'insights.dim.key': 'Key',
   'insights.dim.call_point': 'Call model',
   'insights.dim.model': 'Requested model',

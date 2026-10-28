@@ -427,6 +427,14 @@ fetch time. Missing conversion data has no reading, never an invented 1:1 rate.
   clock runs behind hides every record newer than that clock, and no refresh
   brings them back. The console may still estimate the bounds locally to print
   them.
+- **Comparison Window**: The period the Insights page measures a window against.
+  A closed window compares with the whole period of its kind before it (yesterday,
+  last week, last month); a relative or custom window compares with the span of
+  equal length before its start. A calendar unit that is still running compares
+  with only the stretch of the previous unit it has reached - today so far against
+  yesterday up to this clock time - because a few hours set against a whole day
+  answer a different question. The page prints that figure as the previous
+  period's same stretch, never as its total.
 - **Quota Window**: One metered period of a provider credential's quota (for
   Codex, the 5-hour and weekly windows), each carrying its own used share. A
   window's period is the one its payload states, never the slot it arrived in: a
