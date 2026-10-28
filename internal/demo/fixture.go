@@ -22,21 +22,24 @@ const fixtureInstanceName = "Default CPA"
 // account behind such a row would be a token; here it is a description, and the
 // fixture never emits anything shaped like a secret.
 type credential struct {
-	name          string
-	authIndex     string
-	kind          string
-	provider      string
-	label         string
-	email         string
-	accountType   string
-	plan          string
-	projectID     string
-	models        []string
-	success       int64
-	failed        int64
-	priority      int
-	weight        int64
-	note          string
+	name        string
+	authIndex   string
+	kind        string
+	provider    string
+	label       string
+	email       string
+	accountType string
+	plan        string
+	projectID   string
+	models      []string
+	success     int64
+	failed      int64
+	priority    int
+	weight      int64
+	note        string
+	// displayName is the operator's own name for the credential, which Oh My CPA
+	// stores rather than CPA; the unnamed rows show the masked account instead.
+	displayName   string
 	isDisabled    bool
 	isUnavailable bool
 }
@@ -49,13 +52,13 @@ func credentialCatalog() []credential {
 			name: "codex-team-primary.json", authIndex: "auth-codex-01", kind: "codex", provider: "codex",
 			label: "Codex · team primary", email: "ops@acme-labs.example", accountType: "oauth", plan: "pro",
 			models:  []string{"gpt-5-codex", "gpt-5.1-codex", "gpt-5"},
-			success: 4821, failed: 63, priority: 10, weight: 5, note: "primary ChatGPT workspace seat",
+			success: 4821, failed: 63, priority: 10, weight: 5, note: "primary ChatGPT workspace seat", displayName: "Team primary",
 		},
 		{
 			name: "codex-team-secondary.json", authIndex: "auth-codex-02", kind: "codex", provider: "codex",
 			label: "Codex · overflow seat", email: "eng@acme-labs.example", accountType: "oauth", plan: "plus",
 			models:  []string{"gpt-5-codex", "gpt-5"},
-			success: 1733, failed: 28, priority: 5, weight: 3, note: "used when the primary seat cools down",
+			success: 1733, failed: 28, priority: 5, weight: 3, note: "used when the primary seat cools down", displayName: "Overflow seat",
 		},
 		{
 			name: "claude-work.json", authIndex: "auth-claude-01", kind: "claude", provider: "claude",
@@ -67,7 +70,7 @@ func credentialCatalog() []credential {
 			name: "gemini-personal.json", authIndex: "auth-gemini-01", kind: "gemini", provider: "gemini",
 			label: "Gemini · long context", email: "vision@acme-labs.example", accountType: "oauth", plan: "pro",
 			models:  []string{"gemini-2.5-pro", "gemini-2.5-flash"},
-			success: 1284, failed: 12, priority: 8, weight: 4, note: "repository-wide context, million-token windows",
+			success: 1284, failed: 12, priority: 8, weight: 4, note: "repository-wide context, million-token windows", displayName: "Long-context reader",
 		},
 		{
 			name: "kimi-coding.json", authIndex: "auth-kimi-01", kind: "kimi", provider: "kimi",

@@ -68,26 +68,32 @@ var bidiControlRunes = map[rune]bool{
 
 // NormalizeClientKeyAlias trims an alias and rejects values that cannot be
 // rendered safely.
+func NormalizeClientKeyAlias(raw string) (string, error) {
+	return normalizeOperatorLabel(raw, MaxClientKeyAliasLength, ErrClientKeyAliasInvalid)
+}
+
+// normalizeOperatorLabel trims a name an operator gives something and rejects
+// values that cannot be rendered safely.
 //
-// Control characters are refused rather than stripped. An alias reaches the DOM,
+// Control characters are refused rather than stripped. A name reaches the DOM,
 // a filter chip, an audit record and a log line; silently rewriting the
 // operator's input would store something they did not type and did not see.
 // Newlines and bidi overrides are the cases that matter - a right-to-left
 // override in a name can visually reorder the columns around it.
-func NormalizeClientKeyAlias(raw string) (string, error) {
+func normalizeOperatorLabel(raw string, maxLength int, invalid error) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", nil
 	}
-	if utf8.RuneCountInString(trimmed) > MaxClientKeyAliasLength {
-		return "", fmt.Errorf("%w: alias exceeds %d characters", ErrClientKeyAliasInvalid, MaxClientKeyAliasLength)
+	if utf8.RuneCountInString(trimmed) > maxLength {
+		return "", fmt.Errorf("%w: name exceeds %d characters", invalid, maxLength)
 	}
 	for _, char := range trimmed {
 		if char == utf8.RuneError {
-			return "", fmt.Errorf("%w: alias is not valid UTF-8", ErrClientKeyAliasInvalid)
+			return "", fmt.Errorf("%w: name is not valid UTF-8", invalid)
 		}
 		if unicode.IsControl(char) || bidiControlRunes[char] {
-			return "", fmt.Errorf("%w: alias contains a control character", ErrClientKeyAliasInvalid)
+			return "", fmt.Errorf("%w: name contains a control character", invalid)
 		}
 	}
 	return trimmed, nil

@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Checkbox, Dropdown } from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown, Input, type InputRef } from 'antd';
 import { Switch } from '../../components/common/Switch';
 import {
   AppstoreOutlined,
@@ -12,7 +12,9 @@ import {
   EditOutlined,
   LinkOutlined,
   MoreOutlined,
+  NoteOutlined,
   ProfileOutlined,
+  RenameOutlined,
   StopOutlined,
   SyncOutlined,
   WarningOutlined,
@@ -27,6 +29,7 @@ import type { QuotaWindow } from '../../types/quota';
 import {
   deriveAuthFileIdentity,
   hasAuthFileStatusWarning,
+  MAX_CREDENTIAL_NAME_LENGTH,
   isAuthFileDisabled,
   isAuthFileProblem,
   summarizeAuthFileStatusMessage,
@@ -47,7 +50,7 @@ import {
   type QuotaColumnSort,
   type QuotaFamilyHeader,
 } from './credentialSections';
-import { maskAccount, maskAccountIn } from '../../utils/maskAccount';
+import { maskAccount } from '../../utils/maskAccount';
 import styles from './CredentialSection.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
 
@@ -60,6 +63,8 @@ export interface CredentialRowActions {
   onDownload: (record: OAuthWorkspaceRecord) => void;
   onDelete: (record: OAuthWorkspaceRecord) => void;
   onOpen: (record: OAuthWorkspaceRecord, section: 'overview' | 'configuration' | 'models') => void;
+  /** Saves the credential's own name; resolves false when it was not saved. */
+  onRename: (record: OAuthWorkspaceRecord, displayName: string) => Promise<boolean>;
   onRefreshQuota: (record: OAuthWorkspaceRecord) => void;
   onClearCooldown: (record: OAuthWorkspaceRecord) => void;
   onReauthenticate: (record: OAuthWorkspaceRecord) => void;
@@ -109,17 +114,6 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
   const hasCredits = section.visibleRecords.some((record) => record.quota?.reset_credits !== undefined);
   const selectable = section.records.filter((record) => record.canSelectForFileBatch);
   const selectedCount = selectable.filter((record) => selectedKeys.has(record.key)).length;
-  const statuses = section.records.map((record) => credentialStatusOf(record, isAuthFileDisabled(record.file), isAuthFileProblem(record.file)));
-  const exceptions = new Map<MessageKey, { tone: string; count: number }>();
-  for (const status of statuses) {
-    if (status.tone === 'success') continue;
-    const entry = exceptions.get(status.labelKey) ?? { tone: status.tone, count: 0 };
-    entry.count += 1;
-    exceptions.set(status.labelKey, entry);
-  }
-  const quotaNote = columns.length > 0
-    ? undefined
-    : t(section.records.every((record) => record.isQuotaUnsupported) ? 'omc.section_quota_unsupported' : 'omc.section_quota_unobserved');
   // A section whose only family is the plan names its periods directly: "Plan" above every column
   // would say nothing the section header has not.
   const hasGroupedHeader = section.families.length > 1 || section.families.some((family) => family.scope !== 'standard');
@@ -156,10 +150,7 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
         </span>
         <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
         <span className={styles['head-count']}>{t('omc.section_count', { n: section.records.length })}</span>
-        {[...exceptions.entries()].map(([labelKey, { tone, count }]) => (
-          <span key={labelKey} className={clsx(styles['head-exception'], styles[`tone-${tone}`])}>{count} {t(labelKey)}</span>
-        ))}
-        {quotaNote && <span className={styles['head-note']}>{quotaNote}</span>}
+
       </header>
       <div className={styles.scroll}>
         <table className={styles.table}>
@@ -248,9 +239,25 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
   // Who an account belongs to is masked until the operator asks, so a screen share or a screenshot of
   // the list does not publish every address; the reveal is per row and lasts until clicked again.
   const [isRevealed, setIsRevealed] = React.useState(false);
+  const [isRenaming, setIsRenaming] = React.useState(false);
   const account = identity.isAccountPrimary ? identity.primary : '';
-  const shownPrimary = account && !isRevealed ? maskAccount(account) : identity.primary;
-  const shownSecondary = identity.secondary && account && !isRevealed ? maskAccountIn(identity.secondary, account) : identity.secondary;
+  const shownAccount = account && !isRevealed ? maskAccount(account) : account;
+  // The operator's own name leads the row; the account it stands for drops to the line under it,
+  // where it keeps its mask and its reveal.
+  const displayName = file.display_name?.trim() ?? '';
+  const canRename = !file.runtime_only && record.hasUniqueFileName;
+  const accountToggle = account ? (
+    <button
+      type="button"
+      className={displayName ? clsx(styles['meta-account'], styles['primary-toggle']) : clsx(styles.primary, styles['primary-toggle'])}
+      onClick={() => setIsRevealed((value) => !value)}
+      aria-pressed={isRevealed}
+      title={t(isRevealed ? 'omc.account_hide' : 'omc.account_reveal')}
+      data-account-masked={isRevealed ? undefined : 'true'}
+    >
+      {shownAccount}
+    </button>
+  ) : null;
   const isDisabled = isAuthFileDisabled(file);
   const status = credentialStatusOf(record, isDisabled, isAuthFileProblem(file));
   const isBusy = actions.isBusy(record);
@@ -292,20 +299,45 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
               aria-label={t('af.select_one', { name: file.name })}
             />
           ) : <span className={styles['checkbox-space']} />}
-          <div className={styles['identity-copy']}>
+          <div className={clsx(styles['identity-copy'], canRename && styles['identity-editable'])}>
+              {canRename && !isRenaming && (
+                <Tooltip title={t('af.rename')}>
+                  <button
+                    type="button"
+                    className={styles.rename}
+                    disabled={isBusy}
+                    onClick={() => setIsRenaming(true)}
+                    aria-label={`${t('af.rename')}: ${file.name}`}
+                    data-testid="oauth-credential-rename"
+                  >
+                    <RenameOutlined />
+                  </button>
+                </Tooltip>
+              )}
             <div className={styles['identity-line']}>
-              {account ? (
-                <button
-                  type="button"
-                  className={clsx(styles.primary, styles['primary-toggle'])}
-                  onClick={() => setIsRevealed((value) => !value)}
-                  aria-pressed={isRevealed}
-                  title={t(isRevealed ? 'omc.account_hide' : 'omc.account_reveal')}
-                  data-account-masked={isRevealed ? undefined : 'true'}
-                >
-                  {shownPrimary}
-                </button>
-              ) : <span className={styles.primary} title={identity.primary}>{identity.primary}</span>}
+              <div className={styles['name-group']}>
+                {isRenaming ? (
+                  <CredentialNameEditor
+                    initial={displayName}
+                    label={`${t('af.field_display_name')}: ${file.name}`}
+                    onCommit={async (next) => {
+                      const isSaved = await actions.onRename(record, next);
+                      if (isSaved) setIsRenaming(false);
+                      return isSaved;
+                    }}
+                    onCancel={() => setIsRenaming(false)}
+                  />
+                ) : displayName ? (
+                  <span className={clsx(styles.primary, styles['primary-name'])} title={displayName} data-credential-display-name="true">{displayName}</span>
+                ) : accountToggle ?? <span className={styles.primary} title={identity.primary}>{identity.primary}</span>}
+              </div>
+              {file.note && (
+                <Tooltip title={<span className={styles['note-tip']}>{file.note}</span>}>
+                  <span className={styles.note} tabIndex={0} role="img" aria-label={`${t('af.field_note')}: ${file.note}`} data-credential-note="true">
+                    <NoteOutlined />
+                  </span>
+                </Tooltip>
+              )}
               {quota?.plan?.plan_label && <span className={styles.plan}>{quota.plan.plan_label}</span>}
               {quota?.plan?.subscription_active === false && (
                 <span className={clsx(styles.plan, styles['plan-inactive'])} data-subscription-inactive="true">{t('quota.subscription_inactive')}</span>
@@ -316,12 +348,13 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
                 </Tooltip>
               )}
             </div>
-            <div className={styles.meta}>
-              {shownSecondary && identity.secondary !== identity.primary && <span className={styles['meta-file']} title={shownSecondary}>{shownSecondary}</span>}
-              {file.priority !== undefined && <span>{t('omc.priority_value', { n: file.priority })}</span>}
-              {file.weight !== undefined && <span>{t('omc.weight_value', { n: file.weight })}</span>}
-              {file.note && <Tooltip title={file.note}><span className={styles['meta-note']}>{file.note}</span></Tooltip>}
-            </div>
+            {displayName && accountToggle && <div className={styles['account-line']}>{accountToggle}</div>}
+            {file.priority !== undefined || file.weight !== undefined ? (
+              <div className={styles.meta}>
+                {file.priority !== undefined && <span>{t('omc.priority_value', { n: file.priority })}</span>}
+                {file.weight !== undefined && <span>{t('omc.weight_value', { n: file.weight })}</span>}
+              </div>
+            ) : null}
           </div>
         </div>
       </td>
@@ -418,11 +451,23 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
             aria-label={`${t('common.details')}: ${file.name}`}
           />
         </Tooltip>
+        <Tooltip title={t('common.edit')}>
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            disabled={isBusy || !record.canSelectForFileBatch}
+            onClick={() => actions.onOpen(record, 'configuration')}
+            aria-label={`${t('common.edit')}: ${file.name}`}
+            data-testid="oauth-credential-edit"
+          />
+        </Tooltip>
         <Dropdown
           trigger={['click']}
           menu={{
             items: [
               { key: 'models', icon: <AppstoreOutlined />, label: t('af.models_btn'), disabled: isBusy || file.runtime_only },
+              { key: 'rename', icon: <RenameOutlined />, label: t('af.rename'), disabled: isBusy || !canRename },
               { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), disabled: isBusy || !record.canSelectForFileBatch },
               { key: 'clear-cooldown', icon: <StopOutlined />, label: t('quota.clear_cooldown'), disabled: isBusy || isDemo || !record.canClearCooldown },
               ...(siwc ? [{ key: 'siwc', icon: <LinkOutlined />, label: t('siwc.menu'), disabled: isBusy }] : []),
@@ -432,6 +477,7 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
             ],
             onClick: ({ key }) => {
               if (key === 'models') actions.onOpen(record, 'models');
+              else if (key === 'rename') setIsRenaming(true);
               else if (key === 'edit') actions.onOpen(record, 'configuration');
               else if (key === 'clear-cooldown') actions.onClearCooldown(record);
               else if (key === 'siwc') actions.onOpenSIWC(record);
@@ -455,6 +501,67 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
         </Dropdown>
       </td>
     </tr>
+  );
+}
+
+interface CredentialNameEditorProps {
+  initial: string;
+  label: string;
+  onCommit: (displayName: string) => Promise<boolean>;
+  onCancel: () => void;
+}
+
+/**
+ * The row's name, edited where it stands. Enter or leaving the field saves, Escape abandons; an
+ * unchanged or failed save leaves the field as it was, and a failure keeps it open with what the
+ * operator typed.
+ */
+function CredentialNameEditor({ initial, label, onCommit, onCancel }: CredentialNameEditorProps) {
+  const t = useT();
+  const inputRef = React.useRef<InputRef>(null);
+  const [draft, setDraft] = React.useState(initial);
+  const [isSaving, setIsSaving] = React.useState(false);
+  // Enter saves and then the field unmounts, which blurs it; Escape unmounts it too. Either way the
+  // blur that follows must not save a second time, and neither may a blur during the save.
+  const isSettledRef = React.useRef(false);
+  const isSavingRef = React.useRef(false);
+  const commit = async () => {
+    if (isSettledRef.current || isSavingRef.current) return;
+    if (draft.trim() === initial) {
+      isSettledRef.current = true;
+      onCancel();
+      return;
+    }
+    isSavingRef.current = true;
+    setIsSaving(true);
+    const isSaved = await onCommit(draft);
+    isSavingRef.current = false;
+    setIsSaving(false);
+    if (isSaved) isSettledRef.current = true;
+  };
+  return (
+    <Input
+      ref={inputRef}
+      size="small"
+      autoFocus
+      className={styles['name-input']}
+      value={draft}
+      maxLength={MAX_CREDENTIAL_NAME_LENGTH * 2}
+      placeholder={t('af.display_name_placeholder')}
+      aria-label={label}
+      readOnly={isSaving}
+      onChange={(event) => setDraft(event.target.value)}
+      onPressEnter={() => void commit()}
+      onBlur={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || isSavingRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        isSettledRef.current = true;
+        onCancel();
+      }}
+      data-testid="oauth-credential-name-input"
+    />
   );
 }
 

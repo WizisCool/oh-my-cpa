@@ -1306,7 +1306,8 @@ export async function oauthWindowWarmup({ page, base, check }) {
     await drawer.locator('.ant-drawer-close').click();
     await drawer.waitFor({ state: 'hidden' });
     check('closing a reverted warmup editor leaves OAuth management in place', page.url().includes('/oauth-management'));
-    const record = page.getByTestId('oauth-credential-record').filter({ hasText: 'credential-02.json' });
+    // The row no longer prints its auth file name, so the fixture's own record attribute locates it.
+    const record = page.locator('[data-testid="oauth-credential-record"][data-file-name="credential-02.json"]');
     await record.getByRole('button', { name: /^Details:/ }).click();
     const warmup = page.getByTestId('credential-warmup');
     check('quota tab does not mix in warmup controls', await warmup.count() === 0);

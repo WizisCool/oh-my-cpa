@@ -8,7 +8,7 @@ import { resolveChannelName } from '../../components/dashboard/dashboardProvider
 import { CREDENTIAL_FILES_QUERY_KEY } from '../../components/dashboard/CredentialQuota';
 import { createFacetMarkRenderer } from '../../components/usage/RequestFacetMark';
 import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../types/providerIcons';
-import { createProviderNameResolver, credentialAccount, credentialFileName, indexCredentialFiles } from '../../types/usageEventIdentity';
+import { createProviderNameResolver, credentialFileName, credentialTitle, indexCredentialFiles } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import { FOLDED_ID, type InsightsCube, type InsightsDimension } from './insightsCube';
 
@@ -65,7 +65,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   const credentials = React.useMemo(() => {
     const names = new Map<string, { name: string; provider?: string }>();
     for (const file of authFiles?.files ?? []) {
-      if (file.auth_index) names.set(file.auth_index, { name: credentialAccount(file) || credentialFileName(file), provider: file.provider || file.type });
+      if (file.auth_index) names.set(file.auth_index, { name: credentialTitle(file) || credentialFileName(file), provider: file.provider || file.type });
     }
     for (const provider of configuredProviders ?? []) {
       const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];

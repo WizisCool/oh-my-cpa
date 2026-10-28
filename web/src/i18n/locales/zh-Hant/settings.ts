@@ -184,8 +184,6 @@ export default {
   "omc.quota_family_code_review": "程式碼審查",
   "omc.section_count": "{n} 個憑證",
   "omc.section_select": "選擇本頁全部 {provider} 憑證",
-  "omc.section_quota_unsupported": "不提供額度查詢",
-  "omc.section_quota_unobserved": "尚無額度讀數",
   "omc.col_reset_credits": "可用重置",
   "omc.account_reveal": "點擊顯示帳號",
   "omc.account_hide": "點擊隱藏帳號",

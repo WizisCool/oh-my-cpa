@@ -49,6 +49,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"credential_warmup_runs":        nil,
 	"audit_events":                  nil,
 	"client_key_aliases":            nil,
+	"credential_display_names":      nil,
 	"connections":                   nil,
 	"cpa_bindings":                  nil,
 	"cpa_config_backup_settings":    nil,

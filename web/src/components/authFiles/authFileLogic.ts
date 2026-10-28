@@ -70,29 +70,20 @@ export function providerOf(file: ManagementAuthFile): string {
   return (file.type || file.provider || 'unknown').trim().toLowerCase();
 }
 
+/** The longest credential name the server stores, in characters. */
+export const MAX_CREDENTIAL_NAME_LENGTH = 64;
+
 export interface AuthFileIdentity {
   primary: string;
-  secondary?: string;
   isAccountPrimary: boolean;
 }
 
 export function deriveAuthFileIdentity(file: ManagementAuthFile): AuthFileIdentity {
-  // Trimmed before the fallback, like the dashboard's quota label and `credentialAccount`: a blank
-  // address must not hide the project id the same credential also reports.
+  // Trimmed before the fallback, like `credentialAccount`: a blank address must not hide the
+  // project id the same credential also reports.
   const account = file.email?.trim() || file.project_id?.trim() || '';
-  const name = (file.name || '').trim();
-  if (account) {
-    return {
-      primary: account,
-      secondary: name !== account ? name : undefined,
-      isAccountPrimary: true,
-    };
-  }
-  return {
-    primary: name || '—',
-    secondary: undefined,
-    isAccountPrimary: false,
-  };
+  if (account) return { primary: account, isAccountPrimary: true };
+  return { primary: (file.name || '').trim() || '—', isAccountPrimary: false };
 }
 
 export type AuthFileStatusFilter = 'all' | 'enabled' | 'disabled' | 'problem';
@@ -170,6 +161,7 @@ export function filterAuthFiles(
         file.provider,
         file.auth_index,
         file.note,
+        file.display_name,
         file.status_message,
       ].some((val) => val && val.toLowerCase().includes(q));
       if (!match) return false;

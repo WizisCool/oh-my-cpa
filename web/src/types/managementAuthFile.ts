@@ -43,6 +43,10 @@ export interface ManagementAuthFile {
   priority?: number;
   weight?: number;
   note?: string;
+  /** The operator's own name for the credential, kept by Oh My CPA rather than CPA. */
+  display_name?: string;
+  /** The stored name's version; a rename quotes it back, and 0 means unnamed. */
+  display_name_version?: number;
 }
 
 export interface ManagementAuthFilesResponse {

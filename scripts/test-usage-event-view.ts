@@ -331,7 +331,7 @@ const namedAfterAccount = indexCredentialFiles([
 ]);
 assert.deepEqual(resolveCredential(unbound, namedAfterAccount), {
   name: 'codex-owner@example.com.json',
-  displayName: 'codex-ow•••r@example.com.json',
+  displayName: 'ow•••r@example.com',
   kind: 'current_file',
 });
 // A discovered resource is named after the auth file, so the resource branch carries the
@@ -339,7 +339,7 @@ assert.deepEqual(resolveCredential(unbound, namedAfterAccount), {
 const namedResource = { ...unbound, resource_name: 'codex-owner@example.com.json' } as UsageEvent;
 assert.deepEqual(resolveCredential(namedResource, namedAfterAccount), {
   name: 'codex-owner@example.com.json',
-  displayName: 'codex-ow•••r@example.com.json',
+  displayName: 'ow•••r@example.com',
   kind: 'resource',
 });
 // A Vertex service account reports both an address and a project id, and its file is
@@ -357,12 +357,21 @@ const vertexFiles = indexCredentialFiles([
 const vertexEvent = { ...unbound, auth_index: 'auth-vertex', provider: 'vertex' } as UsageEvent;
 assert.deepEqual(resolveCredential(vertexEvent, vertexFiles), {
   name: 'vertex-acme-prod.json',
-  displayName: 'vertex-acm•••od.json',
+  displayName: 'ru•••r@acme-prod.iam.gserviceaccount.com',
   kind: 'current_file',
 });
 assert.deepEqual(resolveCredential({ ...unbound, provider: 'claude' }, files), {
   name: 'auth-1',
   kind: 'index',
+});
+const customNamed = indexCredentialFiles([
+  { name: 'current.json', auth_index: 'auth-1', provider: 'openai', display_name: 'Team seat' },
+]);
+assert.deepEqual(resolveCredential(unbound, customNamed), {
+  name: 'current.json', displayName: 'Team seat', kind: 'current_file',
+});
+assert.deepEqual(resolveCredential({ ...unbound, provider: 'claude' }, customNamed), {
+  name: 'auth-1', kind: 'index',
 });
 const ambiguous = indexCredentialFiles([
   { name: 'a.json', auth_index: 'auth-1' },
@@ -1043,6 +1052,14 @@ const oauthEvent = {
   tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
 } as UsageEvent;
 
+const reusedIndex = indexCredentialFiles([
+  { name: 'codex.json', auth_index: 'auth-oauth', provider: 'codex', email: 'new@example.com', display_name: 'New seat' },
+]);
+const historical = resolveProviderInfo(oauthEvent, reusedIndex);
+assert.equal(historical.credential, 'auth-oauth', 'a reused index cannot name another provider’s credential');
+assert.equal(historical.title, 'Claude');
+assert.equal(historical.accountIdentity, undefined);
+
 const oauthResolved = resolveProviderInfo(oauthEvent, credFiles);
 assert.equal(oauthResolved.isOAuth, true);
 // One grammar for both credential types: the provider is the title, and the
@@ -1064,10 +1081,10 @@ assert.equal(oauthResolved.accountIdentity, 'user@example.com');
 // raw name: a header must not merge two accounts whose masks happen to be alike.
 const oauthIdentity = eventCredentialIdentity(oauthEvent, credFiles, 'Credential not recorded');
 assert.equal(oauthIdentity.key, 'oauth-claude.json', 'the header buckets by the stored file name');
-assert.equal(oauthIdentity.label, 'oauth-claude.json', 'a file name without an account is printed whole');
+assert.equal(oauthIdentity.label, 'us•••r@example.com', 'the account labels the credential without changing its grouping identity');
 const namedIdentity = eventCredentialIdentity(unbound, namedAfterAccount, 'Credential not recorded');
 assert.equal(namedIdentity.key, 'codex-owner@example.com.json', 'the raw name remains the bucket');
-assert.equal(namedIdentity.label, 'codex-ow•••r@example.com.json', 'the header masks the account inside the name');
+assert.equal(namedIdentity.label, 'ow•••r@example.com', 'the header prints the masked account');
 
 const apiKeyEvent = {
   id: 11,

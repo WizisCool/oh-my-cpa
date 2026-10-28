@@ -1,3 +1,4 @@
+import { credentialTitle } from '../../types/usageEventIdentity';
 import { matchesStatusFilter, providerOf, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import { getCredentialProviderMetadata } from '../../components/common/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -401,6 +402,7 @@ export function filterOAuthWorkspaceRecords(
       fileText(record.file.provider),
       fileText(record.file.auth_index),
       fileText(record.file.note),
+      fileText(record.file.display_name),
       fileText(record.file.status_message),
       fileText(record.quota?.plan?.plan_label),
       fileText(record.quota?.error),
@@ -423,7 +425,7 @@ export function sortOAuthWorkspaceRecords(
   let nameCollator: Intl.Collator | undefined;
   const byName = (left: OAuthWorkspaceRecord, right: OAuthWorkspaceRecord) => {
     nameCollator ??= new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    return nameCollator.compare(left.file.name, right.file.name);
+    return nameCollator.compare(credentialTitle(left.file) || left.file.name, credentialTitle(right.file) || right.file.name) || nameCollator.compare(left.file.name, right.file.name);
   };
   switch (sort) {
     case 'name-desc':

@@ -28,7 +28,7 @@ import {
   eventWindowQuery,
   type EventFilterKey,
 } from '../types/usageEventQuery';
-import { createProviderNameResolver, credentialFileName, indexCredentialFiles } from '../types/usageEventIdentity';
+import { createProviderNameResolver, credentialOptionLabel, indexCredentialFiles } from '../types/usageEventIdentity';
 import {
   UNKNOWN_EVENT_GROUP,
   eventCredentialIdentity,
@@ -409,7 +409,7 @@ export const UsageEventsPage: React.FC = () => {
         key,
         value: values[0] ?? '',
         credentialNames: new Map(
-          [...credentials].map(([index, file]) => [index, credentialFileName(file)] as const),
+          [...credentials].map(([index, file]) => [index, credentialOptionLabel(file)] as const),
         ),
         callerFacets: facets.data?.facets.api_group_keys,
         resolveProviderName: providerName,
@@ -632,7 +632,7 @@ export const UsageEventsPage: React.FC = () => {
             committed={committedView}
             facets={facets.data?.facets}
             facetsFailed={facets.isError}
-            credentialName={(authIndex) => credentialFileName(credentials.get(authIndex)) || authIndex}
+            credentialName={(authIndex) => credentialOptionLabel(credentials.get(authIndex)) || authIndex}
             providerName={providerName}
             renderFacetMark={renderFacetMark}
             onApply={(next) => {

@@ -122,3 +122,17 @@ it('uses committed draft state when a concurrent draft removal suspends during a
     surface.unmount(); releaseSave(); surface.releaseDraftRemoval();
   }
 });
+
+it('preserves credential status when only its name is saved', async () => {
+  const file = { ...FILE, status: 'error' };
+  const api = installOmcApi({ authFiles: [{ file, fields: FIELDS }] });
+  api.on('PUT', '/management/auth-files/display-name', () => ({ status: 'ok', display_name: 'Team seat', display_name_version: 1 }));
+  const onSaved = vi.fn();
+  renderWithOmc(<AuthFileDetailDrawer file={file} open canEdit initialSection="configuration" onClose={vi.fn()} onSaved={onSaved} onDownload={vi.fn()} />);
+  await waitFor(() => expect((screen.getByLabelText('Prefix') as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Team seat' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Fields' }));
+  await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+  expect(onSaved.mock.calls[0][0]).toEqual({ ...file, display_name: 'Team seat', display_name_version: 1 });
+  expect(api.writes('/management/auth-files/fields')).toHaveLength(0);
+});

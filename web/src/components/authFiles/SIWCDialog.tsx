@@ -23,7 +23,7 @@ interface SIWCDialogProps {
 export function SIWCDialog({ file, canEdit, bindings, onClose }: SIWCDialogProps) {
   const t = useT();
   const identity = file ? deriveAuthFileIdentity(file) : undefined;
-  const targetName = identity?.isAccountPrimary ? maskAccount(identity.primary) : identity?.primary;
+  const targetName = file?.display_name || (identity?.isAccountPrimary ? maskAccount(identity.primary) : identity?.primary);
   return (
     <Modal open={Boolean(file)} title={t('siwc.title')} footer={null} onCancel={onClose} width={480} destroyOnHidden>
       {file && (
