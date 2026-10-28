@@ -6,7 +6,8 @@
  * way:
  *
  *   - The credential dimension stores a fingerprint, so the chip has to speak the
- *     file name the console shows everywhere else.
+ *     file name the console shows everywhere else, with the account masked where
+ *     that name repeats it.
  *   - The caller dimension is also a fingerprint. It resolves to the alias when one
  *     exists and falls back to the display mask, which is the same preference the
  *     rows and the dropdown use. A chip that showed the fingerprint would name the

@@ -108,4 +108,15 @@ test('an account mask keeps the edges an owner recognises and hides the length',
   ];
   for (const [account, masked] of cases) assert.equal(maskAccount(account), masked, account);
   assert.equal(maskAccountIn('antigravity-dongjunze2004@gmail.com.json', 'dongjunze2004@gmail.com'), 'antigravity-do•••4@gmail.com.json');
+  // An address is case-insensitive, and a file name CPA derived from it may not match the
+  // account's casing exactly. A case-sensitive lookup would print the whole address.
+  assert.equal(
+    maskAccountIn('antigravity-Dongjunze2004@Gmail.com.json', 'dongjunze2004@gmail.com'),
+    'antigravity-do•••4@gmail.com.json',
+  );
+  // The account is a regex source, so metacharacters must be matched literally; the `$`
+  // at the start of this local part would also be read as a replacement pattern if the
+  // mask were passed as a plain string.
+  assert.equal(maskAccountIn('codex+tag@example.com.json', 'codex+tag@example.com'), 'co•••g@example.com.json');
+  assert.equal(maskAccountIn('codex-$&xy@example.com.json', '$&xy@example.com'), 'codex-$&•••y@example.com.json');
 });

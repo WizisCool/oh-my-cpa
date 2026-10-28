@@ -324,6 +324,16 @@ const files = indexCredentialFiles([{ name: 'current.json', auth_index: 'auth-1'
 const unbound = { ...event, resource_name: null, source: 'hmac:source-identifier', provider: 'openai' };
 assert.deepEqual(resolveCredential(event, files), { name: 'resource.json', kind: 'resource' });
 assert.deepEqual(resolveCredential(unbound, files), { name: 'current.json', kind: 'current_file' });
+// A file named after its account prints that account masked, while the stored name
+// stays the grouping identity: two accounts can render the same mask.
+const namedAfterAccount = indexCredentialFiles([
+  { name: 'codex-owner@example.com.json', auth_index: 'auth-1', provider: 'openai', type: 'oauth', email: 'owner@example.com' },
+]);
+assert.deepEqual(resolveCredential(unbound, namedAfterAccount), {
+  name: 'codex-owner@example.com.json',
+  displayName: 'codex-ow•••r@example.com.json',
+  kind: 'current_file',
+});
 assert.deepEqual(resolveCredential({ ...unbound, provider: 'claude' }, files), {
   name: 'auth-1',
   kind: 'index',
@@ -1010,9 +1020,11 @@ const oauthEvent = {
 const oauthResolved = resolveProviderInfo(oauthEvent, credFiles);
 assert.equal(oauthResolved.isOAuth, true);
 // One grammar for both credential types: the provider is the title, and the
-// credential that answered is the line under it.
+// credential that answered is the line under it. The line is the masked account,
+// because a request record is shared far more often than it is read alone; the raw
+// address survives only for an export the operator explicitly unredacts.
 assert.equal(oauthResolved.title, 'Claude', 'an OAuth cell leads with its provider, as an API-key cell does');
-assert.equal(oauthResolved.credential, 'user@example.com', 'the account is the credential line');
+assert.equal(oauthResolved.credential, 'us•••r@example.com', 'the account is the credential line, masked');
 // A file that records only its credential type does not name the provider; the record does.
 const typeOnlyOAuth = resolveProviderInfo(
   oauthEvent,
@@ -1022,6 +1034,14 @@ assert.equal(typeOnlyOAuth.title, 'Claude', 'the title is the provider, never th
 assert.equal(typeOnlyOAuth.iconId, 'Claude');
 assert.equal(oauthResolved.iconId, 'Claude');
 assert.equal(oauthResolved.accountIdentity, 'user@example.com');
+// The source-group header prints the same masked identity, while its bucket keeps the
+// raw name: a header must not merge two accounts whose masks happen to be alike.
+const oauthIdentity = eventCredentialIdentity(oauthEvent, credFiles, 'Credential not recorded');
+assert.equal(oauthIdentity.key, 'oauth-claude.json', 'the header buckets by the stored file name');
+assert.equal(oauthIdentity.label, 'oauth-claude.json', 'a file name without an account is printed whole');
+const namedIdentity = eventCredentialIdentity(unbound, namedAfterAccount, 'Credential not recorded');
+assert.equal(namedIdentity.key, 'codex-owner@example.com.json', 'the raw name remains the bucket');
+assert.equal(namedIdentity.label, 'codex-ow•••r@example.com.json', 'the header masks the account inside the name');
 
 const apiKeyEvent = {
   id: 11,

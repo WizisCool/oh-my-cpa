@@ -12,6 +12,7 @@ import {
 import type {
   UsageEvent,
 } from './usageEvents';
+import { maskAccount, maskAccountIn } from '../utils/maskAccount';
 
 export type CredentialFile = {
   name: string;
@@ -25,9 +26,42 @@ export type CredentialFile = {
 export type CredentialIndex = ReadonlyMap<string, CredentialFile | null>;
 
 export type CredentialIdentity = {
+  /** The stored identity. It buckets records, so it stays unmasked even when two
+   *  accounts would render the same label. */
   name?: string;
+  /** The form a surface prints, when masking changes it: an account and any file
+   *  name built from it. Absent means `name` is already the display form. */
+  displayName?: string;
   kind: 'resource' | 'current_file' | 'source' | 'index' | 'unknown';
 };
+
+/**
+ * The account a credential file reports, masked for display.
+ *
+ * Request records travel further than the page they are read on - a screenshot, a
+ * shared screen, an exported sheet - so the account is masked everywhere it is
+ * printed, exactly as the OAuth workspace masks it until its own reveal. The mask
+ * keeps the first letters and the domain, which is what tells an operator's own
+ * accounts apart.
+ */
+export function credentialAccount(file: CredentialFile | null | undefined): string {
+  const account = (file?.email || file?.project_id || '').trim();
+  return account ? maskAccount(account) : '';
+}
+
+/**
+ * A credential file's name with the account masked wherever the name repeats it.
+ *
+ * Codex names an auth file after the account, so the same address appears a second
+ * time in the file name. A name that does not contain the account is left whole: it
+ * is the operator's or CPA's own label, not identity material.
+ */
+export function credentialFileName(file: CredentialFile | null | undefined): string {
+  const name = (file?.name || '').trim();
+  if (!name) return '';
+  const account = (file?.email || file?.project_id || '').trim();
+  return account ? maskAccountIn(name, account) : name;
+}
 
 /** Ambiguous indexes must never be guessed, even if one filename looks likely. */
 export function indexCredentialFiles(files: readonly CredentialFile[]): CredentialIndex {
@@ -39,13 +73,28 @@ export function indexCredentialFiles(files: readonly CredentialFile[]): Credenti
   return index;
 }
 
+/**
+ * resolveCredential names the credential a record ran on, preferring the operator's
+ * own resource name over the live auth file.
+ *
+ * `name` is the identity a header or filter buckets by; `displayName` is the form a
+ * surface prints when it differs, which happens only for a live file whose name
+ * repeats its account. The two are separate on purpose: a mask is not unique, so
+ * making it the bucket would merge two accounts into one group.
+ */
 export function resolveCredential(event: UsageEvent, files: CredentialIndex): CredentialIdentity {
   if (event.resource_name?.trim()) return { name: event.resource_name.trim(), kind: 'resource' };
   const file = event.auth_index ? files.get(event.auth_index) : undefined;
   const provider = (file?.provider || file?.type || '').toLowerCase();
   // Never assign a current file belonging to a different provider to history.
-  if (file && (!provider || !event.provider || provider === event.provider.toLowerCase()))
-    return { name: file.name, kind: 'current_file' };
+  if (file && (!provider || !event.provider || provider === event.provider.toLowerCase())) {
+    const displayName = credentialFileName(file);
+    return {
+      name: file.name,
+      ...(displayName !== file.name ? { displayName } : {}),
+      kind: 'current_file',
+    };
+  }
   if (event.auth_index?.trim()) return { name: event.auth_index.trim(), kind: 'index' };
   if (event.source?.trim()) return { name: event.source.trim(), kind: 'source' };
   return { kind: 'unknown' };
@@ -119,12 +168,16 @@ export interface ResolvedProviderInfo {
   /** The provider's name, for every credential type. */
   title: string;
   /**
-   * Which OAuth credential answered: the account, else its file. An API-key
-   * provider's credential is the masked key the record carries, which the
-   * surfaces render from the record themselves.
+   * Which OAuth credential answered, as the line under the provider: the masked
+   * account, else its file. An API-key provider's credential is the masked key the
+   * record carries, which the surfaces render from the record themselves.
    */
   credential?: string;
   authFile?: string;
+  /**
+   * The account behind the credential, unmasked. Only an export the operator has
+   * explicitly unredacted may print it; a display surface uses `credential`.
+   */
   accountIdentity?: string;
 }
 
@@ -167,14 +220,17 @@ export function resolveProviderInfo(
     const iconId = resolveIcon(providerFamily, file?.name);
     const account = file?.email || file?.project_id;
     const credIdentity = resolveCredential(event, credentials);
-    const fileName = credIdentity.name || file?.name || event.source || '';
+    const fileName = credIdentity.displayName || credIdentity.name || event.source || '';
 
     // Both credential types read the same way: the provider is the title and the
     // credential that answered is the line under it. Leading with the account
     // here made an OAuth cell answer a different question from the API-key cell
     // beside it.
     const providerLabel = providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1);
-    const credential = account || fileName || event.resource_name?.trim() || event.auth_index?.trim() || undefined;
+    // The account is the one display value masking must reach here: the API-key half
+    // of the same line is already a server-side mask, and a request record carries no
+    // reveal, so this is the only form the row can print.
+    const credential = credentialAccount(file) || fileName || event.resource_name?.trim() || event.auth_index?.trim() || undefined;
 
     return {
       isOAuth: true,

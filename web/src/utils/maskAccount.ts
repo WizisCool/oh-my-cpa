@@ -22,8 +22,20 @@ export function maskAccount(value: string): string {
   return runes.length >= 8 ? runes.slice(0, 3).join('') + ACCOUNT_MASK + runes.slice(-2).join('') : ACCOUNT_MASK;
 }
 
-/** Masks every occurrence of the account inside a longer label, such as a file name built from it. */
+/**
+ * Masks every occurrence of the account inside a longer label, such as a file name built from it.
+ *
+ * The match ignores case: an address is case-insensitive, and CPA derives a file name from the
+ * account as it received it, so a name that differs only in casing would otherwise print the
+ * whole address. The visible edges and filler come from the account itself, so the same account
+ * reads the same way whether it is the label or inside one.
+ */
 export function maskAccountIn(text: string, account: string): string {
   const trimmed = account.trim();
-  return trimmed ? text.split(trimmed).join(maskAccount(trimmed)) : text;
+  if (!trimmed) return text;
+  const mask = maskAccount(trimmed);
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // A replacer function keeps a `$` in the mask from being read as a replacement pattern; a
+  // local part may legally contain one.
+  return text.replace(new RegExp(escaped, 'giu'), () => mask);
 }

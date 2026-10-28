@@ -98,6 +98,10 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   });
   const event = result.data?.event;
   const identity = event ? resolveCredential(event, credentials) : undefined;
+  // The credential's readable label. It is the same projection the list prints, so an
+  // account and any file name built from it are masked here too; the export is the one
+  // place where the operator decides to disclose the address.
+  const credentialLabel = identity?.displayName ?? identity?.name;
   // The upstream credential that answered, as the record's own response reported
   // it. Re-rendered from whatever arrived so this surface cannot print a value the
   // server never masked, and absent when the credential could not be identified.
@@ -369,7 +373,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       <ArrowRightOutlined />
                       <div>
                         <span>{t('events.credential')}</span>
-                        <strong>{value(identity?.name)}</strong>
+                        <strong>{value(credentialLabel)}</strong>
                       </div>
                     </div>
                     {section(
@@ -377,7 +381,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       fields([
                         [t('events.provider'), value(event.provider)],
                         ...providerKeyFields,
-                        [t('events.credential'), value(identity?.name)],
+                        [t('events.credential'), value(credentialLabel)],
                         [
                           t('events.identity_basis'),
                           identity ? t(`events.credential_${identity.kind}`) : missing,

@@ -112,10 +112,10 @@ export const RequestRow = React.memo<RequestRowProps>(
     // Which of the provider's keys answered this request. The server resolves it
     // from CPA's credential lists and omits it when the credential cannot be
     // identified, so an absent value prints no line at all rather than a guess.
-    // An OAuth credential has no provider key - its second line names the account
-    // instead - so the mask is confined to API-key credentials, and is re-rendered here
-    // from whatever arrived: this surface can then never print a credential even if
-    // a future response carried one.
+    // An OAuth credential has no provider key - its second line names the masked
+    // account instead - so the mask is confined to API-key credentials, and is
+    // re-rendered here from whatever arrived: this surface can then never print a
+    // credential even if a future response carried one.
     const providerKeyMask = providerInfo.isOAuth ? '' : maskKeyText(event.provider_key_mask);
 
     // 2. Cache rate calculation, plus its stop on the 0–100% colour scale.
