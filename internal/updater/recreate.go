@@ -77,6 +77,11 @@ func planReplacement(previous Container, previousImage Image, imageReference str
 		delete(config, "Hostname")
 	}
 	config["Image"] = imageReference
+	labels := config["Labels"].(map[string]any)
+	delete(labels, IMAGE_REFERENCE_LABEL)
+	if strings.HasPrefix(imageReference, "sha256:") {
+		labels[IMAGE_REFERENCE_LABEL] = previous.ImageReference()
+	}
 
 	// An anonymous volume belongs to the container that created it. Naming it in the
 	// replacement's binds is what carries the data across.
@@ -195,36 +200,29 @@ func withoutDefaults(value, defaults any) map[string]any {
 // errRolledBack marks a failed replacement whose previous container is running again.
 var errRolledBack = errors.New("the previous container was restored")
 
-// replaceContainer swaps a container for one created from imageReference.
-//
-// The previous container is renamed and stopped, never removed, until its replacement
-// is healthy; a replacement that fails is deleted and the previous container is given
-// its name back and started. onStage reports progress.
-func replaceContainer(ctx context.Context, engine *Engine, timing Timing, name, imageReference string, onStage func(stage string)) error {
-	return replaceContainerPlanned(ctx, engine, timing, name, imageReference, nil, true, onStage)
+// replacementOptions separates rebinding a namespace from installing a new image.
+type replacementOptions struct {
+	networkOwnerID     string
+	shouldKeepPrevious bool
 }
 
-// rejoinContainer recreates a container that shared a replaced container's network
-// namespace. It runs the same image; what changes is the namespace owner its
-// NetworkMode resolves to, which only a create can rebind.
-func rejoinContainer(ctx context.Context, engine *Engine, timing Timing, name, ownerName string) error {
+// replaceContainer swaps a container for one created from imageReference.
+//
+// The previous container is stopped and retained until its replacement is healthy.
+func replaceContainer(ctx context.Context, engine *Engine, timing Timing, name, imageReference string, onStage func(stage string)) error {
+	return replaceContainerPlanned(ctx, engine, timing, name, imageReference, replacementOptions{}, onStage)
+}
+
+// rejoinContainer preserves the exact running image, even if its configured tag moved.
+func rejoinContainer(ctx context.Context, engine *Engine, timing Timing, name, ownerID string) error {
 	previous, err := engine.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspect %s: %w", name, err)
 	}
-	return replaceContainerPlanned(ctx, engine, timing, name, previous.ImageReference(), func(plan *creationPlan) {
-		// The name already belongs to the replacement, so it resolves to the new
-		// namespace owner at create.
-		hostConfig, _ := plan.payload["HostConfig"].(map[string]any)
-		if hostConfig == nil {
-			hostConfig = map[string]any{}
-			plan.payload["HostConfig"] = hostConfig
-		}
-		hostConfig["NetworkMode"] = "container:" + ownerName
-	}, false, func(string) {})
+	return replaceContainerPlanned(ctx, engine, timing, name, previous.ImageID, replacementOptions{networkOwnerID: ownerID}, func(string) {})
 }
 
-func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing, name, imageReference string, adjust func(plan *creationPlan), restorePrevious bool, onStage func(stage string)) error {
+func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing, name, imageReference string, options replacementOptions, onStage func(stage string)) error {
 	previous, err := engine.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspect %s: %w", name, err)
@@ -237,8 +235,8 @@ func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing,
 	if err != nil {
 		return err
 	}
-	if adjust != nil {
-		adjust(&plan)
+	if options.networkOwnerID != "" {
+		plan.payload["HostConfig"].(map[string]any)["NetworkMode"] = "container:" + options.networkOwnerID
 	}
 	containerName := previous.ContainerName()
 	previousName := containerName + PREVIOUS_SUFFIX
@@ -254,10 +252,12 @@ func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing,
 		defer cancel()
 		_ = engine.RemoveContainer(restoreCtx, containerName)
 		renameErr := engine.RenameContainer(restoreCtx, previous.ID, containerName)
-		if !restorePrevious {
-			// The previous container's network namespace owner is gone: it can never
-			// start again, so its name is all that can be given back.
-			return fmt.Errorf("%w; the previous container cannot be restored without the replaced namespace: %w", cause, renameErr)
+		if ownerID, isJoined := strings.CutPrefix(stringField(previous.HostConfig, "NetworkMode"), "container:"); isJoined {
+			owner, ownerErr := engine.InspectContainer(restoreCtx, ownerID)
+			if ownerErr != nil || !owner.State.Running {
+				// A removed or stopped namespace owner cannot accept the old container.
+				return fmt.Errorf("the previous container cannot restart without its network namespace owner: %w", errors.Join(cause, renameErr, ownerErr))
+			}
 		}
 		startErr := engine.StartContainer(restoreCtx, previous.ID)
 		if renameErr != nil || startErr != nil {
@@ -288,8 +288,10 @@ func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing,
 	if err := awaitStarted(ctx, engine, timing, createdID); err != nil {
 		return restore(err)
 	}
-	if err := engine.RemoveContainer(ctx, previous.ID); err != nil {
-		return fmt.Errorf("remove the previous container: %w", err)
+	if !options.shouldKeepPrevious {
+		if err := engine.RemoveContainer(ctx, previous.ID); err != nil {
+			return fmt.Errorf("remove the previous container: %w", err)
+		}
 	}
 	return nil
 }

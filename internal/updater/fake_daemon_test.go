@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+type updaterTransport func(*http.Request) (*http.Response, error)
+
+func (f updaterTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
 // fakeDaemon is an in-memory Docker Engine speaking the endpoints the updater uses,
 // over a real unix socket, so the tests exercise the production client and wire
 // format rather than a mock of it.
@@ -26,8 +32,11 @@ type fakeDaemon struct {
 	registry map[string]fakeImage
 	networks map[string]bool
 	// crashing lists image IDs whose containers exit right after starting.
-	crashing map[string]bool
-	sequence int
+	crashing   map[string]bool
+	sequence   int
+	socketPath string
+	// unavailableList models failure of namespace discovery before any mutation.
+	unavailableList bool
 }
 
 type fakeImage struct {
@@ -96,6 +105,7 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, *Engine) {
 	// own. A directory of our own, chosen by the length of the path it yields, keeps the fake
 	// daemon listening everywhere.
 	socketPath := shortSocketPath(t)
+	daemon.socketPath = socketPath
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -273,6 +283,10 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 
 	switch {
 	case path == "/containers/json":
+		if d.unavailableList {
+			reply(http.StatusServiceUnavailable, map[string]string{"message": "container discovery unavailable"})
+			return
+		}
 		list := make([]map[string]any, 0, len(d.containers))
 		for _, container := range d.containers {
 			state := "exited"
@@ -333,6 +347,10 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 			container.IsRunning = false
 			writer.WriteHeader(http.StatusNoContent)
 		case action == "rename":
+			if existing := d.find(query.Get("name")); existing != nil && existing.ID != container.ID {
+				reply(http.StatusConflict, map[string]string{"message": "name is already in use"})
+				return
+			}
 			container.Name = query.Get("name")
 			writer.WriteHeader(http.StatusNoContent)
 		}

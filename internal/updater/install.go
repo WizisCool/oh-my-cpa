@@ -29,7 +29,7 @@ const (
 	// ENV_SELF_CONTAINER names this updater's own container, for a deployment whose
 	// shared network namespace makes the hostname look like another container's.
 	ENV_SELF_CONTAINER = "OMCPA_UPDATER_SELF_CONTAINER"
-	ENV_LINK_NETWORK  = "OMCPA_UPDATER_LINK_NETWORK"
+	ENV_LINK_NETWORK   = "OMCPA_UPDATER_LINK_NETWORK"
 	// ENV_PUBLIC_KEY replaces the built-in release key, for a fork that signs its own
 	// releases. It is read from the updater's environment only: whoever can set it
 	// already controls the Docker daemon.

@@ -118,7 +118,14 @@ type Service struct {
 	options Options
 	mu      sync.Mutex
 	job     *Job
-	now     func() time.Time
+	// Admission stays closed through the final Docker operation, independently
+	// of whether this process or its successor publishes the outcome.
+	isUpdating bool
+	// A predecessor that handed over must never admit another job: the successor
+	// removes it after startup recovery, and a job started in between would die
+	// with the predecessor.
+	hasHandedOver bool
+	now           func() time.Time
 	// jobs counts update jobs in flight, the updater's own replacement included, so
 	// a caller can wait for one to end instead of polling for it.
 	jobs sync.WaitGroup
@@ -416,7 +423,7 @@ func (s *Service) Start(ctx context.Context, product string, manifest []byte, si
 	}
 
 	s.mu.Lock()
-	if s.job != nil && !s.job.IsFinished() {
+	if s.isUpdating || s.hasHandedOver {
 		s.mu.Unlock()
 		return Job{}, ErrBusy
 	}
@@ -430,12 +437,20 @@ func (s *Service) Start(ctx context.Context, product string, manifest []byte, si
 		StartedAtMS: startedAt.UnixMilli(),
 	}
 	admitted := *s.job
+	s.isUpdating = true
 	s.mu.Unlock()
 
 	// The request that admitted the job ends long before the job does.
 	s.jobs.Add(1)
 	go func() {
 		defer s.jobs.Done()
+		defer func() {
+			s.mu.Lock()
+			if !s.hasHandedOver {
+				s.isUpdating = false
+			}
+			s.mu.Unlock()
+		}()
 		s.run(context.WithoutCancel(ctx), container, reference, pullReference, product)
 	}()
 	return admitted, nil
@@ -444,14 +459,24 @@ func (s *Service) Start(ctx context.Context, product string, manifest []byte, si
 func (s *Service) run(ctx context.Context, container Container, reference Reference, pullReference, product string) {
 	logger := s.options.Logger.With("product", product, "container", container.ContainerName())
 	fail := func(err error) {
-		stage := StageFailed
-		if errors.Is(err, errRolledBack) {
-			stage = StageRolledBack
-		}
-		logger.Error("update failed", "stage", stage, "error", err)
-		s.setStage(stage, func(job *Job) { job.Error = err.Error() })
+		logger.Error("update failed", "stage", StageFailed, "error", err)
+		s.setStage(StageFailed, func(job *Job) { job.Error = err.Error() })
 	}
 	engine := s.options.Engine
+	if _, err := engine.InspectContainer(ctx, container.ContainerName()+PREVIOUS_SUFFIX); err == nil {
+		fail(errors.New("an interrupted replacement still needs recovery; restart the updater before updating this product"))
+		return
+	} else if !errors.Is(err, ErrNotFound) {
+		fail(fmt.Errorf("inspect the previous replacement: %w", err))
+		return
+	}
+	// Discover before stopping the owner: an incomplete discovery must leave the
+	// deployment untouched, and rollback starts a new sandbox that also needs rebinding.
+	joined, selfJoined, err := s.joinedContainers(ctx, container.ID)
+	if err != nil {
+		fail(fmt.Errorf("discover network namespace dependents: %w", err))
+		return
+	}
 	if err := engine.PullImage(ctx, pullReference); err != nil {
 		fail(err)
 		return
@@ -474,75 +499,167 @@ func (s *Service) run(ctx context.Context, container Container, reference Refere
 		s.setStage(StageAlreadyCurrent, func(job *Job) { job.ToVersion = pulled.Version() })
 		return
 	}
-	err = replaceContainer(ctx, engine, s.options.Timing, container.ID, container.ImageReference(), func(stage string) { s.setStage(stage, nil) })
+	hasJoined := len(joined) > 0 || selfJoined
+	updateErr := replaceContainerPlanned(ctx, engine, s.options.Timing, container.ID, pulled.ID, replacementOptions{shouldKeepPrevious: hasJoined}, func(stage string) { s.setStage(stage, nil) })
+	owner, err := engine.InspectContainer(ctx, container.ContainerName())
 	if err != nil {
-		if errors.Is(err, errRolledBack) {
-			// Give the tag back to the image that works. Left on the rejected image,
-			// the next `docker compose up` would recreate the container from it.
-			if tagErr := engine.TagImage(ctx, container.ImageID, reference.Repository, reference.EffectiveTag()); tagErr != nil {
-				logger.Warn("could not point the image tag back at the previous image", "error", tagErr)
-			}
-		}
-		fail(err)
+		fail(errors.Join(updateErr, fmt.Errorf("inspect the namespace owner: %w", err)))
 		return
 	}
-	// A container sharing the replaced one's network namespace still names the
-	// removed container's ID: its network is dead until a recreate rebinds it.
-	joined, selfJoined, joinErr := s.joinedContainers(ctx, container.ID)
-	if joinErr != nil {
-		logger.Warn("the replaced container's namespace dependents could not be listed", "error", joinErr)
+	if !owner.State.Running {
+		fail(errors.Join(updateErr, errors.New("the namespace owner is not running")))
+		return
 	}
-	failed := make([]string, 0, len(joined))
+	var recoveryErr error
+	if updateErr != nil && owner.ImageID == container.ImageID {
+		// Even a failed rename restarts the owner and replaces its sandbox. The
+		// actual running owner, not the error category, decides what can recover.
+		if tagErr := engine.TagImage(ctx, container.ImageID, reference.Repository, reference.EffectiveTag()); tagErr != nil {
+			recoveryErr = fmt.Errorf("restore the previous image tag: %w", tagErr)
+		}
+	}
 	for _, dependent := range orderJoined(joined) {
-		if err := rejoinContainer(ctx, engine, s.options.Timing, dependent.ID, container.ContainerName()); err != nil {
-			logger.Error("a namespace dependent could not rejoin the replacement", "container", dependent.ContainerName(), "error", err)
-			failed = append(failed, dependent.ContainerName())
+		if err := rejoinContainer(ctx, engine, s.options.Timing, dependent.ID, owner.ID); err != nil {
+			recoveryErr = errors.Join(recoveryErr, fmt.Errorf("rejoin %s to %s: %w", dependent.ContainerName(), owner.ContainerName(), err))
 		}
 	}
-	if len(failed) > 0 {
-		fail(fmt.Errorf("%s was replaced, but %s could not rejoin its network namespace; recreate them on the host", container.ContainerName(), strings.Join(failed, ", ")))
-		return
+	if hasJoined && !selfJoined && recoveryErr == nil && owner.ID != container.ID {
+		recoveryErr = engine.RemoveContainer(ctx, container.ID)
 	}
-	logger.Info("update finished", "version", pulled.Version())
-	s.setStage(StageDone, func(job *Job) { job.ToVersion = pulled.Version() })
+	stage := StageDone
+	if recoveryErr != nil || (updateErr != nil && !errors.Is(updateErr, errRolledBack)) {
+		stage = StageFailed
+	} else if updateErr != nil {
+		stage = StageRolledBack
+	}
+	jobErr := errors.Join(updateErr, recoveryErr)
+	finished := s.LastJob()
+	finished.Stage = stage
+	finished.FinishedAtMS = s.now().UnixMilli()
+	if owner.ImageID == container.ImageID {
+		finished.ToVersion = finished.FromVersion
+	} else {
+		finished.ToVersion = pulled.Version()
+	}
+	if jobErr != nil {
+		finished.Error = jobErr.Error()
+	}
 	switch {
 	case selfJoined:
-		if err := s.rejoinSelf(ctx, container.ContainerName()); err != nil {
-			logger.Warn("the updater could not recreate itself in the new namespace", "error", err)
+		imageID := ""
+		if product == ProductOMC && owner.ImageID == pulled.ID {
+			imageID = pulled.ID
 		}
-	case product == ProductOMC:
-		if err := s.replaceSelf(ctx); err != nil {
+		if err := s.rejoinSelf(ctx, owner.ID, imageID, finished); err != nil {
+			jobErr = errors.Join(jobErr, fmt.Errorf("the updater could not rejoin the replacement's network namespace: %w", err))
+			finished.Stage = StageFailed
+			finished.Error = jobErr.Error()
+			if owner.ID != container.ID {
+				// A successor that cannot start in the replacement sandbox must not
+				// leave the running updater attached to a stopped owner. Put the
+				// previous container back first; the running updater can then be
+				// restarted (or replaced again) from a live namespace.
+				if restoreErr := s.restoreNamespaceOwner(ctx, container, owner); restoreErr != nil {
+					jobErr = errors.Join(jobErr, fmt.Errorf("restore the previous namespace owner: %w", restoreErr))
+				} else {
+					finished.ToVersion = finished.FromVersion
+					reference := ParseReference(container.ImageReference())
+					if !reference.IsPinned() {
+						if tagErr := engine.TagImage(ctx, container.ImageID, reference.Repository, reference.EffectiveTag()); tagErr != nil {
+							jobErr = errors.Join(jobErr, fmt.Errorf("restore the previous image tag: %w", tagErr))
+						}
+					}
+					finished.Error = jobErr.Error()
+					// The first attempt may have used the verified console image. The
+					// predecessor's image is the one known to work in this namespace.
+					if retryErr := s.rejoinSelf(ctx, container.ID, "", finished); retryErr != nil {
+						jobErr = errors.Join(jobErr, fmt.Errorf("the updater could not hand over after restoring the previous namespace: %w", retryErr))
+					}
+				}
+				finished.Stage = StageFailed
+				finished.Error = jobErr.Error()
+			}
+		}
+	case product == ProductOMC && jobErr == nil:
+		if err := s.replaceSelf(ctx, pulled.ID, finished); err != nil {
 			logger.Warn("the updater could not replace itself with the new image", "error", err)
 		}
+	}
+	// Preparing the successor's inherited outcome must not publish a terminal
+	// result while handover can still fail or touch Docker state.
+	s.mu.Lock()
+	s.job = finished
+	s.mu.Unlock()
+	if jobErr != nil {
+		logger.Error("update failed", "stage", finished.Stage, "error", jobErr)
+	} else {
+		logger.Info("update finished", "version", finished.ToVersion)
 	}
 }
 
 // joinedContainers reports the running containers that share the replaced
-// container's network namespace: their NetworkMode still names its removed ID.
+// container's network namespace directly, refusing unsafe chained namespaces.
 // The updater is listed apart because it cannot stop itself the way a dependent
 // is recreated.
 func (s *Service) joinedContainers(ctx context.Context, ownerID string) (joined []Container, selfJoined bool, err error) {
-	containers, err := s.running(ctx)
+	summaries, err := s.options.Engine.ListContainers(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	mode := "container:" + ownerID
-	joined = make([]Container, 0, len(containers))
-	for _, container := range containers {
-		if stringField(container.HostConfig, "NetworkMode") != mode {
+	containers := make(map[string]Container, len(summaries))
+	for _, summary := range summaries {
+		container, err := s.options.Engine.InspectContainer(ctx, summary.ID)
+		if errors.Is(err, ErrNotFound) {
 			continue
 		}
-		// A dependent that is this updater must never be stopped here: it is handed
-		// over after the job finishes, like a stopped container can never finish it.
+		if err != nil {
+			return nil, false, err
+		}
+		containers[container.ID] = container
+	}
+	// A running container may join through a stopped intermediate. Inspect the
+	// complete graph before mutation, but only recreate running direct dependents.
+	for _, container := range containers {
+		if !container.State.Running {
+			continue
+		}
+		namespaceOwner := container.ID
+		for depth := 0; depth <= len(containers); depth++ {
+			if namespaceOwner == ownerID {
+				if container.ID != ownerID && depth > 1 {
+					return nil, false, fmt.Errorf("%s shares the network namespace indirectly; configure it to join the namespace owner directly before updating", container.ContainerName())
+				}
+				ownerMode := stringField(containers[ownerID].HostConfig, "NetworkMode")
+				if container.ID != ownerID && (ownerMode == "host" || strings.HasPrefix(ownerMode, "container:")) {
+					return nil, false, errors.New("the update target does not own an independent network namespace; targets with dependents must be recreated on the Docker host")
+				}
+				break
+			}
+			parent, isJoined := strings.CutPrefix(stringField(containers[namespaceOwner].HostConfig, "NetworkMode"), "container:")
+			if !isJoined {
+				break
+			}
+			namespaceOwner = parent
+		}
+	}
+	for _, summary := range summaries {
+		container, exists := containers[summary.ID]
+		if !exists || !container.State.Running || stringField(container.HostConfig, "NetworkMode") != "container:"+ownerID {
+			continue
+		}
+		if isUpdaterContainer(container) && strings.HasSuffix(container.ContainerName(), PREVIOUS_SUFFIX) {
+			name := strings.TrimSuffix(container.ContainerName(), PREVIOUS_SUFFIX)
+			if successor, err := s.options.Engine.InspectContainer(ctx, name); err == nil && s.isSelf(successor.ID) {
+				continue
+			}
+		}
 		if s.isSelf(container.ID) {
 			selfJoined = true
-			continue
-		}
-		joined = append(joined, container)
-	}
-	if s.options.SelfID != "" {
-		if self, err := s.options.Engine.InspectContainer(ctx, s.options.SelfID); err == nil {
-			selfJoined = selfJoined || stringField(self.HostConfig, "NetworkMode") == mode
+		} else {
+			if s.options.SelfID == "" && isUpdaterContainer(container) {
+				return nil, false, errors.New("the updater cannot identify its own container")
+			}
+			joined = append(joined, container)
 		}
 	}
 	return joined, selfJoined, nil
@@ -561,23 +678,25 @@ const (
 // wait on a sibling that is itself still missing a namespace. A cycle or an
 // undeclared order falls back to the listed order.
 func orderJoined(dependents []Container) []Container {
-	serviceOf := make(map[string]string, len(dependents))
-	inSet := make(map[string]bool, len(dependents))
+	// Service names are local to a Compose project, even when multiple projects
+	// share a namespace owner and use the same service names.
+	type serviceKey struct{ project, name string }
+	inSet := make(map[serviceKey]bool, len(dependents))
 	for _, dependent := range dependents {
 		if service := dependent.Label(COMPOSE_SERVICE_LABEL); service != "" {
-			serviceOf[dependent.ID] = service
-			inSet[service] = true
+			inSet[serviceKey{dependent.Label(COMPOSE_PROJECT_LABEL), service}] = true
 		}
 	}
 	ordered := make([]Container, 0, len(dependents))
-	done := make(map[string]bool, len(dependents))
+	done := make(map[serviceKey]bool, len(dependents))
 	for pending := dependents; len(pending) > 0; {
 		next := make([]Container, 0, len(pending))
 		for _, dependent := range pending {
 			blocked := false
 			for _, edge := range strings.Split(dependent.Label(COMPOSE_DEPENDS_LABEL), ",") {
 				service, _, _ := strings.Cut(edge, ":")
-				if inSet[service] && !done[service] {
+				key := serviceKey{dependent.Label(COMPOSE_PROJECT_LABEL), service}
+				if inSet[key] && !done[key] {
 					blocked = true
 					break
 				}
@@ -587,7 +706,7 @@ func orderJoined(dependents []Container) []Container {
 				continue
 			}
 			ordered = append(ordered, dependent)
-			done[serviceOf[dependent.ID]] = true
+			done[serviceKey{dependent.Label(COMPOSE_PROJECT_LABEL), dependent.Label(COMPOSE_SERVICE_LABEL)}] = true
 		}
 		if len(next) == len(pending) {
 			return append(ordered, next...)
@@ -602,7 +721,7 @@ func orderJoined(dependents []Container) []Container {
 //
 // A container cannot recreate itself, so it hands over instead: it gives up its name,
 // starts the successor under it, and the successor removes it during Reconcile.
-func (s *Service) replaceSelf(ctx context.Context) error {
+func (s *Service) replaceSelf(ctx context.Context, imageID string, finishedJob *Job) error {
 	if s.options.SelfID == "" {
 		return nil
 	}
@@ -614,25 +733,25 @@ func (s *Service) replaceSelf(ctx context.Context) error {
 	if ParseReference(self.ImageReference()).IsPinned() {
 		return nil
 	}
-	current, err := engine.InspectImage(ctx, self.ImageReference())
-	if err != nil || current.ID == self.ImageID {
-		return err
+	if imageID == self.ImageID {
+		return nil
 	}
 	selfImage, err := engine.InspectImage(ctx, self.ImageID)
 	if err != nil {
 		return err
 	}
-	plan, err := planReplacement(self, selfImage, self.ImageReference())
+	plan, err := planReplacement(self, selfImage, imageID)
 	if err != nil {
 		return err
 	}
-	return s.handoverToSuccessor(ctx, self, plan)
+	return s.handoverToSuccessor(ctx, self, plan, finishedJob)
 }
 
 // rejoinSelf hands this updater's name to a successor inside the replacement's
 // network namespace. Unlike replaceSelf the recreate itself is the point, not a
-// newer image: the successor takes whatever the configured reference resolves to.
-func (s *Service) rejoinSelf(ctx context.Context, ownerName string) error {
+// newer image: it keeps the running image unless a signed console update supplies
+// the verified replacement. Pinned updaters always keep their running image.
+func (s *Service) rejoinSelf(ctx context.Context, ownerID, imageID string, finishedJob *Job) error {
 	engine := s.options.Engine
 	self, err := engine.InspectContainer(ctx, s.options.SelfID)
 	if err != nil {
@@ -642,38 +761,99 @@ func (s *Service) rejoinSelf(ctx context.Context, ownerName string) error {
 	if err != nil {
 		return err
 	}
-	plan, err := planReplacement(self, selfImage, self.ImageReference())
+	if imageID == "" || ParseReference(self.ImageReference()).IsPinned() {
+		imageID = self.ImageID
+	}
+	plan, err := planReplacement(self, selfImage, imageID)
 	if err != nil {
 		return err
 	}
-	hostConfig, _ := plan.payload["HostConfig"].(map[string]any)
-	if hostConfig == nil {
-		hostConfig = map[string]any{}
-		plan.payload["HostConfig"] = hostConfig
+	plan.payload["HostConfig"].(map[string]any)["NetworkMode"] = "container:" + ownerID
+	return s.handoverToSuccessor(ctx, self, plan, finishedJob)
+}
+
+// restoreNamespaceOwner puts the previous namespace owner back after a successor
+// could not start in the replacement's sandbox. The old updater may still be
+// running, but a stopped owner makes that updater impossible to restart; restoring
+// the owner first keeps the deployment recoverable even when the retry cannot start
+// another successor. Dependents move before the old name is reused, and the
+// replacement is stopped before the old owner starts so published ports do not
+// collide.
+func (s *Service) restoreNamespaceOwner(ctx context.Context, original, replacement Container) error {
+	engine := s.options.Engine
+	previousName := original.ContainerName() + PREVIOUS_SUFFIX
+	previous, err := engine.InspectContainer(ctx, previousName)
+	if err != nil {
+		return fmt.Errorf("inspect the previous namespace owner: %w", err)
 	}
-	hostConfig["NetworkMode"] = "container:" + ownerName
-	return s.handoverToSuccessor(ctx, self, plan)
+	if previous.ID != original.ID {
+		return fmt.Errorf("the previous namespace owner is %s, not %s", previous.ID, original.ID)
+	}
+	dependents, selfJoined, err := s.joinedContainers(ctx, replacement.ID)
+	if err != nil {
+		return fmt.Errorf("discover the replacement's namespace dependents: %w", err)
+	}
+	if selfJoined {
+		return errors.New("the updater is still attached to the replacement namespace")
+	}
+	if replacement.State.Running {
+		if err := engine.StopContainer(ctx, replacement.ID, s.options.Timing.StopGrace); err != nil {
+			return fmt.Errorf("stop the replacement namespace owner: %w", err)
+		}
+	}
+	if !previous.State.Running {
+		if err := engine.StartContainer(ctx, previous.ID); err != nil {
+			return fmt.Errorf("start the previous namespace owner: %w", err)
+		}
+	}
+	var failures []error
+	for _, dependent := range orderJoined(dependents) {
+		if err := rejoinContainer(ctx, engine, s.options.Timing, dependent.ID, previous.ID); err != nil {
+			failures = append(failures, fmt.Errorf("rejoin %s to %s: %w", dependent.ContainerName(), previous.ContainerName(), err))
+		}
+	}
+	if len(failures) > 0 {
+		return errors.Join(failures...)
+	}
+	if err := engine.RemoveContainer(ctx, replacement.ID); err != nil {
+		return fmt.Errorf("remove the replacement namespace owner: %w", err)
+	}
+	if err := engine.RenameContainer(ctx, previous.ID, original.ContainerName()); err != nil {
+		return fmt.Errorf("restore the previous namespace owner's name: %w", err)
+	}
+	running, err := engine.InspectContainer(ctx, original.ContainerName())
+	if err != nil {
+		return fmt.Errorf("inspect the restored namespace owner: %w", err)
+	}
+	if !running.State.Running {
+		return errors.New("the restored namespace owner is not running")
+	}
+	return nil
 }
 
 // handoverToSuccessor gives this updater's name to the container described by the
 // plan while the process that cannot replace itself is still running. The
 // successor removes the predecessor during Reconcile.
-func (s *Service) handoverToSuccessor(ctx context.Context, self Container, plan creationPlan) error {
-	if job := s.LastJob(); job != nil {
-		encoded, err := json.Marshal(job)
+func (s *Service) handoverToSuccessor(ctx context.Context, self Container, plan creationPlan, finishedJob *Job) error {
+	engine := s.options.Engine
+	name := self.ContainerName()
+	environment := make([]string, 0)
+	for _, entry := range envEntries(plan.payload["Env"]) {
+		if !strings.HasPrefix(entry, ENV_LAST_JOB+"=") && !strings.HasPrefix(entry, ENV_SELF_CONTAINER+"=") {
+			environment = append(environment, entry)
+		}
+	}
+	// Both updaters run during handover. A shared hostname cannot distinguish them,
+	// so the successor resolves the stable name it owns instead of scanning peers.
+	environment = append(environment, ENV_SELF_CONTAINER+"="+name)
+	if finishedJob != nil {
+		encoded, err := json.Marshal(finishedJob)
 		if err != nil {
 			return err
 		}
-		environment := make([]string, 0)
-		for _, entry := range envEntries(plan.payload["Env"]) {
-			if !strings.HasPrefix(entry, ENV_LAST_JOB+"=") {
-				environment = append(environment, entry)
-			}
-		}
-		plan.payload["Env"] = append(environment, ENV_LAST_JOB+"="+string(encoded))
+		environment = append(environment, ENV_LAST_JOB+"="+string(encoded))
 	}
-	engine := s.options.Engine
-	name := self.ContainerName()
+	plan.payload["Env"] = environment
 	if err := engine.RenameContainer(ctx, self.ID, name+PREVIOUS_SUFFIX); err != nil {
 		return err
 	}
@@ -693,14 +873,47 @@ func (s *Service) handoverToSuccessor(ctx context.Context, self Container, plan 
 	if err := engine.StartContainer(ctx, successorID); err != nil {
 		return abandon(err)
 	}
+	successor, err := engine.InspectContainer(ctx, successorID)
+	if err != nil {
+		return abandon(err)
+	}
+	if !successor.State.Running || successor.RestartCount > 0 {
+		return abandon(errors.New("the updater successor exited after starting"))
+	}
+	s.mu.Lock()
+	s.hasHandedOver = true
+	s.mu.Unlock()
 	return nil
+}
+
+// sharesPredecessorNetwork distinguishes independent sandboxes from the two modes
+// where a successor must release its predecessor's listener before binding its own.
+func (s *Service) sharesPredecessorNetwork(ctx context.Context) (bool, error) {
+	if s.options.SelfID == "" {
+		return false, nil
+	}
+	self, err := s.options.Engine.InspectContainer(ctx, s.options.SelfID)
+	if err != nil {
+		return false, err
+	}
+	mode := stringField(self.HostConfig, "NetworkMode")
+	if mode != "host" && !strings.HasPrefix(mode, "container:") {
+		return false, nil
+	}
+	previous, err := s.options.Engine.InspectContainer(ctx, self.ContainerName()+PREVIOUS_SUFFIX)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return mode == stringField(previous.HostConfig, "NetworkMode"), nil
 }
 
 // Reconcile finishes what an interrupted run left behind: a predecessor updater is
 // removed, and a target that was mid-replacement is either cleaned up or restored.
 func (s *Service) Reconcile(ctx context.Context) error {
-	engine := s.options.Engine
-	summaries, err := engine.ListContainers(ctx)
+	summaries, err := s.options.Engine.ListContainers(ctx)
 	if err != nil {
 		return err
 	}
@@ -712,31 +925,83 @@ func (s *Service) Reconcile(ctx context.Context) error {
 				continue
 			}
 			name := strings.TrimSuffix(previousName, PREVIOUS_SUFFIX)
-			replacement, replacementErr := engine.InspectContainer(ctx, name)
-			hasReplacement := replacementErr == nil && replacement.State.Running
-			isSelf := s.isSelf(summary.ID)
-			if hasReplacement && !isSelf && !s.isSelf(replacement.ID) {
-				// The previous container is the only rollback target, so it goes only once
-				// its replacement passed the check awaitStarted applies. One still starting
-				// was cut off mid-verification. The updater's own pair is exempt: a
-				// successor running this code is up, whatever its health check says yet.
-				hasReplacement = replacement.State.Health == nil || replacement.State.Health.Status == "healthy"
-			}
-			switch {
-			case isSelf && hasReplacement:
-				// A successor holds the name and will remove this container.
-			case hasReplacement:
-				failures = append(failures, engine.RemoveContainer(ctx, summary.ID))
-			default:
-				// The replacement never came up: put the previous container back.
-				failures = append(failures,
-					engine.RemoveContainer(ctx, name),
-					engine.RenameContainer(ctx, summary.ID, name))
-				if !isSelf {
-					failures = append(failures, engine.StartContainer(ctx, summary.ID))
-				}
+			if err := s.reconcilePrevious(ctx, summary.ID, name); err != nil {
+				failures = append(failures, fmt.Errorf("recover %s: %w", name, err))
 			}
 		}
+	}
+	return errors.Join(failures...)
+}
+
+func (s *Service) reconcilePrevious(ctx context.Context, previousID, name string) error {
+	engine := s.options.Engine
+	previous, err := engine.InspectContainer(ctx, previousID)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	replacement, err := engine.InspectContainer(ctx, name)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	hasReplacement := err == nil && replacement.State.Running
+	if s.isSelf(previousID) && hasReplacement {
+		return nil
+	}
+	if hasReplacement && !s.isSelf(replacement.ID) {
+		// A successor executing recovery is up; every other replacement must have
+		// completed its health check before its rollback container can be removed.
+		hasReplacement = replacement.State.Health == nil || replacement.State.Health.Status == "healthy"
+	}
+	joined, selfJoined, err := s.joinedContainers(ctx, previousID)
+	if err != nil {
+		return err
+	}
+	owner := replacement
+	var failures []error
+	if !hasReplacement {
+		if replacement.ID != "" {
+			more, moreSelf, err := s.joinedContainers(ctx, replacement.ID)
+			if err != nil {
+				return err
+			}
+			joined = append(joined, more...)
+			selfJoined = selfJoined || moreSelf
+		}
+		if err := engine.RemoveContainer(ctx, name); err != nil {
+			return err
+		}
+		if err := engine.RenameContainer(ctx, previousID, name); err != nil {
+			return err
+		}
+		if !s.isSelf(previousID) {
+			if err := engine.StartContainer(ctx, previousID); err != nil {
+				return err
+			}
+		}
+		owner = previous
+		// Updater handover never moves a tag. Its reference may be shared with a
+		// console that has already upgraded, so only product rollback restores it.
+		if replacement.ID != "" && replacement.ImageID != previous.ImageID && !isUpdaterContainer(previous) {
+			reference := ParseReference(previous.ImageReference())
+			if !reference.IsPinned() {
+				failures = append(failures, engine.TagImage(ctx, previous.ImageID, reference.Repository, reference.EffectiveTag()))
+			}
+		}
+	}
+	for _, dependent := range orderJoined(joined) {
+		if err := rejoinContainer(ctx, engine, s.options.Timing, dependent.ID, owner.ID); err != nil {
+			failures = append(failures, fmt.Errorf("rejoin %s: %w", dependent.ContainerName(), err))
+		}
+	}
+	if selfJoined {
+		// Retain the owner record until the successor can finish recovery from a
+		// namespace that is still reachable. Failed siblings must not strand it.
+		failures = append(failures, s.rejoinSelf(ctx, owner.ID, "", s.LastJob()))
+	} else if hasReplacement && len(failures) == 0 {
+		failures = append(failures, engine.RemoveContainer(ctx, previousID))
 	}
 	return errors.Join(failures...)
 }

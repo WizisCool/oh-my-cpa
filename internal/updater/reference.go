@@ -40,7 +40,8 @@ func (r Reference) EffectiveTag() string {
 // IsPinned reports whether the operator fixed the image to one release, by digest or
 // by a version tag.
 //
-// A pinned container is never replaced. The pin lives in the operator's Compose file
+// A pinned image is never upgraded. Namespace rebinding may recreate the container
+// with its exact running image. The pin lives in the operator's Compose file
 // or `.env`, which the updater cannot edit, so the next `docker compose up` would put
 // the pinned image back: a silent downgrade under a database whose migrations only go
 // forward.

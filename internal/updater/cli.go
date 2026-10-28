@@ -62,11 +62,10 @@ func selfContainerID(ctx context.Context, engine *Engine) string {
 	}
 	found := ""
 	for _, summary := range summaries {
-		if summary.State != "running" {
-			continue
-		}
+		// Docker can start the process before its list snapshot says running.
+		// Inspect waits for the authoritative state and excludes stopped peers.
 		container, err := engine.InspectContainer(ctx, summary.ID)
-		if err != nil || !isUpdaterContainer(container) {
+		if err != nil || !container.State.Running || !isUpdaterContainer(container) {
 			continue
 		}
 		if found != "" {
@@ -154,8 +153,29 @@ func serve(ctx context.Context, version string, stderr io.Writer) int {
 		LinkNetwork:  os.Getenv(ENV_LINK_NETWORK),
 	})
 	service.RestoreJob(os.Getenv(ENV_LAST_JOB))
-	if err := service.Reconcile(ctx); err != nil {
-		logger.Warn("could not finish an interrupted update", "error", err)
+	sharesListener, err := service.sharesPredecessorNetwork(ctx)
+	if err != nil {
+		logger.Error("could not identify the updater's network namespace", "error", err)
+		return 1
+	}
+	reconcile := func() {
+		if err := service.Reconcile(ctx); err != nil {
+			logger.Warn("could not finish an interrupted update", "error", err)
+		}
+	}
+	// A successor in another namespace can bind before removing its predecessor.
+	// When both share one namespace, recovery must first release the old listener.
+	if sharesListener {
+		reconcile()
+	}
+	listener, err := net.Listen("tcp", listenAddr())
+	if err != nil {
+		logger.Error("updater could not listen", "error", err)
+		return 1
+	}
+	defer func() { _ = listener.Close() }()
+	if !sharesListener {
+		reconcile()
 	}
 	go service.KeepLinked(ctx, 5*time.Second)
 
@@ -167,7 +187,7 @@ func serve(ctx context.Context, version string, stderr io.Writer) int {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 	logger.Info("updater started", "addr", server.Addr, "version", version)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("updater stopped", "error", err)
 		return 1
 	}

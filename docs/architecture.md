@@ -2747,15 +2747,17 @@ System Information page
        │            └─ internal/release downloads release-manifest.json + .sig (forwarded unread)
        ├─ audit system.update.apply = admitted   (a failed audit write refuses the update)
        └─ POST http://oh-my-cpa-updater:8090/v1/update   Authorization: Bearer HMAC(master key)
-            ├─ omc: verify signature, repository and non-regressing version; pull repo@digest; tag
+            ├─ omc: verify signature, repository and non-regressing version
+            ├─ discover namespace dependents; refuse incomplete or chained discovery and pending backups
+            ├─ omc: pull repo@digest; tag
             ├─ cpa: pull the configured tag
             ├─ stop old, rename it to <name>-omc-previous, create + start replacement, await healthy
             │      └─ on failure: remove replacement, rename back, start old, re-point the tag
-            ├─ recreate each running container whose NetworkMode bound the removed
-            │      container (compose depends_on order): a shared network namespace is
-            │      dead until a create rebinds it — the previous one can never restart
-            └─ hand the updater's name to a successor when it shared the namespace too;
-                   else omc only: replace the updater itself with the new image
+            ├─ rebind namespace dependents to the healthy or restored owner in Compose
+            │      dependency order, using their exact running image IDs; retain the owner backup
+            └─ hand the updater's name, identity and finished job to a successor when it
+                   shared the namespace, including after partial failure; otherwise omc only:
+                   replace the updater itself with the new image. Remove the backup after recovery.
 ```
 
 `GET /management/system/updater` reduces every way of not having an updater to a state
@@ -2770,20 +2772,26 @@ answers `disabled` and the apply route is refused by the demo policy.
 Three invariants hold the design together:
 
 - **The updater decides what it touches.** Its control surface takes a product name. The
-  console container, the gateway container and the image reference are resolved by the
-  updater from Docker's own state, never supplied by the caller.
+  console container, the gateway container, their running namespace dependents and the
+  image references are resolved by the updater from Docker's own state, never supplied
+  by the caller. Namespace-only recreation uses immutable image IDs and preserves the
+  operator's configured reference in `io.oh-my-cpa.image-reference`, including pins.
+  Chained namespaces and targets that do not own their namespace but have dependents
+  are refused before mutation. An existing owner backup must be recovered before a
+  new job can touch that product, and admission stays closed through self-handover.
 - **Verification happens where the authority is.** The console forwards the manifest and
   signature as bytes; the updater, which holds the socket, checks them against the key
   compiled into its own binary.
-- **The outcome is recorded by whoever is alive.** A gateway update finishes while the
-  admitting process still runs, and a goroutine writes `system.update.completed`. A
-  console update kills that process, so `Handler.RecordInterruptedUpdate` follows the
-  updater's last job from the moment the next process starts. That process starts while
-  the job is still verifying it, and the updater then replaces itself, so the follow
-  waits through unfinished stages and failed reads, for at most fifteen minutes. The
-  audit event is keyed by the job ID so the two paths cannot both record it. Shutdown
-  ends both waits before the database closes (`Handler.CloseUpdateWatchers`); an outcome
-  left unrecorded is picked up by the next process.
+- **The outcome is recorded by whoever is alive.** A goroutine writes
+  `system.update.completed` if the admitting console process survives. A console update,
+  or a gateway update when the console shares its namespace, replaces that process.
+  `Handler.RecordInterruptedUpdate` follows either product's last job from the moment
+  the next process starts. The console may start while a dependent is still being
+  verified, and the updater may hand over afterwards, so the follow waits through
+  unfinished stages and failed reads, for at most fifteen minutes. The audit event is
+  keyed by the job ID so the two paths cannot both record it. Shutdown ends both waits
+  before the database closes (`Handler.CloseUpdateWatchers`); an outcome left unrecorded
+  is picked up by the next process.
 
 The updater role has one loop of its own, `Service.KeepLinked`: an installed updater
 lives outside the deployment's Compose project, so it follows Docker's container-start
@@ -2792,10 +2800,20 @@ A Compose-declared updater shares the project network and runs no such loop.
 
 The updater keeps a job in memory only. A restart mid-replacement is finished by
 `Service.Reconcile`, which looks for a `-omc-previous` container: with a healthy
-replacement the leftover is removed, without one it is restored. A replacement whose
-health check has not yet passed counts as without one, since it was interrupted
-mid-verification. The updater's own pair is the exception: a successor running
-`Reconcile` is up, whatever its health check reports yet.
+replacement the leftover is removed after its remaining namespace dependents rejoin;
+without one the original is restored and its dependents rebind to the restored sandbox.
+A replacement whose health check has not yet passed counts as without one, since it was
+interrupted mid-verification. The updater's own pair is the exception: a successor
+running `Reconcile` is up, whatever its health check reports yet. The successor's
+explicit identity distinguishes it from the still-running predecessor, which is removed
+rather than rebound as an ordinary dependent. A successor in a separate namespace
+binds its listener before recovery removes the predecessor. If both share the same
+namespace, recovery first releases the predecessor's listener so the successor can bind.
+Restoring a product re-points its image tag; restoring the updater never re-points the
+console's shared tag, which may already name a verified newer release. A handover that
+cannot start a successor restores the previous owner and moves its dependents back
+before retrying the updater; if that retry also fails, the old owner is left running so
+a host restart of the updater is possible.
 
 On the page, `useConsoleUpdate` follows one job. While it does, a failed read or a
 `not_installed` answer is not shown, because both are what a console restart looks like
