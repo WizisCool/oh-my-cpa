@@ -99,20 +99,20 @@ test('masking a mask returns the same mask', () => {
 
 test('an account mask keeps the edges an owner recognises and hides the length', () => {
   const cases: Array<[string, string]> = [
-    ['dongjunze2004@gmail.com', 'do•••4@gmail.com'],
-    ['djz20040127@outlook.com', 'dj•••7@outlook.com'],
+    ['operator@example.com', 'op•••r@example.com'],
+    ['abc.def@example.org', 'ab•••f@example.org'],
     ['abc@example.com', 'a•••@example.com'],
     ['vertex-prod-project', 'ver•••ct'],
     ['short', '•••'],
     ['', ''],
   ];
   for (const [account, masked] of cases) assert.equal(maskAccount(account), masked, account);
-  assert.equal(maskAccountIn('antigravity-dongjunze2004@gmail.com.json', 'dongjunze2004@gmail.com'), 'antigravity-do•••4@gmail.com.json');
+  assert.equal(maskAccountIn('antigravity-operator@example.com.json', 'operator@example.com'), 'antigravity-op•••r@example.com.json');
   // An address is case-insensitive, and a file name CPA derived from it may not match the
   // account's casing exactly. A case-sensitive lookup would print the whole address.
   assert.equal(
-    maskAccountIn('antigravity-Dongjunze2004@Gmail.com.json', 'dongjunze2004@gmail.com'),
-    'antigravity-do•••4@gmail.com.json',
+    maskAccountIn('antigravity-Operator@Example.com.json', 'operator@example.com'),
+    'antigravity-op•••r@example.com.json',
   );
   // The account is a regex source, so metacharacters must be matched literally; the `$`
   // at the start of this local part would also be read as a replacement pattern if the

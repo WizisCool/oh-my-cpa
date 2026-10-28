@@ -1197,11 +1197,11 @@ Insights credential dimension and the dashboard's routing labels. The dashboard'
 credential quota rows print the same mask for the same reason, although they read a
 fleet's state rather than one request. The shape is the OAuth management workspace's
 (`web/src/utils/maskAccount.ts`), so one account looks the same wherever it is read:
-`djz20040127@outlook.com` renders as `dj•••7@outlook.com` — a short head and the last
+`operator@example.com` renders as `op•••r@example.com` — a short head and the last
 character of the local part, the whole domain, and a filler of constant length so the
 mask does not give away the name's length. A Vertex project id takes the non-address shape: three leading and
 two trailing characters. A file named after its account is masked in place
-(`codex-dj•••7@outlook.com.json`), because masking the address inside a name is what
+(`codex-op•••r@example.com.json`), because masking the address inside a name is what
 the OAuth table already does. A service account can report both an address and a
 project id, so a file name that repeats either one is masked
 (`vertex-acm•••od.json`); a discovered resource name is the auth file's name, so the
