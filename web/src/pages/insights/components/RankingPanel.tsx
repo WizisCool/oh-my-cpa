@@ -10,6 +10,7 @@ import { RightOutlined } from '../../../components/icons';
 import { InsightsValue } from './InsightsValue';
 import { PanelNarrowing } from './PanelNarrowing';
 import { useT } from '../../../i18n';
+import type { InsightsCompareWindow } from '../../../types/insights';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { compareMetric, NO_COMPARISON, rankingMetric, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../insightsCube';
 import { formatShare } from '../insightsFormat';
@@ -29,6 +30,8 @@ interface RankingPanelProps {
   /** The trend's colour for a group, when this panel ranks what the trend stacks by. */
   colorOf?: (id: string) => string | undefined;
   selected: readonly string[];
+  /** The window the changes are measured against, so their title can name it. */
+  compare?: InsightsCompareWindow | null;
   limit?: number;
   /** A row filters the page to its group; without it the ranking is read-only. */
   onSelect?: (dimension: InsightsDimension, id: string) => void;
@@ -51,7 +54,7 @@ interface RankingPanelProps {
  * does not get a page a hundred rows longer.
  */
 export const RankingPanel: React.FC<RankingPanelProps> = ({
-  dimension, title, groups, metric, labels, colorOf, selected, limit = 8, onSelect, onClear, onOpen, testId,
+  dimension, title, groups, metric, labels, colorOf, selected, compare, limit = 8, onSelect, onClear, onOpen, testId,
 }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
@@ -119,7 +122,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                     {formatShare(group.share)}
                   </span>
                   {hasComparison && (
-                    <ComparisonText comparison={comparison} className={styles['ranking-change']} />
+                    <ComparisonText comparison={comparison} compare={compare} className={styles['ranking-change']} />
                   )}
                 </RowElement>
                 {onOpen && labels.isNonKey(group.id) === false && (

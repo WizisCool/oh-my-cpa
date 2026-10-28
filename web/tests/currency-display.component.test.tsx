@@ -37,7 +37,7 @@ it('shares the display choice and refreshed rates with requests and Insights whi
   const { container } = renderWithOmc(<TokenDisplayProvider><CurrencyDisplayProvider>
     <CurrencySettings />
     <RequestRow event={EVENT} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
-    <MetricTiles current={{ requests: 1, failures: 0, inputTokens: 100, outputTokens: 10, reasoningTokens: 0, totalTokens: 110, latencySumMs: 1000, ttftSumMs: 0, ttftCount: 0, costNanos: 2_000_000_000, pricedRequests: 1, costedRequests: 1 }} previous={null} metric="cost" onMetricChange={() => undefined} />
+    <MetricTiles current={{ requests: 1, failures: 0, inputTokens: 100, outputTokens: 10, reasoningTokens: 0, totalTokens: 110, latencySumMs: 1000, ttftSumMs: 0, ttftCount: 0, costNanos: 2_000_000_000, pricedRequests: 1, costedRequests: 1 }} baseline={null} metric="cost" onMetricChange={() => undefined} />
     <div data-testid="accounting"><UsageCell usage={{ requests: 1, priced_requests: 1, cost_usd: 2 }} /></div>
   </CurrencyDisplayProvider></TokenDisplayProvider>);
   await waitFor(() => expect(api.requests.some(request => request.path === '/exchange-rates')).toBe(true));

@@ -15,6 +15,7 @@ import {
   DEFAULT_INSIGHTS_RANGE,
   INSIGHTS_BUCKETS,
   INSIGHTS_RANGE_PREFERENCE,
+  comparesSameStretch,
   insightsPollInterval,
   insightsRangeParams,
   parseInsightsRange,
@@ -59,6 +60,7 @@ import {
   type InsightsViewState,
 } from './insightsViewState';
 import { useInsightsLabels } from './useInsightsLabels';
+import { useCompareWindowLabel } from './useCompareWindowLabel';
 import { InsightsRangeControl } from './components/InsightsRangeControl';
 import { InsightsFilterBar } from './components/InsightsFilterBar';
 import { MetricTiles } from './components/MetricTiles';
@@ -149,6 +151,7 @@ export const InsightsPage: React.FC = () => {
   });
   const cube = React.useMemo(() => (cubeQuery.data ? decodeInsightsCube(cubeQuery.data) : undefined), [cubeQuery.data]);
   const labels = useInsightsLabels(cube);
+  const formatCompareWindow = useCompareWindowLabel();
 
   const [openKey, setOpenKey] = React.useState<string | null>(null);
   const rhythmQueryString = rhythmParams(range, view.filters);
@@ -178,7 +181,14 @@ export const InsightsPage: React.FC = () => {
   const previousRows = React.useMemo(() => (cube ? filterRows(cube, cube.previous, view.filters) : []), [cube, view.filters]);
   const isComparing = view.isComparing && Boolean(cube?.compare);
   const current = React.useMemo(() => sumMeasures(rows), [rows]);
-  const previous = React.useMemo(() => (isComparing ? sumMeasures(previousRows) : null), [isComparing, previousRows]);
+  // The window and the sums travel together: a tile's label depends on which stretch was compared,
+  // not only on the figures.
+  const baseline = React.useMemo(
+    () => (isComparing && cube?.compare
+      ? { measures: sumMeasures(previousRows), window: cube.compare, isSameStretch: comparesSameStretch(cube.window) }
+      : null),
+    [cube, isComparing, previousRows],
+  );
 
   const rank = React.useCallback((dimension: InsightsDimension) => {
     if (!cube) return [];
@@ -451,7 +461,7 @@ export const InsightsPage: React.FC = () => {
           onRetry={() => void cubeQuery.refetch()}
         />
       )}
-      <MetricTiles current={current} previous={previous} metric={metric} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
+      <MetricTiles current={current} baseline={baseline} metric={metric} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
       <Panel
         className={styles['trend-panel']}
         title={(
@@ -526,13 +536,13 @@ export const InsightsPage: React.FC = () => {
         )}
       </Panel>
       <div className={styles['rankings']} data-layout={panels.key.length === 1 ? 'single-key' : 'grid'}>
-        <RankingPanel dimension="key" title={t('insights.dim.key')} groups={panels.key} metric={metric} labels={labels}
+        <RankingPanel dimension="key" title={t('insights.dim.key')} groups={panels.key} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor('key')} selected={view.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={setOpenKey} limit={rankingLimit} testId="insights-ranking-key" />
-        <RankingPanel dimension={modelDimension} title={t(`insights.dim.${modelDimension}`)} groups={panels.model} metric={metric} labels={labels}
+        <RankingPanel dimension={modelDimension} title={t(`insights.dim.${modelDimension}`)} groups={panels.model} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor(modelDimension)} selected={view.filters[modelDimension] ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-model" />
-        <RankingPanel dimension="provider" title={t('insights.ranking.provider')} groups={panels.provider} metric={metric} labels={labels}
+        <RankingPanel dimension="provider" title={t('insights.ranking.provider')} groups={panels.provider} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor('provider')} selected={view.filters.provider ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-provider" />
-        <RankingPanel dimension="credential" title={t('insights.ranking.credential')} groups={panels.credential} metric={metric} labels={labels}
+        <RankingPanel dimension="credential" title={t('insights.ranking.credential')} groups={panels.credential} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor('credential')} selected={view.filters.credential ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-credential" />
       </div>
       {/* On a phone the key ranking above already lists every key and opens its detail; the table
@@ -543,7 +553,7 @@ export const InsightsPage: React.FC = () => {
         data-testid="insights-keys"
         title={<PanelTitle extra={<span className={styles['panel-meta']}>{t('insights.key_count', { n: clientKeys.length })}</span>}>{t('insights.keys_title')}</PanelTitle>}
       >
-        <KeyTable groups={rankings.key} sparklines={sparklines} lastActive={lastActive} metric={metric} labels={labels} isLoading={cubeQuery.isLoading} onOpen={setOpenKey} />
+        <KeyTable groups={rankings.key} sparklines={sparklines} lastActive={lastActive} metric={metric} labels={labels} compare={baseline?.window} isLoading={cubeQuery.isLoading} onOpen={setOpenKey} />
       </Panel>
       )}
       {/* A bar per key needs the width to name the key and still show its parts; a phone has the table above. */}
@@ -618,14 +628,7 @@ export const InsightsPage: React.FC = () => {
       />
       <div className={styles['footnote']}>
         {cube.window.widened && <span>{t('insights.widened')}</span>}
-        {isComparing && cube.compare && (
-          <span>
-            {t('insights.compare_window', {
-              from: dayjs(cube.compare.from).format('MM-DD HH:mm'),
-              to: dayjs(cube.compare.to).format('MM-DD HH:mm'),
-            })}
-          </span>
-        )}
+        {baseline && <span>{formatCompareWindow(baseline.window)}</span>}
         {current.requests > 0 && current.costedRequests < current.requests && (
           <span>{t('insights.cost_partial', { n: Math.round((current.costedRequests / current.requests) * 100) })}</span>
         )}

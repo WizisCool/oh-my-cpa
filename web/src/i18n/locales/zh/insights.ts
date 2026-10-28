@@ -27,6 +27,7 @@ export default {
   'insights.change_new': '新增',
   'insights.change_noise': '在正常波动范围内',
   'insights.change_was': '上期 {value}',
+  'insights.change_was_same_stretch': '上期同时段 {value}',
   'insights.dim.key': '密钥',
   'insights.dim.call_point': '调用模型',
   'insights.dim.model': '请求模型',

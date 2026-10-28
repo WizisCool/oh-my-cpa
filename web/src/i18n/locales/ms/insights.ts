@@ -30,6 +30,7 @@ export default {
   "insights.change_new": "Baharu",
   "insights.change_noise": "Dalam julat turun naik biasa",
   "insights.change_was": "Sebelum {value}",
+  "insights.change_was_same_stretch": "Sebelum (tempoh sama) {value}",
   "insights.dim.key": "Kunci",
   "insights.dim.call_point": "Model panggilan",
   "insights.dim.model": "Model diminta",
