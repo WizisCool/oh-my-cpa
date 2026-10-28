@@ -36,6 +36,10 @@ export interface ProviderActivityStripProps {
 export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ blocks, name }) => {
   const t = useT();
   const timeZone = useTimeZone();
+  // The whole history answers a visible keyboard focus only. On hover it would race the block
+  // under the pointer: the gaps between blocks belong to the strip, so crossing one starts the
+  // strip's hint and it opens over the block's own reading.
+  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const history = blocks.flatMap((block) => {
     if (block.total <= 0 || block.successRate === null) return [];
     return [{
@@ -62,13 +66,20 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
     )
     : t('dash.providers_activity_idle');
   return (
-    <Tooltip title={historyHint}>
+    <Tooltip
+      title={historyHint}
+      open={isHistoryOpen}
+      classNames={{ root: 'provider-activity-history-tooltip' }}
+    >
       {/* One focus stop gives keyboard and screen-reader users the whole history without turning
           two dozen decorative blocks into two dozen tab stops. Pointer readings stay per block. */}
       <div
         className="provider-activity"
         role="img"
         tabIndex={0}
+        onFocus={(event) => setIsHistoryOpen(event.currentTarget.matches(':focus-visible'))}
+        onBlur={() => setIsHistoryOpen(false)}
+        onKeyDown={(event) => { if (event.key === 'Escape') setIsHistoryOpen(false); }}
         aria-label={`${t('dash.providers_activity', { name })}: ${historyText}`}
       >
         {blocks.map((block) => {
@@ -90,14 +101,10 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
               )}
             >
               {/* A block is a reading, not a second action for the row it sits in: tapping it
-                  opens its hint instead of following the row to provider management. Pointer
-                  events stay on the block so the strip's whole-history hint does not open too. */}
+                  opens its hint instead of following the row to provider management. */}
               <span
                 aria-hidden="true"
                 className={`provider-activity-block tone-${tone}`}
-                onPointerMove={(event) => event.stopPropagation()}
-                onPointerLeave={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
               />
             </Tooltip>

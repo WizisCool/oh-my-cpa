@@ -243,6 +243,29 @@ export async function providerRateMarks({ base, page, check }) {
     );
   }
 
+  // The gaps between blocks belong to the strip. A pointer that crosses one on its way to a block
+  // must read that block alone: the strip's whole history answers keyboard focus, and opening it
+  // here would stack a viewport-tall list over the reading the operator pointed at.
+  const healthyBlocks = page
+    .locator('.provider-row-enhanced')
+    .filter({ hasText: 'healthy-rate' })
+    .locator('.provider-activity-block');
+  await healthyBlocks.last().scrollIntoViewIfNeeded();
+  const lastBlock = await healthyBlocks.last().boundingBox();
+  await page.mouse.move(lastBlock.x - 1, lastBlock.y + lastBlock.height / 2);
+  await page.mouse.move(lastBlock.x + lastBlock.width / 2, lastBlock.y + lastBlock.height / 2, { steps: 2 });
+  const blockHint = page.locator('.ant-tooltip:not(.ant-tooltip-hidden)').filter({ hasText: '%' });
+  await blockHint.first().waitFor({ state: 'visible', timeout: 5_000 });
+  const historyShown = await page.locator('.provider-activity-history').evaluateAll(
+    (nodes) => nodes.some((node) => node.getClientRects().length > 0),
+  );
+  check(
+    'a pointer crossing the activity strip opens only the block it rests on',
+    !historyShown && await blockHint.count() === 1,
+    `history=${historyShown} hints=${await blockHint.count()}`,
+  );
+  await page.mouse.move(0, 0);
+
   // A block sits inside a row that is itself a link. A click on the reading must not take the
   // operator away from the page before they can use the strip's hint.
   await page

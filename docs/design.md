@@ -266,7 +266,8 @@ where the failures sit. An idle bucket is the plain meter track (`--border`), no
 `neutral`: no traffic is not a reading, and the strip must not suggest one. Phones
 omit the strip and keep the number. The strip is one keyboard focus stop and names
 every active bucket in its accessible summary, so the history is not pointer-only
-and colour is not its only carrier. A
+and colour is not its only carrier. A pointer reads one block at a time; the
+whole-history hint opens only for keyboard focus. A
 window with no traffic is *unknowable* rather than bad, so it stays `neutral` and
 does not fall into the alarm step, while a measured 0% is a real outage and does.
 The request list does not show a verdict of its own, for the reason below.
