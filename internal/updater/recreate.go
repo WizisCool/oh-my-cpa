@@ -68,9 +68,12 @@ func planReplacement(previous Container, previousImage Image, imageReference str
 	if len(shortID) > 12 {
 		shortID = shortID[:12]
 	}
+	networkMode := stringField(hostConfig, "NetworkMode")
 	// A hostname the daemon generated is the old container's ID; keeping it would give
-	// the replacement another container's identity.
-	if stringField(config, "Hostname") == shortID {
+	// the replacement another container's identity. A container sharing another's
+	// network namespace always reports that namespace's hostname, which it can never
+	// carry: the daemon refuses a create that names both.
+	if stringField(config, "Hostname") == shortID || strings.HasPrefix(networkMode, "container:") {
 		delete(config, "Hostname")
 	}
 	config["Image"] = imageReference
@@ -90,7 +93,6 @@ func planReplacement(previous Container, previousImage Image, imageReference str
 
 	plan := creationPlan{payload: config, extraNetworks: map[string]map[string]any{}}
 	config["HostConfig"] = hostConfig
-	networkMode := stringField(hostConfig, "NetworkMode")
 	for name, settings := range previous.NetworkSettings.Networks {
 		endpoint := endpointConfig(settings, shortID)
 		if name == networkMode || (len(previous.NetworkSettings.Networks) == 1 && isUserNetworkMode(networkMode)) {
@@ -199,6 +201,30 @@ var errRolledBack = errors.New("the previous container was restored")
 // is healthy; a replacement that fails is deleted and the previous container is given
 // its name back and started. onStage reports progress.
 func replaceContainer(ctx context.Context, engine *Engine, timing Timing, name, imageReference string, onStage func(stage string)) error {
+	return replaceContainerPlanned(ctx, engine, timing, name, imageReference, nil, true, onStage)
+}
+
+// rejoinContainer recreates a container that shared a replaced container's network
+// namespace. It runs the same image; what changes is the namespace owner its
+// NetworkMode resolves to, which only a create can rebind.
+func rejoinContainer(ctx context.Context, engine *Engine, timing Timing, name, ownerName string) error {
+	previous, err := engine.InspectContainer(ctx, name)
+	if err != nil {
+		return fmt.Errorf("inspect %s: %w", name, err)
+	}
+	return replaceContainerPlanned(ctx, engine, timing, name, previous.ImageReference(), func(plan *creationPlan) {
+		// The name already belongs to the replacement, so it resolves to the new
+		// namespace owner at create.
+		hostConfig, _ := plan.payload["HostConfig"].(map[string]any)
+		if hostConfig == nil {
+			hostConfig = map[string]any{}
+			plan.payload["HostConfig"] = hostConfig
+		}
+		hostConfig["NetworkMode"] = "container:" + ownerName
+	}, false, func(string) {})
+}
+
+func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing, name, imageReference string, adjust func(plan *creationPlan), restorePrevious bool, onStage func(stage string)) error {
 	previous, err := engine.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspect %s: %w", name, err)
@@ -210,6 +236,9 @@ func replaceContainer(ctx context.Context, engine *Engine, timing Timing, name, 
 	plan, err := planReplacement(previous, previousImage, imageReference)
 	if err != nil {
 		return err
+	}
+	if adjust != nil {
+		adjust(&plan)
 	}
 	containerName := previous.ContainerName()
 	previousName := containerName + PREVIOUS_SUFFIX
@@ -225,6 +254,11 @@ func replaceContainer(ctx context.Context, engine *Engine, timing Timing, name, 
 		defer cancel()
 		_ = engine.RemoveContainer(restoreCtx, containerName)
 		renameErr := engine.RenameContainer(restoreCtx, previous.ID, containerName)
+		if !restorePrevious {
+			// The previous container's network namespace owner is gone: it can never
+			// start again, so its name is all that can be given back.
+			return fmt.Errorf("%w; the previous container cannot be restored without the replaced namespace: %w", cause, renameErr)
+		}
 		startErr := engine.StartContainer(restoreCtx, previous.ID)
 		if renameErr != nil || startErr != nil {
 			return fmt.Errorf("%w; restoring the previous container also failed: %w", cause, errors.Join(renameErr, startErr))

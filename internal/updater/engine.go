@@ -245,6 +245,15 @@ func stringList(value any) []string {
 	return list
 }
 
+// envEntries reads an environment list whether it came from the daemon's JSON
+// ([]any) or from a replacement plan's own construction ([]string).
+func envEntries(value any) []string {
+	if entries, ok := value.([]string); ok {
+		return entries
+	}
+	return stringList(value)
+}
+
 // ListContainers lists containers, including stopped ones.
 func (e *Engine) ListContainers(ctx context.Context) ([]ContainerSummary, error) {
 	var containers []ContainerSummary

@@ -184,6 +184,23 @@ func TestPlanReplacementLeavesImageDefaultsToTheNewImage(t *testing.T) {
 	}
 }
 
+func TestPlanReplacementDropsAnInheritedHostnameInASharedNamespace(t *testing.T) {
+	previous := Container{ID: "abcdef0123456789", Name: "/console"}
+	previous.Config = map[string]any{
+		"Image":    "repo:latest",
+		"Hostname": "fedcba987654",
+	}
+	previous.HostConfig = map[string]any{"NetworkMode": "container:fedcba9876543210fedcba9876543210fedcba9876543210fedcba"}
+
+	plan, err := planReplacement(previous, Image{Config: map[string]any{}}, "repo:latest")
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if _, isKept := plan.payload["Hostname"]; isKept {
+		t.Errorf("a shared network namespace's hostname can never be carried into the replacement")
+	}
+}
+
 func TestVerifyManifest(t *testing.T) {
 	keys := newSigner(t)
 	manifest, signature := keys.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
@@ -428,6 +445,135 @@ func TestGatewayUpdatePullsItsConfiguredTagWithoutAManifest(t *testing.T) {
 	}
 	if job := awaitJob(t, stack.service); job.Stage != StageAlreadyCurrent {
 		t.Fatalf("a container already on the newest image is left running: %+v", job)
+	}
+}
+
+func TestGatewayUpdateRejoinsTheContainersSharingItsNamespace(t *testing.T) {
+	stack := newDeployment(t, OMC_REPOSITORY+":latest")
+	stack.daemon.mu.Lock()
+	stack.daemon.addImage(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-old", "8.0.1")
+	stack.daemon.publish(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-new", "8.0.2")
+	gateway := stack.daemon.addContainer(containerSpec{name: "cli-proxy-api", image: DEFAULT_CPA_REPOSITORY + ":latest"})
+	for _, name := range []string{"oh-my-cpa", SIDECAR_NAME} {
+		joined := stack.daemon.find(name)
+		joined.HostConfig["NetworkMode"] = "container:" + gateway.ID
+		joined.Networks = map[string]map[string]any{}
+	}
+	stack.daemon.mu.Unlock()
+	console := stack.daemon.named("oh-my-cpa")
+	updater := stack.daemon.named(SIDECAR_NAME)
+
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	job := awaitJob(t, stack.service)
+	if job.Stage != StageDone || job.ToVersion != "8.0.2" {
+		t.Fatalf("job = %+v", job)
+	}
+
+	rejoined := stack.daemon.named("oh-my-cpa")
+	if rejoined == nil || rejoined.ID == console.ID || !rejoined.IsRunning {
+		t.Fatalf("a namespace dependent must be recreated, not just restarted: %+v", rejoined)
+	}
+	if mode := stringField(rejoined.HostConfig, "NetworkMode"); mode != "container:cli-proxy-api" {
+		t.Fatalf("the dependent must bind the replacement's namespace: %s", mode)
+	}
+	if stack.daemon.named("oh-my-cpa"+PREVIOUS_SUFFIX) != nil {
+		t.Errorf("the dependent's previous container must be removed once its replacement is up")
+	}
+
+	successor := stack.daemon.named(SIDECAR_NAME)
+	if successor == nil || successor.ID == updater.ID || !successor.IsRunning {
+		t.Fatalf("the updater must hand its name to a successor in the new namespace: %+v", successor)
+	}
+	if mode := stringField(successor.HostConfig, "NetworkMode"); mode != "container:cli-proxy-api" {
+		t.Fatalf("the successor must bind the replacement's namespace: %s", mode)
+	}
+	var inherited string
+	for _, entry := range envEntries(successor.Config["Env"]) {
+		if value, found := strings.CutPrefix(entry, ENV_LAST_JOB+"="); found {
+			inherited = value
+		}
+	}
+	restored := NewService(Options{Engine: stack.service.options.Engine})
+	restored.RestoreJob(inherited)
+	if restoredJob := restored.LastJob(); restoredJob == nil || restoredJob.Stage != StageDone || restoredJob.ToVersion != "8.0.2" {
+		t.Fatalf("the successor must report the job its predecessor finished: %q", inherited)
+	}
+}
+
+func TestOrderJoinedRejoinsADependencyLast(t *testing.T) {
+	labeled := func(id, service, dependsOn string) Container {
+		labels := map[string]any{COMPOSE_SERVICE_LABEL: service}
+		if dependsOn != "" {
+			labels[COMPOSE_DEPENDS_LABEL] = dependsOn
+		}
+		return Container{ID: id, Config: map[string]any{"Labels": labels}}
+	}
+	console := labeled("1", "omc", "cliproxyapi:service_started:false")
+	gateway := labeled("2", "sso", "cliproxyapi:service_started:true,omc:service_healthy:false")
+	plain := Container{ID: "3", Config: map[string]any{}}
+
+	ordered := orderJoined([]Container{gateway, plain, console})
+	if ordered[len(ordered)-1].Label(COMPOSE_SERVICE_LABEL) != "sso" {
+		t.Fatalf("a dependent on another joined service must rejoin last")
+	}
+	if len(ordered) != 3 {
+		t.Fatalf("every dependent is kept: %d", len(ordered))
+	}
+}
+
+func TestGatewayUpdateReportsAnUnrecoverableDependent(t *testing.T) {
+	stack := newDeployment(t, OMC_REPOSITORY+":latest")
+	stack.daemon.mu.Lock()
+	stack.daemon.addImage(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-old", "8.0.1")
+	stack.daemon.publish(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-new", "8.0.2")
+	gateway := stack.daemon.addContainer(containerSpec{name: "cli-proxy-api", image: DEFAULT_CPA_REPOSITORY + ":latest"})
+	stack.daemon.addImage("dep:latest", "sha256:dep", "1.0")
+	stack.daemon.crashing["sha256:dep"] = true
+	dependent := stack.daemon.addContainer(containerSpec{name: "dependent", image: "dep:latest"})
+	dependent.HostConfig["NetworkMode"] = "container:" + gateway.ID
+	stack.daemon.mu.Unlock()
+
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	job := awaitJob(t, stack.service)
+	if job.Stage != StageFailed || !strings.Contains(job.Error, "dependent") {
+		t.Fatalf("job = %+v", job)
+	}
+	left := stack.daemon.named("dependent")
+	if left == nil || left.ID != dependent.ID || left.IsRunning {
+		t.Fatalf("a dependent whose namespace is gone keeps its name but cannot run: %+v", left)
+	}
+	if gateway := stack.daemon.named("cli-proxy-api"); gateway.ImageID != "sha256:gateway-new" {
+		t.Errorf("the product update still stands: %+v", gateway)
+	}
+}
+
+func TestSelfContainerIDFindsTheOneRunningUpdater(t *testing.T) {
+	daemon, engine := newFakeDaemon(t)
+	daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+	daemon.addContainer(containerSpec{name: "cli-proxy-api", image: "app:latest"})
+	updater := daemon.addContainer(containerSpec{name: SIDECAR_NAME, image: "app:latest", command: []string{ROLE_COMMAND, "serve"}})
+	// A container sharing another's network namespace inherits the owner's hostname,
+	// so the hostname lookup cannot find this container; the running command can.
+	if id := selfContainerID(context.Background(), engine); id != updater.ID {
+		t.Fatalf("self = %s, want %s", id, updater.ID)
+	}
+	t.Setenv(ENV_SELF_CONTAINER, "cli-proxy-api")
+	if id := selfContainerID(context.Background(), engine); id != daemon.named("cli-proxy-api").ID {
+		t.Fatalf("an operator's name wins over inference")
+	}
+}
+
+func TestSelfContainerIDRefusesToGuessBetweenTwoUpdaters(t *testing.T) {
+	daemon, engine := newFakeDaemon(t)
+	daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+	daemon.addContainer(containerSpec{name: "updater-1", image: "app:latest", command: []string{ROLE_COMMAND, "serve"}})
+	daemon.addContainer(containerSpec{name: "updater-2", image: "app:latest", command: []string{ROLE_COMMAND, "serve"}})
+	if id := selfContainerID(context.Background(), engine); id != "" {
+		t.Fatalf("two candidates must not be guessed: %s", id)
 	}
 }
 

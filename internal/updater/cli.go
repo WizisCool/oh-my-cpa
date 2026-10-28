@@ -38,18 +38,43 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
-// selfContainerID is this process's container, when it runs in one: Docker sets the
-// hostname to the container's short ID unless the operator overrides it.
+// selfContainerID is this process's container, when it runs in one.
+//
+// The operator may name it outright. Otherwise the hostname is tried: Docker sets it
+// to the container's short ID — unless the container shares another's network
+// namespace, in which case it inherits the namespace owner's hostname and the lookup
+// lands on the wrong container. The fallback is the one running updater container.
 func selfContainerID(ctx context.Context, engine *Engine) string {
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		return ""
+	if named := os.Getenv(ENV_SELF_CONTAINER); named != "" {
+		if container, err := engine.InspectContainer(ctx, named); err == nil {
+			return container.ID
+		}
 	}
-	container, err := engine.InspectContainer(ctx, hostname)
+	hostname, err := os.Hostname()
+	if err == nil && hostname != "" {
+		if container, err := engine.InspectContainer(ctx, hostname); err == nil && isUpdaterContainer(container) {
+			return container.ID
+		}
+	}
+	summaries, err := engine.ListContainers(ctx)
 	if err != nil {
 		return ""
 	}
-	return container.ID
+	found := ""
+	for _, summary := range summaries {
+		if summary.State != "running" {
+			continue
+		}
+		container, err := engine.InspectContainer(ctx, summary.ID)
+		if err != nil || !isUpdaterContainer(container) {
+			continue
+		}
+		if found != "" {
+			return ""
+		}
+		found = container.ID
+	}
+	return found
 }
 
 func connect(ctx context.Context, stderr io.Writer) (*Engine, bool) {

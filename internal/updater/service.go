@@ -486,13 +486,115 @@ func (s *Service) run(ctx context.Context, container Container, reference Refere
 		fail(err)
 		return
 	}
+	// A container sharing the replaced one's network namespace still names the
+	// removed container's ID: its network is dead until a recreate rebinds it.
+	joined, selfJoined, joinErr := s.joinedContainers(ctx, container.ID)
+	if joinErr != nil {
+		logger.Warn("the replaced container's namespace dependents could not be listed", "error", joinErr)
+	}
+	failed := make([]string, 0, len(joined))
+	for _, dependent := range orderJoined(joined) {
+		if err := rejoinContainer(ctx, engine, s.options.Timing, dependent.ID, container.ContainerName()); err != nil {
+			logger.Error("a namespace dependent could not rejoin the replacement", "container", dependent.ContainerName(), "error", err)
+			failed = append(failed, dependent.ContainerName())
+		}
+	}
+	if len(failed) > 0 {
+		fail(fmt.Errorf("%s was replaced, but %s could not rejoin its network namespace; recreate them on the host", container.ContainerName(), strings.Join(failed, ", ")))
+		return
+	}
 	logger.Info("update finished", "version", pulled.Version())
 	s.setStage(StageDone, func(job *Job) { job.ToVersion = pulled.Version() })
-	if product == ProductOMC {
+	switch {
+	case selfJoined:
+		if err := s.rejoinSelf(ctx, container.ContainerName()); err != nil {
+			logger.Warn("the updater could not recreate itself in the new namespace", "error", err)
+		}
+	case product == ProductOMC:
 		if err := s.replaceSelf(ctx); err != nil {
 			logger.Warn("the updater could not replace itself with the new image", "error", err)
 		}
 	}
+}
+
+// joinedContainers reports the running containers that share the replaced
+// container's network namespace: their NetworkMode still names its removed ID.
+// The updater is listed apart because it cannot stop itself the way a dependent
+// is recreated.
+func (s *Service) joinedContainers(ctx context.Context, ownerID string) (joined []Container, selfJoined bool, err error) {
+	containers, err := s.running(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	mode := "container:" + ownerID
+	joined = make([]Container, 0, len(containers))
+	for _, container := range containers {
+		if stringField(container.HostConfig, "NetworkMode") != mode {
+			continue
+		}
+		// A dependent that is this updater must never be stopped here: it is handed
+		// over after the job finishes, like a stopped container can never finish it.
+		if s.isSelf(container.ID) {
+			selfJoined = true
+			continue
+		}
+		joined = append(joined, container)
+	}
+	if s.options.SelfID != "" {
+		if self, err := s.options.Engine.InspectContainer(ctx, s.options.SelfID); err == nil {
+			selfJoined = selfJoined || stringField(self.HostConfig, "NetworkMode") == mode
+		}
+	}
+	return joined, selfJoined, nil
+}
+
+const (
+	// COMPOSE_DEPENDS_LABEL carries a service's dependencies as
+	// "service:condition:required" entries; COMPOSE_SERVICE_LABEL names the service
+	// a container belongs to. Containers not built by Compose carry neither.
+	COMPOSE_DEPENDS_LABEL = "com.docker.compose.depends_on"
+	COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
+)
+
+// orderJoined sorts namespace dependents so a container whose Compose service
+// depends on another dependent's service rejoins after it: its health check may
+// wait on a sibling that is itself still missing a namespace. A cycle or an
+// undeclared order falls back to the listed order.
+func orderJoined(dependents []Container) []Container {
+	serviceOf := make(map[string]string, len(dependents))
+	inSet := make(map[string]bool, len(dependents))
+	for _, dependent := range dependents {
+		if service := dependent.Label(COMPOSE_SERVICE_LABEL); service != "" {
+			serviceOf[dependent.ID] = service
+			inSet[service] = true
+		}
+	}
+	ordered := make([]Container, 0, len(dependents))
+	done := make(map[string]bool, len(dependents))
+	for pending := dependents; len(pending) > 0; {
+		next := make([]Container, 0, len(pending))
+		for _, dependent := range pending {
+			blocked := false
+			for _, edge := range strings.Split(dependent.Label(COMPOSE_DEPENDS_LABEL), ",") {
+				service, _, _ := strings.Cut(edge, ":")
+				if inSet[service] && !done[service] {
+					blocked = true
+					break
+				}
+			}
+			if blocked {
+				next = append(next, dependent)
+				continue
+			}
+			ordered = append(ordered, dependent)
+			done[serviceOf[dependent.ID]] = true
+		}
+		if len(next) == len(pending) {
+			return append(ordered, next...)
+		}
+		pending = next
+	}
+	return ordered
 }
 
 // replaceSelf starts a successor from the image the console was just updated to, so
@@ -524,19 +626,53 @@ func (s *Service) replaceSelf(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return s.handoverToSuccessor(ctx, self, plan)
+}
+
+// rejoinSelf hands this updater's name to a successor inside the replacement's
+// network namespace. Unlike replaceSelf the recreate itself is the point, not a
+// newer image: the successor takes whatever the configured reference resolves to.
+func (s *Service) rejoinSelf(ctx context.Context, ownerName string) error {
+	engine := s.options.Engine
+	self, err := engine.InspectContainer(ctx, s.options.SelfID)
+	if err != nil {
+		return err
+	}
+	selfImage, err := engine.InspectImage(ctx, self.ImageID)
+	if err != nil {
+		return err
+	}
+	plan, err := planReplacement(self, selfImage, self.ImageReference())
+	if err != nil {
+		return err
+	}
+	hostConfig, _ := plan.payload["HostConfig"].(map[string]any)
+	if hostConfig == nil {
+		hostConfig = map[string]any{}
+		plan.payload["HostConfig"] = hostConfig
+	}
+	hostConfig["NetworkMode"] = "container:" + ownerName
+	return s.handoverToSuccessor(ctx, self, plan)
+}
+
+// handoverToSuccessor gives this updater's name to the container described by the
+// plan while the process that cannot replace itself is still running. The
+// successor removes the predecessor during Reconcile.
+func (s *Service) handoverToSuccessor(ctx context.Context, self Container, plan creationPlan) error {
 	if job := s.LastJob(); job != nil {
 		encoded, err := json.Marshal(job)
 		if err != nil {
 			return err
 		}
 		environment := make([]string, 0)
-		for _, entry := range stringList(plan.payload["Env"]) {
+		for _, entry := range envEntries(plan.payload["Env"]) {
 			if !strings.HasPrefix(entry, ENV_LAST_JOB+"=") {
 				environment = append(environment, entry)
 			}
 		}
 		plan.payload["Env"] = append(environment, ENV_LAST_JOB+"="+string(encoded))
 	}
+	engine := s.options.Engine
 	name := self.ContainerName()
 	if err := engine.RenameContainer(ctx, self.ID, name+PREVIOUS_SUFFIX); err != nil {
 		return err

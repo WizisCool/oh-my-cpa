@@ -2751,7 +2751,11 @@ System Information page
             ├─ cpa: pull the configured tag
             ├─ stop old, rename it to <name>-omc-previous, create + start replacement, await healthy
             │      └─ on failure: remove replacement, rename back, start old, re-point the tag
-            └─ omc only: replace the updater itself, handing the finished job to its successor
+            ├─ recreate each running container whose NetworkMode bound the removed
+            │      container (compose depends_on order): a shared network namespace is
+            │      dead until a create rebinds it — the previous one can never restart
+            └─ hand the updater's name to a successor when it shared the namespace too;
+                   else omc only: replace the updater itself with the new image
 ```
 
 `GET /management/system/updater` reduces every way of not having an updater to a state
