@@ -23,7 +23,7 @@ function basePath(rawValue) {
 // The same table as the Go test for NormalizeBasePath, including the empty result
 // that means the site root.
 const ACCEPTED = [
-  { name: 'unset value means the documented default', input: '', want: '/omc' },
+  { name: 'unset value means the site root', input: '', want: '' },
   { name: 'plain name', input: 'omc', want: '/omc' },
   { name: 'absolute path', input: '/omc', want: '/omc' },
   { name: 'trailing slash', input: '/omc/', want: '/omc' },

@@ -144,13 +144,13 @@ type CPAConfig struct {
 	ManagementKey string
 }
 
-// NormalizeBasePath returns a clean URL path without a trailing slash. An
-// empty environment value means the documented default (/omc); callers that
-// explicitly need the site root should pass "/".
+// NormalizeBasePath returns a clean URL path without a trailing slash. Both an
+// empty environment value and "/" mean the site root, which is the default for
+// a new installation.
 func NormalizeBasePath(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "/omc", nil
+		return "", nil
 	}
 	if raw == "/" {
 		return "", nil
@@ -179,14 +179,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	basePathEnv := strings.TrimSpace(os.Getenv("OMCPA_BASE_PATH"))
-	if demoMode && basePathEnv == "" {
-		// A pasted demo URL has to be the console itself. Only the demo default
-		// moves; an explicit OMCPA_BASE_PATH still wins, so a self-hosted
-		// deployment that turned the demo on keeps its own sub-path.
-		basePathEnv = "/"
-	}
-	basePath, err := NormalizeBasePath(basePathEnv)
+	basePath, err := NormalizeBasePath(os.Getenv("OMCPA_BASE_PATH"))
 	if err != nil {
 		return Config{}, fmt.Errorf("OMCPA_BASE_PATH: %w", err)
 	}

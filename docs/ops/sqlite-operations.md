@@ -137,15 +137,15 @@ Start the container and inspect the health endpoint:
 docker compose --env-file deploy/.env -f deploy/compose.full.yml start oh-my-cpa
 ```
 
-- When accessing via an operator-owned HTTPS ingress, where `BASE_PATH` is the normalised `OMCPA_BASE_PATH` (`/omc` when unset; empty in root mode, which drops the prefix):
+- When accessing via an operator-owned HTTPS ingress, where `BASE_PATH` is the normalised `OMCPA_BASE_PATH` (empty when unset or set to `/`, because the console is served at the root):
   ```bash
-  BASE_PATH=/omc
+  BASE_PATH=${OMCPA_BASE_PATH:-}
   PUBLIC_ORIGIN=https://console.example.com
   curl -sf "${PUBLIC_ORIGIN}${BASE_PATH}/api/healthz" | jq .
   ```
 - When accessing directly on the host (both Compose files publish loopback ports):
   ```bash
-  BASE_PATH=/omc
+  BASE_PATH=${OMCPA_BASE_PATH:-}
   curl -sf "http://127.0.0.1:8080${BASE_PATH}/api/healthz" | jq .
   ```
 - Or via container exec:

@@ -10,7 +10,7 @@ export interface OmcAuthFile {
 }
 
 /**
- * An in-memory OMC server for rendered tests: one state object behind `/omc/api/*`,
+ * An in-memory OMC server for rendered tests: one state object behind `/api/*`,
  * answered through the real typed client by stubbing `fetch`.
  *
  * The routes every page leans on (preferences, providers, plugins) are stateful, so a
@@ -33,8 +33,8 @@ export interface OmcState {
 export interface OmcRequest {
   method: string;
   /**
-   * The path below `/omc/api/v1`, e.g. `/preferences/omc_tps_calculation_mode`; a route
-   * outside v1 keeps its whole path, e.g. `/omc/api/healthz`.
+   * The path below `/api/v1`, e.g. `/preferences/omc_tps_calculation_mode`; a route
+   * outside v1 keeps its whole path, e.g. `/api/healthz`.
    */
   path: string;
   query: URLSearchParams;
@@ -55,7 +55,7 @@ export interface HeldResponse {
   release(reply?: Reply): void;
 }
 
-export const API_BASE = '/omc/api/v1';
+export const API_BASE = '/api/v1';
 
 type ContractFixture = (url: URL, method: string, body: string | null) => { status?: number; json?: unknown };
 
@@ -100,7 +100,7 @@ const BUILT_IN_ROUTES: Route[] = [
       return { status: 'ok', file: entry.file, fields: { name: entry.file.name, ...entry.fields } };
     },
   },
-  { method: 'GET', path: '/omc/api/healthz', handler: (_request, state) => state.health },
+  { method: 'GET', path: '/api/healthz', handler: (_request, state) => state.health },
   { method: 'GET', path: '/preferences', handler: (_request, state) => ({ preferences: state.preferences, time_zone: { server_timezone: state.serverTimezone } }) },
   {
     method: 'PUT', path: /^\/preferences\/[^/]+$/, handler: (request, state) => {
@@ -177,7 +177,7 @@ export function installOmcApi(seed: Partial<OmcState> = {}): OmcApi {
 
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input instanceof Request ? input.url : input), window.location.origin);
-    if (!url.pathname.startsWith('/omc/api/')) {
+    if (!url.pathname.startsWith('/api/')) {
       unexpected.push(`${init.method ?? 'GET'} ${url.pathname}`);
       throw new Error(`Request outside the OMC API: ${url.pathname}`);
     }

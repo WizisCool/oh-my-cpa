@@ -97,7 +97,7 @@ Deploys CPA and OMC together.
    docker compose up -d
    ```
 
-5. Open **`http://127.0.0.1:8080/omc/`** and sign in with the `CPA_MANAGEMENT_KEY` value
+5. Open **`http://127.0.0.1:8080/`** and sign in with the `CPA_MANAGEMENT_KEY` value
    from `.env`.
 
 The new CPA has no providers and no client keys; add both in the console before sending
@@ -175,7 +175,7 @@ Runs OMC as one more service in the Compose file that already runs CPA.
    docker compose up -d oh-my-cpa oh-my-cpa-updater
    ```
 
-5. Open **`http://127.0.0.1:8080/omc/`** and sign in with the management key.
+5. Open **`http://127.0.0.1:8080/`** and sign in with the management key.
 
 Effect on the existing deployment:
 
@@ -253,7 +253,7 @@ changed.
    docker compose up -d
    ```
 
-5. Open **`http://127.0.0.1:8080/omc/`** and sign in with the management key.
+5. Open **`http://127.0.0.1:8080/`** and sign in with the management key.
 
 ### Reaching CPA
 
@@ -368,7 +368,7 @@ These are the variables the two release Compose files accept. Compose reads
 | `OMCPA_BIND` | `127.0.0.1:8080` | Host address of the console; change it if the port is taken |
 | `CPA_BIND` | `127.0.0.1:8317` | Host address of CPA, full stack only |
 | `OMCPA_PUBLIC_URL` | `http://127.0.0.1:8080` | The address browsers use. `https://` only when they really use TLS |
-| `OMCPA_BASE_PATH` | `/omc` | URL prefix; `/` serves the console at the root |
+| `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root; set a sub-path only when the deployment needs one |
 | `TZ` | `UTC` | Calendar for daily totals; match CPA's |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | `off` when another tool collects this CPA's usage |
 | `OMCPA_CPA_USAGE_ADDR` | derived from the CPA URL | Override for CPA's usage queue address, OMC only |
@@ -386,61 +386,54 @@ Everything else OMC reads is in `docs/operations.md`.
 ## Reaching the console from elsewhere
 
 Every Compose file here publishes on `127.0.0.1` only. From another machine, tunnel over
-SSH and open `http://127.0.0.1:18080/omc/`:
+SSH and open `http://127.0.0.1:18080/`:
 
 ```bash
 ssh -L 18080:127.0.0.1:8080 user@server
 ```
 
-To serve OMC over HTTPS, point the existing reverse proxy at `127.0.0.1:8080`, keep the
-`/omc` prefix, and set `OMCPA_PUBLIC_URL` to the address browsers use. Set
+To serve OMC over HTTPS, point the existing reverse proxy at `127.0.0.1:8080`, forward
+the site root unchanged, and set `OMCPA_PUBLIC_URL` to the address browsers use. Set
 `OMCPA_TRUSTED_PROXY_CIDRS` to the proxy's address so OMC reads the client IP it
 forwards. Do not publish port 8080 on a public interface without TLS: the sign-in
 password is CPA's administrator key.
 
-### `/omc` and `/omc/`
+### Reverse proxy
 
-The console lives at `/omc/`. OMC answers the bare `/omc` with a permanent redirect
-(308) to `/omc/`, so either address opens it when browsers reach OMC directly.
+The root path is the default, so the proxy needs no prefix rewrite. Give OMC its own
+hostname when CPA already owns the same hostname, or set `OMCPA_BASE_PATH` explicitly
+when a shared hostname and a sub-path are required.
 
-Behind a reverse proxy the bare path only works if the proxy handles it. A rule that
-matches `/omc/` alone never passes `/omc` to OMC, and the visitor gets whatever the
-proxy serves for unmatched paths instead of the console. Cover both: redirect the bare
-path at the proxy, or forward it and let OMC redirect.
-
-nginx (`deploy/nginx.conf` is a complete example that also routes the rest of the host
-to CPA):
+nginx (`deploy/nginx.conf` is a complete example with separate OMC and CPA hostnames):
 
 ```nginx
-location = /omc {
-    return 308 /omc/;
-}
+server {
+    listen 80;
+    server_name omc.example.com;
 
-# No trailing slash on proxy_pass: the /omc prefix must reach OMC unchanged.
-location ^~ /omc/ {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
 }
 ```
 
 Caddy:
 
 ```caddyfile
-@omc path /omc /omc/*
-reverse_proxy @omc 127.0.0.1:8080
+reverse_proxy 127.0.0.1:8080
 ```
 
-Check both addresses through the proxy:
+Check the root through the proxy:
 
 ```bash
-curl -sI https://example.com/omc | head -n 1                           # 308
-curl -fsS https://example.com/omc/api/healthz
+curl -fsS https://example.com/api/healthz
 ```
 
-With a different `OMCPA_BASE_PATH`, the same holds for that prefix. With `/` there is
-no bare path to handle.
+If `OMCPA_BASE_PATH` is set to a sub-path, configure the proxy to preserve that prefix
+and forward both the bare prefix and everything beneath it.
 
 ## Install as an app
 
@@ -475,8 +468,8 @@ Two conditions come from the browser rather than from OMC:
   is not needed to pick up an update; every launch loads the current bundle from the
   deployment.
 
-The mount point is part of the installed identity. `/`, `/omc` and a nested
-`OMCPA_BASE_PATH` are three different apps to the browser, so installing one does not
+The mount point is part of the installed identity. The root and each configured
+`OMCPA_BASE_PATH` are different apps to the browser, so installing one does not
 replace another, and an app installed at a path that later changes has to be installed
 again. The manifest's URLs are relative and resolve against the manifest's own address,
 which is what keeps this working behind a proxy that preserves the prefix.
@@ -526,13 +519,13 @@ Set `OMCPA_MASTER_KEY` once to a random 64-character hex string (`openssl rand -
 on Unix; use a cryptographic random generator on Windows), set CPA's plaintext
 management key and its reachable URL, and match CPA's `TZ`. Keep `OMCPA_VERSION`
 unset so the tagged build reports its embedded version. The included template binds
-`127.0.0.1:8080`, serves `/omc` and writes SQLite to `./data` under the working directory.
+`127.0.0.1:8080`, serves the site root and writes SQLite to `./data` under the working directory.
 When CPA is on the same host, its loopback URL works without changing CPA's remote
 management policy. Review [usage-reader ownership](#other-panels-and-usage-trackers)
 before keeping `OMCPA_USAGE_INGEST_MODE=auto`; use `off` if another reader continues.
 
 Run `./oh-my-cpa` on Unix or `.\oh-my-cpa.exe` on Windows from that directory. Verify
-[health and connectivity](#verifying-the-install), then open `http://127.0.0.1:8080/omc/`
+[health and connectivity](#verifying-the-install), then open `http://127.0.0.1:8080/`
 and sign in with CPA's management key. For an operator-owned service manager, keep the
 same working directory, environment file, service account and data path. Do not open
 the listener to the network without configuring remote access and HTTPS.
@@ -563,7 +556,7 @@ go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
 ./bin/oh-my-cpa
 ```
 
-Open `http://127.0.0.1:8080/omc/`. The process runs in the foreground; a service manager
+Open `http://127.0.0.1:8080/`. The process runs in the foreground; a service manager
 such as systemd keeps it running. Variables in the environment win over `.env`, and
 `OMCPA_ENV_FILE` points at a different file. A build from an untagged checkout reports
 itself as `v0.1.0-dev`. For hot reload while developing, see
@@ -572,7 +565,7 @@ itself as `v0.1.0-dev`. For hot reload while developing, see
 ## Verifying the install
 
 ```bash
-curl -fsS http://127.0.0.1:8080/omc/api/healthz
+curl -fsS http://127.0.0.1:8080/api/healthz
 ```
 
 A working install returns `"status":"ok"` and `"cpa_connected":true`. A container that
@@ -595,6 +588,11 @@ Upgrades migrate the database and there is no downgrade: the way back to an olde
 version is to restore a backup. OMC takes an encrypted backup by itself before it
 applies a migration; `docs/ops/sqlite-operations.md` is the runbook for backups taken by
 hand, and for restoring one. Back up `.env` separately.
+
+An existing container keeps its explicit `OMCPA_BASE_PATH` through the console updater
+and through `docker compose pull` followed by `docker compose up -d`, so its current
+URL and reverse-proxy rule remain valid. If you replace the Compose file itself, carry
+that setting over. A new installation that does not set it uses the site root.
 
 ### From the console
 

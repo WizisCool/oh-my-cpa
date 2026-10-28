@@ -24,7 +24,7 @@ A client that speaks Streamable HTTP does not need this process: it connects to
 
 Environment:
   OMCPA_SERVER_URL          console URL including its base path, for example
-                            https://omc.example.com/omc (plain HTTP is accepted
+                            https://omc.example.com (plain HTTP is accepted
                             for loopback addresses only)
   OMCPA_CPA_MANAGEMENT_KEY  the CPA management key that signs in to the console
 `

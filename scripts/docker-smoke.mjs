@@ -41,15 +41,19 @@ export async function verifyDockerImage(image, version) {
   assert.equal(metadata.Config.User, '10001:10001');
   assert.equal(metadata.Config.Labels['org.opencontainers.image.version'], version);
   const secret = randomBytes(24).toString('hex');
-  for (const [rawPath, listenPort] of [['omc', '8080'], ['/', '8080'], ['/tools/omc/', '8081']]) {
+  // The first case omits OMCPA_BASE_PATH entirely so the image's own default is
+  // exercised. The explicit paths prove that an existing deployment keeps its
+  // configured mount through an image update.
+  for (const [rawPath, listenPort] of [[null, '8080'], ['/omc', '8080'], ['/tools/omc/', '8081']]) {
     const volume = `omc-release-${randomBytes(6).toString('hex')}`;
     const since = new Date().toISOString();
     let container;
     try {
       executeDocker('volume', 'create', volume);
+      const pathEnvironment = rawPath === null ? [] : ['-e', `OMCPA_BASE_PATH=${rawPath}`];
       container = executeDocker('create', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
         '--health-interval=1s', '--health-start-period=1s', '-p', `127.0.0.1::${listenPort}`, '-v', `${volume}:/data`,
-        '-e', `OMCPA_LISTEN_ADDR=:${listenPort}`, '-e', `OMCPA_BASE_PATH=${rawPath}`, '-e', 'OMCPA_DATA_DIR=/data',
+        '-e', `OMCPA_LISTEN_ADDR=:${listenPort}`, ...pathEnvironment, '-e', 'OMCPA_DATA_DIR=/data',
         '-e', `OMCPA_MASTER_KEY=${randomBytes(32).toString('hex')}`,
         '-e', 'OMCPA_CPA_BASE_URL=http://127.0.0.1:1', '-e', `OMCPA_CPA_MANAGEMENT_KEY=${secret}`,
         '-e', 'OMCPA_USAGE_INGEST_MODE=off', '-e', 'OMCPA_UPDATE_CHECK_ENABLED=false',
@@ -57,7 +61,7 @@ export async function verifyDockerImage(image, version) {
       executeDocker('start', container);
       await waitForHealthy(container, since);
       const address = executeDocker('port', container, `${listenPort}/tcp`);
-      const basePath = rawPath === '/' ? '' : `/${rawPath.replace(/^\/+|\/+$/g, '')}`;
+      const basePath = rawPath === null || rawPath === '/' ? '' : `/${rawPath.replace(/^\/+|\/+$/g, '')}`;
       const origin = `http://${address}${basePath}`;
       const healthResponse = await fetch(`${origin}/api/healthz`);
       const health = await healthResponse.json();
@@ -83,7 +87,8 @@ export async function verifyDockerImage(image, version) {
       assert.equal(state.HostConfig.ReadonlyRootfs, true);
       assert.equal(state.State.Health.Status, 'healthy');
       executeDocker('exec', container, 'sh', '-c', 'test -s /data/oh-my-cpa.db && test -w /data');
-      console.log(`PASS ${image}: ${rawPath} — image health, SQLite, login, embedded SPA and version ${version}`);
+      const label = rawPath === null ? 'default root' : rawPath;
+      console.log(`PASS ${image}: ${label} — image health, SQLite, login, embedded SPA and version ${version}`);
     } finally {
       if (container) {
         try { executeDocker('rm', '-f', container); } catch { /* Preserve the original acceptance failure. */ }

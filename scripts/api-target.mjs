@@ -1,4 +1,4 @@
-// Resolves the Go API address the Vite dev server proxies /omc/api to.
+// Resolves the Go API address the Vite dev server proxies /api to.
 //
 // The Go process reads OMCPA_LISTEN_ADDR from its dotenv file (internal/config:
 // OMCPA_ENV_FILE selects the file, real environment variables win over it), so

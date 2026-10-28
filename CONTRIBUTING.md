@@ -42,7 +42,7 @@ Bug reports and feature requests go through the issue forms under [`.github/ISSU
    ```bash
    pnpm dev
    ```
-   This launches Air (watching Go backend on `:8080`) and Vite (frontend dev server on `:5173`) concurrently. Access the console at **`http://127.0.0.1:5173/omc/`** (`/omc` redirects there).
+   This launches Air (watching Go backend on `:8080`) and Vite (frontend dev server on `:5173`) concurrently. Access the console at **`http://127.0.0.1:5173/`**.
 
 ---
 

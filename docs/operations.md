@@ -39,7 +39,7 @@ a message naming the variable.
 | --- | --- | --- |
 | `OMCPA_VERSION` | embedded stable tag; `v0.1.0-dev` for untagged source builds | Optional display/User-Agent version override; does not change the installed build |
 | `OMCPA_LISTEN_ADDR` | `:8080` | Listen address |
-| `OMCPA_BASE_PATH` | `/omc` | Sub-path the console is served under. `omc`, `/omc/` and `/omc` are equivalent; `/` serves it at the root |
+| `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root; a configured sub-path is normalised without a trailing slash |
 | `OMCPA_DATA_DIR` | `./data` | Directory holding `oh-my-cpa.db`. Local disk only |
 | `OMCPA_PUBLIC_URL` | unset | The address browsers use. An `https://` value marks the session cookie `Secure` |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | unset | Comma-separated CIDRs of reverse proxies whose forwarding headers may be trusted for login throttling |
@@ -108,12 +108,12 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   both mean `0`; the example's `3` and `30` apply only when explicitly configured.
   Header passthrough forwards filtered upstream response headers to clients.
   See `docs/cpa-v8-compat.md` for the other option semantics and upstream sources.
-- **Base path**: Direct OMC serving supports `/omc` or `/`. The console is served at
-  the prefix with a trailing slash (`/omc/`); OMC answers the bare prefix (`/omc`) with
-  a 308 redirect to it. An operator-owned proxy must preserve the prefix and route the
-  bare prefix as well as everything beneath it (`deploy/nginx.conf` shows both rules;
-  `docs/install.md` has the Caddy equivalent); CPA keeps its separate port regardless
-  of OMC's base path.
+- **Base path**: New installations serve the console at `/`. A configured
+  `OMCPA_BASE_PATH` is served with a trailing slash; OMC answers the bare prefix with
+  a 308 redirect to it. An operator-owned proxy must preserve a configured prefix and
+  route both the bare prefix and everything beneath it. At the root, the proxy forwards
+  the site unchanged (`deploy/nginx.conf` and `docs/install.md` show examples); CPA
+  keeps its separate port regardless of OMC's base path.
 - **Container image**: Compose pulls `wiziscool/oh-my-cpa:latest` from Docker Hub by
   default; the full-stack CPA image also defaults to `:latest`. Pin `OMCPA_IMAGE` to the desired version or digest; updates recreate only
   OMC with its existing data and master key. The image runs as uid/gid `10001:10001`,
@@ -290,7 +290,7 @@ External agents connect over MCP to the same capability registry, in one of two 
 
 | Transport | Address | Credential |
 | --- | --- | --- |
-| Streamable HTTP, served by the console | `<console URL>/api/mcp`, for example `https://omc.example.com/omc/api/mcp` | `Authorization: Bearer <CPA management key>` |
+| Streamable HTTP, served by the console | `<console URL>/api/mcp`, for example `https://omc.example.com/api/mcp` | `Authorization: Bearer <CPA management key>` |
 | stdio, the `oh-my-cpa mcp` bridge process | `OMCPA_SERVER_URL` (the console URL, including any base path) | `OMCPA_CPA_MANAGEMENT_KEY` |
 
 The HTTP endpoint needs nothing installed where the agent runs; the **Connect** action at
@@ -497,8 +497,8 @@ capabilities (ADR 0067).
 of a CPA, so it needs no management key and no provider credential. Its storage is not
 durable — the database is deleted and rebuilt on every boot — and the server refuses
 sign-in flows, credential movement, plugin execution and plugin pages, gateway configuration writes and
-anything that would leave the process. It opens at the site root rather than `/omc`
-unless `OMCPA_BASE_PATH` says otherwise. A visitor's theme stays in their own browser:
+anything that would leave the process. It opens at the site root unless
+`OMCPA_BASE_PATH` says otherwise. A visitor's theme stays in their own browser:
 a demonstration is shared, so it is neither sent to the server nor read from it.
 
 ```bash

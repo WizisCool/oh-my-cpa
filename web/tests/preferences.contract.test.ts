@@ -6,6 +6,7 @@ import { createPreferenceFixture, PREFERENCE_CONTRACT, type PreferenceWireCase }
 afterEach(() => { setUnauthorizedHandler(undefined); });
 
 it('consumes the Go-certified corpus through the actual typed API client and stateful fixture', async () => {
+  vi.stubGlobal('window', { __OMCPA_CONFIG__: { basePath: '/omc' } });
   const authorized = createPreferenceFixture();
   const unauthorized = createPreferenceFixture({ authenticated: false });
   const unauthorizedHandler = vi.fn();

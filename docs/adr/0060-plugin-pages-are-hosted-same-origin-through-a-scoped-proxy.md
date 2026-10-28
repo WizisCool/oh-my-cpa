@@ -13,8 +13,8 @@ with the management key. CPA's management centre shows such a page in a same-ori
 and the page reuses the key that console keeps in the browser.
 
 Oh My CPA differs in three ways that make the same arrangement impossible as it stands:
-the browser never holds the management key; the console is usually served under a
-sub-path (`/omc`) of an origin that is not CPA's, so a page's CPA-root absolute paths do
+the browser never holds the management key; the console is served from an origin that is
+not CPA's, sometimes under a configured sub-path, so a page's CPA-root absolute paths do
 not reach CPA; and the facade answers only projected DTOs, never raw CPA responses.
 
 Existing plugin pages also assume their host: they build requests from

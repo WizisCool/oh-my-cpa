@@ -5,7 +5,7 @@
 
 ## Context
 
-Oh My CPA is a self-hosted management and identity layer for CLIProxyAPI. It needs a long-running HTTP API, CPA Management API integration, a RESP usage collector, metadata synchronization, and a browser UI that works at a configurable sub-path such as `/omc`. The intended deployment is a single Docker Compose stack alongside CPA, with a small operational footprint and a simple persistent data directory.
+Oh My CPA is a self-hosted management and identity layer for CLIProxyAPI. It needs a long-running HTTP API, CPA Management API integration, a RESP usage collector, metadata synchronization, and a browser UI that works at the site root and at a configurable sub-path. The intended deployment is a single Docker Compose stack alongside CPA, with a small operational footprint and a simple persistent data directory.
 
 ## Decision
 
@@ -18,7 +18,7 @@ Use a modular monolith with:
 - The CPA Management API over HTTP and a small custom RESP client for usage collection.
 - Direct service-to-service CPA connections inside the Compose network; the public reverse proxy handles browser traffic only.
 
-The backend owns the runtime Base Path contract. The default UI path is `/omc`, the API is `/omc/api/v1`, and media is `/omc/media`. The proxy preserves the prefix.
+The backend owns the runtime Base Path contract. New installations serve the UI at `/`, the API at `/api/v1`, and media at `/media`. `OMCPA_BASE_PATH` can select a sub-path, in which case the proxy preserves that prefix.
 
 ## Consequences
 
@@ -35,7 +35,7 @@ The backend owns the runtime Base Path contract. The default UI path is `/omc`, 
 - SQLite is a single-writer, single-replica starting point; horizontal scaling needs a future PostgreSQL/lease design.
 - Usage ingestion must use durable inboxes, idempotency, and completeness indicators because CPA's queue/PubSub semantics are not an exactly-once log.
 - Frontend assets must be built before the Go binary and copied into the embed directory.
-- The public reverse proxy and application must agree on prefix preservation; stripping `/omc` breaks routing and callbacks.
+- When a sub-path is configured, the public reverse proxy and application must agree on prefix preservation; stripping it breaks routing and callbacks.
 
 ## Alternatives considered
 
