@@ -148,7 +148,12 @@ describe('credential quota presentation', () => {
     const meters = within(rows[2]).getAllByRole('meter');
     expect(meters.map((meter) => meter.getAttribute('aria-valuenow'))).toEqual(['64', '12']);
     expect(rows[2].textContent).toContain('30h left');
-    expect(within(rows[3]).getByText('ample@example.com')).toBeTruthy();
+    expect(within(rows[3]).getByText('am•••e@example.com')).toBeTruthy();
+    expect(within(rows[3]).queryByText('ample@example.com')).toBeNull();
+    // The hover title carries the same label: a row whose text is masked and whose tooltip is not
+    // publishes the address on the first hover.
+    expect(within(rows[3]).getByTitle('am•••e@example.com').textContent).toBe('am•••e@example.com');
+    expect(within(rows[3]).queryByTitle('ample@example.com')).toBeNull();
     expect(within(rows[4]).getByText('No quota reading')).toBeTruthy();
 
     // No row is interactive, and the footer is the panel's one way out.

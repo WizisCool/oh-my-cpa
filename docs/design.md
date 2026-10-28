@@ -581,7 +581,9 @@ exhausted credential keeps its windows, because they *are* the statement: every 
 from stands at zero, and the countdown beside them is when it serves again. The order is the
 reading: sign-in required, cooling down, exhausted, unavailable, running low, healthy, no reading.
 Disabled credentials are the operator's own decision and are only counted, in the header beside the
-serving and blocked counts.
+serving and blocked counts. The row names the credential by the account in the console's one mask
+(`web/src/utils/maskAccount.ts`), or by its file name when it reports no account: the whole address
+stays in the credential workspace, whose reveal owns it.
 
 **The list scrolls inside the panel.** Every credential is listed, so a large fleet is readable
 without leaving the dashboard, and the panel keeps the height of the row it shares: the list takes
@@ -598,9 +600,9 @@ again and everything else done to a single credential stay in `/oauth-management
 links to. The panel reads
 `GET /management/auth-files` and `GET /management/quota` — the stored readings, never a provider —
 and interprets those two responses in its own module
-(`web/src/components/dashboard/credentialQuotaLogic.ts`). Beyond the shared refresh run it shares
-no code with the workspace, so the workspace can change how it selects, labels or acts on quota
-without moving the dashboard.
+(`web/src/components/dashboard/credentialQuotaLogic.ts`). Beyond the shared refresh run and the
+console's account mask it shares no code with the workspace, so the workspace can change how it
+selects, labels or acts on quota without moving the dashboard.
 
 A bar's hue is the remaining share — `--success` from 70%, `--warn` from 25%, `--danger` below —
 and never the heatmap ramp: "plenty left" and "a lot of tokens" must not be the same colour. Its
@@ -1191,12 +1193,13 @@ that identity — but it is an address, and a request list is screenshotted, sha
 and exported far more often than it is read alone. Every request-record surface
 therefore prints the account masked: the provider cell, the credential filter
 and its chip, the source-group header, the detail drawer's credential field, the
-Insights credential dimension and the dashboard's routing labels. The shape is the
-OAuth management workspace's (`web/src/utils/maskAccount.ts`), so one account looks
-the same wherever it is read: `djz20040127@outlook.com` renders as
-`dj•••7@outlook.com` — a short head and the last character of the local part, the
-whole domain, and a filler of constant length so the mask does not give away the
-name's length. A Vertex project id takes the non-address shape: three leading and
+Insights credential dimension and the dashboard's routing labels. The dashboard's
+credential quota rows print the same mask for the same reason, although they read a
+fleet's state rather than one request. The shape is the OAuth management workspace's
+(`web/src/utils/maskAccount.ts`), so one account looks the same wherever it is read:
+`djz20040127@outlook.com` renders as `dj•••7@outlook.com` — a short head and the last
+character of the local part, the whole domain, and a filler of constant length so the
+mask does not give away the name's length. A Vertex project id takes the non-address shape: three leading and
 two trailing characters. A file named after its account is masked in place
 (`codex-dj•••7@outlook.com.json`), because masking the address inside a name is what
 the OAuth table already does. A service account can report both an address and a
@@ -1204,19 +1207,22 @@ project id, so a file name that repeats either one is masked
 (`vertex-acm•••od.json`); a discovered resource name is the auth file's name, so the
 source-group header and the drawer mask it through the same projection.
 
-- **The rule lives in the identity projection, not in a cell.**
+- **The rule lives in the mask, not in a cell.** One account has one shape
+  (`web/src/utils/maskAccount.ts`), and a surface takes it from there rather than
+  re-deriving it. Request records read it through their own projection:
   `resolveProviderInfo` returns the masked account as the credential line and keeps
   the raw value in `accountIdentity`; `resolveCredential` carries a `displayName`
   beside the stored name when a live file or a discovered resource repeats a reported
-  identity. Every surface consumes those, so a new reader of the same identity cannot
-  print the address by forgetting a mask.
+  identity. Every request-record surface consumes those, so a new reader of the same
+  identity cannot print the address by forgetting a mask.
 - **The mask is not an identity.** Grouping, filtering and `auth_index` keep the
   raw name. Two accounts can render the same mask, and merging them into one header
   would be a display bug turned into a data bug.
-- **No reveal on a request record.** The OAuth workspace owns the per-row reveal,
-  because that is where an operator manages the account. A request record's job is
-  to say which credential answered; an operator who needs the whole address opens
-  the credential there.
+- **No reveal on a request record or a quota row.** The OAuth workspace owns the
+  per-row reveal, because that is where an operator manages the account. A request
+  record's job is to say which credential answered, and a quota row's is to say
+  whether it can serve; an operator who needs the whole address opens the credential
+  there.
 - **The export keeps its own decision.** Selected records withhold the account by
   default; the export's "OAuth account names" choice is the explicit disclosure, and
   only then do the sheet and the JSON carry the raw address rather than the mask.
