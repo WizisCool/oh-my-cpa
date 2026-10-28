@@ -109,6 +109,7 @@ assert.deepEqual(compareMetric(usage(40, 0), usage(40, 4000), 'tokens'), { kind:
 const spend = (requests: number, costedRequests: number, costNanos: number) => ({ ...emptyMeasures(), requests, costedRequests, costNanos });
 assert.deepEqual(compareMetric(spend(5000, 1, 3e9), spend(5000, 1, 2e9), 'cost'), { kind: 'change', change: 0.5, isNoise: true }, 'one priced request a side is chance, however many ran');
 assert.deepEqual(compareMetric(spend(1000, 1000, 0), spend(5, 5, 1e9), 'cost'), { kind: 'change', change: -1, isNoise: false }, 'a thousand free requests are a firm fall');
+assert.deepEqual(compareMetric(spend(10, 10, 1e9), spend(10, 0, 0), 'cost'), { kind: 'none' }, 'an unpriced spend before is unknown, not new');
 
 // ── rankings ──────────────────────────────────────────────────────────────────
 

@@ -87,6 +87,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, previous, met
                   {comparison.change < 0 && <ArrowDownOutlined aria-hidden="true" />}
                   {/* The arrow carries the direction, so the figure drops its sign rather than saying it twice. */}
                   <span>{comparison.change === 0 ? changeText : changeText.replace(/^[+−]/, '')}</span>
+                  {comparison.isNoise && <span className="sr-only">{t('insights.change_noise')}</span>}
                 </>
               )}
               {previous !== null && (

@@ -220,7 +220,9 @@ export function compareMetric(current: Measures, previous: Measures, metric: Ins
   const now = metricValue(current, metric);
   const before = metricValue(previous, metric);
   if (now === null) return NO_COMPARISON;
-  if (before === null || before <= 0) return now > 0 ? { kind: 'new' } : NO_COMPARISON;
+  // Only a group absent before is new; an unpriced spend is unknown, not zero.
+  if (before === null) return previous.requests === 0 && now > 0 ? { kind: 'new' } : NO_COMPARISON;
+  if (before <= 0) return now > 0 ? { kind: 'new' } : NO_COMPARISON;
   // Only priced requests say anything about spend. A reading that fell to zero is still measured by
   // every request that ran: a thousand that cost nothing are a firm fall, one that did is not.
   const evidence = (measures: Measures) => (metric === 'cost' ? measures.costedRequests : measures.requests);
