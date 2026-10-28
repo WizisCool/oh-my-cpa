@@ -196,7 +196,8 @@ rule above; see `docs/adr/0006-categorical-series-palette.md` and `docs/design.m
 - **Insights** (`/insights`): the trend's top five groups take slots 1-5 by rank and the remainder
   `muted`; a ranking of the same dimension repeats that colour, every other ranking is monochrome, and
   phones drop the swatches. Changes against the comparison period are an arrow and a size in a
-  muted red (rise) or green (fall) beside the previous value. The page is one scroll of ruled-head
+  muted red (rise) or green (fall) beside the previous value; a change within chance keeps no tone,
+  and a rise from a baseline below sampling noise reads "New". The page is one scroll of ruled-head
   panels with no tab strip; "AI providers" and "OAuth credentials" split the traffic as the
   dashboard does, a ranking panel ignores its own filter so the chosen row stays in view beside its
   dimmed neighbours, and an unfolded ranking scrolls inside its panel. Key composition is a stacked bar per key; the rhythm opens on hourly bars with the

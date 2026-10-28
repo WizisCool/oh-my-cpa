@@ -11,8 +11,9 @@ import { InsightsValue } from './InsightsValue';
 import { PanelNarrowing } from './PanelNarrowing';
 import { useT } from '../../../i18n';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { metricValue, rankingMetric, relativeChange, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../insightsCube';
-import { changeTrend, formatChange, formatShare } from '../insightsFormat';
+import { compareMetric, NO_COMPARISON, rankingMetric, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../insightsCube';
+import { formatShare } from '../insightsFormat';
+import { ComparisonText } from './ComparisonText';
 import type { InsightsLabels } from '../useInsightsLabels';
 import styles from '../insights.module.css';
 
@@ -93,7 +94,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
         <ol className={clsx(styles['ranking-list'], !hasComparison && styles['ranking-list-plain'], isExpanded && styles['ranking-list-expanded'])}>
           {shown.map((group) => {
             const color = colorOf?.(group.id);
-            const change = group.previous ? relativeChange(group.value, metricValue(group.previous, ranking)) : null;
+            const comparison = group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON;
             const isSelected = selected.includes(group.id);
             const width = top > 0 && group.value !== null ? Math.max(2, (group.value / top) * 100) : 0;
             return (
@@ -118,9 +119,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                     {formatShare(group.share)}
                   </span>
                   {hasComparison && (
-                    <span className={styles['ranking-change']} data-trend={changeTrend(change)} title={t('insights.col.change')}>
-                      {formatChange(change) ?? '—'}
-                    </span>
+                    <ComparisonText comparison={comparison} className={styles['ranking-change']} />
                   )}
                 </RowElement>
                 {onOpen && labels.isNonKey(group.id) === false && (
