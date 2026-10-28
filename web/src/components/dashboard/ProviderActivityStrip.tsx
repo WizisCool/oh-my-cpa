@@ -62,9 +62,15 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
     )
     : t('dash.providers_activity_idle');
   return (
-    <Tooltip title={historyHint}>
+    <Tooltip
+      title={historyHint}
+      isFocusOnly
+      classNames={{ root: 'provider-activity-history-tooltip' }}
+    >
       {/* One focus stop gives keyboard and screen-reader users the whole history without turning
-          two dozen decorative blocks into two dozen tab stops. Pointer readings stay per block. */}
+          two dozen decorative blocks into two dozen tab stops. A pointer reads one block at a
+          time: the gaps between blocks belong to the strip, so a hover hint here would open over
+          the reading of the block the pointer crossed onto. */}
       <div
         className="provider-activity"
         role="img"
@@ -90,14 +96,10 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
               )}
             >
               {/* A block is a reading, not a second action for the row it sits in: tapping it
-                  opens its hint instead of following the row to provider management. Pointer
-                  events stay on the block so the strip's whole-history hint does not open too. */}
+                  opens its hint instead of following the row to provider management. */}
               <span
                 aria-hidden="true"
                 className={`provider-activity-block tone-${tone}`}
-                onPointerMove={(event) => event.stopPropagation()}
-                onPointerLeave={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
               />
             </Tooltip>
