@@ -13,7 +13,8 @@ import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 
 import { useT } from '../i18n';
 import { getProviderDefaultIcon } from '../components/LobeIcon';
-import { IconPickerModal } from '../components/IconPickerModal';
+import { DeferredMount } from '../components/common/DeferredMount';
+import { createRouteLoader } from '../utils/routeLoader';
 import { resolveProviderIcon } from '../types/providerIcons';
 import { lookupProviderFamily, PROVIDER_FAMILIES } from '../types/providerFamilies';
 import { SUCCESS_RATE_HEALTHY_PERCENT, successRateTone } from '../types/usageEventMetrics';
@@ -21,7 +22,7 @@ import { useProviderIconOverrides } from '../components/providers/useProviderIco
 import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
 import { useProviderList } from '../components/providers/useProviderList';
 import { useProviderManagement } from '../components/providers/useProviderManagement';
-import { ProviderEditorDrawer } from '../components/providers/ProviderEditorDrawer';
+
 import { ProviderTable } from '../components/providers/ProviderTable';
 import styles from './ProvidersPage.module.css';
 import {
@@ -41,10 +42,16 @@ import { SearchInput } from '../components/common/SearchInput';
 import { Toolbar } from '../components/common/Toolbar';
 import { Count } from '../components/common/Count';
 
+const ProviderEditorDrawer = React.lazy(createRouteLoader(() =>
+  import('../components/providers/ProviderEditorDrawer').then(module => ({ default: module.ProviderEditorDrawer }))));
+const IconPickerModal = React.lazy(createRouteLoader(() =>
+  import('../components/IconPickerModal').then(module => ({ default: module.IconPickerModal }))));
+
 /**
  * The window the list's traffic column counts. It is the key list's window too, so the two pages
  * that report traffic per row agree on what "recent" means.
  */
+
 const TRAFFIC_WINDOW_QUERY = 'preset=24h';
 
 const STATUS_TILES: readonly { key: ProviderStatusFilter; tone: StatusTone; labelKey: MessageKey }[] = [
@@ -357,108 +364,112 @@ export const ProvidersPage: React.FC = () => {
       />
 
       {/* Provider Rich Drawer */}
-      <ProviderEditorDrawer
-        familyDisplayNames={familyDisplayNames}
-        createProviderMutation={createProviderMutation}
-        updateProviderMutation={updateProviderMutation}
-        providerDrawerOpen={providerDrawerOpen}
-        editingProvider={editingProvider}
-        formFamily={formFamily}
-        setFormFamily={setFormFamily}
-        formName={formName}
-        setFormName={setFormName}
-        formBaseURL={formBaseURL}
-        setFormBaseURL={setFormBaseURL}
-        formWebsite={formWebsite}
-        setFormWebsite={setFormWebsite}
-        formPrefix={formPrefix}
-        setFormPrefix={setFormPrefix}
-        formPriority={formPriority}
-        setFormPriority={setFormPriority}
-        formDisabled={formDisabled}
-        setFormDisabled={setFormDisabled}
-        formPolicy={formPolicy}
-        setFormPolicy={setFormPolicy}
-        formBehavior={formBehavior}
-        setFormBehavior={setFormBehavior}
-        policySectionOpen={policySectionOpen}
-        setPolicySectionOpen={setPolicySectionOpen}
-        isPolicyChecked={isPolicyChecked}
-        formKeys={formKeys}
-        setFormKeys={setFormKeys}
-        formHeaders={formHeaders}
-        setFormHeaders={setFormHeaders}
-        formModels={formModels}
-        setFormModels={setFormModels}
-        formTestModel={formTestModel}
-        setFormTestModel={setFormTestModel}
-        formIcon={formIcon}
-        iconManuallySelected={iconManuallySelected}
-        setIconManuallySelected={setIconManuallySelected}
-        setIconPickerOpen={setIconPickerOpen}
-        setTargetProviderForIcon={setTargetProviderForIcon}
-        setFormIcon={setFormIcon}
-        setIsPullingModels={setIsPullingModels}
-        keysSectionOpen={keysSectionOpen}
-        setKeysSectionOpen={setKeysSectionOpen}
-        headersSectionOpen={headersSectionOpen}
-        setHeadersSectionOpen={setHeadersSectionOpen}
-        modelsSectionOpen={modelsSectionOpen}
-        setModelsSectionOpen={setModelsSectionOpen}
-        expandedKeyIds={expandedKeyIds}
-        setExpandedKeyIds={setExpandedKeyIds}
-        expandedModelIds={expandedModelIds}
-        setExpandedModelIds={setExpandedModelIds}
-        endpointModels={endpointModels}
-        setEndpointModels={setEndpointModels}
-        isPullingModels={isPullingModels}
-        modelFetchSeqRef={modelFetchSeqRef}
-        websiteInputState={websiteInputState}
-        handlePullModels={handlePullModels}
-        isModelPickerOpen={isModelPickerOpen}
-        setIsModelPickerOpen={setIsModelPickerOpen}
-        handleAddPickedModels={handleAddPickedModels}
-        toggleModelExpanded={toggleModelExpanded}
-        handleAddModel={handleAddModel}
-        updateModelImage={updateModelImage}
-        toggleThinkingLevel={toggleThinkingLevel}
-        setThinkingLevels={setThinkingLevels}
-        toggleKeyExpanded={toggleKeyExpanded}
-        handleKeyAdd={handleKeyAdd}
-        handleTestKey={handleTestKey}
-        handleTestAllKeys={handleTestAllKeys}
-        handleCloseProviderDrawer={handleCloseProviderDrawer}
-        handleSaveProvider={handleSaveProvider}
-      />
+      <DeferredMount isActive={providerDrawerOpen}>
+        <ProviderEditorDrawer
+          familyDisplayNames={familyDisplayNames}
+          createProviderMutation={createProviderMutation}
+          updateProviderMutation={updateProviderMutation}
+          providerDrawerOpen={providerDrawerOpen}
+          editingProvider={editingProvider}
+          formFamily={formFamily}
+          setFormFamily={setFormFamily}
+          formName={formName}
+          setFormName={setFormName}
+          formBaseURL={formBaseURL}
+          setFormBaseURL={setFormBaseURL}
+          formWebsite={formWebsite}
+          setFormWebsite={setFormWebsite}
+          formPrefix={formPrefix}
+          setFormPrefix={setFormPrefix}
+          formPriority={formPriority}
+          setFormPriority={setFormPriority}
+          formDisabled={formDisabled}
+          setFormDisabled={setFormDisabled}
+          formPolicy={formPolicy}
+          setFormPolicy={setFormPolicy}
+          formBehavior={formBehavior}
+          setFormBehavior={setFormBehavior}
+          policySectionOpen={policySectionOpen}
+          setPolicySectionOpen={setPolicySectionOpen}
+          isPolicyChecked={isPolicyChecked}
+          formKeys={formKeys}
+          setFormKeys={setFormKeys}
+          formHeaders={formHeaders}
+          setFormHeaders={setFormHeaders}
+          formModels={formModels}
+          setFormModels={setFormModels}
+          formTestModel={formTestModel}
+          setFormTestModel={setFormTestModel}
+          formIcon={formIcon}
+          iconManuallySelected={iconManuallySelected}
+          setIconManuallySelected={setIconManuallySelected}
+          setIconPickerOpen={setIconPickerOpen}
+          setTargetProviderForIcon={setTargetProviderForIcon}
+          setFormIcon={setFormIcon}
+          setIsPullingModels={setIsPullingModels}
+          keysSectionOpen={keysSectionOpen}
+          setKeysSectionOpen={setKeysSectionOpen}
+          headersSectionOpen={headersSectionOpen}
+          setHeadersSectionOpen={setHeadersSectionOpen}
+          modelsSectionOpen={modelsSectionOpen}
+          setModelsSectionOpen={setModelsSectionOpen}
+          expandedKeyIds={expandedKeyIds}
+          setExpandedKeyIds={setExpandedKeyIds}
+          expandedModelIds={expandedModelIds}
+          setExpandedModelIds={setExpandedModelIds}
+          endpointModels={endpointModels}
+          setEndpointModels={setEndpointModels}
+          isPullingModels={isPullingModels}
+          modelFetchSeqRef={modelFetchSeqRef}
+          websiteInputState={websiteInputState}
+          handlePullModels={handlePullModels}
+          isModelPickerOpen={isModelPickerOpen}
+          setIsModelPickerOpen={setIsModelPickerOpen}
+          handleAddPickedModels={handleAddPickedModels}
+          toggleModelExpanded={toggleModelExpanded}
+          handleAddModel={handleAddModel}
+          updateModelImage={updateModelImage}
+          toggleThinkingLevel={toggleThinkingLevel}
+          setThinkingLevels={setThinkingLevels}
+          toggleKeyExpanded={toggleKeyExpanded}
+          handleKeyAdd={handleKeyAdd}
+          handleTestKey={handleTestKey}
+          handleTestAllKeys={handleTestAllKeys}
+          handleCloseProviderDrawer={handleCloseProviderDrawer}
+          handleSaveProvider={handleSaveProvider}
+        />
+      </DeferredMount>
 
       {/* LobeHub Icon Picker Modal */}
-      <IconPickerModal
-        open={iconPickerOpen}
-        currentIcon={
-          targetProviderForIcon
-            ? resolveProviderIcon(
-                providerIcons,
-                targetProviderForIcon,
-                getProviderDefaultIcon(
-                  targetProviderForIcon.family,
-                  targetProviderForIcon.name,
-                  targetProviderForIcon.base_url,
-                ),
-              )
-            : formIcon
-        }
-        onSelect={handleSelectIcon}
-        onDeleted={(id) => {
-          if (formIcon === `custom:${id}`) {
-            setFormIcon(getProviderDefaultIcon(formFamily, formName, formBaseURL));
-            setIconManuallySelected(false);
+      <DeferredMount isActive={iconPickerOpen}>
+        <IconPickerModal
+          open={iconPickerOpen}
+          currentIcon={
+            targetProviderForIcon
+              ? resolveProviderIcon(
+                  providerIcons,
+                  targetProviderForIcon,
+                  getProviderDefaultIcon(
+                    targetProviderForIcon.family,
+                    targetProviderForIcon.name,
+                    targetProviderForIcon.base_url,
+                  ),
+                )
+              : formIcon
           }
-        }}
-        onClose={() => {
-          setIconPickerOpen(false);
-          setTargetProviderForIcon(null);
-        }}
-      />
+          onSelect={handleSelectIcon}
+          onDeleted={(id) => {
+            if (formIcon === `custom:${id}`) {
+              setFormIcon(getProviderDefaultIcon(formFamily, formName, formBaseURL));
+              setIconManuallySelected(false);
+            }
+          }}
+          onClose={() => {
+            setIconPickerOpen(false);
+            setTargetProviderForIcon(null);
+          }}
+        />
+      </DeferredMount>
     </div>
   );
 };

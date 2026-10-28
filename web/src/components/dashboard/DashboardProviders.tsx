@@ -21,6 +21,8 @@ import { SectionHeading } from '../common/SectionHeading';
 import { Tag } from '../common/Tag';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ProviderActivityStrip } from './ProviderActivityStrip';
+import { useTimeZone } from '../../utils/TimeZoneProvider';
+import { formatMinuteSpan } from '../../utils/dateTimeFormat';
 import './dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -64,13 +66,14 @@ export interface DashboardProvidersProps {
   enabled?: boolean;
 }
 
-export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
+export const DashboardProviders = React.memo(function DashboardProviders({
   overview,
   query,
   range,
   enabled,
-}) => {
+}: DashboardProvidersProps) {
   const t = useT();
+  const timeZone = useTimeZone();
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
   const isPhone = useIsPhoneViewport();
@@ -134,9 +137,14 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
   const windowCredentials = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.credentials;
   // The strip is drawn only on the grid the windowed read was answered on: the overview fallback
   // carries no buckets, and an empty strip would claim the providers sat idle.
-  const activityGrid = windowProviders && windowProvidersData
-    ? { fromMs: windowProvidersData.window.from, toMs: windowProvidersData.window.to, bucketMs: windowProvidersData.bucket_ms }
-    : undefined;
+  const fromMs = windowProvidersData?.window.from ?? 0;
+  const toMs = windowProvidersData?.window.to ?? 0;
+  const bucketMs = windowProvidersData?.bucket_ms ?? 0;
+  const hasActivityGrid = Boolean(windowProviders);
+  // Every row shares its window and clock. Resolve labels once, not per row or per tooltip.
+  const activityLabels = useMemo(() => hasActivityGrid && !isPhone
+    ? activityBlocks([], fromMs, toMs, bucketMs).map((block) => formatMinuteSpan(block.startMs, block.endMs, timeZone))
+    : [], [hasActivityGrid, isPhone, fromMs, toMs, bucketMs, timeZone]);
 
   // Aggregated list: windowed traffic (or live overview fallback) + configured AI providers + OAuth channels
   const aggregated = useMemo<AggregatedProvider[]>(() => {
@@ -153,7 +161,13 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
   }, [overviewProviders, windowProviders, windowCredentials, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos]);
 
   const isFoldable = aggregated.length > PROVIDER_PREVIEW_LIMIT;
-  const visibleProviders = isFoldable && !isExpanded ? aggregated.slice(0, PROVIDER_PREVIEW_LIMIT) : aggregated;
+  const visibleProviders = useMemo(() => {
+    const visible = isFoldable && !isExpanded ? aggregated.slice(0, PROVIDER_PREVIEW_LIMIT) : aggregated;
+    return visible.map((provider) => ({
+      provider,
+      blocks: hasActivityGrid && !isPhone ? activityBlocks(provider.buckets, fromMs, toMs, bucketMs) : [],
+    }));
+  }, [aggregated, isFoldable, isExpanded, hasActivityGrid, isPhone, fromMs, toMs, bucketMs]);
 
   const handleRowClick = (provider: AggregatedProvider) => {
     if (provider.kind === 'oauth') {
@@ -174,7 +188,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
           <EmptyState size="compact" title={t('dash.empty_providers')} />
         ) : (
           <div className="provider-list-items">
-            {visibleProviders.map((provider) => {
+            {visibleProviders.map(({ provider, blocks }) => {
               const isOAuth = provider.kind === 'oauth';
               // The window rate carries its band colour itself: the strip beside it colours each
               // bucket, and a phone does not draw the strip at all.
@@ -243,10 +257,11 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                       in a phone's width are too narrow to read or to touch, and the rate stays. */}
                   {!isPhone && (
                     <div className="provider-visual-col">
-                      {activityGrid && (
+                      {hasActivityGrid && (
                         <ProviderActivityStrip
                           name={provider.name}
-                          blocks={activityBlocks(provider.buckets, activityGrid.fromMs, activityGrid.toMs, activityGrid.bucketMs)}
+                          blocks={blocks}
+                          labels={activityLabels}
                         />
                       )}
                     </div>
@@ -272,4 +287,4 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
       </div>
     </section>
   );
-};
+});

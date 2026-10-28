@@ -1,8 +1,13 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Tooltip as AntTooltip, type TooltipProps as AntTooltipProps, type TooltipRef } from 'antd';
 import { hasOpenPopup, hoverIntentDelay, isControl, noteHintClosed } from './tooltipIntent';
 
-export type TooltipProps = Omit<AntTooltipProps, 'trigger' | 'mouseEnterDelay' | 'mouseLeaveDelay'> & {
+type TriggerEvents = Pick<React.DOMAttributes<HTMLElement>,
+  'onClick' | 'onMouseDown' | 'onTouchStart' | 'onFocus' | 'onBlur' | 'onMouseEnter' | 'onMouseLeave' |
+  'onPointerEnter' | 'onPointerLeave' | 'onPointerMove' | 'onPointerDown' | 'onContextMenu'>;
+
+export type TooltipProps = TriggerEvents & Omit<AntTooltipProps, 'trigger' | 'mouseEnterDelay' | 'mouseLeaveDelay'> & {
   /**
    * A tap on the trigger reads the hint even though the trigger is a control: an info button whose
    * only job is the hint. Plain text and marks answer a tap without this.
@@ -15,12 +20,44 @@ export type TooltipProps = Omit<AntTooltipProps, 'trigger' | 'mouseEnterDelay' |
   isFocusOnly?: boolean;
 };
 
-type ChildProps = React.HTMLAttributes<HTMLElement>;
+type TriggerHandle = HTMLElement | { nativeElement?: HTMLElement };
+type ChildProps = React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<TriggerHandle> };
 
-function compose<E>(own: ((event: E) => void) | undefined, theirs: (event: E) => void) {
+/** The real trigger stays mounted; only a reader's intent allocates popup and alignment machinery. */
+const TooltipPopup = React.forwardRef<TooltipRef, AntTooltipProps & { element: HTMLElement }>(
+  ({ element, open, children: _children, ...props }, ref) => {
+    const [bounds, setBounds] = React.useState(() => element.getBoundingClientRect());
+    React.useLayoutEffect(() => {
+      if (!open) return;
+      const updateBounds = () => setBounds(element.getBoundingClientRect());
+      updateBounds();
+      const observer = new ResizeObserver(updateBounds);
+      observer.observe(element);
+      window.addEventListener('resize', updateBounds);
+      document.addEventListener('scroll', updateBounds, true);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener('resize', updateBounds);
+        document.removeEventListener('scroll', updateBounds, true);
+      };
+    }, [element, open]);
+    return createPortal(
+      <AntTooltip {...props} ref={ref} open={open} trigger={[]}>
+        <span aria-hidden="true" style={{
+          position: 'fixed', pointerEvents: 'none',
+          left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height,
+        }} />
+      </AntTooltip>,
+      document.body,
+    );
+  },
+);
+TooltipPopup.displayName = 'TooltipPopup';
+
+function compose<E>(own: ((event: E) => void) | undefined, theirs: ((event: E) => void) | undefined) {
   return (event: E) => {
     own?.(event);
-    theirs(event);
+    theirs?.(event);
   };
 }
 
@@ -36,9 +73,21 @@ function compose<E>(own: ((event: E) => void) | undefined, theirs: (event: E) =>
  * hint down (`open={false}`) or up.
  */
 export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
-  ({ children, open: heldOpen, isTapReadable = false, isFocusOnly = false, title, overlay, afterOpenChange, ...rest }, ref) => {
+  ({ children, open: heldOpen, isTapReadable = false, isFocusOnly = false, title, overlay, afterOpenChange,
+    onClick, onMouseDown, onTouchStart, onFocus, onBlur, onMouseEnter, onMouseLeave, onPointerEnter,
+    onPointerLeave, onPointerMove, onPointerDown, onContextMenu, ...rest }, ref) => {
     const [isOpen, setIsOpen] = React.useState(false);
+    const [popupTarget, setPopupTarget] = React.useState<HTMLElement | null>(null);
+    const popupId = React.useId();
     const triggerRef = React.useRef<HTMLElement | null>(null);
+    const popupRef = React.useRef<TooltipRef>(null);
+    // A parent popup (for example Popconfirm) still anchors to the original control before
+    // this hint has ever opened. Exposing the portal's synthetic anchor would move its target.
+    React.useImperativeHandle(ref, () => ({
+      get nativeElement() { return triggerRef.current!; },
+      get popupElement() { return popupRef.current?.popupElement!; },
+      forceAlign: () => popupRef.current?.forceAlign(),
+    }), []);
     const timerRef = React.useRef<number | undefined>(undefined);
     // A press holds the hint down until the pointer leaves the trigger.
     const isPressedRef = React.useRef(false);
@@ -80,9 +129,29 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
 
     const child = React.isValidElement<ChildProps>(children) ? children : <span>{children}</span>;
     const childProps = child.props;
+    const childRef = (child as React.ReactElement & { ref?: React.Ref<TriggerHandle> }).ref;
+    const attachTrigger = React.useCallback((handle: TriggerHandle | null) => {
+      triggerRef.current = handle instanceof HTMLElement ? handle : handle?.nativeElement ?? null;
+      if (typeof childRef === 'function') childRef(handle);
+      else if (childRef) (childRef as React.MutableRefObject<TriggerHandle | null>).current = handle;
+    }, [childRef]);
+    const isShown = hasContent && !rest.disabled && (heldOpen ?? isOpen);
+    React.useLayoutEffect(() => {
+      if (isShown && triggerRef.current) setPopupTarget(triggerRef.current);
+    }, [isShown]);
     const trigger = React.cloneElement(child, {
-      onPointerMove: compose(childProps.onPointerMove, (event: React.PointerEvent<HTMLElement>) => {
-        if (event.pointerType === 'touch' || isFocusOnly) return;
+      ref: attachTrigger,
+      'aria-describedby': isShown ? [childProps['aria-describedby'], rest.id ?? popupId].filter(Boolean).join(' ') : childProps['aria-describedby'],
+      className: [childProps.className, rest.className, isShown && (rest.openClassName ?? 'ant-tooltip-open')].filter(Boolean).join(' ') || undefined,
+      style: rest.style ? { ...childProps.style, ...rest.style } : childProps.style,
+      onMouseDown: compose(childProps.onMouseDown, onMouseDown),
+      onTouchStart: compose(childProps.onTouchStart, onTouchStart),
+      onMouseEnter: compose(childProps.onMouseEnter, onMouseEnter),
+      onMouseLeave: compose(childProps.onMouseLeave, onMouseLeave),
+      onPointerEnter: compose(childProps.onPointerEnter, onPointerEnter),
+      onContextMenu: compose(childProps.onContextMenu, onContextMenu),
+      onPointerMove: compose(compose(childProps.onPointerMove, onPointerMove), (event: React.PointerEvent<HTMLElement>) => {
+        if (event.pointerType === 'touch' || isFocusOnly || heldOpen !== undefined) return;
         triggerRef.current = event.currentTarget;
         if (!hasContent || isPressedRef.current || isOpen || timerRef.current !== undefined) return;
         const element = event.currentTarget;
@@ -92,51 +161,57 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
           if (element.isConnected && !isPressedRef.current && !hasOpenPopup(element)) setIsOpen(true);
         }, hoverIntentDelay());
       }),
-      onPointerLeave: compose(childProps.onPointerLeave, (event: React.PointerEvent<HTMLElement>) => {
+      onPointerLeave: compose(compose(childProps.onPointerLeave, onPointerLeave), (event: React.PointerEvent<HTMLElement>) => {
         if (event.pointerType === 'touch') return;
         isPressedRef.current = false;
         close();
       }),
-      onPointerDown: compose(childProps.onPointerDown, (event: React.PointerEvent<HTMLElement>) => {
+      onPointerDown: compose(compose(childProps.onPointerDown, onPointerDown), (event: React.PointerEvent<HTMLElement>) => {
         lastPointerRef.current = event.pointerType;
         triggerRef.current = event.currentTarget;
         if (event.pointerType === 'touch') return;
         isPressedRef.current = true;
         close();
       }),
-      onClick: compose(childProps.onClick, (event: React.MouseEvent<HTMLElement>) => {
+      onClick: compose(compose(childProps.onClick, onClick), (event: React.MouseEvent<HTMLElement>) => {
         const isTap = lastPointerRef.current === 'touch';
         lastPointerRef.current = 'mouse';
-        if (!isTap || !hasContent || isFocusOnly) return;
+        if (!isTap || !hasContent || isFocusOnly || heldOpen !== undefined) return;
         if (!isTapReadable && isControl(event.currentTarget)) return;
         setIsOpen((current) => !current);
       }),
       // Keyboard focus only: a click focuses what it pressed too, and that is not a request to read it.
-      onFocus: compose(childProps.onFocus, (event: React.FocusEvent<HTMLElement>) => {
+      onFocus: compose(compose(childProps.onFocus, onFocus), (event: React.FocusEvent<HTMLElement>) => {
         const element = event.currentTarget;
-        if (!hasContent || !element.matches(':focus-visible') || hasOpenPopup(element)) return;
+        if (!hasContent || heldOpen !== undefined || !element.matches(':focus-visible') || hasOpenPopup(element)) return;
         triggerRef.current = element;
         setIsOpen(true);
       }),
-      onBlur: compose(childProps.onBlur, () => close()),
+      onBlur: compose(compose(childProps.onBlur, onBlur), () => close()),
     });
 
-    const isShown = heldOpen ?? isOpen;
     return (
-      <AntTooltip
-        {...rest}
-        ref={ref}
-        title={title}
-        overlay={overlay}
-        open={hasContent && isShown}
-        trigger={[]}
-        afterOpenChange={(hasOpened) => {
-          if (!hasOpened) noteHintClosed();
-          afterOpenChange?.(hasOpened);
-        }}
-      >
+      <>
         {trigger}
-      </AntTooltip>
+        {popupTarget && (
+          <TooltipPopup
+            {...rest}
+            ref={popupRef}
+            id={rest.id ?? popupId}
+            element={popupTarget}
+            title={title}
+            overlay={overlay}
+            open={isShown}
+            afterOpenChange={(hasOpened) => {
+              if (!hasOpened) {
+                noteHintClosed();
+                if (!isShown) setPopupTarget(null);
+              }
+              afterOpenChange?.(hasOpened);
+            }}
+          />
+        )}
+      </>
     );
   },
 );

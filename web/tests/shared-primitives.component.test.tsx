@@ -1,5 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DeferredMount } from '../src/components/common/DeferredMount';
+import { Tooltip } from '../src/components/common/Tooltip';
+import { progressTasks } from '../src/utils/progressTasks';
 import { AppDrawer } from '../src/components/common/AppDrawer';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
@@ -250,5 +254,56 @@ describe('the translator', () => {
   it('renders an id the catalog does not define as itself, including a name the prototype carries', () => {
     render(<I18nProvider><UnknownIds /></I18nProvider>);
     expect(document.body.textContent).toContain('toString · no.such.id');
+  });
+});
+
+
+describe('Tooltip', () => {
+  it('evaluates a reading only on intent and keeps the focused trigger and its draft through the popup lifecycle', async () => {
+    const reading = vi.fn(() => 'Current reading');
+    const { rerender } = render(<Tooltip title={reading} open={false}><input aria-label="Draft" defaultValue="initial" aria-describedby="field-hint" /></Tooltip>);
+    const trigger = screen.getByRole('textbox', { name: 'Draft' });
+    fireEvent.change(trigger, { target: { value: 'unfinished draft' } });
+    trigger.focus();
+    expect(reading).not.toHaveBeenCalled();
+
+    rerender(<Tooltip title={reading} open><input aria-label="Draft" defaultValue="initial" aria-describedby="field-hint" /></Tooltip>);
+    await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe('Current reading'));
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-describedby')?.split(' ')).toContain('field-hint');
+    expect((trigger as HTMLInputElement).value).toBe('unfinished draft');
+
+    rerender(<Tooltip title={reading} open={false}><input aria-label="Draft" defaultValue="initial" aria-describedby="field-hint" /></Tooltip>);
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-describedby')).toBe('field-hint');
+  });
+});
+
+describe('DeferredMount', () => {
+  it('counts an optional editor download on first use and keeps its draft while it closes and reopens', async () => {
+    const initialize = vi.fn();
+    function Editor({ isOpen }: { isOpen: boolean }) {
+      React.useEffect(() => { initialize(); }, []);
+      return <input aria-label="Optional draft" hidden={!isOpen} defaultValue="initial" />;
+    }
+    let finishDownload!: (module: { default: typeof Editor }) => void;
+    const LazyEditor = React.lazy(() => new Promise<{ default: typeof Editor }>((resolve) => { finishDownload = resolve; }));
+    const view = (isOpen: boolean) => <DeferredMount isActive={isOpen}><LazyEditor isOpen={isOpen} /></DeferredMount>;
+    const { rerender } = render(view(false));
+    expect(initialize).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Optional draft')).toBeNull();
+    rerender(view(true));
+    expect(progressTasks.read().size).toBe(1);
+    await act(async () => { finishDownload({ default: Editor }); });
+    expect(progressTasks.read().size).toBe(0);
+    const field = screen.getByLabelText('Optional draft');
+    fireEvent.change(field, { target: { value: 'unfinished draft' } });
+    rerender(view(false));
+    rerender(view(true));
+    expect(screen.getByLabelText('Optional draft')).toBe(field);
+    expect((field as HTMLInputElement).value).toBe('unfinished draft');
+    expect(initialize).toHaveBeenCalledTimes(1);
   });
 });

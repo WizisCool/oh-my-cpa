@@ -19,3 +19,20 @@ export function formatCalendarDay(day: string, locale: string, options: Intl.Dat
   // A civil date is not an instant in the browser's zone, where midnight may not even exist.
   return getDateTimeFormatter(locale, { ...options, timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
 }
+
+/** Fixed-width minute labels, with the closing midnight belonging to the day it closes. */
+export function formatMinuteSpan(fromMs: number, toMs: number, timeZone: string): string {
+  const formatter = getDateTimeFormatter('en-GB', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  const readParts = (timestamp: number) => {
+    const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+    for (const part of formatter.formatToParts(timestamp)) parts[part.type] = part.value;
+    return { day: `${parts.year}-${parts.month}-${parts.day}`, stamp: `${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`, time: `${parts.hour}:${parts.minute}` };
+  };
+  const start = readParts(fromMs);
+  const end = readParts(toMs);
+  const isSameDay = toMs - fromMs < 86_400_000 && start.day === readParts(toMs - 1).day;
+  return `${start.stamp} – ${isSameDay ? end.time : end.stamp}`;
+}

@@ -34,20 +34,15 @@ import {
   isAuthFileHealthy,
   isAuthFileProblem,
 } from '../../components/authFiles/authFileLogic';
-import { AuthFileDetailDrawer } from '../../components/authFiles/AuthFileDetailDrawer';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
 import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
-import { OAuthModelRulesDrawer } from '../../components/authFiles/OAuthModelRulesDrawer';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
-import { VertexImportModal } from '../../components/authFiles/VertexImportModal';
-import { OAuthConnectPanel } from './OAuthConnectPanel';
 import { CredentialSection, type CredentialRowActions } from './CredentialSection';
 import { buildCredentialSections, orderBySection, type QuotaColumnSort } from './credentialSections';
 import { useOAuthSessions } from './useOAuthSessions';
 import { isSIWCPending, siwcTargetKey, useSIWCBindings } from '../../hooks/useSIWCBindings';
-import { SIWCDialog } from '../../components/authFiles/SIWCDialog';
 import { siwcBadgeState } from '../../components/authFiles/siwcBadge';
 import { useOAuthWorkspaceActions } from './useOAuthWorkspaceActions';
 import {
@@ -69,6 +64,20 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { Toolbar } from '../../components/common/Toolbar';
 import { ToolButton } from '../../components/common/ToolButton';
 import { Pager } from '../../components/common/Pager';
+
+import { DeferredMount } from '../../components/common/DeferredMount';
+import { createRouteLoader } from '../../utils/routeLoader';
+
+const AuthFileDetailDrawer = React.lazy(createRouteLoader(() =>
+  import('../../components/authFiles/AuthFileDetailDrawer').then(module => ({ default: module.AuthFileDetailDrawer }))));
+const OAuthModelRulesDrawer = React.lazy(createRouteLoader(() =>
+  import('../../components/authFiles/OAuthModelRulesDrawer').then(module => ({ default: module.OAuthModelRulesDrawer }))));
+const VertexImportModal = React.lazy(createRouteLoader(() =>
+  import('../../components/authFiles/VertexImportModal').then(module => ({ default: module.VertexImportModal }))));
+const OAuthConnectPanel = React.lazy(createRouteLoader(() =>
+  import('./OAuthConnectPanel').then(module => ({ default: module.OAuthConnectPanel }))));
+const SIWCDialog = React.lazy(createRouteLoader(() =>
+  import('../../components/authFiles/SIWCDialog').then(module => ({ default: module.SIWCDialog }))));
 
 interface CompletionPending {
   providerId: string;
@@ -908,72 +917,84 @@ export const OAuthManagementPage: React.FC = () => {
         </>
       )}
 
-      <OAuthConnectPanel
-        open={isConnectOpen}
-        choices={choices}
-        selectedProviderId={connectProviderId || undefined}
-        onSelectProvider={setConnectProviderId}
-        onClose={() => setIsConnectOpen(false)}
-        onViewCredentials={(providerId) => {
-          setSearch({ provider: displayProviderForAuthorization(providerId), page: null });
-          setIsConnectOpen(false);
-        }}
-        sessions={sessionController}
-      />
+      <DeferredMount isActive={isConnectOpen}>
+        <OAuthConnectPanel
+          open={isConnectOpen}
+          choices={choices}
+          selectedProviderId={connectProviderId || undefined}
+          onSelectProvider={setConnectProviderId}
+          onClose={() => setIsConnectOpen(false)}
+          onViewCredentials={(providerId) => {
+            setSearch({ provider: displayProviderForAuthorization(providerId), page: null });
+            setIsConnectOpen(false);
+          }}
+          sessions={sessionController}
+        />
+      </DeferredMount>
 
-      <VertexImportModal
-        open={isVertexImportOpen}
-        onClose={() => setIsVertexImportOpen(false)}
-        onImported={actions.reloadWorkspace}
-      />
+      <DeferredMount isActive={isVertexImportOpen}>
+        <VertexImportModal
+          open={isVertexImportOpen}
+          onClose={() => setIsVertexImportOpen(false)}
+          onImported={actions.reloadWorkspace}
+        />
+      </DeferredMount>
 
-      <AuthFileDetailDrawer
-        file={selectedRecord?.file ?? null}
-        open={Boolean(selectedRecord)}
-        onClose={() => setSelectedIdentity(undefined)}
-        onSaved={() => {
-          void Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
-            queryClient.invalidateQueries({ queryKey: ['management-quota'] }),
-            queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
-          ]);
-        }}
-        onDownload={() => {
-          const latest = selectedRecord
-            ? recordsRef.current.find((record) => record.key === selectedRecord.key)
-            : undefined;
-          if (latest) actions.download(latest);
-        }}
-        initialSection={drawerSection}
-        canEdit={Boolean(selectedRecord?.canEditFile)}
-        hasExternalDraft={hasWarmupDraft}
-        quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord) : undefined}
-        warmupContent={selectedRecord?.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider)
-          ? <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} /> : undefined}
-      />
+      <DeferredMount isActive={Boolean(selectedRecord)}>
+        <AuthFileDetailDrawer
+          file={selectedRecord?.file ?? null}
+          open={Boolean(selectedRecord)}
+          onClose={() => setSelectedIdentity(undefined)}
+          onSaved={() => {
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
+              queryClient.invalidateQueries({ queryKey: ['management-quota'] }),
+              queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
+            ]);
+          }}
+          onDownload={() => {
+            const latest = selectedRecord
+              ? recordsRef.current.find((record) => record.key === selectedRecord.key)
+              : undefined;
+            if (latest) actions.download(latest);
+          }}
+          initialSection={drawerSection}
+          canEdit={Boolean(selectedRecord?.canEditFile)}
+          hasExternalDraft={hasWarmupDraft}
+          quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord) : undefined}
+          warmupContent={selectedRecord?.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider)
+            ? <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} /> : undefined}
+        />
+      </DeferredMount>
 
-      <SIWCDialog
-        file={siwcRecord?.file}
-        canEdit={Boolean(siwcRecord?.canEditFile)}
-        bindings={siwcBindings}
-        onClose={() => setSIWCRecordKey(undefined)}
-      />
-      <WarmupSettingsDrawer open={isWarmupSettingsOpen} onClose={() => setIsWarmupSettingsOpen(false)} />
-      <OAuthModelRulesDrawer
-        open={isModelRulesOpen}
-        onClose={() => setIsModelRulesOpen(false)}
-        onSaved={() => {
-          void Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['management-oauth-model-aliases'] }),
-            queryClient.invalidateQueries({ queryKey: ['management-oauth-excluded-models'] }),
-            queryClient.invalidateQueries({ queryKey: ['auth-file-models'] }),
-            queryClient.invalidateQueries({ queryKey: ['model-square'] }),
-            queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
-          ]);
-        }}
-        providerOptions={providerOptions.filter((provider) => provider !== 'all')}
-        pluginLogos={pluginLogos}
-      />
+      <DeferredMount isActive={Boolean(siwcRecord)}>
+        <SIWCDialog
+          file={siwcRecord?.file}
+          canEdit={Boolean(siwcRecord?.canEditFile)}
+          bindings={siwcBindings}
+          onClose={() => setSIWCRecordKey(undefined)}
+        />
+      </DeferredMount>
+      <DeferredMount isActive={isWarmupSettingsOpen}>
+        <WarmupSettingsDrawer open={isWarmupSettingsOpen} onClose={() => setIsWarmupSettingsOpen(false)} />
+      </DeferredMount>
+      <DeferredMount isActive={isModelRulesOpen}>
+        <OAuthModelRulesDrawer
+          open={isModelRulesOpen}
+          onClose={() => setIsModelRulesOpen(false)}
+          onSaved={() => {
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['management-oauth-model-aliases'] }),
+              queryClient.invalidateQueries({ queryKey: ['management-oauth-excluded-models'] }),
+              queryClient.invalidateQueries({ queryKey: ['auth-file-models'] }),
+              queryClient.invalidateQueries({ queryKey: ['model-square'] }),
+              queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
+            ]);
+          }}
+          providerOptions={providerOptions.filter((provider) => provider !== 'all')}
+          pluginLogos={pluginLogos}
+        />
+      </DeferredMount>
     </div>
   );
 };

@@ -265,6 +265,20 @@ export async function providerRateMarks({ base, page, check }) {
     `history=${historyShown} hints=${await blockHint.count()}`,
   );
   await page.mouse.move(0, 0);
+  await page.keyboard.press('Tab');
+  const historyTrigger = page.locator('.provider-row-enhanced').filter({ hasText: 'healthy-rate' }).locator('.provider-activity');
+  await historyTrigger.focus();
+  await page.locator('.provider-activity-history').waitFor({ state: 'visible' });
+  check(
+    'keyboard focus reads the full history without moving focus to a popup anchor',
+    await historyTrigger.evaluate((element) => element === document.activeElement),
+  );
+  await page.keyboard.press('Escape');
+  await page.locator('.provider-activity-history').waitFor({ state: 'hidden' });
+  check(
+    'Escape closes the history while preserving the strip focus',
+    await historyTrigger.evaluate((element) => element === document.activeElement),
+  );
 
   // A block sits inside a row that is itself a link. A click on the reading must not take the
   // operator away from the page before they can use the strip's hint.

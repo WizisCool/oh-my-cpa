@@ -1314,6 +1314,18 @@ prefetch authenticated data, mount the target or load the configuration page's Y
 The sign-in screen has no navigation menu and starts none of these speculative imports.
 `web/src/utils/routeLoader.ts` shares one import across intent and navigation, reusing success
 and clearing a failed speculative attempt so a later navigation can retry.
+UI controls and icon modules follow their actual static consumers in the production graph rather
+than sharing one package-wide vendor chunk. Route-only controls and the Agent's complete icon
+set therefore remain behind their route imports. Provider editing and artwork selection, plus
+OAuth connection, import, model-rule, SIWC and credential-detail surfaces load on first use.
+`DeferredMount` retains a surface after that first use, preserving drafts and closing motion;
+its Suspense fallback reports the pending download through the global progress bar.
+
+The shared preference query still reads one document, but `usePreference` selects its own key
+before notifying React consumers. An unrelated optimistic preference write does not re-render
+the shell, display providers and page subscriptions. Per-key serialization and rollback are
+unchanged, and an own-key update still reaches every reader.
+
 The desktop rail's expanded/collapsed choice is the boolean `omc_sidebar_collapsed`
 server preference (expanded when absent), read directly from the shared preference cache.
 Its header toggle and collapsed brand expansion wait for a successful preference read;
@@ -1324,6 +1336,15 @@ The content column records whether it has scrolled through its own scroll events
 Path navigation resets it only after actual scrolling; a column already at the top
 avoids the otherwise redundant `scrollTo` call and its synchronous layout flush.
 Nested scrollable widgets do not change the content column's recorded state.
+
+Shared `Tooltip` triggers are ordinary mounted controls until hover, touch or keyboard intent
+opens a hint. The popup is portaled against a measured, pointer-transparent anchor only while
+active or closing; its geometry listeners are scoped to that lifetime. The real trigger retains
+its DOM, focus, ref and existing ARIA description, including when nested in a confirmation.
+Provider activity rows share the window's formatted minute spans, computed with the bounded
+Intl formatter cache, and memoize their traffic readings. Dashboard tail updates do not
+re-render an unchanged provider panel. Pointer readings and the keyboard-only whole-history
+hint retain their distinct interaction rules.
 
 The token heatmap resolves its first-stored and as-of instants to calendar days once per
 observation/timezone revision, rather than once per cell. `createHeatmapCellClassifier`

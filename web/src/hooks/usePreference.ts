@@ -47,9 +47,11 @@ export function usePreference<T>(
   const toast = useToast();
   const t = useT();
   const queryClient = useQueryClient();
-  const { data, isPending, isError, isSuccess } = useQuery({
+  const selectPreference = React.useCallback((preferences: Record<string, unknown>) => preferences[key], [key]);
+  const { data: raw, isPending, isError, isSuccess } = useQuery({
     queryKey: ['preferences'],
     queryFn: api.getPreferences,
+    select: selectPreference,
     staleTime: Infinity,
     meta: { silent: true },
   });
@@ -62,7 +64,6 @@ export function usePreference<T>(
   // hundreds of times per second without ever writing to the DOM. This
   // requires object-valued fallbacks and catch-free parsers to live at module
   // scope (see call sites); inline closures would defeat the memo.
-  const raw = data?.[key];
   const stored = React.useMemo(() => parse(raw), [key, raw, parse]);
   const value = stored ?? fallback;
 
