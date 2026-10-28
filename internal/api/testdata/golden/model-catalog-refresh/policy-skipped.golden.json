@@ -1,0 +1,59 @@
+{
+  "status": 200,
+  "body": {
+    "ok": true,
+    "catalogs": [
+      {
+        "catalog": "catalog",
+        "status": "skipped",
+        "changed_providers": []
+      },
+      {
+        "catalog": "codex-catalog",
+        "status": "skipped",
+        "changed_providers": []
+      },
+      {
+        "catalog": "devin-catalog",
+        "status": "skipped",
+        "changed_providers": []
+      }
+    ],
+    "changed_providers": []
+  },
+  "audits": [
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "attempt",
+      "details": null
+    },
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "success",
+      "details": {
+        "catalogs": [
+          {
+            "catalog": "catalog",
+            "changed_providers": [],
+            "status": "skipped"
+          },
+          {
+            "catalog": "codex-catalog",
+            "changed_providers": [],
+            "status": "skipped"
+          },
+          {
+            "catalog": "devin-catalog",
+            "changed_providers": [],
+            "status": "skipped"
+          }
+        ],
+        "changed_providers": []
+      }
+    }
+  ]
+}

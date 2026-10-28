@@ -1,0 +1,9 @@
+{
+  "why": "An older gateway reports an unsupported POST without a GET fallback.",
+  "body": {
+    "status": 404,
+    "response": {
+      "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token"
+    }
+  }
+}

@@ -70,7 +70,7 @@ export function auditSearchParams(filters: AuditFilters, now = Date.now()): URLS
 export const AUDIT_CATEGORIES: Readonly<Record<string, readonly string[]>> = {
   access: ['auth'],
   keys: ['api_key', 'client_key'],
-  providers: ['provider'],
+  providers: ['provider', 'model_catalog'],
   credentials: ['auth_file', 'oauth', 'oauth_model_alias', 'oauth_excluded_models'],
   quota: ['quota'],
   config: ['config'],
@@ -131,7 +131,8 @@ const OPAQUE_HEX = /^[0-9a-f]{24,}$/i;
 export function readableTarget(event: AuditEvent): string | undefined {
   const target = event.target_id.trim();
   if (!target || GENERIC_TARGETS.has(target)) return undefined;
-  if (event.target_type === 'capability_operation' || target.startsWith('client_key_alias:')) return undefined;
+  // A catalog refresh always targets every catalog; its `all` names the scope, not an object.
+  if (event.target_type === 'capability_operation' || event.target_type === 'model_catalog' || target.startsWith('client_key_alias:')) return undefined;
   if (OPAQUE_HEX.test(target)) return `${target.slice(0, 8)}…`;
   return target;
 }

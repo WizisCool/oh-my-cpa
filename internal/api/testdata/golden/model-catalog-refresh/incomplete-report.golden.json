@@ -1,0 +1,81 @@
+{
+  "status": 502,
+  "body": {
+    "ok": false,
+    "catalogs": [
+      {
+        "catalog": "catalog",
+        "status": "error",
+        "changed_providers": [],
+        "error_code": "invalid_response"
+      },
+      {
+        "catalog": "codex-catalog",
+        "status": "refreshed",
+        "changed_providers": [
+          "gemini-interactions",
+          "kimi.ai",
+          "kimi.com"
+        ]
+      },
+      {
+        "catalog": "devin-catalog",
+        "status": "error",
+        "changed_providers": [],
+        "error_code": "invalid_response"
+      }
+    ],
+    "changed_providers": [
+      "gemini-interactions",
+      "kimi.ai",
+      "kimi.com"
+    ],
+    "code": "catalog_refresh_failed",
+    "error": "CPA model catalog refresh failed"
+  },
+  "audits": [
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "attempt",
+      "details": null
+    },
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "failure",
+      "details": {
+        "catalogs": [
+          {
+            "catalog": "catalog",
+            "changed_providers": [],
+            "error_code": "invalid_response",
+            "status": "error"
+          },
+          {
+            "catalog": "codex-catalog",
+            "changed_providers": [
+              "gemini-interactions",
+              "kimi.ai",
+              "kimi.com"
+            ],
+            "status": "refreshed"
+          },
+          {
+            "catalog": "devin-catalog",
+            "changed_providers": [],
+            "error_code": "invalid_response",
+            "status": "error"
+          }
+        ],
+        "changed_providers": [
+          "gemini-interactions",
+          "kimi.ai",
+          "kimi.com"
+        ]
+      }
+    }
+  ]
+}

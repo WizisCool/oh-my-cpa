@@ -1,0 +1,34 @@
+{
+  "why": "A 502 preserves the successfully refreshed catalog and skipped policy outcomes while removing every raw error.",
+  "body": {
+    "status": 502,
+    "response": {
+      "ok": false,
+      "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+      "catalogs": {
+        "catalog": {
+          "source": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "refreshed": true,
+          "changed_providers": [
+            "codex",
+            "claude",
+            "codex",
+            "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+            "catalog-fixture-token",
+            "unknown-provider"
+          ]
+        },
+        "codex-catalog": {
+          "refreshed": false,
+          "source": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "error": "cannot read /operator/catalog-fixture.json with catalog-fixture-token"
+        },
+        "devin-catalog": {
+          "source": "embed",
+          "refreshed": false,
+          "skipped": true
+        }
+      }
+    }
+  }
+}

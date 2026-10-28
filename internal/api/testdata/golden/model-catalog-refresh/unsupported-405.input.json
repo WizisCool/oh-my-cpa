@@ -1,0 +1,9 @@
+{
+  "why": "An older gateway that rejects POST reports unsupported without another operation.",
+  "body": {
+    "status": 405,
+    "response": {
+      "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
-import type { ModelSquareDirectory } from '../types/modelSquare';
+import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
 import type { InstalledFont } from '../types/fonts';
 import { getAppConfig } from '../types/config';
@@ -642,6 +642,14 @@ export const api = {
    */
   async getModelSquare(): Promise<ModelSquareDirectory> {
     return request<ModelSquareDirectory>('/management/model-square', { method: 'GET' });
+  },
+
+  /**
+   * Asks CPA to fetch its model catalogs now. A partial failure answers 502 with the same report,
+   * which `isModelCatalogRefreshResult` reads back out of the `ApiError`.
+   */
+  async refreshModelCatalogs(): Promise<ModelCatalogRefreshResult> {
+    return request<ModelCatalogRefreshResult>('/management/model-square/refresh-catalogs', { method: 'POST' });
   },
 
   async getGatewayModels(fingerprint: string, signal?: AbortSignal): Promise<{ models: GatewayModelItem[] }> {

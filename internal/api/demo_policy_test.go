@@ -282,6 +282,7 @@ func TestDemoGuardRefusesOverHTTP(t *testing.T) {
 		{http.MethodPost, "/omc/api/v1/management/plugin-store/x/install", `{}`},
 		{http.MethodPut, "/omc/api/v1/management/config/source", `{"source":"debug: true"}`},
 		{http.MethodPost, "/omc/api/v1/management/quota/redeem-credit", `{"auth_index":"a"}`},
+		{http.MethodPost, "/omc/api/v1/management/model-square/refresh-catalogs", ""},
 		{http.MethodPost, "/omc/api/v1/management/providers/pull-models", `{}`},
 		{http.MethodPost, "/omc/api/v1/management/providers/probe", `{}`},
 		{http.MethodPost, "/omc/api/v1/pricing/sync", `{}`},
