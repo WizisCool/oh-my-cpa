@@ -30,10 +30,12 @@ import type {
   ManagementAuthFileSafeFields,
 } from '../../types/managementAuthFile';
 import {
+  credentialNameProblem,
   deriveAuthFileIdentity,
   hasAuthFileStatusWarning,
   isAuthFileDisabled,
   isAuthFileProblem,
+  MAX_CREDENTIAL_NAME_LENGTH,
   summarizeAuthFileStatusMessage,
 } from './authFileLogic';
 import styles from './AuthFileDetailDrawer.module.css';
@@ -462,6 +464,15 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
     const nextName = (values.display_name ?? '').trim();
     const hasNameChange = nextName !== (baseline.display_name ?? '');
+    // The server counts code points and refuses control characters; validating here keeps the
+    // fields patch from succeeding while the name half of the same save is rejected.
+    const nameProblem = hasNameChange ? credentialNameProblem(nextName) : null;
+    if (nameProblem) {
+      toast.warning(nameProblem === 'too_long'
+        ? t('af.rename_too_long', { n: MAX_CREDENTIAL_NAME_LENGTH })
+        : t('af.rename_control'));
+      return;
+    }
     if (Object.keys(patch).length === 0 && !hasNameChange) {
       isPendingRef.current = false;
       form.setFieldsValue(baseline);

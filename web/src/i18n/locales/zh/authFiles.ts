@@ -50,6 +50,8 @@ export default {
   'af.rename_cleared': '名称已清除',
   'af.rename_conflict': '名称已被其他会话修改，已载入最新状态',
   'af.rename_failed': '名称保存失败',
+  'af.rename_too_long': '名称最长 {n} 个字符',
+  'af.rename_control': '名称不能包含换行或控制字符',
   'af.models_title': '支持模型列表',
   'af.models_empty': '暂无模型列表',
   'af.quota_title': '配额观测指标 (Quota Signals)',

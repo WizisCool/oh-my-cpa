@@ -4,6 +4,7 @@ import { api, ApiError, describeError } from '../../api/client';
 import { useToast } from '../feedback/useToast';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
+import { credentialNameProblem, MAX_CREDENTIAL_NAME_LENGTH } from './authFileLogic';
 
 /**
  * Names or clears a credential, from its row or from its drawer.
@@ -20,6 +21,15 @@ export function useCredentialRename(): (file: ManagementAuthFile, displayName: s
   return React.useCallback(async (file, displayName) => {
     const next = displayName.trim();
     if (next === (file.display_name ?? '')) return true;
+    // The server counts code points and refuses control characters; checking here turns a
+    // rejected request into the same localized message the row and the drawer both show.
+    const problem = credentialNameProblem(next);
+    if (problem) {
+      toast.warning(problem === 'too_long'
+        ? t('af.rename_too_long', { n: MAX_CREDENTIAL_NAME_LENGTH })
+        : t('af.rename_control'));
+      return false;
+    }
     try {
       await api.setManagementAuthFileDisplayName(file.name, next, file.display_name_version ?? 0);
       toast.success(t(next ? 'af.renamed' : 'af.rename_cleared'));

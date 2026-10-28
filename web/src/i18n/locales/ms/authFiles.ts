@@ -53,6 +53,8 @@ export default {
   "af.rename_cleared": "Nama dikosongkan",
   "af.rename_conflict": "Sesi lain telah menukar nama ini; yang terkini dipaparkan",
   "af.rename_failed": "Gagal menyimpan nama",
+  "af.rename_too_long": "Nama mungkin paling banyak {n} aksara",
+  "af.rename_control": "Nama tidak boleh mengandungi pemisah baris atau aksara kawalan",
   "af.models_title": "Model Disokong",
   "af.models_empty": "Tiada model dilaporkan",
   "af.quota_title": "Isyarat Kuota",

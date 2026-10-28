@@ -70,8 +70,22 @@ export function providerOf(file: ManagementAuthFile): string {
   return (file.type || file.provider || 'unknown').trim().toLowerCase();
 }
 
-/** The longest credential name the server stores, in characters. */
+/** The longest credential name the server stores, in Unicode code points. */
 export const MAX_CREDENTIAL_NAME_LENGTH = 64;
+
+/**
+ * Why a credential name cannot be saved, or null when it can.
+ *
+ * The server counts code points (`utf8.RuneCountInString`), so the browser has to count the same
+ * way: an input's native `maxLength` counts UTF-16 units and would refuse a legal name written in
+ * astral characters. The rule lives with the other credential logic so both editors share it.
+ */
+export function credentialNameProblem(displayName: string): 'too_long' | 'control' | null {
+  const trimmed = displayName.trim();
+  if ([...trimmed].length > MAX_CREDENTIAL_NAME_LENGTH) return 'too_long';
+  // Newlines and bidi overrides are what the server refuses; `\p{Cc}` alone misses the latter.
+  return /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(trimmed) ? 'control' : null;
+}
 
 export interface AuthFileIdentity {
   primary: string;

@@ -64,8 +64,12 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   );
   const credentials = React.useMemo(() => {
     const names = new Map<string, { name: string; provider?: string }>();
-    for (const file of authFiles?.files ?? []) {
-      if (file.auth_index) names.set(file.auth_index, { name: credentialTitle(file) || credentialFileName(file), provider: file.provider || file.type });
+    // The indexed read is the one that refuses to guess: an index two files claim maps to
+    // null, and the raw index stays the label rather than either file's name.
+    for (const [index, file] of credentialFiles) {
+      names.set(index, file
+        ? { name: credentialTitle(file) || credentialFileName(file), provider: file.provider || file.type }
+        : { name: index });
     }
     for (const provider of configuredProviders ?? []) {
       const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
@@ -76,7 +80,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
       });
     }
     return names;
-  }, [authFiles, configuredProviders]);
+  }, [credentialFiles, configuredProviders]);
 
   return React.useMemo<InsightsLabels>(() => {
     const nameProvider = (id: string) => {

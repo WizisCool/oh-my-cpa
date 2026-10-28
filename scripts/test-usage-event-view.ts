@@ -1060,6 +1060,38 @@ assert.equal(historical.credential, 'auth-oauth', 'a reused index cannot name an
 assert.equal(historical.title, 'Claude');
 assert.equal(historical.accountIdentity, undefined);
 
+// A resource names the file CPA recorded. The live file behind today's index may be another
+// file entirely, so its operator name must not stand in for the resource's label; the resource
+// row keeps the masked account every surface printed before a name existed.
+const resourceFromOtherFile = {
+  ...unbound, provider: 'openai', auth_index: 'auth-1', resource_name: 'history.json',
+} as UsageEvent;
+assert.deepEqual(resolveCredential(resourceFromOtherFile, customNamed), {
+  name: 'history.json',
+  kind: 'resource',
+}, 'another file\u2019s operator name never labels a resource it does not name');
+const resourceFromOtherFileWithAccount = {
+  ...resourceFromOtherFile, resource_name: 'codex-owner@example.com.json',
+} as UsageEvent;
+assert.equal(resolveCredential(resourceFromOtherFileWithAccount, namedAfterAccount).displayName, 'ow•••r@example.com',
+  'the matching file\u2019s account labels its resource, as before');
+const resourceFromSameFile = {
+  ...unbound, provider: 'openai', auth_index: 'auth-1', resource_name: 'current.json',
+} as UsageEvent;
+assert.equal(resolveCredential(resourceFromSameFile, customNamed).displayName, 'Team seat',
+  'the operator name stands in only for the resource of the file it names');
+
+// A provider mismatch drops attribution, never masking: the rejected file still reports the
+// address the resource name repeats, so the label stays masked exactly as before the rename.
+const rejectedFile = indexCredentialFiles([
+  { name: 'codex-owner@example.com.json', auth_index: 'auth-1', provider: 'codex', email: 'owner@example.com' },
+]);
+assert.equal(
+  resolveCredential({ ...resourceFromOtherFileWithAccount, provider: 'claude' }, rejectedFile).displayName,
+  'codex-ow•••r@example.com.json',
+  'a mismatched file still masks the resource name',
+);
+
 const oauthResolved = resolveProviderInfo(oauthEvent, credFiles);
 assert.equal(oauthResolved.isOAuth, true);
 // One grammar for both credential types: the provider is the title, and the

@@ -53,6 +53,8 @@ export default {
   'af.rename_cleared': 'Name cleared',
   'af.rename_conflict': 'Another session changed this name; the latest is shown',
   'af.rename_failed': 'Couldn\'t save the name',
+  'af.rename_too_long': 'The name may be at most {n} characters',
+  'af.rename_control': 'The name cannot contain line breaks or control characters',
   'af.models_title': 'Supported Models',
   'af.models_empty': 'No models reported',
   'af.quota_title': 'Quota Signals',

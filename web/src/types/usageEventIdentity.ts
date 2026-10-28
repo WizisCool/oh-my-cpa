@@ -134,19 +134,31 @@ function matchingCredential(event: UsageEvent, files: CredentialIndex): Credenti
 
 export function resolveCredential(event: UsageEvent, files: CredentialIndex): CredentialIdentity {
   const file = matchingCredential(event, files);
+  // Masking is not attribution: whatever the index resolves to can repeat an identity the
+  // resource or file name also prints, so it is applied whenever a file exists for the
+  // index. A name is attribution, and only a file that names this record may supply one.
+  const maskFile = event.auth_index ? files.get(event.auth_index) : undefined;
   // A discovered resource is named after the auth file CPA saw, so its name repeats the
   // same identities the live file reports; mask it through the same projection. The
   // stored name stays the bucket, even when masking changes what a surface prints.
   // The operator's own name for the file, when it has one, is what every surface prints.
-  const identity = (name: string, kind: CredentialIdentity['kind']): CredentialIdentity => {
-    const displayName = credentialTitle(file) || maskCredentialIdentities(name, file);
+  // An operator name, or the account the file reports, replaces the label; the account branch
+  // keeps one mask and one shape for a named and an unnamed credential. Without either, the
+  // label is the name itself, masked in place, which is what every surface prints for a resource.
+  const identity = (name: string, kind: CredentialIdentity['kind'], shownName: string): CredentialIdentity => {
+    const displayName = shownName || maskCredentialIdentities(name, maskFile);
     return { name, ...(displayName !== name ? { displayName } : {}), kind };
   };
-  if (event.resource_name?.trim()) return identity(event.resource_name.trim(), 'resource');
+  const resourceName = event.resource_name?.trim();
+  const isFileOfResource = Boolean(file?.name.trim() && file.name.trim() === resourceName);
+  if (resourceName)
+    // A resource names the file CPA recorded, so the live file's own name must match it
+    // before the operator's name for that file can stand in for the resource's label.
+    return identity(resourceName, 'resource', isFileOfResource ? credentialTitle(file) : '');
   if (file)
-    return identity(file.name, 'current_file');
-  if (event.auth_index?.trim()) return identity(event.auth_index.trim(), 'index');
-  if (event.source?.trim()) return identity(event.source.trim(), 'source');
+    return identity(file.name, 'current_file', credentialTitle(file));
+  if (event.auth_index?.trim()) return identity(event.auth_index.trim(), 'index', '');
+  if (event.source?.trim()) return identity(event.source.trim(), 'source', '');
   return { kind: 'unknown' };
 }
 

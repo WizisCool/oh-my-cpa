@@ -29,7 +29,6 @@ import type { QuotaWindow } from '../../types/quota';
 import {
   deriveAuthFileIdentity,
   hasAuthFileStatusWarning,
-  MAX_CREDENTIAL_NAME_LENGTH,
   isAuthFileDisabled,
   isAuthFileProblem,
   summarizeAuthFileStatusMessage,
@@ -546,7 +545,6 @@ function CredentialNameEditor({ initial, label, onCommit, onCancel }: Credential
       autoFocus
       className={styles['name-input']}
       value={draft}
-      maxLength={MAX_CREDENTIAL_NAME_LENGTH * 2}
       placeholder={t('af.display_name_placeholder')}
       aria-label={label}
       readOnly={isSaving}
