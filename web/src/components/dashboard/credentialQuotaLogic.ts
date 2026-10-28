@@ -82,7 +82,9 @@ function pickRowWindows(windows: QuotaWindow[]): QuotaWindow[] {
  * it. Masking where the row is built means the label and its tooltip cannot disagree.
  */
 function credentialLabel(file: ManagementAuthFile): string {
-  const account = (file.email || file.project_id || '').trim();
+  // Each candidate is trimmed before it is chosen, so a blank address cannot shadow the project id
+  // beside it. `credentialAccount` and `deriveAuthFileIdentity` select the same way.
+  const account = file.email?.trim() || file.project_id?.trim() || '';
   if (account) return maskAccount(account);
   return (file.name || '').trim() || '—';
 }
