@@ -8,6 +8,11 @@ export type TooltipProps = Omit<AntTooltipProps, 'trigger' | 'mouseEnterDelay' |
    * only job is the hint. Plain text and marks answer a tap without this.
    */
   isTapReadable?: boolean;
+  /**
+   * Only a visible keyboard focus opens the hint. For a trigger whose children carry hints of their
+   * own: the pointer reads those, and a hover on the gaps between them must not open this one too.
+   */
+  isFocusOnly?: boolean;
 };
 
 type ChildProps = React.HTMLAttributes<HTMLElement>;
@@ -31,7 +36,7 @@ function compose<E>(own: ((event: E) => void) | undefined, theirs: (event: E) =>
  * hint down (`open={false}`) or up.
  */
 export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
-  ({ children, open: heldOpen, isTapReadable = false, title, overlay, afterOpenChange, ...rest }, ref) => {
+  ({ children, open: heldOpen, isTapReadable = false, isFocusOnly = false, title, overlay, afterOpenChange, ...rest }, ref) => {
     const [isOpen, setIsOpen] = React.useState(false);
     const triggerRef = React.useRef<HTMLElement | null>(null);
     const timerRef = React.useRef<number | undefined>(undefined);
@@ -77,7 +82,7 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
     const childProps = child.props;
     const trigger = React.cloneElement(child, {
       onPointerMove: compose(childProps.onPointerMove, (event: React.PointerEvent<HTMLElement>) => {
-        if (event.pointerType === 'touch') return;
+        if (event.pointerType === 'touch' || isFocusOnly) return;
         triggerRef.current = event.currentTarget;
         if (!hasContent || isPressedRef.current || isOpen || timerRef.current !== undefined) return;
         const element = event.currentTarget;
@@ -102,7 +107,7 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
       onClick: compose(childProps.onClick, (event: React.MouseEvent<HTMLElement>) => {
         const isTap = lastPointerRef.current === 'touch';
         lastPointerRef.current = 'mouse';
-        if (!isTap || !hasContent) return;
+        if (!isTap || !hasContent || isFocusOnly) return;
         if (!isTapReadable && isControl(event.currentTarget)) return;
         setIsOpen((current) => !current);
       }),

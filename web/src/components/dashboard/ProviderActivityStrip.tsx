@@ -36,10 +36,6 @@ export interface ProviderActivityStripProps {
 export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ blocks, name }) => {
   const t = useT();
   const timeZone = useTimeZone();
-  // The whole history answers a visible keyboard focus only. On hover it would race the block
-  // under the pointer: the gaps between blocks belong to the strip, so crossing one starts the
-  // strip's hint and it opens over the block's own reading.
-  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const history = blocks.flatMap((block) => {
     if (block.total <= 0 || block.successRate === null) return [];
     return [{
@@ -68,18 +64,17 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
   return (
     <Tooltip
       title={historyHint}
-      open={isHistoryOpen}
+      isFocusOnly
       classNames={{ root: 'provider-activity-history-tooltip' }}
     >
       {/* One focus stop gives keyboard and screen-reader users the whole history without turning
-          two dozen decorative blocks into two dozen tab stops. Pointer readings stay per block. */}
+          two dozen decorative blocks into two dozen tab stops. A pointer reads one block at a
+          time: the gaps between blocks belong to the strip, so a hover hint here would open over
+          the reading of the block the pointer crossed onto. */}
       <div
         className="provider-activity"
         role="img"
         tabIndex={0}
-        onFocus={(event) => setIsHistoryOpen(event.currentTarget.matches(':focus-visible'))}
-        onBlur={() => setIsHistoryOpen(false)}
-        onKeyDown={(event) => { if (event.key === 'Escape') setIsHistoryOpen(false); }}
         aria-label={`${t('dash.providers_activity', { name })}: ${historyText}`}
       >
         {blocks.map((block) => {
