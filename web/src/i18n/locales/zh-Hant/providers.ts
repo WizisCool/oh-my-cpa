@@ -165,5 +165,4 @@ export default {
   "pro.traffic_unknown": "流量資料暫不可用",
   "pro.traffic_none": "無請求",
   "pro.traffic_requests": "{n} 次請求",
-  "pro.traffic_failed": "失敗 {n}",
 } satisfies Translation<typeof source>;

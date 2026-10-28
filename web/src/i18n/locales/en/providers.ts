@@ -165,5 +165,4 @@ export default {
   'pro.traffic_unknown': 'Traffic is unavailable',
   'pro.traffic_none': 'No requests',
   'pro.traffic_requests': '{n} requests',
-  'pro.traffic_failed': '{n} failed',
 } satisfies Translation<typeof source>;

@@ -1,8 +1,8 @@
 import type { ProviderItem } from '../../types/providers';
 import { matchProviderFamily } from '../../types/providerFamilies';
 import { successRateTone } from '../../types/usageEventMetrics';
-import { aggregateProviders, type WindowProviderTraffic } from '../dashboard/dashboardProvidersLogic';
-import type { WindowCredentialTraffic } from '../../types/dashboard';
+import { aggregateProviders } from '../dashboard/dashboardProvidersLogic';
+import type { WindowCredentialTraffic, WindowProviderTraffic } from '../../types/dashboard';
 
 /** The status tiles, in reading order; each one is also the list's status filter. */
 export const PROVIDER_STATUS_FILTERS = ['all', 'active', 'disabled', 'attention'] as const;
@@ -12,7 +12,6 @@ export type ProviderStatusFilter = (typeof PROVIDER_STATUS_FILTERS)[number];
 export interface ProviderTraffic {
   total: number;
   success: number;
-  failure: number;
   /** 0-100, or null when the window served nothing. */
   successRate: number | null;
 }
@@ -70,7 +69,6 @@ export function providerTrafficById(
     traffic.set(row.providerId, {
       total: row.total,
       success: row.success,
-      failure: row.failure,
       successRate: row.successRate,
     });
   }
@@ -157,13 +155,11 @@ export function totalProviderTraffic(
   if (!traffic) return undefined;
   let total = 0;
   let success = 0;
-  let failure = 0;
   for (const provider of providers) {
     const row = traffic.get(provider.id);
     if (!row) continue;
     total += row.total;
     success += row.success;
-    failure += row.failure;
   }
-  return { total, success, failure, successRate: total > 0 ? (success / total) * 100 : null };
+  return { total, success, successRate: total > 0 ? (success / total) * 100 : null };
 }

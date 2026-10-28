@@ -165,13 +165,6 @@
   width: 100%;
 }
 
-.traffic-failed {
-  color: var(--danger);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
 /* The band's three tones, as the dashboard paints them; neutral is a window with nothing to judge. */
 .tone-success { color: var(--success); }
 .tone-warn { color: var(--warn); }
