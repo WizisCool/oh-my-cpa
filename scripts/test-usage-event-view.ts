@@ -334,6 +334,32 @@ assert.deepEqual(resolveCredential(unbound, namedAfterAccount), {
   displayName: 'codex-ow•••r@example.com.json',
   kind: 'current_file',
 });
+// A discovered resource is named after the auth file, so the resource branch carries the
+// same masked display form while its raw name stays the grouping key.
+const namedResource = { ...unbound, resource_name: 'codex-owner@example.com.json' } as UsageEvent;
+assert.deepEqual(resolveCredential(namedResource, namedAfterAccount), {
+  name: 'codex-owner@example.com.json',
+  displayName: 'codex-ow•••r@example.com.json',
+  kind: 'resource',
+});
+// A Vertex service account reports both an address and a project id, and its file is
+// named after the project: masking only the first reported identity would leave it whole.
+const vertexFiles = indexCredentialFiles([
+  {
+    name: 'vertex-acme-prod.json',
+    auth_index: 'auth-vertex',
+    provider: 'vertex',
+    type: 'vertex',
+    email: 'runner@acme-prod.iam.gserviceaccount.com',
+    project_id: 'acme-prod',
+  },
+]);
+const vertexEvent = { ...unbound, auth_index: 'auth-vertex', provider: 'vertex' } as UsageEvent;
+assert.deepEqual(resolveCredential(vertexEvent, vertexFiles), {
+  name: 'vertex-acme-prod.json',
+  displayName: 'vertex-acm•••od.json',
+  kind: 'current_file',
+});
 assert.deepEqual(resolveCredential({ ...unbound, provider: 'claude' }, files), {
   name: 'auth-1',
   kind: 'index',

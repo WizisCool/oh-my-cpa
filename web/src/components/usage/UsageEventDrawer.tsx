@@ -28,6 +28,7 @@ import { ModelMark } from '../ModelMark';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
+  maskCredentialIdentities,
   resolveCredential,
   type CredentialIndex,
 } from '../../types/usageEventIdentity';
@@ -102,6 +103,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   // account and any file name built from it are masked here too; the export is the one
   // place where the operator decides to disclose the address.
   const credentialLabel = identity?.displayName ?? identity?.name;
+  // `resource_name` is the discovered auth file's name, so it repeats the same identities
+  // the file reports; it is a fact of its own here, not the credential label, so it is
+  // masked independently rather than read from the resolved identity.
+  const resourceNameLabel = event?.resource_name
+    ? maskCredentialIdentities(event.resource_name, event.auth_index ? credentials.get(event.auth_index) : undefined)
+    : undefined;
   // The upstream credential that answered, as the record's own response reported
   // it. Re-rendered from whatever arrived so this surface cannot print a value the
   // server never masked, and absent when the credential could not be identified.
@@ -386,7 +393,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           t('events.identity_basis'),
                           identity ? t(`events.credential_${identity.kind}`) : missing,
                         ],
-                        [t('events.resource_name'), value(event.resource_name)],
+                        [t('events.resource_name'), value(resourceNameLabel)],
                         [t('events.source'), value(event.source)],
                         [t('events.auth_index'), value(event.auth_index)],
                         [t('events.auth_type'), value(event.auth_type)],

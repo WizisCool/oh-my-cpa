@@ -1188,15 +1188,19 @@ the same wherever it is read: `djz20040127@outlook.com` renders as
 `dj•••7@outlook.com` — a short head and the last character of the local part, the
 whole domain, and a filler of constant length so the mask does not give away the
 name's length. A Vertex project id takes the non-address shape: three leading and
-two trailing characters. A file that is named after its account is masked in place
+two trailing characters. A file named after its account is masked in place
 (`codex-dj•••7@outlook.com.json`), because masking the address inside a name is what
-the OAuth table already does.
+the OAuth table already does. A service account can report both an address and a
+project id, so a file name that repeats either one is masked
+(`vertex-acm•••od.json`); a discovered resource name is the auth file's name, so the
+source-group header and the drawer mask it through the same projection.
 
 - **The rule lives in the identity projection, not in a cell.**
   `resolveProviderInfo` returns the masked account as the credential line and keeps
   the raw value in `accountIdentity`; `resolveCredential` carries a `displayName`
-  beside the stored name. Every surface consumes those, so a new reader of the same
-  identity cannot print the address by forgetting a mask.
+  beside the stored name when a live file or a discovered resource repeats a reported
+  identity. Every surface consumes those, so a new reader of the same identity cannot
+  print the address by forgetting a mask.
 - **The mask is not an identity.** Grouping, filtering and `auth_index` keep the
   raw name. Two accounts can render the same mask, and merging them into one header
   would be a display bug turned into a data bug.

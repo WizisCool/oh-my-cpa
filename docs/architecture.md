@@ -2123,8 +2123,10 @@ for the surfaces that manage credentials: the OAuth workspace masks it until
 revealed and needs the whole value to do so. Request records need the same identity
 without publishing it, so they print the mask
 (`web/src/utils/maskAccount.ts`: two leading and the last character of the local
-part, the whole domain, a constant filler), and a file named after the account is
-masked in place. Vertex project ids take the non-address shape.
+part, the whole domain, a constant filler), and a file name that repeats either
+reported identity - the address or a Vertex project id - is masked in place. A
+discovered resource is named after the auth file CPA saw, so a resource name goes
+through the same projection before a header or the drawer prints it.
 
 The projection that makes this uniform is
 `web/src/types/usageEventIdentity.ts`, not any single component:

@@ -50,17 +50,40 @@ export function credentialAccount(file: CredentialFile | null | undefined): stri
 }
 
 /**
- * A credential file's name with the account masked wherever the name repeats it.
+ * Every identity CPA reports for one credential file: the account address and, for a
+ * service account, the project it belongs to.
+ */
+function credentialIdentities(file: CredentialFile | null | undefined): string[] {
+  return [file?.email, file?.project_id]
+    .map((value) => (value || '').trim())
+    .filter(Boolean);
+}
+
+/**
+ * Masks each reported identity wherever a display label repeats it.
  *
- * Codex names an auth file after the account, so the same address appears a second
- * time in the file name. A name that does not contain the account is left whole: it
- * is the operator's or CPA's own label, not identity material.
+ * A file can report both an address and a project id (a Vertex service account does),
+ * and its name may repeat either or both - `vertex-acme-prod.json` is named after the
+ * project. Masking only the first reported value would leave the other printed. The
+ * address goes first because a project id can be part of it; masking the whole address
+ * before the project id keeps one replacement from breaking the other's match.
+ */
+export function maskCredentialIdentities(text: string, file: CredentialFile | null | undefined): string {
+  return credentialIdentities(file).reduce((masked, identity) => maskAccountIn(masked, identity), text);
+}
+
+/**
+ * A credential file's name with every reported identity masked wherever the name
+ * repeats one.
+ *
+ * Codex names an auth file after the account, and a Vertex file after its project, so
+ * the file name is a second place the same identity appears. A name that contains none
+ * of them is left whole: it is the operator's or CPA's own label, not identity material.
  */
 export function credentialFileName(file: CredentialFile | null | undefined): string {
   const name = (file?.name || '').trim();
   if (!name) return '';
-  const account = (file?.email || file?.project_id || '').trim();
-  return account ? maskAccountIn(name, account) : name;
+  return maskCredentialIdentities(name, file);
 }
 
 /** Ambiguous indexes must never be guessed, even if one filename looks likely. */
@@ -78,25 +101,26 @@ export function indexCredentialFiles(files: readonly CredentialFile[]): Credenti
  * own resource name over the live auth file.
  *
  * `name` is the identity a header or filter buckets by; `displayName` is the form a
- * surface prints when it differs, which happens only for a live file whose name
- * repeats its account. The two are separate on purpose: a mask is not unique, so
- * making it the bucket would merge two accounts into one group.
+ * surface prints when it differs, which happens when a resource or file name repeats
+ * an identity CPA reports for the credential. The two are separate on purpose: a mask
+ * is not unique, so making it the bucket would merge two accounts into one group.
  */
 export function resolveCredential(event: UsageEvent, files: CredentialIndex): CredentialIdentity {
-  if (event.resource_name?.trim()) return { name: event.resource_name.trim(), kind: 'resource' };
   const file = event.auth_index ? files.get(event.auth_index) : undefined;
+  // A discovered resource is named after the auth file CPA saw, so its name repeats the
+  // same identities the live file reports; mask it through the same projection. The
+  // stored name stays the bucket, even when masking changes what a surface prints.
+  const identity = (name: string, kind: CredentialIdentity['kind']): CredentialIdentity => {
+    const displayName = maskCredentialIdentities(name, file);
+    return { name, ...(displayName !== name ? { displayName } : {}), kind };
+  };
+  if (event.resource_name?.trim()) return identity(event.resource_name.trim(), 'resource');
   const provider = (file?.provider || file?.type || '').toLowerCase();
   // Never assign a current file belonging to a different provider to history.
-  if (file && (!provider || !event.provider || provider === event.provider.toLowerCase())) {
-    const displayName = credentialFileName(file);
-    return {
-      name: file.name,
-      ...(displayName !== file.name ? { displayName } : {}),
-      kind: 'current_file',
-    };
-  }
-  if (event.auth_index?.trim()) return { name: event.auth_index.trim(), kind: 'index' };
-  if (event.source?.trim()) return { name: event.source.trim(), kind: 'source' };
+  if (file && (!provider || !event.provider || provider === event.provider.toLowerCase()))
+    return identity(file.name, 'current_file');
+  if (event.auth_index?.trim()) return identity(event.auth_index.trim(), 'index');
+  if (event.source?.trim()) return identity(event.source.trim(), 'source');
   return { kind: 'unknown' };
 }
 
