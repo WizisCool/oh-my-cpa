@@ -1065,8 +1065,8 @@ The analytical page at `/insights` puts one window on one quiet page of panels:
   rule along its top edge in
   the primary ink, and the trend plots its metric. Each tile states its change as an arrow and the size of
   the change, followed by the previous period's value in `meta` ("Prev. $21.62"); a phone keeps only
-  the change. A window that is still running is measured against the same elapsed stretch of the
-  period before it, so that figure says so ("Prev. same time $21.62") and the comparison's own
+  the change. A calendar window that is still running is measured against the same elapsed stretch of
+  the period before it, so that figure says so ("Prev. same time $21.62") and the comparison's own
   instants are its title - the title every ranking row and key-table cell carries too. A rise is
   drawn in a muted red and a fall in a muted green (`--trend-up` and
   `--trend-down`: `danger` and `success` mixed 64% toward `fg-2`), so the direction reads at a
