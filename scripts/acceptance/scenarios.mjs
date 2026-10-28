@@ -628,13 +628,21 @@ export const SCENARIOS = [
            traffic: one of either produces no row at all. `success_rate` is a percentage, so a row
            that served all 12 of its requests reads 100 - and therefore green, which is the row
            this scenario means to be looking at. */
-        [(url) => url.pathname.endsWith('/management/dashboard/providers'), () => ({
-          window: { preset: '1h', from: Date.now() - 3_600_000, to: Date.now(), bucket_ms: 60_000 },
-          providers: [
-            { id: 'codex', total: 12, success: 12, failure: 0, success_rate: 100 },
-          ],
-          partial_errors: [],
-        })],
+        [(url) => url.pathname.endsWith('/management/dashboard/providers'), () => {
+          const now = Date.now();
+          const bucketMS = 3_600_000;
+          return {
+            window: { preset: '1h', from: now - bucketMS, to: now, bucket_ms: 60_000 },
+            bucket_ms: bucketMS,
+            providers: [
+              {
+                id: 'codex', total: 12, success: 12, failure: 0, success_rate: 100,
+                buckets: [{ start_ms: Math.floor(now / bucketMS) * bucketMS, total: 12, failure: 0 }],
+              },
+            ],
+            partial_errors: [],
+          };
+        }],
         [(url) => url.pathname.endsWith('/management/overview'), () => ({
           cpa: { connected: true, version: 'probe', latency_ms: 1 },
           counts: { management_keys: 1, provider_keys: 1, credentials: 1, models: 1 },

@@ -1707,7 +1707,7 @@ first-token sums, and the request-time cost with its priced and costed counts). 
 never pruned. They grow with *distinct dimension combinations per bucket*, not with requests.
 
 `Repository.QueryUsageFacts` is the single read every panel goes through; the older
-`QueryUsageAnalytics`, `QueryUsageModelBuckets`, `QueryUsageProviderTotals`,
+`QueryUsageAnalytics`, `QueryUsageModelBuckets`, `QueryUsageProviderBuckets`,
 `QueryUsageCostWindow` and `QueryDailyTokenTotals` are thin projections of it. A query names
 the dimensions it groups by (`UsageDimension`: key, model, call point, provider, credential,
 auth type, serving key) and the values it keeps (`Filters`, one `IN` per dimension, rendered
@@ -1962,9 +1962,12 @@ served nothing with another surface's traffic. The fact that does identify the k
 already in the record: the credential's runtime `auth_index`.
 
 `/management/dashboard/providers` therefore answers with two lists instead of one.
-`QueryUsageProviderTotals` reads the usage facts grouped by `UsageGroupProviderCredential`
-(`usageFactGroupExpressions` in `internal/repository/usage_facts.go`): the provider label
-CPA wrote, and `CASE WHEN auth_type = 'apikey' THEN auth_index ELSE '' END`;
+`QueryUsageProviderBuckets` reads the usage facts by `UsageDimensionProvider` and
+`UsageDimensionServingKey` (`internal/repository/usage_facts.go`): the provider label
+CPA wrote, and `CASE WHEN auth_type = 'apikey' THEN TRIM(auth_index) ELSE '' END`, per
+bucket of the response's top-level `bucket_ms` activity grid — separate from the chart grid in
+`window.bucket_ms` — which aims at about two dozen buckets per window so each row can draw its
+activity strip;
 `internal/api/management_dashboard_providers.go` folds the empty-index rows into
 `providers[]` by the label CPA wrote — the OAuth channels, and records that name no
 credential — and the rest into `credentials[]`, one entry per key that served traffic.

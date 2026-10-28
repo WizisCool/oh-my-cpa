@@ -88,44 +88,52 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 	return result, nil
 }
 
-// UsageProviderTotalsRow is one provider's traffic across the whole requested window.
+// UsageProviderBucketRow is one provider's traffic inside one bucket of the requested grid.
 //
 // It is a *row* type rather than a finished response for the same reason the model rows are:
 // canonicalising the provider label and deciding how a zero-request provider reads is a
 // presentation decision, and keeping it out of SQL is what lets it be tested without a database.
-type UsageProviderTotalsRow struct {
+type UsageProviderBucketRow struct {
 	Provider string
 	// CredentialIndex is the runtime auth index of the API key that served the rows, and empty
 	// for every other record. CPA labels an API-key request with its family ("codex"), the same
 	// label an OAuth request of that family carries, so the label alone cannot say which
 	// configured provider answered; the index can.
 	CredentialIndex string
+	StartMS         int64
 	Requests        int64
 	Failures        int64
 }
 
-// QueryUsageProviderTotals aggregates the requested window, [fromMS, toMS), per provider.
+// QueryUsageProviderBuckets aggregates the requested window, [fromMS, toMS), per provider and
+// bucket, and returns the grid it actually read: a window reaching behind the request-record
+// horizon is read in whole fact buckets, so the width can come back coarser than requested.
 //
-// One row per provider, with no bucket: the dashboard's provider list prints a window total and a
-// rate, and reads the rate against the console's fixed bands.
-func (r *Repository) QueryUsageProviderTotals(ctx context.Context, instanceID string, fromMS, toMS int64) ([]UsageProviderTotalsRow, error) {
+// The read is answered from the fact grains, not by grouping request records, which is what
+// makes a per-row grid affordable on a list that polls every thirty seconds.
+func (r *Repository) QueryUsageProviderBuckets(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) ([]UsageProviderBucketRow, int64, error) {
 	if toMS < fromMS {
-		return nil, errors.New("provider analytics window is negative")
+		return nil, 0, errors.New("provider analytics window is negative")
 	}
-	result := []UsageProviderTotalsRow{}
+	if bucketMS <= 0 {
+		return nil, 0, fmt.Errorf("invalid provider analytics bucket width %d", bucketMS)
+	}
+	result := []UsageProviderBucketRow{}
 	if toMS == fromMS {
-		return result, nil
+		return result, bucketMS, nil
 	}
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
-		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS - 1, Dimensions: []UsageDimension{UsageDimensionProvider, UsageDimensionServingKey},
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS - 1, BucketMS: bucketMS,
+		Dimensions: []UsageDimension{UsageDimensionProvider, UsageDimensionServingKey},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read usage provider totals: %w", err)
+		return nil, 0, fmt.Errorf("read usage provider buckets: %w", err)
 	}
 	for _, fact := range facts.Rows {
-		result = append(result, UsageProviderTotalsRow{
-			Provider: fact.Keys[0], CredentialIndex: fact.Keys[1], Requests: fact.Requests, Failures: fact.Failures,
+		result = append(result, UsageProviderBucketRow{
+			Provider: fact.Keys[0], CredentialIndex: fact.Keys[1], StartMS: fact.StartMS,
+			Requests: fact.Requests, Failures: fact.Failures,
 		})
 	}
-	return result, nil
+	return result, facts.BucketMS, nil
 }

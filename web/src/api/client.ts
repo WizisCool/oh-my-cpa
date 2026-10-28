@@ -28,7 +28,7 @@ import {
   ManagementOAuthModelAliasMutationResponse,
   ManagementOAuthProviderModelsResponse,
 } from '../types/managementOAuthModelAlias';
-import { DashboardResponse, DashboardTailResponse, DashboardWindow, type WindowCredentialTraffic } from '../types/dashboard';
+import { DashboardResponse, DashboardTailResponse, DashboardWindow, type WindowCredentialTraffic, type WindowProviderTraffic } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile, type ServiceLogPage } from '../types/logs';
@@ -473,22 +473,14 @@ export const api = {
   },
 
   /**
-   * getDashboardProviders reads per-provider request totals for the window selected by the
-   * dashboard range picker.
-   *
-   * A window total per provider, not a series: the provider list prints a count and a rate and
-   * draws the rate as one meter. A per-bucket grid used to travel here for a sparkline each row
-   * drew; that mark is gone, and with it the group-by the endpoint used to run for it.
+   * getDashboardProviders reads per-provider request traffic for the window selected by the
+   * dashboard range picker: a window total and rate per row, and the same traffic per bucket of
+   * the `bucket_ms` grid for each row's activity strip.
    */
   async getDashboardProviders(query?: string): Promise<{
     window: DashboardWindow;
-    providers: {
-      id: string;
-      total: number;
-      success: number;
-      failure: number;
-      success_rate: number | null;
-    }[];
+    bucket_ms: number;
+    providers: WindowProviderTraffic[];
     /** API-key traffic by the key's runtime auth index (see `ProviderItem.auth_indexes`). */
     credentials?: WindowCredentialTraffic[];
     partial_errors: string[];

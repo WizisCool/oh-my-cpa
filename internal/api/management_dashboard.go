@@ -805,8 +805,13 @@ func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.Usa
 // dashboardBucketWidth snaps a window to the smallest friendly step that keeps
 // the sparkline near the target point count.
 func dashboardBucketWidth(span time.Duration) time.Duration {
+	return dashboardBucketWidthFor(span, dashboardTargetBuckets)
+}
+
+// dashboardBucketWidthFor is the narrowest series step that cuts a span into at most targetBuckets.
+func dashboardBucketWidthFor(span time.Duration, targetBuckets int) time.Duration {
 	for _, candidate := range dashboardSeriesBucket {
-		if span/candidate <= dashboardTargetBuckets {
+		if int(span/candidate) <= targetBuckets {
 			return candidate
 		}
 	}
