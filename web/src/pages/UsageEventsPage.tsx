@@ -28,7 +28,7 @@ import {
   eventWindowQuery,
   type EventFilterKey,
 } from '../types/usageEventQuery';
-import { createProviderNameResolver, indexCredentialFiles } from '../types/usageEventIdentity';
+import { createProviderNameResolver, credentialFileName, indexCredentialFiles } from '../types/usageEventIdentity';
 import {
   UNKNOWN_EVENT_GROUP,
   eventCredentialIdentity,
@@ -361,7 +361,8 @@ export const UsageEventsPage: React.FC = () => {
    * The credential dimension resolves to a file name and the caller dimension to
    * its readable mask, because the stored value for both is a fingerprint that
    * nobody recognises - but the chip must still remove the value it was given,
-   * not the label it displayed.
+   * not the label it displayed. The credential's file name is its display form,
+   * with its account masked where the name repeats it.
    */
   const chipLabels: Record<EventFilterKey, MessageKey> = {
     model: 'events.filter_chip_model',
@@ -408,7 +409,7 @@ export const UsageEventsPage: React.FC = () => {
         key,
         value: values[0] ?? '',
         credentialNames: new Map(
-          [...credentials].map(([index, file]) => [index, file?.name] as const),
+          [...credentials].map(([index, file]) => [index, credentialFileName(file)] as const),
         ),
         callerFacets: facets.data?.facets.api_group_keys,
         resolveProviderName: providerName,
@@ -631,7 +632,7 @@ export const UsageEventsPage: React.FC = () => {
             committed={committedView}
             facets={facets.data?.facets}
             facetsFailed={facets.isError}
-            credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
+            credentialName={(authIndex) => credentialFileName(credentials.get(authIndex)) || authIndex}
             providerName={providerName}
             renderFacetMark={renderFacetMark}
             onApply={(next) => {

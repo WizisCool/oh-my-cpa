@@ -318,7 +318,7 @@ asked" to find it.
 
 | Column | Question | Carries |
 | --- | --- | --- |
-| Provider | Which provider answered, and on which credential? | The provider's name with an `OAuth` badge when the credential is one, then the credential on the second line: the account for OAuth, the masked key for an API key. Both lines are set alike on every row, so the first is always a provider and the second always a credential. |
+| Provider | Which provider answered, and on which credential? | The provider's name with an `OAuth` badge when the credential is one, then the credential on the second line: the masked account for OAuth, the masked key for an API key. Both lines are set alike on every row, so the first is always a provider and the second always a credential. |
 | Model | Which model answered? | The call model by default (requested model in requested-model view). An alias shows its routed upstream on a neutral `--fg-2` second line; a served substitution takes priority on that line in `--warn`, with routing detail retained in the tooltip. A preflight tag stays here because it qualifies what the record is. |
 | Mode | How was the request made? | The reasoning-effort badge on its scale, then one 18px filled mark per departure from an ordinary streamed call: a filled bolt in `--accent` when the response's service tier was `fast` or `priority`, and the crossed-out broadcast glyph for a non-streaming response. An em dash when there is nothing to say. |
 
@@ -842,7 +842,7 @@ lanes, the accent on the gateway, and status colour on a node surface where some
   as it stays on the panel; its port and its lane into the gateway carry it, and the name is always in
   text beside it. The cool routing palette exists so a lane can never be read as a verdict (§2).
 - **The right column is the credential or provider that answered**, named as the request list names
-  it, through the same resolver: provider mark, provider, and the masked key or the OAuth account. The
+  it, through the same resolver: provider mark, provider, and the masked key or the masked OAuth account. The
   state column says the one thing that is exceptional - `Rate limited`, `Quota exceeded` or `Cooling
   down` with a countdown, in the warn tone - or else that it answered last (accent), or its count and
   mean latency.
@@ -1174,6 +1174,43 @@ length, so the mask never reveals the secret's length.
 - **Shape checking is not a security boundary.** A credential can contain the
   filler, so `IsMask` only stops an obviously unmasked value from being written
   to a display column; provenance comes from masking at ingestion.
+
+### OAuth account display mask
+
+A request record names the credential that answered, and the account is part of
+that identity — but it is an address, and a request list is screenshotted, shared
+and exported far more often than it is read alone. Every request-record surface
+therefore prints the account masked: the provider cell, the credential filter
+and its chip, the source-group header, the detail drawer's credential field, the
+Insights credential dimension and the dashboard's routing labels. The shape is the
+OAuth management workspace's (`web/src/utils/maskAccount.ts`), so one account looks
+the same wherever it is read: `djz20040127@outlook.com` renders as
+`dj•••7@outlook.com` — a short head and the last character of the local part, the
+whole domain, and a filler of constant length so the mask does not give away the
+name's length. A Vertex project id takes the non-address shape: three leading and
+two trailing characters. A file named after its account is masked in place
+(`codex-dj•••7@outlook.com.json`), because masking the address inside a name is what
+the OAuth table already does. A service account can report both an address and a
+project id, so a file name that repeats either one is masked
+(`vertex-acm•••od.json`); a discovered resource name is the auth file's name, so the
+source-group header and the drawer mask it through the same projection.
+
+- **The rule lives in the identity projection, not in a cell.**
+  `resolveProviderInfo` returns the masked account as the credential line and keeps
+  the raw value in `accountIdentity`; `resolveCredential` carries a `displayName`
+  beside the stored name when a live file or a discovered resource repeats a reported
+  identity. Every surface consumes those, so a new reader of the same identity cannot
+  print the address by forgetting a mask.
+- **The mask is not an identity.** Grouping, filtering and `auth_index` keep the
+  raw name. Two accounts can render the same mask, and merging them into one header
+  would be a display bug turned into a data bug.
+- **No reveal on a request record.** The OAuth workspace owns the per-row reveal,
+  because that is where an operator manages the account. A request record's job is
+  to say which credential answered; an operator who needs the whole address opens
+  the credential there.
+- **The export keeps its own decision.** Selected records withhold the account by
+  default; the export's "OAuth account names" choice is the explicit disclosure, and
+  only then do the sheet and the JSON carry the raw address rather than the mask.
 
 ## 3. Typography
 

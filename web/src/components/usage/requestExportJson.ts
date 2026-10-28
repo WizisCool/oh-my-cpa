@@ -46,7 +46,10 @@ export interface RequestExportInput {
  * A withheld field is absent rather than null, and `redacted` says why. The
  * credential's `auth_index` survives an account redaction on purpose: it is
  * CPA's opaque runtime index, so requests can still be grouped by the account
- * that answered without the file naming it.
+ * that answered without the file naming it. When the operator does include the
+ * account, `accountIdentity` supplies the raw address: the display line every
+ * screen prints is masked, so a disclosure has to be asked for rather than
+ * inherited from a label.
  */
 export function buildRequestExport(input: RequestExportInput): RequestExportDocument {
   const { masks } = input;
@@ -84,7 +87,7 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
         put('resource_name', event.resource_name);
         if (!masks.has('provider_key')) put('provider_key_mask', maskKeyText(event.provider_key_mask));
       } else if (!masks.has('provider_account')) {
-        put('account', provider.credential);
+        put('account', provider.accountIdentity ?? provider.credential);
         put('source', event.source);
         put('resource_name', event.resource_name);
       }
