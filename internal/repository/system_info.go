@@ -21,9 +21,12 @@ type DatabaseFacts struct {
 	PageCount int64
 	// FreelistCount is the number of pages on the free list. It is reported
 	// separately from the used size and is never equated with reclaimable disk
-	// space: freed pages stay in the file until a rebuild, and a rebuild needs as
-	// much free space again while it runs.
+	// space: in a database that is not incremental, freed pages stay in the file
+	// until a rebuild, and a rebuild needs as much free space again while it runs.
 	FreelistCount int64
+	// AutoVacuum is SQLite's mode number: 0 none, 1 full, 2 incremental. In
+	// incremental mode the maintenance loop returns free pages after retention.
+	AutoVacuum int64
 	// Synchronous and ForeignKeys are connection-level settings observed through
 	// PRAGMA, reported as absent when the database cannot answer for them.
 	Synchronous   *int64
@@ -46,8 +49,9 @@ func (f DatabaseFacts) UsedBytes() int64 {
 // FreePageBytes is the space held by pages on the free list.
 //
 // The name says "free pages" rather than "reclaimable" on purpose. These bytes are
-// inside the file and are reused by later writes; they are only returned to the
-// filesystem by a rebuild, and the rebuild needs comparable free space to run.
+// inside the file and are reused by later writes. An incremental database hands
+// them back after each retention pass; any other is only shrunk by a rebuild, and
+// the rebuild needs comparable free space to run.
 func (f DatabaseFacts) FreePageBytes() int64 {
 	if f.FreelistCount < 0 {
 		return 0
@@ -84,6 +88,9 @@ func (r *Repository) ReadDatabaseFacts(ctx context.Context) (DatabaseFacts, erro
 	}
 	if err := r.SQL().QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&facts.FreelistCount); err != nil {
 		return facts, fmt.Errorf("read freelist count: %w", err)
+	}
+	if err := r.SQL().QueryRowContext(ctx, `PRAGMA auto_vacuum`).Scan(&facts.AutoVacuum); err != nil {
+		return facts, fmt.Errorf("read auto_vacuum: %w", err)
 	}
 
 	// Optionals: absent means the database did not answer, and the page says so.

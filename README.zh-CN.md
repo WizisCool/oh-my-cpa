@@ -419,6 +419,8 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 | `OMCPA_DATA_DIR` | `./data` | SQLite 数据库所在目录；编排文件中设为 `/data` |
 | `OMCPA_PUBLIC_URL` | 未设置 | 浏览器访问的地址；为 `https://` 时会话 Cookie 带 `Secure` 标记 |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | 已有其他服务采集该 CPA 的用量时设为 `off` |
+| `OMCPA_USAGE_RETENTION_DAYS` | `90` | 请求记录保留天数，`0` 为全部保留；可在 OMC 设置 → 数据保留中修改。仪表盘统计永久保留 |
+| `OMCPA_USAGE_INBOX_RETENTION_DAYS` | `7` | 捕获载荷（供重新解码的原始上报）保留天数，`0` 为跟随请求记录 |
 | `TZ` | 系统时区 | 服务器日历，需与 CPA 一致；容器内默认为 UTC |
 
 完整的配置参考、部署约束与运维须知见 [`docs/operations.md`](docs/operations.md)。

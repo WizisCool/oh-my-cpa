@@ -209,4 +209,13 @@ export default {
   'omc.refresh_scope_page': '当前页（{n}）',
   'omc.refresh_scope_filtered': '全部筛选结果（{n}）',
   'omc.refresh_scope_all': '全部符合条件（{n}）',
+  'omc.section_retention': '数据保留',
+  'omc.retention_records': '请求记录',
+  'omc.retention_records_desc': '到期自动删除；仪表盘统计永久保留。',
+  'omc.retention_days': '{n} 天',
+  'omc.retention_keep': '永久保留',
+  'omc.retention_saved': '数据保留已更新',
+  'omc.retention_save_failed': '保存数据保留失败：{msg}',
+  'omc.retention_confirm_title': '缩短保留时间？',
+  'omc.retention_confirm_records': '超过 {days} 天的请求记录将在约一分钟后永久删除，之后延长保留时间也无法恢复。',
 };

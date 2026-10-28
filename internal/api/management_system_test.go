@@ -276,3 +276,88 @@ func TestDiagnosticsBundleCarriesWhatThePageStoppedShowing(t *testing.T) {
 		}
 	}
 }
+
+// TestDataRetentionIsAuditedAndStored pins the retention setting's contract: the
+// environment answers until the console saves, a horizon outside the bounds or a
+// missing field is refused, and an accepted change is audited with what it replaced.
+func TestDataRetentionIsAuditedAndStored(t *testing.T) {
+	client, baseURL, repo := startSystemTestServer(t)
+	url := baseURL + "/omc/api/v1/management/system/data-retention"
+
+	read := func(payload []byte) DataRetentionDTO {
+		t.Helper()
+		var dto DataRetentionDTO
+		if err := json.Unmarshal(payload, &dto); err != nil {
+			t.Fatalf("decode %s: %v", payload, err)
+		}
+		return dto
+	}
+	resp, payload := getJSON(t, client, url)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get status = %d body %s", resp.StatusCode, payload)
+	}
+	if dto := read(payload); dto.Source != repository.UsageRetentionSourceEnvironment || dto.IsScheduled || dto.Storage.AutoVacuum != "incremental" {
+		t.Fatalf("initial retention = %+v, want the environment's, unscheduled, on an incremental database", dto)
+	}
+
+	for _, body := range []string{`{"payload_days":7}`, `{"request_record_days":-1}`, `{"request_record_days":30,"payload_days":3651}`} {
+		resp, payload := doJSON(t, client, http.MethodPut, url, body)
+		var result map[string]string
+		if err := json.Unmarshal(payload, &result); err != nil || resp.StatusCode != http.StatusBadRequest || result["error"] != "invalid_usage_retention" || len(result) != 1 {
+			t.Fatalf("PUT %s status = %d body %s, want 400 with invalid_usage_retention", body, resp.StatusCode, payload)
+		}
+	}
+
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":30,"payload_days":3}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("put status = %d body %s", resp.StatusCode, payload)
+	}
+	if dto := read(payload); dto.Source != repository.UsageRetentionSourceConsole || dto.RequestRecordDays != 30 || dto.PayloadDays != 3 {
+		t.Fatalf("saved retention = %+v", dto)
+	}
+	// The console sends request records alone; the payload horizon in force is kept.
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":14}`)
+	if dto := read(payload); resp.StatusCode != http.StatusOK || dto.RequestRecordDays != 14 || dto.PayloadDays != 3 {
+		t.Fatalf("records-only save = %d %+v, want 14 days and payloads still 3", resp.StatusCode, dto)
+	}
+	events, err := repo.ListAuditEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var audited *repository.AuditEvent
+	for index := range events {
+		if events[index].Action == "system.data_retention" {
+			audited = &events[index]
+			break
+		}
+	}
+	if audited == nil || audited.Result != "success" || audited.Details["request_record_days"] != float64(14) || audited.Details["previous_request_record_days"] != float64(30) {
+		t.Fatalf("audit = %+v, want the change and what it replaced", audited)
+	}
+
+	if _, err := repo.SQL().Exec(`CREATE TRIGGER reject_retention BEFORE UPDATE ON usage_retention_settings BEGIN SELECT RAISE(ABORT, 'rejected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":7}`)
+	if resp.StatusCode != http.StatusInternalServerError || strings.TrimSpace(string(payload)) != `{"error":"internal server error"}` {
+		t.Fatalf("rejected write = %d %s, want redacted 500", resp.StatusCode, payload)
+	}
+	events, err = repo.ListAuditEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 2 || events[0].Action != "system.data_retention" || events[0].Result != "failure" || events[1].Result != "attempt" || events[0].RequestID != events[1].RequestID {
+		t.Fatalf("rejected write audit = %+v, want paired attempt and failure", events)
+	}
+	if _, err := repo.SQL().Exec(`DROP TRIGGER reject_retention; CREATE TRIGGER reject_retention_audit BEFORE INSERT ON audit_events WHEN NEW.action = 'system.data_retention' BEGIN SELECT RAISE(ABORT, 'audit rejected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":7}`)
+	if resp.StatusCode != http.StatusInternalServerError || strings.TrimSpace(string(payload)) != `{"error":"internal server error"}` {
+		t.Fatalf("rejected audit = %d %s, want redacted 500", resp.StatusCode, payload)
+	}
+	setting, err := repo.ResolveUsageRetention(context.Background(), repository.UsageRetention{})
+	if err != nil || setting.RequestRecordDays != 14 {
+		t.Fatalf("retention after rejected audit = %+v, %v; want 14 days", setting, err)
+	}
+}

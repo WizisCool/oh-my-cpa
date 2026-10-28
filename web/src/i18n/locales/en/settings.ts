@@ -212,4 +212,13 @@ export default {
   'omc.refresh_scope_page': 'Current page ({n})',
   'omc.refresh_scope_filtered': 'All filtered ({n})',
   'omc.refresh_scope_all': 'All eligible ({n})',
+  'omc.section_retention': 'Data Retention',
+  'omc.retention_records': 'Request records',
+  'omc.retention_records_desc': 'Deleted once expired; dashboard statistics are kept permanently.',
+  'omc.retention_days': '{n} days',
+  'omc.retention_keep': 'Keep forever',
+  'omc.retention_saved': 'Data retention updated',
+  'omc.retention_save_failed': 'Could not save data retention: {msg}',
+  'omc.retention_confirm_title': 'Shorten retention?',
+  'omc.retention_confirm_records': 'Request records older than {days} days are deleted in about a minute; lengthening retention later does not bring them back.',
 } satisfies Translation<typeof source>;

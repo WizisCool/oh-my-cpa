@@ -794,3 +794,15 @@
 .vacuum-desc {
   margin: 0 !important;
 }
+
+/* Retention follows the file readings it governs, under its own quiet heading. */
+.retention-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.retention-heading {
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+}

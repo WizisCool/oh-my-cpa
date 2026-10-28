@@ -109,6 +109,7 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"agent_documents":               {Kind: LifecycleOwnerBounded, Reason: "sessions are capped by turns; terminal operations expire lazily on agent requests"},
 	"cpa_config_backup_settings":    {Kind: LifecycleReplaced, Reason: "one settings row"},
 	"data_lifecycle_state":          {Kind: LifecycleReplaced, Reason: "one row per rolling policy"},
+	"usage_retention_settings":      {Kind: LifecycleReplaced, Reason: "one settings row"},
 	"pricing_catalog_state":         {Kind: LifecycleReplaced, Reason: "current catalog state"},
 	"pricing_model_catalog":         {Kind: LifecycleReplaced, Reason: "replaced whole on reconciliation"},
 	"exchange_rate_cache":           {Kind: LifecycleReplaced, Reason: "latest complete display-currency reference snapshot and refresh state"},
@@ -179,6 +180,10 @@ func (r *Repository) RunLifecycle(ctx context.Context, cutoffs map[string]int64,
 	deletedByPolicy := map[string]int64{}
 	for _, table := range tables {
 		for _, rule := range TABLE_LIFECYCLES[table].Rules {
+			cutoffMS := cutoffs[rule.Policy]
+			if cutoffMS <= 0 {
+				continue
+			}
 			horizonMS, err := r.LifecycleHorizonMS(ctx, rule.Policy)
 			if err != nil {
 				return report, err
@@ -186,6 +191,9 @@ func (r *Repository) RunLifecycle(ctx context.Context, cutoffs map[string]int64,
 			if horizonMS <= 0 {
 				continue
 			}
+			// A published horizon cannot move back, but a newly lengthened policy
+			// must protect rows that have not yet been deleted below it.
+			horizonMS = min(horizonMS, cutoffMS)
 			for {
 				if batches >= maxBatches {
 					report.IsComplete = false
@@ -290,4 +298,81 @@ func (r *Repository) ListLifecycleStates(ctx context.Context) ([]LifecycleState,
 		states = append(states, state)
 	}
 	return states, rows.Err()
+}
+
+// AutoVacuumIncremental is SQLite's value for `PRAGMA auto_vacuum = INCREMENTAL`.
+const AutoVacuumIncremental = 2
+
+// freePageBatch bounds one incremental_vacuum statement for the same reason
+// lifecycleBatchRows bounds a delete: it holds the single connection while it
+// moves pages, and 2048 pages is a few megabytes.
+const freePageBatch = 2048
+
+// FreePageRelease is what one ReleaseFreePages call did.
+type FreePageRelease struct {
+	// IsIncremental is false when the database is not in incremental auto-vacuum
+	// mode yet; such a file only shrinks when it is rebuilt.
+	IsIncremental bool
+	ReleasedPages int64
+	// IsComplete is false when free pages remain after the batch budget.
+	IsComplete bool
+}
+
+// ReleaseFreePages truncates the database file by the pages deletions left free,
+// at most maxBatches batches at a time.
+//
+// Without it a retention pass makes room inside the file and the file stays at
+// its peak; on a small disk that peak is the problem retention was meant to solve.
+// It only works in incremental auto-vacuum mode, which a database created by this
+// build is in and an older one enters at its next rebuild.
+func (r *Repository) ReleaseFreePages(ctx context.Context, maxBatches int) (FreePageRelease, error) {
+	release := FreePageRelease{IsComplete: true}
+	if r == nil || r.SQL() == nil {
+		return release, errors.New("repository is not initialized")
+	}
+	var mode int64
+	if err := r.SQL().QueryRowContext(ctx, `PRAGMA auto_vacuum`).Scan(&mode); err != nil {
+		return release, fmt.Errorf("read auto_vacuum: %w", err)
+	}
+	if mode != AutoVacuumIncremental {
+		return release, nil
+	}
+	release.IsIncremental = true
+	if maxBatches <= 0 {
+		maxBatches = 1
+	}
+	for batch := 0; batch < maxBatches; batch++ {
+		if err := ctx.Err(); err != nil {
+			return release, err
+		}
+		var before, after int64
+		if err := r.SQL().QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&before); err != nil {
+			return release, fmt.Errorf("read freelist_count: %w", err)
+		}
+		if before == 0 {
+			return release, nil
+		}
+		// SQLite frees one page per step of this pragma, and an Exec steps once,
+		// so it is read as a query and drained to step it to completion.
+		rows, err := r.SQL().QueryContext(ctx, fmt.Sprintf(`PRAGMA incremental_vacuum(%d)`, freePageBatch))
+		if err != nil {
+			return release, fmt.Errorf("release free pages: %w", err)
+		}
+		for rows.Next() {
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return release, fmt.Errorf("release free pages: %w", err)
+		}
+		if err := r.SQL().QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&after); err != nil {
+			return release, fmt.Errorf("read freelist_count: %w", err)
+		}
+		release.ReleasedPages += before - after
+		if after == 0 {
+			return release, nil
+		}
+	}
+	release.IsComplete = false
+	return release, nil
 }

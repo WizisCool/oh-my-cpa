@@ -88,12 +88,19 @@ func registeredSQLiteDriver() driver.Driver {
 // load-bearing: the set includes `journal_mode(WAL)`, which the classifier treats as a
 // write, so routing it through the pool during connection setup would make the first
 // connection of a restart wait on a maintenance job before the database was even usable.
+//
+// `auto_vacuum(INCREMENTAL)` comes before anything that could create a table: SQLite only
+// switches a database out of `NONE` while it is empty or during a VACUUM. A new database is
+// therefore created incremental, and an older one becomes incremental at its next rebuild;
+// until then the pragma changes nothing. Incremental mode is what lets retention hand the
+// pages it frees back to the filesystem (ReleaseFreePages) instead of keeping the file at
+// its peak size.
 func gatedDSN(databasePath string) string {
 	separator := "?"
 	if strings.Contains(databasePath, "?") {
 		separator = "&"
 	}
-	return databasePath + separator + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+	return databasePath + separator + "_pragma=busy_timeout(5000)&_pragma=auto_vacuum(INCREMENTAL)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
 }
 
 func (db *DB) driverName() string {

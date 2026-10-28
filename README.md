@@ -452,6 +452,8 @@ trusted agents and serve the console over HTTPS before connecting one remotely.
 | `OMCPA_DATA_DIR` | `./data` | Directory of the SQLite database; the Compose files set `/data` |
 | `OMCPA_PUBLIC_URL` | unset | The address browsers use; `https://` marks the session cookie `Secure` |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | `off` when another service collects this CPA's usage |
+| `OMCPA_USAGE_RETENTION_DAYS` | `90` | Days request records are kept, `0` for all; OMC Settings → Data retention overrides it. Dashboard statistics are permanent |
+| `OMCPA_USAGE_INBOX_RETENTION_DAYS` | `7` | Days captured payloads (raw records kept for re-decoding) are kept, `0` to follow request records |
 | `TZ` | system zone | Server calendar; keep it equal to CPA's. Containers default to UTC |
 
 The full reference, with deployment constraints and operational notes, is

@@ -34,6 +34,7 @@ import { REDUCED_MOTION_PREFERENCES, type ReducedMotionPreference } from '../uti
 import { SectionHeading } from '../components/common/SectionHeading';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
+import { DataRetentionSettings } from '../components/settings/DataRetentionSettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
 import { Notice } from '../components/feedback';
@@ -215,6 +216,8 @@ export const OmcSettingsPage: React.FC = () => {
 
       <QuotaAutoRefreshGroup />
 
+      <DataRetentionSettings />
+
       <PluginSourceGroup />
 
       <div className="settings-group omc-settings-group">
@@ -338,7 +341,7 @@ const PluginSourceGroup: React.FC = () => {
 /**
  * QuotaAutoRefreshGroup is the background quota refresh policy the server's loop reads.
  *
- * Unlike every other row on this page it changes what the deployment does on its own, not how the
+ * Unlike the display rows it changes what the deployment does on its own, not how the
  * console reads: each automatic read is a request to a provider made with the credential. The two
  * rows are the two independent triggers, so either can be used without the other.
  */

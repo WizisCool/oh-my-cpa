@@ -41,6 +41,10 @@ type App struct {
 	// pipeline captures CPA request records into the local database. Nil when
 	// ingestion is disabled or no CPA instance is configured yet.
 	pipeline *ingest.Pipeline
+	// usageMaintenance folds stored records into the usage facts and applies
+	// retention. It runs whether or not anything is captured; nil only in a demo,
+	// whose fixture is the whole history.
+	usageMaintenance *ingest.Maintenance
 	// pricing keeps model prices fresh from OpenRouter; nil-safe service.
 	pricing       *pricing.Service
 	exchangeRates *exchangerate.Service
@@ -166,7 +170,19 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		handler.SetExchangeRates(exchangeRateService)
 	}
 
-	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger, cipher)
+	var usageMaintenance *ingest.Maintenance
+	if !cfg.IsDemoMode {
+		usageMaintenance, err = ingest.NewMaintenance(repo, logger, cfg.Usage.AggregateInterval, repository.UsageRetention{
+			RequestRecordDays: cfg.Usage.RetentionDays,
+			PayloadDays:       cfg.Usage.InboxRetentionDays,
+		})
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("build usage maintenance: %w", err)
+		}
+		handler.SetUsageMaintenance(usageMaintenance)
+	}
+	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger, cipher, usageMaintenance)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -243,7 +259,8 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		handler: handler,
 		logger:  logger,
 
-		pipeline: pipeline,
+		pipeline:         pipeline,
+		usageMaintenance: usageMaintenance,
 
 		pricing:       pricingService,
 		exchangeRates: exchangeRateService,
@@ -326,12 +343,13 @@ func (l *cpaModelLister) ListConfiguredModelSnapshot(ctx context.Context) (prici
 	return pricing.ModelCatalogSnapshot{Models: snapshot.Models, Providers: providers}, nil
 }
 
-// buildUsagePipeline wires capture, decode and maintenance over the default CPA
-// instance. It is intentionally skipped, not failed, when CPA is not configured:
-// the UI must still boot and explain what is missing.
+// buildUsagePipeline wires capture and decode over the default CPA instance. It is
+// intentionally skipped, not failed, when CPA is not configured: the UI must still
+// boot and explain what is missing. Maintenance is built and run by the caller in
+// either case; the pipeline only reports it.
 func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler *api.Handler, logger *slog.Logger, fingerprinter interface {
 	Fingerprint(...string) (string, error)
-}) (*ingest.Pipeline, error) {
+}, maintenance *ingest.Maintenance) (*ingest.Pipeline, error) {
 	if !cfg.Usage.Enabled || cfg.Usage.Mode == string(ingest.ModeOff) {
 		logger.Info("usage ingestion disabled", "mode", cfg.Usage.Mode, "enabled", cfg.Usage.Enabled)
 		return nil, nil
@@ -357,10 +375,6 @@ func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler 
 	processor, err := ingest.NewProcessorWithFingerprinter(repo, logger, 0, cfg.Usage.IdleInterval, fingerprinter)
 	if err != nil {
 		return nil, fmt.Errorf("build usage processor: %w", err)
-	}
-	maintenance, err := ingest.NewMaintenance(repo, logger, cfg.Usage.AggregateInterval, cfg.Usage.RetentionDays, cfg.Usage.InboxRetentionDays)
-	if err != nil {
-		return nil, fmt.Errorf("build usage maintenance: %w", err)
 	}
 	pipeline, err := ingest.NewPipeline(runner, processor, maintenance, repo)
 	if err != nil {
@@ -400,10 +414,21 @@ func (a *App) Run(ctx context.Context) error {
 			a.logger.Info("usage ingestion started",
 				"mode", a.cfg.Usage.Mode,
 				"idle_interval", a.cfg.Usage.IdleInterval.String(),
-				"batch_size", a.cfg.Usage.BatchSize,
-				"retention_days", a.cfg.Usage.RetentionDays,
-				"inbox_retention_days", a.cfg.Usage.InboxRetentionDays)
+				"batch_size", a.cfg.Usage.BatchSize)
 			pipelineErrors <- a.pipeline.Run(runCtx)
+		}()
+	}
+	usageMaintenanceDone := make(chan struct{})
+	if a.usageMaintenance == nil {
+		close(usageMaintenanceDone)
+	} else {
+		go func() {
+			defer close(usageMaintenanceDone)
+			defaults := a.usageMaintenance.Defaults()
+			a.logger.Info("usage maintenance started",
+				"default_request_record_days", defaults.RequestRecordDays,
+				"default_payload_days", defaults.PayloadDays)
+			_ = a.usageMaintenance.Run(runCtx)
 		}()
 	}
 
@@ -519,6 +544,13 @@ func (a *App) Run(ctx context.Context) error {
 	case <-quotaRefreshDone:
 	case <-shutdownContext.Done():
 		a.logger.Warn("automatic quota refresh did not stop before the shutdown deadline")
+	}
+	// Maintenance writes in bounded batches, so it is joined like the pipeline: a
+	// batch still in flight must not find the database closed underneath it.
+	select {
+	case <-usageMaintenanceDone:
+	case <-shutdownContext.Done():
+		a.logger.Warn("usage maintenance did not stop before the shutdown deadline")
 	}
 	if !hasPipelineReturned {
 		select {

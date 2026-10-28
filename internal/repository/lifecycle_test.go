@@ -114,6 +114,30 @@ func TestLifecyclePassIsBoundedAndResumes(t *testing.T) {
 	}
 }
 
+func TestLifecycleHonoursLengthenedOrDisabledRetention(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	if _, err := repo.SQL().Exec(`INSERT INTO error_events (instance_id, event_key, timestamp_ms, created_at_ms) VALUES ('default', 'old', 100, 0), ('default', 'newer', 500, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.RunLifecycle(ctx, map[string]int64{LifecycleUsageDetail: 1000}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.RunLifecycle(ctx, map[string]int64{LifecycleUsageDetail: 200}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.RunLifecycle(ctx, nil, 1); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := repo.SQL().QueryRow(`SELECT COUNT(*) FROM error_events`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("lengthening and disabling retention left %d records, want the newer one", count)
+	}
+}
+
 func TestDecodedPayloadsRollOnTheirOwnPolicy(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()

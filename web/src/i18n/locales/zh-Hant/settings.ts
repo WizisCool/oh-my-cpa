@@ -212,4 +212,13 @@ export default {
   "omc.refresh_scope_page": "目前頁面（{n}）",
   "omc.refresh_scope_filtered": "全部篩選結果（{n}）",
   "omc.refresh_scope_all": "全部符合條件（{n}）",
+  "omc.section_retention": "資料保留",
+  "omc.retention_records": "請求記錄",
+  "omc.retention_records_desc": "到期自動刪除；儀表板統計永久保留。",
+  "omc.retention_days": "{n} 天",
+  "omc.retention_keep": "永久保留",
+  "omc.retention_saved": "資料保留已更新",
+  "omc.retention_save_failed": "儲存資料保留失敗：{msg}",
+  "omc.retention_confirm_title": "縮短保留時間？",
+  "omc.retention_confirm_records": "超過 {days} 天的請求記錄將在約一分鐘後永久刪除，之後延長保留時間也無法恢復。",
 } satisfies Translation<typeof source>;

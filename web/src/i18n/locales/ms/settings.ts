@@ -212,4 +212,13 @@ export default {
   "omc.refresh_scope_page": "Halaman semasa ({n})",
   "omc.refresh_scope_filtered": "Semua hasil ditapis ({n})",
   "omc.refresh_scope_all": "Semua yang layak ({n})",
+  "omc.section_retention": "Pengekalan Data",
+  "omc.retention_records": "Rekod permintaan",
+  "omc.retention_records_desc": "Dipadam apabila tamat tempoh; statistik papan pemuka disimpan kekal.",
+  "omc.retention_days": "{n} hari",
+  "omc.retention_keep": "Simpan selamanya",
+  "omc.retention_saved": "Pengekalan data dikemas kini",
+  "omc.retention_save_failed": "Gagal menyimpan pengekalan data: {msg}",
+  "omc.retention_confirm_title": "Pendekkan tempoh pengekalan?",
+  "omc.retention_confirm_records": "Rekod permintaan lebih lama daripada {days} hari dipadam dalam kira-kira seminit; memanjangkan tempoh kemudian tidak memulihkannya.",
 } satisfies Translation<typeof source>;
