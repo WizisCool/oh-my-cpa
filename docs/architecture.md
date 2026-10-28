@@ -1319,7 +1319,10 @@ than sharing one package-wide vendor chunk. Route-only controls and the Agent's 
 set therefore remain behind their route imports. Provider editing and artwork selection, plus
 OAuth connection, import, model-rule, SIWC and credential-detail surfaces load on first use.
 `DeferredMount` retains a surface after that first use, preserving drafts and closing motion;
-its Suspense fallback reports the pending download through the global progress bar.
+its Suspense fallback reports the pending download through the global progress bar. A rejected
+optional module download shows a persistent reload notice in its place and scrolls it into
+view, leaving the surrounding page and drafts in place. Other rendering errors still reach
+the route error boundary and its bounded diagnostics.
 
 The shared preference query still reads one document, but `usePreference` selects its own key
 before notifying React consumers. An unrelated optimistic preference write does not re-render

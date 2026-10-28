@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryRouter, RouterProvider, useRouteError } from 'react-router-dom';
 import { DeferredMount } from '../src/components/common/DeferredMount';
 import { Tooltip } from '../src/components/common/Tooltip';
 import { progressTasks } from '../src/utils/progressTasks';
@@ -14,6 +15,7 @@ import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
+import { renderWithOmc } from './support/render';
 
 describe('SearchInput', () => {
   it('is named by its label, shows it as the placeholder, and reports text rather than events', () => {
@@ -306,4 +308,64 @@ describe('DeferredMount', () => {
     expect((field as HTMLInputElement).value).toBe('unfinished draft');
     expect(initialize).toHaveBeenCalledTimes(1);
   });
+
+  it('contains a rejected optional download without replacing the page or losing its draft', async () => {
+    let rejectDownload!: (error: Error) => void;
+    const LazyEditor = React.lazy(() => new Promise<{ default: React.ComponentType }>((_resolve, reject) => {
+      rejectDownload = reject;
+    }));
+    function Page() {
+      const [isActive, setIsActive] = React.useState(false);
+      return <>
+        <input aria-label="Page draft" defaultValue="initial" />
+        <button type="button" onClick={() => setIsActive((current) => !current)}>Toggle editor</button>
+        <DeferredMount isActive={isActive}><LazyEditor /></DeferredMount>
+      </>;
+    }
+    const router = createMemoryRouter([{
+      path: '/',
+      element: <Page />,
+      errorElement: <p role="alert">Route unavailable</p>,
+    }]);
+    renderWithOmc(<RouterProvider router={router} />);
+    const draft = screen.getByRole('textbox', { name: 'Page draft' });
+    fireEvent.change(draft, { target: { value: 'unfinished page draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle editor' }));
+    expect(progressTasks.read().size).toBe(1);
+
+    await act(async () => { rejectDownload(new TypeError('Failed to fetch dynamically imported module: editor.js')); });
+
+    expect(screen.getByRole('textbox', { name: 'Page draft' })).toBe(draft);
+    expect((draft as HTMLInputElement).value).toBe('unfinished page draft');
+    expect(progressTasks.read().size).toBe(0);
+    expect(await screen.findByTestId('optional-surface-failure')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reload page' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Page draft' })).toBe(draft);
+  });
+
+  it('leaves non-download failures to the route diagnostic boundary', async () => {
+    const BrokenEditor: React.FC = () => {
+      throw new Error('Editor render failed');
+    };
+    const LazyEditor = React.lazy(async () => ({ default: BrokenEditor }));
+    function Page() {
+      const [isActive, setIsActive] = React.useState(false);
+      return <>
+        <button type="button" onClick={() => setIsActive(true)}>Open editor</button>
+        <DeferredMount isActive={isActive}><LazyEditor /></DeferredMount>
+      </>;
+    }
+    function RouteFailure() {
+      const error = useRouteError();
+      return <p role="alert">{error instanceof Error ? error.message : 'Route unavailable'}</p>;
+    }
+    const router = createMemoryRouter([{ path: '/', element: <Page />, errorElement: <RouteFailure /> }]);
+    renderWithOmc(<RouterProvider router={router} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open editor' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Editor render failed');
+    expect(screen.queryByTestId('optional-surface-failure')).toBeNull();
+  });
+
 });

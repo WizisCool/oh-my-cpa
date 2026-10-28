@@ -492,10 +492,11 @@ The existing preference integration case now verifies independent-key isolation 
 own-key propagation. Reverting the selector made it fail with six renders instead of
 four. The shared-primitive hint case verifies deferred title evaluation plus preserved
 focus, draft and ARIA description; reverting the hint change evaluated its title while
-closed and failed. The deferred-editor primitive verifies first-use mounting, download progress and draft
-retention. An untracked pending download fails that existing case with zero active tasks
-instead of one. Existing OAuth snapshot coverage opens the connection surface through its
-real action before inspecting the controller.
+closed and failed. The deferred-editor primitive verifies first-use mounting, download
+progress, draft retention and failure isolation. An untracked pending download fails that
+existing case with zero active tasks instead of one; without the local boundary, a rejected
+chunk replaces the page through the route error boundary. Existing OAuth snapshot coverage
+opens the connection surface through its real action before inspecting the controller.
 
 The provider-rate browser scenario retains PR #381's gap-to-block single-hint assertion
 and now also checks keyboard history, Escape and focus retention. The Agent view probe
