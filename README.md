@@ -62,6 +62,16 @@ signs in with CPA's management key.
 </tr>
 <tr>
 <td width="50%" valign="top">
+<img src="docs/images/readme/insights.en.webp" alt="Insights: multi-dimensional usage comparison and trend analytics">
+<p align="center"><b>Insights</b><br />Compare usage across keys, models and providers with trends and rhythms</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/readme/agent.en.webp" alt="Agent: built-in conversational assistant with interactive management">
+<p align="center"><b>Agent</b><br />Query usage, analyze traffic and operate the console in natural language</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 <img src="docs/images/readme/oauth-management.en.webp" alt="OAuth credentials with their state and quota">
 <p align="center"><b>OAuth management</b><br />Sign in, inspect quota and configure each credential in one place</p>
 </td>

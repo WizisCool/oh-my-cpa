@@ -59,9 +59,9 @@ func credentialCatalog() []credential {
 		},
 		{
 			name: "claude-work.json", authIndex: "auth-claude-01", kind: "claude", provider: "claude",
-			label: "Claude · work", email: "ops@acme-labs.example", accountType: "oauth", plan: "max",
+			label: "Claude · work", email: "ops@acme-labs.example", accountType: "oauth", plan: "pro",
 			models:  []string{"claude-sonnet-4-5-20250929", "claude-opus-4-1", "claude-haiku-4-5"},
-			success: 2960, failed: 41, priority: 10, weight: 5, note: "drives the review and refactor workloads",
+			success: 2960, failed: 41,
 		},
 		{
 			name: "gemini-personal.json", authIndex: "auth-gemini-01", kind: "gemini", provider: "gemini",
@@ -826,21 +826,26 @@ func quotaPayloads(now time.Time) map[string]any {
 			"is_delinquent": false,
 		},
 		claudeUsageURL: map[string]any{
-			"five_hour":        map[string]any{"utilization": 36.4, "resets_at": resetAt},
-			"seven_day":        map[string]any{"utilization": 58.1, "resets_at": weeklyReset},
-			"seven_day_opus":   map[string]any{"utilization": 22.9, "resets_at": weeklyReset},
-			"seven_day_sonnet": map[string]any{"utilization": 64.7, "resets_at": weeklyReset},
-			"extra_usage":      map[string]any{"is_enabled": false, "monthly_limit": 0, "used_credits": 0},
+			"five_hour":   map[string]any{"utilization": 16.0, "resets_at": resetAt},
+			"seven_day":   map[string]any{"utilization": 32.0, "resets_at": weeklyReset},
+			"extra_usage": map[string]any{"is_enabled": false, "monthly_limit": 0, "used_credits": 0},
 			// The cloud session credit pool shares the legacy Fable key; its dollar
 			// amounts make it a balance rather than a window.
 			"iguana_necktie": map[string]any{"utilization": 30, "limit_dollars": 50, "used_dollars": 15, "remaining_dollars": 35, "resets_at": weeklyReset},
-			"limits":         []map[string]any{{"kind": "session", "group": "five_hour", "percent": 36.4, "resets_at": resetAt, "is_active": true}},
+			"limits":         []map[string]any{{"kind": "session", "group": "five_hour", "percent": 16.0, "resets_at": resetAt, "is_active": true}},
 		},
 		claudeProfileURL: map[string]any{
-			"account":        map[string]any{"email": "ops@acme-labs.example"},
-			"organization":   map[string]any{"name": "Acme Labs", "rate_limit_tier": "default_claude_max_20x"},
-			"has_claude_max": true, "has_claude_pro": false,
-			"has_extra_usage_enabled": false, "subscription_status": "active",
+			"account": map[string]any{
+				"email":          "ops@acme-labs.example",
+				"has_claude_pro": true,
+				"has_claude_max": false,
+			},
+			"organization": map[string]any{
+				"name":            "Acme Labs",
+				"rate_limit_tier": "default_claude_pro_5x",
+			},
+			"has_extra_usage_enabled": false,
+			"subscription_status":     "active",
 		},
 		// Listing-only, like the service's own grants read: the demo answers a
 		// grant document so the Claude card's display path is exercised, and

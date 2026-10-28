@@ -26,11 +26,17 @@ func seedQuotaObservations(ctx context.Context, repo *repository.Repository, now
 			return fmt.Errorf("marshal quota payload for %s: %w", credential.authIndex, err)
 		}
 		var windows []quota.QuotaWindow
+		var plan *quota.QuotaPlan
 		switch credential.provider {
 		case "codex":
-			_, windows, _, err = quota.ParseCodexUsage(raw, now.UnixMilli())
+			plan, windows, _, err = quota.ParseCodexUsage(raw, now.UnixMilli())
 		case "claude":
 			windows, _, err = quota.ParseClaudeUsage(raw, now.UnixMilli())
+			if profilePayload, ok := payloads[claudeProfileURL]; ok {
+				if profileRaw, marshalErr := json.Marshal(profilePayload); marshalErr == nil {
+					plan = quota.ParseClaudeProfile(profileRaw)
+				}
+			}
 		case "antigravity":
 			windows, err = quota.ParseAntigravityUsage(raw, now.UnixMilli(), 0)
 		}
@@ -44,26 +50,42 @@ func seedQuotaObservations(ctx context.Context, repo *repository.Repository, now
 				previous.ResetAtMS = &currentStart
 				used, remaining := 65.0, 35.0
 				previous.UsedPercent, previous.RemainingPercent = &used, &remaining
-				if err := saveDemoQuotaSnapshot(ctx, repo, credential.authIndex, credential.provider, []quota.QuotaWindow{previous}, currentStart-60000); err != nil {
+				if err := saveDemoQuotaSnapshot(ctx, repo, credential.authIndex, credential.provider, plan, []quota.QuotaWindow{previous}, currentStart-60000); err != nil {
 					return fmt.Errorf("seed previous-cycle quota for %s: %w", credential.authIndex, err)
 				}
 				currentUsed, currentRemaining := 2.0, 98.0
 				windows[0].UsedPercent, windows[0].RemainingPercent = &currentUsed, &currentRemaining
 			}
 		}
-		if err := saveDemoQuotaSnapshot(ctx, repo, credential.authIndex, credential.provider, windows, now.UnixMilli()); err != nil {
+		if err := saveDemoQuotaSnapshot(ctx, repo, credential.authIndex, credential.provider, plan, windows, now.UnixMilli()); err != nil {
 			return fmt.Errorf("seed current-cycle quota for %s: %w", credential.authIndex, err)
 		}
 	}
 	return nil
 }
 
-func saveDemoQuotaSnapshot(ctx context.Context, repo *repository.Repository, authIndex, provider string, windows []quota.QuotaWindow, observedAtMS int64) error {
+func saveDemoQuotaSnapshot(ctx context.Context, repo *repository.Repository, authIndex, provider string, plan *quota.QuotaPlan, windows []quota.QuotaWindow, observedAtMS int64) error {
 	raw, err := json.Marshal(windows)
 	if err != nil {
 		return fmt.Errorf("marshal quota snapshot for %s: %w", authIndex, err)
 	}
-	if err := repo.SaveQuotaSnapshot(ctx, repository.QuotaSnapshotRecord{ID: "demo-quota-" + authIndex + "-" + strconv.FormatInt(observedAtMS, 10), CreatedAtMS: observedAtMS, AuthIndex: authIndex, Provider: provider, Status: "healthy", WindowsJSON: string(raw), ObservedAtMS: observedAtMS}); err != nil {
+	record := repository.QuotaSnapshotRecord{
+		ID:           "demo-quota-" + authIndex + "-" + strconv.FormatInt(observedAtMS, 10),
+		CreatedAtMS:  observedAtMS,
+		AuthIndex:    authIndex,
+		Provider:     provider,
+		Status:       "healthy",
+		WindowsJSON:  string(raw),
+		ObservedAtMS: observedAtMS,
+	}
+	if plan != nil {
+		record.PlanType = plan.PlanType
+		record.PlanTier = plan.Tier
+		if b, err := json.Marshal(plan); err == nil {
+			record.PlanJSON = string(b)
+		}
+	}
+	if err := repo.SaveQuotaSnapshot(ctx, record); err != nil {
 		return fmt.Errorf("save quota snapshot for %s: %w", authIndex, err)
 	}
 	return nil

@@ -59,6 +59,16 @@ OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本�
 </tr>
 <tr>
 <td width="50%" valign="top">
+<img src="docs/images/readme/insights.zh.webp" alt="洞察：多维度用量对比与趋势分析">
+<p align="center"><b>洞察</b><br />横向对比密钥、模型与提供商用量，呈现趋势与使用节律</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/readme/agent.zh.webp" alt="智能体：内置对话助手与交互式管理">
+<p align="center"><b>智能体</b><br />通过自然语言查询用量、分析请求，并安全操作控制台</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 <img src="docs/images/readme/oauth-management.zh.webp" alt="OAuth 凭据及其状态与配额">
 <p align="center"><b>OAuth 管理</b><br />登录、查看配额、配置凭据，集中在一处完成</p>
 </td>

@@ -36,6 +36,8 @@ const PHONE = { width: 390, height: 844, scale: 3 };
 const FEATURE_SHOTS = [
   { path: '/usage/events', mode: 'light' },
   { path: '/pricing', mode: 'light' },
+  { path: '/insights', mode: 'light' },
+  { path: '/agent', mode: 'dark' },
   { path: '/oauth-management', mode: 'dark' },
   { path: '/ai-providers', mode: 'dark' },
 ];

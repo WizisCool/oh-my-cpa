@@ -1323,8 +1323,8 @@ func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExpo
 	expected := map[string]string{
 		"auth-codex-01/five_hour":                               "current_cycle",
 		"auth-codex-02/five_hour":                               "previous_cycle",
-		"auth-claude-01/seven_day_sonnet":                       "current_cycle",
-		"auth-claude-01/seven_day_opus":                         "current_cycle",
+		"auth-claude-01/five_hour":                              "current_cycle",
+		"auth-claude-01/seven_day":                              "current_cycle",
 		"auth-antigravity-01/ag_Gemini Models_gemini-shared-5h": "current_cycle",
 	}
 	for _, observation := range quotas.Quotas {
