@@ -218,4 +218,5 @@ export default {
   'omc.retention_save_failed': '保存数据保留失败：{msg}',
   'omc.retention_confirm_title': '缩短保留时间？',
   'omc.retention_confirm_records': '超过 {days} 天的请求记录将在约一分钟后永久删除，之后延长保留时间也无法恢复。',
+  'omc.retention_changed': '保留设置已被其他控制台修改，已刷新，请重新选择。',
 };

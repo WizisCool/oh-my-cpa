@@ -2659,8 +2659,9 @@ per product, and the running or last update), `POST /management/system/updater/a
 /management/system/maintenance/{checkpoint,vacuum}`, and `GET`/`PUT
 /management/system/data-retention` (the request-record and payload horizons, where they come
 from, what each rolling policy has removed, the pass schedule, and whether the file is in
-incremental auto-vacuum mode; a `PUT` takes `request_record_days` and an optional `payload_days`,
-0–3650 days, is audited before it is stored and wakes the maintenance loop). The check answers `200` with the two
+incremental auto-vacuum mode; a `PUT` takes `request_record_days`, the `expected_request_record_days` it was confirmed
+against, and an optional `payload_days` (0–3650 days), is audited before it is stored, answers
+`409` when another console has replaced the expected horizon, and wakes the maintenance loop). The check answers `200` with the two
 products' states and `served_from_cache`; a maintenance POST answers `202` on admission,
 `409` when a job is already running, `507` when a rebuild cannot be admitted for space, and
 `503` once the service is shutting down. Every one of them answers `503` when the handler was

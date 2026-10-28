@@ -300,7 +300,7 @@ func TestDataRetentionIsAuditedAndStored(t *testing.T) {
 		t.Fatalf("initial retention = %+v, want the environment's, unscheduled, on an incremental database", dto)
 	}
 
-	for _, body := range []string{`{"payload_days":7}`, `{"request_record_days":-1}`, `{"request_record_days":30,"payload_days":3651}`} {
+	for _, body := range []string{`{"payload_days":7,"expected_request_record_days":0}`, `{"request_record_days":-1,"expected_request_record_days":0}`, `{"request_record_days":30,"payload_days":3651,"expected_request_record_days":0}`, `{"request_record_days":30}`} {
 		resp, payload := doJSON(t, client, http.MethodPut, url, body)
 		var result map[string]string
 		if err := json.Unmarshal(payload, &result); err != nil || resp.StatusCode != http.StatusBadRequest || result["error"] != "invalid_usage_retention" || len(result) != 1 {
@@ -308,7 +308,7 @@ func TestDataRetentionIsAuditedAndStored(t *testing.T) {
 		}
 	}
 
-	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":30,"payload_days":3}`)
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":30,"payload_days":3,"expected_request_record_days":0}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("put status = %d body %s", resp.StatusCode, payload)
 	}
@@ -316,7 +316,7 @@ func TestDataRetentionIsAuditedAndStored(t *testing.T) {
 		t.Fatalf("saved retention = %+v", dto)
 	}
 	// The console sends request records alone; the payload horizon in force is kept.
-	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":14}`)
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":14,"expected_request_record_days":30}`)
 	if dto := read(payload); resp.StatusCode != http.StatusOK || dto.RequestRecordDays != 14 || dto.PayloadDays != 3 {
 		t.Fatalf("records-only save = %d %+v, want 14 days and payloads still 3", resp.StatusCode, dto)
 	}
@@ -338,7 +338,7 @@ func TestDataRetentionIsAuditedAndStored(t *testing.T) {
 	if _, err := repo.SQL().Exec(`CREATE TRIGGER reject_retention BEFORE UPDATE ON usage_retention_settings BEGIN SELECT RAISE(ABORT, 'rejected'); END`); err != nil {
 		t.Fatal(err)
 	}
-	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":7}`)
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":7,"expected_request_record_days":14}`)
 	if resp.StatusCode != http.StatusInternalServerError || strings.TrimSpace(string(payload)) != `{"error":"internal server error"}` {
 		t.Fatalf("rejected write = %d %s, want redacted 500", resp.StatusCode, payload)
 	}
@@ -352,12 +352,25 @@ func TestDataRetentionIsAuditedAndStored(t *testing.T) {
 	if _, err := repo.SQL().Exec(`DROP TRIGGER reject_retention; CREATE TRIGGER reject_retention_audit BEFORE INSERT ON audit_events WHEN NEW.action = 'system.data_retention' BEGIN SELECT RAISE(ABORT, 'audit rejected'); END`); err != nil {
 		t.Fatal(err)
 	}
-	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":7}`)
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":7,"expected_request_record_days":14}`)
 	if resp.StatusCode != http.StatusInternalServerError || strings.TrimSpace(string(payload)) != `{"error":"internal server error"}` {
 		t.Fatalf("rejected audit = %d %s, want redacted 500", resp.StatusCode, payload)
 	}
 	setting, err := repo.ResolveUsageRetention(context.Background(), repository.UsageRetention{})
 	if err != nil || setting.RequestRecordDays != 14 {
 		t.Fatalf("retention after rejected audit = %+v, %v; want 14 days", setting, err)
+	}
+
+	// Another console has since stored 30; a write confirmed against 14 must not
+	// delete below a horizon the operator never saw.
+	if err := repo.SetUsageRetention(context.Background(), 30, nil, 14); err != nil {
+		t.Fatal(err)
+	}
+	resp, payload = doJSON(t, client, http.MethodPut, url, `{"request_record_days":3,"expected_request_record_days":14}`)
+	if resp.StatusCode != http.StatusConflict || strings.TrimSpace(string(payload)) != `{"code":"usage_retention_changed","error":"usage_retention_changed"}` {
+		t.Fatalf("stale write = %d %s, want 409 usage_retention_changed", resp.StatusCode, payload)
+	}
+	if setting, err := repo.ResolveUsageRetention(context.Background(), repository.UsageRetention{}); err != nil || setting.RequestRecordDays != 30 {
+		t.Fatalf("retention after stale write = %+v, %v; want the other console's 30 days", setting, err)
 	}
 }

@@ -221,4 +221,5 @@ export default {
   "omc.retention_save_failed": "Gagal menyimpan pengekalan data: {msg}",
   "omc.retention_confirm_title": "Pendekkan tempoh pengekalan?",
   "omc.retention_confirm_records": "Rekod permintaan lebih lama daripada {days} hari dipadam dalam kira-kira seminit; memanjangkan tempoh kemudian tidak memulihkannya.",
+  "omc.retention_changed": "Konsol lain telah menukar pengekalan. Ia telah dimuat semula; pilih semula.",
 } satisfies Translation<typeof source>;

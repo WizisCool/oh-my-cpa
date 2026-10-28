@@ -221,4 +221,5 @@ export default {
   "omc.retention_save_failed": "儲存資料保留失敗：{msg}",
   "omc.retention_confirm_title": "縮短保留時間？",
   "omc.retention_confirm_records": "超過 {days} 天的請求記錄將在約一分鐘後永久刪除，之後延長保留時間也無法恢復。",
+  "omc.retention_changed": "保留設定已被其他控制台修改，已重新整理，請重新選擇。",
 } satisfies Translation<typeof source>;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { App, Select } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, describeError } from '../../api/client';
+import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { DATA_RETENTION_QUERY_KEY, formatRetentionDays, useDataRetention } from '../../hooks/useDataRetention';
@@ -40,18 +40,28 @@ export const DataRetentionSettings: React.FC = () => {
   const queryClient = useQueryClient();
   const { data } = useDataRetention();
   const save = useMutation({
-    mutationFn: (days: number) => api.setDataRetention(days),
+    mutationFn: (next: { days: number; expected: number }) => api.setDataRetention(next.days, next.expected),
     onSuccess: (saved) => {
       queryClient.setQueryData(DATA_RETENTION_QUERY_KEY, saved);
       toast.success(t('omc.retention_saved'));
     },
-    onError: (failure) => toast.error(t('omc.retention_save_failed', { msg: describeError(failure) })),
+    onError: (failure) => {
+      // The horizon the operator confirmed is gone, so the deletion they confirmed is not the
+      // one this console would make. Re-read and let them decide again.
+      if (apiErrorCode(failure) === 'usage_retention_changed') {
+        void queryClient.invalidateQueries({ queryKey: DATA_RETENTION_QUERY_KEY });
+        toast.warning(t('omc.retention_changed'));
+        return;
+      }
+      toast.error(t('omc.retention_save_failed', { msg: describeError(failure) }));
+    },
   });
 
   const apply = (days: number) => {
     if (!data) return;
-    if (!isShorter(days, data.request_record_days)) {
-      save.mutate(days);
+    const expected = data.request_record_days;
+    if (!isShorter(days, expected)) {
+      save.mutate({ days, expected });
       return;
     }
     modal.confirm({
@@ -60,7 +70,7 @@ export const DataRetentionSettings: React.FC = () => {
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
-      onOk: () => save.mutateAsync(days),
+      onOk: () => save.mutateAsync({ days, expected }),
     });
   };
 

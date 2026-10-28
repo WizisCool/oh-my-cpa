@@ -740,7 +740,7 @@ func TestRetentionFollowsTheConsoleWithoutARestart(t *testing.T) {
 		t.Fatalf("the environment keeps every record, yet %d of 2 remain", count)
 	}
 
-	if err := store.SetUsageRetention(ctx, 7, nil); err != nil {
+	if err := store.SetUsageRetention(ctx, 7, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	// The first pass publishes the horizon, the next deletes below it.

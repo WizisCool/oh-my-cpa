@@ -64,8 +64,11 @@ type DataRetentionStorageDTO struct {
 }
 
 type dataRetentionRequest struct {
-	RequestRecordDays *int `json:"request_record_days"`
-	PayloadDays       *int `json:"payload_days"`
+	// ExpectedRequestRecordDays is the horizon the console confirmed against. The
+	// write is refused when another console has replaced it since.
+	ExpectedRequestRecordDays *int `json:"expected_request_record_days"`
+	RequestRecordDays         *int `json:"request_record_days"`
+	PayloadDays               *int `json:"payload_days"`
 }
 
 func (h *Handler) usageRetentionDefaults() repository.UsageRetention {
@@ -167,13 +170,22 @@ func (h *Handler) putDataRetention(writer http.ResponseWriter, request *http.Req
 		writeError(writer, http.StatusServiceUnavailable, "database is unavailable")
 		return
 	}
-	if req.RequestRecordDays == nil {
+	if req.RequestRecordDays == nil || req.ExpectedRequestRecordDays == nil {
 		writeError(writer, http.StatusBadRequest, repository.ErrInvalidUsageRetention.Error())
 		return
 	}
 	previous, err := h.repo.ResolveUsageRetention(request.Context(), h.usageRetentionDefaults())
 	if err != nil {
 		writeInternalError(writer, err)
+		return
+	}
+	// The console confirmed against a horizon that is no longer in force: another
+	// console changed it, so the deletion it confirmed is not the one it would make.
+	if previous.RequestRecordDays != *req.ExpectedRequestRecordDays {
+		writeJSON(writer, http.StatusConflict, map[string]string{
+			"error": repository.ErrUsageRetentionChanged.Error(),
+			"code":  repository.ErrUsageRetentionChanged.Error(),
+		})
 		return
 	}
 	// The console sets request records only; payloads are an internal replay buffer, so a
@@ -196,8 +208,15 @@ func (h *Handler) putDataRetention(writer http.ResponseWriter, request *http.Req
 		writeInternalError(writer, errors.Join(errors.New("audit data retention change"), err))
 		return
 	}
-	if err := h.repo.SetUsageRetention(request.Context(), retention.RequestRecordDays, req.PayloadDays); err != nil {
+	if err := h.repo.SetUsageRetention(request.Context(), retention.RequestRecordDays, req.PayloadDays, *req.ExpectedRequestRecordDays); err != nil {
 		_ = h.recordAudit(request, "system.data_retention", "database", "usage_retention", "failure", details)
+		if errors.Is(err, repository.ErrUsageRetentionChanged) {
+			writeJSON(writer, http.StatusConflict, map[string]string{
+				"error": repository.ErrUsageRetentionChanged.Error(),
+				"code":  repository.ErrUsageRetentionChanged.Error(),
+			})
+			return
+		}
 		writeInternalError(writer, err)
 		return
 	}

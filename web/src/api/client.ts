@@ -1201,10 +1201,11 @@ export const api = {
     return request<DataRetentionResponse>('/management/system/data-retention', { method: 'GET' });
   },
 
-  async setDataRetention(requestRecordDays: number): Promise<DataRetentionResponse> {
+  /** `expectedRequestRecordDays` is the horizon the operator confirmed against; a different stored value is refused with 409. */
+  async setDataRetention(requestRecordDays: number, expectedRequestRecordDays: number): Promise<DataRetentionResponse> {
     return request<DataRetentionResponse>('/management/system/data-retention', {
       method: 'PUT',
-      body: JSON.stringify({ request_record_days: requestRecordDays }),
+      body: JSON.stringify({ request_record_days: requestRecordDays, expected_request_record_days: expectedRequestRecordDays }),
     });
   },
 

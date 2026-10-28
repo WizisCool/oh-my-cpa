@@ -221,4 +221,5 @@ export default {
   'omc.retention_save_failed': 'Could not save data retention: {msg}',
   'omc.retention_confirm_title': 'Shorten retention?',
   'omc.retention_confirm_records': 'Request records older than {days} days are deleted in about a minute; lengthening retention later does not bring them back.',
+  'omc.retention_changed': 'Another console changed the retention. It has been refreshed; choose again.',
 } satisfies Translation<typeof source>;
