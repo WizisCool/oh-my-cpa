@@ -42,6 +42,49 @@ export interface ModelSquareDirectory {
   model_info: Record<string, ModelReference>;
   metadata_updated_at: string;
 }
+/** The three CPA model catalogs, in the order a refresh reports them. */
+export const MODEL_CATALOGS = ['catalog', 'codex-catalog', 'devin-catalog'] as const;
+export type ModelCatalog = typeof MODEL_CATALOGS[number];
+export type ModelCatalogRefreshStatus = 'refreshed' | 'skipped' | 'error';
+export interface ModelCatalogRefreshOutcome {
+  catalog: ModelCatalog;
+  status: ModelCatalogRefreshStatus;
+  changed_providers: string[];
+  error_code?: 'refresh_failed' | 'invalid_response';
+}
+export interface ModelCatalogRefreshResult {
+  ok: boolean;
+  catalogs: ModelCatalogRefreshOutcome[];
+  changed_providers: string[];
+  code?: 'catalog_refresh_failed';
+}
+
+const REFRESH_STATUSES: readonly string[] = ['refreshed', 'skipped', 'error'];
+const REFRESH_ERROR_CODES: readonly string[] = ['refresh_failed', 'invalid_response'];
+
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string');
+
+/**
+ * True for a refresh report, whether it arrived as a 200 or as the body of a 502.
+ *
+ * A partial failure is a 502 that still carries every catalog's outcome, but a 502 can also come
+ * from anything between the console and CPA; only a body of the report's own shape is read as one.
+ * Every enumerated value is checked because the report's copy is looked up by it.
+ */
+export function isModelCatalogRefreshResult(value: unknown): value is ModelCatalogRefreshResult {
+  if (!value || typeof value !== 'object') return false;
+  const result = value as Partial<ModelCatalogRefreshResult>;
+  return typeof result.ok === 'boolean'
+    && (result.code === undefined || result.code === 'catalog_refresh_failed')
+    && isStringArray(result.changed_providers)
+    && Array.isArray(result.catalogs)
+    && result.catalogs.length === MODEL_CATALOGS.length
+    && result.catalogs.every((outcome, index) => outcome?.catalog === MODEL_CATALOGS[index]
+      && REFRESH_STATUSES.includes(outcome.status)
+      && (outcome.error_code === undefined || REFRESH_ERROR_CODES.includes(outcome.error_code))
+      && isStringArray(outcome.changed_providers));
+}
+
 export interface ModelManufacturer {
   id: string;
   name: string;

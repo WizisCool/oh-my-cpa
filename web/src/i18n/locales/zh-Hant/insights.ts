@@ -28,6 +28,7 @@ export default {
   "insights.metric.requests": "請求",
   "insights.metric.latency": "平均延遲",
   "insights.change_new": "新增",
+  "insights.change_noise": "在正常波動範圍內",
   "insights.change_was": "上期 {value}",
   "insights.dim.key": "金鑰",
   "insights.dim.call_point": "呼叫模型",

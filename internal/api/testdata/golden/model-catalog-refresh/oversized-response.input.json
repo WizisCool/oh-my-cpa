@@ -1,0 +1,10 @@
+{
+  "why": "Bound the complete response, including unknown native fields, before parsing.",
+  "body": {
+    "status": 200,
+    "response_padding_bytes": 65536,
+    "response": {
+      "ok": true
+    }
+  }
+}

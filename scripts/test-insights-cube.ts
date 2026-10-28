@@ -3,6 +3,7 @@ import {
   FOLDED_ID,
   buildFlow,
   buildMatrix,
+  compareMetric,
   decodeInsightsCube,
   emptyMeasures,
   facetValues,
@@ -12,7 +13,6 @@ import {
   matrixCellKey,
   metricValue,
   rankGroups,
-  relativeChange,
   sumMeasures,
   trendSeries,
 } from '../web/src/pages/insights/insightsCube.ts';
@@ -92,9 +92,24 @@ assert.equal(metricValue(emptyMeasures(), 'latency'), null, 'an average over no 
 const unpriced = sumMeasures(filterRows(cube, cube.rows, { key: ['hmac:b'] }));
 assert.equal(metricValue(unpriced, 'cost'), null);
 
-assert.equal(relativeChange(12, 10), 0.2);
-assert.equal(relativeChange(5, 0), null, 'growth from nothing has no ratio');
-assert.equal(relativeChange(null, 10), null);
+// A comparison weighs the requests behind it: the same ratio is noise on a few and a trend on many.
+const usage = (requests: number, totalTokens: number) => ({ ...emptyMeasures(), requests, totalTokens });
+assert.deepEqual(compareMetric(usage(12, 1200), usage(10, 1000), 'tokens'), { kind: 'change', change: 0.19999999999999996, isNoise: true });
+assert.deepEqual(compareMetric(usage(1200, 120000), usage(1000, 100000), 'tokens'), { kind: 'change', change: 0.19999999999999996, isNoise: false });
+assert.deepEqual(compareMetric(usage(5, 500), usage(0, 0), 'tokens'), { kind: 'new' }, 'growth from nothing has no ratio');
+// A baseline inside the current reading's sampling noise is an arrival, not a sixty-fold rise; the
+// same baseline against a smaller current reading is a measurable change.
+assert.deepEqual(compareMetric(usage(400, 6_100_000), usage(2, 100_000), 'tokens'), { kind: 'new' });
+assert.equal(compareMetric(usage(20, 150_000), usage(2, 100_000), 'tokens').kind, 'change');
+assert.deepEqual(compareMetric(usage(0, 0), usage(1, 100), 'tokens'), { kind: 'change', change: -1, isNoise: true }, 'one request gone is chance');
+assert.deepEqual(compareMetric(usage(0, 0), usage(40, 4000), 'tokens'), { kind: 'change', change: -1, isNoise: false }, 'a group that stopped has fallen');
+assert.deepEqual(compareMetric(emptyMeasures(), usage(10, 1000), 'latency'), { kind: 'none' });
+assert.deepEqual(compareMetric(usage(1, 100), usage(1, 100), 'requests'), { kind: 'change', change: 0, isNoise: true }, 'a request a side is no arrival');
+assert.deepEqual(compareMetric(usage(40, 0), usage(40, 4000), 'tokens'), { kind: 'change', change: -1, isNoise: false }, 'tokens that stopped fell, though requests ran on');
+const spend = (requests: number, costedRequests: number, costNanos: number) => ({ ...emptyMeasures(), requests, costedRequests, costNanos });
+assert.deepEqual(compareMetric(spend(5000, 1, 3e9), spend(5000, 1, 2e9), 'cost'), { kind: 'change', change: 0.5, isNoise: true }, 'one priced request a side is chance, however many ran');
+assert.deepEqual(compareMetric(spend(1000, 1000, 0), spend(5, 5, 1e9), 'cost'), { kind: 'change', change: -1, isNoise: false }, 'a thousand free requests are a firm fall');
+assert.deepEqual(compareMetric(spend(10, 10, 1e9), spend(10, 0, 0), 'cost'), { kind: 'none' }, 'an unpriced spend before is unknown, not new');
 
 // ── rankings ──────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,9 @@
+{
+  "why": "An invalid CPA source policy produces only a safe failure; source errors never pass through generic configuration-rejection rendering.",
+  "body": {
+    "status": 400,
+    "response": {
+      "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token"
+    }
+  }
+}

@@ -283,6 +283,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodDelete, "/api/v1/management/logs", demoRefuse, "clearing the gateway log is disabled"},
 
 	// Anything that would reach outside this process.
+	{http.MethodPost, "/api/v1/management/model-square/refresh-catalogs", demoRefuse, "Refreshing model catalogs is unavailable in the demo"},
 	{http.MethodPost, "/api/v1/management/providers/pull-models", demoRefuse, "reading models from a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/management/providers/probe", demoRefuse, "probing a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call openrouter.ai"},

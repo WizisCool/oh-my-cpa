@@ -1,0 +1,23 @@
+{
+  "why": "Missing or contradictory catalog outcomes are explicit invalid_response failures, not successful refreshes.",
+  "body": {
+    "status": 200,
+    "response": {
+      "ok": true,
+      "catalogs": {
+        "catalog": {
+          "refreshed": true,
+          "skipped": true
+        },
+        "codex-catalog": {
+          "refreshed": true,
+          "changed_providers": [
+            "kimi.ai",
+            "kimi.com",
+            "gemini-interactions"
+          ]
+        }
+      }
+    }
+  }
+}

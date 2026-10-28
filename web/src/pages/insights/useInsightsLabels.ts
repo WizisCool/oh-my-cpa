@@ -8,7 +8,7 @@ import { resolveChannelName } from '../../components/dashboard/dashboardProvider
 import { CREDENTIAL_FILES_QUERY_KEY } from '../../components/dashboard/CredentialQuota';
 import { createFacetMarkRenderer } from '../../components/usage/RequestFacetMark';
 import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../types/providerIcons';
-import { createProviderNameResolver, indexCredentialFiles } from '../../types/usageEventIdentity';
+import { createProviderNameResolver, credentialAccount, credentialFileName, indexCredentialFiles } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import { FOLDED_ID, type InsightsCube, type InsightsDimension } from './insightsCube';
 
@@ -33,10 +33,10 @@ const MARK_KEYS: Partial<Record<InsightsDimension, EventFilterKey>> = {
  *
  * A key is named by the operator's alias, then by the mask its last request carried, then by its
  * fingerprint; the key itself is never in the browser. Providers and credentials are named and marked
- * the way the request list names and marks them - the configured provider name, the account behind an
- * auth file, the provider's brand or a plugin's logo - from the same queries, so one value reads the
- * same on both pages. A credential keeps its runtime index when it has since been removed, because its
- * usage outlives it.
+ * the way the request list names and marks them - the configured provider name, the masked account
+ * behind an auth file, the provider's brand or a plugin's logo - from the same queries, so one value
+ * reads the same on both pages. A credential keeps its runtime index when it has since been removed,
+ * because its usage outlives it.
  */
 export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabels {
   const t = useT();
@@ -65,7 +65,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   const credentials = React.useMemo(() => {
     const names = new Map<string, { name: string; provider?: string }>();
     for (const file of authFiles?.files ?? []) {
-      if (file.auth_index) names.set(file.auth_index, { name: file.email || file.name, provider: file.provider || file.type });
+      if (file.auth_index) names.set(file.auth_index, { name: credentialAccount(file) || credentialFileName(file), provider: file.provider || file.type });
     }
     for (const provider of configuredProviders ?? []) {
       const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];

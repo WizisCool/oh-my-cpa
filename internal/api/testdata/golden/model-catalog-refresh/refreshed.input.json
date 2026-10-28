@@ -1,0 +1,56 @@
+{
+  "why": "Only bounded, known provider identifiers and outcomes reach the response and audit, never native source data.",
+  "body": {
+    "status": 200,
+    "response": {
+      "ok": true,
+      "source": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+      "sources": {
+        "catalog": "https://catalog-fixture.invalid/models?token=catalog-fixture-token"
+      },
+      "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+      "catalogs": {
+        "catalog": {
+          "source": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "refreshed": true,
+          "changed_providers": [
+            "codex",
+            "claude",
+            "codex",
+            "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+            "catalog-fixture-token",
+            "unknown-provider"
+          ]
+        },
+        "codex-catalog": {
+          "source": "/operator/catalog-fixture.json",
+          "refreshed": true,
+          "changed_providers": [
+            "codex"
+          ]
+        },
+        "devin-catalog": {
+          "source": "embed",
+          "refreshed": false,
+          "skipped": true
+        },
+        "https://catalog-fixture.invalid/models?token=catalog-fixture-token": {
+          "source": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "refreshed": true,
+          "changed_providers": [
+            "codex",
+            "claude",
+            "codex",
+            "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+            "catalog-fixture-token",
+            "unknown-provider"
+          ]
+        }
+      },
+      "changed_providers": [
+        "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+        "untrusted-top-level-provider"
+      ]
+    }
+  }
+}

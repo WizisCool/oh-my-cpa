@@ -42,6 +42,11 @@ export function eventProviderIdentity(
 /**
  * eventCredentialIdentity is the auth-source half.
  *
+ * The key is the stored identity, lower-cased, and the label is the form a header
+ * prints: the same name with its account masked. They are deliberately not the same
+ * string - a mask keeps only a short head and tail, so two accounts can render alike
+ * and must still get a header each.
+ *
  * An ambiguous credential is never resolved to a guessed file name: two
  * credentials of one provider must not merge into one header, because the header
  * is the only thing telling them apart. It still names the stored index, which is
@@ -52,9 +57,10 @@ export function eventCredentialIdentity(
   credentials: CredentialIndex,
   unknownLabel: string,
 ): EventSourceIdentity {
-  const label = resolveCredential(event, credentials).name?.trim() || '';
-  if (!label) return { key: UNKNOWN_EVENT_GROUP, label: unknownLabel };
-  return { key: label.toLowerCase(), label };
+  const identity = resolveCredential(event, credentials);
+  const name = identity.name?.trim() || '';
+  if (!name) return { key: UNKNOWN_EVENT_GROUP, label: unknownLabel };
+  return { key: name.toLowerCase(), label: identity.displayName?.trim() || name };
 }
 
 /**

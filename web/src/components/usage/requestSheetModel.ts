@@ -239,8 +239,10 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
           ],
           // The credential line: an OAuth account - usually an address - or the
           // masked key. Each has its own mask; the provider's name always stays.
+          // An unredacted sheet is the operator's explicit disclosure, so it prints
+          // the account itself rather than the screen's mask.
           ...(provider.isOAuth && provider.credential
-            ? [masks.has('provider_account') ? MASK_LINE : [text(provider.credential, 'muted', 11)]]
+            ? [masks.has('provider_account') ? MASK_LINE : [text(provider.accountIdentity ?? provider.credential, 'muted', 11)]]
             : []),
           ...(providerKeyMask
             ? [masks.has('provider_key') ? MASK_LINE : [text(providerKeyMask, 'muted', 11)]]

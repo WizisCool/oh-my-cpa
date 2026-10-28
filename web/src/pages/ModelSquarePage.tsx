@@ -2,20 +2,19 @@ import { translateOr } from '../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
 import { Button } from 'antd';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useViewSearchParams, type ViewChangeOptions } from '../hooks/useViewSearchParams';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
-import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, UpOutlined } from '../components/icons';
+import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, SyncOutlined, UpOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { PageLoading } from '../components/common/PageLoading';
-import { RefreshButton } from '../components/common/RefreshButton';
 import { CopyButton } from '../components/common/CopyButton';
 import { StatusLabel } from '../components/common/StatusLabel';
 import { credentialProviderIconId, getCredentialProviderMetadata } from '../components/common/providerMetadata';
-import { LoadFailure, Notice, useToast } from '../components/feedback';
+import { LoadFailure, Notice, useToast, type ToastItem } from '../components/feedback';
 import { useOpenPriceEditor } from '../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
 import { copyText } from '../utils/clipboard';
@@ -28,9 +27,12 @@ import {
   classifyModelOpenness,
   countModelManufacturers,
   filterModelSquareEntries,
+  isModelCatalogRefreshResult,
   isSafeReferenceURL,
   resolveEntryReference,
   resolveModelManufacturer,
+  type ModelCatalogRefreshOutcome,
+  type ModelCatalogRefreshResult,
   type ModelManufacturer,
   type ModelReference,
   type ModelReferenceLink,
@@ -280,6 +282,85 @@ const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) =
   </section>;
 };
 
+/**
+ * The page's one refresh: has CPA fetch its model catalogs, then re-reads everything they feed.
+ *
+ * CPA decides which catalogs it refreshes and which its configuration skips, so the report names
+ * a catalog only when its outcome needs the operator's attention: a failure, or a skip beside a
+ * refresh. The page owns its own readings and passes them in as `onReread`; the model-rule
+ * catalogs elsewhere in the console are invalidated here.
+ */
+const CatalogRefreshButton: React.FC<{ onReread: () => Promise<unknown> }> = ({ onReread }) => {
+  const t = useT();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  // Inactive reads are only marked stale, so a model-rule drawer opened later reads the new catalog.
+  const reread = () => Promise.allSettled([
+    onReread(),
+    queryClient.invalidateQueries({ queryKey: ['management-oauth-provider-models'] }),
+    queryClient.invalidateQueries({ queryKey: ['auth-file-models'] }),
+  ]);
+  const report = (result: ModelCatalogRefreshResult) => {
+    const catalogName = (catalog: ModelCatalogRefreshOutcome['catalog']) => t(`models.catalog_name.${catalog}`);
+    const failed = result.catalogs.filter(outcome => outcome.status === 'error');
+    const skipped = result.catalogs.filter(outcome => outcome.status === 'skipped');
+    if (failed.length > 0) {
+      // Failures lead, each with its reason; the catalogs that refreshed or were skipped follow
+      // under their own headings, so the operator sees exactly which ones need attention.
+      const items: ToastItem[] = [...failed, ...result.catalogs.filter(outcome => outcome.status !== 'error')].map(outcome => ({
+        name: catalogName(outcome.catalog),
+        group: t(`models.catalog_status.${outcome.status}`),
+        reason: outcome.error_code && t(`models.catalog_error.${outcome.error_code}`),
+      }));
+      const isTotal = failed.length === result.catalogs.length;
+      (isTotal ? toast.error : toast.warning)(t(isTotal ? 'models.catalogs_failed' : 'models.catalogs_partial'), { items });
+      return;
+    }
+    // `ok` is the verdict: a success is reported only when the server vouches for the whole refresh.
+    if (!result.ok) {
+      toast.warning(t('models.catalogs_unconfirmed'));
+      return;
+    }
+    if (skipped.length === result.catalogs.length) {
+      toast.info(t('models.catalogs_all_skipped'));
+      return;
+    }
+    if (skipped.length > 0) {
+      const catalogs = skipped.map(outcome => catalogName(outcome.catalog)).join(' · ');
+      toast.info(t('models.catalogs_refreshed_with_skips'), { detail: t('models.catalogs_skipped_by_config', { catalogs }) });
+      return;
+    }
+    toast.success(t('models.catalogs_refreshed'));
+  };
+  const refresh = useMutation({
+    // Every outcome re-reads: CPA may have refreshed some catalogs even when no readable report
+    // came back. The re-read belongs to the mutation, so the button stays busy until the page
+    // shows what the refresh left behind and a second click cannot send a second POST.
+    mutationFn: async () => {
+      try {
+        return await api.refreshModelCatalogs();
+      } finally {
+        await reread();
+      }
+    },
+    onSuccess: report,
+    onError: error => {
+      if (error instanceof ApiError && error.status === 502 && isModelCatalogRefreshResult(error.data)) report(error.data);
+      else if (error instanceof ApiError && error.status === 501) toast.warning(t('models.catalogs_unsupported'));
+      else toast.error(t('models.catalogs_failed'), { error });
+    },
+  });
+  return <Button
+    icon={<SyncOutlined spin={refresh.isPending} />}
+    aria-busy={refresh.isPending}
+    disabled={refresh.isPending}
+    data-testid="model-catalog-refresh"
+    onClick={() => refresh.mutate()}
+  >
+    {t('models.refresh_catalogs')}
+  </Button>;
+};
+
 export const ModelSquarePage: React.FC = () => {
   const t = useT();
   const [params, setParams] = useViewSearchParams();
@@ -320,7 +401,7 @@ export const ModelSquarePage: React.FC = () => {
     if (targets.length === 1) openEditor(targets[0].model, targets[0]);
     else if (targets.length > 1) setSelectedIdentity(identity);
   } : undefined;
-  const refresh = () => { void directory.refetch(); void pricing.refetch(); void requests.refetch(); };
+  const reread = () => Promise.all([directory.refetch(), pricing.refetch(), requests.refetch()]);
 
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -361,7 +442,7 @@ export const ModelSquarePage: React.FC = () => {
   });
 
   return <div className={clsx(styles['page'], 'terminal-page', 'model-square-page')}>
-    <PageHeader title={t('nav.model_square')} subtitle={subtitle} actions={<RefreshButton isRefreshing={directory.isFetching || pricing.isFetching || requests.isFetching} onRefresh={refresh} />} />
+    <PageHeader title={t('nav.model_square')} subtitle={subtitle} actions={<CatalogRefreshButton onReread={reread} />} />
     {directory.isError && <LoadFailure title={t(needsKey ? 'models.key_required' : 'models.load_failed')} error={directory.error} onRetry={() => void directory.refetch()} />}
     {needsKey && <Link to="/api-keys">{t('models.manage_keys')}</Link>}
     {directory.isPending ? <PageLoading variant="block" /> : directory.data && <>
