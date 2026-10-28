@@ -1672,7 +1672,9 @@ supplies content and layout width; what is inside the frame is not restyled per 
   text, a mark, an info glyph marked `isTapReadable` - and a touch elsewhere or a scroll closes it;
   a tap on a control only operates it, which is also what spares iOS's second tap. A keyboard
   focus opens it when the focus is visible, so the focus a click or a closing drawer leaves behind
-  does not. The request list's delegated cell popup follows the same rules (`tooltipIntent.ts`).
+  does not. Only an active or closing hint mounts popup machinery: its trigger stays in place,
+  retaining focus and control state, and an existing ARIA description is preserved. The request
+  list's delegated cell popup follows the same rules (`tooltipIntent.ts`).
 - **`SearchInput` - a filter-as-you-type field.** The search glyph in `--muted`, the text, and a
   clear control. `label` is its accessible name and its placeholder unless a longer placeholder is
   given; `onChange` receives the text. Width is the caller's.

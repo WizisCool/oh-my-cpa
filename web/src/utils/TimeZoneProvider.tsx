@@ -7,10 +7,12 @@ import { configureTimeZone, getTimeZone, parseTimeZone, subscribeTimeZone } from
 export function useTimeZone(): string {
   return React.useSyncExternalStore(subscribeTimeZone, getTimeZone, getTimeZone);
 }
+const selectServerTimeZone = (preferences: Record<string, unknown>) => preferences.omc_server_timezone;
+
 export function useTimeZoneSetting() {
   const preference = usePreference<string>('omc_timezone', '', parseTimeZone);
-  const { data } = useQuery({ queryKey: ['preferences'], queryFn: api.getPreferences, staleTime: Infinity, meta: { silent: true } });
-  const server = parseTimeZone(data?.omc_server_timezone) || 'UTC';
+  const { data } = useQuery({ queryKey: ['preferences'], queryFn: api.getPreferences, select: selectServerTimeZone, staleTime: Infinity, meta: { silent: true } });
+  const server = parseTimeZone(data) || 'UTC';
   return { ...preference, server };
 }
 /**

@@ -178,7 +178,7 @@ describe('real preference hook and cache integration', () => {
     expect(reads()).toBe(1);
   });
 
-  it('keeps object parsing reference-stable when another preference updates', async () => {
+  it('isolates each preference while publishing its own updates with stable parsed values', async () => {
     stored.usage_events_columns = { provider: 200 };
     const parse = vi.fn((raw: unknown) => typeof raw === 'object' && raw !== null ? { ...(raw as object) } : undefined);
     const fallback = {};
@@ -188,13 +188,17 @@ describe('real preference hook and cache integration', () => {
       values.push(preference.value);
       return <output aria-label="columns ready">{String(preference.ready)}</output>;
     }
-    const { client } = mount(<Columns />);
+    const { client } = mount(<><Columns /><PreferenceControl name="theme" preferenceKey="omc_theme" /></>);
     await waitFor(() => expect(screen.getByLabelText('columns ready').textContent).toBe('true'));
     const value = values.at(-1);
     const renderCount = values.length;
     await act(async () => { client.setQueryData(['preferences'], { ...stored, omc_theme: 'dark' }); });
-    await waitFor(() => expect(values.length).toBeGreaterThan(renderCount));
+    await waitFor(() => expect(screen.getByLabelText('theme value').textContent).toBe('dark'));
+    expect(values).toHaveLength(renderCount);
     expect(values.at(-1)).toBe(value);
+    await act(async () => { client.setQueryData(['preferences'], { ...stored, usage_events_columns: { provider: 240 } }); });
+    await waitFor(() => expect(values.at(-1)).toEqual({ provider: 240 }));
+    expect(values.at(-1)).not.toBe(value);
   });
 });
 

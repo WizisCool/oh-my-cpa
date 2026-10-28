@@ -1,5 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryRouter, RouterProvider, useRouteError } from 'react-router-dom';
+import { DeferredMount } from '../src/components/common/DeferredMount';
+import { Tooltip } from '../src/components/common/Tooltip';
+import { progressTasks } from '../src/utils/progressTasks';
 import { AppDrawer } from '../src/components/common/AppDrawer';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
@@ -10,6 +15,7 @@ import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
+import { renderWithOmc } from './support/render';
 
 describe('SearchInput', () => {
   it('is named by its label, shows it as the placeholder, and reports text rather than events', () => {
@@ -251,4 +257,115 @@ describe('the translator', () => {
     render(<I18nProvider><UnknownIds /></I18nProvider>);
     expect(document.body.textContent).toContain('toString · no.such.id');
   });
+});
+
+
+describe('Tooltip', () => {
+  it('evaluates a reading only on intent and keeps the focused trigger and its draft through the popup lifecycle', async () => {
+    const reading = vi.fn(() => 'Current reading');
+    const { rerender } = render(<Tooltip title={reading} open={false}><input aria-label="Draft" defaultValue="initial" aria-describedby="field-hint" /></Tooltip>);
+    const trigger = screen.getByRole('textbox', { name: 'Draft' });
+    fireEvent.change(trigger, { target: { value: 'unfinished draft' } });
+    trigger.focus();
+    expect(reading).not.toHaveBeenCalled();
+
+    rerender(<Tooltip title={reading} open><input aria-label="Draft" defaultValue="initial" aria-describedby="field-hint" /></Tooltip>);
+    await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe('Current reading'));
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-describedby')?.split(' ')).toContain('field-hint');
+    expect((trigger as HTMLInputElement).value).toBe('unfinished draft');
+
+    rerender(<Tooltip title={reading} open={false}><input aria-label="Draft" defaultValue="initial" aria-describedby="field-hint" /></Tooltip>);
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-describedby')).toBe('field-hint');
+  });
+});
+
+describe('DeferredMount', () => {
+  it('counts an optional editor download on first use and keeps its draft while it closes and reopens', async () => {
+    const initialize = vi.fn();
+    function Editor({ isOpen }: { isOpen: boolean }) {
+      React.useEffect(() => { initialize(); }, []);
+      return <input aria-label="Optional draft" hidden={!isOpen} defaultValue="initial" />;
+    }
+    let finishDownload!: (module: { default: typeof Editor }) => void;
+    const LazyEditor = React.lazy(() => new Promise<{ default: typeof Editor }>((resolve) => { finishDownload = resolve; }));
+    const view = (isOpen: boolean) => <DeferredMount isActive={isOpen}><LazyEditor isOpen={isOpen} /></DeferredMount>;
+    const { rerender } = render(view(false));
+    expect(initialize).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Optional draft')).toBeNull();
+    rerender(view(true));
+    expect(progressTasks.read().size).toBe(1);
+    await act(async () => { finishDownload({ default: Editor }); });
+    expect(progressTasks.read().size).toBe(0);
+    const field = screen.getByLabelText('Optional draft');
+    fireEvent.change(field, { target: { value: 'unfinished draft' } });
+    rerender(view(false));
+    rerender(view(true));
+    expect(screen.getByLabelText('Optional draft')).toBe(field);
+    expect((field as HTMLInputElement).value).toBe('unfinished draft');
+    expect(initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains a rejected optional download without replacing the page or losing its draft', async () => {
+    let rejectDownload!: (error: Error) => void;
+    const LazyEditor = React.lazy(() => new Promise<{ default: React.ComponentType }>((_resolve, reject) => {
+      rejectDownload = reject;
+    }));
+    function Page() {
+      const [isActive, setIsActive] = React.useState(false);
+      return <>
+        <input aria-label="Page draft" defaultValue="initial" />
+        <button type="button" onClick={() => setIsActive((current) => !current)}>Toggle editor</button>
+        <DeferredMount isActive={isActive}><LazyEditor /></DeferredMount>
+      </>;
+    }
+    const router = createMemoryRouter([{
+      path: '/',
+      element: <Page />,
+      errorElement: <p role="alert">Route unavailable</p>,
+    }]);
+    renderWithOmc(<RouterProvider router={router} />);
+    const draft = screen.getByRole('textbox', { name: 'Page draft' });
+    fireEvent.change(draft, { target: { value: 'unfinished page draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle editor' }));
+    expect(progressTasks.read().size).toBe(1);
+
+    await act(async () => { rejectDownload(new TypeError('Failed to fetch dynamically imported module: editor.js')); });
+
+    expect(screen.getByRole('textbox', { name: 'Page draft' })).toBe(draft);
+    expect((draft as HTMLInputElement).value).toBe('unfinished page draft');
+    expect(progressTasks.read().size).toBe(0);
+    expect(await screen.findByTestId('optional-surface-failure')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reload page' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Page draft' })).toBe(draft);
+  });
+
+  it('leaves non-download failures to the route diagnostic boundary', async () => {
+    const BrokenEditor: React.FC = () => {
+      throw new Error('Editor render failed');
+    };
+    const LazyEditor = React.lazy(async () => ({ default: BrokenEditor }));
+    function Page() {
+      const [isActive, setIsActive] = React.useState(false);
+      return <>
+        <button type="button" onClick={() => setIsActive(true)}>Open editor</button>
+        <DeferredMount isActive={isActive}><LazyEditor /></DeferredMount>
+      </>;
+    }
+    function RouteFailure() {
+      const error = useRouteError();
+      return <p role="alert">{error instanceof Error ? error.message : 'Route unavailable'}</p>;
+    }
+    const router = createMemoryRouter([{ path: '/', element: <Page />, errorElement: <RouteFailure /> }]);
+    renderWithOmc(<RouterProvider router={router} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open editor' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Editor render failed');
+    expect(screen.queryByTestId('optional-surface-failure')).toBeNull();
+  });
+
 });

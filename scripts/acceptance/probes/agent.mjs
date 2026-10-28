@@ -937,7 +937,7 @@ export async function agentViews({ base, page, check, expectProblem }) {
   // conversation's own approval card before the Mutation resolves.
   check('a mutation button states what it will do', await drawn.getByRole('button', { name: 'Disable gpt-4.1', exact: true }).count() === 1 && await drawn.getByText('Ready', { exact: true }).isVisible());
   await drawn.getByRole('button', { name: 'Disable gpt-4.1', exact: true }).click();
-  await page.getByTestId('agent-openui-approval').waitFor();
+  await page.getByTestId('agent-openui-approval').getByText('gpt-4.1', { exact: true }).waitFor();
   check('the change asks for approval with what it will change', await page.getByTestId('agent-openui-approval').getByText('gpt-4.1').count() >= 1 && invokes.length === 1
     && invokes[0].name === 'providers_set_status' && invokes[0].arguments?.provider === 'gpt-4.1', JSON.stringify(invokes));
   await page.getByTestId('agent-openui-approval').getByRole('button', { name: /^(Allow|Allow exactly once)$/ }).first().click();

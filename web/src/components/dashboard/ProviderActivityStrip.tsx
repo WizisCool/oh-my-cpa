@@ -1,26 +1,13 @@
 import React from 'react';
 import { useT } from '../../i18n';
-import dayjs from '../../utils/time';
-import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { successRateTone } from '../../types/usageEventMetrics';
 import { Tooltip } from '../common/Tooltip';
 import type { ActivityBlock } from './dashboardProvidersLogic';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function formatSpan(block: ActivityBlock, timeZone: string): string {
-  const start = dayjs(block.startMs).tz(timeZone);
-  const end = dayjs(block.endMs).tz(timeZone);
-  // A block inside one day names the day once; a block of a day or more needs both dates.
-  if (block.endMs - block.startMs < DAY_MS && start.isSame(end.subtract(1, 'millisecond'), 'day')) {
-    return `${start.format('MM-DD HH:mm')} – ${end.format('HH:mm')}`;
-  }
-  return `${start.format('MM-DD HH:mm')} – ${end.format('MM-DD HH:mm')}`;
-}
-
 export interface ProviderActivityStripProps {
   blocks: ActivityBlock[];
+  labels: readonly string[];
   /** The row's name, for the strip's accessible label. */
   name: string;
 }
@@ -33,19 +20,18 @@ export interface ProviderActivityStripProps {
  * console's one success-rate band, so where in the window the failures sit is visible at a glance.
  * An idle bucket is a plain track, never a band colour: no traffic is not a verdict.
  */
-export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ blocks, name }) => {
+export const ProviderActivityStrip = React.memo(function ProviderActivityStrip({ blocks, labels, name }: ProviderActivityStripProps) {
   const t = useT();
-  const timeZone = useTimeZone();
-  const history = blocks.flatMap((block) => {
+  const history = React.useMemo(() => blocks.flatMap((block, index) => {
     if (block.total <= 0 || block.successRate === null) return [];
     return [{
       key: block.startMs,
-      text: `${formatSpan(block, timeZone)} · ${t('dash.providers_activity_block', {
+      text: `${labels[index]} · ${t('dash.providers_activity_block', {
         n: PLAIN_NUMBER_FORMAT.format(block.total),
         rate: `${block.successRate.toFixed(1)}%`,
       })}`,
     }];
-  });
+  }), [blocks, labels, t]);
   const idleCount = blocks.length - history.length;
   const idleNote = history.length > 0 && idleCount > 0
     ? t('dash.providers_activity_idle_other', { n: idleCount })
@@ -53,7 +39,7 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
   const historyText = history.length > 0
     ? `${history.map((reading) => reading.text).join('; ')}${idleNote ? `; ${idleNote}` : ''}`
     : t('dash.providers_activity_idle');
-  const historyHint = history.length > 0
+  const historyHint = () => history.length > 0
     ? (
       <div className="provider-activity-history">
         {history.map((reading) => <div key={reading.key}>{reading.text}</div>)}
@@ -77,7 +63,7 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
         tabIndex={0}
         aria-label={`${t('dash.providers_activity', { name })}: ${historyText}`}
       >
-        {blocks.map((block) => {
+        {blocks.map((block, index) => {
           const tone = block.successRate === null ? 'idle' : successRateTone(block.successRate);
           const reading = block.successRate === null
             ? t('dash.providers_activity_idle')
@@ -88,9 +74,9 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
           return (
             <Tooltip
               key={block.startMs}
-              title={(
+              title={() => (
                 <>
-                  <div>{formatSpan(block, timeZone)}</div>
+                  <div>{labels[index]}</div>
                   <div>{reading}</div>
                 </>
               )}
@@ -108,4 +94,4 @@ export const ProviderActivityStrip: React.FC<ProviderActivityStripProps> = ({ bl
       </div>
     </Tooltip>
   );
-};
+});

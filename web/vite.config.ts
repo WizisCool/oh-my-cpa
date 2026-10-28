@@ -96,7 +96,7 @@ export default defineConfig(({ command }) => ({
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
+        manualChunks: (id, { getModuleInfo }) => {
           // Vite's shared preload helper is called by every `React.lazy` route, so
           // wherever it lands becomes an eager dependency of the entry. Left to
           // Rollup it can be merged into a chart chunk, dragging the whole chart
@@ -110,6 +110,14 @@ export default defineConfig(({ command }) => ({
           if (id.includes('node_modules/echarts/') || id.includes('node_modules/zrender/')) {
             return 'vendor-echarts';
           }
+          // A workspace's dynamic icon directory is one deferred catalog, not thousands
+          // of tiny files in the embedded binary. Statically imported console icons stay
+          // with their consumers instead of joining that catalog.
+          if (id.includes('node_modules/lucide-react/') && getModuleInfo(id)?.dynamicImporters.some(
+            (importer) => /lucide-react\/.*dynamicIconImports/.test(importer),
+          )) {
+            return 'workspace-icons';
+          }
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||
@@ -118,13 +126,8 @@ export default defineConfig(({ command }) => ({
           ) {
             return 'vendor-react';
           }
-          if (
-            id.includes('node_modules/@ant-design/icons') ||
-            id.includes('node_modules/lucide-react') ||
-            id.includes('node_modules/antd')
-          ) {
-            return 'vendor-antd';
-          }
+          // Let shared UI and icon modules follow their consumers. A package-wide chunk
+          // promotes route-only controls and the Agent's icon catalog into every startup.
           if (id.includes('node_modules/@tanstack/react-query')) {
             return 'vendor-query';
           }

@@ -1,7 +1,7 @@
 # Console responsiveness audit
 
-> **Status: historical measurement record.** Measured on the baseline commit named below;
-> the numbers describe that revision on that machine, not a current guarantee.
+> **Status: revision-specific measurement records.** Each round names its baseline and method;
+> the numbers describe that revision on that machine, not a production latency guarantee.
 
 ## Scope and method
 
@@ -389,3 +389,123 @@ routine quota changes. Absolute ceilings still detect gross expansion; their
 values and the exact-base artifact policy are in `docs/testing.md` and
 `scripts/bundle-report.mjs`. Gzip estimates do not remove CPU costs, and these
 checks do not substitute for the browser timings and profiling methodology above.
+
+
+## October 28, 2026: console-wide loading and mount work
+
+The measurement baseline for this round is `4639f92e`, the initial revision of PR #381,
+including the provider strip's pointer/keyboard split. The implementation also retains
+the merged PR's focus-only shared hint and unified dismissal behavior. This round
+changes production dependency ownership, shared
+hint initialization, preference subscriptions, and optional provider/OAuth editors,
+as well as the provider strip's repeated date work. API shapes, polling freshness,
+chart rendering, layout, stored preference semantics and the `/omc` mount are unchanged.
+
+### Measurement method
+
+Both revisions were built on the same Linux ARM64 host and served as immutable static
+artifacts with gzip. Chromium 151 used a 1440 × 900 viewport, 4× CPU slowdown and an
+emulated asset link with 60 ms latency, 20 Mbps downstream and 5 Mbps upstream. The
+existing scenario API fixtures answered locally; these numbers isolate frontend work
+and are not backend or production latency guarantees. The paired snapshots predate
+the final PR #381 integration and pending-download progress wiring; the integrated
+implementation is validated separately.
+
+All 16 primary routes were measured. Each route used a fresh context starting on System
+(or Logs when measuring System), one immediate-click cold navigation, then three warm
+returns. Baseline and optimized contexts alternated per route to limit shared-host drift.
+The readiness marker was representative rendered content: provider blocks, request rows,
+provider/key table rows, OAuth records, pricing groups or a route's own rendered frame.
+A second animation frame confirmed a paint opportunity. Long tasks were observed through
+800 ms after readiness, so work after the first content remained part of the comparison.
+These markers do not claim that every lazy chart or optional editor has finished.
+Startup samples alternated revisions in fresh contexts three times.
+
+### Dependency delivery
+
+| Production artifact | Baseline | Optimized | Change |
+| --- | ---: | ---: | ---: |
+| Startup static JS closure, raw | 3,098,852 B | 1,384,683 B | −55.3% |
+| Startup static JS closure, gzip level 6 | 804,733 B | 448,443 B | −44.3% |
+| Startup Lucide icon modules | 1,774 | 107 | −94.0% |
+| All emitted JS, raw | 14,099,245 B | 14,213,681 B | +0.8% |
+| All emitted JS files, including workers | 316 | 344 | +28 files |
+
+Package-wide UI/icon chunking previously made route-only controls and workspace icon
+code startup dependencies. UI modules now follow their consumers; the workspace's
+dynamic icon directory is one deferred catalog. The modest total-output increase is
+an explicit partitioning trade-off, not a claim that the complete application shrank.
+The existing production graph gate still checks the eager page, chart, Markdown and
+editor boundaries. First-contentful-paint medians were 1,364 → 1,120 ms, DOMContentLoaded
+832 → 608 ms, and the first System content marker 3,864 → 3,727 ms.
+
+### Route measurements
+
+| Page | Cold route before → after | Warm route before → after (median) | Warm change | Longest task before → after (median) |
+| --- | ---: | ---: | ---: | ---: |
+| Dashboard | 4,741 → 2,597 ms | 3,586 → 1,460 ms | -59% | 1,990 → 725 ms |
+| Request records | 3,308 → 3,759 ms | 1,433 → 1,858 ms | 30% | 250 → 356 ms |
+| Providers | 2,535 → 1,926 ms | 1,079 → 823 ms | -24% | 190 → 124 ms |
+| OAuth management | 2,790 → 2,143 ms | 2,097 → 1,128 ms | -46% | 462 → 263 ms |
+| Price book | 1,770 → 1,788 ms | 877 → 745 ms | -15% | 281 → 225 ms |
+| Model Square | 907 → 942 ms | 390 → 400 ms | 3% | 88 → 81 ms |
+| Key management | 1,352 → 1,214 ms | 545 → 478 ms | -12% | 168 → 151 ms |
+| Insights | 1,773 → 1,970 ms | 855 → 890 ms | 4% | 239 → 225 ms |
+| Logs | 938 → 959 ms | 415 → 407 ms | -2% | 98 → 90 ms |
+| Audit trail | 971 → 990 ms | 462 → 494 ms | 7% | 119 → 114 ms |
+| Configuration | 728 → 777 ms | 695 → 682 ms | -2% | 161 → 156 ms |
+| OMC settings | 1,306 → 1,317 ms | 468 → 465 ms | -1% | 107 → 103 ms |
+| Plugins | 806 → 843 ms | 350 → 347 ms | -1% | 61 → 56 ms |
+| System | 360 → 372 ms | 461 → 326 ms | -29% | 84 → 76 ms |
+| Playground | 3,333 → 3,505 ms | 600 → 566 ms | -6% | 153 → 145 ms |
+| Agent | 2,875 → 3,042 ms | 446 → 398 ms | -11% | 116 → 111 ms |
+
+Warm timings and longest-task values are medians of three returns; cold values are a
+single sample per route, so small changes do not establish a directional improvement.
+The host showed visible timing drift. In particular, the request-list comparison above
+looked slower, so it was profiled again in isolation with the same artifacts and fixtures:
+its warm readiness was 1,036 → 1,013 ms and longest task 219 → 212 ms. That follow-up does
+not establish a material request-list runtime improvement. Native virtual-list height
+collection and layout (`offsetParent`) remain its leading costs. Model Square, Insights,
+logs, audit, configuration, settings and plugin timings are similarly close enough that
+this round does not claim a reliable runtime win for each of them. Their delivery path
+benefits from the smaller startup closure.
+
+The Dashboard profile identified repeated `Date.toLocaleString` inside time-zone
+conversion as the main regression: thousands of conversions were performed while
+building block titles and accessible histories across repeated mounts. Window labels
+now use cached Intl formatters once per grid/timezone revision and are shared by rows;
+traffic readings and the provider panel retain stable memo boundaries. A midnight
+closing a day and DST transitions keep their intended display-clock semantics.
+
+Shared hints retain ordinary trigger DOM until intent, then mount a popup against an
+independent anchor. This removes inactive popup setup across the console without
+replacing focused controls. Preference readers select their own key before React
+notification, retaining the single shared query and the serialized optimistic write /
+rollback behavior. Provider and OAuth editor surfaces load and mount on first use,
+then stay mounted for their drafts and closing motion. Pending downloads use the existing
+Suspense fallback to report work to the global progress indicator.
+
+### Regression evidence and remaining work
+
+The existing preference integration case now verifies independent-key isolation and
+own-key propagation. Reverting the selector made it fail with six renders instead of
+four. The shared-primitive hint case verifies deferred title evaluation plus preserved
+focus, draft and ARIA description; reverting the hint change evaluated its title while
+closed and failed. The deferred-editor primitive verifies first-use mounting, download
+progress, draft retention and failure isolation. An untracked pending download fails that
+existing case with zero active tasks instead of one; without the local boundary, a rejected
+chunk replaces the page through the route error boundary. Existing OAuth snapshot coverage
+opens the connection surface through its real action before inspecting the controller.
+
+The provider-rate browser scenario retains PR #381's gap-to-block single-hint assertion
+and now also checks keyboard history, Escape and focus retention. The Agent view probe
+waits for the approval target rather than its loading container; the authorization
+assertion and timeout remain unchanged. Existing full static, artifact acceptance,
+interaction, demonstration and secret gates cover the changed shared runtime and
+production loading graph.
+
+Further work should prioritize the request list's measured native layout/height
+collection, residual Dashboard commits and first-use workspace runtime initialization.
+Keep separate measurements for startup delivery, first content and subsequent blocking;
+a deferred dependency is still work when its feature is first opened.

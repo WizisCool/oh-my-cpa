@@ -1,4 +1,4 @@
-import { act, waitFor } from '@testing-library/react';
+import { act, fireEvent, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
@@ -57,6 +57,7 @@ it('records the pre-start snapshot for an explicit default-route controller star
   const surface = renderWithOmc(<RouterProvider router={router} />);
   try {
     await waitFor(() => expect(surface.baseElement.querySelector('[data-auth-index="initial"]')).toBeTruthy());
+    fireEvent.click(surface.getByRole('button', { name: 'OAuth sign-in' }));
     await waitFor(() => expect(capture.panelSessions).toBeTruthy());
     await act(async () => { await capture.panelSessions!.startDefaultRoute('kimi'); });
     expect(capture.calls).toEqual(['default:kimi']);

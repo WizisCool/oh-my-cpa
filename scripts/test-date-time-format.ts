@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { getDateTimeFormatter, formatCalendarDay } from '../web/src/utils/dateTimeFormat.ts';
+import { getDateTimeFormatter, formatCalendarDay, formatMinuteSpan } from '../web/src/utils/dateTimeFormat.ts';
 import dayjs, { configureTimeZone } from '../web/src/utils/time.ts';
 import { createHeatmapCellClassifier, heatmapCellState, type DashboardTokenHeatmapDay } from '../web/src/types/tokenHeatmap.ts';
 import { formatClock } from '../web/src/pages/agent/state.ts';
@@ -72,4 +72,24 @@ test('Agent clock follows the effective zone and locale at each instant', () => 
     }
   }
   configureTimeZone('UTC');
+});
+
+
+test('minute spans retain the display clock across midnight, year boundaries and daylight saving changes', () => {
+  const cases = [
+    ['2026-10-28T10:00:00Z', '2026-10-28T11:00:00Z', 'UTC'],
+    ['2026-10-28T23:00:00Z', '2026-10-29T00:00:00Z', 'UTC'],
+    ['2026-12-31T23:30:00Z', '2027-01-01T00:30:00Z', 'UTC'],
+    ['2026-10-28T10:00:00Z', '2026-10-29T10:00:00Z', 'Asia/Kathmandu'],
+    ['2026-03-08T06:30:00Z', '2026-03-08T07:30:00Z', 'America/New_York'],
+    ['2026-11-01T05:30:00Z', '2026-11-01T06:30:00Z', 'America/New_York'],
+  ];
+  assert.deepEqual(cases.map(([from, to, zone]) => formatMinuteSpan(Date.parse(from), Date.parse(to), zone)), [
+    '10-28 10:00 – 11:00',
+    '10-28 23:00 – 00:00',
+    '12-31 23:30 – 01-01 00:30',
+    '10-28 15:45 – 10-29 15:45',
+    '03-08 01:30 – 03:30',
+    '11-01 01:30 – 01:30',
+  ]);
 });
