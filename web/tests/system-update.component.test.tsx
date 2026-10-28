@@ -43,7 +43,7 @@ function mount(fixture = createSystemUpdaterFixture()) {
     if (reach.isLost) return Promise.reject(new TypeError('Failed to fetch'));
     return undefined;
   });
-  const requests = () => omc.requests.map(request => ({ method: request.method, path: `/omc/api/v1${request.path}` }));
+  const requests = () => omc.requests.map(request => ({ method: request.method, path: `/api/v1${request.path}` }));
   const onFinished = vi.fn<(outcome: UpdateOutcome) => void>();
   const surface = renderWithOmc(<Card onFinished={onFinished} />, { isStrict: true });
   const reread = () => act(async () => { await surface.client.refetchQueries({ queryKey: UPDATER_QUERY_KEY }); });
@@ -64,7 +64,7 @@ it('asks before updating and sends nothing until the question is answered', asyn
   expect(surface.requests.some((entry) => entry.method === 'POST')).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Update now' }));
   await screen.findByText('Pulling the new image…');
-  expect(surface.requests.filter((entry) => entry.method === 'POST').map((entry) => entry.path)).toEqual(['/omc/api/v1/management/system/updater/apply']);
+  expect(surface.requests.filter((entry) => entry.method === 'POST').map((entry) => entry.path)).toEqual(['/api/v1/management/system/updater/apply']);
   surface.close();
 });
 

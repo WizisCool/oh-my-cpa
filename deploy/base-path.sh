@@ -5,16 +5,11 @@
 # Image health probes must use the same prefix as internal/config.NormalizeBasePath.
 # Normalise before composing their URL, including the supported root path.
 #
-# An empty result means the site root, which is what the application serves when
-# OMCPA_BASE_PATH is "/".
+# An empty result means the site root, which is the default and is also what the
+# application serves when OMCPA_BASE_PATH is "/".
 set -eu
 
 raw=$(printf '%s' "${OMCPA_BASE_PATH:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-
-if [ -z "$raw" ]; then
-	printf '/omc\n'
-	exit 0
-fi
 
 case $raw in
 *'?'* | *'#'*)

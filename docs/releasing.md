@@ -52,7 +52,7 @@ extra metadata. GNU tar creation uses `--force-local`, so drive-letter archive p
 are treated as local files rather than remote hosts. A clean output directory
 prevents stale assets from entering a retry.
 The smoke check extracts the host-architecture Linux archive into a new directory
-and checks SQLite, login, `/omc`, root and nested base paths, embedded JavaScript and
+and checks SQLite, login, root and configured sub-paths, embedded JavaScript and
 the running tag. Foreign targets are cross-compiled, not executed on Linux.
 
 ## One-time configuration

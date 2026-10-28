@@ -23,8 +23,8 @@ One process, one SQLite file, one Oh My CPA replica. The Go process owns the
 base path contract: the SPA is served at `<base>/`, the API at `<base>/api/v1`,
 media at `<base>/media`. The embedded bundle's hashed assets are served from
 `<base>/assets/` and provider SVGs from `<base>/lobe-icons/`; unknown non-API
-paths fall back to the SPA shell. The proxy must preserve the prefix rather than
-strip it (ADR 0001).
+paths fall back to the SPA shell. The proxy must preserve a configured prefix rather
+than strip it (ADR 0001).
 
 The React bundle is built into `internal/web/dist` and embedded with
 `go:embed`, so a deployment has no CDN or static-file dependency. Everything the
@@ -37,8 +37,8 @@ The console is installable as a web app. The hand-written
 those icons are renders of the brand mark in `web/public/favicon.svg`; re-render them
 from that drawing when it changes. Every URL inside
 the manifest is relative, and `start_url`, `scope` and the icon sources resolve against
-the manifest URL, so one committed file is correct at the site root, under `/omc` and
-under a nested base path, with no per-deployment generation. The manifest carries no
+the manifest URL, so one committed file is correct at the site root and under every
+configured base path, with no per-deployment generation. The manifest carries no
 `id`: a relative id resolves against `start_url`'s origin rather than the manifest URL,
 so `"./"` would give every mount point the same installed identity; omitted, the identity
 is the resolved `start_url`, which is mount-specific. The manifest and icons are served

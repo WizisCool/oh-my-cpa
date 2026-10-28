@@ -108,6 +108,7 @@ these under `services:` and leave every existing line as it is:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      OMCPA_BASE_PATH: /
       OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -203,9 +204,10 @@ Do not attempt to verify undownloaded entries or run a mismatched executable.
 Extract into a new user-owned directory. Copy the packaged `.env.example` to `.env`
 only if no existing file is present. Generate a master key without printing it and
 ask the user to fill in the plaintext CPA management key. The template binds loopback,
-uses `/omc` and writes `./data`; preserve those defaults unless the user approves a
-change. Leave `OMCPA_VERSION` unset, match CPA's `TZ`, and apply B2's usage-reader
-ownership decision. A host CPA listening on loopback needs no remote-management edit.
+serves the site root and writes `./data`; preserve those defaults unless the user
+approves a change. Leave `OMCPA_VERSION` unset, match CPA's `TZ`, and apply B2's
+usage-reader ownership decision. A host CPA listening on loopback needs no
+remote-management edit.
 Restrict the environment/data files to the service account (Unix permissions or Windows
 ACLs). Use the OS's certificate roots; the binary already embeds IANA zone data.
 
@@ -239,7 +241,7 @@ It runs in the foreground. Offer a systemd unit or similar only if the user want
 ## 4. Verify
 
 ```bash
-curl -fsS http://127.0.0.1:8080/omc/api/healthz
+curl -fsS http://127.0.0.1:8080/api/healthz
 ```
 
 The install is done only when the response has `"status":"ok"`, `"database_status":"ok"`
@@ -272,7 +274,16 @@ key, restart and verify as in step 4. Restore the corresponding data backup to r
 to an older executable; migrations are forward-only.
 
 For a container installation, find the existing Compose file, data directory and
-`.env`, and back up the data directory and `.env`. Then check for the updater:
+`.env`, and back up the data directory and `.env`.
+
+An existing container's explicit `OMCPA_BASE_PATH` is preserved by both the updater and
+`docker compose pull` with `docker compose up -d`. Do not remove or rewrite it: the
+deployment's current URL and reverse-proxy rule remain valid. Only a new installation
+that does not set the variable uses the site root. Before replacing a container that
+has no `OMCPA_BASE_PATH`, determine the path its current public URL and proxy use; add
+that value explicitly if the deployment must keep its existing entry point.
+
+Then check for the updater:
 
 ```bash
 docker ps --filter name=oh-my-cpa-updater --format '{{.Names}} {{.Status}}'
@@ -314,9 +325,9 @@ the backup. Verify as in step 4.
 
 ## 6. Tell the user
 
-- The console address, `http://127.0.0.1:8080/omc/` unless the port was changed. On a
+- The console address, `http://127.0.0.1:8080/` unless the port was changed. On a
   remote server, give them `ssh -L 18080:127.0.0.1:8080 user@server` and
-  `http://127.0.0.1:18080/omc/`.
+  `http://127.0.0.1:18080/`.
 - That the sign-in password is the CPA management key, and which file holds it. Not
   the key itself.
 - To back up the `.env` file and OMC's data (the `oh-my-cpa-data` directory or volume). Without `OMCPA_MASTER_KEY` the data
@@ -327,10 +338,10 @@ the backup. Verify as in step 4.
   container holds the Docker socket. If it is not: the command that adds it.
 - Anything changed outside the new `oh-my-cpa` directory.
 
-OMC redirects the bare `/omc` to `/omc/`. If a reverse proxy sits in front of it,
-route both `/omc` and `/omc/` to OMC (or redirect `/omc` to `/omc/` at the proxy) and
-confirm `curl -sI <public address>/omc` answers `308`; a rule for `/omc/` alone leaves
-the bare path unreachable.
+If a reverse proxy sits in front of OMC, forward the site root unchanged and confirm
+`curl -fsS <public address>/api/healthz` succeeds. Give OMC its own hostname when CPA
+already owns the same hostname; use an explicit `OMCPA_BASE_PATH` only when a shared
+hostname and sub-path are required.
 
 More detail, including HTTPS behind a reverse proxy and every setting, is in
 `docs/install.md`.

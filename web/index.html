@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <!-- Every URL in the manifest is relative, and start_url, scope and the icon sources resolve
-         against the MANIFEST's URL, so one committed file is correct at the site root, under /omc
-         and under a nested base path. The manifest deliberately carries no id: a relative id
+         against the MANIFEST's URL, so one committed file is correct at the site root and under
+         every configured base path. The manifest deliberately carries no id: a relative id
          resolves against start_url's ORIGIN, not the manifest URL, so "./" would collapse every
          mount point onto one installed identity. Omitted, the identity IS the resolved start_url,
          which already differs per mount. The Go service serves the manifest itself (see
@@ -37,9 +37,9 @@
     <script>
       if (!window.__OMCPA_CONFIG__) {
         window.__OMCPA_CONFIG__ = {
-          basePath: "/omc",
-          apiBaseUrl: "/omc/api/v1",
-          mediaBaseUrl: "/omc/media",
+          basePath: "",
+          apiBaseUrl: "/api/v1",
+          mediaBaseUrl: "/media",
           appName: "Oh My CPA"
         };
       }

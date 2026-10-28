@@ -52,7 +52,7 @@ services:
     environment:
       TZ: ${TZ:-UTC}
       OMCPA_LISTEN_ADDR: ":8080"
-      OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/omc}
+      OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/}
       OMCPA_DATA_DIR: /data
       OMCPA_CPA_BASE_URL: http://cpa:8317
       OMCPA_CPA_USAGE_ADDR: cpa:8317

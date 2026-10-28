@@ -14,7 +14,10 @@ export default defineConfig({
   webServer: {
     command: `"${process.execPath}" --import tsx "${join(ROOT, 'scripts/testing/vite-server.ts')}" ${port}`,
     cwd: join(ROOT, 'web'),
-    env: { OMC_PROBE_OWNER: owner },
+    // The probe catalog exercises the configurable sub-path mount, including its
+    // canonical bare-prefix redirect. It therefore pins the development server to
+    // that mount instead of relying on the product's root default.
+    env: { OMC_PROBE_OWNER: owner, OMCPA_BASE_PATH: '/omc' },
     wait: { stdout: new RegExp(`^OMC_PROBE_READY:${owner}$`, 'm') },
     reuseExistingServer: false,
     timeout: 24_000,

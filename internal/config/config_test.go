@@ -13,7 +13,7 @@ func TestNormalizeBasePath(t *testing.T) {
 		in   string
 		want string
 	}{
-		{name: "default", in: "", want: "/omc"},
+		{name: "default", in: "", want: ""},
 		{name: "plain", in: "omc", want: "/omc"},
 		{name: "trailing", in: "/omc/", want: "/omc"},
 		{name: "nested", in: "/tools/omc/", want: "/tools/omc"},
@@ -46,6 +46,9 @@ func TestLoadReadsAuthenticationConfiguration(t *testing.T) {
 	}
 	if cfg.PublicURL != "https://example.test/omc" {
 		t.Fatalf("authentication config = %#v", cfg)
+	}
+	if cfg.BasePath != "/omc" {
+		t.Fatalf("an explicitly configured legacy sub-path changed: %#v", cfg)
 	}
 }
 
@@ -80,8 +83,8 @@ func TestLoadLeavesSelfHostDefaultsAlone(t *testing.T) {
 	if cfg.IsDemoMode {
 		t.Fatal("demo mode must be off unless it is asked for")
 	}
-	if cfg.BasePath != "/omc" {
-		t.Fatalf("base path = %q, want the documented /omc", cfg.BasePath)
+	if cfg.BasePath != "" {
+		t.Fatalf("base path = %q, want the site root", cfg.BasePath)
 	}
 	if cfg.DataDir != "data" {
 		t.Fatalf("data dir = %q, want ./data", cfg.DataDir)

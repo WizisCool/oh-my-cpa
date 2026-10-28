@@ -25,7 +25,7 @@ Not every rule weighs the same. Know which tier you are working in.
 - **Data integrity.** Migrations are forward-only: never edit an applied migration or `schema_migrations`; a fix is a new migration. Pricing versions and audit events are append-only. One replica per data directory — SQLite access is serialized, not retried.
 - **Zero-destructive CPA adoption.** Never wipe, overwrite, or mutate pre-existing CPA configuration OMC does not own. Ordinary configuration writes are revision-guarded, name only the paths the operator changed, and keep a restorable backup; refuse the write when the backup cannot be made. Reading CPA's usage queue is destructive: availability is probed with AUTH, never by popping.
 - **Update boundary.** Only the updater sidecar holds the Docker socket; the console stays read-only, unprivileged, and socket-free. An update names a product, never an image. Console releases are verified against the compiled-in public key and pulled by digest, with no unverified fallback; the gateway image, which this project cannot sign, pulls the tag its container already uses. A pinned image is never updated, and a replacement that fails its health check restores the previous container and its image tag.
-- **Offline embedding.** No CDN or externally hosted asset; the SPA embeds in the single Go binary and keeps working under the `/omc` sub-path.
+- **Offline embedding.** No CDN or externally hosted asset; the SPA embeds in the single Go binary and keeps working at the site root and under every configured base path.
 - **Repository hygiene.** No secret, key, token, or auth file in the diff, the history, the PR text, or screenshots.
 
 ### Tier 2 — contracts. Change deliberately, verify before and after, and say what changed.
@@ -161,7 +161,7 @@ The complete script list is in `package.json`; these are the ones agents use mos
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm dev` | Air + Vite dev entrypoint (`http://127.0.0.1:5173/omc/`) |
+| `pnpm dev` | Air + Vite dev entrypoint (`http://127.0.0.1:5173/`) |
 | `pnpm dev:api` / `pnpm dev:web` | Go/Air only, or Vite only |
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
 | `pnpm build` | Build the frontend and sync it to `internal/web/dist` |

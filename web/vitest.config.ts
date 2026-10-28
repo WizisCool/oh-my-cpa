@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.component.test.tsx', 'tests/**/*.contract.test.ts'],
     environment: 'jsdom',
-    environmentOptions: { jsdom: { url: 'http://localhost/omc/' } },
+    environmentOptions: { jsdom: { url: 'http://localhost/' } },
     setupFiles: ['./tests/setup.ts'],
     // Every file gets its own environment, so files run in parallel; within a file
     // tests stay sequential and share nothing but what setup.ts resets.
