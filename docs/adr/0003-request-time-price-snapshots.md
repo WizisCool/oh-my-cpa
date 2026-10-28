@@ -14,8 +14,10 @@ in the maintenance list indefinitely.
 ## Decision
 
 Maintain a durable snapshot of the current CPA model catalog separately from
-usage history. A complete CPA catalog refresh atomically replaces that snapshot;
-partial or failed discovery leaves the last complete snapshot intact. A model
+usage history. In this ADR, a catalog refresh means OMC's complete catalog read
+for the pricing snapshot, not the on-demand CPA catalog-refresh action. A
+complete catalog read atomically replaces that snapshot; partial or failed
+discovery leaves the last complete snapshot intact. A model
 alias stores its canonical pricing identity, so aliases do not need separate
 manual maintenance when CPA changes their target.
 
@@ -40,5 +42,5 @@ future requests without changing existing snapshots.
 - The pricing page only asks users to maintain currently configured CPA models.
 - Existing databases lose no usage telemetry, but old rows cannot be assigned
   an invented historical cost.
-- A catalog refresh requires a successful CPA management read and can wait for
-  the configured metadata source to identify a new model's rates.
+- The pricing catalog read requires a successful CPA management read and can
+  wait for the configured metadata source to identify a new model's rates.

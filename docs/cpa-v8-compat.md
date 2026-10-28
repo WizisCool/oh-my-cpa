@@ -21,9 +21,10 @@ and Home-restricted sources remain skipped under CPA's policy.
 The facade audits before execution and projects a bounded allowlist rather than
 forwarding native sources or errors. A missing POST (404/405) reports
 `catalog_refresh_unsupported` with HTTP 501; it does not substitute a catalog GET,
-try the equivalent route, restart CPA or change configuration. The single page-header action re-reads live models, displayed prices and request
-counts and invalidates OAuth model-rule catalogs after every outcome, including
-unsupported responses. It preserves the reported refresh outcome while those
+try the equivalent route, restart CPA or change configuration. The single
+page-header action re-reads live models, displayed prices and request counts and
+invalidates OAuth model-rule catalogs after every outcome, including unsupported
+responses. It preserves the reported refresh outcome while those
 readings are updated.
 The historical v8.0.2 binary acceptance does not verify this later addition;
 `TestModelCatalogRefreshHTTP` owns its fixed POST, partial-response, privacy and
