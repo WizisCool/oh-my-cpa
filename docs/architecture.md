@@ -1530,6 +1530,8 @@ CPA queue / subscription
   → ingest.Maintenance   fold into usage_facts_15m + usage_facts_daily
                          (permanent), then the data-lifecycle pass that
                          rolls request records and decoded payloads out
+                         and returns freed pages to the filesystem; run
+                         by the app, so it continues with capture off
   → /management/dashboard, /management/dashboard/tail,
     /management/dashboard/token-heatmap, /management/dashboard/models,
     /management/dashboard/providers, /usage/events, /usage/routing
@@ -2630,7 +2632,7 @@ account as the reading it was decided from.
 | Table group | Tables | Notes |
 | --- | --- | --- |
 | Instances & identity | `cpa_instances`, `discovered_resources`, `resource_overrides`, `connections`, `cpa_bindings` | Encrypted management key; bindings survive upstream removal. `connections` is provisioned by migration 006 for the Connection entity but no code reads or writes it yet — treat it as reserved, not as a live table |
-| Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_facts_15m`, `usage_facts_daily`, `usage_aggregation_checkpoints`, `data_lifecycle_state` | Milliseconds; raw payloads encrypted, and stored once: with a cipher configured `raw_message` is empty and only the ciphertext is kept. Migration 035 replaces the hourly and daily overview rollups with the permanent usage facts and adds `data_lifecycle_state` (what each rolling policy has removed, and up to which instant). Every table declares its lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`). Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown. Migration 037 adds `usage_events.fail_status_code` and `fail_body` (the status a failed request ended with and the upstream's redacted, bounded error body, from the `fail` block of CPA's usage record); `0` and empty mean unknown, and the list projection carries the status only. Migration 038 adds `usage_events.response_headers`, the filtered upstream header snapshot as a JSON object (`usage.FilterResponseHeaders` drops transport and credential-bearing headers and bounds the rest); only `GetUsageEvent` reads it. Migration 039 adds `usage_events.access_provider` and `is_native_key` (which access provider authenticated the caller and whether the caller's key is CPA's native configured key, from CPA's usage record); an empty `access_provider` means a gateway that predates them, while `is_native_key` is meaningful whenever a path is present, and only `GetUsageEvent` reads them |
+| Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_facts_15m`, `usage_facts_daily`, `usage_aggregation_checkpoints`, `data_lifecycle_state` | Milliseconds; raw payloads encrypted, and stored once: with a cipher configured `raw_message` is empty and only the ciphertext is kept. Migration 035 replaces the hourly and daily overview rollups with the permanent usage facts and adds `data_lifecycle_state` (what each rolling policy has removed, and up to which instant). Every table declares its lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`). Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown. Migration 037 adds `usage_events.fail_status_code` and `fail_body` (the status a failed request ended with and the upstream's redacted, bounded error body, from the `fail` block of CPA's usage record); `0` and empty mean unknown, and the list projection carries the status only. Migration 038 adds `usage_events.response_headers`, the filtered upstream header snapshot as a JSON object (`usage.FilterResponseHeaders` drops transport and credential-bearing headers and bounds the rest); only `GetUsageEvent` reads it. Migration 039 adds `usage_events.access_provider` and `is_native_key` (which access provider authenticated the caller and whether the caller's key is CPA's native configured key, from CPA's usage record); an empty `access_provider` means a gateway that predates them, while `is_native_key` is meaningful whenever a path is present, and only `GetUsageEvent` reads them. Migration 051 adds `usage_retention_settings`, the single row holding the request-record horizon the operator chose in OMC Settings and, when the API set one, a payload horizon (NULL follows the environment); no row means the environment's horizons apply |
 | Custom icons | `custom_icons` | Migration 032 adds durable sanitized image BLOBs, stable IDs and content revisions; confirmed deletion atomically clears matching provider overrides and deletes the asset |
 | Font library | `fonts`, `font_faces` | Migration 042: one row per installed family (`source` `google` or `upload`) and one per `@font-face` (weight range, style, `unicode-range`, container format, file BLOB, position). Faces cascade with their family; deletion clears the `omc_fonts` roles that used it in the same transaction. Both tables are hidden from `database_query` |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions`, `pricing_match_reviews` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29. Migration 031 added `pricing_match_reviews` (the OpenRouter model last answered for a custom or linked price); match-review reads and writes refuse to run before migration 31 |
@@ -2645,7 +2647,7 @@ once for both the gateway's version header and its credential count), the plugin
 provider counts, and the database, collector, record-count and admission reads - so the page
 waits for its slowest read rather than for the sum of them.
 
-The management system surface is nine routes: `GET /management/system` (the page),
+The management system surface is eleven routes: `GET /management/system` (the page),
 `GET /management/system/releases` (one product's merged change log), `GET
 /management/system/repository` (the project's star count for the header link), `GET
 /management/system/updates` (both products' stored version answers for the shell's update
@@ -2653,8 +2655,13 @@ indicator), `GET /management/system/updater` (whether this deployment can apply 
 per product, and the running or last update), `POST /management/system/updater/apply`
 (start one; see [Console updates](#console-updates-adr-0099)), `POST
 /management/system/check-updates` (a check, subject to the floor), `GET
-/management/system/maintenance` (the running or last job) and `POST
-/management/system/maintenance/{checkpoint,vacuum}`. The check answers `200` with the two
+/management/system/maintenance` (the running or last job), `POST
+/management/system/maintenance/{checkpoint,vacuum}`, and `GET`/`PUT
+/management/system/data-retention` (the request-record and payload horizons, where they come
+from, what each rolling policy has removed, the pass schedule, and whether the file is in
+incremental auto-vacuum mode; a `PUT` takes `request_record_days`, the `expected_request_record_days` it was confirmed
+against, and an optional `payload_days` (0–3650 days), is audited before it is stored, answers
+`409` when another console has replaced the expected horizon, and wakes the maintenance loop). The check answers `200` with the two
 products' states and `served_from_cache`; a maintenance POST answers `202` on admission,
 `409` when a job is already running, `507` when a rebuild cannot be admitted for space, and
 `503` once the service is shutting down. Every one of them answers `503` when the handler was
@@ -2698,7 +2705,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
 | Quota auto refresh | `app.Run` → `api.Handler.RunQuotaAutoRefresh` | Best effort; a round that cannot reach CPA leaves the stored readings and cooldown evidence as they were and the next minute tries again. Reads only what the `omc_quota_auto_refresh` policy makes due, and releases cooldowns whose recovery times have all passed through CPA's `routing/cooldown/reset` (§8, ADR 0094) |
-| Usage-fact fold + data lifecycle | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
+| Usage-fact fold + data lifecycle | `app.Run` → `ingest.Maintenance`, independent of capture (runs with ingestion off or no CPA configured; not in a demo) | Retried on its own interval; errors surface in ingest status. Each pass reads the retention from `usage_retention_settings` (falling back to the environment), and `PUT /management/system/data-retention` wakes it |
 | Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 
 A demo deployment starts only the HTTP server: its history is the fixture, so there

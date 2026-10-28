@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -180,6 +181,73 @@ func TestVacuumReclaimsSpaceAndKeepsData(t *testing.T) {
 	}
 	if integrity != "ok" {
 		t.Fatalf("integrity check = %q, want ok", integrity)
+	}
+}
+
+// TestRetentionGivesFreedPagesBackToTheFilesystem pins what makes retention shrink the file
+// rather than only make room inside it: a database from before incremental auto-vacuum is not
+// shrunk by ReleaseFreePages, becomes incremental at its next rebuild, and from then on hands
+// the pages a deletion frees back to the filesystem.
+func TestRetentionGivesFreedPagesBackToTheFilesystem(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.ExecContext(ctx, `CREATE TABLE probe(id INTEGER PRIMARY KEY, v TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	_ = legacy.Close()
+
+	database, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	repo := New(database)
+	fillAndEmpty := func() {
+		t.Helper()
+		if _, err := database.SQL.ExecContext(ctx, `WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n < 600)
+			INSERT INTO probe(v) SELECT zeroblob(4096) FROM seq`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.SQL.ExecContext(ctx, `DELETE FROM probe`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fillAndEmpty()
+	release, err := repo.ReleaseFreePages(ctx, 10)
+	if err != nil || release.IsIncremental || release.ReleasedPages != 0 {
+		t.Fatalf("a database created before incremental mode must be left to a rebuild, got %+v: %v", release, err)
+	}
+
+	service := newTestMaintenanceService(t, database)
+	if _, err := service.StartVacuum(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if status := waitForMaintenance(t, service); status.Error != "" {
+		t.Fatalf("vacuum failed: %s", status.Error)
+	}
+
+	fillAndEmpty()
+	var pagesBefore, pagesAfter, freeAfter int64
+	if err := database.SQL.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&pagesBefore); err != nil {
+		t.Fatal(err)
+	}
+	release, err = repo.ReleaseFreePages(ctx, 10)
+	if err != nil || !release.IsIncremental || !release.IsComplete || release.ReleasedPages == 0 {
+		t.Fatalf("the rebuilt database must release its free pages, got %+v: %v", release, err)
+	}
+	if err := database.SQL.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&pagesAfter); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SQL.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freeAfter); err != nil {
+		t.Fatal(err)
+	}
+	if freeAfter != 0 || pagesBefore-pagesAfter != release.ReleasedPages {
+		t.Fatalf("page_count %d -> %d with %d free left, want a file shorter by the %d released pages",
+			pagesBefore, pagesAfter, freeAfter, release.ReleasedPages)
 	}
 }
 

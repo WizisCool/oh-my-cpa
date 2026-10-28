@@ -693,7 +693,7 @@ func TestMaintenanceFoldsWhenLocalGrainRebuildFails(t *testing.T) {
  BEGIN SELECT RAISE(ABORT, 'fixture rejects derived marker'); END;`); err != nil {
 		t.Fatal(err)
 	}
-	maintenance, err := NewMaintenance(store, nil, time.Second, 0, 0)
+	maintenance, err := NewMaintenance(store, nil, time.Second, repository.UsageRetention{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,5 +704,52 @@ func TestMaintenanceFoldsWhenLocalGrainRebuildFails(t *testing.T) {
 	}
 	if status.Folded != 1 {
 		t.Fatalf("primary fold absorbed %d records after derived rebuild failed, want 1", status.Folded)
+	}
+}
+
+// TestRetentionFollowsTheConsoleWithoutARestart pins that a pass reads the retention it
+// applies rather than the one the process started with: the environment keeps everything,
+// the console then asks for a week, and the next passes publish and apply that week.
+func TestRetentionFollowsTheConsoleWithoutARestart(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	for index, age := range []time.Duration{30 * 24 * time.Hour, time.Hour} {
+		if _, err := store.SQL().Exec(`INSERT INTO usage_events (instance_id, event_key, api_group_key, timestamp_ms, created_at_ms)
+			VALUES ('default', ?, 'keyless', ?, 0)`, fmt.Sprintf("retention-%d", index), now.Add(-age).UnixMilli()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	maintenance, err := NewMaintenance(store, nil, time.Second, repository.UsageRetention{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	maintenance.now = func() time.Time { return now }
+	maintenance.aggregateOnce(ctx)
+
+	countEvents := func() int {
+		var count int
+		if err := store.SQL().QueryRow(`SELECT COUNT(*) FROM usage_events`).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	maintenance.purgeOnce(ctx)
+	maintenance.purgeOnce(ctx)
+	if count := countEvents(); count != 2 {
+		t.Fatalf("the environment keeps every record, yet %d of 2 remain", count)
+	}
+
+	if err := store.SetUsageRetention(ctx, 7, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	// The first pass publishes the horizon, the next deletes below it.
+	maintenance.purgeOnce(ctx)
+	maintenance.purgeOnce(ctx)
+	if count := countEvents(); count != 1 {
+		t.Fatalf("after the console chose a week, %d records remain, want only the recent one", count)
+	}
+	if status := maintenance.Status(); status.Purged != 1 || status.LastRetentionAt == nil {
+		t.Fatalf("maintenance status = %+v, want one purged record and a recorded pass", status)
 	}
 }

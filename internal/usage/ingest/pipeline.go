@@ -10,8 +10,10 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
-// Pipeline owns the three background loops that keep usage data fresh:
-// capture, decode and maintenance.
+// Pipeline owns the background loops that bring usage in: capture and decode.
+//
+// Maintenance is reported here but run by the application: folding and retention
+// keep working on what is stored when capture is off or has no gateway to read.
 type Pipeline struct {
 	runner      *Runner
 	processor   *Processor
@@ -36,7 +38,8 @@ type PipelineStatus struct {
 	Healthy bool `json:"healthy"`
 }
 
-// NewPipeline wires capture, decode and maintenance over one store.
+// NewPipeline wires capture and decode over one store; maintenance, when given,
+// is only reported.
 func NewPipeline(runner *Runner, processor *Processor, maintenance *Maintenance, store *repository.Repository) (*Pipeline, error) {
 	if processor == nil {
 		return nil, errors.New("usage processor is required")
@@ -73,7 +76,7 @@ func (p *Pipeline) Runner() *Runner { return p.runner }
 func (p *Pipeline) Run(ctx context.Context) error {
 	stageCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	errs := make(chan error, 3)
+	errs := make(chan error, 2)
 	var stages sync.WaitGroup
 	launch := func(fn func(context.Context) error) {
 		stages.Add(1)
@@ -83,16 +86,12 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		}()
 	}
 	// A method value on a nil receiver is not a nil func, so each stage is checked
-	// before its method is taken: integrations that run without rollup
-	// maintenance must not panic at start-up.
+	// before its method is taken.
 	if p.runner != nil {
 		launch(p.runner.Run)
 	}
 	if p.processor != nil {
 		launch(p.processor.Run)
-	}
-	if p.maintenance != nil {
-		launch(p.maintenance.Run)
 	}
 
 	var err error

@@ -141,8 +141,9 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   which is a different measurement from an empty one.
 - **Free Pages**: Pages inside the database file that later writes reuse, reported
   through `page_count`, `page_size` and `freelist_count`. They are never presented as
-  reclaimable or wasted disk space: the file does not shrink until it is rebuilt, and
-  the rebuild needs comparably free space while it runs.
+  reclaimable or wasted disk space. A database in incremental auto-vacuum mode hands
+  them back after each retention pass; an older file keeps them until it is rebuilt
+  once, and the rebuild needs comparably free space while it runs.
 - **Maintenance Action**: One of the two operator-issued database operations the console
   can run - a WAL-truncating checkpoint, or a rebuild (`VACUUM`). It runs as a
   background job against the database file and is refused while another is in flight. A
@@ -400,8 +401,11 @@ fetch time. Missing conversion data has no reading, never an invented 1:1 rate.
   request.
 - **Request Record retention**: Request Records, and the captured payloads they
   were decoded from, are detail: they are kept for a configured number of days
-  and then deleted in the background. Deleting them never changes a dashboard
-  number. A request record is never deleted before Usage Facts hold it.
+  and then deleted in the background. The operator sets the request-record
+  horizon in OMC Settings; the environment supplies it until then, and keeps
+  supplying the payload horizon, which the console does not offer. Deleting
+  them never changes a dashboard number, and it runs whether or not usage is
+  being captured. A request record is never deleted before Usage Facts hold it.
 - **Detail horizon**: The instant before which Request Records have been
   deleted. A dashboard window that reaches behind it is widened to whole
   fifteen-minute buckets and drawn no finer than that; the response reports the

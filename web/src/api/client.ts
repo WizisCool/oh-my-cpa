@@ -56,6 +56,7 @@ import {
   SystemMaintenanceResponse,
   SystemUpdaterResponse,
   ReleaseProduct,
+  DataRetentionResponse,
 } from '../types/system';
 import type {
   PluginConfigResponse,
@@ -1193,6 +1194,18 @@ export const api = {
   async runSystemMaintenance(action: 'checkpoint' | 'vacuum'): Promise<SystemMaintenanceResponse> {
     return request<SystemMaintenanceResponse>(`/management/system/maintenance/${encodeURIComponent(action)}`, {
       method: 'POST',
+    });
+  },
+
+  async getDataRetention(): Promise<DataRetentionResponse> {
+    return request<DataRetentionResponse>('/management/system/data-retention', { method: 'GET' });
+  },
+
+  /** `expectedRequestRecordDays` is the horizon the operator confirmed against; a different stored value is refused with 409. */
+  async setDataRetention(requestRecordDays: number, expectedRequestRecordDays: number): Promise<DataRetentionResponse> {
+    return request<DataRetentionResponse>('/management/system/data-retention', {
+      method: 'PUT',
+      body: JSON.stringify({ request_record_days: requestRecordDays, expected_request_record_days: expectedRequestRecordDays }),
     });
   },
 

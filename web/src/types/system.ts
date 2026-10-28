@@ -206,6 +206,37 @@ export interface SystemMaintenanceResponse {
   maintenance_admission: SystemMaintenanceAdmission;
 }
 
+/** One rolling policy's progress: rows older than `horizon_ms` are gone or going. */
+export interface DataRetentionPolicy {
+  policy: 'usage_detail' | 'usage_inbox' | string;
+  horizon_ms: number;
+  deleted_rows: number;
+  last_run_at_ms: number | null;
+}
+
+/**
+ * How long request records and captured payloads are kept. Zero keeps rows; a zero payload
+ * horizon follows the request records. `source` is `environment` until the console saves one.
+ */
+export interface DataRetentionResponse {
+  request_record_days: number;
+  payload_days: number;
+  source: 'environment' | 'console';
+  environment_request_record_days: number;
+  environment_payload_days: number;
+  max_days: number;
+  scheduled: boolean;
+  last_pass_at_ms: number | null;
+  next_pass_at_ms: number | null;
+  oldest_request_record_ms: number | null;
+  policies: DataRetentionPolicy[];
+  storage: {
+    /** `incremental` gives freed pages back to the filesystem after each pass. */
+    auto_vacuum: 'incremental' | 'none' | 'full';
+    free_page_bytes: number;
+  };
+}
+
 /** One release in a merged change log. */
 export interface SystemReleaseEntry {
   tag: string;

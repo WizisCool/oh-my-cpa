@@ -110,6 +110,11 @@ export function defaultRoutes() {
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/healthz', () => ({ cpa_connected: true, version: 'probe', status: 'ok' })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/plugins', () => ({ plugins: [], total: 0 })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/repository', () => ({ stargazers_count: null })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/data-retention', () => ({
+      request_record_days: 90, payload_days: 7, source: 'environment', environment_request_record_days: 90, environment_payload_days: 7,
+      max_days: 3650, scheduled: true, last_pass_at_ms: null, next_pass_at_ms: null, oldest_request_record_ms: null, policies: [],
+      storage: { auto_vacuum: 'incremental', free_page_bytes: 0 },
+    })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/updates', () => ({ omc_version: uncheckedVersion('omc'), cpa_version: uncheckedVersion('cpa') })],
     // A native install: the state in which the page draws nothing about updating, so scenarios
     // that are not about it see the page they were written against.

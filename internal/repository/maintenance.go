@@ -488,6 +488,10 @@ func interpretCheckpointResult(busy, logFrames, checkpointed int64) (string, boo
 // smaller main file and adds a larger WAL and can net out to nothing. Truncating
 // the log first makes the measured size describe the rebuilt database rather than
 // the bookkeeping that produced it.
+//
+// The rebuild is also what moves a database created before incremental auto-vacuum
+// into that mode: the connection asks for it (gatedDSN), and SQLite applies the
+// request while it rewrites the file. From then on retention shrinks the file itself.
 func (s *MaintenanceService) runVacuum(ctx context.Context) (string, bool, error) {
 	if _, err := s.work.ExecContext(ctx, `VACUUM`); err != nil {
 		return "", false, fmt.Errorf("rebuild the database: %w", err)
