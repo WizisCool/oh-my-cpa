@@ -105,7 +105,7 @@ type UsageProviderBucketRow struct {
 	Failures        int64
 }
 
-// QueryUsageProviderBuckets aggregates the requested window, [fromMS, toMS), per provider and
+// QueryUsageProviderBuckets aggregates the requested window, [fromMS, toMS], per provider and
 // bucket, and returns the grid it actually read: a window reaching behind the request-record
 // horizon is read in whole fact buckets, so the width can come back coarser than requested.
 //
@@ -118,17 +118,14 @@ func (r *Repository) QueryUsageProviderBuckets(ctx context.Context, instanceID s
 	if bucketMS <= 0 {
 		return nil, 0, fmt.Errorf("invalid provider analytics bucket width %d", bucketMS)
 	}
-	result := []UsageProviderBucketRow{}
-	if toMS == fromMS {
-		return result, bucketMS, nil
-	}
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
-		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS - 1, BucketMS: bucketMS,
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: bucketMS,
 		Dimensions: []UsageDimension{UsageDimensionProvider, UsageDimensionServingKey},
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("read usage provider buckets: %w", err)
 	}
+	result := make([]UsageProviderBucketRow, 0, len(facts.Rows))
 	for _, fact := range facts.Rows {
 		result = append(result, UsageProviderBucketRow{
 			Provider: fact.Keys[0], CredentialIndex: fact.Keys[1], StartMS: fact.StartMS,

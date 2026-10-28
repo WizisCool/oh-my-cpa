@@ -149,6 +149,11 @@
 .provider-activity-block.tone-success { background: var(--success); }
 .provider-activity-block.tone-warn { background: var(--warn); }
 .provider-activity-block.tone-danger { background: var(--danger); }
+.provider-activity-history {
+  display: grid;
+  gap: 2px;
+  max-width: 360px;
+}
 @media (max-width: 768px) {
   .provider-row-enhanced {
     grid-template-columns: minmax(130px, 1fr) auto auto;

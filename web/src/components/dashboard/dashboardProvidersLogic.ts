@@ -153,7 +153,20 @@ export interface ActivityBlock {
  */
 export function activityBlocks(buckets: readonly TrafficBucket[], fromMs: number, toMs: number, bucketMs: number): ActivityBlock[] {
   if (!(bucketMs > 0) || toMs <= fromMs) return [];
-  const byStart = new Map(buckets.map((bucket) => [bucket.start_ms, bucket]));
+  const byStart = new Map<number, TrafficBucket>();
+  let boundaryTotal = 0;
+  let boundaryFailure = 0;
+  for (const bucket of buckets) {
+    // The dashboard's range is inclusive at its closing instant. When that instant is also a
+    // bucket edge, the server reports the final bucket at `toMs`, outside the half-open display
+    // grid. Fold it into the closing block so the strip's totals agree with the row's total.
+    if (bucket.start_ms === toMs) {
+      boundaryTotal += bucket.total;
+      boundaryFailure += bucket.failure;
+      continue;
+    }
+    byStart.set(bucket.start_ms, bucket);
+  }
   const blocks: ActivityBlock[] = [];
   for (let start = Math.floor(fromMs / bucketMs) * bucketMs; start < toMs; start += bucketMs) {
     const bucket = byStart.get(start);
@@ -166,6 +179,12 @@ export function activityBlocks(buckets: readonly TrafficBucket[], fromMs: number
       failure,
       successRate: total > 0 ? (Math.max(0, total - failure) / total) * 100 : null,
     });
+  }
+  const closing = blocks.at(-1);
+  if (closing && boundaryTotal > 0) {
+    closing.total += boundaryTotal;
+    closing.failure += boundaryFailure;
+    closing.successRate = (Math.max(0, closing.total - closing.failure) / closing.total) * 100;
   }
   return blocks;
 }

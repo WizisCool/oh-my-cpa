@@ -131,6 +131,7 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 
 	baseTime := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	toMS := baseTime.Add(10 * time.Minute).UnixMilli()
 	events := []usage.Event{
 		{
 			InstanceID:  "default",
@@ -180,6 +181,17 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 			Failed:      true,
 			TotalTokens: 10,
 		},
+		// The dashboard window is inclusive at both ends. A request at the closing
+		// instant belongs to the same totals as every other request in the window.
+		{
+			InstanceID:  "default",
+			EventKey:    "evt-window-end",
+			Provider:    "codex",
+			Model:       "gpt-4o",
+			TimestampMS: toMS,
+			Failed:      true,
+			TotalTokens: 25,
+		},
 		// Outside window
 		{
 			InstanceID:  "default",
@@ -197,7 +209,6 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 	}
 
 	fromMS := baseTime.Add(-10 * time.Minute).UnixMilli()
-	toMS := baseTime.Add(10 * time.Minute).UnixMilli()
 	query := fmt.Sprintf("?from=%d&to=%d", fromMS, toMS)
 
 	resp, body := getJSON(t, client, baseURL+providersDashboardPath+query)

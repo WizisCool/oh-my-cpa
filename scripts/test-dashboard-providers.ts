@@ -631,4 +631,19 @@ assert.deepEqual(blocks, [
 ]);
 console.log('✓ Activity blocks fill the window grid');
 
+// The API's window includes its closing instant. When that instant lands on a bucket edge, the
+// sparse response carries a bucket the visible half-open grid cannot start; it belongs to the
+// closing block, otherwise the strip's traffic would end one block short of the row total.
+const closingEdgeBlocks = activityBlocks(
+  [{ start_ms: 3 * minute, total: 1, failure: 1 }],
+  1 * minute,
+  3 * minute,
+  minute,
+);
+assert.deepEqual(closingEdgeBlocks, [
+  { startMs: 1 * minute, endMs: 2 * minute, total: 0, failure: 0, successRate: null },
+  { startMs: 2 * minute, endMs: 3 * minute, total: 1, failure: 1, successRate: 0 },
+]);
+console.log('✓ A closing-edge bucket is folded into the final activity block');
+
 console.log('All dashboard provider logic tests passed successfully!');

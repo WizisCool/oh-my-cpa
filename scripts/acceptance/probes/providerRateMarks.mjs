@@ -60,12 +60,27 @@ const READ_MARKS = `(() => {
       rateColor: row.querySelector('.provider-rate') ? getComputedStyle(row.querySelector('.provider-rate')).color : null,
       blocks: blocks.map((block) => getComputedStyle(block).backgroundColor),
       narrowest: blocks.length ? Math.min(...blocks.map((block) => block.getBoundingClientRect().width)) : 0,
+      activityLabel: row.querySelector('.provider-activity')?.getAttribute('aria-label') ?? '',
+      activityFocusable: row.querySelector('.provider-activity')?.tabIndex === 0,
     };
   });
 })()`;
 
 /** The mode the console actually applied, which is what the colour assertions are about. */
 const READ_THEME_MODE = `document.documentElement.getAttribute('data-theme-mode')`;
+
+/** Wait for both queries behind a row: its configured identity and its windowed traffic. */
+async function waitForProviderWindow(page, hasActivity) {
+  await page.waitForFunction(({ rowCount, healthyRate, hasActivity }) => {
+    const rows = [...document.querySelectorAll('.provider-row-enhanced')];
+    if (rows.length !== rowCount) return false;
+    const healthy = rows.find((row) => row.querySelector('.provider-title')?.textContent === 'healthy-rate');
+    if (!healthy || !(healthy.querySelector('.provider-rate')?.textContent ?? '').includes(healthyRate.toFixed(2))) {
+      return false;
+    }
+    return !hasActivity || healthy.querySelectorAll('.provider-activity-block').length > 0;
+  }, { rowCount: ROWS.length, healthyRate: ROWS[0].rate, hasActivity }, { timeout: 20_000 });
+}
 
 export async function providerRateMarks({ base, page, check }) {
   // The fixture has to describe a window the endpoint could actually have produced. The server
@@ -96,11 +111,9 @@ export async function providerRateMarks({ base, page, check }) {
     await page.evaluate((stored) => localStorage.setItem('omc-theme', stored), theme);
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    // The rows arrive from a second query, so the page is painted before they exist.
-    await page
-      .locator('.provider-row-enhanced')
-      .first()
-      .waitFor({ timeout: 20_000 });
+    // Configured providers can paint before the windowed read replaces their counts and adds the
+    // strips. Wait for that response's visible result instead of racing it after the first row.
+    await waitForProviderWindow(page, true);
 
     // The theme has to have been applied before any colour is read. A stored preference the
     // console ignored would leave every row painted in the other palette, and the comparisons
@@ -140,6 +153,11 @@ export async function providerRateMarks({ base, page, check }) {
           `rate=${JSON.stringify(row.rate)} total=${JSON.stringify(row.total)}`,
         );
       }
+      check(
+        `${theme}: the ${id} row exposes its activity history to assistive technology`,
+        row.activityFocusable && row.activityLabel.includes(id) && (rate === null || row.activityLabel.includes(`${rate.toFixed(1)}%`)),
+        `focusable=${row.activityFocusable} label=${JSON.stringify(row.activityLabel)}`,
+      );
       // Every row draws the whole window, idle or not, so the strips line up row to row.
       check(
         `${theme}: the ${id} row draws the window's ${STRIP_BLOCKS} blocks, each wide enough to see`,
@@ -253,7 +271,7 @@ export async function providerRateMarks({ base, page, check }) {
 async function assertPhoneOmitsStrip({ base, page, check }) {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.provider-row-enhanced').first().waitFor({ timeout: 20_000 });
+  await waitForProviderWindow(page, false);
   const marks = await page.evaluate(READ_MARKS);
   const healthy = marks.find((candidate) => candidate.name === 'healthy-rate');
   check(

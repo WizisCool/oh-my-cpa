@@ -27,13 +27,18 @@
           "failure": 1,
           "start_ms": 1789041660000,
           "total": 1
+        },
+        {
+          "failure": 1,
+          "start_ms": 1789042200000,
+          "total": 1
         }
       ],
-      "failure": 1,
+      "failure": 2,
       "id": "codex",
       "success": 1,
-      "success_rate": 50,
-      "total": 2
+      "success_rate": 33.33333333333333,
+      "total": 3
     },
     {
       "buckets": [
