@@ -148,6 +148,7 @@ export default {
   'audit.action.oauth.cancel': 'Cancelled an OAuth sign-in',
   'audit.action.oauth_model_alias.update': 'Updated OAuth model aliases',
   'audit.action.oauth_excluded_models.update': 'Updated OAuth model exclusions',
+  'audit.action.model_catalog.refresh': 'Refreshed CPA model catalogs',
   'audit.action.config.save_source': 'Saved the configuration file',
   'audit.action.config.save_scalar': 'Changed a setting',
   'audit.action.config.reveal_source': 'Viewed the raw configuration',

@@ -1,0 +1,7 @@
+{
+  "why": "An undecodable response contains no trustworthy outcomes and never exposes parser input or a native error.",
+  "body": {
+    "status": 502,
+    "raw_response": "{\"ok\":false,\"error\":\"catalog-fixture-token\""
+  }
+}

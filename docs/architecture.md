@@ -3579,6 +3579,29 @@ The shared `WorkspaceLayout` also bounds its own height to the phone visible vie
 
 ## Model Square directory
 
+The page has one header refresh action. It sends
+`POST /management/model-square/refresh-catalogs` to the console facade, then
+re-reads the displayed directory, prices and recent-request counts. Provider
+model pulls and price synchronization remain separate operations. The handler records a mandatory `model_catalog.refresh`
+attempt before calling CPA's fixed
+`POST /v8/management/routing/model-definitions/refresh`; it never changes CPA's
+source configuration or Home policy. The outcome audit and response contain only
+the three catalog identifiers, refreshed/skipped/error states, fixed error codes
+and messages, and known changed-provider identifiers. Native source URLs, paths and error text
+are excluded. The native response is capped at 64 KiB before decoding.
+
+HTTP 502 preserves individual outcomes because other catalogs may already have
+refreshed; a 404 or 405 becomes `501 catalog_refresh_unsupported` without another
+endpoint attempt. Every outcome, including an unsupported gateway or an unreadable
+report, finishes by re-reading the page and invalidating credential-model and
+OAuth model-rule catalog queries, including inactive rule pickers. The action
+stays busy until those reads settle, and its completion feedback preserves the
+catalog-refresh outcome. This action does not notify the pricing synchronizer or
+contact a price source. The read-only `models_list` capability does not invoke this mutation,
+and no agent mutation or automatic refresh loop is registered. A failed attempt
+audit blocks the POST; a failed outcome audit cannot undo a publication and does
+not replace its result with a retry-inducing error.
+
 The lazy `/model-square` route reads `GET /management/model-square` through
 `web/src/api/client.ts`. The HTTP adapter in `internal/api/model_square.go` and the
 read-only `models_list` capability share `operations.Service.ListModelSquare`.

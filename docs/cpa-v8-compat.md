@@ -7,6 +7,28 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+## On-demand model-catalog refresh (post-baseline source contract)
+
+CPA commit `10417e5b6b85461e8d7072a6fea6ad9f781b1f0f` adds
+`POST /v8/management/routing/model-definitions/refresh` and the equivalent
+`POST /v8/management/models/refresh`. OMC calls only the first route from the
+explicit Model Square action. The source-verified contract covers the general,
+Codex-client and Devin catalogs, each with independent refreshed/skipped/error
+outcomes. A source failure returns 502 while preserving its last valid catalog;
+other catalogs may already have published changed providers. Embedded, disabled
+and Home-restricted sources remain skipped under CPA's policy.
+
+The facade audits before execution and projects a bounded allowlist rather than
+forwarding native sources or errors. A missing POST (404/405) reports
+`catalog_refresh_unsupported` with HTTP 501; it does not substitute a catalog GET,
+try the equivalent route, restart CPA or change configuration. The single page-header action re-reads live models, displayed prices and request
+counts and invalidates OAuth model-rule catalogs after every outcome, including
+unsupported responses. It preserves the reported refresh outcome while those
+readings are updated.
+The historical v8.0.2 binary acceptance does not verify this later addition;
+`TestModelCatalogRefreshHTTP` owns its fixed POST, partial-response, privacy and
+audit contract, with access/audit refusal checked separately.
+
 ## Compression settings (post-baseline source contract)
 
 CPA commit [`064e008b079fae13e58c7d4007322482eb600695`](https://github.com/router-for-me/CLIProxyAPI/commit/064e008b079fae13e58c7d4007322482eb600695)

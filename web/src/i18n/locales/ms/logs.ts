@@ -148,6 +148,7 @@ export default {
   "audit.action.oauth.cancel": "Membatalkan log masuk OAuth",
   "audit.action.oauth_model_alias.update": "Mengemas kini alias model OAuth",
   "audit.action.oauth_excluded_models.update": "Mengemas kini pengecualian model OAuth",
+  "audit.action.model_catalog.refresh": "Memuat semula katalog model CPA",
   "audit.action.config.save_source": "Menyimpan fail konfigurasi",
   "audit.action.config.save_scalar": "Menukar tetapan",
   "audit.action.config.reveal_source": "Melihat konfigurasi mentah",

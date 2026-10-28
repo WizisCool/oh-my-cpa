@@ -189,17 +189,21 @@ func (c *Client) sendBytes(request *http.Request, maxBytes int64) ([]byte, Respo
 	return data, meta, nil
 }
 
-// send is the one place a management request leaves the process. A non-2xx
-// answer is returned as an *HTTPError with the body closed; a 2xx answer is
-// returned open for the caller to read.
+// send rejects non-2xx responses unless an operation explicitly owns their body.
 func (c *Client) send(request *http.Request) (*http.Response, ResponseMeta, error) {
+	return c.sendAccepting(request, 0)
+}
+
+// Catalog refresh can publish some providers while returning 502. Its caller
+// must decode that answer rather than discard the successful catalog outcomes.
+func (c *Client) sendAccepting(request *http.Request, acceptedStatus int) (*http.Response, ResponseMeta, error) {
 	request.Header.Set("Authorization", "Bearer "+c.management)
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, ResponseMeta{}, fmt.Errorf("CPA request failed: %w", err)
 	}
 	meta := ResponseMeta{StatusCode: response.StatusCode, Header: response.Header.Clone()}
-	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+	if (response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices) || response.StatusCode == acceptedStatus {
 		return response, meta, nil
 	}
 	defer response.Body.Close()

@@ -2,7 +2,9 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 )
@@ -54,4 +56,53 @@ func (c *Client) OAuthChannelModelDefinitions(ctx context.Context, channel strin
 		response.Models = []AuthModel{}
 	}
 	return response.Models, true, nil
+}
+
+// ModelCatalogRefreshResult decodes only the native fields the facade needs.
+// Sources and raw errors never belong in an ordinary response or audit record.
+type ModelCatalogRefreshResult struct {
+	OK       *bool                                 `json:"ok"`
+	Catalogs map[string]ModelCatalogRefreshOutcome `json:"catalogs"`
+}
+
+type ModelCatalogRefreshOutcome struct {
+	Refreshed        bool     `json:"refreshed"`
+	Skipped          bool     `json:"skipped"`
+	Error            string   `json:"error"`
+	ChangedProviders []string `json:"changed_providers"`
+}
+
+const MODEL_CATALOG_REFRESH_RESPONSE_LIMIT = 64 * 1024
+
+// RefreshModelCatalogs delegates source and Home policy to CPA. It does not
+// rewrite configuration or substitute catalog reads for an unsupported POST.
+func (c *Client) RefreshModelCatalogs(ctx context.Context) (ModelCatalogRefreshResult, ResponseMeta, error) {
+	if err := c.requireManagementV8(ctx); err != nil {
+		return ModelCatalogRefreshResult{}, ResponseMeta{}, err
+	}
+	request, err := c.newRequest(ctx, http.MethodPost, "/routing/model-definitions/refresh", nil, "")
+	if err != nil {
+		return ModelCatalogRefreshResult{}, ResponseMeta{}, err
+	}
+	request.Header.Set("Accept", "application/json")
+	response, meta, err := c.sendAccepting(request, http.StatusBadGateway)
+	if err != nil {
+		// Other error bodies may contain source paths or credentials. Even the
+		// shared facade error renderer must not inspect their native wording.
+		var httpErr *HTTPError
+		if errors.As(err, &httpErr) {
+			err = &HTTPError{StatusCode: httpErr.StatusCode}
+		}
+		return ModelCatalogRefreshResult{}, meta, err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, MODEL_CATALOG_REFRESH_RESPONSE_LIMIT+1))
+	if err != nil || len(body) > MODEL_CATALOG_REFRESH_RESPONSE_LIMIT {
+		return ModelCatalogRefreshResult{}, meta, errors.New("invalid model catalog refresh response")
+	}
+	var result ModelCatalogRefreshResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return ModelCatalogRefreshResult{}, meta, errors.New("invalid model catalog refresh response")
+	}
+	return result, meta, nil
 }

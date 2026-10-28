@@ -1,0 +1,75 @@
+{
+  "status": 200,
+  "body": {
+    "ok": true,
+    "catalogs": [
+      {
+        "catalog": "catalog",
+        "status": "refreshed",
+        "changed_providers": [
+          "claude",
+          "codex"
+        ]
+      },
+      {
+        "catalog": "codex-catalog",
+        "status": "refreshed",
+        "changed_providers": [
+          "codex"
+        ]
+      },
+      {
+        "catalog": "devin-catalog",
+        "status": "skipped",
+        "changed_providers": []
+      }
+    ],
+    "changed_providers": [
+      "claude",
+      "codex"
+    ]
+  },
+  "audits": [
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "attempt",
+      "details": null
+    },
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "success",
+      "details": {
+        "catalogs": [
+          {
+            "catalog": "catalog",
+            "changed_providers": [
+              "claude",
+              "codex"
+            ],
+            "status": "refreshed"
+          },
+          {
+            "catalog": "codex-catalog",
+            "changed_providers": [
+              "codex"
+            ],
+            "status": "refreshed"
+          },
+          {
+            "catalog": "devin-catalog",
+            "changed_providers": [],
+            "status": "skipped"
+          }
+        ],
+        "changed_providers": [
+          "claude",
+          "codex"
+        ]
+      }
+    }
+  ]
+}

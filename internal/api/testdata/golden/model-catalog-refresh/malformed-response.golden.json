@@ -1,0 +1,25 @@
+{
+  "status": 502,
+  "body": {
+    "code": "catalog_refresh_failed",
+    "error": "CPA model catalog refresh failed"
+  },
+  "audits": [
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "attempt",
+      "details": null
+    },
+    {
+      "action": "model_catalog.refresh",
+      "target_type": "model_catalog",
+      "target_id": "all",
+      "result": "failure",
+      "details": {
+        "code": "catalog_refresh_failed"
+      }
+    }
+  ]
+}

@@ -23,6 +23,11 @@ required service, and SQLite remains local, single-replica state.
 ## Connected model discovery
 
 Model Square takes over the available-model-list role of CPAMC's Center Information.
+A single refresh action asks CPA to reload its configured general, Codex-client
+and Devin catalogs under the gateway's source policy, then re-reads the displayed
+models, prices and request counts and invalidates OAuth rule catalogs. Feedback
+confirms completion and identifies partial failures or skipped catalogs. Provider
+model pulls and price synchronization remain separate operations.
 It lists CPA's advertised client model names in vertically stacked manufacturer sections,
 each row giving the call name (click to copy), its price and the serving connection, with search, a maker filter and local brand artwork. Unpriced
 models are flagged and priced in place; a model's requests open in the request list. A model

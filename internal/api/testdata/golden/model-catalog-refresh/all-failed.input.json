@@ -1,0 +1,26 @@
+{
+  "why": "A failed source never yields native errors or a fabricated refreshed result.",
+  "body": {
+    "status": 502,
+    "response": {
+      "ok": false,
+      "catalogs": {
+        "catalog": {
+          "refreshed": false,
+          "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "source": "/operator/catalog-fixture.json"
+        },
+        "codex-catalog": {
+          "refreshed": false,
+          "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "source": "/operator/catalog-fixture.json"
+        },
+        "devin-catalog": {
+          "refreshed": false,
+          "error": "https://catalog-fixture.invalid/models?token=catalog-fixture-token",
+          "source": "/operator/catalog-fixture.json"
+        }
+      }
+    }
+  }
+}

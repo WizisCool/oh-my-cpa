@@ -1,0 +1,26 @@
+{
+  "why": "Embedded, disabled, and Home-restricted catalogs stay skipped; the facade does not change sources.",
+  "body": {
+    "status": 200,
+    "response": {
+      "ok": true,
+      "catalogs": {
+        "catalog": {
+          "source": "embed",
+          "refreshed": false,
+          "skipped": true
+        },
+        "codex-catalog": {
+          "source": "disabled",
+          "refreshed": false,
+          "skipped": true
+        },
+        "devin-catalog": {
+          "source": "disabled",
+          "refreshed": false,
+          "skipped": true
+        }
+      }
+    }
+  }
+}
