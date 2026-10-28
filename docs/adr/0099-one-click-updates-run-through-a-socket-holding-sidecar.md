@@ -1,6 +1,6 @@
 # ADR 0099: Console updates run through a socket-holding sidecar
 
-Status: Accepted
+Status: Accepted; amended 2026-10-28 to include same-image namespace-dependent recreation
 Date: 2026-10-14
 Supersedes: ADR 0057's consequence that existing containers do not update themselves and
 operators explicitly pull and recreate the selected service. Its default of floating
@@ -41,12 +41,31 @@ container is stopped and renamed, not removed, until the replacement is healthy;
 replacement that exits or reports unhealthy is deleted, the old container gets its name
 back and is started, and the image tag is pointed at the old image again.
 
-**A pinned image is never changed.** A version tag or digest in the configured image
-reference means the operator chose that version. Replacing the container anyway would be
-undone by the next `docker compose up`, which would then start the pinned, older binary
-over a database the newer one had already migrated, and migrations are forward-only.
-Only floating tags are updated, and the tag is re-pointed locally so Compose sees no
-drift afterwards.
+**Namespace dependents rebind as part of replacement.** A running container whose
+`NetworkMode` names the replaced container shares its network sandbox, not its stable
+name. Its exact image is recreated against the healthy replacement, or against the
+original after rollback starts a new sandbox. This includes dependencies in another
+Compose project, but not containers that were already stopped. Discovery must succeed
+before mutation. Chained namespace references and targets without their own namespace
+that have dependents are refused before pulling or stopping anything. The owner backup
+remains until dependent rebinding finishes; startup recovery completes the same
+rebinding before removing that record. A dependent failure
+is reported without preventing an updater sharing the namespace from handing over to a
+reachable successor. If that successor cannot start, the running predecessor restores
+the previous owner and retries from that live namespace; a restore failure is reported
+for host-side recovery. Rebinding uses immutable image IDs and retains the configured
+image reference in `io.oh-my-cpa.image-reference` for future update and pin checks.
+An existing owner backup blocks a new update before mutation until startup recovery
+resolves it. Admission remains closed through updater handover, even after its finished
+job has been prepared for the successor.
+
+**A pinned image is never upgraded.** A version tag or digest in the configured image
+reference means the operator chose that version. Installing a newer image anyway would
+be undone by the next `docker compose up`, which would then start the pinned, older
+binary over a database the newer one had already migrated, and migrations are
+forward-only. Namespace rebinding may recreate a pinned container with its exact
+running image. Only floating tags are updated, and the tag is re-pointed locally so
+Compose sees no drift afterwards.
 
 **Console releases are verified by signature; gateway releases are not.** Each release
 publishes `release-manifest.json`, naming the image repository and the multi-platform
@@ -74,9 +93,11 @@ know about, attached to a Compose network, makes `docker compose down` fail. The
 re-attaches the console whenever Compose recreates it. New installs declare the updater
 as a service instead.
 
-**The updater replaces itself after it replaces the console,** so both run the same
-release, and hands the finished job to its successor so the restarted console can still
-read how its own update ended and record it.
+**The updater hands over when its image or namespace changes.** After a signed console
+update, an unpinned updater follows that verified release. When any update replaces its
+network namespace owner, it starts a successor in the live namespace even if a sibling
+failed to rejoin. The successor inherits the finished job so the restarted console can
+read the outcome and record it.
 
 ## Consequences
 
@@ -91,6 +112,9 @@ read how its own update ended and record it.
 - Host maintenance stays outside the Agent capability surface
   (`docs/agent-capabilities.md`); an update is a console action with its own
   confirmation and audit events, `system.update.apply` and `system.update.completed`.
+- Updating the gateway or console also restarts its running namespace dependents,
+  including those in other Compose projects. Their images stay unchanged unless the
+  updater itself follows a signed console release.
 - Native installations are unaffected and keep the manual upgrade in `docs/install.md`.
 - No database migration: a job lives in the updater's memory, and its outcome in the
   audit log.

@@ -316,38 +316,42 @@ func TestUpdateOutcomeIsRecordedOnceEvenAcrossARestart(t *testing.T) {
 	}
 }
 
-func TestInterruptedConsoleUpdateIsRecordedByTheNextProcess(t *testing.T) {
-	fixture := newUpdaterFixture(t)
-	fixture.sidecar.answers = make(chan statusAnswer)
-	finished := make(chan struct{})
-	go func() {
-		defer close(finished)
-		fixture.handler.RecordInterruptedUpdate(context.Background())
-	}()
-	answer := func(stage string, err error) {
-		t.Helper()
-		job := updater.Job{ID: "omc-7", Product: updater.ProductOMC, Stage: stage, FromVersion: "v1.0.0", ToVersion: "v1.1.0"}
-		select {
-		case fixture.sidecar.answers <- statusAnswer{status: updater.StatusResponse{Job: &job}, err: err}:
-		case <-finished:
-			t.Fatal("the outcome must be waited for until the job finishes")
-		}
-	}
+func TestInterruptedUpdateIsRecordedByTheNextProcess(t *testing.T) {
+	for _, product := range []string{updater.ProductOMC, updater.ProductCPA} {
+		t.Run(product, func(t *testing.T) {
+			fixture := newUpdaterFixture(t)
+			fixture.sidecar.answers = make(chan statusAnswer)
+			finished := make(chan struct{})
+			go func() {
+				defer close(finished)
+				fixture.handler.RecordInterruptedUpdate(context.Background())
+			}()
+			answer := func(stage string, err error) {
+				t.Helper()
+				job := updater.Job{ID: product + "-7", Product: product, Stage: stage, FromVersion: "v1.0.0", ToVersion: "v1.1.0"}
+				select {
+				case fixture.sidecar.answers <- statusAnswer{status: updater.StatusResponse{Job: &job}, err: err}:
+				case <-finished:
+					t.Fatal("the outcome must be waited for until the job finishes")
+				}
+			}
 
-	// The process that replaced the console starts while the update is still verifying
-	// it, and the sidecar then replaces itself, so it is briefly unreachable.
-	answer(updater.StageVerifying, nil)
-	answer("", errors.New("dial tcp: lookup oh-my-cpa-updater: no such host"))
-	answer(updater.StageVerifying, nil)
-	if recorded := fixture.audits(t, "system.update.completed"); len(recorded) != 0 {
-		t.Fatalf("an unfinished job has no outcome yet: %+v", recorded)
-	}
-	answer(updater.StageDone, nil)
-	<-finished
+			// Either product can restart the console before verification finishes; updater
+			// handover may then make the control API briefly unreachable.
+			answer(updater.StageVerifying, nil)
+			answer("", errors.New("dial tcp: lookup oh-my-cpa-updater: no such host"))
+			answer(updater.StageVerifying, nil)
+			if recorded := fixture.audits(t, "system.update.completed"); len(recorded) != 0 {
+				t.Fatalf("an unfinished job has no outcome yet: %+v", recorded)
+			}
+			answer(updater.StageDone, nil)
+			<-finished
 
-	outcomes := fixture.audits(t, "system.update.completed")
-	if len(outcomes) != 1 || outcomes[0].Result != "success" || outcomes[0].Details["job_id"] != "omc-7" || outcomes[0].Details["to_version"] != "v1.1.0" {
-		t.Fatalf("the process that replaced the console records the outcome: %+v", outcomes)
+			outcomes := fixture.audits(t, "system.update.completed")
+			if len(outcomes) != 1 || outcomes[0].Result != "success" || outcomes[0].TargetID != product || outcomes[0].Details["job_id"] != product+"-7" || outcomes[0].Details["to_version"] != "v1.1.0" {
+				t.Fatalf("the process that replaced the console records the outcome: %+v", outcomes)
+			}
+		})
 	}
 }
 

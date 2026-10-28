@@ -190,9 +190,19 @@ type Container struct {
 // ContainerName is the name without the leading slash the daemon reports it with.
 func (c Container) ContainerName() string { return strings.TrimPrefix(c.Name, "/") }
 
+// IMAGE_REFERENCE_LABEL retains the operator's update policy when recreation uses
+// an immutable image ID instead of resolving a mutable tag.
+const IMAGE_REFERENCE_LABEL = "io.oh-my-cpa.image-reference"
+
 // ImageReference is the image as the container was configured, for example
 // "wiziscool/oh-my-cpa:latest".
-func (c Container) ImageReference() string { return stringField(c.Config, "Image") }
+func (c Container) ImageReference() string {
+	reference := stringField(c.Config, "Image")
+	if configured := c.Label(IMAGE_REFERENCE_LABEL); configured != "" && reference == c.ImageID {
+		return configured
+	}
+	return reference
+}
 
 // Label returns one container label.
 func (c Container) Label(name string) string {
@@ -243,6 +253,15 @@ func stringList(value any) []string {
 		}
 	}
 	return list
+}
+
+// envEntries reads an environment list whether it came from the daemon's JSON
+// ([]any) or from a replacement plan's own construction ([]string).
+func envEntries(value any) []string {
+	if entries, ok := value.([]string); ok {
+		return entries
+	}
+	return stringList(value)
 }
 
 // ListContainers lists containers, including stopped ones.

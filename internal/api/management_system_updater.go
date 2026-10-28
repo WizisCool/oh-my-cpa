@@ -283,9 +283,8 @@ func (h *Handler) releaseStatus(ctx context.Context, product, runningVersion str
 }
 
 // recordUpdateOutcome waits for a job to finish and writes its outcome to the audit
-// trail. A gateway update finishes while this process is alive. A console update
-// replaces this process first, so RecordInterruptedUpdate picks the outcome up in the
-// process that replaces it.
+// trail. If replacing the console or its namespace owner restarts this process,
+// RecordInterruptedUpdate picks the outcome up in the process that replaces it.
 func (h *Handler) recordUpdateOutcome(jobID string) {
 	ctx, cancel := context.WithTimeout(h.updateWatchContext, updateJobWatchLimit)
 	defer cancel()
@@ -314,11 +313,10 @@ func (h *Handler) updateJobPollInterval() time.Duration {
 }
 
 // RecordInterruptedUpdate records the outcome of an update whose admitting process did
-// not live to see it: the console's own. It runs at start-up, which for a console update
-// is while that update is still verifying this very process, so it waits for the job to
-// finish. A failed read is not the end of the wait: after a console update the sidecar
-// replaces itself too. Only the job first seen is followed, because a later one has a
-// watcher of its own, and nothing is written when its outcome is already on record.
+// not live to see because the console or its namespace owner was replaced. Startup
+// may precede verification and updater handover, so unfinished stages and failed
+// reads must not end the wait. Only the job first seen is followed, because a later
+// one has a watcher of its own, and an outcome already on record is not written again.
 func (h *Handler) RecordInterruptedUpdate(ctx context.Context) {
 	if h.updater == nil || h.repo == nil || !h.cfg.Updater.Enabled || !h.isContainerised {
 		return

@@ -192,6 +192,7 @@ own environment, and an installation needs none of them:
 | `OMCPA_UPDATER_SOCKET` | `/var/run/docker.sock` | The Docker socket as mounted in the container |
 | `OMCPA_UPDATER_OMC_CONTAINER` | found by image | The console container, when more than one Oh My CPA runs on the host |
 | `OMCPA_UPDATER_CPA_CONTAINER` | found from `OMCPA_CPA_BASE_URL` | The gateway container, when it cannot be found that way |
+| `OMCPA_UPDATER_SELF_CONTAINER` | found from hostname or a unique updater | This updater's own container name or ID. Handover sets it to the successor's stable name because shared network namespaces inherit the owner's hostname |
 | `OMCPA_UPDATER_LINK_NETWORK` | empty | Set by `updater install`: the network the updater keeps the console attached to. Empty when both are services of one Compose file |
 | `OMCPA_UPDATER_PUBLIC_KEY` | built in | Base64 Ed25519 public key that replaces the built-in release key, for a fork that signs its own releases |
 
@@ -205,13 +206,43 @@ Security boundary:
   not logged. Changing the master key needs no step here: the updater reads the
   console's current value from Docker.
 - The updater accepts a product name only. It never takes an image, a container name or
-  a command from the console, updates only the two containers it identified, and
-  refuses an image pinned to a version tag or digest.
+  a command from the console. It identifies the two products from Docker state and
+  refuses to upgrade an image pinned to a version tag or digest. Replacing a namespace
+  owner also recreates its running `network_mode: container:<owner>` dependents, even
+  across Compose projects; stopped containers are left alone.
 - Oh My CPA is replaced only by the image a release's signed manifest names, and never
   by an older version. CLIProxyAPI is an upstream image this project cannot sign: its
   update pulls the tag the container already uses.
 - A build without the release public key reports `signature_unavailable` and offers no
   console update for Oh My CPA.
+
+Namespace rebinding preserves each dependent's exact running image, mounts and settings;
+it does not resolve a floating tag again. The `io.oh-my-cpa.image-reference` container
+label retains the configured image reference while Docker records an immutable image ID,
+so future update discovery and version pins keep their meaning. An updater following a
+signed console update may use that verified image; a pinned updater keeps its own image.
+
+Automatic rebinding supports direct dependents of a container-owned namespace. Updates
+are refused before pulling or stopping anything if a running container joins indirectly
+through another dependent, or if the target itself uses a shared or host namespace and
+has dependents. Configure shared helpers to reference the actual namespace owner
+directly, or recreate this topology on the Docker host.
+
+An existing `<name>-omc-previous` backup also blocks another update before mutation.
+When a self-handover cannot start its successor, the running predecessor restores the
+previous owner and retries from that live namespace. If that restore also fails, recover
+the updater from the Docker host rather than restarting it in the dead namespace. In the
+ordinary interrupted-replacement case, restart the updater to run startup recovery before
+retrying that product. New jobs are refused while the current updater is handing over to
+its successor.
+
+Dependents rejoin in Compose dependency order. They must also rejoin after a failed owner
+update restores the original container, because restarting that owner creates a new
+network sandbox. The owner backup remains until rebinding finishes, or until the
+successor updater completes startup recovery. A helper failure is reported in the job
+without blocking the updater's own handover. A dependent that cannot rejoin remains
+stopped under its original name and needs to be recreated on the Docker host. Containers
+that were already stopped before the update are not started by this process.
 
 Network use: applying an Oh My CPA update makes the console download
 `release-manifest.json` and its `.sig` from the release's assets on `github.com`,
@@ -222,8 +253,9 @@ registry and proxy configuration.
 Audit: `system.update.apply` records the admission, or the refusal with its reason,
 before the updater is asked; `system.update.completed` records how that admission ended:
 the job's outcome, or the updater's refusal or silence when no job started. An Oh
-My CPA update ends the process that admitted it, so the next process follows the job
-from start-up and records the outcome once the updater reports it finished.
+My CPA update, or a CLIProxyAPI update when the console shares its network namespace,
+ends the process that admitted it, so the next process follows the job from start-up and
+records the outcome once the updater reports it finished.
 
 ## Database maintenance
 
