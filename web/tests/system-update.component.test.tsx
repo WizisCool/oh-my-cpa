@@ -18,10 +18,11 @@ const VERSION: SystemProductVersion = {
 
 /** The version card's update pieces over the real hook, as the page composes them. */
 function Card({ onFinished }: { onFinished: (outcome: UpdateOutcome) => void }) {
-  const { updater, submittingProduct, apply } = useConsoleUpdate({ onFinished });
+  const { updater, latest, submittingProduct, apply } = useConsoleUpdate({ onFinished });
   const offer = deriveUpdateOffer(VERSION, updater, 'omc');
   return (
     <>
+      <output data-testid="updater-answers">{JSON.stringify({ progress: updater?.state ?? null, latest: latest?.state ?? null })}</output>
       <UpdateAction version={VERSION} productTitle="Oh My CPA" offer={offer} isSubmitting={submittingProduct === 'omc'} onUpdate={() => void apply('omc')} />
       <UpdateStatusLine offer={offer} />
       <UpdaterSetup updater={updater} />
@@ -56,6 +57,22 @@ async function startUpdate() {
   fireEvent.click(await screen.findByRole('button', { name: 'Update now' }));
   await screen.findByText('Pulling the new image…');
 }
+
+it('keeps drawing the followed update while reporting the answer that replaced it', async () => {
+  const surface = mount();
+  await startUpdate();
+  const answers = () => JSON.parse(screen.getByTestId('updater-answers').textContent!);
+  expect(answers()).toEqual({ progress: 'ready', latest: 'ready' });
+
+  // The console's own container is replaced, and the updater that comes back is not linked to the
+  // new one. The progress line must survive that answer; a health reading must not repeat it.
+  surface.overrides.push(() => new Response(JSON.stringify(SYSTEM_UPDATER_CONTRACT.not_installed), { status: 200 }));
+  await surface.reread();
+  await waitFor(() => expect(answers().latest).toBe('not_installed'));
+  expect(answers().progress).toBe('ready');
+  expect(screen.getByTestId('sys-update-stage')).toBeTruthy();
+  surface.close();
+});
 
 it('asks before updating and sends nothing until the question is answered', async () => {
   const surface = mount();

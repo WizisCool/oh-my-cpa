@@ -259,9 +259,10 @@ export const SystemPage: React.FC = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
     void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
   };
-  const { updater, isUpdaterError, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
-  // A failed read cannot certify the verdict an earlier answer gave.
-  const updaterVerdict = isUpdaterError ? UPDATER_READ_FAILED : updater ? UPDATER_VERDICTS[updater.state] : UPDATER_UNREPORTED;
+  const { updater, latest: latestUpdater, isUpdaterError, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
+  // The health row states the sidecar's last answer, not the progress the version card keeps drawing
+  // while a followed update restarts it, and not a verdict a failed read can no longer certify.
+  const updaterVerdict = isUpdaterError ? UPDATER_READ_FAILED : latestUpdater ? UPDATER_VERDICTS[latestUpdater.state] : UPDATER_UNREPORTED;
   const handleApplyUpdate = async (product: ReleaseProduct) => {
     try {
       await applyUpdate(product);

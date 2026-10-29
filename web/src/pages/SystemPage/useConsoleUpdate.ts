@@ -104,5 +104,13 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
     }
   }, [queryClient]);
 
-  return { updater, isUpdaterError: isError, submittingProduct, apply };
+  return {
+    /** What the version card draws: the last working answer while a followed update restarts it. */
+    updater,
+    /** What the sidecar last answered, which is what a health reading must state. */
+    latest: data,
+    isUpdaterError: isError,
+    submittingProduct,
+    apply,
+  };
 }
