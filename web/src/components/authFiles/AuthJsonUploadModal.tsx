@@ -38,6 +38,8 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
   const [text, setText] = React.useState('');
   const [editedName, setEditedName] = React.useState<string | null>(null);
   const [canReplace, setCanReplace] = React.useState(false);
+  // Names found stored by the lookup at submit, beyond the page's possibly partial or stale list.
+  const [foundNames, setFoundNames] = React.useState<ReadonlySet<string>>(() => new Set());
 
   // The pasted text is a secret: it must not outlive the dialog.
   React.useEffect(() => {
@@ -46,6 +48,7 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
       setText('');
       setEditedName(null);
       setCanReplace(false);
+      setFoundNames(new Set());
     }
   }, [open]);
 
@@ -53,12 +56,25 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
   const nameInput = editedName ?? reading?.summary?.suggestedName ?? '';
   const name = normalizeAuthFileName(nameInput);
   const isNameValid = isValidAuthFileName(name);
-  const isReplacing = isNameValid && existingNames.has(name);
+  const isReplacing = isNameValid && (existingNames.has(name) || foundNames.has(name));
 
   // Text is read from the closure rather than passed as a variable React Query would cache.
   const uploadMutation = useMutation({
-    mutationFn: () => api.uploadManagementAuthJson(name, text),
-    onSuccess: async () => {
+    mutationFn: async () => {
+      // CPA replaces a stored name without asking, and the page's list may be capped or stale,
+      // so an unconfirmed name is looked up first and held for confirmation if it is taken.
+      if (!canReplace) {
+        const stored = await api.getManagementAuthFiles({ name });
+        if (stored.files.some((file) => file.name === name)) return { isHeld: true };
+      }
+      await api.uploadManagementAuthJson(name, text);
+      return { isHeld: false };
+    },
+    onSuccess: async ({ isHeld }) => {
+      if (isHeld) {
+        setFoundNames((previous) => new Set(previous).add(name));
+        return;
+      }
       toast.success(t('af.paste_uploaded', { name }));
       onClose();
       await onUploaded();

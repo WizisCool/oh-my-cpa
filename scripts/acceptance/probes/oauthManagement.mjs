@@ -1208,9 +1208,15 @@ async function verifyVertexImportDialog({ page, check }) {
 async function verifyPasteAuthJsonDialog({ page, check }) {
   const uploads = [];
   const isNamedUpload = (url) => url.pathname.endsWith('/management/auth-files') && url.searchParams.has('name');
+  // A stored credential the page's list does not include, as when the list is capped or stale.
+  const unlistedName = 'codex-unlisted@fixture.test.json';
   const uploadHandler = async (route) => {
-    if (route.request().method() !== 'POST') return route.fallback();
     const name = new URL(route.request().url()).searchParams.get('name');
+    if (route.request().method() === 'GET') {
+      const files = name === unlistedName ? [{ name, id: name, type: 'codex' }] : [];
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files, total: files.length }) });
+    }
+    if (route.request().method() !== 'POST') return route.fallback();
     uploads.push({ name, body: route.request().postData() });
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', uploaded: 1, files: [name] }) });
   };
@@ -1237,6 +1243,12 @@ async function verifyPasteAuthJsonDialog({ page, check }) {
       check('confirming replacement allows the upload', await submit.isEnabled());
       await nameField.fill('codex-paste@fixture.test.json');
     }
+    await nameField.fill(unlistedName);
+    await dialog.getByRole('button', { name: 'Upload', exact: true }).click();
+    await dialog.getByRole('checkbox', { name: 'Replace', exact: true }).waitFor();
+    check('a stored name missing from the page list is held for confirmation, not replaced', uploads.length === 0
+      && await dialog.getByRole('button', { name: 'Upload', exact: true }).isDisabled());
+    await nameField.fill('codex-paste@fixture.test.json');
     await settleLayout(page);
     await page.screenshot({ path: 'tmp/paste-auth-json-desktop.png' });
     await dialog.getByRole('button', { name: 'Upload', exact: true }).click();
