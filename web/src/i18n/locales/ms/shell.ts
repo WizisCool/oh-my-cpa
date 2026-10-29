@@ -144,8 +144,6 @@ export default {
   "theme.sandstone": "Batu pasir",
   "theme.sandstone_desc": "Permukaan pasir hangat dengan aksen teal",
   "header.logout": "Log keluar",
-  "shell.connected": "disambungkan",
-  "shell.offline": "luar talian",
   "shell.cpa_management_disabled_title": "API Pengurusan CPA dimatikan",
   "shell.cpa_management_disabled_desc": "CLIProxyAPI tiada kunci pengurusan yang dikonfigurasikan; Oh My CPA tidak dapat mengakses API pengurusan.",
   "shell.cpa_management_disabled_config": "Tetapkan rahsia pengurusan dalam fail konfigurasi CPA kepada nilai OMCPA_CPA_MANAGEMENT_KEY Oh My CPA (pemboleh ubah persekitaran MANAGEMENT_PASSWORD CPA juga boleh digunakan):",
