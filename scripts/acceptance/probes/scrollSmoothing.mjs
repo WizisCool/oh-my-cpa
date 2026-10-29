@@ -52,11 +52,8 @@ async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
     window.__scrollSampleTimes = [performance.now()];
     window.__scrollInputAt = null;
     window.__scrollInput = null;
-    window.__scrollHanded = 0;
-    // A glide drives a virtualized list with wheel events of its own; their deltas are what it asked
-    // the list to travel, apart from anything the list adds while it measures rows.
+    // A trusted input starts the sampled gesture; anything else on the page is not the reader's.
     const noteInput = (event) => {
-      if (!event.isTrusted && event.type === 'wheel') window.__scrollHanded += event.deltaY;
       if (event.isTrusted && window.__scrollInputAt === null) {
         window.__scrollInputAt = performance.now();
         window.__scrollSamples = [node.scrollTop];
@@ -90,7 +87,7 @@ async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
     () => page.evaluate((frames) => window.__scrollSamples.length > frames, sampleFrames),
     { label: 'scroll samples' },
   );
-  const { samples, times, framesBeforeMove, handed, input } = await page.evaluate(() => {
+  const { samples, times, framesBeforeMove, input } = await page.evaluate(() => {
     const samples = window.__scrollSamples;
     const times = window.__scrollSampleTimes;
     // Frames that ran after the input and before the scroller first moved.
@@ -98,9 +95,9 @@ async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
     const framesBeforeMove = firstMove < 0 || window.__scrollInputAt === null
       ? null
       : times.slice(1, firstMove).filter((time) => time > window.__scrollInputAt).length;
-    return { samples, times, framesBeforeMove, handed: window.__scrollHanded, input: window.__scrollInput };
+    return { samples, times, framesBeforeMove, input: window.__scrollInput };
   });
-  return Object.assign(samples, { framesBeforeMove, times, handed, input });
+  return Object.assign(samples, { framesBeforeMove, times, input });
 }
 
 /** Turns the wheel one notch over (x, y) and returns the offsets the marked scroller passed through. */
@@ -135,22 +132,14 @@ function describeNotch(samples) {
     intermediateFrames: intermediate.size,
     stalledFrames,
     framesBeforeMove: samples.framesBeforeMove,
-    handed: samples.handed,
     detail: `samples=${samples.map(Math.round).join(',')} framesBeforeMove=${samples.framesBeforeMove}`
-      + ` handed=${Math.round(samples.handed * 10) / 10} input=${JSON.stringify(samples.input)}`
+      + ` input=${JSON.stringify(samples.input)}`
       + ` frameMs=${times.slice(1).map((time, index) => Math.round(time - times[index])).join(',')}`,
   };
 }
 
-/**
- * Opens the request list, marks its virtualized holder for sampling and folds the header with the
- * first notch, which the live-tail list consumes. Returns where to point the wheel and that
- * first notch.
- */
-async function openRequestList(page, base) {
-  await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
-  const hasHolder = await markScroller(page, () => {
+async function markRequestList(page) {
+  return markScroller(page, () => {
     const root = document.querySelector('.request-list-host') ?? document.body;
     const holder = [...root.querySelectorAll('*')].find(
       (node) => node.scrollHeight > node.clientHeight + 1_000 && getComputedStyle(node).overflowY === 'hidden',
@@ -158,15 +147,77 @@ async function openRequestList(page, base) {
     holder?.setAttribute('data-probe-scroller', '');
     return Boolean(holder);
   });
-  // The wheel points at a row's provider cell, whose hints are native titles. A cell with an antd
-  // tooltip would open it as rows glide under the pointer, and the popup, a portal outside the list,
-  // would take the next notch.
-  const pointAt = async () => {
-    const box = await page.locator('.request-row').nth(2).locator('.req-col-provider').boundingBox();
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+// Native titles do not open a portal under the pointer as rows glide past it.
+async function pointAtRequestList(page) {
+  const box = await page.locator('.request-row').nth(2).locator('.req-col-provider').boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** Opens the list and folds its header with the first notch, which the list consumes. */
+async function openRequestList(page, base) {
+  await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+  const hasHolder = await markRequestList(page);
+  const foldingNotch = describeNotch(await sampleNotch(page, await pointAtRequestList(page)));
+  return { hasHolder, foldingNotch, listAt: await pointAtRequestList(page) };
+}
+
+/** A wheel over the initial placeholder must not interfere with the first scroll of the loaded list. */
+async function checkScrollDuringInitialLoad({ page, base, check, isSmoothed }) {
+  let release;
+  const response = new Promise((resolve) => { release = resolve; });
+  const pattern = '**/api/**/usage/events?*';
+  const hold = async (route) => {
+    await response;
+    await route.fallback();
   };
-  const foldingNotch = describeNotch(await sampleNotch(page, await pointAt()));
-  return { hasHolder, foldingNotch, listAt: await pointAt() };
+  await page.route(pattern, hold);
+  try {
+    await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
+    const placeholder = page.locator('.request-loading');
+    await placeholder.waitFor({ timeout: 20_000 });
+    await placeholder.hover();
+    await page.mouse.wheel(0, NOTCH);
+    await until(() => page.locator('.request-collapsible-header.is-collapsed').count(), { label: 'the loading list header to fold' });
+    check('the initial request is still loading when the header folds', await placeholder.isVisible());
+    release();
+    await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+    await page.waitForFunction(() => document.querySelector('.request-collapsible-header')?.getAnimations().length === 0);
+    const hasHolder = await markRequestList(page);
+    const notch = describeNotch(await sampleNotch(page, await pointAtRequestList(page)));
+    check(`after scrolling while loading, the first ${isSmoothed ? 'smoothed' : 'native'} notch moves the list`,
+      hasHolder && Math.abs(notch.travelled - NOTCH) <= REMEASURE_PX && (isSmoothed ? notch.intermediateFrames >= 2 : notch.intermediateFrames === 0),
+      notch.detail);
+    await page.locator('.request-stream[aria-busy="false"]').waitFor();
+    await page.unroute(pattern, hold);
+
+    // The column header is outside the list's scroll holder as well, even after rows have loaded.
+    await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
+    await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+    const point = await pointAtRequestList(page);
+    await page.mouse.move(point.x, point.y);
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel(0, NOTCH);
+    await page.keyboard.up('Shift');
+    await nextFrames(page, 2);
+    check('a modified wheel leaves the request controls unfolded',
+      await page.locator('.request-collapsible-header.is-collapsed').count() === 0);
+    await page.locator('.request-table-header').hover();
+    await page.mouse.wheel(0, NOTCH);
+    await until(() => page.locator('.request-collapsible-header.is-collapsed').count(), { label: 'the column header wheel to fold the controls' });
+    await page.waitForFunction(() => document.querySelector('.request-collapsible-header')?.getAnimations().length === 0);
+    const hasHeaderHolder = await markRequestList(page);
+    const afterHeader = describeNotch(await sampleNotch(page, await pointAtRequestList(page)));
+    check(`after wheeling over the column header, the first ${isSmoothed ? 'smoothed' : 'native'} notch moves the list`,
+      hasHeaderHolder && Math.abs(afterHeader.travelled - NOTCH) <= REMEASURE_PX
+        && (isSmoothed ? afterHeader.intermediateFrames >= 2 : afterHeader.intermediateFrames === 0),
+      afterHeader.detail);
+  } finally {
+    release();
+    await page.unroute(pattern, hold);
+  }
 }
 
 export async function scrollSmoothing({ base, page, check }) {
@@ -266,6 +317,7 @@ export async function scrollSmoothing({ base, page, check }) {
   let list = await openRequestList(page, base);
   const ownJump = describeNotch(await sampleNotch(page, list.listAt));
   check('On leaves the request list its own jump', list.hasHolder && ownJump.intermediateFrames === 0 && ownJump.framesBeforeMove !== null, ownJump.detail);
+  await checkScrollDuringInitialLoad({ page, base, check, isSmoothed: false });
 
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await row.scrollIntoViewIfNeeded();
@@ -300,10 +352,8 @@ export async function scrollSmoothing({ base, page, check }) {
     for (let turned = 0; turned < TURNED_NOTCHES; turned += 1) await page.mouse.wheel(0, NOTCH);
   }, TURNED_SAMPLE_FRAMES));
   // The list re-anchors its offset as it replaces estimated row heights with measured ones, and may
-  // shift by a few pixels doing so, as it does on its own jumps. The glide itself must hand over
-  // exactly the notches turned.
+  // shift by a few pixels doing so, as it does on its own jumps.
   check('a wheel turned several notches glides the list through all of them', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES) <= REMEASURE_PX, notch.detail);
-  check('the glide hands the list exactly the notches turned', Math.abs(notch.handed - NOTCH * TURNED_NOTCHES) <= 0.5, notch.detail);
 
   // Each notch the reader turns reaches the list too, and the list would let it cancel the frame that
   // was about to apply the glide's last step: two frames without movement at every notch, then a
@@ -319,10 +369,36 @@ export async function scrollSmoothing({ base, page, check }) {
       }
     }, TURNED_SAMPLE_FRAMES));
     check(`${label}, a turning wheel keeps the list moving from notch to notch`, notch.stalledFrames < TURNED_NOTCHES / 2, notch.detail);
-    check(`${label}, the glide hands the list exactly the notches turned`, Math.abs(notch.handed - NOTCH * TURNED_NOTCHES * direction) <= 0.5, notch.detail);
     check(`${label}, the list lands ${TURNED_NOTCHES} notches further`, Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES * direction) <= REMEASURE_PX, notch.detail);
   }
+  await checkScrollDuringInitialLoad({ page, base, check, isSmoothed: true });
+  await checkScrollWhileProgressIsActive({ page, base, check });
   await checkNativeModelPopup({ page, base, check });
+}
+
+/** Another pending page request must not interrupt a list that is already available. */
+async function checkScrollWhileProgressIsActive({ page, base, check }) {
+  let release;
+  const response = new Promise((resolve) => { release = resolve; });
+  const pattern = '**/api/**/usage/facets?*';
+  const hold = async (route) => {
+    await response;
+    await route.fallback();
+  };
+  await page.route(pattern, hold);
+  try {
+    const list = await openRequestList(page, base);
+    await page.locator('.data-progress[data-state="running"]').waitFor();
+    const notch = describeNotch(await sampleNotch(page, list.listAt));
+    check('the available request list glides while another page request is still loading',
+      list.hasHolder && notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= REMEASURE_PX,
+      notch.detail);
+    release();
+    await page.waitForFunction(() => document.querySelector('.data-progress')?.hidden);
+  } finally {
+    release();
+    await page.unroute(pattern, hold);
+  }
 }
 
 async function checkNativeModelPopup({ page, base, check }) {

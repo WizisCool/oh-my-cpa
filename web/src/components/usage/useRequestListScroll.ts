@@ -199,7 +199,7 @@ export function useRequestListScroll({
   // 2. When at top edge and wheeling up in collapsed mode: intentional top-bounce overscroll expands header.
   const handleWheel = React.useCallback(
     (e: React.WheelEvent<HTMLElement>) => {
-      if (isNavigatingPageRef.current) return;
+      if (isNavigatingPageRef.current || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.deltaX !== 0) return;
 
       if (!collapse.get() && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
         // First wheel down from top: enter full-screen mode, but freeze scroll at top
@@ -208,7 +208,12 @@ export function useRequestListScroll({
         // list never moved and there is no jump to pin back, and pinning anyway would swallow the
         // reader's next notch.
         const wasClaimed = consumeWheel(e.nativeEvent);
-        justCollapsedFromTopRef.current = !wasClaimed;
+        const list = e.currentTarget.querySelector<HTMLElement>('.request-list');
+        const holder = isNativeScroll ? list : list?.querySelector<HTMLElement>('.ant-listy-holder');
+        // A wheel over the placeholder or column header cannot move the list. Arming the
+        // correction there would instead undo the first real scroll after the rows appear.
+        justCollapsedFromTopRef.current = !wasClaimed && !!holder && e.target instanceof Node
+          && holder.contains(e.target) && holder.scrollHeight > holder.clientHeight;
         collapse.set(true);
         listRef.current?.scrollTo({ top: 0 });
         return;
@@ -216,10 +221,11 @@ export function useRequestListScroll({
 
       if (collapse.get() && e.deltaY < -15 && lastScrollTopRef.current <= 2) {
         // Intentional top-bounce when already at the very top: unfold header
+        justCollapsedFromTopRef.current = false;
         collapse.set(false);
       }
     },
-    [collapse],
+    [collapse, isNativeScroll],
   );
 
   /**
@@ -272,12 +278,14 @@ export function useRequestListScroll({
   }, [collapse, endReturnToTop, scrolledDown]);
 
   const handleToggleExpand = React.useCallback(() => {
+    justCollapsedFromTopRef.current = false;
     collapse.set((isCollapsed) => !isCollapsed);
   }, [collapse]);
 
   // Reset collapse only on filter / window changes (NOT cursor pagination, and
   // not on a poll: a refresh must never expand or collapse the reader's view).
   React.useEffect(() => {
+    justCollapsedFromTopRef.current = false;
     collapse.set(false);
     scrolledDown.set(false);
   }, [collapse, scrolledDown, viewScope]);
