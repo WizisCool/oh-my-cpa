@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { failureKey, formatDuration, isKnownTurnStatus, playgroundErrorKey } from '../web/src/components/workspace/conversationLabels';
 import * as agentState from '../web/src/pages/agent/state';
 import * as playgroundErrors from '../web/src/pages/playground/errors';

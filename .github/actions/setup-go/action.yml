@@ -1,0 +1,16 @@
+name: Set up Go toolchain
+description: Read the exact build toolchain from the repository pin.
+inputs:
+  cache:
+    description: Cache Go modules and build objects; release packaging stays isolated.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      run: echo "version=$(node -p 'JSON.parse(require("fs").readFileSync("scripts/tools-versions.json", "utf8")).go.version')" >> "$GITHUB_OUTPUT"
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      with:
+        go-version: ${{ steps.version.outputs.version }}
+        cache: ${{ inputs.cache }}

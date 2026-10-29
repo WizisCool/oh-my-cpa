@@ -9,7 +9,7 @@ export function hasReadmeScreenshotContent(selector) {
 }
 
 /**
- * Runs in Chromium: the console font's shards beyond the core are registered (ADR 0094). They
+ * Runs in Chromium: the console font's shards beyond the core are registered. They
  * arrive after load, and a capture taken before them draws demo text outside the core in a
  * fallback font.
  */

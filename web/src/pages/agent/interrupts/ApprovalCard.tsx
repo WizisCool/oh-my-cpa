@@ -27,9 +27,9 @@ export interface ApprovalCardProps {
 }
 
 /**
- * The agent asking to change something, decided where the call is (ADR 0043).
+ * The agent asking to change something, decided where the call is.
  *
- * One allow-or-deny decision (ADR 0035), bound on the server to the revision the preview was read
+ * One allow-or-deny decision, bound on the server to the revision the preview was read
  * at, which is what makes one click safe: a target that changed in between is refused, not
  * overwritten. The card sits in the transcript under the call that raised it, so the answer the
  * operator is deciding about stays in view instead of behind a modal. Private input - a credential,

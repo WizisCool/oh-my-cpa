@@ -239,7 +239,7 @@ async function main() {
           await drawer.waitFor({ state: 'hidden', timeout: NAVIGATION_TIMEOUT_MS });
         }
         if (route.path === '/agent') {
-          // The recorded run (ADR 0092): the example sends, the run ends as a stored turn, and
+          // The recorded run: the example sends, the run ends as a stored turn, and
           // that turn holds the calls and the generated interface the recording carries. This is
           // the built bundle, so it also proves the replay's lazy chunk loads from a static host.
           await page.getByTestId('agent-empty').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });

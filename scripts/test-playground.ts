@@ -1,6 +1,6 @@
 import { createID as sharedCreateID } from '../web/src/utils/ids';
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import {
   actualRequest, applyEvent, buildChatRequest, buildCurl, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS,
   hasCustomParameters, hasOmittedImage, inspectRequest, effectiveModel, MAX_EVENTS, parametersFromSession,

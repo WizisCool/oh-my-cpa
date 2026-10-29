@@ -72,7 +72,7 @@ const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: Messa
  * The keys are part of CPA's configuration document (`api-keys`, or `access.api-keys` in a v8
  * layout), not a separate store, so every change is written as one revision-guarded transaction
  * on that document - the same one the configuration workbench uses. It is the only editor of that
- * field: the workbench points here instead of carrying a second one (ADR 0010).
+ * field: the workbench points here instead of carrying a second one.
  *
  * A change applies when it is confirmed. Adding, editing and removing a key each end in their
  * own confirmation - the dialog's primary action, or the removal's popover - so there is no

@@ -1,351 +1,54 @@
-# Install Oh My CPA (for a coding agent)
+# Installation by an agent
 
-This runbook is for a coding agent installing Oh My CPA (OMC) on a user's machine. OMC
-is a web console for CLIProxyAPI (CPA). It needs **CPA v8.0.0 or later** and CPA's plaintext
-management key, which is also OMC's sign-in password. The Docker image is
-`wiziscool/oh-my-cpa:latest` (amd64 and arm64). Native release archives cover Darwin,
-Windows, Linux and FreeBSD on amd64/arm64; a normal install builds nothing.
+Use the same [installation guide](install.md) as a human operator. It owns the commands,
+assets and supported deployment paths; this page adds the agent's preflight and handoff.
 
-The work is: look at what is already there, pick a path, install, verify.
+## Inspect before acting
 
-## Rules
+Determine whether CPA and OMC already exist, how they are started, their network
+reachability, OS/architecture, data directories and occupied ports. Inspect names,
+image references and network metadata, not container environments or credential files
+in tool output. Ask only for facts that cannot be established safely.
 
-1. **Keep secrets out of the conversation.** Do not print `.env` files, management
-   keys, the master key or `docker compose config` output. When the existing
-   management key is needed, write a placeholder into the `.env` file and ask the user
-   to fill it in.
-2. **Do not change the existing CPA.** No upgrade, no config edit, no restart, no
-   stopping another panel or tracker, unless the user agrees to that specific change.
-3. **Never replace an existing `OMCPA_MASTER_KEY`.** If an OMC data directory already
-   exists, reuse its key. If the key is lost, stop and say so.
-4. **Ask before** using `sudo`, installing Docker or a toolchain, opening a port beyond
-   `127.0.0.1`, giving a container the Docker socket, or sending a model request that
-   costs money.
-5. **Ask with the agent's question tool.** Every question in this runbook — the ones
-   rule 4 requires and the ones the steps ask for — goes through the harness's own
-   `ask_user_question` / `ask_question` tool, so the choice is explicit and the answer
-   arrives structured. Ask in ordinary conversation only when the harness has no such
-   tool, and wait for the reply before acting either way.
+Find any other usage collector. CPA gives a queued record to one reader only; choose
+one collector before enabling OMC ingestion. Never test availability by consuming a
+record. OMC requires the v8 management API and the existing plaintext management key.
 
-## 1. Look first
+## Preserve the existing installation
 
-```bash
-docker version --format '{{.Server.Version}}'; docker compose version
-docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Networks}}'
-ss -ltn 2>/dev/null | grep -E ':(8080|8317)\b'
-curl -fsS --max-time 3 http://127.0.0.1:8317/healthz
-```
+- Do not print `.env`, management/master keys, auth files or `docker compose config`.
+  Let the user supply missing secrets privately; placeholders are not working credentials.
+- Never replace an existing master key. If encrypted data exists and its key is lost,
+  stop and explain recovery limits before changing the deployment.
+- Do not edit, upgrade, restart or remove an existing CPA or another panel without the
+  user's authorization for that action. Keep its configuration and auth directories.
+- Get explicit approval for privilege elevation, tool installation, opening a public
+  port, granting Docker socket access or sending a billable inference request.
+- Do not overwrite an existing target file to fit a new-install recipe. An existing
+  OMC deployment follows [Upgrading](install.md#upgrading), not fresh key generation.
 
-Find out:
+## Choose one path and use its guide
 
-- Is CPA running? As a container (which network?), a host process (listening on
-  `127.0.0.1` or on all interfaces?), or on another machine?
-- Is OMC already installed? Then this is an upgrade (step 5), not an install.
-- Does anything else collect CPA's usage, such as another panel's statistics or an
-  exporter? CPA gives each usage record to one reader only, so this decides step 3.
-- Which OS and CPU architecture will run OMC, and does the release provide a matching native archive?
-- Are ports 8080 and 8317 free?
-
-Ask the user only for what cannot be found out.
-
-## 2. Pick a path
-
-| Found | Path |
+| Situation | Procedure |
 | --- | --- |
-| No CPA | **A**: install CPA and OMC together |
-| CPA runs from a Compose file the user can edit | **B1**: add an OMC service to that file |
-| CPA in Docker without such a file, on another machine, or on the host listening on all interfaces | **B2**: add OMC from its own Compose file |
-| A published native asset matches the detected OS/architecture, and either CPA listens on `127.0.0.1` only on the host or Docker is unavailable | **C**: install the matching native executable on the host |
-| User explicitly requests source, or no published native asset matches the detected OS/architecture | **D**: build from source |
-| OMC already installed | Step 5 |
+| CPA is not installed | [New install](install.md#new-install) |
+| Existing editable CPA Compose project | [Add to Compose](install.md#add-to-the-existing-compose-file) |
+| Existing CPA reachable from a separate container | [Standalone](install.md#standalone) |
+| Host-loopback CPA, or Docker unavailable | [Native executable](install.md#native-executable) |
+| Explicit source request or unsupported native target | [From source](install.md#from-source) |
 
-Before starting, tell the user which path was chosen and what it will create.
+Explain what the chosen path creates before executing it. The updater has host-level
+Docker authority; disclose that before starting its service. If declined, omit the
+updater and leave ordinary OMC operation intact. Follow
+[coexistence](install.md#other-panels-and-usage-trackers) for competing collectors.
 
-## 3. Install
+## Verify and hand off
 
-Paths A and B2 use the Compose files each release publishes. They are the hardened
-equivalents of the minimal files in `docs/install.md` (read-only root filesystem,
-dropped capabilities, every setting in `deploy/.env`).
+Follow [Verifying the install](install.md#verifying-the-install). Check the actual
+browser/API base path, health, CPA management reachability and usage-consumer choice.
+Do not claim historical usage was imported or issue paid traffic just to populate a graph.
 
-Every container path below includes an `oh-my-cpa-updater` service. It lets the user
-update OMC and CPA from the console, and it mounts the Docker socket, which amounts to
-control of Docker on the host. Say so before starting it (rule 4). If the user declines,
-delete the `oh-my-cpa-updater` service block from the Compose file before running
-`docker compose up`; nothing else depends on it.
-
-### A. CPA and OMC together
-
-Use a new directory. If any target file already exists, stop and ask.
-
-```bash
-mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data,cpa/auths,cpa/logs,cpa/plugins} && cd oh-my-cpa
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o deploy/compose.full.yml
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o cpa/config.yaml
-sudo chown 10001:10001 oh-my-cpa-data
-
-cat > deploy/.env <<EOF
-CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
-OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-EOF
-chmod 600 deploy/.env
-
-docker compose -f deploy/compose.full.yml up -d
-```
-
-If port 8080 or 8317 is taken, add `OMCPA_BIND=127.0.0.1:<port>` or
-`CPA_BIND=127.0.0.1:<port>` to `deploy/.env`. Do not stop whatever holds the port.
-
-### B1. OMC in CPA's Compose file
-
-Find CPA's Compose file (`docker inspect <cpa container>` shows it in the
-`com.docker.compose.project.config_files` label). Show the user the change, then add
-these under `services:` and leave every existing line as it is:
-
-```yaml
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
-```
-
-Set the host in `OMCPA_CPA_BASE_URL` to CPA's service name in that file. If a
-top-level `volumes:` key exists, add `oh-my-cpa-data:` under it. Then, in the Compose
-file's directory:
-
-```bash
-cat >> .env <<EOF
-OMCPA_CPA_MANAGEMENT_KEY=replace-me
-OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-EOF
-chmod 600 .env
-```
-
-Have the user fill in the management key, apply the time-zone and usage-collection
-points from B2 (as `environment:` entries here), and start the new services alone:
-
-```bash
-docker compose up -d oh-my-cpa oh-my-cpa-updater
-```
-
-Name the services. A bare `docker compose up -d` would also recreate CPA if its
-definition or image had drifted. Check afterwards that CPA's container ID and start
-time are unchanged. The data lives in a Docker volume, so no `chown` is needed.
-
-### B2. OMC beside an existing CPA
-
-```bash
-mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data} && cd oh-my-cpa
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o deploy/compose.omc.yml
-sudo chown 10001:10001 oh-my-cpa-data
-
-cat > deploy/.env <<EOF
-OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
-OMCPA_CPA_MANAGEMENT_KEY=replace-me
-OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-EOF
-chmod 600 deploy/.env
-```
-
-Then adjust `deploy/.env`:
-
-- **CPA URL.** It must be reachable from inside OMC's container.
-  - CPA in Docker: add `OMCPA_NETWORK_NAME=<CPA's network>` and
-    `OMCPA_NETWORK_EXTERNAL=true`, and use `http://<CPA container name>:8317`.
-  - CPA on this host, all interfaces: keep `http://host.docker.internal:8317`.
-  - CPA elsewhere: its private or HTTPS address. Leave TLS verification on.
-- **Management key.** Ask the user to replace `replace-me` with the plaintext key.
-  The bcrypt hash in CPA's `config.yaml` will not work.
-- **Time zone.** Add `TZ=` matching CPA's if it is not UTC.
-- **Usage collection.** If something else already collects CPA's usage, ask the user:
-  stop that tool so OMC records requests, or keep it and add
-  `OMCPA_USAGE_INGEST_MODE=off` (OMC then manages CPA but shows no usage). If that
-  cannot be determined, use `off` and say so. Another management panel that does not collect
-  usage needs nothing; leave it running.
-
-```bash
-docker compose -f deploy/compose.omc.yml up -d
-```
-
-In B1 and B2 alike, CPA treats OMC's container as a remote client. If health reports
-`cpa_connected: false` with a correct URL and key, CPA has `management.allow-remote`
-turned off. Turning it on is a change to CPA: explain it and ask first.
-
-### C. Native executable
-
-Follow the Native executable section in `docs/install.md`. Detect the OS and CPU
-architecture first: Darwin, Windows, Linux or FreeBSD with amd64/arm64; `x86_64` maps
-to amd64 and `aarch64` to arm64. Pick a single published stable release containing
-that asset, download its archive and `checksums.txt` from the same tag, and compare
-its exact manifest entry with a locally calculated SHA-256 hash before extracting.
-Do not attempt to verify undownloaded entries or run a mismatched executable.
-
-Extract into a new user-owned directory. Copy the packaged `.env.example` to `.env`
-only if no existing file is present. Generate a master key without printing it and
-ask the user to fill in the plaintext CPA management key. The template binds loopback,
-serves the site root and writes `./data`; preserve those defaults unless the user
-approves a change. Leave `OMCPA_VERSION` unset, match CPA's `TZ`, and apply B2's
-usage-reader ownership decision. A host CPA listening on loopback needs no
-remote-management edit.
-Restrict the environment/data files to the service account (Unix permissions or Windows
-ACLs). Use the OS's certificate roots; the binary already embeds IANA zone data.
-
-Run `./oh-my-cpa` or `.\oh-my-cpa.exe` from the extracted directory, then verify as in
-step 4. Do not bypass macOS/Windows trust controls: unsigned binaries may require an
-explicit user decision after checksum verification. Offer a service manager only if
-requested, retaining the working directory and data path.
-
-### D. From source
-
-Needs Go 1.26+, Node.js 22+ and pnpm 11+.
-
-```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git && cd oh-my-cpa
-pnpm install --frozen-lockfile
-cp -n .env.example .env
-```
-
-In `.env`, set `OMCPA_MASTER_KEY` (`openssl rand -hex 32`), `OMCPA_CPA_BASE_URL`, and a
-placeholder `OMCPA_CPA_MANAGEMENT_KEY` for the user to fill in. Apply the time zone
-and usage-collection points from B2. Then:
-
-```bash
-pnpm build
-go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
-./bin/oh-my-cpa
-```
-
-It runs in the foreground. Offer a systemd unit or similar only if the user wants one.
-
-## 4. Verify
-
-```bash
-curl -fsS http://127.0.0.1:8080/api/healthz
-```
-
-The install is done only when the response has `"status":"ok"`, `"database_status":"ok"`
-and `"cpa_connected":true`. A container that Docker calls healthy is not proof: OMC
-stays up with `"status":"degraded"` when it cannot reach CPA. If the check fails, report
-the actual reason. Common ones:
-
-| Symptom | Cause |
-| --- | --- |
-| Database will not open | The `oh-my-cpa-data` directory is not owned by `10001:10001` (A and B2) |
-| `degraded`, `cpa_connected: false` | Wrong URL or key, or CPA refuses remote management |
-| `cpa_management_api: unsupported` | CPA is older than v8.0.0; the user must upgrade it |
-
-On a container path with the updater, also check that it is running and that the console
-has not lost it:
-
-```bash
-docker inspect -f '{{.State.Health.Status}}' oh-my-cpa-updater
-```
-
-`healthy` is the expected answer. With the updater in CPA's own Compose file (B1) the
-container is named `<project>-oh-my-cpa-updater-1`; `docker compose ps` lists it.
-
-## 5. Upgrading an existing OMC
-
-Do not reinstall. For a native installation, stop only OMC, back up its `.env` and
-data directory, verify/extract the new archive separately and replace only the
-executable. Preserve its service account, working directory, data path and master
-key, restart and verify as in step 4. Restore the corresponding data backup to return
-to an older executable; migrations are forward-only.
-
-For a container installation, find the existing Compose file, data directory and
-`.env`, and back up the data directory and `.env`.
-
-An existing container's explicit `OMCPA_BASE_PATH` is preserved by both the updater and
-`docker compose pull` with `docker compose up -d`. Do not remove or rewrite it: the
-deployment's current URL and reverse-proxy rule remain valid. Only a new installation
-that does not set the variable uses the site root. Before replacing a container that
-has no `OMCPA_BASE_PATH`, determine the path its current public URL and proxy use; add
-that value explicitly if the deployment must keep its existing entry point.
-
-Then check for the updater:
-
-```bash
-docker ps --filter name=oh-my-cpa-updater --format '{{.Names}} {{.Status}}'
-```
-
-**The updater is running.** The user can update from the console's System Information
-page, and nothing needs to be run. To upgrade for them now, use the Compose commands
-below and include `oh-my-cpa-updater` in both.
-
-**No updater, and OMC's image is not pinned to a version.** One command adds the updater
-and brings OMC to the current release, without editing the Compose file. It mounts the
-Docker socket into a container, so explain that and get the user's agreement first
-(rule 4):
-
-```bash
-docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
-```
-
-Keep `--pull always`: without it Docker runs the older `latest` the host already has,
-which has no updater. It prints the console container it found and what it did. If it reports more than one
-Oh My CPA container, rerun it with `--container <name>`. It does not touch CPA (rule 2).
-Afterwards `docker inspect -f '{{.State.Health.Status}}' oh-my-cpa-updater` must print
-`healthy`. `docker rm -f oh-my-cpa-updater` undoes it.
-
-**The user declines, or the image is pinned.** Upgrade through Compose:
-
-```bash
-docker compose -f deploy/compose.omc.yml pull oh-my-cpa
-docker compose -f deploy/compose.omc.yml up -d --no-deps oh-my-cpa
-```
-
-Use `compose.full.yml` if that is the file in place. When OMC is a service in CPA's
-Compose file, run `docker compose pull oh-my-cpa` and `docker compose up -d oh-my-cpa`
-in that directory. For a pinned image, change the pin to the wanted release first; do
-not unpin it without asking.
-
-Database migrations only go forward, so the way back to an older version is to restore
-the backup. Verify as in step 4.
-
-## 6. Tell the user
-
-- The console address, `http://127.0.0.1:8080/` unless the port was changed. On a
-  remote server, give them `ssh -L 18080:127.0.0.1:8080 user@server` and
-  `http://127.0.0.1:18080/`.
-- That the sign-in password is the CPA management key, and which file holds it. Not
-  the key itself.
-- To back up the `.env` file and OMC's data (the `oh-my-cpa-data` directory or volume). Without `OMCPA_MASTER_KEY` the data
-  cannot be read.
-- Whether OMC is collecting usage, and why not if it is off.
-- Whether the updater is installed. If it is: later releases of OMC and CPA can be
-  installed from the console's System Information page, and the `oh-my-cpa-updater`
-  container holds the Docker socket. If it is not: the command that adds it.
-- Anything changed outside the new `oh-my-cpa` directory.
-
-If a reverse proxy sits in front of OMC, forward the site root unchanged and confirm
-`curl -fsS <public address>/api/healthz` succeeds. Give OMC its own hostname when CPA
-already owns the same hostname; use an explicit `OMCPA_BASE_PATH` only when a shared
-hostname and sub-path are required.
-
-More detail, including HTTPS behind a reverse proxy and every setting, is in
-`docs/install.md`.
-
-A working install needs nothing back. Ask whether to star the project, and run
-`gh api -X PUT user/starred/WizisCool/oh-my-cpa` if the answer is yes; the command needs
-`gh` authenticated on this machine.
+Report the console URL, deployment and data locations, selected update method, how to
+start/stop it and any unresolved warnings. Say that the existing CPA management key is
+the sign-in password without repeating the value. Link the operator to
+[Operations](operations.md) and the [backup/restore runbook](ops/sqlite-operations.md).

@@ -24,7 +24,7 @@ function layoutTopWithin(element: HTMLElement, container: HTMLElement | null): n
 /**
  * Slides an element from where it was laid out to where it is now (FLIP): the
  * layout changes at once and a transform carries the element across, so a
- * reflow never animates a layout property (docs/design.md §7 rules 1 and 9). The
+ * reflow never animates a layout property. The
  * slide is additive, so it composes with an entrance still running.
  */
 export function useFlip(ref: React.RefObject<HTMLElement | null>, containerRef: React.RefObject<HTMLElement | null>) {

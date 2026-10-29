@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { clockOffset, observeServerClock, toBrowserTime } from '../web/src/types/serverClock.ts';
 
 const HEADER = 'Thu, 08 Oct 2026 12:00:00 GMT';

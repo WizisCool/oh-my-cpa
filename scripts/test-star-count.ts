@@ -6,7 +6,7 @@
  * that does not exist.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { formatStarCount } from '../web/src/utils/format.ts';
 
 test('a count below a thousand is shown exactly', () => {

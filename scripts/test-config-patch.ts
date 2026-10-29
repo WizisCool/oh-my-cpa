@@ -3,8 +3,8 @@
  * the schema it is computed over.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { parseDocument } from '../node_modules/.pnpm/yaml@2.9.0/node_modules/yaml/browser/index.js';
+import { test } from 'vitest';
+import { parseDocument } from 'yaml';
 
 import { getFieldSemanticValue, updateFieldWithBaseline } from '../web/src/components/config/configDirty.ts';
 import { computeConfigChanges, rebaseDraft } from '../web/src/components/config/configPatch.ts';

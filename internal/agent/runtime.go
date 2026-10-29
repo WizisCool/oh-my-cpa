@@ -98,7 +98,7 @@ type Turn struct {
 	// Present is the presentation the operator asked this turn for with a composer command. It is
 	// kept on the turn so a run that resumes after an approval still honours it.
 	Present string `json:"present,omitempty"`
-	// Images are the pictures the operator sent with the message, by reference (ADR 0075).
+	// Images are the pictures the operator sent with the message, by reference.
 	Images []gateway.AgentImage `json:"images,omitempty"`
 }
 
@@ -122,13 +122,13 @@ type Conversation struct {
 
 // Input is one run request. There is no consent flag: the page states, beside the composer, that
 // a message and the data the agent reads go to the selected CPA model, and sending is the act the
-// notice describes (ADR 0027).
+// notice describes.
 //
 // A run either carries a new message or resumes the turn that stopped on the operator; Resume then
 // names the operations it continues from, which must be exactly the ones the last turn is waiting
 // on. Language is the console's reading language, used only as the reply language's default.
 // DisplayTools are validated against the server's own set; their schemas are never the client's.
-// MAX_MESSAGE_BYTES bounds one operator message, attached text files included (ADR 0074). The
+// MAX_MESSAGE_BYTES bounds one operator message, attached text files included. The
 // AG-UI decoder applies the same bound to the envelope before the message reaches the runtime.
 const MAX_MESSAGE_BYTES = 48 << 10
 
@@ -143,7 +143,7 @@ type Input struct {
 	Endpoint string
 	Resume   []string
 	Language string
-	// DisplayTools names the display tools the console can draw for this run (ADR 0107).
+	// DisplayTools names the display tools the console can draw for this run.
 	DisplayTools []string
 	// ReplaceTurn names the newest turn the message takes the place of, for a retry or an edit.
 	ReplaceTurn string
@@ -160,13 +160,13 @@ func (input Input) isMessage() bool {
 	return input.Message != "" || len(input.Images) > 0 || input.ReplaceTurn != ""
 }
 
-// The images of a conversation (ADR 0075). Their bytes are stored as documents of their own
+// The images of a conversation. Their bytes are stored as documents of their own
 // beside the conversation, so the conversation document - rewritten after every capability call -
 // stays the size of its text, and a turn that waits on the operator can be resumed with the
 // pictures it started with.
 const (
 	IMAGE_DOCUMENT = "image"
-	// MAX_IMAGES_PER_REQUEST matches ADR 0075: later context keeps the newest images only.
+	// MAX_IMAGES_PER_REQUEST bounds image context; later context keeps the newest images only.
 	MAX_IMAGES_PER_REQUEST = 8
 	// IMAGE_CLEANUP_TIMEOUT bounds a deferred deletion: the write that orphaned the bytes is already
 	// committed, so the cleanup is detached from a request that may already be gone.

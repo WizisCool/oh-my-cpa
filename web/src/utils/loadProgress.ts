@@ -11,7 +11,7 @@
  * clock and lifecycle; `ProgressBar` owns the DOM and CSS activity marker.
  */
 
-/** The work must still be in flight after this long before the bar paints (design.md §7 rule 4). */
+/** The work must still be in flight after this long before the bar paints. */
 export const PROGRESS_SHOW_DELAY_MS = 200;
 /** The most of its share a pending task can earn before it settles. */
 export const PENDING_CREDIT_CAP = 0.85;

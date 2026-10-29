@@ -12,7 +12,7 @@ import { OPENUI_TOOL_PROVIDER } from '../../../agent/openui/toolProvider';
 import { fenceRemoteAssets } from '../../../agent/openui/noRemoteAssets';
 
 /**
- * The official OpenUI tool renderers (ADR 0107), configured for OMC.
+ * The official OpenUI tool renderers, configured for OMC.
  *
  * `present_openui` and `prompt_openui` are drawn by `@openuidev/assistant-ui` exactly as the
  * integration ships them; OMC contributes only what is its own: the tool provider that connects a
@@ -63,7 +63,7 @@ function isWebURL(value: unknown): value is string {
  * Where a drawn interface stands in an answer.
  *
  * The program is model output, so the assets it names are fenced here rather than trusted: a remote
- * image would let a steered answer report what its reader looked at (ADR 0107). The fence follows
+ * image would let a steered answer report what its reader looked at. The fence follows
  * mutations because a program streams its statements into this box.
  */
 export function OpenUISurface({ tool, children }: { tool: string; children: React.ReactNode }) {

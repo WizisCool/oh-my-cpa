@@ -17,7 +17,7 @@ import (
 //
 // It opts into the values, which is what the key page does: the alias overlay is
 // joined to the operator's draft by the key text, so this is the one reader of the
-// list that needs it (ADR 0015). Matching on the mask instead would not identify a
+// list that needs it. Matching on the mask instead would not identify a
 // key - two keys can share one.
 func aliasFor(t *testing.T, client *http.Client, baseURL, rawKey string) ClientAPIKeyItemDTO {
 	t.Helper()

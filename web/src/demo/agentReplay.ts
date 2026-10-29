@@ -34,7 +34,7 @@ const THOUGHT_CHUNK = 14;
 const PROGRAM_ARGUMENT_CHUNK = 72;
 
 /**
- * Replays the recorded Agent run as the events a live run sends (ADR 0092).
+ * Replays the recorded Agent run as the events a live run sends.
  *
  * The demonstration calls no model, so this stands where the run request does and yields the
  * same AG-UI stream the server's translator would have: a round per model request, reasoning and

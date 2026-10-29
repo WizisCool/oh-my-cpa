@@ -5,9 +5,9 @@ import { IMAGE_TYPES, MAX_IMAGES, readAgentImage } from '../../components/worksp
  * What an Agent message can carry beside its words.
  *
  * A text file travels inside the message itself, as a `<file name="...">` block after the
- * operator's words (ADR 0074): the server stores one string per message and resumes a turn from
+ * operator's words: the server stores one string per message and resumes a turn from
  * what it stored. An image has no such form, so it travels beside the message as bytes, and the
- * server keeps it next to the conversation for as long as its turn lasts (ADR 0075).
+ * server keeps it next to the conversation for as long as its turn lasts.
  */
 /** Every file of one message together; with the operator's words it stays under the server's message limit. */
 export const MAX_ATTACHED_BYTES = 40 << 10;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { createFrameClock } from '../web/src/types/frameClock.ts';
 import { elapsedLabel } from '../web/src/types/liveElapsed.ts';
 

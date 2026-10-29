@@ -14,8 +14,7 @@
  *
  * Measured: fitting the six built-in palettes in OKLCH and in raw sRGB gives the same
  * residual (mean |ΔL| 0.011 for the hover step), so the space is not what limits fidelity
- * to the old hand-tuned values - the spread between those values is. See
- * `docs/adr/0011-theme-modes-and-derived-palettes.md`.
+ * to the old hand-tuned values - the spread between those values is.
  */
 
 export type Rgb = readonly [number, number, number];

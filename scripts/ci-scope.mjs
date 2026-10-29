@@ -11,15 +11,15 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|scripts\/(?:ci-scope|affected-files|affected-checks|verify-fast|parallel-checks)\.mjs)$/;
+export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/(?:workflows\/ci\.yml|actions\/.*)|scripts\/(?:ci-scope|affected-files|affected-checks|verify-fast|parallel-checks)\.mjs)$/;
 // Go tests also read a few files outside the module: the console's public assets, the
 // committed demonstration dataset and the shared API contract fixtures.
 const GO = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^(?:internal|cmd|migrations)\/|^scripts\/fixture\/|^scripts\/fake-cpa\.mjs$|^scripts\/browser-acceptance\.mjs$|^web\/public\/|^web\/index\.html$|^deploy\/cloudflare\/data\/|^scripts\/acceptance\/contracts\/)/;
-const WEB = /^(?:web\/|scripts\/acceptance\/|scripts\/testing\/|scripts\/test-[^/]+\.(?:ts|mjs)$|scripts\/check-ui|scripts\/browser-acceptance\.mjs$|deploy\/cloudflare\/)/;
+const WEB = /^(?:vitest\.(?:config|workspace)\.[cm]?[jt]s$|web\/|scripts\/acceptance\/|scripts\/testing\/|scripts\/test-[^/]+\.(?:ts|mjs)$|scripts\/check-ui|scripts\/(?:browser-acceptance|build-demo|sync-web-dist|check-bundle-budget|install-chromium|verify-demo|demo-smoke)\.mjs$|deploy\/cloudflare\/)/;
 // Paths only the repository lane reads: prose, the plugin registry (validated there by its
 // own Go test), workflow and repository scripts. The repository lane runs on every event, so naming them here is what keeps a
 // documentation change from paying for a browser.
-const REPOSITORY = /(?:\.md$|^docs\/|^plugins\/|^\.github\/|^scripts\/[^/]+\.(?:mjs|ts|json)$|^deploy\/[^/]+\.ya?ml$|^LICENSE|^\.coderabbit\.yaml$|^\.gitignore$|^\.gitattributes$)/;
+const REPOSITORY = /(?:\.md$|^docs\/|^plugins\/|^\.github\/|^scripts\/[^/]+\.(?:mjs|ts|json)$|^deploy\/[^/]+\.ya?ml$|^LICENSE|^\.coderabbit\.yaml$|^\.gitignore$|^\.gitattributes$|^\.?lychee(?:\.toml|ignore)$)/;
 
 export function scopeOf(files) {
   let isGo = false;
@@ -44,8 +44,8 @@ function isFullRun(env) {
 function changedFiles(base) {
   if (!base || /^0+$/.test(base)) return undefined;
   try {
-    return execFileSync('git', ['diff', '--name-only', '--no-renames', `${base}...HEAD`], { encoding: 'utf8' })
-      .split('\n').filter(Boolean);
+    return execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', `${base}...HEAD`], { encoding: 'utf8' })
+      .split('\0').filter(Boolean);
   } catch {
     return undefined;
   }

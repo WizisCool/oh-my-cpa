@@ -9,9 +9,9 @@ export type AnswerStep = { kind: 'thought'; text: string } | { kind: 'call'; tra
 /**
  * One block of an answer as a reader meets it, top to bottom.
  *
- * `chain` is a stretch of reasoning and calls drawn as one timeline (ADR 0084). `interface` is an
+ * `chain` is a stretch of reasoning and calls drawn as one timeline. `interface` is an
  * OpenUI program drawn where the model wrote it - a `present_openui` or `prompt_openui` call, or
- * answer text that is itself a program (ADR 0107); an OpenUI call that failed is a `call` row
+ * answer text that is itself a program; an OpenUI call that failed is a `call` row
  * standing on its own, which is where its code and detail are read. Reasoning with no call beside
  * it needs no timeline around it and is a `thought` of its own.
  */

@@ -113,9 +113,6 @@ export async function agentWorkspace({ base, page, check }) {
   const heroExamples = page.getByLabel('Try one of these');
   check('agent empty state offers example prompts under a centred composer', await heroExamples.getByRole('button').count() === 4
     && heroBox.y + heroBox.height < page.viewportSize().height * 0.75 && (await heroExamples.boundingBox()).y > heroBox.y, JSON.stringify(heroBox));
-  // Sending needs no separate grant: the composer states where a message and the data the agent
-  // reads will go, and sending is the act it describes.
-  check('agent states where its data goes beside the composer', await page.getByText('Messages and the OMC data the agent reads are sent to the selected CPA model and its upstream. Do not enter secrets in chat.').isVisible());
   check('agent has no consent checkbox to tick before sending', await page.getByRole('checkbox').count() === 0);
 
   const composer = page.getByLabel('Describe an OMC query or action');

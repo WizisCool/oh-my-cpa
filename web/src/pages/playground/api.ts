@@ -7,8 +7,8 @@ import type { ChatRequest, StreamEvent } from './state';
 /**
  * Streams one chat request's events to `onEvent`.
  *
- * The demonstration calls no model: it replays a recorded answer as the same events instead
- * (ADR 0092), loaded on demand so a self-hosted console never fetches the recording.
+ * The demonstration calls no model: it replays a recorded answer as the same events
+ * and loads it on demand so a self-hosted console never fetches the recording.
  */
 export async function streamChat(request: ChatRequest, signal: AbortSignal, onEvent: (event: StreamEvent) => void, run: { id: string; turn?: unknown; replay: () => void; isRecovery?: boolean; language?: string }): Promise<void> {
   if (isDemoMode()) {

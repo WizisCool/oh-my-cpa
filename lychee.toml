@@ -1,0 +1,2 @@
+# GitHub image-theme selectors are rendering hints, not document anchors.
+exclude = ['#gh-(dark|light)-mode-only$']

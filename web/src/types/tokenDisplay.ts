@@ -130,8 +130,7 @@ const FULL = new Intl.NumberFormat('en');
  *
  * A stored `zh` resolves back to the compact form whenever the reading language is
  * not Chinese, because a Malay console printing `12亿` beside a Malay legend would
- * mix two languages in one reading - the same defect `docs/design.md` forbids for
- * copy, applied to the one number format that carries a language.
+ * mix two languages in one reading. The compact form follows the interface's reading language.
  *
  * The *stored* value is deliberately left alone: it is the operator's choice, and
  * switching the console back to Chinese must restore it rather than silently

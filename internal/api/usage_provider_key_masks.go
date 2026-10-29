@@ -37,7 +37,7 @@ import (
  *     worse than no mask at all. This is the same rule the repository applies when
  *     it joins a record to a discovered resource.
  *   - **The plaintext key never leaves this process** except toward the credential
- *     list the operator is editing, which is what ADR 0015 fixes. Only
+ *     list the operator is editing. Only
  *     `security.MaskSecret` output is ever stored in this cache or returned to the
  *     browser, and the browser renders it as a label without asking for anything.
  *

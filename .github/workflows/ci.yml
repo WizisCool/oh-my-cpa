@@ -3,8 +3,8 @@ name: ci
 # A pull request runs the lanes its paths reach: the static gates, a browser smoke run
 # and the probe scenarios its frontend change selects. The full catalog (built-artifact
 # acceptance, the demonstration and every probe) runs on a push to main, nightly,
-# on demand, and on a pull request labelled `full-ci`. A skipped job reports success,
-# so the required `static`, `browser` and `probes` checks stay satisfiable either way.
+# on demand, and on a pull request labelled `full-ci`. Aggregates require selected
+# jobs to succeed and accept skipped jobs only when their scope is not selected.
 on:
   push:
     branches: [main]
@@ -21,9 +21,9 @@ permissions:
   actions: read
 
 concurrency:
-  # The event name keeps the nightly run and a push to main from cancelling each other.
-  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PRs are disposable; each main/release-candidate revision needs a verdict.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -59,12 +59,21 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: 1.27.3
-          cache: true
+        uses: ./.github/actions/setup-go
+      - name: Install Go test reporter
+        run: go install "gotest.tools/gotestsum@v$(node -p 'require("./scripts/tools-versions.json").gotestsum.version')"
       - name: Test
-        run: go test ./...
+        run: |
+          mkdir -p tmp/go-tests
+          gotestsum --format pkgname --junitfile tmp/go-tests/junit.xml --jsonfile tmp/go-tests/events.json -- ./...
+      - name: Upload Go test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: go-tests
+          path: tmp/go-tests/
+          if-no-files-found: ignore
+          retention-days: 7
       # golangci-lint's standard set includes vet; .golangci.yml says what it excludes.
       - name: Lint
         run: |
@@ -84,15 +93,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
       - name: Type check, logic, components and antd lint
         if: needs.changes.outputs.full == 'true'
         run: pnpm verify:static:frontend
@@ -101,6 +103,14 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: pnpm test:frontend:affected
+      - name: Upload frontend test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: frontend-tests
+          path: tmp/frontend-tests/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Verify clean generated state
         run: test -z "$(git status --porcelain)"
 
@@ -115,41 +125,32 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Verify repository anchors
-        run: |
-          git merge-base --is-ancestor 1d0fd8d85ddee1f2ae5e803453904b23128d6c7d HEAD
-          git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: 1.27.3
-          cache: true
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/setup-go
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
       - name: Lint workflows
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           pnpm verify:workflow:lint
       - name: Verify pinned toolchain
         run: pnpm verify:toolchain:strict
+      - name: Cache verification tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            .tools/gitleaks
+            .tools/lychee
+          key: verification-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Check offline documentation links and fragments
+        run: pnpm check-docs
       - name: Repository gates
         run: pnpm verify:static:repository
       # Every installation's gateway reads the published registry, and a registry-only
       # change reaches no other lane.
       - name: Validate the plugin registry
+        if: needs.changes.outputs.go != 'true'
         run: go test ./internal/pluginregistry -run '^TestPublishedRegistryIsReadable$'
-      - name: Cache gitleaks
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .tools/gitleaks
-          key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
       - name: Scan worktree and history
         run: |
           pnpm verify:secrets:worktree
@@ -165,13 +166,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every static lane that ran
+      - name: Require every selected static lane
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          CHANGES: ${{ needs.changes.result }}
+          REPOSITORY: ${{ needs.static-repository.result }}
+          GO_SELECTED: ${{ needs.changes.outputs.go }}
+          GO_RESULT: ${{ needs.static-go.result }}
+          WEB_SELECTED: ${{ needs.changes.outputs.web }}
+          WEB_RESULT: ${{ needs.static-frontend.result }}
         run: |
-          for result in $RESULTS; do
-            case "$result" in success|skipped) ;; *) echo "a static lane ended $result"; exit 1 ;; esac
-          done
+          test "$CHANGES" = success
+          case "$GO_SELECTED:$WEB_SELECTED" in true:true|true:false|false:true|false:false) ;; *) exit 1 ;; esac
+          test "$REPOSITORY" = success
+          if [ "$GO_SELECTED" = true ]; then test "$GO_RESULT" = success; else test "$GO_RESULT" = skipped; fi
+          if [ "$WEB_SELECTED" = true ]; then test "$WEB_RESULT" = success; else test "$WEB_RESULT" = skipped; fi
 
   browser:
     needs: changes
@@ -184,40 +192,20 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: 1.27.3
-          cache: true
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Cache Playwright Chromium
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-      # The application binary embeds `internal/web/dist`, so it is compiled only after
-      # `pnpm build` has finished writing it; Chromium's install overlaps the build.
-      - name: Prepare Chromium and build embedded SPA
+        uses: ./.github/actions/setup-go
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
+      - name: Set up Chromium
+        uses: ./.github/actions/setup-browser
+      # Compile only after the SPA build; the Go binary embeds its completed output.
+      - name: Build embedded SPA and browser fixtures
         id: prepare
         run: |
           set -o pipefail
-          node scripts/install-chromium.mjs > tmp-install.log 2>&1 &
-          install_pid=$!
           pnpm build
           mkdir -p tmp
           CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage
           CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
-          install_status=0
-          wait "${install_pid}" || install_status=$?
-          cat tmp-install.log && rm tmp-install.log
-          exit "${install_status}"
       - name: Verify loading boundaries and report bundle growth
         env:
           BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -268,37 +256,29 @@ jobs:
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.full != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Cache Playwright Chromium
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-      - name: Install Chromium
-        run: node scripts/install-chromium.mjs
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
+      - name: Set up Chromium
+        uses: ./.github/actions/setup-browser
       - name: Run the affected scenarios
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm check:ui --base "${BASE}"
+        run: pnpm check:ui --base "${BASE}" --shard ${{ matrix.shard }}/3
       - name: Upload probe failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: probe-failure-affected
+          name: probe-failure-affected-${{ matrix.shard }}
           path: tmp/probe-failure/
           if-no-files-found: ignore
           retention-days: 7
@@ -306,7 +286,6 @@ jobs:
   probes-full:
     needs: changes
     if: needs.changes.outputs.full == 'true'
-    name: probes-full (${{ matrix.shard }}/3)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -318,22 +297,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Cache Playwright Chromium
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-      - name: Install Chromium
-        run: node scripts/install-chromium.mjs
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
+      - name: Set up Chromium
+        uses: ./.github/actions/setup-browser
       - name: Run the probe shard
         run: pnpm verify:probes --shard ${{ matrix.shard }}/3
       - name: Upload probe failure diagnostics
@@ -351,20 +318,34 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every probe job that ran
+      - name: Require all selected verification
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          CHANGES: ${{ needs.changes.result }}
+          STATIC: ${{ needs.static.result }}
+          BROWSER: ${{ needs.browser.result }}
+          GO_SELECTED: ${{ needs.changes.outputs.go }}
+          WEB_SELECTED: ${{ needs.changes.outputs.web }}
+          FULL_SELECTED: ${{ needs.changes.outputs.full }}
+          AFFECTED: ${{ needs.probes-affected.result }}
+          FULL: ${{ needs.probes-full.result }}
         run: |
-          for result in $RESULTS; do
-            case "$result" in success|skipped) ;; *) echo "a probe job ended $result"; exit 1 ;; esac
+          test "$CHANGES" = success
+          for selected in "$GO_SELECTED" "$WEB_SELECTED" "$FULL_SELECTED"; do
+            case "$selected" in true|false) ;; *) exit 1 ;; esac
           done
-      - name: Checkout cost policy
-        if: success()
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Report verification cost and reject sustained growth
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/parallel-checks.mjs --ci-cost
+          test "$STATIC" = success
+          if [ "$GO_SELECTED" = true ] || [ "$WEB_SELECTED" = true ]; then
+            test "$BROWSER" = success
+          else
+            test "$BROWSER" = skipped
+          fi
+          if [ "$FULL_SELECTED" = true ]; then
+            test "$FULL" = success
+            test "$AFFECTED" = skipped
+          elif [ "$WEB_SELECTED" = true ]; then
+            test "$AFFECTED" = success
+            test "$FULL" = skipped
+          else
+            test "$AFFECTED" = skipped
+            test "$FULL" = skipped
+          fi

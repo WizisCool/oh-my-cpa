@@ -82,7 +82,7 @@ svg{flex-shrink:0}
 .omitted{margin:-12px 0 0}
 
 /* The answer's working, drawn as the conversation draws it: a timeline of disclosures on a rail
-   (ADR 0084), with reasoning in a quieter ink. The values are the thread's own. */
+   with reasoning in a quieter ink. The values are the thread's own. */
 details>summary{list-style:none;cursor:pointer;user-select:none}
 details>summary::-webkit-details-marker{display:none}
 .caret{color:var(--meta,var(--muted));transition:transform 50ms}

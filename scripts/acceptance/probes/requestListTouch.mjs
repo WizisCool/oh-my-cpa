@@ -1,7 +1,7 @@
 import { until } from '../harness.mjs';
 
 /**
- * The request list under a finger (docs/design.md §7, ADR 0109).
+ * The request list under a finger.
  *
  * On a phone the list is the page's only scroller, and the browser scrolls it: the list is an
  * ordinary overflowing element there, not a virtualized one redrawn by script. A drag moves the list

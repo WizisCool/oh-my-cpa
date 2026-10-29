@@ -102,9 +102,8 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, MessageKey> = {
  * mode for the same reason, and says so while it does.
  *
  * It carries a single title and no subtitle, and each group is an open list of labelled rows rather
- * than a card: `docs/design.md` §3 allows a subtitle only when it carries live data, and prefers
- * open section lists for settings and management over heavy wrappers. A sentence explaining *why* a
- * switch exists is documentation, not interface.
+ * than a card, keeping the controls easy to scan without repeated headings or wrappers.
+ * A sentence explaining *why* a switch exists is documentation, not interface.
  *
  * The chart grouping deliberately does **not** appear here. It changes what the two model panels
  * plot, so it belongs on those panels, where the operator reading them is - a second control on a

@@ -1,7 +1,7 @@
 /**
  * The inference surface of CPA a conversation is sent to. All three take the same conversation;
  * the server writes the body each one expects and reads its stream back into one set of events,
- * so the choice changes what reaches CPA and nothing about how an answer is drawn (ADR 0088).
+ * so the choice changes what reaches CPA and nothing about how an answer is drawn.
  */
 export type InferenceEndpoint = 'chat' | 'responses' | 'messages';
 

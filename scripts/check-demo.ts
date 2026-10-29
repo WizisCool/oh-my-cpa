@@ -133,7 +133,7 @@ export async function checkDemo(root = ROOT, {
     }
   }
 
-  // The recorded runs the demonstration replays (ADR 0092) are public for the same reason, and
+  // The recorded runs the demonstration replays are public for the same reason, and
   // they began as a real deployment's conversation: a key fingerprint is the identifier a
   // recording is most likely to carry in unnoticed.
   for (const name of RECORDINGS) {

@@ -38,7 +38,7 @@ interface AgentRuntimeOptions {
 }
 
 /**
- * The ExternalStore adapter: the only module that knows assistant-ui's runtime API (ADR 0041).
+ * The ExternalStore adapter: the only module that knows assistant-ui's runtime API.
  *
  * OMC's own state - the stored conversation and the live run's frame - is converted to messages
  * here and handed to the framework to render; every action the framework offers comes back

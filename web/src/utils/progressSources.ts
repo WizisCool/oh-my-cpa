@@ -40,7 +40,7 @@ function isPolled(query: ProgressQuery): boolean {
  * A read counts when nothing is on screen for it yet (a first load, a new key, a retry after a
  * failure), when an action invalidated data that last read successfully, or when a query nobody
  * polls is re-read (a refresh button). A polled query re-reading the data it already shows is
- * background refresh and stays invisible (docs/design.md §7) - including the poll after a failed
+ * background refresh and stays invisible - including the poll after a failed
  * one, since a failed fetch also marks its query invalidated.
  *
  * This is decided from the query rather than by each poll opting in: an opt-in that one poll forgot

@@ -12,8 +12,8 @@ import { isDemoMode } from '../types/demoMode';
  * `stream_incomplete` rather than being skipped, because a skipped event may be the interrupt the
  * operator has to answer.
  *
- * The demonstration calls no model: it replays a recorded run as the same events instead
- * (ADR 0092). The replay is loaded on demand, so a self-hosted console never fetches it.
+ * The demonstration calls no model: it replays a recorded run as the same events
+ * and loads the replay on demand, so a self-hosted console never fetches it.
  */
 export async function* runAgent(request: AgentRunRequest, signal: AbortSignal, replay: () => void = () => {}, isRecovery = false): AsyncGenerator<AgentEvent> {
   if (isDemoMode()) {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import type { QuotaItem } from '../web/src/types/quota.ts';
 import { outlivedResetLine, refreshFailureLine } from '../web/src/pages/quota/quotaAttempt.ts';
 

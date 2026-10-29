@@ -1,5 +1,6 @@
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
-import { guardBrowserContext } from '../acceptance/browser-guard.mjs';
+import { createProblemLedger, guardBrowserContext } from '../acceptance/browser-guard.mjs';
+import { withinBudget } from '../acceptance/lifecycle.mjs';
 import { installRoutes } from '../acceptance/probe.mjs';
 
 type Ledger = Awaited<ReturnType<typeof guardBrowserContext>>;
@@ -15,12 +16,35 @@ export type Probe = {
   expectProblem: Ledger['expect'];
 };
 
-export const test = base.extend<{ probe: Probe }>({
-  probe: async ({ context, page, baseURL }, use, testInfo) => {
+type BrowserAudit = { ledger: Ledger; page?: Page; errors: string[]; trail: string[] };
+
+export const test = base.extend<{ probe: Probe; browserAudit: BrowserAudit }>({
+  // Automatic fixtures start before the native page/context and finish after
+  // their teardown, even if a test or a diagnostic read throws.
+  browserAudit: [async ({}, use, testInfo) => {
+    const audit: BrowserAudit = { ledger: createProblemLedger(), errors: [], trail: [] };
+    try { await use(audit); }
+    finally {
+      const faults = audit.ledger.unexpected();
+      if (testInfo.status !== testInfo.expectedStatus || faults.length) {
+        await testInfo.attach('browser-state', {
+          body: JSON.stringify({ url: audit.page?.url(), errors: audit.errors, trail: audit.trail, faults }, null, 2),
+          contentType: 'application/json',
+        });
+      }
+      expect(faults, 'no unexpected browser, fixture, outbound or late teardown faults').toEqual([]);
+    }
+  }, { auto: true }],
+  baseURL: async ({}, use) => {
+    const url = process.env.OMC_PROBE_BASE_URL;
+    if (!url) throw new Error('Playwright did not receive an owned probe server URL');
+    await use(url);
+  },
+  probe: async ({ context, page, baseURL, browserAudit }, use, testInfo) => {
     if (!baseURL) throw new Error('A probe must own its server URL');
-    const ledger = await guardBrowserContext(context, [baseURL]);
-    const errors: string[] = [];
-    const trail: string[] = [];
+    const { ledger, errors, trail } = browserAudit;
+    browserAudit.page = page;
+    await guardBrowserContext(context, [baseURL], { ledger });
     await context.addInitScript(() => {
       if (!/^https?:$/.test(location.protocol)) return;
       if (!localStorage.getItem('omc-theme')) localStorage.setItem('omc-theme', 'omc-light');
@@ -45,17 +69,22 @@ export const test = base.extend<{ probe: Probe }>({
     try {
       await use(probe);
     } finally {
-      // Keep the domain fault boundary after context teardown as well: pending
-      // request/console events must not disappear behind a green test body.
-      if (testInfo.status !== testInfo.expectedStatus || ledger.unexpected().length) {
-        await testInfo.attach('browser-state', { body: JSON.stringify({ url: page.url(), errors, trail, faults: ledger.unexpected() }, null, 2), contentType: 'application/json' });
-        if (!page.isClosed()) {
-          await testInfo.attach('page-dom', { body: await page.content(), contentType: 'text/html' });
-          await testInfo.attach('page-screenshot', { body: await page.screenshot({ fullPage: true, timeout: 2000 }), contentType: 'image/png' });
+      if ((testInfo.status !== testInfo.expectedStatus || ledger.unexpected().length) && !page.isClosed()) {
+        try {
+          await testInfo.attach('page-dom', { body: await withinBudget(page.content(), 2000, 'failure DOM capture'), contentType: 'text/html' });
+        } catch (error) {
+          trail.push(`DOM capture: ${String(error)}`);
+        }
+        // Native screenshots cover body failures. A ledger-only failure becomes
+        // a test failure after context teardown, so capture its page now.
+        if (testInfo.status === testInfo.expectedStatus) {
+          try {
+            await testInfo.attach('page-screenshot', { body: await page.screenshot({ fullPage: true, timeout: 2000 }), contentType: 'image/png' });
+          } catch (error) {
+            trail.push(`Screenshot capture: ${String(error)}`);
+          }
         }
       }
-      await context.close();
-      expect(ledger.unexpected(), 'no unexpected browser, fixture, outbound or late teardown faults').toEqual([]);
     }
   },
 });

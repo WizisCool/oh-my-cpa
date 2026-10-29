@@ -9,7 +9,7 @@
  * every wheel delta itself - steps on every Windows desk regardless of the setting.
  *
  * This layer turns each discrete step into a glide over the `scroll` motion token
- * (`MOTION_SCROLL`, `docs/design.md` §7) and leaves every continuous source alone: a trackpad
+ * (`MOTION_SCROLL`) and leaves every continuous source alone: a trackpad
  * stream is already smooth, and re-smoothing it would only add latency. Touch input is never
  * intercepted, because a phone's own momentum is the smooth scroll and anything layered on top of it
  * fights the finger.

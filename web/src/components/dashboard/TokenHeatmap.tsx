@@ -256,8 +256,7 @@ export const TOKEN_HEATMAP_QUERY_KEY = 'dashboard-token-heatmap';
  *
  * **The cells are DOM, not a chart mark.** The SVG chart runtime is lazy;
  * the calendar does not depend on it. A field of ~370 cells needs per-cell
- * text, focus and hit areas, so a canvas mark would need a parallel DOM layer for all three. See
- * docs/design.md §2 and ADR 0005.
+ * text, focus and hit areas, so a canvas mark would need a parallel DOM layer for all three.
  *
  * **Its span is a rolling fifty-three whole weeks**, ending on the week containing today. Fixed
  * rather than derived from the window picker: a field whose width is its own data's age is not a
@@ -272,8 +271,7 @@ export const TOKEN_HEATMAP_QUERY_KEY = 'dashboard-token-heatmap';
  * far side of a daylight-saving transition. The response carries each day's exact bounds, and
  * those same bounds are what a click opens, so the cell and the list cannot disagree.
  *
- * Colour is a density ramp rather than a verdict - see docs/design.md §2 for the rules, which are
- * asserted from painted pixels by the browser probe.
+ * Colour is a density ramp rather than a verdict; the browser probe checks the painted pixels.
  */
 export const TokenHeatmap: React.FC = () => {
   const t = useT();

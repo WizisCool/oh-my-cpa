@@ -6,7 +6,7 @@
  * for a window the server withheld one from. Both are decisions of these pure functions.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import type { TFunc } from '../web/src/i18n/index.tsx';
 import {
   compactQuotaCapacity,

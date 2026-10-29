@@ -11,7 +11,7 @@
  * answers only "which two stops, and how much of the first one?" — the caller
  * passes the strings through as CSS custom properties.
  *
- * See docs/design.md §2 for the stop values and the 4.5:1 contrast rule.
+ * The stops are CSS tokens; filled labels must clear 4.5:1 contrast across the ramp.
  */
 
 import type { RollingReadout } from '../types/rollingNumber';
@@ -30,7 +30,7 @@ export interface CacheScaleMix {
  *
  * This is presentation policy, not arithmetic: the app never claims a perfect
  * hit rate, so the badge stops at 99.9% and the Go dashboard aggregate caps at
- * the same value so the two readings agree. See docs/design.md §2.
+ * the same value so the two readings agree.
  */
 export const MAX_CACHE_RATE = 99.9;
 

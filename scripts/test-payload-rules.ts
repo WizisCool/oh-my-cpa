@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { parseDocument } from '../web/node_modules/yaml/browser/index.js';
+import { test } from 'vitest';
+import { parseDocument } from 'yaml';
 import {
   parseTypedRules,
   serializeTypedRules,

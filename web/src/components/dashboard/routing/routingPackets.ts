@@ -22,7 +22,7 @@ import type { RoutingRoute } from '../../../types/usageRouting';
  * no state the page reads back, so holding it in React state would re-render
  * the map on every frame for nothing. The dot is moved on animation frames
  * along the lane as it is drawn at that moment, so a row sliding while a dot is
- * on its lane carries the dot's path with it (docs/design.md §7 rule 9).
+ * on its lane carries the dot's path with it.
  */
 
 /** At most this many requests replay from one read; the rest are already counted on the rows. */

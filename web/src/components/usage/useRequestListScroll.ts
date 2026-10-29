@@ -10,7 +10,7 @@ import { createViewFlag } from './viewFlag';
 
 /**
  * A device a finger can scroll. There the list is an ordinary overflowing element the browser
- * scrolls itself, with the platform's own tracking and momentum (ADR 0109): a virtualized list
+ * scrolls itself, with the platform's own tracking and momentum: a virtualized list
  * clips its overflow, so every finger move had to be redrawn by script, which trailed the finger
  * and dropped frames however it was tuned.
  */

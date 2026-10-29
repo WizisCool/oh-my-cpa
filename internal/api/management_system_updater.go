@@ -16,7 +16,7 @@ import (
 
 // UpdateManager is the updater sidecar as the console uses it. The console never
 // reaches the Docker daemon: it can ask this narrow interface to replace a product,
-// and the sidecar decides which container and which image that means (ADR 0099).
+// and the sidecar decides which container and which image that means.
 type UpdateManager interface {
 	Status(ctx context.Context) (updater.StatusResponse, error)
 	Update(ctx context.Context, request updater.UpdateRequest) (updater.Job, error)

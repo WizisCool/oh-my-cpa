@@ -83,7 +83,7 @@ const DEMO_REPLAY_EXAMPLE = 'agent.example.daily';
 /**
  * What the drawer beside the conversation shows. It is closed until something is asked of it - the
  * capability directory, the connection guide - so the page at rest is the conversation and nothing
- * else. A call's own details open in the conversation, under the call (ADR 0084).
+ * else. A call's own details open in the conversation, under the call.
  */
 type DrawerView = 'directory' | 'connect';
 
@@ -529,7 +529,7 @@ export function AgentPage() {
   );
 
   // Sending is the act this line describes: the message, and whatever the agent reads to answer
-  // it, goes to the selected model and on to its upstream provider (ADR 0027).
+  // it, goes to the selected model and on to its upstream provider.
   // An answer is given in place - in this panel or in the drawn form - so it needs no jump. A
   // secret or an OAuth flow is still an approval, and its card is what the hint points at.
   const approvalHint = openOperation && openOperation.human_input !== 'answer' && !isRunning ? (
@@ -605,7 +605,7 @@ export function AgentPage() {
       <p className={styles['hero-text']}>{t('agent.empty.description')}</p>
     </div>
   );
-  // The demonstration answers one question, from a recording (ADR 0092): it is the only example
+  // The demonstration answers one question, from a recording: it is the only example
   // offered there, and choosing it sends it.
   const shownExamples = isDemo ? EXAMPLES.filter(example => example.key === DEMO_REPLAY_EXAMPLE) : EXAMPLES;
   const examples = (

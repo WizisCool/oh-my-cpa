@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { createRouteLoader } from '../web/src/utils/routeLoader.ts';
 
 test('hover, focus and navigation share a lazy import without loading at creation', async () => {

@@ -153,7 +153,7 @@ func isPluginLogoURLAllowed(parsed *url.URL) bool {
 	}
 	// Userinfo is refused because `http.Client` turns it into an `Authorization: Basic`
 	// header: a manifest could otherwise decide that this process authenticates to a host
-	// of its choosing, while the policy's claim - and the ADR's - is that the fetch
+	// of its choosing, while the security boundary requires that the fetch
 	// carries no credential at all.
 	if parsed.User != nil {
 		return false

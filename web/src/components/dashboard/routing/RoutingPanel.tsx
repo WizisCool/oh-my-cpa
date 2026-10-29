@@ -120,7 +120,7 @@ export function RoutingPanel() {
     },
     // Each live read is a new key that the window has already folded in.
     gcTime: 15_000,
-    // A read the reader did not ask for paints no progress (docs/design.md §7 rule 4).
+    // A read the reader did not ask for paints no progress.
     meta: { silent: revision > 0 },
   });
   isFetchingRef.current = routing.isFetching;

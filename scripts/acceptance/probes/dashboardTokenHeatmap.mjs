@@ -491,8 +491,8 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
 
   // The declared motion is asserted from the stylesheet rather than from a rendered frame, because
   // no probe context can render it: `prefers-reduced-motion` is forced on for determinism. The rule
-  // itself is what matters - a colour transition on hover would smear behind a fast sweep, which is
-  // what design.md §7 rule 7 forbids, and only the declaration can say which property animates.
+  // itself is what matters: a colour transition on hover would smear behind a fast sweep, and
+  // only the declaration can say which property animates.
   const declaredMotion = await page.evaluate(() => {
     for (const sheet of document.styleSheets) {
       let rules;
@@ -1185,7 +1185,7 @@ export async function dashboardTokenHeatmapPruned({ base, page, check }) {
   );
   // And both zeros stay quiet: they must never compete with the greens that carry the data. The card
   // is drawn on the page ground (`--bg`), where the two steps measure ~1.17 and ~1.35 on dark and
-  // ~1.19 and ~1.37 on light (docs/design.md §2); a ceiling a step above each catches a zero token
+  // ~1.19 and ~1.37 on light; a ceiling a step above each catches a zero token
   // moved toward the ink without freezing the exact shade.
   check(
     'neither zero state competes with the measured cells',

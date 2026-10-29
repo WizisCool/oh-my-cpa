@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { nextPickerIndex, pickerRoom } from '../web/src/components/workspace/pickerNavigation.ts';
 
 test('picker arrows wrap so every named choice is reachable', () => {

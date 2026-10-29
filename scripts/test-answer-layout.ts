@@ -6,7 +6,7 @@
  * that grouped by its own rule drew every display at the end of its turn.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { answerLayout } from '../web/src/agent/answerLayout.ts';
 import type { Trace, TurnPart } from '../web/src/agent/types.ts';
 

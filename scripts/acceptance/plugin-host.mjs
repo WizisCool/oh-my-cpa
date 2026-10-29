@@ -1,7 +1,7 @@
 import { FAKE_CPA_MANAGEMENT_KEY } from '../fake-cpa.mjs';
 
 /**
- * The trusted plugin host (ADR 0067) end to end on the built binary: a registered plugin
+ * The trusted plugin host end to end on the built binary: a registered plugin
  * page loads through the console's host, its CPA-root paths are re-based onto it, its
  * native management calls carry the key only the server holds, and nothing it reads or
  * stores exposes the management or OAuth credentials.

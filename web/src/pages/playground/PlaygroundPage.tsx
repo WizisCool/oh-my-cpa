@@ -105,7 +105,7 @@ export const PlaygroundPage: React.FC = () => {
   //
   // Three reads arrive in any order - the session, the key list and the key's model directory - and
   // each stored choice is used only once it is known to still exist: a deleted key or a model the
-  // gateway no longer serves is never selected (ADR 0023). Until all three have been reconciled
+  // gateway no longer serves is never selected. Until all three have been reconciled
   // nothing is written back, so a slow read cannot persist an empty target over a stored one.
   const storedRef = React.useRef<PlaygroundSession>();
   const [hydration, setHydration] = React.useState({ session: false, key: false, model: false });
@@ -226,7 +226,7 @@ export const PlaygroundPage: React.FC = () => {
   const submit = (text: string, images: string[]) => {
     if (!isTargetReady || isRunning || !customBody.ok) return;
     if (!text.trim() && images.length === 0) return;
-    // The demonstration has one recorded answer, for one message (ADR 0092).
+    // The demonstration has one recorded answer, for one message.
     if (isDemo && (text.trim() !== t('pg.demo.example') || images.length > 0)) {
       refuse('demo_replay_only');
       return;

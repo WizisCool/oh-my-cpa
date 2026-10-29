@@ -26,8 +26,7 @@ export function sparkColor(colors: ThemePalette, tone: ChartTone): string {
  * red means failed; a model's colour cannot mean anything, because the model list is whatever the
  * deployment happens to serve. Borrowing the status hues for it would be worse than decoration - a green
  * line labelled "model B" beside a green pip that means "healthy" makes both unreadable - so the series
- * families are their own. See the measured bounds in docs/design.md and
- * docs/adr/0006-categorical-series-palette.md.
+ * families are their own. Their contrast is resolved with the palette in `theme/palette.ts`.
  *
  * A slot is a *rank*, not a model. Colour is assigned from the ranked list both dashboard panels share,
  * which is what guarantees a group's line and its ring slice are the same hue; it also means a group's

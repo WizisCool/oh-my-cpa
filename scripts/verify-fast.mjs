@@ -1,29 +1,10 @@
-/**
- * Fast, affected-only local verification.
- *
- * Three properties this gate has to keep, each of which it has lost before:
- *
- * 1. **It never pays for the browser.** No ordinary change may build the production
- *    SPA, build the Go binary, or start Chromium. Interface checks during development
- *    go through `pnpm check:ui`, which serves the dev server with mocked routes and
- *    needs no artefact at all.
- * 2. **It never selects nothing for a change that matters.** A test suite, the test
- *    harness, or this planner itself all previously fell outside every rule, so
- *    editing a test to make it pass was verified by nothing at all.
- * 3. **It stays inside the development feedback budget.** The selected checks are
- *    independent processes, so they run concurrently. Report elapsed time per
- *    check instead of assuming a fixed cost as the repository grows.
- *
- * The selection lives in `affected-checks.mjs`.
- */
+/** Local feedback: native Vitest dependencies, Go reverse dependencies, and static gates. */
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planChecks } from './affected-checks.mjs';
-import { runChecks, measureVerification } from './parallel-checks.mjs';
-import { createImpactGraph } from './affected-files.mjs';
-import { readdirSync } from 'node:fs';
-import { componentTestFiles } from './test-components.mjs';
+import { runChecks } from './parallel-checks.mjs';
+import { existsSync } from 'node:fs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -44,14 +25,10 @@ export const CHECK_COMMANDS = {
   // Incremental only here: the iteration loop re-checks what changed against a build
   // info file under `tmp/`, while `verify` and CI keep the fresh `type-check`.
   'type-check': { label: 'frontend type check (incremental)', command: 'pnpm', args: ['type-check:incremental'] },
-  logic: { label: 'frontend logic tests', command: 'pnpm', args: ['test:logic'] },
-  // Keep jsdom renders off the other checks' CPU budget.
-  components: { label: 'frontend component and API integration tests', command: 'pnpm', args: ['test:components'], isExclusive: true },
+  frontend: { label: 'frontend tests', command: 'pnpm', args: ['test:frontend'], isExclusive: true },
   i18n: { label: 'frontend translation keys', command: 'pnpm', args: ['check-i18n'] },
   'antd-lint': { label: 'Ant Design lint', command: 'pnpm', args: ['lint:antd'] },
   'css-modules': { label: 'CSS module references', command: 'pnpm', args: ['check-css-modules'] },
-  motion: { label: 'motion budget', command: 'pnpm', args: ['check:motion'] },
-  'style-tokens': { label: 'style tokens', command: 'pnpm', args: ['check:style-tokens'] },
   feedback: { label: 'feedback surfaces', command: 'pnpm', args: ['check:feedback'] },
   'openui-prompt': { label: 'generated OpenUI instructions', command: 'pnpm', args: ['check:openui-prompt'] },
   // -short skips the few tests that cost tens of seconds; CI runs them.
@@ -62,7 +39,9 @@ export const CHECK_COMMANDS = {
 };
 
 function selectGoPackages(files) {
-  const relevant = files.filter(file => !file.endsWith('.md'));
+  // Non-Go inputs selected for this lane cannot be resolved by go list.
+  if (files.some(file => !file.endsWith('.go') && planChecks([file]).includes('go'))) return ['./...'];
+  const relevant = files.filter(file => /(?:\.go$|^go\.(?:mod|sum)$|^migrations\/|^internal\/web\/)/.test(file));
   if (!relevant.length || relevant.some(file => !file.endsWith('.go'))) return ['./...'];
   try {
     const module = execFileSync('go', ['list', '-m'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -85,27 +64,24 @@ function selectGoPackages(files) {
 
 export function planFastChecks(files) {
   const ids = planChecks(files);
-  const graph = createImpactGraph(files.filter(file => !/^web\/src\/i18n\/locales\//.test(file)));
-  const isLocal = files.filter(file => !file.endsWith('.md')).every(file => /^(?:web\/(?:src|tests)\/|scripts\/test-[^/]+\.ts$)/.test(file));
-  const suites = isLocal ? {
-    logic: graph.affected(readdirSync(path.join(root, 'scripts')).filter(name => /^test-.+\.ts$/.test(name) && !name.endsWith('.test.ts')).map(name => `scripts/${name}`)),
-    components: files.includes('web/tests/setup.ts') ? componentTestFiles() : graph.affected(componentTestFiles()),
-  } : undefined;
-  if (suites?.logic.length && !ids.includes('logic')) ids.push('logic');
+  // Vitest owns source-module resolution. CSS-only changes run the logic suite:
+  // its contrast fixtures read CSS, while jsdom cannot prove stylesheet layout.
+  const sources = files.filter(file => !file.endsWith('.md'));
+  const canSelectRelated = sources.length > 0 && sources.every(file =>
+    /^(?:web\/(?:src|tests)\/.*\.tsx?$|scripts\/test-[^/]+\.ts$)/.test(file)
+    && existsSync(path.join(root, file))) && !sources.includes('web/tests/setup.ts');
   return ids.flatMap(id => {
     const definition = { ...CHECK_COMMANDS[id] };
     if (id === 'go') { definition.args = ['test', '-short', ...selectGoPackages(files)]; definition.suiteCount = definition.args.includes('./...') ? undefined : definition.args.length - 2; }
-    if (suites && id in suites) {
-      const selected = suites[id];
-      if (!selected.length) return [];
-      definition.args = id === 'logic'
-        ? ['--import', 'tsx', '--test', '--test-concurrency=2', ...selected]
-        : ['scripts/test-components.mjs', ...selected];
-      definition.command = 'node';
-      definition.suiteCount = selected.length;
-      definition.label += ` (${selected.length} affected suites)`;
+    if (id === 'frontend' && canSelectRelated) {
+      definition.args = ['exec', 'vitest', 'related', '--run', '--passWithNoTests', '--config', 'web/vitest.config.ts', ...sources];
+      definition.label += ' (Vitest related)';
     }
-    if (isLocal && id === 'feedback') {
+    if (id === 'frontend' && sources.length && sources.every(file => /^web\/src\/.*\.css$/.test(file))) {
+      definition.args = ['test:logic'];
+      definition.label = 'frontend logic tests (stylesheet fixtures)';
+    }
+    if (canSelectRelated && id === 'feedback') {
       const sources = files.filter(file => /^web\/src\/.*\.tsx?$/.test(file));
       if (!sources.length) return [];
       definition.command = 'node';
@@ -149,11 +125,7 @@ export async function runFastChecks(argv) {
     return true;
   }
 
-  // Concurrent, because the checks are independent processes and the budget is what
-  // decides whether a development loop can afford to run this at all. Quiet, because
-  // the answer to "is it broken" is one line per check: a few thousand lines of passing
-  // tool output buries it, and a check that fails still prints everything it captured.
-  const passed = await measureVerification(files.every(file => /^web\/(?:src|tests)\//.test(file)) ? 'fast-affected' : 'fast-wide', () => runChecks(selected, { quiet: true }), selected.map(check => [check.id, check.suiteCount === undefined ? 'full' : check.suiteCount <= 2 ? 'small' : check.suiteCount <= 8 ? 'medium' : 'large']));
+  const passed = await runChecks(selected, { quiet: true });
   if (!passed) return false;
   console.log(`\n[fast] ${selected.length} affected check(s) passed`);
   return true;

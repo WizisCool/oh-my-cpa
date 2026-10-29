@@ -50,403 +50,404 @@ import {
 } from '../web/src/theme/themePreference.ts';
 import { createThemeConfig, MOTION_FAST, MOTION_LIVE_TEXT, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
 import { applyEchartsMotion, echartsMotion } from '../web/src/charts/echarts/echartsTheme.ts';
+import { test } from 'vitest';
 
-// ── the registry ─────────────────────────────────────────────────────────────
+test('theme presets', () => {
+  // ── the registry ─────────────────────────────────────────────────────────────
 
-assert.equal(BUILT_IN_PALETTES.length, 6, 'the registry keeps three palettes per mode');
-assert.equal(new Set(BUILT_IN_PALETTE_IDS).size, BUILT_IN_PALETTE_IDS.length, 'palette ids must be unique');
-assert.equal(new Set(BUILT_IN_PALETTES.map((definition) => definition.id)).size, BUILT_IN_PALETTES.length);
-for (const mode of ['dark', 'light'] as const) {
-  assert.equal(builtInPalettesForMode(mode).length, 3, `${mode} mode offers exactly three palettes`);
-  for (const definition of builtInPalettesForMode(mode)) {
-    assert.equal(definition.mode, mode, `${definition.id} belongs to ${mode}`);
-  }
-}
-// A palette id is never also a mode name: `parseThemePreferences` would otherwise have to guess
-// whether a stored `"dark"` meant the mode or a palette.
-for (const id of BUILT_IN_PALETTE_IDS) assert.ok(!['dark', 'light', 'system'].includes(id), id);
-
-// ── the derivation's guaranteed relationships ────────────────────────────────
-
-/**
- * A semantic colour is as legible on a palette as on its mode's own (up to the text floor), so a grey
- * page cannot quietly fade a failure count or a chart slot.
- */
-function assertSignalsHold(mode: 'dark' | 'light', palette: ReturnType<typeof derivePalette>, where: string): void {
-  const reference = resolvedBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').palette;
-  const signals = (of: typeof palette) => [of.success, of.warn, of.danger, ...of.series, ...of.route];
-  const weakest = (color: string, of: typeof palette) => Math.min(contrastRatio(color, of.bg), contrastRatio(color, of.surface));
-  signals(palette).forEach((color, index) => {
-    const floor = Math.min(weakest(signals(reference)[index], reference), CONTRAST_FLOORS.text ?? 4.5);
-    assert.ok(weakest(color, palette) >= floor, `${where} signal ${index} (${color}) reads ${weakest(color, palette).toFixed(2)}:1, want >= ${floor.toFixed(2)}:1`);
-  });
-}
-
-for (const definition of BUILT_IN_PALETTES) {
-  const palette = derivePalette(definition.mode, definition.core);
-  const where = `${definition.id}:`;
-
-  assert.equal(palette.series.length, 6, `${where} defines exactly six series slots`);
-  assert.equal(palette.route.length, 6, `${where} defines exactly six routing slots`);
-  assert.equal(palette.tooltipBg, definition.mode === 'light' ? palette.fg : palette.surface,
-    `${where} a tooltip sits on the surface it floats over`);
-  assert.equal(palette.heatmapQuiet, palette.borderSoft, `${where} the ramp's floor is the border-soft step`);
-  assert.equal(palette.heatmapZeroUnrecorded, palette.borderSoft, `${where} an unrecorded day is the ramp's floor`);
-  assert.equal(palette.heatmapZeroRecorded, palette.border, `${where} a recorded empty day is the border step`);
-  assert.equal(palette.seriesTrack, palette.border, `${where} an empty plot floor is the border step`);
-  assert.equal(palette.heatmapBusy, palette.accent, `${where} the ramp reaches the accent`);
-  assert.equal(palette.heatmapTipLink, palette.accent, `${where} the tooltip link is the accent`);
-  assert.equal(palette.cacheRateYellow, palette.warn, `${where} the cache scale's low end is the warning hue`);
-  assert.equal(palette.cacheRateGreen, palette.success, `${where} the cache scale's high end is the success hue`);
-  assert.equal(palette.hover, palette.rowHover, `${where} a hovered row and a hovered control lift by the same step`);
-  if (definition.mode === 'dark') {
-    assert.equal(palette.hoverInset, palette.bg, `${where} dark mode's inset step is the page itself`);
-  } else {
-    // Light mode's inset step is a blend toward the foreground, so an inset hover is visible.
-    assert.notEqual(palette.hoverInset, palette.bg, `${where} light mode's inset step differs from the page`);
-  }
-
-  assertSignalsHold(definition.mode, palette, where);
-
-  // The accent ladder has to be a ladder: a filled control whose resting and hover fills are the
-  // same colour has no hover state, and one whose hover and pressed fills match has no press.
-  assert.notEqual(palette.accentHover, palette.accent, `${where} the filled control's hover differs from its accent`);
-  assert.notEqual(palette.accentActive, palette.accentHover, `${where} the pressed fill differs from the hover fill`);
-
-  // The label on that fill, which is the promise the solving loop exists to keep.
-  const label = contrastRatio(palette.accentOn, palette.accentHover);
-  assert.ok(
-    label >= ACCENT_LABEL_CONTRAST_FLOOR,
-    `${where} the primary button label (${palette.accentOn}) on its fill (${palette.accentHover}) reads ${label.toFixed(2)}:1, want >= ${ACCENT_LABEL_CONTRAST_FLOOR}:1`,
-  );
-
-  // Every authored token against the floor its own role carries.
-  for (const key of CORE_TOKEN_KEYS) {
-    const floor = CONTRAST_FLOORS[CORE_TOKEN_CONTRAST_ROLES[key]];
-    if (floor === undefined) continue;
-    const ratio = contrastRatio(palette[key], palette.bg);
-    assert.ok(ratio >= floor, `${where} ${key} reads ${ratio.toFixed(2)}:1 on the page, want >= ${floor}:1`);
-  }
-
-  // Purity: the same nine tokens always produce the same palette, which is what lets the stylesheet
-  // mirror, the derived hex tables in the docs and the runtime all be the same palette.
-  assert.deepEqual(derivePalette(definition.mode, { ...definition.core }), palette, `${where} derivation is deterministic`);
-  assert.equal(resolvedBuiltInPalette(definition.id).palette.bg, palette.bg, `${where} the resolution cache agrees`);
-}
-
-// An operator may author a dark-mode palette on a light page, or the reverse. The signals then have to
-// move toward the mode's own ink rather than away from it, or they walk into the page.
-assertSignalsHold('dark', derivePalette('dark', getBuiltInPalette('fog').core), 'a dark palette on a light page:');
-assertSignalsHold('light', derivePalette('light', getBuiltInPalette('pewter').core), 'a light palette on a dark page:');
-
-/**
- * The dead zone, and the loop that gets out of it.
- *
- * These are the accents where a fixed lightness step fails: measured against the built-ins of the time, a
- * −0.075 step put OMC Dark's label at 3.73:1 and a `#58a6ff` accent's at 3.38:1, and neither white nor
- * near-black could carry the label. The sweep asserts the loop lands a legible pair for all of them,
- * and for the extremes - a near-black accent and a near-white one - that a proportional step alone
- * would carry off the end of the scale.
- */
-const ACCENT_SWEEP = [
-  '#00a2fb', '#58a6ff', '#6ee7a8', '#005d8f', '#0b6e99', '#0f766e',
-  '#f59e0b', '#ef4444', '#7c3aed', '#ffffff', '#000000', '#808080',
-  '#ff0000', '#00ff00', '#0000ff', '#ffff00',
-];
-for (const mode of ['dark', 'light'] as const) {
-  for (const accent of ACCENT_SWEEP) {
-    const core: ThemeCore = { ...getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core, accent };
-    const palette = derivePalette(mode, core);
-    const hoverLabel = contrastRatio(palette.accentOn, palette.accentHover);
-    assert.ok(
-      hoverLabel >= ACCENT_LABEL_CONTRAST_FLOOR,
-      `${mode} accent ${accent}: the solved hover fill ${palette.accentHover} carries ${palette.accentOn} at ${hoverLabel.toFixed(2)}:1`,
-    );
-    // The pressed step is deeper than the hover step, never equal or inverted, for every accent.
-    assert.notEqual(palette.accentActive, palette.accentHover, `${mode} accent ${accent}: active differs from hover`);
-    // A fill is a hex colour, not a clipped channel: the derivation reduces chroma rather than
-    // clipping, so every output is a well-formed six-digit value.
-    for (const key of CORE_TOKEN_KEYS) {
-      assert.ok(normalizeHex(palette[key]), `${mode} accent ${accent}: ${key} is a hex colour`);
+  assert.equal(BUILT_IN_PALETTES.length, 6, 'the registry keeps three palettes per mode');
+  assert.equal(new Set(BUILT_IN_PALETTE_IDS).size, BUILT_IN_PALETTE_IDS.length, 'palette ids must be unique');
+  assert.equal(new Set(BUILT_IN_PALETTES.map((definition) => definition.id)).size, BUILT_IN_PALETTES.length);
+  for (const mode of ['dark', 'light'] as const) {
+    assert.equal(builtInPalettesForMode(mode).length, 3, `${mode} mode offers exactly three palettes`);
+    for (const definition of builtInPalettesForMode(mode)) {
+      assert.equal(definition.mode, mode, `${definition.id} belongs to ${mode}`);
     }
   }
-}
+  // A palette id is never also a mode name: `parseThemePreferences` would otherwise have to guess
+  // whether a stored `"dark"` meant the mode or a palette.
+  for (const id of BUILT_IN_PALETTE_IDS) assert.ok(!['dark', 'light', 'system'].includes(id), id);
 
-// ── custom palettes ──────────────────────────────────────────────────────────
+  // ── the derivation's guaranteed relationships ────────────────────────────────
 
-for (const mode of ['dark', 'light'] as const) {
-  const seeded = emptyCustomPalette(mode, mode === 'dark' ? 'forest' : 'fog');
-  assert.equal(seeded.base, mode === 'dark' ? 'forest' : 'fog', 'a custom palette starts from a palette of its own mode');
-  assert.deepEqual(seeded.core, getBuiltInPalette(seeded.base).core, 'a fresh custom palette borrows its base verbatim');
-  // A custom palette carries no name: it is labelled by a dictionary entry like every other control,
-  // which is what keeps the card and the header tooltip translatable.
-  assert.deepEqual(Object.keys(seeded).sort(), ['base', 'core'], 'a custom palette is a starting point and nine tokens');
-
-  // Untouched, a seeded custom palette is its base's palette - the derivation is the only difference
-  // between "a copy" and "the original", and there is none.
-  const seededPalette = derivePalette(mode, seeded.core);
-  const basePalette = resolvedBuiltInPalette(seeded.base).palette;
-  assert.equal(seededPalette.accentHover, basePalette.accentHover, 'a seeded palette derives its base exactly');
-
-  const resolved = resolvePalette(mode, 'custom', seeded);
-  assert.equal(resolved.id, customPaletteId(mode), 'a custom palette resolves to the mode-specific synthetic id');
-  assert.equal(resolved.isCustom, true);
-  assert.equal(resolved.nameKey, 'omc.palette_custom', "a custom palette is named by the dictionary, so its label is translated");
-
-  // The fallback that keeps a half-saved preference renderable.
-  const missing = resolvePalette(mode, 'custom', undefined);
-  assert.equal(missing.isCustom, false, 'custom with no stored palette falls back to a built-in');
-  assert.equal(missing.mode, mode, 'and falls back within its own mode');
-}
-
-for (const definition of BUILT_IN_PALETTES) {
-  const palette = resolvedBuiltInPalette(definition.id).palette;
-  const variables = themePaletteCssVariables(palette);
-  assert.equal(variables['--motion-live-text'], `${MOTION_LIVE_TEXT.duration}ms`, `${definition.id} keeps the same live-label cadence`);
-  for (const [name, share] of [['field', 5], ['field-hover', 8], ['hairline', 12]] as const) {
-    assert.equal(variables[`--thread-${name}`], `color-mix(in srgb, var(--fg) ${share}%, transparent)`);
+  /**
+   * A semantic colour is as legible on a palette as on its mode's own (up to the text floor), so a grey
+   * page cannot quietly fade a failure count or a chart slot.
+   */
+  function assertSignalsHold(mode: 'dark' | 'light', palette: ReturnType<typeof derivePalette>, where: string): void {
+    const reference = resolvedBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').palette;
+    const signals = (of: typeof palette) => [of.success, of.warn, of.danger, ...of.series, ...of.route];
+    const weakest = (color: string, of: typeof palette) => Math.min(contrastRatio(color, of.bg), contrastRatio(color, of.surface));
+    signals(palette).forEach((color, index) => {
+      const floor = Math.min(weakest(signals(reference)[index], reference), CONTRAST_FLOORS.text ?? 4.5);
+      assert.ok(weakest(color, palette) >= floor, `${where} signal ${index} (${color}) reads ${weakest(color, palette).toFixed(2)}:1, want >= ${floor.toFixed(2)}:1`);
+    });
   }
-  for (const [name, radius] of [['document', 8], ['control', 6], ['surface', 10], ['thread', 12]] as const) {
-    assert.equal(variables[`--radius-${name}`], `${radius}px`);
+
+  for (const definition of BUILT_IN_PALETTES) {
+    const palette = derivePalette(definition.mode, definition.core);
+    const where = `${definition.id}:`;
+
+    assert.equal(palette.series.length, 6, `${where} defines exactly six series slots`);
+    assert.equal(palette.route.length, 6, `${where} defines exactly six routing slots`);
+    assert.equal(palette.tooltipBg, definition.mode === 'light' ? palette.fg : palette.surface,
+      `${where} a tooltip sits on the surface it floats over`);
+    assert.equal(palette.heatmapQuiet, palette.borderSoft, `${where} the ramp's floor is the border-soft step`);
+    assert.equal(palette.heatmapZeroUnrecorded, palette.borderSoft, `${where} an unrecorded day is the ramp's floor`);
+    assert.equal(palette.heatmapZeroRecorded, palette.border, `${where} a recorded empty day is the border step`);
+    assert.equal(palette.seriesTrack, palette.border, `${where} an empty plot floor is the border step`);
+    assert.equal(palette.heatmapBusy, palette.accent, `${where} the ramp reaches the accent`);
+    assert.equal(palette.heatmapTipLink, palette.accent, `${where} the tooltip link is the accent`);
+    assert.equal(palette.cacheRateYellow, palette.warn, `${where} the cache scale's low end is the warning hue`);
+    assert.equal(palette.cacheRateGreen, palette.success, `${where} the cache scale's high end is the success hue`);
+    assert.equal(palette.hover, palette.rowHover, `${where} a hovered row and a hovered control lift by the same step`);
+    if (definition.mode === 'dark') {
+      assert.equal(palette.hoverInset, palette.bg, `${where} dark mode's inset step is the page itself`);
+    } else {
+      // Light mode's inset step is a blend toward the foreground, so an inset hover is visible.
+      assert.notEqual(palette.hoverInset, palette.bg, `${where} light mode's inset step differs from the page`);
+    }
+
+    assertSignalsHold(definition.mode, palette, where);
+
+    // The accent ladder has to be a ladder: a filled control whose resting and hover fills are the
+    // same colour has no hover state, and one whose hover and pressed fills match has no press.
+    assert.notEqual(palette.accentHover, palette.accent, `${where} the filled control's hover differs from its accent`);
+    assert.notEqual(palette.accentActive, palette.accentHover, `${where} the pressed fill differs from the hover fill`);
+
+    // The label on that fill, which is the promise the solving loop exists to keep.
+    const label = contrastRatio(palette.accentOn, palette.accentHover);
+    assert.ok(
+      label >= ACCENT_LABEL_CONTRAST_FLOOR,
+      `${where} the primary button label (${palette.accentOn}) on its fill (${palette.accentHover}) reads ${label.toFixed(2)}:1, want >= ${ACCENT_LABEL_CONTRAST_FLOOR}:1`,
+    );
+
+    // Every authored token against the floor its own role carries.
+    for (const key of CORE_TOKEN_KEYS) {
+      const floor = CONTRAST_FLOORS[CORE_TOKEN_CONTRAST_ROLES[key]];
+      if (floor === undefined) continue;
+      const ratio = contrastRatio(palette[key], palette.bg);
+      assert.ok(ratio >= floor, `${where} ${key} reads ${ratio.toFixed(2)}:1 on the page, want >= ${floor}:1`);
+    }
+
+    // Purity: the same nine tokens always produce the same palette, which is what lets the stylesheet
+    // mirror, the derived hex tables in the docs and the runtime all be the same palette.
+    assert.deepEqual(derivePalette(definition.mode, { ...definition.core }), palette, `${where} derivation is deterministic`);
+    assert.equal(resolvedBuiltInPalette(definition.id).palette.bg, palette.bg, `${where} the resolution cache agrees`);
   }
-}
 
-// Every resolved palette has a label the dictionary owns - the two custom ones included - so no
-// palette can reach the header's tooltip or a settings card as an untranslated string.
-for (const definition of BUILT_IN_PALETTES) {
-  assert.match(resolvedBuiltInPalette(definition.id).nameKey, /^theme\./, `${definition.id} names itself from the dictionary`);
-}
-for (const mode of ['dark', 'light'] as const) {
-  assert.equal(resolvePalette(mode, 'custom', emptyCustomPalette(mode, 'omc-dark')).nameKey, 'omc.palette_custom');
-}
+  // An operator may author a dark-mode palette on a light page, or the reverse. The signals then have to
+  // move toward the mode's own ink rather than away from it, or they walk into the page.
+  assertSignalsHold('dark', derivePalette('dark', getBuiltInPalette('fog').core), 'a dark palette on a light page:');
+  assertSignalsHold('light', derivePalette('light', getBuiltInPalette('pewter').core), 'a light palette on a dark page:');
 
-// ── the stored preference document ───────────────────────────────────────────
+  /**
+   * The dead zone, and the loop that gets out of it.
+   *
+   * These are the accents where a fixed lightness step fails: measured against the built-ins of the time, a
+   * −0.075 step put OMC Dark's label at 3.73:1 and a `#58a6ff` accent's at 3.38:1, and neither white nor
+   * near-black could carry the label. The sweep asserts the loop lands a legible pair for all of them,
+   * and for the extremes - a near-black accent and a near-white one - that a proportional step alone
+   * would carry off the end of the scale.
+   */
+  const ACCENT_SWEEP = [
+    '#00a2fb', '#58a6ff', '#6ee7a8', '#005d8f', '#0b6e99', '#0f766e',
+    '#f59e0b', '#ef4444', '#7c3aed', '#ffffff', '#000000', '#808080',
+    '#ff0000', '#00ff00', '#0000ff', '#ffff00',
+  ];
+  for (const mode of ['dark', 'light'] as const) {
+    for (const accent of ACCENT_SWEEP) {
+      const core: ThemeCore = { ...getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core, accent };
+      const palette = derivePalette(mode, core);
+      const hoverLabel = contrastRatio(palette.accentOn, palette.accentHover);
+      assert.ok(
+        hoverLabel >= ACCENT_LABEL_CONTRAST_FLOOR,
+        `${mode} accent ${accent}: the solved hover fill ${palette.accentHover} carries ${palette.accentOn} at ${hoverLabel.toFixed(2)}:1`,
+      );
+      // The pressed step is deeper than the hover step, never equal or inverted, for every accent.
+      assert.notEqual(palette.accentActive, palette.accentHover, `${mode} accent ${accent}: active differs from hover`);
+      // A fill is a hex colour, not a clipped channel: the derivation reduces chroma rather than
+      // clipping, so every output is a well-formed six-digit value.
+      for (const key of CORE_TOKEN_KEYS) {
+        assert.ok(normalizeHex(palette[key]), `${mode} accent ${accent}: ${key} is a hex colour`);
+      }
+    }
+  }
 
-const stored = {
-  mode: 'system',
-  palettes: { dark: 'pewter', light: 'custom' },
-  custom: { light: { base: 'fog', core: getBuiltInPalette('fog').core } },
-};
-const parsed = parseThemePreferences(stored);
-assert.ok(parsed, 'a well-formed document parses');
-assert.equal(parsed.mode, 'system');
-assert.equal(parsed.palettes.dark, 'pewter');
-assert.equal(parsed.palettes.light, 'custom');
-assert.equal(parsed.custom.light?.base, 'fog');
+  // ── custom palettes ──────────────────────────────────────────────────────────
 
-// A withdrawn palette is read as the one that replaced it, so a stored choice keeps its mode's nearest
-// look and an authored palette started from it is kept rather than dropped with its starting point.
-const retired = parseThemePreferences({
-  palettes: { dark: 'midnight', light: 'porcelain' },
-  custom: { light: { base: 'porcelain', core: getBuiltInPalette('fog').core } },
-});
-assert.deepEqual(retired?.palettes, { dark: 'pewter', light: 'fog' }, 'a withdrawn palette reads as its successor');
-assert.equal(retired?.custom.light?.base, 'fog', 'and an authored palette started from it survives');
+  for (const mode of ['dark', 'light'] as const) {
+    const seeded = emptyCustomPalette(mode, mode === 'dark' ? 'forest' : 'fog');
+    assert.equal(seeded.base, mode === 'dark' ? 'forest' : 'fog', 'a custom palette starts from a palette of its own mode');
+    assert.deepEqual(seeded.core, getBuiltInPalette(seeded.base).core, 'a fresh custom palette borrows its base verbatim');
+    // A custom palette carries no name: it is labelled by a dictionary entry like every other control,
+    // which is what keeps the card and the header tooltip translatable.
+    assert.deepEqual(Object.keys(seeded).sort(), ['base', 'core'], 'a custom palette is a starting point and nine tokens');
 
-// A document written by a build that still held a name parses without it: the field is ignored, so a
-// browser carrying one is not asked to re-author its palette.
-const withLegacyName = parseThemePreferences({
-  custom: { dark: { name: 'Studio', base: 'forest', core: getBuiltInPalette('forest').core } },
-});
-assert.equal(withLegacyName?.custom.dark?.base, 'forest', 'a stored name does not invalidate the palette');
-assert.ok(!('name' in (withLegacyName?.custom.dark ?? {})), 'and it is dropped rather than carried forward');
+    // Untouched, a seeded custom palette is its base's palette - the derivation is the only difference
+    // between "a copy" and "the original", and there is none.
+    const seededPalette = derivePalette(mode, seeded.core);
+    const basePalette = resolvedBuiltInPalette(seeded.base).palette;
+    assert.equal(seededPalette.accentHover, basePalette.accentHover, 'a seeded palette derives its base exactly');
 
-// Liberal by field, strict by value: a missing field inherits the default while a wrong one is
-// dropped rather than coerced into something the operator did not choose.
-const partial = parseThemePreferences({ mode: 'purple', palettes: { dark: 'nope' } });
-assert.equal(partial?.mode, DEFAULT_THEME_PREFERENCES.mode, 'an unknown mode falls back to the default');
-assert.equal(partial?.palettes.dark, DEFAULT_THEME_PREFERENCES.palettes.dark, 'an unknown palette falls back');
+    const resolved = resolvePalette(mode, 'custom', seeded);
+    assert.equal(resolved.id, customPaletteId(mode), 'a custom palette resolves to the mode-specific synthetic id');
+    assert.equal(resolved.isCustom, true);
+    assert.equal(resolved.nameKey, 'omc.palette_custom', "a custom palette is named by the dictionary, so its label is translated");
 
-const brokenCore = parseThemePreferences({
-  custom: { dark: { base: 'forest', core: { ...getBuiltInPalette('forest').core, accent: 'blue' } } },
-});
-assert.equal(brokenCore?.custom.dark, undefined, 'a palette with an unreadable token is dropped, not repaired');
+    // The fallback that keeps a half-saved preference renderable.
+    const missing = resolvePalette(mode, 'custom', undefined);
+    assert.equal(missing.isCustom, false, 'custom with no stored palette falls back to a built-in');
+    assert.equal(missing.mode, mode, 'and falls back within its own mode');
+  }
 
-assert.equal(parseThemePreferences('nonsense'), undefined, 'a non-object document does not parse');
-assert.equal(parseThemePreferences(null), undefined);
-assert.equal(parseThemePreferences([]), undefined, 'an array is not a preference document');
+  for (const definition of BUILT_IN_PALETTES) {
+    const palette = resolvedBuiltInPalette(definition.id).palette;
+    const variables = themePaletteCssVariables(palette);
+    assert.equal(variables['--motion-live-text'], `${MOTION_LIVE_TEXT.duration}ms`, `${definition.id} keeps the same live-label cadence`);
+    for (const [name, share] of [['field', 5], ['field-hover', 8], ['hairline', 12]] as const) {
+      assert.equal(variables[`--thread-${name}`], `color-mix(in srgb, var(--fg) ${share}%, transparent)`);
+    }
+    for (const [name, radius] of [['document', 8], ['control', 6], ['surface', 10], ['thread', 12]] as const) {
+      assert.equal(variables[`--radius-${name}`], `${radius}px`);
+    }
+  }
 
-// The migration. `omc-theme` held a bare palette id before this change, and a bare mode name before
-// that; both have to arrive as a usable document rather than as a default.
-assert.equal(migrateLegacyThemeValue('omc-dark')?.mode, 'dark');
-assert.equal(migrateLegacyThemeValue('omc-light')?.mode, 'light');
-assert.equal(migrateLegacyThemeValue('pewter')?.mode, 'dark');
-assert.equal(migrateLegacyThemeValue('pewter')?.palettes.dark, 'pewter', 'a legacy palette becomes that mode\'s choice');
-assert.equal(migrateLegacyThemeValue('porcelain')?.palettes.light, 'fog', 'a withdrawn bare id reads as its successor');
-assert.equal(migrateLegacyThemeValue('sandstone')?.mode, 'light');
-assert.equal(migrateLegacyThemeValue('sandstone')?.palettes.light, 'sandstone');
-assert.equal(migrateLegacyThemeValue('dark')?.mode, 'dark', 'the pre-palette bare mode still reads');
-assert.equal(migrateLegacyThemeValue('light')?.mode, 'light');
-assert.equal(migrateLegacyThemeValue('OMC-Theme-1.0'), undefined, 'an unrelated value is not migrated');
-assert.equal(migrateLegacyThemeValue(null), undefined);
+  // Every resolved palette has a label the dictionary owns - the two custom ones included - so no
+  // palette can reach the header's tooltip or a settings card as an untranslated string.
+  for (const definition of BUILT_IN_PALETTES) {
+    assert.match(resolvedBuiltInPalette(definition.id).nameKey, /^theme\./, `${definition.id} names itself from the dictionary`);
+  }
+  for (const mode of ['dark', 'light'] as const) {
+    assert.equal(resolvePalette(mode, 'custom', emptyCustomPalette(mode, 'omc-dark')).nameKey, 'omc.palette_custom');
+  }
 
-/** A minimal localStorage stand-in: the reads and writes the preference path performs. */
-function fakeStorage(initial: Record<string, string>) {
-  const values = new Map(Object.entries(initial));
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value); },
-    read: (key: string) => values.get(key) ?? null,
+  // ── the stored preference document ───────────────────────────────────────────
+
+  const stored = {
+    mode: 'system',
+    palettes: { dark: 'pewter', light: 'custom' },
+    custom: { light: { base: 'fog', core: getBuiltInPalette('fog').core } },
   };
-}
+  const parsed = parseThemePreferences(stored);
+  assert.ok(parsed, 'a well-formed document parses');
+  assert.equal(parsed.mode, 'system');
+  assert.equal(parsed.palettes.dark, 'pewter');
+  assert.equal(parsed.palettes.light, 'custom');
+  assert.equal(parsed.custom.light?.base, 'fog');
 
-const v2 = fakeStorage({ 'omc-theme': JSON.stringify({ ...stored, dirty: true }) });
-const readV2 = readStoredThemePreferences(v2);
-assert.equal(readV2?.preferences.mode, 'system');
-assert.equal(readV2?.isDirty, true, 'an unsaved local change is remembered as such');
+  // A withdrawn palette is read as the one that replaced it, so a stored choice keeps its mode's nearest
+  // look and an authored palette started from it is kept rather than dropped with its starting point.
+  const retired = parseThemePreferences({
+    palettes: { dark: 'midnight', light: 'porcelain' },
+    custom: { light: { base: 'porcelain', core: getBuiltInPalette('fog').core } },
+  });
+  assert.deepEqual(retired?.palettes, { dark: 'pewter', light: 'fog' }, 'a withdrawn palette reads as its successor');
+  assert.equal(retired?.custom.light?.base, 'fog', 'and an authored palette started from it survives');
 
-const legacy = fakeStorage({ 'omc-theme': 'forest' });
-assert.equal(readStoredThemePreferences(legacy)?.preferences.palettes.dark, 'forest', 'a legacy bare id is migrated on read');
-assert.equal(readStoredThemePreferences(legacy)?.isDirty, false, 'a migrated value is not a pending write');
+  // A document written by a build that still held a name parses without it: the field is ignored, so a
+  // browser carrying one is not asked to re-author its palette.
+  const withLegacyName = parseThemePreferences({
+    custom: { dark: { name: 'Studio', base: 'forest', core: getBuiltInPalette('forest').core } },
+  });
+  assert.equal(withLegacyName?.custom.dark?.base, 'forest', 'a stored name does not invalidate the palette');
+  assert.ok(!('name' in (withLegacyName?.custom.dark ?? {})), 'and it is dropped rather than carried forward');
 
-assert.equal(readStoredThemePreferences(fakeStorage({ 'omc-theme': '{ not json' })), undefined, 'unreadable storage yields no preference');
-assert.equal(readStoredThemePreferences(fakeStorage({})), undefined, 'a first visit has no stored preference');
+  // Liberal by field, strict by value: a missing field inherits the default while a wrong one is
+  // dropped rather than coerced into something the operator did not choose.
+  const partial = parseThemePreferences({ mode: 'purple', palettes: { dark: 'nope' } });
+  assert.equal(partial?.mode, DEFAULT_THEME_PREFERENCES.mode, 'an unknown mode falls back to the default');
+  assert.equal(partial?.palettes.dark, DEFAULT_THEME_PREFERENCES.palettes.dark, 'an unknown palette falls back');
 
-const written = fakeStorage({});
-writeStoredThemePreferences(parsed, true, written as unknown as Storage);
-const roundTripped = readStoredThemePreferences(written);
-assert.ok(roundTripped && sameThemePreferences(roundTripped.preferences, parsed), 'what is written can be read back');
-assert.equal(roundTripped?.isDirty, true, 'the dirty flag survives the round trip');
+  const brokenCore = parseThemePreferences({
+    custom: { dark: { base: 'forest', core: { ...getBuiltInPalette('forest').core, accent: 'blue' } } },
+  });
+  assert.equal(brokenCore?.custom.dark, undefined, 'a palette with an unreadable token is dropped, not repaired');
 
-// Comparison has to ignore the key order JSON.stringify would otherwise preserve, or a document that
-// changed only in field order would look like a change and be pushed to the deployment again.
-assert.ok(
-  sameThemePreferences(
-    { mode: 'dark', palettes: { dark: 'omc-dark', light: 'omc-light' }, custom: {} },
-    { palettes: { light: 'omc-light', dark: 'omc-dark' }, custom: {}, mode: 'dark' } as never,
-  ),
-  'field order does not make two documents different',
-);
-assert.ok(!sameThemePreferences(parsed, DEFAULT_THEME_PREFERENCES), 'a real difference is still a difference');
+  assert.equal(parseThemePreferences('nonsense'), undefined, 'a non-object document does not parse');
+  assert.equal(parseThemePreferences(null), undefined);
+  assert.equal(parseThemePreferences([]), undefined, 'an array is not a preference document');
 
-// The header's cycle and the system follow.
-assert.equal(nextModePreference('light'), 'dark');
-assert.equal(nextModePreference('dark'), 'system');
-assert.equal(nextModePreference('system'), 'light', 'the cycle closes');
-assert.equal(resolveModePreference('system', 'light'), 'light', 'following the system resolves to it');
-assert.equal(resolveModePreference('system', 'dark'), 'dark');
-assert.equal(resolveModePreference('light', 'dark'), 'light', 'an explicit choice ignores the system');
+  // The migration. `omc-theme` held a bare palette id before this change, and a bare mode name before
+  // that; both have to arrive as a usable document rather than as a default.
+  assert.equal(migrateLegacyThemeValue('omc-dark')?.mode, 'dark');
+  assert.equal(migrateLegacyThemeValue('omc-light')?.mode, 'light');
+  assert.equal(migrateLegacyThemeValue('pewter')?.mode, 'dark');
+  assert.equal(migrateLegacyThemeValue('pewter')?.palettes.dark, 'pewter', 'a legacy palette becomes that mode\'s choice');
+  assert.equal(migrateLegacyThemeValue('porcelain')?.palettes.light, 'fog', 'a withdrawn bare id reads as its successor');
+  assert.equal(migrateLegacyThemeValue('sandstone')?.mode, 'light');
+  assert.equal(migrateLegacyThemeValue('sandstone')?.palettes.light, 'sandstone');
+  assert.equal(migrateLegacyThemeValue('dark')?.mode, 'dark', 'the pre-palette bare mode still reads');
+  assert.equal(migrateLegacyThemeValue('light')?.mode, 'light');
+  assert.equal(migrateLegacyThemeValue('OMC-Theme-1.0'), undefined, 'an unrelated value is not migrated');
+  assert.equal(migrateLegacyThemeValue(null), undefined);
 
-assert.ok(isPaletteRef('custom') && isPaletteRef('forest') && !isPaletteRef('tree'), 'palette references are validated');
-
-// The Ant Design projection takes its values from the resolved palette rather than from the id.
-for (const definition of BUILT_IN_PALETTES) {
-  const resolved = resolvedBuiltInPalette(definition.id);
-  const antd = createThemeConfig(resolved);
-  assert.equal(antd.token?.colorBgBase, resolved.palette.bg, `${definition.id} paints the page from its palette`);
-  assert.equal(antd.token?.colorInfo, resolved.palette.accent, `${definition.id} paints links from its accent`);
-  assert.equal(antd.token?.colorBorderSecondary, resolved.palette.borderSoft, `${definition.id} paints dividers from its border-soft step`);
-  assert.equal(antd.components?.Table?.rowHoverBg, resolved.palette.rowHover, `${definition.id} paints row hover from its palette`);
-  assert.equal(antd.components?.Button?.primaryColor, resolved.palette.accentOn, `${definition.id} draws the primary label in its on-accent step`);
-  assert.equal(antd.components?.Tooltip?.colorBgSpotlight, resolved.palette.tooltipBg, `${definition.id} paints the spotlight from its palette`);
-}
-
-// ── the filled control's label, on both fills ────────────────────────────────
-//
-// One label sits on all three filled-control states, so the floor has to hold on the pressed state too
-// and not only on the resting hover. Solving the ladder against the hover fill alone left a `#58a6ff` accent's
-// near-black label at 3.14:1 the moment its button was pressed, and seven of eighteen authored accents
-// broke the same way - which is why the derivation now solves the two fills together and why this
-// checks both rather than the pair that happens to be the resting one.
-for (const definition of BUILT_IN_PALETTES) {
-  const palette = derivePalette(definition.mode, definition.core);
-  for (const [state, fill] of [['resting hover', palette.accentHover], ['pressed', palette.accentActive]] as const) {
-    const ratio = contrastRatio(palette.accentOn, fill);
-    assert.ok(
-      ratio >= ACCENT_LABEL_CONTRAST_FLOOR,
-      `${definition.id}: the primary button label (${palette.accentOn}) on its ${state} fill (${fill}) reads ${ratio.toFixed(2)}:1`,
-    );
+  /** A minimal localStorage stand-in: the reads and writes the preference path performs. */
+  function fakeStorage(initial: Record<string, string>) {
+    const values = new Map(Object.entries(initial));
+    return {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      read: (key: string) => values.get(key) ?? null,
+    };
   }
-}
-for (const mode of ['dark', 'light'] as const) {
-  const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core;
-  for (const accent of ACCENT_SWEEP) {
-    const palette = derivePalette(mode, { ...base, accent });
-    const worst = Math.min(
-      contrastRatio(palette.accentOn, palette.accentHover),
-      contrastRatio(palette.accentOn, palette.accentActive),
-    );
-    assert.ok(
-      worst >= ACCENT_LABEL_CONTRAST_FLOOR,
-      `${mode} accent ${accent}: the label reads ${worst.toFixed(2)}:1 on the weaker of the two fills`,
-    );
+
+  const v2 = fakeStorage({ 'omc-theme': JSON.stringify({ ...stored, dirty: true }) });
+  const readV2 = readStoredThemePreferences(v2);
+  assert.equal(readV2?.preferences.mode, 'system');
+  assert.equal(readV2?.isDirty, true, 'an unsaved local change is remembered as such');
+
+  const legacy = fakeStorage({ 'omc-theme': 'forest' });
+  assert.equal(readStoredThemePreferences(legacy)?.preferences.palettes.dark, 'forest', 'a legacy bare id is migrated on read');
+  assert.equal(readStoredThemePreferences(legacy)?.isDirty, false, 'a migrated value is not a pending write');
+
+  assert.equal(readStoredThemePreferences(fakeStorage({ 'omc-theme': '{ not json' })), undefined, 'unreadable storage yields no preference');
+  assert.equal(readStoredThemePreferences(fakeStorage({})), undefined, 'a first visit has no stored preference');
+
+  const written = fakeStorage({});
+  writeStoredThemePreferences(parsed, true, written as unknown as Storage);
+  const roundTripped = readStoredThemePreferences(written);
+  assert.ok(roundTripped && sameThemePreferences(roundTripped.preferences, parsed), 'what is written can be read back');
+  assert.equal(roundTripped?.isDirty, true, 'the dirty flag survives the round trip');
+
+  // Comparison has to ignore the key order JSON.stringify would otherwise preserve, or a document that
+  // changed only in field order would look like a change and be pushed to the deployment again.
+  assert.ok(
+    sameThemePreferences(
+      { mode: 'dark', palettes: { dark: 'omc-dark', light: 'omc-light' }, custom: {} },
+      { palettes: { light: 'omc-light', dark: 'omc-dark' }, custom: {}, mode: 'dark' } as never,
+    ),
+    'field order does not make two documents different',
+  );
+  assert.ok(!sameThemePreferences(parsed, DEFAULT_THEME_PREFERENCES), 'a real difference is still a difference');
+
+  // The header's cycle and the system follow.
+  assert.equal(nextModePreference('light'), 'dark');
+  assert.equal(nextModePreference('dark'), 'system');
+  assert.equal(nextModePreference('system'), 'light', 'the cycle closes');
+  assert.equal(resolveModePreference('system', 'light'), 'light', 'following the system resolves to it');
+  assert.equal(resolveModePreference('system', 'dark'), 'dark');
+  assert.equal(resolveModePreference('light', 'dark'), 'light', 'an explicit choice ignores the system');
+
+  assert.ok(isPaletteRef('custom') && isPaletteRef('forest') && !isPaletteRef('tree'), 'palette references are validated');
+
+  // The Ant Design projection takes its values from the resolved palette rather than from the id.
+  for (const definition of BUILT_IN_PALETTES) {
+    const resolved = resolvedBuiltInPalette(definition.id);
+    const antd = createThemeConfig(resolved);
+    assert.equal(antd.token?.colorBgBase, resolved.palette.bg, `${definition.id} paints the page from its palette`);
+    assert.equal(antd.token?.colorInfo, resolved.palette.accent, `${definition.id} paints links from its accent`);
+    assert.equal(antd.token?.colorBorderSecondary, resolved.palette.borderSoft, `${definition.id} paints dividers from its border-soft step`);
+    assert.equal(antd.components?.Table?.rowHoverBg, resolved.palette.rowHover, `${definition.id} paints row hover from its palette`);
+    assert.equal(antd.components?.Button?.primaryColor, resolved.palette.accentOn, `${definition.id} draws the primary label in its on-accent step`);
+    assert.equal(antd.components?.Tooltip?.colorBgSpotlight, resolved.palette.tooltipBg, `${definition.id} paints the spotlight from its palette`);
   }
-}
 
-// ── the secondary button's fill and ink ─────────────────────────────────────
-//
-// A default button is a soft fill rather than an outline: the foreground washed over whatever it
-// stands on, deepening under the pointer and while pressed, with a transparent edge. Its label stays
-// the palette's text colour in every state - the accent is a link and a selection, not a hover - so
-// what is asserted is that the projection pins exactly that, and that the label still clears the text
-// floor on the deepest fill, composited over the page the way the browser's `color-mix` paints it.
-const SECONDARY_BUTTON_STATES = [
-  { state: 'resting', fill: 'defaultBg', label: 'defaultColor', edge: 'defaultBorderColor' },
-  { state: 'hovered', fill: 'defaultHoverBg', label: 'defaultHoverColor', edge: 'defaultHoverBorderColor' },
-  { state: 'pressed', fill: 'defaultActiveBg', label: 'defaultActiveColor', edge: 'defaultActiveBorderColor' },
-] as const;
-
-/** `color-mix(in srgb, var(--fg) N%, transparent)` over `ground`, as the browser composites it. */
-function compositeForegroundWash(fill: string, fg: string, ground: string): string {
-  const match = /^color-mix\(in srgb, var\(--fg\) (\d+(?:\.\d+)?)%, transparent\)$/.exec(fill);
-  assert.ok(match, `a secondary button's fill is a foreground wash (${fill})`);
-  const share = Number(match[1]) / 100;
-  const channels = (hex: string) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
-  const [top, bottom] = [channels(fg), channels(ground)];
-  return `#${top.map((value, index) => Math.round(value * share + bottom[index] * (1 - share)).toString(16).padStart(2, '0')).join('')}`;
-}
-
-const textFloor = CONTRAST_FLOORS.text;
-assert.ok(textFloor !== undefined, 'text is a role with a contrast floor');
-const projectedPalettes = [
-  ...BUILT_IN_PALETTES.map((definition) => resolvedBuiltInPalette(definition.id)),
-  ...(['dark', 'light'] as const).flatMap((mode) => {
-    const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light');
-    return ACCENT_SWEEP.map((accent) => resolvePalette(mode, 'custom', { base: base.id, core: { ...base.core, accent } }));
-  }),
-];
-for (const resolved of projectedPalettes) {
-  const button = createThemeConfig(resolved).components?.Button;
-  for (const { state, fill, label, edge } of SECONDARY_BUTTON_STATES) {
-    assert.equal(button?.[label], resolved.palette.fg, `${resolved.id}: a ${state} secondary button's label is the text colour`);
-    assert.equal(button?.[edge], 'transparent', `${resolved.id}: a ${state} secondary button draws no edge`);
-    const painted = compositeForegroundWash(String(button?.[fill]), resolved.palette.fg, resolved.palette.bg);
-    const ratio = contrastRatio(resolved.palette.fg, painted);
-    assert.ok(
-      ratio >= textFloor,
-      `${resolved.id}: a ${state} secondary button's label reads ${ratio.toFixed(2)}:1 on its fill (${painted}), want >= ${textFloor}:1`,
-    );
+  // ── the filled control's label, on both fills ────────────────────────────────
+  //
+  // One label sits on all three filled-control states, so the floor has to hold on the pressed state too
+  // and not only on the resting hover. Solving the ladder against the hover fill alone left a `#58a6ff` accent's
+  // near-black label at 3.14:1 the moment its button was pressed, and seven of eighteen authored accents
+  // broke the same way - which is why the derivation now solves the two fills together and why this
+  // checks both rather than the pair that happens to be the resting one.
+  for (const definition of BUILT_IN_PALETTES) {
+    const palette = derivePalette(definition.mode, definition.core);
+    for (const [state, fill] of [['resting hover', palette.accentHover], ['pressed', palette.accentActive]] as const) {
+      const ratio = contrastRatio(palette.accentOn, fill);
+      assert.ok(
+        ratio >= ACCENT_LABEL_CONTRAST_FLOOR,
+        `${definition.id}: the primary button label (${palette.accentOn}) on its ${state} fill (${fill}) reads ${ratio.toFixed(2)}:1`,
+      );
+    }
   }
-}
+  for (const mode of ['dark', 'light'] as const) {
+    const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core;
+    for (const accent of ACCENT_SWEEP) {
+      const palette = derivePalette(mode, { ...base, accent });
+      const worst = Math.min(
+        contrastRatio(palette.accentOn, palette.accentHover),
+        contrastRatio(palette.accentOn, palette.accentActive),
+      );
+      assert.ok(
+        worst >= ACCENT_LABEL_CONTRAST_FLOOR,
+        `${mode} accent ${accent}: the label reads ${worst.toFixed(2)}:1 on the weaker of the two fills`,
+      );
+    }
+  }
 
-// ── a palette reference belongs to one mode ─────────────────────────────────
-//
-// `palettes.dark = 'omc-light'` is a document that claims dark mode and paints a light console. The UI
-// cannot produce it; a stored document and a preference endpoint that accepts any JSON can, so the
-// parser is where the claim has to be enforced.
-const crossMode = parseThemePreferences({
-  mode: 'dark',
-  palettes: { dark: 'omc-light' },
-  custom: { dark: { base: 'fog', core: getBuiltInPalette('fog').core } },
+  // ── the secondary button's fill and ink ─────────────────────────────────────
+  //
+  // A default button is a soft fill rather than an outline: the foreground washed over whatever it
+  // stands on, deepening under the pointer and while pressed, with a transparent edge. Its label stays
+  // the palette's text colour in every state - the accent is a link and a selection, not a hover - so
+  // what is asserted is that the projection pins exactly that, and that the label still clears the text
+  // floor on the deepest fill, composited over the page the way the browser's `color-mix` paints it.
+  const SECONDARY_BUTTON_STATES = [
+    { state: 'resting', fill: 'defaultBg', label: 'defaultColor', edge: 'defaultBorderColor' },
+    { state: 'hovered', fill: 'defaultHoverBg', label: 'defaultHoverColor', edge: 'defaultHoverBorderColor' },
+    { state: 'pressed', fill: 'defaultActiveBg', label: 'defaultActiveColor', edge: 'defaultActiveBorderColor' },
+  ] as const;
+
+  /** `color-mix(in srgb, var(--fg) N%, transparent)` over `ground`, as the browser composites it. */
+  function compositeForegroundWash(fill: string, fg: string, ground: string): string {
+    const match = /^color-mix\(in srgb, var\(--fg\) (\d+(?:\.\d+)?)%, transparent\)$/.exec(fill);
+    assert.ok(match, `a secondary button's fill is a foreground wash (${fill})`);
+    const share = Number(match[1]) / 100;
+    const channels = (hex: string) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+    const [top, bottom] = [channels(fg), channels(ground)];
+    return `#${top.map((value, index) => Math.round(value * share + bottom[index] * (1 - share)).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  const textFloor = CONTRAST_FLOORS.text;
+  assert.ok(textFloor !== undefined, 'text is a role with a contrast floor');
+  const projectedPalettes = [
+    ...BUILT_IN_PALETTES.map((definition) => resolvedBuiltInPalette(definition.id)),
+    ...(['dark', 'light'] as const).flatMap((mode) => {
+      const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light');
+      return ACCENT_SWEEP.map((accent) => resolvePalette(mode, 'custom', { base: base.id, core: { ...base.core, accent } }));
+    }),
+  ];
+  for (const resolved of projectedPalettes) {
+    const button = createThemeConfig(resolved).components?.Button;
+    for (const { state, fill, label, edge } of SECONDARY_BUTTON_STATES) {
+      assert.equal(button?.[label], resolved.palette.fg, `${resolved.id}: a ${state} secondary button's label is the text colour`);
+      assert.equal(button?.[edge], 'transparent', `${resolved.id}: a ${state} secondary button draws no edge`);
+      const painted = compositeForegroundWash(String(button?.[fill]), resolved.palette.fg, resolved.palette.bg);
+      const ratio = contrastRatio(resolved.palette.fg, painted);
+      assert.ok(
+        ratio >= textFloor,
+        `${resolved.id}: a ${state} secondary button's label reads ${ratio.toFixed(2)}:1 on its fill (${painted}), want >= ${textFloor}:1`,
+      );
+    }
+  }
+
+  // ── a palette reference belongs to one mode ─────────────────────────────────
+  //
+  // `palettes.dark = 'omc-light'` is a document that claims dark mode and paints a light console. The UI
+  // cannot produce it; a stored document and a preference endpoint that accepts any JSON can, so the
+  // parser is where the claim has to be enforced.
+  const crossMode = parseThemePreferences({
+    mode: 'dark',
+    palettes: { dark: 'omc-light' },
+    custom: { dark: { base: 'fog', core: getBuiltInPalette('fog').core } },
+  });
+  assert.equal(crossMode?.palettes.dark, DEFAULT_THEME_PREFERENCES.palettes.dark, 'a reference from the other mode is refused');
+  assert.equal(crossMode?.custom.dark, undefined, 'and so is a custom palette started from one');
+  assert.equal(
+    parseThemePreferences({ palettes: { dark: 'forest' }, custom: { dark: { base: 'forest', core: getBuiltInPalette('forest').core } } })?.palettes.dark,
+    'forest',
+    'a reference from the same mode is kept',
+  );
+  assert.equal(emptyCustomPalette('light', 'forest').base, 'omc-light', 'a cross-mode starting palette falls back to this mode');
+
+  // Motion projection must not enable hover UI on a chart that did not request it.
+  for (const isReducedMotion of [true, false]) {
+    const option = { series: [{ type: 'pie', data: [{ name: 'requests', value: 12 }] }] };
+    const motion = echartsMotion(isReducedMotion);
+    assert.deepEqual(applyEchartsMotion(option, isReducedMotion), {
+      ...motion,
+      series: option.series.map(series => ({ ...motion, ...series })),
+      axisPointer: { animation: !isReducedMotion, animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration },
+    }, 'motion projection preserves an omitted tooltip and supplies inherited axis-pointer timing');
+  }
 });
-assert.equal(crossMode?.palettes.dark, DEFAULT_THEME_PREFERENCES.palettes.dark, 'a reference from the other mode is refused');
-assert.equal(crossMode?.custom.dark, undefined, 'and so is a custom palette started from one');
-assert.equal(
-  parseThemePreferences({ palettes: { dark: 'forest' }, custom: { dark: { base: 'forest', core: getBuiltInPalette('forest').core } } })?.palettes.dark,
-  'forest',
-  'a reference from the same mode is kept',
-);
-assert.equal(emptyCustomPalette('light', 'forest').base, 'omc-light', 'a cross-mode starting palette falls back to this mode');
-
-// Motion projection must not enable hover UI on a chart that did not request it.
-for (const isReducedMotion of [true, false]) {
-  const option = { series: [{ type: 'pie', data: [{ name: 'requests', value: 12 }] }] };
-  const motion = echartsMotion(isReducedMotion);
-  assert.deepEqual(applyEchartsMotion(option, isReducedMotion), {
-    ...motion,
-    series: option.series.map(series => ({ ...motion, ...series })),
-    axisPointer: { animation: !isReducedMotion, animationDurationUpdate: isReducedMotion ? 0 : MOTION_FAST.duration },
-  }, 'motion projection preserves an omitted tooltip and supplies inherited axis-pointer timing');
-}
-
-console.log('theme contracts hold: derivation, preferences and Ant Design projection');

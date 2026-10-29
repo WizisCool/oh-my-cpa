@@ -220,7 +220,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
 
   // ── the page states itself once, without decorative copy ──────────────────
-  // docs/design.md §3: one page title, and a subtitle only when it carries live data. The titles
+  // One page title, and a subtitle only when it carries live data. The titles
   // and descriptions this page shipped with were static explanation, so their absence is the claim.
   check('the settings page carries exactly one page title', (await page.locator('.omc-settings-page .terminal-title').count()) === 1);
   check(

@@ -10,7 +10,7 @@
  * must never carry a countdown, and only a live reading may read as a deadline.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import type { TFunc } from '../web/src/i18n/index.tsx';
 import {
   formatSnapshotRenewalBound,

@@ -6,7 +6,7 @@ import { pluginDisplayName, type PluginItem } from '../../types/plugin';
  * A plugin page is an HTML resource the plugin serves from CPA. The console lists every
  * running plugin's pages in its navigation and shows each one in a frame whose document
  * comes through the console's plugin host, so the page is loaded with the console session
- * and never needs CPA's management key in the browser (ADR 0060).
+ * and never needs CPA's management key in the browser.
  */
 
 export const PLUGIN_PAGE_ROUTE_PREFIX = '/plugin-pages';

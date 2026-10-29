@@ -33,7 +33,7 @@
   /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
      background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 resting,
      6.93:1 pressed). Both are measured against the *same* label, which is why the ladder solves them
-     together rather than one at a time. Ratios are in docs/design.md §2. */
+     together rather than one at a time. */
   --accent: #00a2fb;
   --accent-hover: #0579bd;
   --accent-active: #025e94;
@@ -43,7 +43,7 @@
   --success: #10b981;
   --warn: #f59e0b;
   --danger: #ef4444;
-  /* Cache-rate sequential scale (design.md §2): 0% yellow → 100% green,
+  /* Cache-rate sequential scale: 0% yellow → 100% green,
      interpolated in OKLCH so the hue sweep stays perceptually even. Red is
      deliberately absent — a low hit rate is not a failure, and the danger hue
      belongs to failed requests. These are the semantic hues themselves; the
@@ -78,7 +78,7 @@
   /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
      where the bright accent reads 6.12:1 - clear of AA, so the ladder's own link step is used. */
   --heatmap-tip-link: #00a2fb;
-  /* Categorical series palette (design.md §2, ADR 0006): ZCode & Codex inspired developer console
+  /* Categorical series palette: ZCode & Codex inspired developer console
      palette matching AntV and Tremor. Alternates vibrant primary hues (Blue -> Emerald -> Purple ->
      Coral -> Amber -> Cyan) ensuring immediate visual hierarchy, warm-cool harmony, and rich telemetry. */
   --series-1: #3b82f6;
@@ -87,7 +87,7 @@
   --series-4: #f43f5e;
   --series-5: #f59e0b;
   --series-6: #06b6d4;
-  /* The live routing map's lane identities (design.md §2, §7 rule 9). A lane is a connection, and a
+  /* The live routing map's lane identities. A lane is a connection, and a
      connection drawn in green, amber or red reads as a verdict on it. Every slot therefore stays on
      the cool side of the wheel, away from the status hues the rest of the map still uses on node
      surfaces. */
@@ -100,7 +100,7 @@
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
-  /* Reasoning-effort scale (design.md §2): one cool sweep from a quiet teal to a saturated pink,
+  /* Reasoning-effort scale: one cool sweep from a quiet teal to a saturated pink,
      lowest reasoning step first. It never enters green, amber or red, which are verdicts here;
      each step is lightened until 10px badge text clears 4.5:1 on the badge's own tint. */
   --effort-1: #94bfce;
@@ -110,7 +110,7 @@
   --effort-5: #f08dee;
   --effort-6: #ff8cc1;
   --effort-tint: 14%;
-  /* The type scale (design.md §3). Sizes below the page title are these seven steps; a
+  /* The type scale. Sizes below the page title are these seven steps; a
      literal size is a display numeral or an icon, which belong to one surface each. */
   --text-2xs: 10px;
   --text-xs: 11px;
@@ -120,7 +120,7 @@
   --text-lg: 16px;
   --text-xl: 20px;
   /* The corner scale nests: a shape inside another takes the next step down, so an inner
-     corner never reads rounder than the edge around it (design.md §4). */
+     corner never reads rounder than the edge around it. */
   --radius-xs: 2px;
   /* A check box is a mark-sized control: the control step would round a 16px box into a dot. */
   --radius-check: 4px;
@@ -152,7 +152,7 @@
   --hover-inset: var(--bg);
   /* The hover fill for a row or a quiet control that sits on the page or a card. */
   --hover: #272729;
-  /* Motion tokens from docs/design.md §7. `fast`, `base` and `slow` are the numbers Ant Design's
+  /* `fast`, `base` and `slow` are the numbers Ant Design's
      own motion tokens carry in `themeConfig.ts` (`motionDurationFast`, `Mid` and `Slow`), and
      `test-theme-presets` pins them together, so a call site and a component library cannot pay
      different budgets for the same move. */
@@ -162,7 +162,7 @@
   --motion-fast: 120ms;
   --motion-base: 180ms;
   --motion-slow: 240ms;
-  /* §7's `float`: a summoned panel fades in while settling from just below full size toward the
+  /* The `float` token: a summoned panel fades in while settling from just below full size toward the
      control that opened it. antd has no token for it, which is why this one is the console's own. */
   --motion-float: 160ms;
   /* The glyph-only work-in-flight loop uses the same period in every palette. */
@@ -265,7 +265,7 @@ a { color: inherit; }
 .ant-layout, .ant-card, .ant-drawer-section {
   box-shadow: none !important;
 }
-/* Floating layers lift off the page (design.md §4). A layer the reader summoned carries a soft
+/* Floating layers lift off the page. A layer the reader summoned carries a soft
    shadow and a hairline: the shadow says "above", the hairline keeps its edge legible where the
    shadow has nothing to fall on - a light menu over a light page, a dark one over a dark page. */
 .ant-popover-container, .ant-dropdown-menu, .ant-select-dropdown,
@@ -289,7 +289,7 @@ a { color: inherit; }
    down from 80% of its height. Both read as the panel flying in. Here a panel fades in while
    settling the last few percent toward its origin, a menu also drops the last 4px toward its
    control, and a dialog rises 8px into place: the reader sees the result arrive, not travel.
-   Opacity and transform only, per §7 rule 1. */
+   Opacity and transform only, so the transition stays on the compositor. */
 .ant-zoom-big-enter.ant-zoom-big-enter-active, .ant-zoom-big-appear.ant-zoom-big-appear-active,
 .ant-zoom-big-fast-enter.ant-zoom-big-fast-enter-active, .ant-zoom-big-fast-appear.ant-zoom-big-fast-appear-active {
   animation-name: omc-float-in !important;
@@ -393,7 +393,7 @@ a { color: inherit; }
 .ant-drawer-left .ant-drawer-section { border-right: 1px solid var(--border); }
 /* On a desktop a side sheet floats like the page panel it covers: inset from the window's edges,
    rounded, and lifted by the overlay shadow, so it reads as a layer over the work rather than as
-   a second column bolted onto it. A phone's sheet stays edge to edge (§8). */
+   a second column bolted onto it. A phone's sheet stays edge to edge. */
 @media (min-width: 901px) {
   .ant-drawer-right > .ant-drawer-content-wrapper { top: 8px; bottom: 8px; right: 8px; }
   .ant-drawer-right .ant-drawer-section {
@@ -445,7 +445,7 @@ a { color: inherit; }
 .terminal-page-stack > * { min-width: 0; }
 .terminal-page-stack > .omc-notice { margin: 0; }
 
-/* Feedback surfaces (docs/design.md, Feedback surfaces). A toast reports an action and leaves; a
+/* Feedback surfaces (docs/design.md, Feedback and loading). A toast reports an action and leaves; a
    notice describes a region while it is on screen. Both read at the console's body size so a
    failure is never smaller than the data it interrupts. */
 /* A toast is a floating panel like a menu: the elevated fill and the 1px border above - with
@@ -941,7 +941,7 @@ a { color: inherit; }
 .fact-list.is-strong dd { color: var(--fg); font-weight: 600; }
 .fact-list.is-quiet dd { color: var(--fg-2); }
 
-/* A wide table scrolls sideways inside its card, never the page (docs/design.md §3). */
+/* A wide table scrolls sideways inside its card, never the page. */
 /* A wide table scrolls sideways only. `overflow-x: auto` alone computes the other axis to `auto`
    too, and a table's bottom border overflows by a subpixel, so every list became a vertical
    scroller of one pixel that caught the wheel: over a stack of lists the page would not scroll. */
@@ -1039,7 +1039,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    Two layers and no rules between them. The navigation stands on the canvas, which is chrome;
    the page is drawn on a single panel inset from the window's edges, which is the work. The
    panel's rounded edge is what separates the two, so neither the rail nor the header carries a
-   border of its own (design.md §5). */
+   border of its own. */
 .app-shell { height: 100vh; height: 100dvh; overflow: hidden; background: var(--canvas); }
 .app-shell > .app-body {
   height: calc(100% - 16px);
@@ -1241,7 +1241,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   }
 }
 .terminal-subtitle { margin: 4px 0 0; color: var(--muted); font-size: var(--text-md); }
-/* Status pips: 7×7, 2px radius (design.md). Both vocabularies are covered —
+/* Status pips: 7×7, 2px radius. Both vocabularies are covered —
    the chart tone names and the status names — because a pip that
    matches no rule silently falls back to grey, which is how a failed
    request once ended up reading as healthy. */
@@ -1357,8 +1357,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 /* No refresh indicator of its own. A bar that appears and disappears inside the card would add and
    remove height on every poll, so background refresh would move the two cards and the activity grid
-   below them - which design.md §7 forbids twice over: a poll is not a view change, and nothing
-   expensive may ride along with a re-render. The page's own progress bar already reports the fetch
+   below them. Background refresh must preserve layout. The page's own progress bar reports the fetch
    without occupying layout. */
 /* The heading must not stretch the data tracks: a timestamp is often wider than a KPI value.
    Shared content-sized tracks keep markers beside names and align numeric edges across model rows. */
@@ -1393,10 +1392,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    layout, and never covers more area than it has to: the terminal look should
    feel immediate and hand-following, not decorated. */
 .route-transition {
-  /* The `base` token, not `fast`. §7's table states that a route change "fades in over 100ms with a
-     3px rise", and the two tokens are only interchangeable while they happen to hold the same
-     number - which is how reading this as `fast` stayed invisible until the fast token was
-     corrected. */
+  /* A route change uses `base`, not the shorter acknowledgement for controls.
+     Keeping the named token preserves that distinction when durations change. */
   animation: route-enter var(--motion-base) var(--ease-standard) both;
 }
 /* Held for the two frames a palette change takes to paint (ThemeContext): the console lands in
@@ -1484,7 +1481,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* A first-load placeholder block. The breath is opacity only and staggered one `base` per row, so
-   the wave runs down the frame; ADR 0052 records why this is not §7 rule 3's shimmer. */
+   the wave runs down the frame without a moving gradient. */
 .placeholder {
   display: block;
   flex: none;
@@ -1588,8 +1585,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   line-height: 0;
   vertical-align: -0.125em;
 }
-/* One rotation per 900ms: a spinner's period is not a state transition, so §7 freezes it
-   under reduced motion rather than shortening it. */
+/* One rotation per 900ms: a spinner's period is not a state transition, so reduced motion
+   freezes it rather than shortening it. */
 .anticon-spin {
   animation: omc-icon-spin 900ms linear infinite;
 }
@@ -2336,8 +2333,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .ant-input-number-actions { display: none !important; }
   .ant-input-number-input { padding-inline-end: 8px; }
 
-  /* The hit area grows while the control keeps its drawn size: the spacing scale in
-     design.md §4 is what the console's density *is*, so enlarging every 28px button would
+  /* The hit area grows while the control keeps its drawn size: the spacing scale
+     keeps the console dense, so enlarging every 28px button would
      trade a reachability defect for a layout one.
 
      **The scope is controls small in both dimensions.** A control that is wide - a labelled

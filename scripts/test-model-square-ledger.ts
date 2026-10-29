@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { buildModelLedger, modelRequestsLink, MODEL_REQUEST_FACET_QUERY } from '../web/src/types/modelSquareLedger.ts';
 import { readEventQuery } from '../web/src/types/usageEventQuery.ts';
 import { USAGE_MULTI_FILTER_KEYS, type UsageFacetsResponse } from '../web/src/types/usageEvents.ts';

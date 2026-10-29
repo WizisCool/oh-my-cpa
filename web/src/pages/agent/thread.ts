@@ -13,7 +13,7 @@ import { turnParts } from './state';
  * The Agent transcript as assistant-ui messages.
  *
  * This is the one place the stored turns and the live run become the chat framework's shape, and
- * it is pure: the page's state stays OMC's own (ADR 0041), and swapping the framework rewrites this
+ * it is pure: the page's state stays OMC's own, and swapping the framework rewrites this
  * module and the views, never the state or the protocol.
  *
  * Message ids are the turn's own, so the live turn - once `RUN_STARTED` names it - and the stored
@@ -228,7 +228,7 @@ export function agentThreadMessages(conversation: Conversation | undefined, stor
  */
 export function appendMessageText(message: AppendMessage): string {
   const typed = message.content.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n').trim();
-  // Attached files follow the operator's words, each already a `<file>` block (ADR 0074).
+  // Attached files follow the operator's words, each already a `<file>` block.
   const files = (message.attachments ?? []).flatMap(attachment => attachment.content.flatMap(part => (part.type === 'text' ? [part.text] : [])));
   const text = [typed, ...files].filter(Boolean).join('\n\n');
   return quotedText(message, text);

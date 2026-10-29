@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { createProgressController, type ProgressPresentation } from '../web/src/utils/progressController.ts';
 import { PROGRESS_FLOOR } from '../web/src/utils/loadProgress.ts';
 

@@ -1,6 +1,6 @@
-/* The conversation workspace shared by the Playground and the Agent (design §5, "Conversation
-   workspaces"). Every colour is a palette token and every duration a motion token; nothing here
-   adds a shadow or a decorative gradient. Shape follows the thread scale of ADR 0081: printed
+/* The conversation workspace shared by the Playground and the Agent.
+   Every colour is a palette token and every duration a motion token; nothing here
+   adds a shadow or a decorative gradient. Shape follows the thread scale: printed
    matter, controls, floating surfaces and the composer each take their own radius. */
 
 /* ── frame ─────────────────────────────────────────────────────────────────── */
@@ -1744,7 +1744,7 @@
 /* ── work in flight ────────────────────────────────────────────────────────── */
 
 /* A label for work that is still running: a glint a few glyphs wide crosses the text and nothing
-   else (ADR 0080). The glyphs are painted once, by a background clipped to them: the label's own
+   else. The glyphs are painted once, by a background clipped to them: the label's own
    ink with the glint as a second layer moved across it. Masking the element to its text instead
    drew every glyph through its own outline, which squared the anti-aliased edge and left thin,
    pale strokes - barely legible as dark ink on a light ground. Repainting one short line is the
@@ -1822,7 +1822,7 @@
 
 /* The markdown renderer wraps each arriving run of text in a span that names its own fade. The
    thread replaces that fade with its own: new words land in the accent and settle into the ink,
-   so the eye finds the end of the answer without a jump (ADR 0080). */
+   so the eye finds the end of the answer without a jump. */
 :global(:root[data-reduced-motion='false']) {
   .markdown :global(span[style*='x-markdown-fade-in']) {
     animation: stream-arrive var(--motion-base) var(--ease-standard) both !important;

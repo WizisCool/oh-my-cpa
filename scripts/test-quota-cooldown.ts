@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { compactCooldownDiagnostic, isKnownQuotaCooldownReason, resolveQuotaCooldownTooltip } from '../web/src/pages/quota/quotaCooldown.ts';
 import type { QuotaItem } from '../web/src/types/quota.ts';
 

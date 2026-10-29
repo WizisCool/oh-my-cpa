@@ -110,11 +110,11 @@ const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
 /**
  * rateTone gives the tile's only pip something to mean.
  *
- * design.md reserves green/amber/red for real state, so one pip per verdict, and the band comes
+ * Green/amber/red convey real state, so one pip per verdict, and the band comes
  * from `successRateTone` - the console's single published rate rule, which the dashboard's provider
  * rows read too. 80% or better is a gateway serving well enough not to need a look, 50-80% is
  * degraded, below that is broken, and a window with no traffic carries no verdict at all rather
- * than reading as a fault. See docs/design.md §Status pip semantics.
+ * than reading as a fault.
  */
 function rateTone(successRate: number | null | undefined): ChartTone {
   return successRateTone(successRate);
@@ -481,10 +481,9 @@ export const DashboardPage: React.FC = () => {
               <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
             </div>
             {/* The bar chart is the token volume behind the rate, and its hue is
-                the tile's identity colour. It used to turn danger red when the
-                hit rate fell under 50%, which design.md forbids: a cache miss is
-                the shape of a novel prompt, not a failed execution, and the
-                danger hue belongs to failed requests. The rate itself is read
+                the tile's identity colour. A cache miss is the shape of a novel
+                prompt, not a failed execution; the danger hue belongs to failed
+                requests. The rate itself is read
                 from the badge above, which owns the cache scale. */}
             {/* The mark shows the cache reads behind the rate. A rate needs both
                 its terms, and this series carries only the numerator, so plotting

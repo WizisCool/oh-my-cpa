@@ -1,5 +1,5 @@
 /* Insights: one quiet column of panels on the canvas. Hue appears only where it names a category the
-   trend also draws (docs/design.md §Insights); every other mark is ink. */
+   trend also draws; every other mark is ink. */
 
 .page {
   /* A change's direction: the state hues mixed well toward the ink, so a rise or a fall is legible

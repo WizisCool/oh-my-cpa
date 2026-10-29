@@ -4,7 +4,7 @@
  * A continuous scale rather than the four discrete steps the panel used to have. The steps answered
  * "busy / quiet" and nothing finer, so every day between two of them was painted identically - which
  * is exactly the information the panel exists to show. The cache-rate badge is the app's other
- * continuous reading (see docs/design.md §2), and this follows the same shape: a pure helper that
+ * continuous reading, and this follows the same shape: a pure helper that
  * answers "which two stops, and how much of the first", with the mixing left to CSS.
  *
  * The interpolation is done by CSS `color-mix(in oklch, ...)` so the stops stay design tokens rather

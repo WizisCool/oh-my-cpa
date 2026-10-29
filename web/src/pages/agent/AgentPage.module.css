@@ -217,7 +217,7 @@
 
 /* ── work timeline ─────────────────────────────────────────────────────────── */
 
-/* A stretch of reasoning and calls: a summary line, and under it the steps on a rail (ADR 0084). */
+/* A stretch of reasoning and calls: a summary line, and under it the steps on a rail. */
 .chain {
   display: flex;
   flex-direction: column;
@@ -533,7 +533,7 @@
   display: none;
 }
 
-/* ── files sent with a message (ADR 0074) ──────────────────────────────────── */
+/* ── files sent with a message ──────────────────────────────────── */
 
 .sent-files {
   display: flex;
@@ -601,13 +601,13 @@
   object-fit: cover;
 }
 
-/* ── panels (ADR 0079) ─────────────────────────────────────────────────────── */
+/* ── panels ─────────────────────────────────────────────────────── */
 
 /* Figures share one hairline grid instead of each sitting in its own box. */
 
 /* The rail is each step's own left edge, so it joins the marks whatever a step's height. */
 
-/* ── canvases (ADR 0072) ───────────────────────────────────────────────────── */
+/* ── canvases ───────────────────────────────────────────────────── */
 
 /* ── composer additions ────────────────────────────────────────────────────── */
 

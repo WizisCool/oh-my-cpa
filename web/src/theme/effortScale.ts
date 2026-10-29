@@ -9,7 +9,7 @@
  * did not succeed, degrade or fail by doing so.
  *
  * The level's own name is always printed beside the colour, so the hue only
- * speeds up a scan the text already answers. See docs/design.md §2.
+ * speeds up a scan the text already answers.
  */
 
 /**

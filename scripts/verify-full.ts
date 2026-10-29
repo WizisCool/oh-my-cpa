@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runChecks, measureVerification } from './parallel-checks.mjs';
+import { runChecks } from './parallel-checks.mjs';
 import type { Check, Execute } from './testing/checks.ts';
 
 export async function runFullVerification({ execute = runChecks, isSerial = false, probePort }: { execute?: Execute; isSerial?: boolean; probePort?: number } = {}) {
@@ -31,6 +31,7 @@ export async function runFullVerification({ execute = runChecks, isSerial = fals
         { label: 'static-repository', command: 'pnpm', args: ['verify:static:repository'] },
       ] : [{ label: 'static', command: 'pnpm', args: ['verify:static'] }]),
     ])) return false;
+    if (!await runGroup([{ label: 'documentation', command: 'pnpm', args: ['check-docs'] }])) return false;
     if (!await runGroup([{ label: 'history-secrets', command: 'pnpm', args: ['verify:secrets:history'] }])) return false;
     if (!await runGroup([{ label: 'worktree-secrets', command: 'pnpm', args: ['verify:secrets:worktree'] }])) return false;
 
@@ -64,5 +65,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     else if (arguments_[i] === '--probe-port' && probePort === undefined) probePort = Number(arguments_[++i]);
     else throw new Error('Expected [--serial] [--probe-port PORT]');
   }
-  if (!await measureVerification(isSerial ? 'full-serial' : 'full', () => runFullVerification({ isSerial, probePort }))) process.exitCode = 1;
+  if (!await runFullVerification({ isSerial, probePort })) process.exitCode = 1;
 }

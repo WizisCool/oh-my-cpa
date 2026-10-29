@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { createID } from '../web/src/utils/ids';
 import { extractThinking } from '../web/src/utils/thinking';
 import { effectiveModel } from '../web/src/types/requestModel';

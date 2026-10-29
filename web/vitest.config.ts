@@ -1,22 +1,47 @@
+import { createRequire } from 'node:module';
+import { availableParallelism } from 'node:os';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-// Do not load the product Vite config: component tests neither stage assets nor
-// start the dev proxy, browser, editor workers or any upstream service.
+const require = createRequire(import.meta.url);
+
+// Tests do not load the product Vite config or stage its browser assets and services.
 export default defineConfig({
-  plugins: [react()],
+  root: fileURLToPath(new URL('../', import.meta.url)),
   test: {
-    include: ['tests/**/*.component.test.tsx', 'tests/**/*.contract.test.ts'],
-    environment: 'jsdom',
-    environmentOptions: { jsdom: { url: 'http://localhost/' } },
-    setupFiles: ['./tests/setup.ts'],
-    // Every file gets its own environment, so files run in parallel; within a file
-    // tests stay sequential and share nothing but what setup.ts resets.
-    isolate: true,
-    // A worker per core when the suite has the machine to itself. Beside other gates
-    // (`pnpm verify` runs three at once) a heavy antd render per core pushes tests
-    // past their five-second budget, so scripts/parallel-checks.mjs asks for one
-    // worker through OMC_SHARED_CPU.
-    maxWorkers: process.env.OMC_SHARED_CPU ? 1 : undefined,
+    reporters: process.env.CI ? ['default', 'junit'] : ['default'],
+    outputFile: { junit: 'tmp/frontend-tests/junit.xml' },
+    // Heavy jsdom/antd renders compete for CPU before their assertions run. Bound
+    // the pool even on an otherwise idle host, and yield when other gates share it.
+    maxWorkers: process.env.OMC_SHARED_CPU ? 1 : Math.min(2, availableParallelism()),
+    projects: [
+      {
+        test: {
+          name: 'logic',
+          include: ['scripts/test-*.ts'],
+          environment: 'node',
+        },
+      },
+      {
+        plugins: [react()],
+        // React belongs to web's workspace; plugin deduplication must not resolve
+        // against the runner's repository root, which does not install React.
+        resolve: {
+          alias: {
+            react: dirname(require.resolve('react/package.json')),
+            'react-dom': dirname(require.resolve('react-dom/package.json')),
+          },
+        },
+        test: {
+          name: 'components',
+          include: ['web/tests/**/*.component.test.tsx', 'web/tests/**/*.contract.test.ts'],
+          environment: 'jsdom',
+          environmentOptions: { jsdom: { url: 'http://localhost/' } },
+          setupFiles: ['./web/tests/setup.ts'],
+        },
+      },
+    ],
   },
 });

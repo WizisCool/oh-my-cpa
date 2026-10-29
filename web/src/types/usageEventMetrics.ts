@@ -31,7 +31,7 @@ export const SUCCESS_RATE_DEGRADED_PERCENT = 50;
  *
  * Every surface that shows a rate reads this: the dashboard's request tile and the provider rows.
  * A rate therefore carries the same colour wherever it appears, and there is no second rule to
- * disagree with this one. See docs/design.md §Status pip semantics.
+ * disagree with this one.
  *
  * An *absent* rate - `null` on the wire, printed as an em dash - carries no verdict and stays
  * neutral rather than reading as a fault: a window that served nothing has no rate to judge. A
@@ -75,7 +75,7 @@ export interface EventCacheRateResult {
  * only for providers whose accounting treats cache buckets as separate from
  * input, but the persisted row carries no canonical breakdown to prove which
  * convention produced its raw counts, so widening the denominator here would be
- * a guess. See docs/design.md §2 for the deferred work.
+ * a guess.
  */
 export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateResult {
   if (!tokens) {

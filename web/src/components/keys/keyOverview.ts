@@ -6,7 +6,7 @@ export type KeyUseFilter = (typeof KEY_USE_FILTERS)[number];
 
 /** One rendered row: a key from CPA's client-key list plus the identity and
  *  traffic Oh My CPA knows about it. A key has no state of its own to report —
- *  CPA accepts it by presence in that list (see ADR 0010). */
+ *  CPA accepts it by presence in that list. */
 export interface ApiKeyRecord {
   id: string;
   /** Position in the client-key array; an edit writes back to this index. */
