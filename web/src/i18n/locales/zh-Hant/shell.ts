@@ -176,5 +176,9 @@ export default {
   "time_range.in_future": "時間範圍不能超出目前時間。",
   "common.more": "更多",
   "common.edit": "編輯",
+  "common.search": "搜尋",
+  "common.no_matches": "沒有相符項目",
+  "common.add_value": "新增「{value}」",
+  "common.done": "完成",
   "nav.model_square": "模型廣場",
 } satisfies Translation<typeof source>;

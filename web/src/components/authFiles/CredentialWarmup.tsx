@@ -1,7 +1,7 @@
 import { translateOr } from '../../i18n/catalog';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { App, Button, Input, Segmented, Select, Space, Tabs, Typography } from 'antd';
+import { App, Button, Input, Segmented, Space, Tabs, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
@@ -10,6 +10,7 @@ import { languageLocale } from '../../i18n/language';
 import { isDemoMode } from '../../types/demoMode';
 import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, isWarmupPolicyEnabled, type WarmupPolicy, type WarmupResult, type WarmupSettings, type WarmupCredential } from '../../types/warmup';
 import { AppDrawer } from '../common/AppDrawer';
+import { SearchSelect } from '../common/SearchSelect';
 import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { Switch } from '../common/Switch';
@@ -98,7 +99,7 @@ function RuleEditor({ policy, onChange, models, timezone, disabled }: {
     </div>
     <label className={styles['model']}>
       <Text>{t('warmup.model')}</Text>
-      <Select aria-label={t('warmup.model')} value={policy.model || undefined} placeholder={t('warmup.select_model')} disabled={disabled}
+      <SearchSelect label={t('warmup.model')} value={policy.model || undefined} placeholder={t('warmup.select_model')} disabled={disabled}
         showSearch={{ optionFilterProp: 'label' }} options={modelOptions.map(model => ({ value: model, label: model }))}
         onChange={(model: string) => onChange({ ...policy, model })} />
       <Text type="secondary" className={styles['rule-hint']}>{t('warmup.model_hint')}</Text>

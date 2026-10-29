@@ -50,6 +50,7 @@ const PRIMITIVE_OWNERS = {
   'raw-drawer': [
     'web/src/components/common/AppDrawer.tsx',
     'web/src/components/common/AppLayout.tsx',
+    'web/src/components/common/SearchSelect.tsx',
     'web/src/components/common/timeRange/TimeRangePicker.tsx',
   ],
   'raw-popconfirm': ['web/src/components/common/ConfirmAction.tsx'],

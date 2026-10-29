@@ -1,9 +1,10 @@
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import React from 'react';
-import { Button, Checkbox, Modal, Segmented, Select } from 'antd';
+import { Button, Checkbox, Modal, Segmented } from 'antd';
 
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { useT } from '../../i18n';
+import { SearchSelect } from '../common/SearchSelect';
 import { useTheme } from '../../theme/ThemeContext';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -257,12 +258,12 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
               label: t(`events.export_detail_${detail}`),
             }))}
           />
-          <Select
+          <SearchSelect
             className="req-export-columns"
             mode="multiple"
             allowClear
             maxTagCount="responsive"
-            aria-label={t('events.export_mask_columns')}
+            label={t('events.export_mask_columns')}
             placeholder={t('events.export_mask_columns')}
             value={maskedWholeColumns}
             onChange={setMaskedWholeColumns}

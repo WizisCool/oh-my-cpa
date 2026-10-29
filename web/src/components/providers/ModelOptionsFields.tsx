@@ -1,8 +1,9 @@
 import type { MessageKey } from '../../i18n/catalog';
-import { Checkbox, Input, InputNumber, Select } from 'antd';
+import { Checkbox, Input, InputNumber } from 'antd';
 
 import { VertexModelOpenAPI } from '../authFiles/VertexModelOpenAPI';
 import { useT } from '../../i18n';
+import { SearchSelect } from '../common/SearchSelect';
 import type { ProviderModelOptionField } from '../../types/providers';
 import { MODALITY_SUGGESTIONS, type ModelOptionsDraft, type ModelOptionsProblem } from './modelOptions';
 import styles from './ProviderEditorDrawer.module.css';
@@ -124,7 +125,8 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
               <label className={styles['item-field-label']} htmlFor={`${idPrefix}-input-modalities`}>
                 {t('pro.model_input_modalities')}
               </label>
-              <Select
+              <SearchSelect
+                label={t('pro.model_input_modalities')}
                 id={`${idPrefix}-input-modalities`}
                 mode="tags"
                 className={styles['option-select']}
@@ -139,7 +141,8 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
               <label className={styles['item-field-label']} htmlFor={`${idPrefix}-output-modalities`}>
                 {t('pro.model_output_modalities')}
               </label>
-              <Select
+              <SearchSelect
+                label={t('pro.model_output_modalities')}
                 id={`${idPrefix}-output-modalities`}
                 mode="tags"
                 className={styles['option-select']}

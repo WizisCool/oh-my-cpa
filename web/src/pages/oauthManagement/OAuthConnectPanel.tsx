@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Input,
-  Select,
   Space,
   Spin,
 } from 'antd';
@@ -26,6 +25,7 @@ import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
 import { useToast } from '../../components/feedback';
 import { AppDrawer } from '../../components/common/AppDrawer';
+import { SearchSelect } from '../../components/common/SearchSelect';
 import { SecretInput } from '../../components/common/SecretInput';
 import { Tag } from '../../components/common/Tag';
 
@@ -124,7 +124,8 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <label className={styles['field-label']} htmlFor="oauth-connect-provider">
                 {t('omc.connect_provider')}
               </label>
-              <Select
+              <SearchSelect
+                label={t('omc.connect_provider')}
                 id="oauth-connect-provider"
                 value={selectedProviderId}
                 placeholder={t('omc.connect_provider_placeholder')}
@@ -189,7 +190,8 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                   {t('omc.change_provider')}
                 </Button>
               </div>
-              <Select
+              <SearchSelect
+                label={t('omc.connect_provider')}
                 id="oauth-connect-provider"
                 value={selectedProviderId}
                 placeholder={t('omc.connect_provider_placeholder')}

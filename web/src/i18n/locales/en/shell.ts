@@ -176,5 +176,9 @@ export default {
   'time_range.in_future': 'The range cannot extend beyond the current time.',
   'common.more': 'More',
   'common.edit': 'Edit',
+  'common.search': 'Search',
+  'common.no_matches': 'No matches',
+  'common.add_value': 'Add “{value}”',
+  'common.done': 'Done',
   'nav.model_square': 'Model Square',
 } satisfies Translation<typeof source>;

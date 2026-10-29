@@ -21,6 +21,7 @@ import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { ResultMarker } from './ResultMarker';
 import { TimeRangeControl } from './TimeRangeControl';
 import { SearchInput } from '../common/SearchInput';
+import { SearchSelect } from '../common/SearchSelect';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import './RequestToolbar.css';
 import './requestMarks.css';
@@ -93,10 +94,10 @@ export function RequestToolbar({
   ) => {
     const selected = committedParams[key] ?? [];
     return (
-      <Select
+      <SearchSelect
         className="req-facet-select"
         mode="multiple"
-        aria-label={t(labelKey)}
+        label={t(labelKey)}
         placeholder={t(labelKey)}
         value={selected}
         allowClear

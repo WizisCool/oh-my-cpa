@@ -1,5 +1,4 @@
 import React from 'react';
-import { Select } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useI18n, useT, LANGUAGES } from '../../i18n';
@@ -9,6 +8,7 @@ import { DISPLAY_CURRENCIES, EXCHANGE_RATES_QUERY_KEY, currencySymbol, formatCur
 import { isDemoMode } from '../../types/demoMode';
 import { CountryFlag } from '../common/CountryFlag';
 import { RefreshButton } from '../common/RefreshButton';
+import { SearchSelect } from '../common/SearchSelect';
 import { SettingRow } from '../common/SettingRow';
 import { Notice, useToast } from '../feedback';
 import { CURRENCY_FLAGS } from './currencyFlags';
@@ -58,7 +58,8 @@ export const CurrencySettings: React.FC = () => {
       label={t('omc.display_currency')}
       description={<>{t('omc.display_currency_desc')}{status && <span className={styles['status']}>{status}</span>}</>}
       control={<div className={styles['control']}>
-        <Select
+        <SearchSelect
+          label={t('omc.display_currency')}
           className={styles['currency-select']}
           classNames={{ popup: { root: styles['currency-popup'] } }}
           popupMatchSelectWidth={false}
@@ -71,7 +72,6 @@ export const CurrencySettings: React.FC = () => {
           disabled={!isLoaded}
           showSearch={{ optionFilterProp: 'label' }}
           listHeight={360}
-          aria-label={t('omc.display_currency')}
           labelRender={({ value }) => renderCurrency(value as DisplayCurrencyCode, names.of(String(value)) ?? String(value))}
           optionRender={(option) => renderCurrency(option.value as DisplayCurrencyCode, option.data.name)}
         />

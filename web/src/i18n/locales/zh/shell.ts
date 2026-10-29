@@ -173,5 +173,9 @@ export default {
   'time_range.in_future': '时间范围不能超出当前时间。',
   'common.more': '更多',
   'common.edit': '编辑',
+  'common.search': '搜索',
+  'common.no_matches': '没有匹配项',
+  'common.add_value': '添加“{value}”',
+  'common.done': '完成',
   'nav.model_square': '模型广场',
 };

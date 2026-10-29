@@ -176,5 +176,9 @@ export default {
   "time_range.in_future": "Julat tidak boleh melebihi masa semasa.",
   "common.more": "Lagi",
   "common.edit": "Edit",
+  "common.search": "Cari",
+  "common.no_matches": "Tiada padanan",
+  "common.add_value": "Tambah “{value}”",
+  "common.done": "Selesai",
   "nav.model_square": "Dataran Model",
 } satisfies Translation<typeof source>;
