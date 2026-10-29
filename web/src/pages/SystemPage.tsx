@@ -50,6 +50,7 @@ import { useConsoleUpdate } from './SystemPage/useConsoleUpdate';
 import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
 import { DataRetention, DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
+import { StorageFootprint } from './SystemPage/StorageFootprint';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
 import type { SystemUpdatesResponse } from '../types/system';
@@ -592,10 +593,9 @@ export const SystemPage: React.FC = () => {
 
       {/* The versions card is the page's subject and takes a row of its own: a product row is
           identity, comparison, status and actions at once, and a half-width cell made every one of
-          them wrap. The three operational cards below it are peers, so they share one row and wrap
-          to fewer columns before their own readings would be squeezed. Source order is the reading
-          order, so a keyboard, a screen reader and a phone all meet the cards in the order the
-          grid draws them. */}
+          them wrap. Health and storage are readings and share the next row; maintenance is actions
+          and closes the page at full width. Source order is the reading order, so a keyboard, a
+          screen reader and a phone all meet the cards in the order the layout draws them. */}
       <div className={styles['system-stack']}>
         {/* Card 1: Versions & Updates */}
         <Panel
@@ -658,219 +658,10 @@ export const SystemPage: React.FC = () => {
           )}
         </Panel>
 
-        {/* Cards 2-4: the operational readings, which are peers rather than a sequence. */}
+        {/* The two reading cards are peers and share a row: one answers "is every part running",
+            the other "how much room does it take". */}
         <div className={styles['detail-grid']}>
-
-          {/* Card 2: Maintenance & Diagnostics */}
-          <Panel
-            className={`${styles['system-card']} ${styles['detail-card']}`}
-            data-testid="sys-card-maintenance"
-            title={(
-              <PanelTitle
-                icon={<SafetyCertificateOutlined />}
-              >
-                {t('sys.maintenance_card')}
-              </PanelTitle>
-            )}
-          >
-            <div className={styles['maintenance-actions']}>
-              <div className={styles['maintenance-action']}>
-                <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
-                  <div className={styles['maintenance-action-title']}>{t('sys.action_checkpoint_short')}</div>
-                  <Button
-                    icon={<ClearOutlined />}
-                    aria-label={t('sys.action_checkpoint')}
-                    loading={
-                      submittingAction === 'checkpoint' ||
-                      (effectiveMaintenance?.running &&
-                        (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
-                    }
-                    disabled={isDemo || isMaintenanceActive}
-                    onClick={() => void handleRunCheckpoint()}
-                  >
-                    {t('sys.action_run')}
-                  </Button>
-                </div>
-                <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">{t('sys.checkpoint_desc')}</div>
-              </div>
-
-              <div className={styles['maintenance-action']}>
-                <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
-                  <div className={styles['maintenance-action-title']}>{t('sys.action_vacuum_short')}</div>
-                  <Button
-                    icon={<CompressOutlined />}
-                    aria-label={t('sys.action_vacuum')}
-                    loading={
-                      submittingAction === 'vacuum' ||
-                      (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
-                    }
-                    disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
-                    onClick={() => setIsVacuumModalOpen(true)}
-                  >
-                    {t('sys.action_run')}
-                  </Button>
-                </div>
-                <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">
-                  {effectiveAdmission && !effectiveAdmission.allowed
-                    ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
-                    : t('sys.vacuum_desc')}
-                </div>
-              </div>
-
-              <div className={styles['maintenance-action']}>
-                <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
-                  <div className={styles['maintenance-action-title']}>{t('sys.diagnostics_bundle')}</div>
-                  <Button
-                    icon={<DownloadOutlined />}
-                    aria-label={t('sys.download_diag')}
-                    loading={downloadingDiag}
-                    disabled={isDemo}
-                    title={isDemo ? t('demo.blocked') : undefined}
-                    onClick={() => void handleDownloadDiagnostics()}
-                  >
-                    {t('sys.action_download')}
-                  </Button>
-                </div>
-                <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">{t('sys.diag_desc')}</div>
-              </div>
-            </div>
-
-            {/* The running job, from the live server status. It is always shown, including one
-                that was already running when the page was opened, and it is never dismissible:
-                the page must not let a reader hide a job that is still holding the write gate. */}
-            {effectiveMaintenance?.running && (
-              <Notice
-                tone="info"
-                icon={<Spin size="small" />}
-                className={styles['maintenance-running']}
-                title={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
-              />
-            )}
-
-            {/* The completed outcome, rendered from this page's own snapshot rather than from the
-                server's retained last job. The server keeps that record for the life of the process,
-                so rendering it directly would resurrect a result the reader has already cleared on
-                every reload. */}
-            {!effectiveMaintenance?.running && displayedOutcome && (
-              <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
-                <div className={styles['maintenance-box-title']}>
-                  {displayedOutcome.error ? (
-                    <CloseCircleOutlined className={styles['outcome-danger']} />
-                  ) : displayedOutcome.incomplete ? (
-                    // A partial result is its own outcome, not a qualified success. SQLite reports
-                    // a blocked checkpoint in the statement's result row rather than as an error,
-                    // so a green checkmark here would claim the log was truncated when it was not.
-                    <WarningOutlined className={styles['outcome-warn']} />
-                  ) : (
-                    <CheckCircleOutlined className={styles['outcome-success']} />
-                  )}
-                  <span>
-                    {displayedOutcome.error
-                      ? t('sys.maintenance_failed', {
-                          action: actionLabel(displayedOutcome.action),
-                          msg: displayedOutcome.error,
-                        })
-                      : displayedOutcome.incomplete
-                        ? t('sys.maintenance_incomplete_title', {
-                            action: actionLabel(displayedOutcome.action),
-                          })
-                        : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
-                  </span>
-                  <Button
-                    type="text"
-                    // The console's square row-action size, not `small`: a 28px control gains only 36px
-                    // from the coarse-pointer 4px hit inset, and the floor this console measures is
-                    // ~40px. The drawn box is what a finger has to hit here.
-                    className={styles['maintenance-box-close']}
-                    icon={<CloseOutlined />}
-                    aria-label={t('common.close')}
-                    title={t('common.close')}
-                    onClick={() => setDisplayedOutcome(null)}
-                  />
-                </div>
-
-                <div className={styles['maintenance-box-meta']}>
-                  {t('sys.maintenance_reclaimed', {
-                    before: formatBytes(displayedOutcome.size_before_bytes),
-                    after: formatBytes(displayedOutcome.size_after_bytes),
-                    reclaimed: formatBytes(displayedOutcome.reclaimed_bytes),
-                  })}
-                </div>
-
-                {displayedOutcome.detail && (
-                  <Text type="secondary" className={styles['maintenance-detail']}>
-                    {displayedOutcome.detail}
-                  </Text>
-                )}
-
-                {displayedOutcome.incomplete && (
-                  <Notice
-                    tone="warning"
-                    className={styles['maintenance-outcome-alert']}
-                    title={t('sys.maintenance_incomplete_warning', {
-                      detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
-                    })}
-                  />
-                )}
-
-                {displayedOutcome.error && (
-                  <Notice
-                    tone="error"
-                    className={styles['maintenance-outcome-alert']}
-                    title={displayedOutcome.error}
-                  />
-                )}
-              </div>
-            )}
-          </Panel>
-
-          {/* Card 3: SQLite Storage */}
-          <Panel
-            className={`${styles['system-card']} ${styles['detail-card']}`}
-            data-testid="sys-card-storage"
-            title={(
-              <PanelTitle
-                icon={<DatabaseOutlined />}
-              >
-                {t('sys.storage_card')}
-              </PanelTitle>
-            )}
-          >
-            {sysInfo && (
-              <>
-                <div className={styles['storage-headline']}>
-                  <span className={styles['storage-headline-label']}>{t('sys.storage_total')}</span>
-                  <span className={styles['storage-total-num']}>
-                    {formatBytes(sysInfo.database.files.total_bytes)}
-                  </span>
-                </div>
-
-                <FactList
-                  className={styles['storage-readings']}
-                  testId="sys-storage-readings"
-                  facts={[
-                    ...([
-                      ['main', t('sys.storage_main'), sysInfo.database.files.main_exists, sysInfo.database.files.main_bytes],
-                      ['wal', t('sys.storage_wal'), sysInfo.database.files.wal_exists, sysInfo.database.files.wal_bytes],
-                      ['shm', t('sys.storage_shm'), sysInfo.database.files.shm_exists, sysInfo.database.files.shm_bytes],
-                    ] as const).map(([key, label, exists, bytes]) => ({
-                      key,
-                      label,
-                      value: exists ? formatBytes(bytes) : t('sys.file_not_exist'),
-                      testId: 'sys-storage-file-row',
-                    })),
-                    { key: 'journal', label: t('sys.journal_mode'), value: (sysInfo.database.journal_mode || '—').toUpperCase(), testId: 'sys-storage-fact-row' },
-                    { key: 'schema', label: t('sys.schema_version'), value: `v${sysInfo.database.schema_version}`, testId: 'sys-storage-fact-row' },
-                  ]}
-                />
-
-                <DataRetention />
-
-              </>
-            )}
-          </Panel>
-
-          {/* Card 4: Component Topology & Health */}
+          {/* Component health: one verdict and one or two readings per moving part. */}
           <Panel
             className={`${styles['system-card']} ${styles['detail-card']}`}
             data-testid="sys-card-health"
@@ -888,11 +679,7 @@ export const SystemPage: React.FC = () => {
                   <div className={styles['component-head']} data-testid="sys-component-head">
                     <div className={styles['component-name']}>{t('sys.component_cpa')}</div>
                     <StatusLabel tone={sysInfo.cpa.status === 'connected' ? 'success' : 'danger'}>
-                      {sysInfo.cpa.status === 'connected'
-                        ? sysInfo.cpa.latency_ms > 0
-                          ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
-                          : t('shell.connected')
-                        : t('shell.offline')}
+                      {sysInfo.cpa.status === 'connected' ? t('sys.cpa_connected') : t('sys.cpa_offline')}
                     </StatusLabel>
                   </div>
                   <FactList
@@ -900,7 +687,7 @@ export const SystemPage: React.FC = () => {
                     emphasis="quiet"
                     testId="sys-component-facts"
                     facts={[
-                      { key: 'credentials', label: t('sys.fact_credentials'), value: sysInfo.data_volumes.credentials ?? '—' },
+                      { key: 'latency', label: t('sys.fact_latency'), value: sysInfo.cpa.status === 'connected' && sysInfo.cpa.latency_ms > 0 ? `${sysInfo.cpa.latency_ms} ms` : '—' },
                     ]}
                   />
                 </div>
@@ -961,7 +748,191 @@ export const SystemPage: React.FC = () => {
               </div>
             )}
           </Panel>
+
+          {/* SQLite storage: how large the database is, and how long it keeps request records. */}
+          <Panel
+            className={`${styles['system-card']} ${styles['detail-card']}`}
+            data-testid="sys-card-storage"
+            title={(
+              <PanelTitle
+                icon={<DatabaseOutlined />}
+              >
+                {t('sys.storage_card')}
+              </PanelTitle>
+            )}
+          >
+            {sysInfo && (
+              <>
+                <StorageFootprint database={sysInfo.database} />
+                <DataRetention />
+              </>
+            )}
+          </Panel>
         </div>
+
+        {/* Maintenance is a set of actions rather than readings, so it takes the full width and lays
+            its actions side by side instead of stacking them in a narrow column. */}
+        <Panel
+          className={`${styles['system-card']} ${styles['detail-card']}`}
+          data-testid="sys-card-maintenance"
+          title={(
+            <PanelTitle
+              icon={<SafetyCertificateOutlined />}
+            >
+              {t('sys.maintenance_card')}
+            </PanelTitle>
+          )}
+        >
+          <div className={styles['maintenance-actions']}>
+            <div className={styles['maintenance-action']}>
+              <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
+                <div className={styles['maintenance-action-title']}>{t('sys.action_checkpoint_short')}</div>
+                <Button
+                  icon={<ClearOutlined />}
+                  aria-label={t('sys.action_checkpoint')}
+                  loading={
+                    submittingAction === 'checkpoint' ||
+                    (effectiveMaintenance?.running &&
+                      (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
+                  }
+                  disabled={isDemo || isMaintenanceActive}
+                  onClick={() => void handleRunCheckpoint()}
+                >
+                  {t('sys.action_run')}
+                </Button>
+              </div>
+              <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">{t('sys.checkpoint_desc')}</div>
+            </div>
+
+            <div className={styles['maintenance-action']}>
+              <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
+                <div className={styles['maintenance-action-title']}>{t('sys.action_vacuum_short')}</div>
+                <Button
+                  icon={<CompressOutlined />}
+                  aria-label={t('sys.action_vacuum')}
+                  loading={
+                    submittingAction === 'vacuum' ||
+                    (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
+                  }
+                  disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
+                  onClick={() => setIsVacuumModalOpen(true)}
+                >
+                  {t('sys.action_run')}
+                </Button>
+              </div>
+              <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">
+                {effectiveAdmission && !effectiveAdmission.allowed
+                  ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
+                  : t('sys.vacuum_desc')}
+              </div>
+            </div>
+
+            <div className={styles['maintenance-action']}>
+              <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
+                <div className={styles['maintenance-action-title']}>{t('sys.diagnostics_bundle')}</div>
+                <Button
+                  icon={<DownloadOutlined />}
+                  aria-label={t('sys.download_diag')}
+                  loading={downloadingDiag}
+                  disabled={isDemo}
+                  title={isDemo ? t('demo.blocked') : undefined}
+                  onClick={() => void handleDownloadDiagnostics()}
+                >
+                  {t('sys.action_download')}
+                </Button>
+              </div>
+              <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">{t('sys.diag_desc')}</div>
+            </div>
+          </div>
+
+          {/* The running job, from the live server status. It is always shown, including one
+              that was already running when the page was opened, and it is never dismissible:
+              the page must not let a reader hide a job that is still holding the write gate. */}
+          {effectiveMaintenance?.running && (
+            <Notice
+              tone="info"
+              icon={<Spin size="small" />}
+              className={styles['maintenance-running']}
+              title={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
+            />
+          )}
+
+          {/* The completed outcome, rendered from this page's own snapshot rather than from the
+              server's retained last job. The server keeps that record for the life of the process,
+              so rendering it directly would resurrect a result the reader has already cleared on
+              every reload. */}
+          {!effectiveMaintenance?.running && displayedOutcome && (
+            <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
+              <div className={styles['maintenance-box-title']}>
+                {displayedOutcome.error ? (
+                  <CloseCircleOutlined className={styles['outcome-danger']} />
+                ) : displayedOutcome.incomplete ? (
+                  // A partial result is its own outcome, not a qualified success. SQLite reports
+                  // a blocked checkpoint in the statement's result row rather than as an error,
+                  // so a green checkmark here would claim the log was truncated when it was not.
+                  <WarningOutlined className={styles['outcome-warn']} />
+                ) : (
+                  <CheckCircleOutlined className={styles['outcome-success']} />
+                )}
+                <span>
+                  {displayedOutcome.error
+                    ? t('sys.maintenance_failed', {
+                        action: actionLabel(displayedOutcome.action),
+                        msg: displayedOutcome.error,
+                      })
+                    : displayedOutcome.incomplete
+                      ? t('sys.maintenance_incomplete_title', {
+                          action: actionLabel(displayedOutcome.action),
+                        })
+                      : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
+                </span>
+                <Button
+                  type="text"
+                  // The console's square row-action size, not `small`: a 28px control gains only 36px
+                  // from the coarse-pointer 4px hit inset, and the floor this console measures is
+                  // ~40px. The drawn box is what a finger has to hit here.
+                  className={styles['maintenance-box-close']}
+                  icon={<CloseOutlined />}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                  onClick={() => setDisplayedOutcome(null)}
+                />
+              </div>
+
+              <div className={styles['maintenance-box-meta']}>
+                {t('sys.maintenance_reclaimed', {
+                  before: formatBytes(displayedOutcome.size_before_bytes),
+                  after: formatBytes(displayedOutcome.size_after_bytes),
+                  reclaimed: formatBytes(displayedOutcome.reclaimed_bytes),
+                })}
+              </div>
+
+              {displayedOutcome.detail && (
+                <Text type="secondary" className={styles['maintenance-detail']}>
+                  {displayedOutcome.detail}
+                </Text>
+              )}
+
+              {displayedOutcome.incomplete && (
+                <Notice
+                  tone="warning"
+                  className={styles['maintenance-outcome-alert']}
+                  title={t('sys.maintenance_incomplete_warning', {
+                    detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
+                  })}
+                />
+              )}
+
+              {displayedOutcome.error && (
+                <Notice
+                  tone="error"
+                  className={styles['maintenance-outcome-alert']}
+                  title={displayedOutcome.error}
+                />
+              )}
+            </div>
+          )}
+        </Panel>
       </div>
 
       {/* The change log drawer. Its title names the product it belongs to, because the two

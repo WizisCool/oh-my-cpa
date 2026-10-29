@@ -141,8 +141,6 @@ export default {
   'theme.sandstone': 'Sandstone',
   'theme.sandstone_desc': '暖砂浅色背景与青绿色强调色',
   'header.logout': '退出',
-  'shell.connected': '已连接',
-  'shell.offline': '离线',
   'shell.cpa_management_disabled_title': 'CPA 未开启管理接口',
   'shell.cpa_management_disabled_desc': 'CLIProxyAPI 未配置管理密钥，Oh My CPA 无法连接管理接口。',
   'shell.cpa_management_disabled_config': '在 CPA 配置文件中设置管理密钥，与 Oh My CPA 的 OMCPA_CPA_MANAGEMENT_KEY 保持一致（也可以用 CPA 的 MANAGEMENT_PASSWORD 环境变量）：',

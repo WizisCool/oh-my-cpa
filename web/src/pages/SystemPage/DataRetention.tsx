@@ -3,53 +3,54 @@ import { describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import dayjs from '../../utils/time';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
-import { formatBytes, formatTimeAgo } from '../../utils/format';
+import { formatBytes } from '../../utils/format';
 import { formatRetentionDays, useDataRetention } from '../../hooks/useDataRetention';
-import { FactList } from '../../components/common/FactList';
+import { Meter } from '../../components/common/Meter';
 import { LoadFailure, Notice } from '../../components/feedback';
 import styles from '../SystemPage.module.css';
 
 export { DATA_RETENTION_QUERY_KEY } from '../../hooks/useDataRetention';
 
+const DAY_MS = 86_400_000;
+
 /**
- * DataRetention reports what retention has done to this database: the horizons in force, what has
- * been removed, when the next pass runs and whether removing rows gave the space back. It sits in
- * the storage card, under the footprint it explains; the horizons themselves are changed in the
- * console settings.
+ * DataRetention reports the request-record window as the share of it the stored records already
+ * fill: a young database shows a short fill, and one that has reached its horizon a full track that
+ * retention keeps trimming. The horizon itself is changed in the console settings.
  */
 export const DataRetention: React.FC = () => {
   const t = useT();
   useTimeZone();
   const { data, error, refetch } = useDataRetention();
-  const now = Date.now();
-  const deletedRows = data?.policies.reduce((total, policy) => total + policy.deleted_rows, 0) ?? 0;
+  // Whole days the stored records span, capped at the horizon retention holds them to.
+  const filledDays = data?.oldest_request_record_ms
+    ? Math.min(data.request_record_days, Math.ceil((Date.now() - data.oldest_request_record_ms) / DAY_MS))
+    : null;
 
   return (
     <section className={styles['retention-section']} data-testid="sys-retention" aria-label={t('sys.retention_card')}>
-      <div className={styles['retention-heading']}>{t('sys.retention_card')}</div>
+      <div className={styles['retention-head']}>
+        <span className={styles['retention-heading']}>{t('sys.retention_card')}</span>
+        {data && (
+          <span className={styles['retention-span']}>
+            {data.request_record_days > 0 && filledDays !== null
+              ? t('sys.retention_filled', { n: filledDays, days: data.request_record_days })
+              : formatRetentionDays(data.request_record_days, t)}
+          </span>
+        )}
+      </div>
       {error && !data && <LoadFailure title={t('sys.retention_load_failed')} detail={describeError(error)} onRetry={() => void refetch()} />}
       {data && (
         <>
-          <FactList
-            className={styles['component-facts']}
-            emphasis="quiet"
-            testId="sys-retention-facts"
-            facts={[
-              { key: 'records', label: t('omc.retention_records'), value: formatRetentionDays(data.request_record_days, t) },
-              { key: 'source', label: t('sys.retention_source'), value: t(data.source === 'console' ? 'sys.retention_source_console' : 'sys.retention_source_environment') },
-              { key: 'oldest', label: t('sys.retention_oldest'), value: data.oldest_request_record_ms ? dayjs(data.oldest_request_record_ms).format('YYYY-MM-DD') : '—' },
-              { key: 'deleted', label: t('sys.retention_deleted'), value: deletedRows.toLocaleString() },
-              { key: 'last', label: t('sys.retention_last_pass'), value: data.last_pass_at_ms ? formatTimeAgo(data.last_pass_at_ms, now, t) : '—' },
-              ...(data.scheduled && data.next_pass_at_ms
-                ? [{ key: 'next', label: t('sys.retention_next_pass'), value: dayjs(data.next_pass_at_ms).format('HH:mm') }]
-                : []),
-              {
-                key: 'space',
-                label: t('sys.retention_space'),
-                value: data.storage.auto_vacuum === 'none' ? t('sys.retention_space_rebuild') : t('sys.retention_space_auto'),
-              },
-            ]}
-          />
+          {/* A zero horizon keeps every record, so there is no window to fill. */}
+          {data.request_record_days > 0 && (
+            <Meter value={filledDays ?? 0} max={data.request_record_days} />
+          )}
+
+          <dl className={styles['retention-foot']}>
+            <dt>{t('sys.retention_oldest')}</dt>
+            <dd>{data.oldest_request_record_ms ? dayjs(data.oldest_request_record_ms).format('YYYY-MM-DD') : '—'}</dd>
+          </dl>
 
           {/* A file that predates incremental mode keeps what retention frees until it is rebuilt
               once; saying how much is held is what makes the rebuild in the next card worth running. */}

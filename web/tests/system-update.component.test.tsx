@@ -221,7 +221,7 @@ it('offers the install command only to a deployment that can use it', async () =
   rejected.close();
 });
 
-it('reports full auto-vacuum as returning space without a rebuild', async () => {
+it('does not ask a full auto-vacuum database to be rebuilt', async () => {
   const omc = installOmcApi();
   omc.on('GET', '/management/system/data-retention', () => ({
     request_record_days: 90, payload_days: 7, source: 'environment',
@@ -230,7 +230,7 @@ it('reports full auto-vacuum as returning space without a rebuild', async () => 
     storage: { auto_vacuum: 'full', free_page_bytes: 4096 },
   }));
   const surface = renderWithOmc(<DataRetention />);
-  await screen.findByText('Returned after each cleanup');
-  expect(screen.queryByText('Returned once rebuilt')).toBeNull();
+  await screen.findByText('Oldest record');
+  expect(screen.queryByText(/Rebuild the database once/)).toBeNull();
   surface.unmount();
 });

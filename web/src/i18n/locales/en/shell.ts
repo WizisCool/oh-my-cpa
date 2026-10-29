@@ -144,8 +144,6 @@ export default {
   'theme.sandstone': 'Sandstone',
   'theme.sandstone_desc': 'Warm sand surfaces with a teal accent',
   'header.logout': 'Sign out',
-  'shell.connected': 'connected',
-  'shell.offline': 'offline',
   'shell.cpa_management_disabled_title': 'CPA\'s Management API is off',
   'shell.cpa_management_disabled_desc': 'CLIProxyAPI has no management key configured; Oh My CPA cannot access management APIs.',
   'shell.cpa_management_disabled_config': 'Set the management secret in the CPA configuration file to the value of Oh My CPA\'s OMCPA_CPA_MANAGEMENT_KEY (CPA\'s MANAGEMENT_PASSWORD environment variable works too):',

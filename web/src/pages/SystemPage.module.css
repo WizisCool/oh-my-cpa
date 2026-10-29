@@ -16,7 +16,7 @@
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -316,42 +316,102 @@
 }
 
 .changelog-panel {
-  margin-top: 12px;
-  padding: 14px;
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
-.changelog-header {
+.changelog-summary {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding-bottom: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border-soft);
-  font-size: var(--text-sm);
+}
+
+.changelog-range {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.changelog-versions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.changelog-versions :global(.anticon) {
   color: var(--meta);
+  font-size: var(--text-sm);
+}
+
+.changelog-count-label {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+}
+
+/* The releases hang from one rail, newest first. Each node sits on the rail beside its tag, and
+   the rail stops at the last node instead of running past the log. */
+.release-timeline {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .release-entry {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-bottom: 14px;
-  border-bottom: 1px dashed var(--border-soft);
+  gap: 10px;
+  padding: 0 0 28px 28px;
+}
+
+.release-entry::before {
+  content: '';
+  position: absolute;
+  inset-block: 14px 0;
+  inset-inline-start: 5px;
+  width: 1px;
+  background: var(--border);
 }
 
 .release-entry:last-child {
   padding-bottom: 0;
-  border-bottom: none;
+}
+
+.release-entry:last-child::before {
+  display: none;
+}
+
+.release-node {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-start: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+}
+
+.release-node-in-range {
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .release-title-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
@@ -359,22 +419,46 @@
 
 .release-tag-group {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.release-tag {
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.release-name {
+  color: var(--fg-2);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
 }
 
 .release-meta {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-family: var(--font-mono, monospace);
   font-size: var(--text-sm);
   color: var(--meta);
 }
 
+.release-meta a {
+  color: var(--meta);
+}
+
+.release-meta a:hover {
+  color: var(--accent);
+}
+
 .markdown-body {
   font-size: var(--text-md);
-  line-height: 1.6;
-  color: var(--fg);
+  line-height: 1.7;
+  color: var(--fg-2);
   overflow-wrap: anywhere;
 }
 
@@ -438,6 +522,41 @@
   background: transparent;
 }
 
+.markdown-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  text-align: start;
+}
+
+.markdown-body th {
+  color: var(--fg-2);
+  font-weight: 600;
+  background: color-mix(in oklab, var(--fg) 4%, transparent);
+}
+
+.markdown-body blockquote {
+  margin: 8px 0;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--border);
+  color: var(--fg-2);
+}
+
+.markdown-body hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+}
+
 .markdown-body a {
   color: var(--accent);
   text-decoration: none;
@@ -475,18 +594,28 @@
   overflow-wrap: anywhere;
 }
 
+.storage-footprint {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 20px;
+}
+
 .storage-headline {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 8px 16px;
-  padding-bottom: 16px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--border-soft);
 }
 
-.storage-headline-label {
+.storage-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storage-total-label {
   font-size: var(--text-sm);
   color: var(--fg-2);
 }
@@ -494,44 +623,100 @@
 .storage-total-num {
   color: var(--fg);
   font-family: var(--font-mono, monospace);
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
-.storage-readings :global(.fact-list-row) {
-  padding-block: 12px;
+/* The schema version is a support reference, not a reading; it sits in the meta ink. */
+.storage-schema {
+  color: var(--meta);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm);
+  line-height: 1.8;
 }
 
-.storage-readings :global(dd) {
+/* One track, split by size. A segment never shrinks below a sliver, so a small but present
+   write-ahead log stays visible beside a large main file. */
+.storage-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--border);
+}
+
+.storage-bar-segment {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+.storage-bar-segment.part-main,
+.storage-swatch.part-main { background: var(--fg-2); }
+
+.storage-bar-segment.part-wal,
+.storage-swatch.part-wal { background: var(--accent); }
+
+.storage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  margin: 0;
+}
+
+.storage-legend-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.storage-legend-item dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+}
+
+.storage-legend-item dd {
+  margin: 0;
+  color: var(--fg);
   font-family: var(--font-mono, monospace);
-  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
 }
 
 .maintenance-actions {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Each action is a column: what it is and its button on one line, what it does under it. The
+   columns are divided by a rule rather than boxed, as the product rows are. */
 .maintenance-action {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  flex: 1;
   gap: 8px;
-  padding-block: 16px;
-  border-bottom: 1px solid var(--border-soft);
+  padding-inline: 24px;
+  border-inline-start: 1px solid var(--border-soft);
 }
 
 .maintenance-action:first-child {
-  padding-top: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 
 .maintenance-action:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
+  padding-inline-end: 0;
 }
 
 .maintenance-action-head {
@@ -633,8 +818,27 @@
 }
 
 @media (max-width: 900px) {
-  .detail-grid {
+  .detail-grid,
+  .maintenance-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the actions are divided by a rule between rows instead of between columns. */
+  .maintenance-action,
+  .maintenance-action:first-child,
+  .maintenance-action:last-child {
+    padding: 16px 0;
+    border-inline-start: 0;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .maintenance-action:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .maintenance-action:last-child {
+    padding-bottom: 0;
   }
 }
 
@@ -689,14 +893,6 @@
 
 .check-alert {
   font-size: var(--text-sm);
-}
-
-.release-tag {
-  font-weight: 600;
-}
-
-.release-name {
-  font-size: var(--text-md);
 }
 
 .release-notes-missing {
@@ -795,14 +991,49 @@
   margin: 0 !important;
 }
 
-/* Retention follows the file readings it governs, under its own quiet heading. */
+/* Retention follows the footprint it governs: the share of the horizon the records fill, and the
+   date the oldest of them was stored. */
 .retention-section {
-  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--border-soft);
+}
+
+.retention-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .retention-heading {
   font-size: var(--text-sm);
   color: var(--fg-2);
+}
+
+.retention-span {
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.retention-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.retention-foot dt { color: var(--meta); }
+
+.retention-foot dd {
+  margin: 0;
+  color: var(--fg-2);
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
 }

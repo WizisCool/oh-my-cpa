@@ -353,10 +353,7 @@ export async function systemInformationPage({ base, page, check }) {
   await verifySystemOverview({ page, check });
 
   const fileRowCount = await page.locator('[data-testid="sys-storage-file-row"]').count();
-  check('storage card renders 3 file breakdown rows', fileRowCount === 3, `found ${fileRowCount}`);
-
-  const factRowCount = await page.locator('[data-testid="sys-storage-fact-row"]').count();
-  check('storage card keeps just journal and schema metadata', factRowCount === 2, `found ${factRowCount}`);
+  check('storage card breaks the total into the main file and the write-ahead log', fileRowCount === 2, `found ${fileRowCount}`);
 
   // Assert storage card internal row alignment and bounds
   const storageCardLayout = await page.evaluate(() => {
@@ -381,27 +378,11 @@ export async function systemInformationPage({ base, page, check }) {
       }
     }
 
-    const factRows = Array.from(card.querySelectorAll('[data-testid="sys-storage-fact-row"]'));
-    for (const row of factRows) {
-      const children = Array.from(row.children);
-      if (children.length >= 2) {
-        const leftBox = children[0].getBoundingClientRect();
-        const rightBox = children[1].getBoundingClientRect();
-        if (Math.min(leftBox.right, rightBox.right) - Math.max(leftBox.left, rightBox.left) > 1 &&
-            Math.min(leftBox.bottom, rightBox.bottom) - Math.max(leftBox.top, rightBox.top) > 1) {
-          errors.push(`fact row label and value overlap: "${children[0].textContent}" over "${children[1].textContent}"`);
-        }
-        if (rightBox.right > cardBox.right + 2) {
-          errors.push(`fact row value overflows card: "${children[1].textContent}"`);
-        }
-      }
-    }
-
     return { found: true, errors };
   });
 
   check(
-    'storage card rows have aligned labels and values with no overlap or card overflow',
+    'storage readings keep their labels and values apart and inside the card',
     storageCardLayout.found && storageCardLayout.errors.length === 0,
     storageCardLayout.errors.join(' | '),
   );
@@ -470,7 +451,7 @@ export async function systemInformationPage({ base, page, check }) {
   await reloadedSystemRead;
   await until(
     async () =>
-      (await page.locator('[data-testid="sys-storage-file-row"]').count()) === 3 &&
+      (await page.locator('[data-testid="sys-storage-file-row"]').count()) === 2 &&
       (await page.locator('[data-testid="sys-card-maintenance"] .ant-btn').count()) > 0,
     { label: 'the reloaded page rendering the response that carries the retained job', timeoutMs: 15_000 },
   );
@@ -1023,13 +1004,13 @@ export async function systemInformationPage({ base, page, check }) {
     check('a rebuild control is offered when admission allows it', false, 'no enabled VACUUM button');
   }
 
-  // ── the versions card owns the full width; the operational cards share one row ──
+  // ── versions and maintenance own the full width; the two reading cards share a row ──
   // The versions card is the page's subject and the only card whose content wants the whole
   // column: a product row is identity, comparison, status and actions at once, and a half-width
-  // cell wrapped every one of them. The three cards under it - maintenance, storage, component
-  // health - are peers, so they share one row at equal height and width. Source order is the
-  // reading order, so a keyboard, a screen reader and a phone meet them in the order the grid
-  // draws them.
+  // cell wrapped every one of them. Component health and storage are readings and peers, so they
+  // share one row at equal height and width. Maintenance is a set of actions laid side by side and
+  // closes the page at full width. Source order is the reading order, so a keyboard, a screen
+  // reader and a phone meet the cards in the order the layout draws them.
   const gridGeometry = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));
     if (cards.length !== 4) return { error: `expected 4 cards, found ${cards.length}` };
@@ -1040,36 +1021,43 @@ export async function systemInformationPage({ base, page, check }) {
       return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height), title };
     });
 
-    const [versions, ...detail] = boxes;
-    const spread = (values) => Math.max(...values) - Math.min(...values);
-    // The versions card sits above the others and spans the column they share.
-    const isVersionsFirst = detail.every((box) => box.top >= versions.bottom - 2);
-    const spansTheColumn = Math.abs(versions.left - detail[0].left) <= 2
-      && Math.abs(versions.right - detail[detail.length - 1].right) <= 2
-      && versions.width >= detail[0].width * 2;
-    // The operational cards are one row: same top and bottom edge, same width.
-    const sameRow = spread(detail.map((box) => box.top)) <= 2 && spread(detail.map((box) => box.bottom)) <= 2;
-    const equalWidths = spread(detail.map((box) => box.width)) <= 2;
-    const isMaintenanceFirst = /Maintenance|Penyelenggaraan|维护|維護/i.test(detail[0].title);
-    const isStorageSecond = /Storage|Storan|存储|儲存/i.test(detail[1].title);
-    const isHealthLast = /Health|Kesihatan|健康/i.test(detail[2].title);
+    const [versions, health, storage, maintenance] = boxes;
+    const spansTheColumn = (box) => Math.abs(box.left - health.left) <= 2 && Math.abs(box.right - storage.right) <= 2
+      && box.width >= health.width * 2;
+    const isVersionsFirst = health.top >= versions.bottom - 2 && storage.top >= versions.bottom - 2;
+    const isMaintenanceLast = maintenance.top >= Math.max(health.bottom, storage.bottom) - 2;
+    // The reading cards are one row: same top and bottom edge, same width.
+    const sameRow = Math.abs(health.top - storage.top) <= 2 && Math.abs(health.bottom - storage.bottom) <= 2;
+    const equalWidths = Math.abs(health.width - storage.width) <= 2;
+    const isHealthFirst = /Health|Kesihatan|健康/i.test(health.title);
+    const isStorageSecond = /Storage|Storan|存储|儲存/i.test(storage.title);
+    const isMaintenanceTitled = /Maintenance|Penyelenggaraan|维护|維護/i.test(maintenance.title);
 
-    return { isVersionsFirst, spansTheColumn, sameRow, equalWidths, isMaintenanceFirst, isStorageSecond, isHealthLast, boxes, error: null };
+    return {
+      isVersionsFirst,
+      isMaintenanceLast,
+      areWideCardsFull: spansTheColumn(versions) && spansTheColumn(maintenance),
+      sameRow,
+      equalWidths,
+      isOrdered: isHealthFirst && isStorageSecond && isMaintenanceTitled,
+      boxes,
+      error: null,
+    };
   });
 
   check(
-    'the versions card is the full-width first row',
-    !gridGeometry.error && gridGeometry.isVersionsFirst && gridGeometry.spansTheColumn,
-    gridGeometry.error ?? `versions=${gridGeometry.boxes?.[0]?.width}px detail=${gridGeometry.boxes?.[1]?.width}px`,
+    'versions open the page and maintenance closes it, both at full width',
+    !gridGeometry.error && gridGeometry.isVersionsFirst && gridGeometry.isMaintenanceLast && gridGeometry.areWideCardsFull,
+    gridGeometry.error ?? `widths=${gridGeometry.boxes?.map((box) => box.width).join(',')} tops=${gridGeometry.boxes?.map((box) => box.top).join(',')}`,
   );
   check(
-    'the operational cards share one row at equal height and width',
+    'component health and storage share one row at equal height and width',
     !gridGeometry.error && gridGeometry.sameRow && gridGeometry.equalWidths,
     gridGeometry.error ?? `tops=${gridGeometry.boxes?.map((box) => box.top).join(',')} widths=${gridGeometry.boxes?.map((box) => box.width).join(',')}`,
   );
   check(
-    'the operational row reads maintenance, storage, then health',
-    !gridGeometry.error && gridGeometry.isMaintenanceFirst && gridGeometry.isStorageSecond && gridGeometry.isHealthLast,
+    'the cards read versions, health, storage, then maintenance',
+    !gridGeometry.error && gridGeometry.isOrdered,
     gridGeometry.error ?? `titles: ${gridGeometry.boxes?.map((box) => box.title).join(' | ')}`,
   );
 
@@ -1131,7 +1119,7 @@ export async function systemInformationNarrow({ base, page, check }) {
     // build time, so a selector naming one matches nothing and the whole probe passes on an
     // empty set. That is how this check was initially vacuous.
     const rows = document.querySelectorAll(
-      '[data-testid="sys-card-head"], [data-testid="sys-product-header"], [data-testid="sys-version-row"], [data-testid="sys-version-comparison"], [data-testid="sys-latest-release"], [data-testid="sys-storage-file-row"], [data-testid="sys-storage-fact-row"], [data-testid="sys-maintenance-action-head"], [data-testid="sys-component-head"], [data-testid="sys-component-facts"]',
+      '[data-testid="sys-card-head"], [data-testid="sys-product-header"], [data-testid="sys-version-row"], [data-testid="sys-version-comparison"], [data-testid="sys-latest-release"], [data-testid="sys-storage-file-row"], [data-testid="sys-maintenance-action-head"], [data-testid="sys-component-head"], [data-testid="sys-component-facts"]',
     );
     const collapsed = [];
     for (const row of rows) {
@@ -1337,19 +1325,6 @@ async function verifyVersionCheckFeedback({ page, base, check }) {
 async function verifySystemOverview({ page, check }) {
   check('system information is immediately readable without detail controls', await page.locator('[data-testid^="sys-details-"]').count() === 0);
   check('short maintenance explanations are visible by default', await page.locator('[data-testid="sys-maintenance-description"]:visible').count() === 3);
-  check('storage shows only two compact metadata readings', await page.locator('[data-testid="sys-storage-fact-row"]:visible').count() === 2);
-  const areStorageReadingsAligned = await page.locator('[data-testid="sys-card-storage"]').evaluate((card) => {
-    const rows = Array.from(card.querySelectorAll('[data-testid="sys-storage-file-row"], [data-testid="sys-storage-fact-row"]'));
-    if (rows.length !== 5) return false;
-    const firstLabel = rows[0].querySelector('dt').getBoundingClientRect();
-    const firstValue = rows[0].querySelector('dd').getBoundingClientRect();
-    return rows.every((row) => {
-      const label = row.querySelector('dt').getBoundingClientRect();
-      const value = row.querySelector('dd').getBoundingClientRect();
-      return Math.abs(label.left - firstLabel.left) <= 1 && Math.abs(value.right - firstValue.right) <= 1;
-    });
-  });
-  check('all five storage readings share the same label and value columns', areStorageReadingsAligned);
   check('all four component verdicts and readings are visible by default', await page.locator('[data-testid="sys-component-head"]:visible').count() === 4 && await page.locator('[data-testid="sys-component-facts"]:visible').count() === 4);
   const componentLayout = await page.locator('[data-testid="sys-component-facts"]').evaluateAll((lists) => lists.length === 4 && lists.every((list) => {
     const style = getComputedStyle(list);
@@ -1404,7 +1379,7 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
       await heads.nth(0).locator('.status-label.is-danger').count() === 1 &&
       await heads.nth(2).locator('.status-label.is-danger').count() === 1);
     check('a disabled collector retains its independent status', await heads.nth(3).locator('.status-label.is-neutral').count() === 1);
-    check('missing credential and usage observations are not fabricated',
+    check('missing gateway latency and usage observations are not fabricated',
       await page.locator('[data-testid="sys-component-facts"]').nth(0).locator('dd').innerText() === '—' &&
       await page.locator('[data-testid="sys-component-facts"]').nth(3).locator('dd').first().innerText() === '—');
     const isContained = await page.locator('[data-testid="sys-card-health"]').evaluate((card) => {
