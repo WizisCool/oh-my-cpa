@@ -10,7 +10,7 @@
     "build:demo": "node scripts/build-demo.mjs",
     "check-brand": "node scripts/sync-brand.mjs --check",
     "check-css-modules": "node scripts/check-css-modules.mjs",
-    "check-docs": "lychee --offline --include-fragments --no-progress '*.md' 'docs/**/*.md' 'web/src/i18n/*.md'",
+    "check-docs": "node scripts/check-docs.mjs",
     "check-i18n": "node --import tsx scripts/check-i18n.ts",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "check:demo": "node --import tsx scripts/check-demo.ts",

@@ -51,6 +51,8 @@ jobs:
         uses: ./.github/actions/setup-go
         with:
           cache: 'false'
+      - name: Check documentation with the host-native tool
+        run: pnpm check-docs
       - run: pnpm build
       - name: Compile and execute the host-native distribution
         shell: bash

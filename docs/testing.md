@@ -110,12 +110,15 @@ pins. JavaScript installation uses `pnpm install --frozen-lockfile`; install the
 matching Playwright Chromium with `node scripts/install-chromium.mjs` before
 browser checks. `pnpm verify:toolchain:strict` checks the reproducible toolchain.
 
-Documentation links use **lychee v0.24.2**: install the published binary or use a
-package manager, then `pnpm check-docs`. Checks are offline, include local
+`pnpm check-docs` automatically downloads the pinned **lychee** binary for Linux,
+macOS or Windows on first use, verifies its SHA-256 and caches it under `.tools/`.
+No global installation or Rust toolchain is needed. The first download needs network
+access; subsequent runs work offline. A preinstalled binary can be selected with
+`LYCHEE_BIN`; it must match the pinned version in `scripts/tools-versions.json`.
+Local checks and CI use this same entry point. Checks are offline, include local
 fragments and read `lychee.toml`; GitHub image-theme selectors are the only
-rendering-specific exclusion. CI installs the pinned tool through its action.
-The checker does not interpret arbitrary backticked prose as file paths or carry
-a retired-document inventory.
+rendering-specific exclusion. The checker does not interpret arbitrary backticked
+prose as file paths or carry a retired-document inventory.
 
 `pnpm verify:workflow:lint` uses actionlint 1.7.12 plus the repository's small
 supply-chain policy for pinned Actions, token-free checkouts and signing-key

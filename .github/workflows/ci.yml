@@ -135,13 +135,15 @@ jobs:
           pnpm verify:workflow:lint
       - name: Verify pinned toolchain
         run: pnpm verify:toolchain:strict
-      - name: Check offline documentation links and fragments
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+      - name: Cache verification tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
-          lycheeVersion: v0.24.2
-          args: --offline --include-fragments --no-progress '*.md' 'docs/**/*.md' 'web/src/i18n/*.md'
-          output: tmp/lychee.md
-          token: ''
+          path: |
+            .tools/gitleaks
+            .tools/lychee
+          key: verification-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Check offline documentation links and fragments
+        run: pnpm check-docs
       - name: Repository gates
         run: pnpm verify:static:repository
       # Every installation's gateway reads the published registry, and a registry-only
@@ -149,11 +151,6 @@ jobs:
       - name: Validate the plugin registry
         if: needs.changes.outputs.go != 'true'
         run: go test ./internal/pluginregistry -run '^TestPublishedRegistryIsReadable$'
-      - name: Cache gitleaks
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .tools/gitleaks
-          key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
       - name: Scan worktree and history
         run: |
           pnpm verify:secrets:worktree
