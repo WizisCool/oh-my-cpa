@@ -1,0 +1,63 @@
+diff --git a/es/hooks/useChildren.js b/es/hooks/useChildren.js
+index 5b932e65ab224253364bd4e3f7754b9d91142ea3..bf576cad371bf35789912355d8dd14529b56c65f 100644
+--- a/es/hooks/useChildren.js
++++ b/es/hooks/useChildren.js
+@@ -3,6 +3,10 @@ import { Item } from "../Item";
+ export default function useChildren(list, startIndex, endIndex, scrollWidth, offsetX, setNodeRef, renderFunc, {
+   getKey
+ }) {
++  // Keep mounted row refs stable as the scroll offset changes. Reattaching them
++  // on every frame remeasures every visible row, even when only the offset moved.
++  // A new list or renderer can change row heights and must be measured again.
++  const refs = React.useMemo(() => new Map(), [list, getKey, renderFunc]);
+   return list.slice(startIndex, endIndex + 1).map((item, index) => {
+     const eleIndex = startIndex + index;
+     const node = renderFunc(item, eleIndex, {
+@@ -12,9 +16,14 @@ export default function useChildren(list, startIndex, endIndex, scrollWidth, off
+       offsetX
+     });
+     const key = getKey(item);
++    let entry = refs.get(eleIndex);
++    if (!entry || entry.item !== item) {
++      entry = { item, setRef: ele => setNodeRef(item, ele) };
++      refs.set(eleIndex, entry);
++    }
+     return /*#__PURE__*/React.createElement(Item, {
+       key: key,
+-      setRef: ele => setNodeRef(item, ele)
++      setRef: entry.setRef
+     }, node);
+   });
+ }
+\ No newline at end of file
+diff --git a/lib/hooks/useChildren.js b/lib/hooks/useChildren.js
+index 1e91e426213d81351b22fcec3546777994db7ffd..c5b83959c0290976ec8143f6ce87897a6ec5a6fe 100644
+--- a/lib/hooks/useChildren.js
++++ b/lib/hooks/useChildren.js
+@@ -11,6 +11,10 @@ function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e;
+ function useChildren(list, startIndex, endIndex, scrollWidth, offsetX, setNodeRef, renderFunc, {
+   getKey
+ }) {
++  // Keep mounted row refs stable as the scroll offset changes. Reattaching them
++  // on every frame remeasures every visible row, even when only the offset moved.
++  // A new list or renderer can change row heights and must be measured again.
++  const refs = React.useMemo(() => new Map(), [list, getKey, renderFunc]);
+   return list.slice(startIndex, endIndex + 1).map((item, index) => {
+     const eleIndex = startIndex + index;
+     const node = renderFunc(item, eleIndex, {
+@@ -20,9 +24,14 @@ function useChildren(list, startIndex, endIndex, scrollWidth, offsetX, setNodeRe
+       offsetX
+     });
+     const key = getKey(item);
++    let entry = refs.get(eleIndex);
++    if (!entry || entry.item !== item) {
++      entry = { item, setRef: ele => setNodeRef(item, ele) };
++      refs.set(eleIndex, entry);
++    }
+     return /*#__PURE__*/React.createElement(_Item.Item, {
+       key: key,
+-      setRef: ele => setNodeRef(item, ele)
++      setRef: entry.setRef
+     }, node);
+   });
+ }

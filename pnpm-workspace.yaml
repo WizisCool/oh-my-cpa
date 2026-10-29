@@ -20,3 +20,6 @@ overrides:
   # @ag-ui/core@0.0.53 still asks for zod ^3.22.4 and no patched 3.x exists, so
   # its instance is lifted onto the patched 4.x line rather than left vulnerable.
   zod: 4.6.6
+patchedDependencies:
+  # Avoid remeasuring every mounted row on each virtual-list scroll frame.
+  '@rc-component/virtual-list@1.5.1': patches/@rc-component__virtual-list@1.5.1.patch

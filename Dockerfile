@@ -3,6 +3,7 @@ FROM --platform=$BUILDPLATFORM node:22.23.4-alpine AS web
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/package.json
+COPY patches/ ./patches/
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY web/ ./web/
 COPY scripts/ ./scripts/
