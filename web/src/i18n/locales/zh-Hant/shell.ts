@@ -144,8 +144,6 @@ export default {
   "theme.sandstone": "Sandstone",
   "theme.sandstone_desc": "暖砂淺色背景與青綠色強調色",
   "header.logout": "退出",
-  "shell.connected": "已連線",
-  "shell.offline": "離線",
   "shell.cpa_management_disabled_title": "CPA 未開啟管理介面",
   "shell.cpa_management_disabled_desc": "CLIProxyAPI 未設定管理金鑰，Oh My CPA 無法連線管理介面。",
   "shell.cpa_management_disabled_config": "在 CPA 設定檔中設定管理金鑰，與 Oh My CPA 的 OMCPA_CPA_MANAGEMENT_KEY 保持一致（也可以使用 CPA 的 MANAGEMENT_PASSWORD 環境變數）：",
