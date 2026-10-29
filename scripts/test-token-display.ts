@@ -123,10 +123,13 @@ test('token display', () => {
 
   // ── costs ──────────────────────────────────────────────────────────────────────
 
-  // Four decimals: request costs are commonly fractions of a cent, and two decimals
-  // would collapse a thousand small calls into "$0.00".
-  assert.equal(formatCost(0.000012), '$0.0000');
-  assert.equal(formatCost(0.5), '$0.5000');
+  // Two decimals. A request cost is commonly a fraction of a cent, so an ordinary sub-cent
+  // reading keeps four decimals (six below a ten-thousandth) rather than collapsing into
+  // "$0.00" — but an everyday amount never trails four digits.
+  assert.equal(formatCost(0.000012), '$0.000012');
+  assert.equal(formatCost(0.000123), '$0.0001');
+  assert.equal(formatCost(0.0075), '$0.0075');
+  assert.equal(formatCost(0.5), '$0.50');
   assert.equal(formatCost(null), '—');
   assert.equal(formatCost(undefined), '—');
   assert.equal(formatCost(NaN), '—');
@@ -248,20 +251,20 @@ test('token display', () => {
   assert.equal(parseDisplayCurrency('MYR'), 'MYR');
   for (const invalid of [null, 1, {}, 'usd', 'US', 'USDD', 'PLN']) assert.equal(parseDisplayCurrency(invalid), undefined);
   assert.deepEqual(resolveDisplayCurrency('USD', []), USD_CURRENCY);
-  assert.equal(formatCost(2, resolveDisplayCurrency('MYR', cachedRates)), 'RM8.5000');
-  assert.equal(formatCost(2, resolveDisplayCurrency('CNY', cachedRates)), '¥14.0000');
-  assert.equal(formatCost(2, resolveDisplayCurrency('JPY', cachedRates)), '¥300.0000');
-  assert.equal(formatCost(2, resolveDisplayCurrency('EUR', cachedRates)), '€1.8000');
+  assert.equal(formatCost(2, resolveDisplayCurrency('MYR', cachedRates)), 'RM8.50');
+  assert.equal(formatCost(2, resolveDisplayCurrency('CNY', cachedRates)), '¥14.00');
+  assert.equal(formatCost(2, resolveDisplayCurrency('JPY', cachedRates)), '¥300.00');
+  assert.equal(formatCost(2, resolveDisplayCurrency('EUR', cachedRates)), '€1.80');
   assert.equal(formatCost(2, resolveDisplayCurrency('SGD', cachedRates)), '—');
   assert.equal(formatCost(null, resolveDisplayCurrency('MYR', cachedRates)), '—');
   for (const code of ['USD', ...cachedRates.map(rate => rate.currency)]) {
     const currency = resolveDisplayCurrency(code, cachedRates);
-    for (const usd of [0, 0.000003, 0.1, 2, 12345.678, -1.2]) {
-      assert.equal(renderReadout(currencyReadout(usd, currency, 4)), formatCost(usd, currency));
-      assert.equal(renderReadout(currencyReadout(usd, currency, 'adaptive')), formatCost(usd, currency, 'adaptive'));
+    for (const usd of [0, 0.000003, 0.0003, 0.02, 0.1, 2, 12345.678, -1.2]) {
+      assert.equal(renderReadout(currencyReadout(usd, currency)), formatCost(usd, currency));
     }
   }
   assert.equal(currencyReadout(1, resolveDisplayCurrency('SGD', cachedRates)), undefined);
+  // A rate is not an amount: the 1-USD quote and a per-1M price keep their decimals.
   assert.equal(formatCost(0.075, USD_CURRENCY, 'rate'), '$0.075');
-  assert.equal(formatCost(0.000012, USD_CURRENCY, 'amount'), '$0.000012');
+  assert.equal(formatCost(1, resolveDisplayCurrency('CNY', cachedRates), 'rate'), '¥7.00');
 });

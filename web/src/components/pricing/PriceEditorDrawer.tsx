@@ -17,7 +17,7 @@ import {
   canonicalServiceTiers,
   formatMultiplier,
   formatRatePer1M,
-  formatUsd,
+  formatUsdPreview,
   modeOf,
   parseRateText,
   parseTokenCount,
@@ -587,8 +587,8 @@ const PreviewRows: React.FC<{
                     {row.label}
                     {showsTiers && next && after && <span className={styles['preview-tier']}>{tierLabel(next, after.tierIndex)}</span>}
                   </th>
-                  <td>{before === null ? '—' : formatUsd(before.usd)}</td>
-                  <td className={styles['preview-new']}>{after === null ? '—' : formatUsd(after.usd)}</td>
+                  <td>{before === null ? '—' : formatUsdPreview(before.usd)}</td>
+                  <td className={styles['preview-new']}>{after === null ? '—' : formatUsdPreview(after.usd)}</td>
                 </tr>
               );
             })}

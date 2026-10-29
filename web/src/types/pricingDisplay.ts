@@ -4,6 +4,7 @@
  * mirrors the server's tier rule, but a recorded request's amount is always the stored one.
  */
 import type { ModelPrice, PriceTier, PricingMode, UpstreamModel } from './pricing';
+import { formatCurrency, USD_CURRENCY } from './currencyDisplay';
 
 /** Trims trailing zeros while keeping at least `minDecimals`, so $3 reads "$3.00" and $0.075 stays exact. */
 function trimDecimals(value: number, maxDecimals: number, minDecimals: number): string {
@@ -23,10 +24,20 @@ export function formatRatePer1M(rate: number | null | undefined): string {
 }
 
 /**
- * A money amount sized to its magnitude. A request usually costs a fraction of a cent and a month
- * costs dollars; one fixed precision either hides the first or clutters the second.
+ * A USD amount in the console's money reading: two decimals, a fraction of a cent keeping
+ * the extra digits that place it below a cent. The chosen display currency prints by the
+ * same rule, so an accounting figure and a converted one read alike.
  */
 export function formatUsd(usd: number | null | undefined): string {
+  return formatCurrency(usd, USD_CURRENCY);
+}
+
+/**
+ * The price editor's preview amount: what a sample request costs under a price being edited. It
+ * keeps sub-cent detail above a cent too, because $0.075 and $0.076 are different prices that
+ * money's two decimals would print the same.
+ */
+export function formatUsdPreview(usd: number | null | undefined): string {
   if (usd === null || usd === undefined || !Number.isFinite(usd)) return '—';
   const magnitude = Math.abs(usd);
   if (magnitude === 0) return '$0.00';

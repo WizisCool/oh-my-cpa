@@ -137,7 +137,7 @@ export const DashboardPage: React.FC = () => {
   // the request records, so every token readout on this page follows it.
   const { style: tokenStyle } = useTokenDisplayStyle();
   const { currency } = useDisplayCurrency();
-  const formatTrendCost = React.useCallback((value: number) => formatCurrency(value, currency, 2), [currency]);
+  const formatTrendCost = React.useCallback((value: number) => formatCurrency(value, currency), [currency]);
   // The chosen window is the operator's working context, so it lives in the
   // database: a reload, a service restart and a container rebuild all drop
   // browser storage, and none of them should reset what they are looking at.

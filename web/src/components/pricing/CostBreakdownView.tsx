@@ -36,7 +36,7 @@ export interface CostBreakdownViewProps {
 export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown, model, costUsd }) => {
   useTimeZone();
   const { currency } = useDisplayCurrency();
-  const formatCost = (usd: number | null | undefined) => formatCurrency(usd, currency, 'amount');
+  const formatCost = (usd: number | null | undefined) => formatCurrency(usd, currency);
   const t = useT();
   const openEditor = useOpenPriceEditor();
   const setPrice = openEditor ? (

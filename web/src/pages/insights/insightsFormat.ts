@@ -9,11 +9,6 @@ import type { InsightsMetric, MetricComparison } from './insightsCube';
 
 const COUNT = new Intl.NumberFormat('en');
 
-/** Money at two decimals; a fraction of a cent keeps four, so a small spend never reads as $0.00. */
-export function formatSpend(usd: number, currency = USD_CURRENCY): string {
-  return formatCurrency(usd, currency, 'adaptive');
-}
-
 export function formatLatency(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
 }
@@ -23,7 +18,7 @@ export function formatMetric(metric: InsightsMetric, value: number | null, style
   if (value === null || !Number.isFinite(value)) return '—';
   switch (metric) {
     case 'cost':
-      return formatSpend(value, currency);
+      return formatCurrency(value, currency);
     case 'tokens':
       return formatTokens(value, style);
     case 'requests':
@@ -33,11 +28,13 @@ export function formatMetric(metric: InsightsMetric, value: number | null, style
   }
 }
 
-/** The exact form behind a rounded readout, for its title. */
-export function formatMetricExact(metric: InsightsMetric, value: number | null, currency: DisplayCurrency = USD_CURRENCY): string | undefined {
+/**
+ * The exact form behind a rounded readout, for its title. Money has none: its reading already
+ * states the precision.
+ */
+export function formatMetricExact(metric: InsightsMetric, value: number | null): string | undefined {
   if (value === null || !Number.isFinite(value)) return undefined;
   if (metric === 'tokens') return formatTokensFull(value);
-  if (metric === 'cost') return formatCurrency(value, currency, 6);
   if (metric === 'requests') return COUNT.format(value);
   return undefined;
 }

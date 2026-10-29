@@ -57,21 +57,28 @@ export function resolveDisplayCurrency(code: DisplayCurrencyCode, rates: readonl
   return { code, rate: rate !== undefined && Number.isFinite(rate) && rate > 0 ? rate : null };
 }
 
-type MoneyPrecision = number | 'adaptive' | 'amount' | 'rate';
+/** Rates are not amounts; every other reading is money. */
+type MoneyPrecision = 'money' | 'rate';
 const FORMATTERS = new Map<string, Intl.NumberFormat>();
 
-function moneyFormatter(currency: DisplayCurrency, amount: number, precision: MoneyPrecision): Intl.NumberFormat {
+/**
+ * Money reads at two decimals. A fraction of a cent keeps four, and one below a
+ * ten-thousandth six — the finest reading the console prints. A rate keeps six decimals:
+ * a per-1M price and the 1-USD quote are readings, not amounts.
+ */
+function fractionDigits(amount: number, precision: MoneyPrecision): number {
+  if (precision === 'rate') return 6;
   const magnitude = Math.abs(amount);
-  const digits = precision === 'adaptive' ? (amount !== 0 && magnitude < 0.01 ? 4 : 2)
-    : precision === 'rate' ? 6
-    : precision === 'amount' ? (magnitude === 0 || magnitude >= 1 ? 2 : magnitude >= 0.01 ? 4 : 6)
-    : precision;
-  const minDigits = precision === 'rate' || precision === 'amount' ? 2 : digits;
-  const useGrouping = precision === 'amount' && magnitude >= 100;
-  const key = `${currency.code}:${minDigits}:${digits}:${useGrouping}`;
+  if (amount === 0 || magnitude >= 0.01) return 2;
+  return magnitude >= 0.0001 ? 4 : 6;
+}
+
+function moneyFormatter(currency: DisplayCurrency, amount: number, precision: MoneyPrecision): Intl.NumberFormat {
+  const digits = fractionDigits(amount, precision);
+  const key = `${currency.code}:${digits}`;
   let formatter = FORMATTERS.get(key);
   if (!formatter) {
-    formatter = new Intl.NumberFormat('en', { style: 'currency', currency: currency.code, minimumFractionDigits: minDigits, maximumFractionDigits: digits, useGrouping });
+    formatter = new Intl.NumberFormat('en', { style: 'currency', currency: currency.code, minimumFractionDigits: 2, maximumFractionDigits: digits });
     FORMATTERS.set(key, formatter);
   }
   return formatter;
@@ -81,7 +88,8 @@ function convertUsd(usd: number | null | undefined, currency: DisplayCurrency): 
   if (usd == null || !Number.isFinite(usd) || currency.rate === null) return null;
   if (!Number.isFinite(currency.rate) || currency.rate <= 0) return null;
   const amount = usd * currency.rate;
-  return Number.isFinite(amount) ? amount : null;
+  // A negative zero would print as an amount owed.
+  return Number.isFinite(amount) ? (amount === 0 ? 0 : amount) : null;
 }
 
 /** Splits a formatted amount around its digits, with the currency mark swapped for `currencySymbol`. */
@@ -101,7 +109,7 @@ function moneyParts(currency: DisplayCurrency, amount: number, precision: MoneyP
 }
 
 /** Conversion is presentation-only: callers keep using the original USD values for math and APIs. */
-export function formatCurrency(usd: number | null | undefined, currency = USD_CURRENCY, precision: MoneyPrecision = 4): string {
+export function formatCurrency(usd: number | null | undefined, currency = USD_CURRENCY, precision: MoneyPrecision = 'money'): string {
   const amount = convertUsd(usd, currency);
   if (amount === null) return '—';
   const { prefix, digits, suffix } = moneyParts(currency, amount, precision);
@@ -109,7 +117,7 @@ export function formatCurrency(usd: number | null | undefined, currency = USD_CU
 }
 
 /** Derive both moving digits and surrounding currency marks from the same parts as static copy. */
-export function currencyReadout(usd: number | null | undefined, currency = USD_CURRENCY, precision: MoneyPrecision = 2): RollingReadout | undefined {
+export function currencyReadout(usd: number | null | undefined, currency = USD_CURRENCY, precision: MoneyPrecision = 'money'): RollingReadout | undefined {
   const amount = convertUsd(usd, currency);
   if (amount === null) return undefined;
   const { formatter, prefix, suffix } = moneyParts(currency, amount, precision);

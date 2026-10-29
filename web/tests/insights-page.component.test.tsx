@@ -204,7 +204,7 @@ describe('insights page', () => {
   it.each([
     { metric: 'requests', values: ['70', '60', '50', '40', '30', '20', '10'], total: '280', zero: '0', active: '1' },
     { metric: 'tokens', values: ['7K', '6K', '5K', '4K', '3K', '2K', '1K'], total: '28K', zero: '0', active: '100' },
-    { metric: 'cost', values: ['$0.07', '$0.06', '$0.05', '$0.04', '$0.03', '$0.02', '$0.01'], total: '$0.28', zero: '$0.00', active: '$0.0010' },
+    { metric: 'cost', values: ['$0.07', '$0.06', '$0.05', '$0.04', '$0.03', '$0.02', '$0.01'], total: '$0.28', zero: '$0.00', active: '$0.001' },
     { metric: 'latency', values: ['700ms', '600ms', '500ms', '400ms', '300ms', '200ms', '100ms'], total: '500ms', zero: '—', active: '200ms' },
   ])('shows the hovered $metric bucket or segment with its nonzero contributors and aggregate', async ({ metric, values, total, zero, active }) => {
     const models = Array.from({ length: 7 }, (_, index) => `model-${index + 1}`);
