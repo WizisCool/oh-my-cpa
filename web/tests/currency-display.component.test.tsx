@@ -41,7 +41,7 @@ it('shares the display choice and refreshed rates with requests and Insights whi
     <div data-testid="accounting"><UsageCell usage={{ requests: 1, priced_requests: 1, cost_usd: 2 }} /></div>
   </CurrencyDisplayProvider></TokenDisplayProvider>);
   await waitFor(() => expect(api.requests.some(request => request.path === '/exchange-rates')).toBe(true));
-  expect(container.querySelector('.req-cost-val')?.textContent).toBe('$2.0000');
+  expect(container.querySelector('.req-cost-val')?.textContent).toBe('$2.00');
   // The picker waits for the stored document: a read that lands after a choice would replace
   // the optimistic value in the shared cache.
   const picker = screen.getByRole('combobox', { name: 'Display currency' });
@@ -50,13 +50,13 @@ it('shares the display choice and refreshed rates with requests and Insights whi
   await waitFor(() => expect(picker.hasAttribute('disabled')).toBe(false));
   fireEvent.mouseDown(picker);
   fireEvent.click(await screen.findByTitle('MYR · Malaysian Ringgit'));
-  await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM8.0000'));
+  await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM8.00'));
   expect(screen.getByTestId('insights-tile-cost').textContent).toContain('RM8.00');
   expect(screen.getByTestId('accounting').textContent).toContain('$2.00');
   await waitFor(() => expect(api.preferenceWrites()).toContainEqual({ key: 'omc_display_currency', value: 'MYR' }));
 
   fireEvent.click(screen.getByRole('button', { name: 'Update rates' }));
-  await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM9.0000'));
+  await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM9.00'));
   expect(screen.getByTestId('insights-tile-cost').textContent).toContain('RM9.00');
   expect(screen.getByTestId('accounting').textContent).toContain('$2.00');
   expect(EVENT.cost_usd).toBe(2);
@@ -69,9 +69,9 @@ it('keeps the chosen currency and cached display values across hydration and a m
   const { container } = renderWithOmc(<TokenDisplayProvider><CurrencyDisplayProvider>
     <CurrencySettings /><RequestRow event={EVENT} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
   </CurrencyDisplayProvider></TokenDisplayProvider>);
-  await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM8.0000'));
+  await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM8.00'));
   fireEvent.click(screen.getByRole('button', { name: 'Update rates' }));
   await screen.findByText('Could not update exchange rates');
-  expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM8.0000');
+  expect(container.querySelector('.req-cost-val')?.textContent).toBe('RM8.00');
   expect(api.preferenceWrites()).toEqual([]);
 });

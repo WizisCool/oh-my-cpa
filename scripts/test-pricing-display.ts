@@ -11,6 +11,7 @@ import {
   formatTokenCount,
   clockShiftMinutes,
   formatUsd,
+  formatUsdPreview,
   minuteOfDayIn,
   modeOf,
   matchesModelSearch,
@@ -54,13 +55,22 @@ test('pricing display', () => {
     assert.equal(formatRatePer1M(null), '—');
   });
 
-  check('money is sized to its magnitude', () => {
+  check('money reads at two decimals, and a fraction of a cent keeps its extra digits', () => {
     assert.equal(formatUsd(0), '$0.00');
     assert.equal(formatUsd(1234.5), '$1,234.50');
     assert.equal(formatUsd(3.456), '$3.46');
-    assert.equal(formatUsd(0.0512), '$0.0512');
-    assert.equal(formatUsd(0.000123), '$0.000123');
+    assert.equal(formatUsd(0.0512), '$0.05');
+    assert.equal(formatUsd(0.0071), '$0.0071');
+    assert.equal(formatUsd(0.000123), '$0.0001');
+    assert.equal(formatUsd(0.0000123), '$0.000012');
     assert.equal(formatUsd(undefined), '—');
+  });
+
+  check('the price preview keeps sub-cent detail above a cent, because $0.075 and $0.076 are different prices', () => {
+    assert.equal(formatUsdPreview(3.456), '$3.46');
+    assert.equal(formatUsdPreview(0.075), '$0.075');
+    assert.equal(formatUsdPreview(0.000123), '$0.000123');
+    assert.equal(formatUsdPreview(undefined), '—');
     assert.equal(formatMultiplier(0.3), '×0.3');
     assert.equal(formatMultiplier(1), '×1');
     assert.equal(formatHHMM(0), '00:00');

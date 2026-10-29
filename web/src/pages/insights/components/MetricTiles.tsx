@@ -31,7 +31,7 @@ function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNum
   if (value === null) return undefined;
   switch (metric) {
     case 'cost':
-      return currencyReadout(value, currency, 'adaptive');
+      return currencyReadout(value, currency);
     case 'tokens':
       return resolveTokenFlowReadout(value, style);
     case 'requests':
