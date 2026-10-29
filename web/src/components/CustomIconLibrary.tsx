@@ -29,11 +29,11 @@ import {
   ExclamationCircleOutlined,
   PictureOutlined,
   PlusOutlined,
-  UploadOutlined,
 } from './icons';
 import { LoadFailure, Notice, useToast } from './feedback';
 import styles from './CustomIconLibrary.module.css';
 import { SearchInput } from './common/SearchInput';
+import { FileDropzone } from './common/FileDropzone';
 
 interface Props {
   currentIcon?: string;
@@ -65,11 +65,9 @@ export const CustomIconLibrary: React.FC<Props> = ({
   const [preview, setPreview] = useState('');
   const [previewMIME, setPreviewMIME] = useState('');
   const [isBusy, setIsBusy] = useState(false);
-  const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState('');
   const [savedID, setSavedID] = useState('');
   const sequence = useRef(0);
-  const fileInput = useRef<HTMLInputElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const cancelDeleteButton = useRef<HTMLButtonElement>(null);
   const shouldRestoreFocus = useRef(false);
@@ -313,51 +311,21 @@ export const CustomIconLibrary: React.FC<Props> = ({
               }}
             />
             {mode === 'file' ? (
-              <div
-                className={[
-                  styles['dropzone'],
-                  isDragActive ? styles['dropzone-active'] : '',
-                ].join(' ')}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  if (!isBusy) setIsDragActive(true);
-                }}
-                onDragLeave={() => setIsDragActive(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setIsDragActive(false);
-                  if (!isBusy) void readFile(event.dataTransfer.files[0]);
-                }}
+              <FileDropzone
+                title={t('icons.drop_title')}
+                hint={t('icons.drop_hint')}
+                chooseLabel={t('icons.choose_file')}
+                inputLabel={t('icons.file')}
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                disabled={isBusy}
+                onFiles={(files) => void readFile(files[0])}
               >
-                <UploadOutlined className={styles['upload-mark']} />
-                <strong>{t('icons.drop_title')}</strong>
-                <span>{t('icons.drop_hint')}</span>
-                <Button
-                  icon={<PlusOutlined />}
-                  disabled={isBusy}
-                  onClick={() => fileInput.current?.click()}
-                >
-                  {t('icons.choose_file')}
-                </Button>
-                <input
-                  ref={fileInput}
-                  className={styles['file-input']}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  tabIndex={-1}
-                  aria-label={t('icons.file')}
-                  disabled={isBusy}
-                  onChange={(event) => {
-                    void readFile(event.target.files?.[0]);
-                    event.target.value = '';
-                  }}
-                />
                 {fileName && (
                   <span className={styles['file-name']} title={fileName}>
                     {fileName}
                   </span>
                 )}
-              </div>
+              </FileDropzone>
             ) : (
               <div className={styles['base64-input']}>
                 <label className={styles['field']}>

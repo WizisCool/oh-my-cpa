@@ -253,7 +253,8 @@ async function main() {
     const uploadPath = path.join(os.tmpdir(), fileName);
     fs.writeFileSync(uploadPath, JSON.stringify({ type: 'gemini-api-key', api_key: 'browser-acceptance-placeholder' }));
     await page.goto(`${appURL}/oauth-management`, { waitUntil: 'networkidle' });
-    await page.setInputFiles('input[type="file"]', uploadPath);
+    await page.getByRole('button', { name: /^上传 JSON$|^Upload JSON$/ }).click();
+    await page.getByRole('dialog').locator('input[type="file"]').setInputFiles(uploadPath);
     const uploadedCard = page.locator(`[data-testid="oauth-credential-record"][data-file-name="${fileName}"]`);
     await uploadedCard.waitFor({ timeout: 15000 });
     const uploadListed = await page.request.get(`${appURL}/api/v1/management/auth-files?name=${encodeURIComponent(fileName)}`);

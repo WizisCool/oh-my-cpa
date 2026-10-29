@@ -975,6 +975,13 @@ export const api = {
     });
   },
 
+  async uploadManagementAuthJson(name: string, json: string): Promise<ManagementAuthFileMutationResponse> {
+    return request<ManagementAuthFileMutationResponse>(`/management/auth-files?name=${encodeURIComponent(name)}`, {
+      method: 'POST',
+      body: json,
+    });
+  },
+
   async downloadManagementAuthFile(name: string): Promise<Blob> {
     const { apiBaseUrl } = getAppConfig();
     return downloadBlob(`${apiBaseUrl}/management/auth-files/download?name=${encodeURIComponent(name)}`);

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  isValidAuthFileName,
+  normalizeAuthFileName,
+  readPastedAuthJson,
+} from '../web/src/components/authFiles/pasteAuthJson.ts';
+import {
   credentialNameProblem,
   MAX_CREDENTIAL_NAME_LENGTH,
   isAuthFileDisabled,
@@ -197,4 +202,32 @@ test('Credential name validation counts code points, not UTF-16 units', () => {
   assert.equal(credentialNameProblem('名'.repeat(MAX_CREDENTIAL_NAME_LENGTH + 1)), 'too_long');
   assert.equal(credentialNameProblem('line\nbreak'), 'control');
   assert.equal(credentialNameProblem('seat\u202eevil'), 'control');
+});
+
+test('pasted credential JSON is named like a login and summarised without its tokens', () => {
+  const now = new Date(1_700_000_000_000);
+  const reading = readPastedAuthJson(JSON.stringify({
+    type: ' codex ',
+    email: 'dev@example.test',
+    access_token: 'SECRET',
+  }), now);
+  assert.deepEqual(reading, { summary: { type: 'codex', email: 'dev@example.test', suggestedName: 'codex-dev@example.test.json' } });
+  assert.equal(JSON.stringify(reading).includes('SECRET'), false);
+
+  assert.equal(readPastedAuthJson('{"type":"claude"}', now).summary?.suggestedName, 'claude-1700000000000.json');
+  assert.equal(readPastedAuthJson('{}', now).summary?.suggestedName, 'auth-1700000000000.json');
+  assert.equal(readPastedAuthJson(JSON.stringify({ type: 'a/b', email: 'x:y\\z w' }), now).summary?.suggestedName, 'a-b-x-y-z-w.json');
+  for (const text of ['not json', '[1]', 'null', '"x"']) {
+    assert.equal(readPastedAuthJson(text, now).summary, undefined, text);
+  }
+});
+
+test('an edited paste name gets the extension and the gateway selector rules', () => {
+  assert.equal(normalizeAuthFileName(' codex-a '), 'codex-a.json');
+  assert.equal(normalizeAuthFileName('codex-a.JSON'), 'codex-a.JSON');
+  assert.equal(normalizeAuthFileName('  '), '');
+  assert.equal(isValidAuthFileName('codex-a.json'), true);
+  for (const name of ['', '.json', '../a.json', 'a\\b.json', 'c:a.json', 'a\nb.json', `${'a'.repeat(251)}.json`]) {
+    assert.equal(isValidAuthFileName(name), false, name);
+  }
 });
