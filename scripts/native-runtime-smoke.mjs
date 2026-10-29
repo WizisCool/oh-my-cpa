@@ -21,7 +21,7 @@ try {
     OMCPA_LISTEN_ADDR:`127.0.0.1:${port}`,OMCPA_BASE_PATH:'/tools/omc',OMCPA_DATA_DIR:working,
     OMCPA_MASTER_KEY:randomBytes(32).toString('hex'),OMCPA_CPA_BASE_URL:'http://127.0.0.1:1',
     OMCPA_CPA_MANAGEMENT_KEY:'synthetic-native-runtime-key',OMCPA_USAGE_INGEST_MODE:'off',
-    OMCPA_UPDATE_CHECK_ENABLED:'false',OMCPA_UPDATE_CHECK_ON_PAGE_LOAD:'false',
+    OMCPA_UPDATE_CHECK_ENABLED:'false',OMCPA_UPDATE_CHECK_ON_PAGE_LOAD:'false',TZ:'Asia/Kuala_Lumpur',
   })});
   let output='',spawnError;child.stderr.on('data',chunk=>{output+=chunk;});child.on('error',error=>{spawnError=error;});
   let health;
