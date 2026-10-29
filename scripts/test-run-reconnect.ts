@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { createRunConnection, isConnectionFailure } from '../web/src/agent/runConnection.ts';
 class ApiError extends Error {
  status: number;

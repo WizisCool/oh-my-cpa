@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { getDateTimeFormatter, formatCalendarDay, formatMinuteSpan } from '../web/src/utils/dateTimeFormat.ts';
 import dayjs, { configureTimeZone } from '../web/src/utils/time.ts';
 import { createHeatmapCellClassifier, heatmapCellState, type DashboardTokenHeatmapDay } from '../web/src/types/tokenHeatmap.ts';

@@ -19,13 +19,10 @@
 /** Every check the planner can select, as a stable identifier. */
 export const CHECK_IDS = [
   'type-check',
-  'logic',
-  'components',
+  'frontend',
   'i18n',
   'antd-lint',
   'css-modules',
-  'motion',
-  'style-tokens',
   'feedback',
   'openui-prompt',
   'go',
@@ -36,14 +33,13 @@ export const CHECK_IDS = [
 
 const WEB_TEST_INFRASTRUCTURE = [
   'scripts/verify-fast.mjs',
-  'scripts/testing/logic.ts',
   'tsconfig.tooling.json',
 ];
 
 const DEPENDENCY_INPUTS = new Set([
   'package.json', 'web/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
 ]);
-const FRONTEND_CHECKS = ['type-check', 'logic', 'components', 'i18n', 'antd-lint', 'css-modules', 'motion', 'style-tokens', 'feedback'];
+const FRONTEND_CHECKS = ['type-check', 'frontend', 'i18n', 'antd-lint', 'css-modules', 'feedback'];
 
 function planFileChecks(file) {
   const checks = new Set();
@@ -51,14 +47,16 @@ function planFileChecks(file) {
   const isWebCode = file.startsWith('web/src/') && /\.(?:ts|tsx)$/.test(file);
 
   if (DEPENDENCY_INPUTS.has(file)) return CHECK_IDS;
-  if (/^scripts\/test-[^/]+\.ts$/.test(file)) return ['type-check', 'logic'];
+  if (file === 'lychee.toml') return ['docs'];
+  if (/^scripts\/test-[^/]+\.ts$/.test(file)) return ['type-check', 'frontend'];
   if (file.startsWith('internal/agent/openui/')) add('go', 'openui-prompt');
   if (file.startsWith('web/src/agent/openui/') || file === 'scripts/generate-openui-prompt.ts') add('openui-prompt');
-  if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components');
+  if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'frontend');
   if (/^web\/src\/i18n\/locales\//.test(file)) return ['type-check', 'i18n'];
-  if (isWebCode) add('type-check', 'logic', 'components', 'i18n', 'css-modules', 'feedback');
-  if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
-  if (file.endsWith('.css')) add('css-modules', 'motion', 'style-tokens');
+  if (isWebCode) add('type-check', 'frontend', 'i18n', 'css-modules', 'feedback');
+  if (isWebCode && file.endsWith('.tsx')) add('antd-lint', 'css-modules');
+  // Logic suites own CSS-derived values; jsdom does not lay out stylesheets.
+  if (file.endsWith('.css')) add('css-modules', 'frontend');
   if (/^(?:.*\.go|go\.mod|go\.sum)$/.test(file)
       || file.startsWith('migrations/') || file.startsWith('internal/web/')) add('go');
   if (file.endsWith('.md')) add('docs');
@@ -69,10 +67,10 @@ function planFileChecks(file) {
   if ((/^(?:scripts|deploy\/cloudflare)\//.test(file) && /\.(?:mjs|ts)$/.test(file))
       || file === 'tsconfig.tooling.json') add('type-check');
   if ((file.startsWith('scripts/') && file.endsWith('.ts'))
-      || WEB_TEST_INFRASTRUCTURE.includes(file)) add('logic');
+      || WEB_TEST_INFRASTRUCTURE.includes(file)) add('frontend');
   if (/^web\/(?:vite\.config\.|tsconfig)/.test(file)) add(...FRONTEND_CHECKS, 'self-tests');
-  if (file === 'web/vitest.config.ts' || file.startsWith('scripts/test-components')) add('components');
-  if (file.startsWith('scripts/acceptance/contracts/') || /^scripts\/acceptance\/[\w-]+-fixture\.mjs$/.test(file)) add('go', 'components');
+  if (file === 'web/vitest.config.ts') add('frontend');
+  if (file.startsWith('scripts/acceptance/contracts/') || /^scripts\/acceptance\/[\w-]+-fixture\.mjs$/.test(file)) add('go', 'frontend');
   if (file === 'scripts/tools-versions.json') add('toolchain');
 
   // Fallback is per file: a documentation edit must never hide an unclassified

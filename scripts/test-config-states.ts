@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { parseDocument } from '../node_modules/.pnpm/yaml@2.9.0/node_modules/yaml/browser/index.js';
+import { test } from 'vitest';
+import { parseDocument } from 'yaml';
 import {
   updateFieldWithBaseline,
   isConfigSemanticallyEqual,

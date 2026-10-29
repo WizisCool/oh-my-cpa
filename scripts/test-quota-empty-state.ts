@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { quotaEmptyStateKey } from '../web/src/pages/quota/quotaFormat.ts';
 
 /** The message a credential with no window carries, from the fields the card actually reads. */

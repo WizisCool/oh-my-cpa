@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { buildModelSquareEntries, buildModelReferenceLinks, classifyModelOpenness, countModelManufacturers, filterModelSquareEntries, isSafeReferenceURL, resolveEntryReference, resolveModelManufacturer, type ModelSquareDirectory, type ModelReference } from '../web/src/types/modelSquare.ts';
 import { LOBE_ICON_CATALOG } from '../web/src/types/lobeIconCatalog.ts';
 

@@ -1,5 +1,5 @@
 /**
- * The demonstration's replays, asserted without a browser (ADR 0092).
+ * The demonstration's replays, asserted without a browser.
  *
  * A replay stands where a model request does, so what it has to get right is the contract the
  * console reads: the events fold into exactly the turn the run then stores, a message with no
@@ -7,7 +7,7 @@
  * browser probe shows the page drawing a replay; this suite proves what it is drawing.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { applyAgentEvent, EMPTY_FRAME } from '../web/src/agent/runReducer.ts';
 import type { AgentRunRequest } from '../web/src/agent/protocol.ts';
 import { DEMO_REPLAY_ONLY, replayAgentRun } from '../web/src/demo/agentReplay.ts';

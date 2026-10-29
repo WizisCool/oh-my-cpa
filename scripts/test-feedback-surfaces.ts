@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import {
   TOAST_ACTION_DURATION_SECONDS,
   TOAST_DURATION_SECONDS,

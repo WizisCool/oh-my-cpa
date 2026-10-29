@@ -7,7 +7,7 @@
  * runtime parses its ranges as the generator does, and common text stays in few shards.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import manifest from '../web/src/assets/fonts/sarasa/manifest.json' with { type: 'json' };
 import { parseUnicodeRange, shardsForText } from '../web/src/theme/fontShards.ts';
 import { parseUnicodeRange as generatorParseUnicodeRange } from './font-shards.mjs';

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { createVisibleClock } from '../web/src/types/visibleClock.ts';
 
 test('visible clock shares one timer, suspends in background, resumes fresh and cleans up', () => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { UPDATE_STAGE_ORDER, deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from '../web/src/pages/SystemPage/versionPresentation.ts';
 import { isUpdateDismissed, listPendingUpdates, parseUpdateDismissals, withDismissal } from '../web/src/utils/updateDismissals.ts';
 import type { SystemProductVersion, SystemUpdateJob, SystemUpdaterResponse } from '../web/src/types/system.ts';

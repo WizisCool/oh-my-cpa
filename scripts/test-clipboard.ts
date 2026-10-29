@@ -19,7 +19,7 @@
  * verified end to end where a real document exists.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { copyText } from '../web/src/utils/clipboard.ts';
 
 interface FakeRange {

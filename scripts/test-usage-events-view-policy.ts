@@ -44,13 +44,7 @@ import {
 } from '../web/src/components/usage/syncPresentation.ts';
 import { chipDisplayValue } from '../web/src/components/usage/chipDisplay.ts';
 import { EVENT_PRESETS } from '../web/src/types/usageEventQuery.ts';
-
-let checks = 0;
-function test(name: string, run: () => void) {
-  run();
-  checks += 1;
-  console.log(`PASS ${name}`);
-}
+import { test } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // replaceFilters: a filter edit rewrites only the filter dimensions
@@ -569,5 +563,3 @@ test('a reasoning chip shows the parameter spelling', () => {
   assert.equal(chipDisplayValue({ ...chipBase, key: 'reasoning', value: 'xhigh' }), 'xHigh');
   assert.equal(chipDisplayValue({ ...chipBase, key: 'reasoning', value: 'high' }), 'high');
 });
-
-console.log(`\n${checks} view-policy suites passed.`);

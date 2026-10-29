@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { resolveVisibleViewport } from '../web/src/types/visibleViewport.ts';
 
 test('a keyboard resize and caret pan bound the usable workspace', () => {

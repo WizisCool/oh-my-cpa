@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { sortOAuthWorkspaceRecords } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { AuthFileSortKey } from '../web/src/components/authFiles/authFileLogic';
 import { createOAuthSortRecords, legacyOAuthSort, OAUTH_SORT_KEYS } from './fixtures/oauth-sort';

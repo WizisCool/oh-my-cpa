@@ -8,7 +8,7 @@
  * `internal/api/usage_routing_test.go`; this pins what the panel draws from it.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 
 import {
   MAX_DRAWN_MODELS,

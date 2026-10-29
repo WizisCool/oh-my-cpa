@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import type { ManagementAuthFile } from '../web/src/types/managementAuthFile.ts';
 import type { QuotaItem } from '../web/src/types/quota.ts';
 import {

@@ -17,7 +17,7 @@
  * the repository's secret scanner can mistake it for a credential.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { maskKeyText } from '../web/src/utils/maskKey.ts';
 import { maskAccount, maskAccountIn } from '../web/src/utils/maskAccount.ts';
 

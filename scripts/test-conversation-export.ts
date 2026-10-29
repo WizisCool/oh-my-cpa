@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { agentSnapshot, playgroundSnapshot, snapshotImageSlices, snapshotInterfaces, snapshotValue, SNAPSHOT_IMAGE_PAGE_HEIGHT } from '../web/src/agent/conversationSnapshot.ts';
 import { conversationHTML } from '../web/src/agent/conversationHtml.ts';
 import type { SnapshotLabels } from '../web/src/agent/conversationHtml.ts';

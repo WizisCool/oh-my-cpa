@@ -10,9 +10,6 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = path.join(root, 'deploy', 'base-path.sh');
 
-const probe = spawnSync('sh', ['-c', 'exit 0'], { encoding: 'utf8' });
-const hasShell = probe.error === undefined && probe.status === 0;
-
 function basePath(rawValue) {
   return spawnSync('sh', [script], {
     encoding: 'utf8',
@@ -35,7 +32,7 @@ const ACCEPTED = [
   { name: 'only slashes is the site root', input: '//', want: '' },
 ];
 
-test('deploy/base-path.sh agrees with the server on every accepted value', { skip: hasShell ? false : 'requires a POSIX shell' }, () => {
+test('deploy/base-path.sh agrees with the server on every accepted value', () => {
   for (const { name, input, want } of ACCEPTED) {
     const result = basePath(input);
     assert.equal(result.status, 0, `${name}: exited ${result.status}: ${result.stderr}`);
@@ -43,7 +40,7 @@ test('deploy/base-path.sh agrees with the server on every accepted value', { ski
   }
 });
 
-test('deploy/base-path.sh refuses values the server refuses', { skip: hasShell ? false : 'requires a POSIX shell' }, () => {
+test('deploy/base-path.sh refuses values the server refuses', () => {
   for (const input of ['/omc?x=1', '/omc#fragment', '/../omc']) {
     const result = basePath(input);
     assert.notEqual(result.status, 0, `${input} was accepted`);
@@ -57,7 +54,7 @@ test('deploy/base-path.sh refuses values the server refuses', { skip: hasShell ?
 // literal character - the health probe and the application would end up on different
 // paths. "?" is refused before this point as URL syntax, so only the glob
 // metacharacter is reachable.
-test('deploy/base-path.sh does not glob a path segment', { skip: hasShell ? false : 'requires a POSIX shell' }, () => {
+test('deploy/base-path.sh does not glob a path segment', () => {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-base-path-'));
   try {
     // Matching names, so a globbing shell would substitute them.

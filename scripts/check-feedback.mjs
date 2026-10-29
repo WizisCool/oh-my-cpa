@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * check-feedback keeps every notification, failure and error report on the console's two feedback
- * surfaces (docs/design.md, Feedback surfaces):
+ * surfaces (docs/design.md, Feedback and loading):
  *
  * - the outcome of an action is a toast, through `useToast`;
  * - a condition of a region - a failed read, stale data, a feature switched off - is inline, through
@@ -17,7 +17,7 @@
  *   (a confirmation is still `modal.confirm`; a result is a toast).
  *
  * The same resolution guards the shared components that replace an antd one outright
- * (docs/design.md, Shared primitives):
+ * (docs/design.md, Composition and shared controls):
  *
  * - `Switch` is refused everywhere, because `components/common/Switch` is drawn without it;
  * - `Empty` is refused everywhere, because `components/common/EmptyState` is;
@@ -209,7 +209,7 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console, files }
     }
   }
   if (failures.length > 0) {
-    output.error('Feedback surfaces or shared primitives bypassed (docs/design.md, Feedback surfaces and Shared primitives):');
+    output.error('Feedback surfaces or shared primitives bypassed (docs/design.md, Feedback and loading; Composition and shared controls):');
     for (const failure of failures) {
       output.error(`  ${failure.file}:${failure.line} [${failure.rule}] ${failure.message}`);
     }

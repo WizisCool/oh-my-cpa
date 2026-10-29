@@ -6,7 +6,7 @@
  * going to the background are asserted without a browser.
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 
 import {
   createLiveReadPolicy,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 
 import { isValidVertexLocation, MAX_VERTEX_KEY_BYTES, readVertexKey } from '../web/src/components/authFiles/vertexImport.ts';
 

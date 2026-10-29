@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import dayjs, { configureTimeZone } from '../web/src/utils/time.ts';
 import { formatRequestTimestamp } from '../web/src/components/usage/requestTimestamp.ts';
 

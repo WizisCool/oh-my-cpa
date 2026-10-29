@@ -3,7 +3,7 @@
  * (web/src/components/authFiles/vertexOpenAPI.ts).
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 
 import {
   buildVertexOpenAPIPatch,

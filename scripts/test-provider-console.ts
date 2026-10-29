@@ -1,9 +1,6 @@
 /**
  * Logic-level tests for the provider console's shared helpers.
- *
- * These run under the same plumbing as the other `scripts/test-*.ts` files:
- * Node's type stripping plus the resolver hook, with no test framework, so a
- * failing assertion exits non-zero and stops the script.
+
  */
 import assert from 'node:assert/strict';
 import { filterModelOptions, modelOptionsFor, modelsToAdd } from '../web/src/utils/modelOptions.ts';
@@ -30,449 +27,442 @@ import {
 } from '../web/src/components/providers/opencodeSession.ts';
 import type { FormHeaderItem } from '../web/src/components/providers/managementProviders.ts';
 import type { ProviderItem } from '../web/src/types/providers.ts';
+import { test } from 'vitest';
 
-// ---- provider ids: the list's key is not the API's family name ----
+test('provider console', () => {
+  // ---- provider ids: the list's key is not the API's family name ----
 
-// The OpenAI-compatible family is abbreviated in the list id but spelled out on
-// the wire. Forwarding the abbreviation would make the enable/disable toggle fail
-// for exactly that family while working for the other three, which is the kind of
-// asymmetry a click-through would not notice.
-assert.deepEqual(parseProviderID('openai-compat-0'), { family: 'openai-compatibility', index: 0 });
-assert.deepEqual(parseProviderID('openai-compat-12'), { family: 'openai-compatibility', index: 12 });
-assert.deepEqual(parseProviderID('codex-3'), { family: 'codex', index: 3 });
-assert.deepEqual(parseProviderID('claude-1'), { family: 'claude', index: 1 });
-assert.deepEqual(parseProviderID('gemini-0'), { family: 'gemini', index: 0 });
-assert.deepEqual(parseProviderID('meta-0'), { family: 'meta', index: 0 });
-assert.deepEqual(parseProviderID('xai-2'), { family: 'xai', index: 2 });
-assert.deepEqual(parseProviderID('vertex-0'), { family: 'vertex', index: 0 });
-assert.deepEqual(parseProviderID('interactions-1'), { family: 'interactions', index: 1 });
-assert.notEqual(
-  FAMILY_BY_PROVIDER_ID_PREFIX['openai-compat'],
-  'openai-compat',
-  'the wire family must not be the list abbreviation',
-);
+  // The OpenAI-compatible family is abbreviated in the list id but spelled out on
+  // the wire. Forwarding the abbreviation would make the enable/disable toggle fail
+  // for exactly that family while working for the other three, which is the kind of
+  // asymmetry a click-through would not notice.
+  assert.deepEqual(parseProviderID('openai-compat-0'), { family: 'openai-compatibility', index: 0 });
+  assert.deepEqual(parseProviderID('openai-compat-12'), { family: 'openai-compatibility', index: 12 });
+  assert.deepEqual(parseProviderID('codex-3'), { family: 'codex', index: 3 });
+  assert.deepEqual(parseProviderID('claude-1'), { family: 'claude', index: 1 });
+  assert.deepEqual(parseProviderID('gemini-0'), { family: 'gemini', index: 0 });
+  assert.deepEqual(parseProviderID('meta-0'), { family: 'meta', index: 0 });
+  assert.deepEqual(parseProviderID('xai-2'), { family: 'xai', index: 2 });
+  assert.deepEqual(parseProviderID('vertex-0'), { family: 'vertex', index: 0 });
+  assert.deepEqual(parseProviderID('interactions-1'), { family: 'interactions', index: 1 });
+  assert.notEqual(
+    FAMILY_BY_PROVIDER_ID_PREFIX['openai-compat'],
+    'openai-compat',
+    'the wire family must not be the list abbreviation',
+  );
 
-// Anything unaddressable is refused rather than sent to an endpoint that would
-// reject it as an unsupported family.
-for (const bad of ['', '-1', 'openai-compat', 'openai-compat-', 'openai-compat-abc', 'openai-compat-1.5', 'nonsense-0', 'openai-compat--1']) {
-  assert.equal(parseProviderID(bad), undefined, `${bad} must not parse`);
-}
+  // Anything unaddressable is refused rather than sent to an endpoint that would
+  // reject it as an unsupported family.
+  for (const bad of ['', '-1', 'openai-compat', 'openai-compat-', 'openai-compat-abc', 'openai-compat-1.5', 'nonsense-0', 'openai-compat--1']) {
+    assert.equal(parseProviderID(bad), undefined, `${bad} must not parse`);
+  }
 
-console.log('PASS provider ids: list abbreviation maps to the wire family, junk is refused');
 
-// ---- the enabled/disabled inversion ----
 
-// The control reasons in "is this provider on" and the endpoint takes the
-// opposite field. Getting this backwards inverts every toggle - switching a
-// provider off asks for it on, and the request succeeds while doing the reverse
-// of what was clicked - so the conversion is pinned rather than left inline.
-assert.deepEqual(providerStatusPayload('codex-0', true), {
-  family: 'codex',
-  index: 0,
-  disabled: false,
+  // ---- the enabled/disabled inversion ----
+
+  // The control reasons in "is this provider on" and the endpoint takes the
+  // opposite field. Getting this backwards inverts every toggle - switching a
+  // provider off asks for it on, and the request succeeds while doing the reverse
+  // of what was clicked - so the conversion is pinned rather than left inline.
+  assert.deepEqual(providerStatusPayload('codex-0', true), {
+    family: 'codex',
+    index: 0,
+    disabled: false,
+  });
+  assert.deepEqual(providerStatusPayload('codex-0', false), {
+    family: 'codex',
+    index: 0,
+    disabled: true,
+  });
+  assert.deepEqual(providerStatusPayload('openai-compat-2', false), {
+    family: 'openai-compatibility',
+    index: 2,
+    disabled: true,
+  });
+
+  // Switching a provider off must never ask for it to be switched on.
+  assert.equal(providerStatusPayload('claude-1', false)?.disabled, true, 'enabled=false means disabled=true');
+  assert.equal(providerStatusPayload('claude-1', true)?.disabled, false, 'enabled=true means disabled=false');
+  assert.deepEqual(providerStatusPayload('meta-2', false), {
+    family: 'meta',
+    index: 2,
+    disabled: true,
+  });
+
+  // An unaddressable id produces no request at all, rather than one against index
+  // zero of a family nobody named.
+  for (const bad of ['', 'openai-compat-', 'nonsense-0', 'codex-abc']) {
+    assert.equal(providerStatusPayload(bad, true), undefined, `${bad} must not produce a payload`);
+  }
+
+
+
+  // ---- provider website: only a URL that can safely be an href ----
+
+  // The scheme is the security boundary. A javascript: or data: URL rendered into
+  // an href executes with the session's authority, so it must never be accepted.
+  for (const unsafe of [
+    'javascript:alert(1)',
+    'JavaScript:alert(1)',
+    ' javascript:alert(1) ',
+    'data:text/html,<script>alert(1)</script>',
+    'vbscript:msgbox(1)',
+    'file:///etc/passwd',
+    'ftp://example.test',
+    'chrome://settings',
+  ]) {
+    assert.equal(isSafeExternalURL(unsafe), false, `${unsafe} must be refused`);
+    assert.equal(safeExternalURL(unsafe), undefined, `${unsafe} must not become an href`);
+  }
+
+  // A scheme-relative or relative value would silently point at this console
+  // instead of at the provider, so it is refused rather than resolved.
+  for (const relative of ['//example.test', '/path', 'example.test', 'www.example.test', '?q=1', '#top']) {
+    assert.equal(isSafeExternalURL(relative), false, `${relative} must be refused`);
+  }
+
+  // Absent is not an error, it is "no website": the row renders plain text.
+  for (const empty of ['', '   ', null, undefined]) {
+    assert.equal(isSafeExternalURL(empty), false);
+    assert.equal(safeExternalURL(empty), undefined);
+  }
+
+  for (const safe of [
+    'http://example.test',
+    'https://example.test',
+    'https://example.test/path?q=1#frag',
+    '  https://example.test  ',
+    'https://api.deepseek.com',
+  ]) {
+    assert.equal(isSafeExternalURL(safe), true, `${safe} must be accepted`);
+    assert.equal(safeExternalURL(safe), safe.trim(), 'the href is the trimmed value');
+  }
+
+  assert.equal(safeExternalURL('https://example.test:8443/v1'), 'https://example.test:8443/v1');
+
+
+
+  // ---- model input filter ----
+
+  const MODELS = ['gpt-5.4', 'gpt-5.4-mini', 'GPT-4o', 'claude-sonnet-4', 'azure/gpt-5.4', 'deepseek-chat'];
+
+  // An empty query is the opening state and the state a cleared field returns to.
+  assert.deepEqual(filterModelOptions(MODELS, ''), MODELS);
+  assert.deepEqual(filterModelOptions(MODELS, '   '), MODELS);
+  assert.deepEqual(filterModelOptions([], 'gpt'), []);
+
+  // Case-insensitive, and a substring rather than a prefix: on a relay both
+  // `azure/gpt-5.4` and `gpt-5.4` are real ids and either may be the target.
+  assert.deepEqual(filterModelOptions(MODELS, 'GPT'), ['gpt-5.4', 'gpt-5.4-mini', 'GPT-4o', 'azure/gpt-5.4']);
+  assert.deepEqual(filterModelOptions(MODELS, 'gpt-5.4'), ['gpt-5.4', 'gpt-5.4-mini', 'azure/gpt-5.4']);
+  assert.deepEqual(filterModelOptions(MODELS, 'SONNET'), ['claude-sonnet-4']);
+  assert.deepEqual(filterModelOptions(MODELS, 'azure/'), ['azure/gpt-5.4']);
+  assert.deepEqual(filterModelOptions(MODELS, 'nothing-matches'), []);
+
+  // Surrounding whitespace is the operator's, not part of the model id.
+  assert.deepEqual(filterModelOptions(MODELS, '  deepseek  '), ['deepseek-chat']);
+
+  // The input list is never mutated: the fetched catalog is shared state.
+  const original = [...MODELS];
+  filterModelOptions(MODELS, 'gpt');
+  assert.deepEqual(MODELS, original);
+
+
+
+  // ---- already-configured suppression ----
+
+  const configured = new Set(['gpt-5.4', 'claude-sonnet-4']);
+
+  // A model configured on another row is not offered again: CPA would accept the
+  // duplicate and the gateway would then have two entries competing for one model.
+  assert.deepEqual(modelOptionsFor(MODELS, '', configured), [
+    'gpt-5.4-mini',
+    'GPT-4o',
+    'azure/gpt-5.4',
+    'deepseek-chat',
+  ]);
+
+  // The row's own value is kept even though it is in the configured set, or
+  // editing an existing model would empty its own dropdown.
+  assert.deepEqual(modelOptionsFor(MODELS, 'gpt-5.4', configured), [
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'azure/gpt-5.4',
+  ]);
+
+  // Typing a value that is configured elsewhere re-offers it, because that is the
+  // text the operator is entering and removing it would hide their own input.
+  assert.deepEqual(modelOptionsFor(MODELS, 'claude-sonnet-4', configured), ['claude-sonnet-4']);
+
+  // Suppression and the typed filter compose rather than one overriding the other:
+  // a configured-elsewhere model stays hidden while narrowing.
+  assert.deepEqual(modelOptionsFor(MODELS, 'gpt', configured), ['gpt-5.4-mini', 'GPT-4o', 'azure/gpt-5.4']);
+
+  // With nothing configured elsewhere the two functions agree.
+  assert.deepEqual(modelOptionsFor(MODELS, 'gpt', new Set()), filterModelOptions(MODELS, 'gpt'));
+
+  // A refreshed catalog is filtered the same way, so refreshing does not resurrect
+  // a duplicate: the suppression is applied at render, not baked into the fetch.
+  assert.deepEqual(
+    modelOptionsFor([...MODELS, 'gpt-5.4'], '', configured),
+    ['gpt-5.4-mini', 'GPT-4o', 'azure/gpt-5.4', 'deepseek-chat'],
+  );
+
+
+
+  // ---- batch model pick: only new names become rows, in the order shown ----
+
+  // The picker opens with configured models ticked, so its selection repeats them;
+  // they must not come back as second rows, and whitespace does not disguise one.
+  assert.deepEqual(
+    modelsToAdd(['gpt-5.4', 'deepseek-chat', 'claude-opus', 'azure/gpt-5.4'], [' deepseek-chat ', 'gpt-5.4', '']),
+    ['claude-opus', 'azure/gpt-5.4'],
+  );
+  // A name picked twice, or padded, is added once and trimmed; blanks are dropped.
+  assert.deepEqual(modelsToAdd(['  o3 ', 'o3', '', '   '], []), ['o3']);
+  // Nothing new means nothing to add, which the drawer reports instead of a no-op.
+  assert.deepEqual(modelsToAdd(['gpt-5.4'], ['gpt-5.4']), []);
+
+
+
+  // ---- provider families: the table the provider list and its form share ----
+
+  // The family ids are the console's half of a contract with the Go side: each one
+  // must be a family CPA exposes as a credential list, because the form writes the
+  // id straight to `POST/PUT /management/providers`. A typo here would create a row
+  // the list can render and the gateway rejects.
+  assert.deepEqual(
+    PROVIDER_FAMILIES.map((family) => family.id),
+    ['openai-compatibility', 'codex', 'claude', 'gemini', 'meta', 'xai', 'vertex', 'interactions'],
+  );
+
+  // CPA discards a Codex-style entry without a base URL while answering the write
+  // with success, so exactly those families make the field required in the form.
+  assert.deepEqual(
+    PROVIDER_FAMILIES.filter((family) => family.requiresBaseURL).map((family) => family.id),
+    ['codex', 'xai'],
+  );
+
+  // CPA declares the image-endpoint flag only on the OpenAI-compatible model entry
+  // and refuses any other family's list that carries it, so only that family's
+  // form offers the checkbox.
+  assert.deepEqual(
+    PROVIDER_FAMILIES.filter((family) => family.supportsModelImage).map((family) => family.id),
+    ['openai-compatibility'],
+  );
+
+  // The tag's border and fill are derived by appending hex alpha to this value, so a
+  // non-hex colour would silently produce an invalid declaration rather than a
+  // visible error. Asserting the form here is what keeps that invariant honest.
+  for (const family of PROVIDER_FAMILIES) {
+    assert.match(family.color, /^#[0-9a-f]{6}$/i, `${family.id} colour must be 6-digit hex, got ${family.color}`);
+    assert.ok(family.labelKey.startsWith('pro.family_'), `${family.id} needs an i18n label key`);
+    assert.ok(family.iconId.length > 0, `${family.id} needs a brand mark`);
+  }
+
+  // Resolution is exact on the family and best-effort on a bare protocol string, in
+  // that order: a family tag CPA sent is authoritative, while a protocol description
+  // is only a guess about which family served a row that carries no tag.
+  assert.equal(lookupProviderFamily('meta')?.iconId, 'Meta');
+  assert.equal(lookupProviderFamily(' META ')?.id, 'meta');
+  assert.equal(matchProviderFamily('gemini')?.id, 'gemini');
+  assert.equal(matchProviderFamily(undefined, 'OpenAI Chat Completions')?.id, 'openai-compatibility');
+  assert.equal(matchProviderFamily(undefined, 'Anthropic Messages')?.id, 'claude');
+  assert.equal(matchProviderFamily(undefined, 'xAI Grok')?.id, 'xai');
+  assert.equal(matchProviderFamily(undefined, 'Vertex Generate Content')?.id, 'vertex');
+  assert.equal(matchProviderFamily(undefined, 'Interactions API')?.id, 'interactions');
+  assert.equal(lookupProviderFamily('xai')?.iconId, 'XAI');
+  assert.equal(matchProviderFamily('unknown-family'), undefined);
+  assert.equal(matchProviderFamily(undefined, undefined), undefined);
+
+
+
+  // ---- provider icon overrides: keyed by the row the override belongs to ----
+
+  // The row id is the identity and wins; the display name is only a fallback for an
+  // override stored before the id was known. Resolution lives in one place because a
+  // second copy of this order is a surface that can silently disagree with the rest.
+  assert.equal(resolveProviderIcon({ 'codex-0': 'DeepSeek', relay: 'OpenAI' }, { id: 'codex-0', name: 'relay' }, 'Codex'), 'DeepSeek');
+  assert.equal(resolveProviderIcon({ relay: 'OpenAI' }, { id: 'codex-0', name: 'relay' }, 'Codex'), 'OpenAI');
+  assert.equal(resolveProviderIcon({}, { id: 'codex-0', name: 'relay' }, 'Codex'), 'Codex');
+  assert.equal(resolveProviderIcon({ 'codex-0': 'DeepSeek' }, { name: 'relay' }, 'Codex'), 'Codex');
+  assert.equal(resolveProviderIcon({ relay: 'OpenAI' }, {}, 'Codex'), 'Codex');
+
+
+
+  // The positional prefix comes from the id rather than a family table, so a family
+  // added on the Go side cannot be left out of the shift by forgetting to list it.
+  assert.equal(providerIconIdPrefix('openai-compat-3'), 'openai-compat-');
+  assert.equal(providerIconIdPrefix('meta-0'), 'meta-');
+  assert.equal(providerIconIdPrefix('codex-12'), 'codex-');
+  for (const bad of ['', 'codex', 'codex-', 'codex-abc', '-1', 'codex-1.5']) {
+    assert.equal(providerIconIdPrefix(bad), undefined, `${bad} must not yield a prefix`);
+  }
+
+  // A delete drops the removed row's own override and moves every later one down with
+  // it. Leaving the key behind is what made a deleted provider's brand mark reappear
+  // on whichever credential inherited its index; a sibling family's ids must not move,
+  // because the map is shared across families.
+  assert.deepEqual(
+    shiftProviderIconsAfterDelete(
+      { 'codex-0': 'Zero', 'codex-1': 'One', 'codex-2': 'Two', 'meta-0': 'Untouched', relay: 'OpenAI' },
+      'codex-',
+      0,
+    ),
+    { 'codex-0': 'One', 'codex-1': 'Two', 'meta-0': 'Untouched', relay: 'OpenAI' },
+  );
+  // Deleting the last row only drops it - nothing below it moves.
+  assert.deepEqual(
+    shiftProviderIconsAfterDelete({ 'codex-0': 'Zero', 'codex-1': 'One' }, 'codex-', 1),
+    { 'codex-0': 'Zero' },
+  );
+  // Deleting the only row leaves an empty map rather than a key nothing addresses.
+  assert.deepEqual(shiftProviderIconsAfterDelete({ 'codex-0': 'Zero' }, 'codex-', 0), {});
+  // An id this family cannot be addressed by is kept as it is rather than rewritten.
+  assert.deepEqual(
+    shiftProviderIconsAfterDelete({ 'codex-x': 'Odd', 'codex-2': 'Two' }, 'codex-', 0),
+    { 'codex-x': 'Odd', 'codex-1': 'Two' },
+  );
+
+
+
+  // ---- the provider list's overview: traffic join, attention and facet counts ----
+
+  const overviewRows: ProviderItem[] = [
+    // A renamed relay: CPA labels its traffic by the upstream name, not the operator's label.
+    { id: 'openai-compat-0', family: 'openai-compatibility', name: 'My Relay', upstream_name: 'relay', protocol: 'OpenAI', base_url: 'https://relay.example/v1', disabled: false, key_configured: true, key_entries: [{}], model_entries: [{ name: 'gpt-5' }] } as ProviderItem,
+    { id: 'openai-compat-1', family: 'openai-compatibility', name: 'Flaky', upstream_name: 'flaky', protocol: 'OpenAI', disabled: false, key_configured: true, key_entries: [{}] } as ProviderItem,
+    { id: 'claude-0', family: 'claude', name: 'Claude', protocol: 'Anthropic Messages', disabled: false, key_configured: false } as ProviderItem,
+    { id: 'gemini-0', family: 'gemini', name: 'Gemini', protocol: 'Gemini', disabled: true, key_configured: false } as ProviderItem,
+  ];
+  const overviewTraffic = providerTrafficById(overviewRows, [
+    { id: 'relay', total: 10, success: 10, failure: 0, success_rate: 100 },
+    { id: 'flaky', total: 10, success: 4, failure: 6, success_rate: 40 },
+  ]);
+  assert.ok(overviewTraffic, 'a readable window yields a traffic map');
+  assert.equal(overviewTraffic.get('openai-compat-0')?.total, 10, 'traffic joins on the upstream name');
+  assert.equal(overviewTraffic.get('claude-0')?.total, 0, 'a provider absent from the window served nothing');
+  // An unreadable window is unknown, not zero: the page must not claim a provider was idle.
+  assert.equal(providerTrafficById(overviewRows, undefined), undefined);
+  assert.equal(totalProviderTraffic(overviewRows, undefined), undefined);
+  assert.deepEqual(totalProviderTraffic(overviewRows, overviewTraffic), { total: 20, success: 14, successRate: 70 });
+
+  // Attention is a switched-on row that cannot serve well: no key, or a rate below the healthy band.
+  const enabledOf = (row: ProviderItem) => !row.disabled;
+  assert.equal(needsAttention(overviewRows[0], true, overviewTraffic.get('openai-compat-0')), false);
+  assert.equal(needsAttention(overviewRows[1], true, overviewTraffic.get('openai-compat-1')), true, 'a failing rate needs attention');
+  assert.equal(needsAttention(overviewRows[2], true, overviewTraffic.get('claude-0')), true, 'a keyless enabled row needs attention');
+  assert.equal(needsAttention(overviewRows[3], false, undefined), false, 'a switched-off row is a decision, not a fault');
+
+  // Search reaches the models and the endpoint as well as the name.
+  assert.equal(matchesProviderSearch(overviewRows[0], 'GPT-5'), true);
+  assert.equal(matchesProviderSearch(overviewRows[0], 'relay.example'), true);
+  assert.equal(matchesProviderSearch(overviewRows[0], 'claude'), false);
+
+  // Each facet counts under the other facet's selection, so a tile says what choosing it shows.
+  const everything = summarizeProviders(overviewRows, DEFAULT_PROVIDER_FILTERS, enabledOf, overviewTraffic);
+  assert.deepEqual(everything.statusCounts, { all: 4, active: 3, disabled: 1, attention: 2 });
+  assert.deepEqual(everything.familyCounts, { 'openai-compatibility': 2, claude: 1, gemini: 1 });
+  assert.equal(everything.visible.length, 4);
+  const attentionOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTERS, status: 'attention' }, enabledOf, overviewTraffic);
+  assert.deepEqual(attentionOnly.visible.map((row) => row.id), ['openai-compat-1', 'claude-0']);
+  assert.deepEqual(attentionOnly.statusCounts, everything.statusCounts, 'the status filter does not change the status counts');
+  assert.deepEqual(attentionOnly.familyCounts, { 'openai-compatibility': 1, claude: 1 });
+  const relaysOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTERS, family: 'openai-compatibility' }, enabledOf, overviewTraffic);
+  assert.deepEqual(relaysOnly.statusCounts, { all: 2, active: 2, disabled: 0, attention: 1 });
+
+
+
+  // ---- OpenCode endpoints and the session header they require ----
+
+  // OpenCode publishes one lane per base path and keeps adding them, so the lane is
+  // recognized from the host rather than from a path list that goes stale. The host
+  // is compared exactly: a relay whose *path* spells opencode.ai, a lookalike host
+  // such as opencode.ai.example.test, and a subdomain are somebody else's endpoint.
+  for (const lane of [
+    'https://opencode.ai',
+    'https://opencode.ai/',
+    'https://opencode.ai/zen/v1',
+    'https://opencode.ai/zen/go/v1',
+    'https://opencode.ai/inference/go/openai/v1',
+    'https://opencode.ai/lane-published-later/anthropic/v2',
+    'https://OpenCode.AI/zen/v1',
+    'https://opencode.ai./zen/v1',
+    'https://opencode.ai:443/zen/v1',
+    'https://opencode.ai/zen/v1?trace=1#models',
+  ]) {
+    assert.equal(isOpenCodeEndpoint(lane), true, `${lane} is an OpenCode endpoint`);
+  }
+  for (const notOpenCode of [
+    '',
+    '   ',
+    'opencode.ai/zen/v1',
+    'http://opencode.ai/zen/v1',
+    'https://api.opencode.ai/zen/v1',
+    'https://opencode.ai.example.test/zen/v1',
+    'https://notopencode.ai/zen/v1',
+    'https://relay.example/opencode.ai/zen/v1',
+    'https://opencode.ai:bad/zen/v1',
+    'javascript:alert(1)',
+  ]) {
+    assert.equal(isOpenCodeEndpoint(notOpenCode), false, `${JSON.stringify(notOpenCode)} is not an OpenCode endpoint`);
+  }
+
+  // The header list is read the way the save reads it: one map entry per trimmed
+  // key, the last row naming a key wins, and HTTP matches the name case-insensitively.
+  const header = (key: string, value: string, id = 'hdr'): FormHeaderItem => ({ id, key, value });
+  assert.equal(openCodeSessionState([]), 'missing');
+  assert.equal(openCodeSessionState([header('X-Team', '$CPA-SESSION-ID')]), 'missing');
+  assert.equal(openCodeSessionState([header('x-opencode-session', '  ')]), 'missing');
+  assert.equal(openCodeSessionState([header(' X-OpenCode-Session ', 'ses_operator')]), 'mapped');
+  assert.equal(
+    openCodeSessionState([header('x-opencode-session', '$CPA-SESSION-ID'), header('X-OpenCode-Session', '$CPA-SESSION-ID', 'hdr-2')]),
+    'mapped',
+    'the same id under two spellings is still one value',
+  );
+  // A filled row followed by a blank one saves the blank, so the guidance must stay.
+  assert.equal(
+    openCodeSessionState([header('x-opencode-session', 'ses_operator'), header('x-opencode-session', '', 'hdr-2')]),
+    'missing',
+  );
+  assert.equal(
+    openCodeSessionState([header('x-opencode-session', '', 'hdr-1'), header('x-opencode-session', '', 'hdr-2')]),
+    'missing',
+  );
+  // Two different configured ids are the operator's decision, not the editor's.
+  assert.equal(
+    openCodeSessionState([header('x-opencode-session', 'ses_a', 'hdr-1'), header('X-OpenCode-Session', 'ses_b', 'hdr-2')]),
+    'conflict',
+  );
+
+  const teamHeader = header('X-Team', 'alpha', 'hdr-team');
+  const appended = withOpenCodeSessionHeader([teamHeader], 'hdr-new');
+  assert.deepEqual(appended, [
+    teamHeader,
+    { id: 'hdr-new', key: 'x-opencode-session', value: '$CPA-SESSION-ID' },
+  ]);
+  assert.equal(appended[1].value, '$CPA-SESSION-ID', 'the suggestion is the placeholder CPA expands');
+  // A second click is not a second header, and the draft it returns is the same
+  // reference so React can bail out of the update.
+  assert.equal(withOpenCodeSessionHeader(appended, 'hdr-other'), appended);
+  // The operator's own id fills a blank row instead of being replaced by the placeholder.
+  assert.deepEqual(
+    withOpenCodeSessionHeader(
+      [header('x-opencode-session', 'ses_operator'), header('x-opencode-session', ' ', 'hdr-2')],
+      'hdr-new',
+    ),
+    [header('x-opencode-session', 'ses_operator'), header('x-opencode-session', 'ses_operator', 'hdr-2')],
+  );
+  // Every blank row is filled, because whichever one is last is the value the save keeps.
+  assert.deepEqual(
+    withOpenCodeSessionHeader(
+      [header('x-opencode-session', '', 'hdr-1'), header('x-opencode-session', '', 'hdr-2')],
+      'hdr-new',
+    ),
+    [header('x-opencode-session', '$CPA-SESSION-ID', 'hdr-1'), header('x-opencode-session', '$CPA-SESSION-ID', 'hdr-2')],
+  );
+  // Conflicting ids are left exactly as the operator wrote them.
+  const conflicting = [header('x-opencode-session', 'ses_a', 'hdr-1'), header('X-OpenCode-Session', 'ses_b', 'hdr-2')];
+  assert.equal(withOpenCodeSessionHeader(conflicting, 'hdr-new'), conflicting);
 });
-assert.deepEqual(providerStatusPayload('codex-0', false), {
-  family: 'codex',
-  index: 0,
-  disabled: true,
-});
-assert.deepEqual(providerStatusPayload('openai-compat-2', false), {
-  family: 'openai-compatibility',
-  index: 2,
-  disabled: true,
-});
-
-// Switching a provider off must never ask for it to be switched on.
-assert.equal(providerStatusPayload('claude-1', false)?.disabled, true, 'enabled=false means disabled=true');
-assert.equal(providerStatusPayload('claude-1', true)?.disabled, false, 'enabled=true means disabled=false');
-assert.deepEqual(providerStatusPayload('meta-2', false), {
-  family: 'meta',
-  index: 2,
-  disabled: true,
-});
-
-// An unaddressable id produces no request at all, rather than one against index
-// zero of a family nobody named.
-for (const bad of ['', 'openai-compat-', 'nonsense-0', 'codex-abc']) {
-  assert.equal(providerStatusPayload(bad, true), undefined, `${bad} must not produce a payload`);
-}
-
-console.log('PASS provider status payload: the enabled/disabled inversion is stated once and pinned');
-
-// ---- provider website: only a URL that can safely be an href ----
-
-// The scheme is the security boundary. A javascript: or data: URL rendered into
-// an href executes with the session's authority, so it must never be accepted.
-for (const unsafe of [
-  'javascript:alert(1)',
-  'JavaScript:alert(1)',
-  ' javascript:alert(1) ',
-  'data:text/html,<script>alert(1)</script>',
-  'vbscript:msgbox(1)',
-  'file:///etc/passwd',
-  'ftp://example.test',
-  'chrome://settings',
-]) {
-  assert.equal(isSafeExternalURL(unsafe), false, `${unsafe} must be refused`);
-  assert.equal(safeExternalURL(unsafe), undefined, `${unsafe} must not become an href`);
-}
-
-// A scheme-relative or relative value would silently point at this console
-// instead of at the provider, so it is refused rather than resolved.
-for (const relative of ['//example.test', '/path', 'example.test', 'www.example.test', '?q=1', '#top']) {
-  assert.equal(isSafeExternalURL(relative), false, `${relative} must be refused`);
-}
-
-// Absent is not an error, it is "no website": the row renders plain text.
-for (const empty of ['', '   ', null, undefined]) {
-  assert.equal(isSafeExternalURL(empty), false);
-  assert.equal(safeExternalURL(empty), undefined);
-}
-
-for (const safe of [
-  'http://example.test',
-  'https://example.test',
-  'https://example.test/path?q=1#frag',
-  '  https://example.test  ',
-  'https://api.deepseek.com',
-]) {
-  assert.equal(isSafeExternalURL(safe), true, `${safe} must be accepted`);
-  assert.equal(safeExternalURL(safe), safe.trim(), 'the href is the trimmed value');
-}
-
-assert.equal(safeExternalURL('https://example.test:8443/v1'), 'https://example.test:8443/v1');
-
-console.log(
-  'PASS provider website: http/https only, script and relative schemes refused, absent means plain text',
-);
-
-// ---- model input filter ----
-
-const MODELS = ['gpt-5.4', 'gpt-5.4-mini', 'GPT-4o', 'claude-sonnet-4', 'azure/gpt-5.4', 'deepseek-chat'];
-
-// An empty query is the opening state and the state a cleared field returns to.
-assert.deepEqual(filterModelOptions(MODELS, ''), MODELS);
-assert.deepEqual(filterModelOptions(MODELS, '   '), MODELS);
-assert.deepEqual(filterModelOptions([], 'gpt'), []);
-
-// Case-insensitive, and a substring rather than a prefix: on a relay both
-// `azure/gpt-5.4` and `gpt-5.4` are real ids and either may be the target.
-assert.deepEqual(filterModelOptions(MODELS, 'GPT'), ['gpt-5.4', 'gpt-5.4-mini', 'GPT-4o', 'azure/gpt-5.4']);
-assert.deepEqual(filterModelOptions(MODELS, 'gpt-5.4'), ['gpt-5.4', 'gpt-5.4-mini', 'azure/gpt-5.4']);
-assert.deepEqual(filterModelOptions(MODELS, 'SONNET'), ['claude-sonnet-4']);
-assert.deepEqual(filterModelOptions(MODELS, 'azure/'), ['azure/gpt-5.4']);
-assert.deepEqual(filterModelOptions(MODELS, 'nothing-matches'), []);
-
-// Surrounding whitespace is the operator's, not part of the model id.
-assert.deepEqual(filterModelOptions(MODELS, '  deepseek  '), ['deepseek-chat']);
-
-// The input list is never mutated: the fetched catalog is shared state.
-const original = [...MODELS];
-filterModelOptions(MODELS, 'gpt');
-assert.deepEqual(MODELS, original);
-
-console.log(
-  'PASS model filter: case-insensitive substring, empty query shows all, input left untouched',
-);
-
-// ---- already-configured suppression ----
-
-const configured = new Set(['gpt-5.4', 'claude-sonnet-4']);
-
-// A model configured on another row is not offered again: CPA would accept the
-// duplicate and the gateway would then have two entries competing for one model.
-assert.deepEqual(modelOptionsFor(MODELS, '', configured), [
-  'gpt-5.4-mini',
-  'GPT-4o',
-  'azure/gpt-5.4',
-  'deepseek-chat',
-]);
-
-// The row's own value is kept even though it is in the configured set, or
-// editing an existing model would empty its own dropdown.
-assert.deepEqual(modelOptionsFor(MODELS, 'gpt-5.4', configured), [
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'azure/gpt-5.4',
-]);
-
-// Typing a value that is configured elsewhere re-offers it, because that is the
-// text the operator is entering and removing it would hide their own input.
-assert.deepEqual(modelOptionsFor(MODELS, 'claude-sonnet-4', configured), ['claude-sonnet-4']);
-
-// Suppression and the typed filter compose rather than one overriding the other:
-// a configured-elsewhere model stays hidden while narrowing.
-assert.deepEqual(modelOptionsFor(MODELS, 'gpt', configured), ['gpt-5.4-mini', 'GPT-4o', 'azure/gpt-5.4']);
-
-// With nothing configured elsewhere the two functions agree.
-assert.deepEqual(modelOptionsFor(MODELS, 'gpt', new Set()), filterModelOptions(MODELS, 'gpt'));
-
-// A refreshed catalog is filtered the same way, so refreshing does not resurrect
-// a duplicate: the suppression is applied at render, not baked into the fetch.
-assert.deepEqual(
-  modelOptionsFor([...MODELS, 'gpt-5.4'], '', configured),
-  ['gpt-5.4-mini', 'GPT-4o', 'azure/gpt-5.4', 'deepseek-chat'],
-);
-
-console.log(
-  'PASS model options: configured duplicates suppressed, own value kept, filter and suppression compose',
-);
-
-// ---- batch model pick: only new names become rows, in the order shown ----
-
-// The picker opens with configured models ticked, so its selection repeats them;
-// they must not come back as second rows, and whitespace does not disguise one.
-assert.deepEqual(
-  modelsToAdd(['gpt-5.4', 'deepseek-chat', 'claude-opus', 'azure/gpt-5.4'], [' deepseek-chat ', 'gpt-5.4', '']),
-  ['claude-opus', 'azure/gpt-5.4'],
-);
-// A name picked twice, or padded, is added once and trimmed; blanks are dropped.
-assert.deepEqual(modelsToAdd(['  o3 ', 'o3', '', '   '], []), ['o3']);
-// Nothing new means nothing to add, which the drawer reports instead of a no-op.
-assert.deepEqual(modelsToAdd(['gpt-5.4'], ['gpt-5.4']), []);
-
-console.log('PASS batch model pick: configured and repeated names skipped, pick order kept');
-
-// ---- provider families: the table the provider list and its form share ----
-
-// The family ids are the console's half of a contract with the Go side: each one
-// must be a family CPA exposes as a credential list, because the form writes the
-// id straight to `POST/PUT /management/providers`. A typo here would create a row
-// the list can render and the gateway rejects.
-assert.deepEqual(
-  PROVIDER_FAMILIES.map((family) => family.id),
-  ['openai-compatibility', 'codex', 'claude', 'gemini', 'meta', 'xai', 'vertex', 'interactions'],
-);
-
-// CPA discards a Codex-style entry without a base URL while answering the write
-// with success, so exactly those families make the field required in the form.
-assert.deepEqual(
-  PROVIDER_FAMILIES.filter((family) => family.requiresBaseURL).map((family) => family.id),
-  ['codex', 'xai'],
-);
-
-// CPA declares the image-endpoint flag only on the OpenAI-compatible model entry
-// and refuses any other family's list that carries it, so only that family's
-// form offers the checkbox.
-assert.deepEqual(
-  PROVIDER_FAMILIES.filter((family) => family.supportsModelImage).map((family) => family.id),
-  ['openai-compatibility'],
-);
-
-// The tag's border and fill are derived by appending hex alpha to this value, so a
-// non-hex colour would silently produce an invalid declaration rather than a
-// visible error. Asserting the form here is what keeps that invariant honest.
-for (const family of PROVIDER_FAMILIES) {
-  assert.match(family.color, /^#[0-9a-f]{6}$/i, `${family.id} colour must be 6-digit hex, got ${family.color}`);
-  assert.ok(family.labelKey.startsWith('pro.family_'), `${family.id} needs an i18n label key`);
-  assert.ok(family.iconId.length > 0, `${family.id} needs a brand mark`);
-}
-
-// Resolution is exact on the family and best-effort on a bare protocol string, in
-// that order: a family tag CPA sent is authoritative, while a protocol description
-// is only a guess about which family served a row that carries no tag.
-assert.equal(lookupProviderFamily('meta')?.iconId, 'Meta');
-assert.equal(lookupProviderFamily(' META ')?.id, 'meta');
-assert.equal(matchProviderFamily('gemini')?.id, 'gemini');
-assert.equal(matchProviderFamily(undefined, 'OpenAI Chat Completions')?.id, 'openai-compatibility');
-assert.equal(matchProviderFamily(undefined, 'Anthropic Messages')?.id, 'claude');
-assert.equal(matchProviderFamily(undefined, 'xAI Grok')?.id, 'xai');
-assert.equal(matchProviderFamily(undefined, 'Vertex Generate Content')?.id, 'vertex');
-assert.equal(matchProviderFamily(undefined, 'Interactions API')?.id, 'interactions');
-assert.equal(lookupProviderFamily('xai')?.iconId, 'XAI');
-assert.equal(matchProviderFamily('unknown-family'), undefined);
-assert.equal(matchProviderFamily(undefined, undefined), undefined);
-
-console.log(
-  'PASS provider families: every declared family is hex-coloured, labelled, and resolvable by family id before protocol text',
-);
-
-// ---- provider icon overrides: keyed by the row the override belongs to ----
-
-// The row id is the identity and wins; the display name is only a fallback for an
-// override stored before the id was known. Resolution lives in one place because a
-// second copy of this order is a surface that can silently disagree with the rest.
-assert.equal(resolveProviderIcon({ 'codex-0': 'DeepSeek', relay: 'OpenAI' }, { id: 'codex-0', name: 'relay' }, 'Codex'), 'DeepSeek');
-assert.equal(resolveProviderIcon({ relay: 'OpenAI' }, { id: 'codex-0', name: 'relay' }, 'Codex'), 'OpenAI');
-assert.equal(resolveProviderIcon({}, { id: 'codex-0', name: 'relay' }, 'Codex'), 'Codex');
-assert.equal(resolveProviderIcon({ 'codex-0': 'DeepSeek' }, { name: 'relay' }, 'Codex'), 'Codex');
-assert.equal(resolveProviderIcon({ relay: 'OpenAI' }, {}, 'Codex'), 'Codex');
-
-console.log('PASS provider icons: the row id resolves first and the default is the last resort');
-
-// The positional prefix comes from the id rather than a family table, so a family
-// added on the Go side cannot be left out of the shift by forgetting to list it.
-assert.equal(providerIconIdPrefix('openai-compat-3'), 'openai-compat-');
-assert.equal(providerIconIdPrefix('meta-0'), 'meta-');
-assert.equal(providerIconIdPrefix('codex-12'), 'codex-');
-for (const bad of ['', 'codex', 'codex-', 'codex-abc', '-1', 'codex-1.5']) {
-  assert.equal(providerIconIdPrefix(bad), undefined, `${bad} must not yield a prefix`);
-}
-
-// A delete drops the removed row's own override and moves every later one down with
-// it. Leaving the key behind is what made a deleted provider's brand mark reappear
-// on whichever credential inherited its index; a sibling family's ids must not move,
-// because the map is shared across families.
-assert.deepEqual(
-  shiftProviderIconsAfterDelete(
-    { 'codex-0': 'Zero', 'codex-1': 'One', 'codex-2': 'Two', 'meta-0': 'Untouched', relay: 'OpenAI' },
-    'codex-',
-    0,
-  ),
-  { 'codex-0': 'One', 'codex-1': 'Two', 'meta-0': 'Untouched', relay: 'OpenAI' },
-);
-// Deleting the last row only drops it - nothing below it moves.
-assert.deepEqual(
-  shiftProviderIconsAfterDelete({ 'codex-0': 'Zero', 'codex-1': 'One' }, 'codex-', 1),
-  { 'codex-0': 'Zero' },
-);
-// Deleting the only row leaves an empty map rather than a key nothing addresses.
-assert.deepEqual(shiftProviderIconsAfterDelete({ 'codex-0': 'Zero' }, 'codex-', 0), {});
-// An id this family cannot be addressed by is kept as it is rather than rewritten.
-assert.deepEqual(
-  shiftProviderIconsAfterDelete({ 'codex-x': 'Odd', 'codex-2': 'Two' }, 'codex-', 0),
-  { 'codex-x': 'Odd', 'codex-1': 'Two' },
-);
-
-console.log('PASS provider icons: a delete drops its own override and shifts the later ones down');
-
-// ---- the provider list's overview: traffic join, attention and facet counts ----
-
-const overviewRows: ProviderItem[] = [
-  // A renamed relay: CPA labels its traffic by the upstream name, not the operator's label.
-  { id: 'openai-compat-0', family: 'openai-compatibility', name: 'My Relay', upstream_name: 'relay', protocol: 'OpenAI', base_url: 'https://relay.example/v1', disabled: false, key_configured: true, key_entries: [{}], model_entries: [{ name: 'gpt-5' }] } as ProviderItem,
-  { id: 'openai-compat-1', family: 'openai-compatibility', name: 'Flaky', upstream_name: 'flaky', protocol: 'OpenAI', disabled: false, key_configured: true, key_entries: [{}] } as ProviderItem,
-  { id: 'claude-0', family: 'claude', name: 'Claude', protocol: 'Anthropic Messages', disabled: false, key_configured: false } as ProviderItem,
-  { id: 'gemini-0', family: 'gemini', name: 'Gemini', protocol: 'Gemini', disabled: true, key_configured: false } as ProviderItem,
-];
-const overviewTraffic = providerTrafficById(overviewRows, [
-  { id: 'relay', total: 10, success: 10, failure: 0, success_rate: 100 },
-  { id: 'flaky', total: 10, success: 4, failure: 6, success_rate: 40 },
-]);
-assert.ok(overviewTraffic, 'a readable window yields a traffic map');
-assert.equal(overviewTraffic.get('openai-compat-0')?.total, 10, 'traffic joins on the upstream name');
-assert.equal(overviewTraffic.get('claude-0')?.total, 0, 'a provider absent from the window served nothing');
-// An unreadable window is unknown, not zero: the page must not claim a provider was idle.
-assert.equal(providerTrafficById(overviewRows, undefined), undefined);
-assert.equal(totalProviderTraffic(overviewRows, undefined), undefined);
-assert.deepEqual(totalProviderTraffic(overviewRows, overviewTraffic), { total: 20, success: 14, successRate: 70 });
-
-// Attention is a switched-on row that cannot serve well: no key, or a rate below the healthy band.
-const enabledOf = (row: ProviderItem) => !row.disabled;
-assert.equal(needsAttention(overviewRows[0], true, overviewTraffic.get('openai-compat-0')), false);
-assert.equal(needsAttention(overviewRows[1], true, overviewTraffic.get('openai-compat-1')), true, 'a failing rate needs attention');
-assert.equal(needsAttention(overviewRows[2], true, overviewTraffic.get('claude-0')), true, 'a keyless enabled row needs attention');
-assert.equal(needsAttention(overviewRows[3], false, undefined), false, 'a switched-off row is a decision, not a fault');
-
-// Search reaches the models and the endpoint as well as the name.
-assert.equal(matchesProviderSearch(overviewRows[0], 'GPT-5'), true);
-assert.equal(matchesProviderSearch(overviewRows[0], 'relay.example'), true);
-assert.equal(matchesProviderSearch(overviewRows[0], 'claude'), false);
-
-// Each facet counts under the other facet's selection, so a tile says what choosing it shows.
-const everything = summarizeProviders(overviewRows, DEFAULT_PROVIDER_FILTERS, enabledOf, overviewTraffic);
-assert.deepEqual(everything.statusCounts, { all: 4, active: 3, disabled: 1, attention: 2 });
-assert.deepEqual(everything.familyCounts, { 'openai-compatibility': 2, claude: 1, gemini: 1 });
-assert.equal(everything.visible.length, 4);
-const attentionOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTERS, status: 'attention' }, enabledOf, overviewTraffic);
-assert.deepEqual(attentionOnly.visible.map((row) => row.id), ['openai-compat-1', 'claude-0']);
-assert.deepEqual(attentionOnly.statusCounts, everything.statusCounts, 'the status filter does not change the status counts');
-assert.deepEqual(attentionOnly.familyCounts, { 'openai-compatibility': 1, claude: 1 });
-const relaysOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTERS, family: 'openai-compatibility' }, enabledOf, overviewTraffic);
-assert.deepEqual(relaysOnly.statusCounts, { all: 2, active: 2, disabled: 0, attention: 1 });
-
-console.log('PASS provider overview: traffic joins by upstream name, attention and facets count consistently');
-
-// ---- OpenCode endpoints and the session header they require ----
-
-// OpenCode publishes one lane per base path and keeps adding them, so the lane is
-// recognized from the host rather than from a path list that goes stale. The host
-// is compared exactly: a relay whose *path* spells opencode.ai, a lookalike host
-// such as opencode.ai.example.test, and a subdomain are somebody else's endpoint.
-for (const lane of [
-  'https://opencode.ai',
-  'https://opencode.ai/',
-  'https://opencode.ai/zen/v1',
-  'https://opencode.ai/zen/go/v1',
-  'https://opencode.ai/inference/go/openai/v1',
-  'https://opencode.ai/lane-published-later/anthropic/v2',
-  'https://OpenCode.AI/zen/v1',
-  'https://opencode.ai./zen/v1',
-  'https://opencode.ai:443/zen/v1',
-  'https://opencode.ai/zen/v1?trace=1#models',
-]) {
-  assert.equal(isOpenCodeEndpoint(lane), true, `${lane} is an OpenCode endpoint`);
-}
-for (const notOpenCode of [
-  '',
-  '   ',
-  'opencode.ai/zen/v1',
-  'http://opencode.ai/zen/v1',
-  'https://api.opencode.ai/zen/v1',
-  'https://opencode.ai.example.test/zen/v1',
-  'https://notopencode.ai/zen/v1',
-  'https://relay.example/opencode.ai/zen/v1',
-  'https://opencode.ai:bad/zen/v1',
-  'javascript:alert(1)',
-]) {
-  assert.equal(isOpenCodeEndpoint(notOpenCode), false, `${JSON.stringify(notOpenCode)} is not an OpenCode endpoint`);
-}
-
-// The header list is read the way the save reads it: one map entry per trimmed
-// key, the last row naming a key wins, and HTTP matches the name case-insensitively.
-const header = (key: string, value: string, id = 'hdr'): FormHeaderItem => ({ id, key, value });
-assert.equal(openCodeSessionState([]), 'missing');
-assert.equal(openCodeSessionState([header('X-Team', '$CPA-SESSION-ID')]), 'missing');
-assert.equal(openCodeSessionState([header('x-opencode-session', '  ')]), 'missing');
-assert.equal(openCodeSessionState([header(' X-OpenCode-Session ', 'ses_operator')]), 'mapped');
-assert.equal(
-  openCodeSessionState([header('x-opencode-session', '$CPA-SESSION-ID'), header('X-OpenCode-Session', '$CPA-SESSION-ID', 'hdr-2')]),
-  'mapped',
-  'the same id under two spellings is still one value',
-);
-// A filled row followed by a blank one saves the blank, so the guidance must stay.
-assert.equal(
-  openCodeSessionState([header('x-opencode-session', 'ses_operator'), header('x-opencode-session', '', 'hdr-2')]),
-  'missing',
-);
-assert.equal(
-  openCodeSessionState([header('x-opencode-session', '', 'hdr-1'), header('x-opencode-session', '', 'hdr-2')]),
-  'missing',
-);
-// Two different configured ids are the operator's decision, not the editor's.
-assert.equal(
-  openCodeSessionState([header('x-opencode-session', 'ses_a', 'hdr-1'), header('X-OpenCode-Session', 'ses_b', 'hdr-2')]),
-  'conflict',
-);
-
-const teamHeader = header('X-Team', 'alpha', 'hdr-team');
-const appended = withOpenCodeSessionHeader([teamHeader], 'hdr-new');
-assert.deepEqual(appended, [
-  teamHeader,
-  { id: 'hdr-new', key: 'x-opencode-session', value: '$CPA-SESSION-ID' },
-]);
-assert.equal(appended[1].value, '$CPA-SESSION-ID', 'the suggestion is the placeholder CPA expands');
-// A second click is not a second header, and the draft it returns is the same
-// reference so React can bail out of the update.
-assert.equal(withOpenCodeSessionHeader(appended, 'hdr-other'), appended);
-// The operator's own id fills a blank row instead of being replaced by the placeholder.
-assert.deepEqual(
-  withOpenCodeSessionHeader(
-    [header('x-opencode-session', 'ses_operator'), header('x-opencode-session', ' ', 'hdr-2')],
-    'hdr-new',
-  ),
-  [header('x-opencode-session', 'ses_operator'), header('x-opencode-session', 'ses_operator', 'hdr-2')],
-);
-// Every blank row is filled, because whichever one is last is the value the save keeps.
-assert.deepEqual(
-  withOpenCodeSessionHeader(
-    [header('x-opencode-session', '', 'hdr-1'), header('x-opencode-session', '', 'hdr-2')],
-    'hdr-new',
-  ),
-  [header('x-opencode-session', '$CPA-SESSION-ID', 'hdr-1'), header('x-opencode-session', '$CPA-SESSION-ID', 'hdr-2')],
-);
-// Conflicting ids are left exactly as the operator wrote them.
-const conflicting = [header('x-opencode-session', 'ses_a', 'hdr-1'), header('X-OpenCode-Session', 'ses_b', 'hdr-2')];
-assert.equal(withOpenCodeSessionHeader(conflicting, 'hdr-new'), conflicting);
-
-console.log('PASS OpenCode guidance: the host selects the lane, and exactly one session id survives the save');
