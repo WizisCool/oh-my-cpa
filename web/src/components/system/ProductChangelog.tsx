@@ -64,8 +64,11 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
         <div className={styles['changelog-range']}>
           {data.running_version && data.latest_version && (
             <span className={styles['changelog-versions']}>
+              {/* The arrow is drawn for the eye; a screen reader hears which version is which. */}
+              <span className="sr-only">{t('sys.current_version')}</span>
               {data.running_version}
               <ArrowRightOutlined aria-hidden="true" />
+              <span className="sr-only">{t('sys.latest_version')}</span>
               <span className={styles['version-target']}>{data.latest_version}</span>
             </span>
           )}
@@ -86,7 +89,8 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
         {data.releases.map((release) => (
           <li key={release.tag} className={styles['release-entry']}>
             {/* A release between the running build and the newest one is what an upgrade brings;
-                its node takes the accent, and the rest of the log stays in the rail's ink. */}
+                its node is filled in the accent while the rest of the log keeps a hollow ring, so
+                the difference survives without colour. */}
             <span
               className={`${styles['release-node']} ${release.in_range ? styles['release-node-in-range'] : ''}`}
               role={release.in_range ? 'img' : undefined}

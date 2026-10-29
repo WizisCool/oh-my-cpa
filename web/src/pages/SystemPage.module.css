@@ -406,7 +406,7 @@
 
 .release-node-in-range {
   border-color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 24%, var(--surface));
+  background: var(--accent);
 }
 
 .release-title-row {
