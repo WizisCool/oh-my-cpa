@@ -1,5 +1,5 @@
 import { fulfillFixture } from '../browser-guard.mjs';
-import { until } from '../harness.mjs';
+import { settleLayout, until } from '../harness.mjs';
 
 /**
  * The System Information page, and the claim that rendering a release's change log does
@@ -1242,7 +1242,7 @@ export async function systemInformationNarrow({ base, page, check }) {
 
   // ── Intermediate viewport (800px): below 900px breakpoint, single column ──
   await page.setViewportSize({ width: 800, height: 1000 });
-  await page.waitForTimeout(100);
+  await settleLayout(page);
 
   const intermediateResult = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));

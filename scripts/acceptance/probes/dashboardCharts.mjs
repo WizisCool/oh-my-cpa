@@ -182,7 +182,7 @@ async function accessibleReadout(host) {
  *   - A unit change prints in place. `31.8K -> 2.1M` is a change of *scale*: rolling 31.8 into 2.1
  *     while the unit word swaps underneath would show digits that never described the window.
  *   - A reader who asked for reduced motion gets the new value without the travel, which is the
- *     `prefers-reduced-motion` override §7 requires reaching the readout as well.
+ *     `prefers-reduced-motion` override reaching the readout as well.
  */
 
 export async function dashboardRollingReadouts({ base, page, context, check }) {

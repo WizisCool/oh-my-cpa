@@ -1,7 +1,7 @@
 /**
  * Probes for the console's touch rules, on a context that actually has a coarse pointer.
  *
- * `docs/design.md` §8 states four of them, and each was a measured defect before it was a rule:
+ * Each rule addresses an observed interaction defect:
  * nothing is reachable only by hover; a control a finger must hit is about 40px after its hit
  * area; a focusable text control is at least 16px; and no page scrolls sideways. A scenario is
  * how they stop being a statement about the day they were written - and the context is the part
@@ -48,8 +48,8 @@ const MEDIA = `({
  *     `.config-key-action`: the console's own dense controls are plain buttons rather than antd's
  *     icon-only variant, so the touch rule had never reached them.
  *
- * It measures controls that are **small in both dimensions**, which is the scope `docs/design.md` §8
- * states: a control that is wide - a labelled button, or any of the console's 32px-tall buttons - is
+ * It measures controls that are **small in both dimensions**, which is the scope of the touch
+ * rule: a control that is wide - a labelled button, or any of the console's 32px-tall buttons - is
  * aimable even when it is short, so requiring 40px of height from it would be asserting a change the
  * design system deliberately does not make.
  *

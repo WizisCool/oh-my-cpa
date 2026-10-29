@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { guardBrowserContext } from './acceptance/browser-guard.mjs';
-import { launchBrowser, closeBrowser, stopProcess, closeServer, withOwnedCleanup } from './acceptance/lifecycle.mjs';
+import { launchBrowser, closeBrowser, stopProcess, closeServer, withinBudget } from './acceptance/lifecycle.mjs';
 // Deterministic browser acceptance against an isolated fake CPA by default.
 // Set OMCPA_LIVE_CPA=1 to run the separately maintained live-system smoke.
 
@@ -11,6 +11,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import {
   createFakeCpaServer,
@@ -45,6 +46,10 @@ if (process.env.OMCPA_LIVE_CPA === '1') {
 }
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-e2e-'));
+const outputDir = path.join(root, 'tmp/browser-acceptance-failure', path.basename(temporary));
+const fixtureVersion = `v0.1.0-e2e-${path.basename(temporary)}`;
+const cancellation = new AbortController();
+console.log(`Browser acceptance artifacts: ${outputDir}`);
 // One master key for the whole run: the app, the seeder and the fingerprint
 // assertions must all derive caller-key identities with the same key.
 const MASTER_KEY = ['fixture', 'master', 'key', 'for', 'browser', 'acceptance', 'only'].join('-');
@@ -65,6 +70,26 @@ const nativeResponseAudits = [];
 const consoleErrors = [];
 const pageErrors = [];
 const requestFailures = [];
+const diagnosticErrors = [];
+let browserStop;
+let appStop;
+const stopBrowser = () => browser ? (browserStop ??= closeBrowser(browser)) : Promise.resolve();
+const stopApp = () => appProcess ? (appStop ??= stopProcess(appProcess)) : Promise.resolve();
+const onSignal = signal => {
+  if (cancellation.signal.aborted) return;
+  process.exitCode = signal === 'SIGINT' ? 130 : 143;
+  const reason = new Error(`Browser acceptance interrupted by ${signal}`);
+  failures.push(reason.message);
+  cancellation.abort(reason);
+  // Interrupt an active browser operation so the ordinary finally path owns the
+  // same cleanup as a failed assertion; no signal-only success path is possible.
+  void stopBrowser().catch(error => failures.push(`Browser shutdown: ${error.message}`));
+  void stopApp().catch(error => failures.push(`App shutdown: ${error.message}`));
+};
+const onInterrupt = () => onSignal('SIGINT');
+const onTerminate = () => onSignal('SIGTERM');
+process.on('SIGINT', onInterrupt);
+process.on('SIGTERM', onTerminate);
 
 async function freePort() {
   return await new Promise((resolve, reject) => {
@@ -81,13 +106,17 @@ async function waitFor(url, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
   while (Date.now() < deadline) {
+    cancellation.signal.throwIfAborted();
+    if (appProcess && (!appProcess.pid || appProcess.exitCode !== null || appProcess.signalCode !== null)) {
+      throw new Error(`Acceptance app exited before readiness: ${appProcess.signalCode ?? appProcess.exitCode}`);
+    }
     try {
-      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(1000) });
+      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(1000)]) });
       if (response.status > 0) return response;
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await delay(150, undefined, { signal: cancellation.signal });
   }
   throw new Error(`timed out waiting for ${url}: ${lastError?.message ?? 'no response'}`);
 }
@@ -134,15 +163,28 @@ async function auditRoutes(page, responseBodies, routes) {
 }
 
 async function captureFailureDiagnostics(failedPage) {
-  const output = path.join(root, 'tmp', 'browser-acceptance-failure');
-  fs.mkdirSync(output, { recursive: true });
-  await failedPage.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }).catch(() => {});
-  const html = await failedPage.content().catch(() => '');
-  fs.writeFileSync(path.join(output, 'failure.html'), html);
-  fs.writeFileSync(path.join(output, 'app.log'), appLog.join(''));
+  if (!fs.existsSync(outputDir)) console.error(`Browser acceptance diagnostics: ${outputDir}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+  if (failedPage && !failedPage.isClosed()) {
+    for (const [name, capture] of [
+      ['screenshot', () => failedPage.screenshot({ path: path.join(outputDir, 'failure.png'), fullPage: true, timeout: 2000 })],
+      ['DOM', async () => fs.writeFileSync(path.join(outputDir, 'failure.html'), await withinBudget(failedPage.content(), 2000, 'failure DOM capture'))],
+    ]) {
+      try { await capture(); }
+      catch (error) { diagnosticErrors.push(`${name}: ${error.message}`); }
+    }
+  }
+  fs.writeFileSync(path.join(outputDir, 'app.log'), appLog.join(''));
+  fs.writeFileSync(path.join(outputDir, 'failure.json'), JSON.stringify({
+    appURL, failures, consoleErrors, pageErrors, requestFailures,
+    faults: network?.problems ?? [], diagnosticErrors,
+    interrupted: cancellation.signal.aborted,
+    interruption: cancellation.signal.reason?.message,
+  }, null, 2));
 }
 
 try {
+  cancellation.signal.throwIfAborted();
   fakeCpa = createFakeCpaServer();
   await new Promise((resolve, reject) => {
     fakeCpa.server.once('error', reject);
@@ -185,6 +227,7 @@ try {
     if (!output.includes('SEED_USAGE_OK')) throw new Error(`seed usage failed: ${output}`);
   };
   seedUsage();
+  cancellation.signal.throwIfAborted();
   appProcess = spawn(executable, [], {
     cwd: root,
     env: isolatedAppEnvironment({
@@ -210,7 +253,7 @@ try {
       OMCPA_UPDATE_CHECK_ENABLED: 'false',
       OMCPA_UPDATE_CHECK_ON_PAGE_LOAD: 'false',
       OMCPA_PUBLIC_URL: '',
-      OMCPA_VERSION: 'v0.1.0-e2e',
+      OMCPA_VERSION: fixtureVersion,
     }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -220,11 +263,20 @@ try {
     if (code !== null && code !== 0) appLog.push(`app exited with ${code}`);
   });
 
-  const redirect = await waitFor(appURL);
+  const appExited = new Promise((_, reject) => {
+    appProcess.once('error', reject);
+    appProcess.once('exit', (code, signal) => reject(new Error(`Acceptance app exited: ${signal ?? code}`)));
+  });
+  const health = await Promise.race([waitFor(`${appURL}/api/healthz`), appExited]);
+  const identity = await health.json();
+  if (identity.version !== fixtureVersion) throw new Error('Acceptance port is served by an unrelated process');
+  cancellation.signal.throwIfAborted();
+  const redirect = await fetch(appURL, { redirect: 'manual', signal: cancellation.signal });
   check('fixture startup ignores operator dotenv files', !appLog.join('').includes('loaded environment file'));
   check('/omc redirects to /omc/', redirect.status === 308 && redirect.headers.get('location') === '/omc/', `status=${redirect.status}`);
 
   browser = await launchBrowser(chromium, { headless: true });
+  cancellation.signal.throwIfAborted();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
   network = await guardBrowserContext(context, [appURL]);
   page = await context.newPage();
@@ -316,13 +368,13 @@ try {
   console.error(error.stack || error.message);
   failures.push(error.message);
 } finally {
-  if (network) check('built console makes no outbound network requests', !network.problems.some(problem => problem.kind === 'outbound'));
-  await withOwnedCleanup(async () => {
-    if (failures.length > 0 && page) await captureFailureDiagnostics(page);
-  }, async () => {
+  try {
+    if (failures.length > 0 || cancellation.signal.aborted) await captureFailureDiagnostics(page);
+  } finally {
     try {
-      await closeBrowser(browser);
+      await stopBrowser().catch(error => { failures.push(`Browser teardown: ${error.message}`); throw error; });
       await settleNativeResponseAudits(nativeResponseAudits, check);
+      if (network) check('built console makes no outbound network requests', !network.problems.some(problem => problem.kind === 'outbound'));
       if (page) {
         check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
         check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));
@@ -330,19 +382,26 @@ try {
       }
     }
     finally {
-      try { await stopProcess(appProcess); }
+      try { await stopApp().catch(error => { failures.push(`App teardown: ${error.message}`); throw error; }); }
       finally {
-        try { if (fakeCpa) await closeServer(fakeCpa.server); }
-        finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+        try { if (fakeCpa) await closeServer(fakeCpa.server).catch(error => { failures.push(`Fixture teardown: ${error.message}`); throw error; }); }
+        finally {
+          fs.rmSync(temporary, { recursive: true, force: true });
+          process.removeListener('SIGINT', onInterrupt);
+          process.removeListener('SIGTERM', onTerminate);
+          // Teardown may expose a late network/native audit failure. Keep that
+          // evidence too, even if all exercise steps had already passed.
+          if (failures.length > 0 || cancellation.signal.aborted) await captureFailureDiagnostics();
+        }
       }
     }
-  });
+  }
 }
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} acceptance check(s) failed.`);
   if (appLog.length > 0) console.error(appLog.join('').slice(-8000));
-  process.exitCode = 1;
+  process.exitCode ??= 1;
 } else {
   const mode = smokeOnly ? ' (smoke)' : '';
   console.log(`\n${checks.length} deterministic browser checks passed${mode}.`);

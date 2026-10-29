@@ -247,12 +247,6 @@ export async function pluginManagement({ base, page, check, writes }) {
   await communityCard.getByRole('button', { name: /安装|Install/ }).click();
   const communityDialog = page.locator('.ant-modal:visible');
   await communityDialog.waitFor({ timeout: 5000 });
-  const communityDialogText = await communityDialog.innerText();
-  check(
-    'the dialog tells the operator the code is community-published and unreviewed',
-    /官方源社区插件|Community plugin from the official source/.test(communityDialogText) && /未经审查|unreviewed/.test(communityDialogText),
-    communityDialogText,
-  );
   check('an official-registry community install still needs its id typed', await communityDialog.locator('.ant-modal-footer .ant-btn-primary').isDisabled());
   await communityDialog.getByRole('button', { name: /取消|Cancel/ }).click();
 

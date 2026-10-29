@@ -144,7 +144,7 @@ function describeNotch(samples) {
 
 /**
  * Opens the request list, marks its virtualized holder for sampling and folds the header with the
- * first notch, which the list claims (§7 live tail). Returns where to point the wheel and that
+ * first notch, which the live-tail list consumes. Returns where to point the wheel and that
  * first notch.
  */
 async function openRequestList(page, base) {

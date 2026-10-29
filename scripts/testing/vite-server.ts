@@ -8,33 +8,40 @@ const modules = [
   ...(ids.some(id => id.startsWith('agent')) ? ['/src/pages/agent/AgentPage.tsx'] : []),
   ...(ids.some(id => id.startsWith('playground')) ? ['/src/pages/playground/PlaygroundPage.tsx'] : []),
 ];
-/**
- * A probe run pre-bundles into its own directory, not the developer's `node_modules/.vite`.
- *
- * Both are Vite caches, but they belong to different lifecycles. Pre-bundling writes new chunk
- * names and rewrites `_metadata.json`, and a `pnpm dev` session that is already open keeps serving
- * the graph it built earlier - so a verification run against the default directory leaves that
- * session mixing two copies of a dependency, which fails in the middle of one of them (a Prism
- * grammar reading `Prism.languages.javascript` from another refractor instance threw
- * `Cannot read properties of undefined (reading 'source')` on the Agent route). Keeping the probe
- * cache separate means verification cannot break a session somebody is using, and the two
- * lifecycles no longer invalidate each other.
- */
-const cacheDir = 'node_modules/.vite-probes';
+// Vite rewrites optimized chunk names and metadata. Each live server needs its
+// own cache, including two independent probe runs, not just the developer's Vite.
+const cacheDir = process.env.OMC_PROBE_CACHE_DIR;
+if (!cacheDir) throw new Error('A probe server requires an invocation-owned cache directory');
 const server = await createServer({
   cacheDir,
   server: {
-    host: '127.0.0.1', port: Number(process.argv[2]), strictPort: true,
+    host: '127.0.0.1', port: Number(process.argv[2] ?? '0'), strictPort: true,
     headers: { 'X-OMC-Probe-Owner': owner },
     warmup: { clientFiles: modules.map(url => `.${url}`) },
   },
 });
-await server.listen();
-// Keep cold source transformation in server startup, not an interaction budget.
-await Promise.all(modules.map(async url => {
-  if (!await server.transformRequest(url)) throw new Error(`Cannot prepare probe module: ${url}`);
-}));
-if (modules.length) await server.waitForRequestsIdle();
-// Readiness comes from this child's pipe, after its strict bind. A foreign HTTP
-// response cannot win a readiness race, even if it serves the same application.
-console.log(`OMC_PROBE_READY:${owner}`);
+try {
+  // Vite 6's listen(0) selects its default port. Binding the exposed HTTP
+  // server directly lets the OS allocate a port without a reserve/rebind race.
+  const listener = server.httpServer;
+  if (!listener) throw new Error('Probe server has no HTTP listener');
+  await new Promise<void>((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(Number(process.argv[2] ?? '0'), '127.0.0.1', () => {
+      listener.removeListener('error', reject);
+      resolve();
+    });
+  });
+  await Promise.all(modules.map(async url => {
+    if (!await server.transformRequest(url)) throw new Error(`Cannot prepare probe module: ${url}`);
+  }));
+  await server.waitForRequestsIdle();
+  const address = server.httpServer?.address();
+  if (!address || typeof address === 'string') throw new Error('Probe server has no TCP address');
+  // Native Playwright captures the URL only from this child's owned stdout,
+  // after bind and cold transforms. No port reservation or HTTP readiness race.
+  console.log(`OMC_PROBE_READY:${owner} http://127.0.0.1:${address.port}/omc`);
+} catch (error) {
+  await server.close();
+  throw error;
+}

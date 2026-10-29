@@ -28,7 +28,8 @@
  *   pnpm check:ui                       scenarios the working tree affects
  *   pnpm check:ui --all                 every scenario
  *   pnpm check:ui --scenario charts     one scenario by id (see --list)
- *   pnpm check:ui --workers 1          serial reproduction with identical coverage
+ *   pnpm check:ui --workers 1           serial reproduction with identical coverage
+ *   pnpm check:ui --shard 1/3           native shard of the affected selection
  *   pnpm check:ui --list                ids and names, starts nothing
  *   pnpm check:ui --plan                what would run and why, starts nothing
  *   pnpm check:ui --base <ref>          plan against <ref>..worktree instead of HEAD
@@ -36,29 +37,31 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runProbeCatalog } from './testing/probes.ts';
+import { parseProbeArguments, runProbeCatalog } from './testing/probes.ts';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
-import { measureVerification } from './parallel-checks.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Distinct from `verify:probes` (5180) on purpose: running a focused check while the
-// release gate is also running must not collide, and `strictPort` turns a collision
-// into a loud failure rather than a silent rebind.
-const PORT = 5181;
+function argumentValue(argv: string[], index: number, flag: string) {
+  const value = argv[index];
+  if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value`);
+  return value;
+}
 
 function parseArgs(argv: string[]) {
-  const options: { all: boolean; list: boolean; plan: boolean; scenario?: string; base: string; workers: number } = { all: false, list: false, plan: false, base: 'HEAD', workers: 2 };
+  const options: { all: boolean; list: boolean; plan: boolean; scenario?: string; base: string; workers: number; shard?: string } = { all: false, list: false, plan: false, base: 'HEAD', workers: 2 };
   let hasWorkers = false;
+  let hasShard = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--all') options.all = true;
     else if (arg === '--list') options.list = true;
     else if (arg === '--plan') options.plan = true;
-    else if (arg === '--scenario') options.scenario = argv[++index];
-    else if (arg === '--workers' && !hasWorkers && /^[1-9]$/.test(argv[index + 1] ?? '')) { options.workers = Number(argv[++index]); hasWorkers = true; }
-    else if (arg === '--base') options.base = argv[++index];
+    else if (arg === '--scenario') options.scenario = argumentValue(argv, ++index, arg);
+    else if (arg === '--workers' && !hasWorkers) { options.workers = parseProbeArguments([arg, argumentValue(argv, ++index, arg)]).workers; hasWorkers = true; }
+    else if (arg === '--shard' && !hasShard) { options.shard = parseProbeArguments([arg, argumentValue(argv, ++index, arg)]).shard; hasShard = true; }
+    else if (arg === '--base') options.base = argumentValue(argv, ++index, arg);
     else throw new Error(`unknown argument: ${arg}`);
   }
   return options;
@@ -110,26 +113,20 @@ if (options.scenario !== undefined && !ids.includes(options.scenario)) {
   process.exit(2);
 }
 
-const files = changedFiles(options.base);
-const plan = planScenarios(files, ids);
-
-const selectedIds = options.all
-  ? ids
+// Explicit runs do not need git or a repository-wide impact graph.
+const files = options.all || options.scenario !== undefined ? undefined : changedFiles(options.base);
+const plan = options.all
+  ? { ids, reason: '--all' }
   : options.scenario !== undefined
-    ? [options.scenario]
-    : plan.ids;
-// An explicit selection is its own reason: the file-based plan was not consulted for it,
-// and printing that plan's reason beside it would describe a selection that did not run.
-const selectionReason = options.all
-  ? '--all'
-  : options.scenario !== undefined
-    ? `--scenario ${options.scenario}`
-    : plan.reason;
+    ? { ids: [options.scenario], reason: `--scenario ${options.scenario}` }
+    : planScenarios(files!, ids);
+const selectedIds = plan.ids;
 
 if (options.plan) {
-  console.log(`Changed files: ${files.length === 0 ? '(none)' : files.join(', ')}`);
-  for (const file of files) console.log(`  - ${file}`);
-  console.log(`\nPlan: ${plan.reason}`);
+  if (files) {
+    console.log(`Changed files: ${files.length === 0 ? '(none)' : files.join(', ')}`);
+  }
+  console.log(`\nPlan: ${plan.reason}${options.shard ? `; native shard ${options.shard}` : ''}`);
   console.log(
     selectedIds.length === 0
       ? '\nNo scenario would run.'
@@ -144,5 +141,5 @@ if (selectedIds.length === 0) {
 }
 
 console.log(`Running ${selectedIds.length} of ${SCENARIOS.length} scenarios: ${selectedIds.join(', ')}`);
-console.log(`Reason: ${selectionReason}; workers: ${options.workers}\n`);
-if (!await measureVerification(options.all ? 'ui-full' : 'ui-affected', () => runProbeCatalog({ port: PORT, workers: options.workers, ids: selectedIds }), selectedIds)) process.exitCode = 1;
+console.log(`Reason: ${plan.reason}; workers: ${options.workers}${options.shard ? `; shard: ${options.shard}` : ''}\n`);
+if (!await runProbeCatalog({ workers: options.workers, ids: selectedIds, shard: options.shard })) process.exitCode ??= 1;

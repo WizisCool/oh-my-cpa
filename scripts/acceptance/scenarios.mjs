@@ -682,7 +682,7 @@ export const SCENARIOS = [
    *
    * The scenario owns its viewport changes rather than being run twice, because the claim is the
    * *pairing*: a response to width, not one layout that happens to exist. Its fixtures are the
-   * list surfaces the phone rendering was measured for (ADR 0012), each one a row in the probe's
+   * list surfaces the phone rendering was measured for, each one a row in the probe's
    * own table.
    */
   {
@@ -776,7 +776,7 @@ export const SCENARIOS = [
   },
   {
     id: 'scroll-smoothing',
-    // Asserts motion frame by frame; a sibling context on the same CPU drops frames (ADR 0095).
+    // Frame-by-frame motion needs an uncontended browser; sibling contexts can drop frames.
     shouldRunAlone: true,
     name: 'a wheel notch glides on an ordinary scroller and on the virtualized request list, as the preference says',
     options: {

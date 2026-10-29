@@ -1,40 +1,4 @@
-/**
- * Waiting primitives for the deterministic browser acceptance run.
- *
- * Every check in this suite used to be preceded by a fixed `waitForTimeout`. A
- * fixed sleep is wrong in both directions: it wastes the whole window when the
- * app settles in 20 ms, and it still asserts too early when the app is slower
- * than the author's machine happened to be. This module replaces the sleeps with
- * waits that name the condition the following check actually depends on.
- *
- * The hard part is not the waiting, it is keeping the wait honest. Three cases
- * look alike and must not be collapsed:
- *
- * 1. The app must reach a state. `until(predicate)` - bounded, and it throws on
- *    timeout so a broken expectation fails loudly instead of letting the next
- *    check pass against a page that never moved.
- * 2. The app must reach a state at a point in the audit where a *later* write
- *    could still undo it. `checkHoldsFor` / `holdsFor` - see case 3.
- * 3. The app must *not* change during a window in which it could have. Negative
- *    timing claims ("a draft edit must not rewrite the URL", "a queued keystroke
- *    must not revive a cleared filter") have no positive event to wait for. The
- *    only honest evidence is that nothing changed across the whole window, which
- *    is what `holdsFor` provides.
- *
- * Case 3 is the reason this module cannot simply delete every sleep: some windows
- * are irreducible and the point of the refactor is to say so explicitly rather
- * than leave an anonymous magic number.
- *
- * A transition guard - "the predicate must be false before the wait begins, so a
- * check cannot pass on a state the app was already in" - was tried here and
- * removed, because it cannot work in this harness. By the time a predicate is
- * first evaluated, every awaited Playwright interaction that preceded it (click,
- * key press, dropdown dismissal) has already given the app time to settle, so the
- * starting state is no longer observable: the guard rejected checks whose
- * transition had demonstrably happened. Where a transition must be proven, this
- * suite asserts the starting state as its own check *before* the interacting
- * click, which is also what makes such a check readable.
- */
+/** Condition and layout waits shared by deterministic browser acceptance. */
 
 /** The budget for a condition on a page that is already up: long enough for the app to settle, and
  *  short enough to keep a genuinely broken expectation from stalling the run to its job timeout. */
@@ -105,23 +69,6 @@ export async function untilBooted(locator, label) {
  */
 export async function attachedText(locator) {
   return await locator.count() ? locator.innerText() : '';
-}
-
-/**
- * Requires `predicate` to hold for the whole window.
- *
- * Sampling rather than sleeping once and asserting is deliberate: the value is
- * read throughout the window, so a condition that flips and flips back is caught
- * where a single assertion at the end would miss it.
- */
-async function holdsFor(predicate, windowMs, { label = 'condition', sampleMs = 50 } = {}) {
-  const deadline = Date.now() + windowMs;
-  for (;;) {
-    const value = await predicate();
-    if (!value) throw new Error(`${label} stopped holding during a ${windowMs}ms window`);
-    if (Date.now() >= deadline) return value;
-    await sleep(Math.min(sampleMs, Math.max(0, deadline - Date.now())));
-  }
 }
 
 /**
@@ -214,20 +161,5 @@ export function createChecker() {
     }
   }
 
-  /**
-   * Asserts that a condition holds for a full window. The companion of
-   * `checkEventually` for negative timing claims, which have no positive event to
-   * wait for: a draft that must not be written, a queued keystroke that must not
-   * land. A window that expires without the condition holding is the failure.
-   */
-  async function checkHoldsFor(name, predicate, windowMs, { label = name, detail } = {}) {
-    try {
-      await holdsFor(predicate, windowMs, { label });
-      check(name, true, await describe(detail));
-    } catch (error) {
-      check(name, false, `${error.message}${detail ? ` — ${await describe(detail)}` : ''}`);
-    }
-  }
-
-  return { check, checkEventually, checkHoldsFor, checks, failures };
+  return { check, checkEventually, checks, failures };
 }

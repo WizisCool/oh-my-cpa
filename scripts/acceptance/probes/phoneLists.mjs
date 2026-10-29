@@ -1,7 +1,7 @@
 /**
  * Probes for the phone rendering of a list surface.
  *
- * ADR 0012 makes a list one dataset with two renderings, chosen by width: a table on a
+ * A list has one dataset with two renderings, chosen by width: a table on a
  * pointer-fine viewport, labelled rows below 640px. Two claims are worth a real engine, and
  * neither can be made by reading the code:
  *

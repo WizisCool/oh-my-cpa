@@ -26,7 +26,7 @@ export async function withinBudget(task, milliseconds, label) {
   } finally { clearTimeout(timer); }
 }
 
-export async function stopProcess(child, milliseconds = 2000, { isGroup = false } = {}) {
+export async function stopProcess(child, milliseconds = 2000, { isGroup = false, signal = 'SIGTERM' } = {}) {
   if (!child) return;
   const hasExited = child.exitCode !== null || child.signalCode !== null;
   const ownsGroup = isGroup && process.platform !== 'win32' && child.pid;
@@ -37,7 +37,7 @@ export async function stopProcess(child, milliseconds = 2000, { isGroup = false 
       try { process.kill(-child.pid, signal); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     } else child.kill(signal);
   };
-  terminate('SIGTERM');
+  terminate(signal);
   try { await withinBudget(closed, milliseconds, 'process shutdown'); }
   catch {
     terminate('SIGKILL');
@@ -66,26 +66,4 @@ export async function closeServer(server) {
   if (!server) return;
   server.closeAllConnections?.();
   await withinBudget(new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())), 2000, 'fixture server shutdown');
-}
-
-// Watchdog, signal and normal-finally callers share one teardown. Stop is visible
-// immediately so a closed context cannot advance the loop into another scenario.
-export function createShutdownController(cleanup) {
-  let isStopping = false;
-  let shutdownTask;
-  return {
-    get isStopping() { return isStopping; },
-    shutdown() {
-      if (!shutdownTask) {
-        isStopping = true;
-        shutdownTask = Promise.resolve().then(cleanup);
-      }
-      return shutdownTask;
-    },
-  };
-}
-
-export async function withOwnedCleanup(task, cleanup) {
-  try { return await task(); }
-  finally { await cleanup(); }
 }

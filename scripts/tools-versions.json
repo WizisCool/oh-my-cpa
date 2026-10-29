@@ -89,5 +89,8 @@
         "sha256": "3f1a35578631dbfe633cc5b49e6c906e55ff14a4bfd7336a10fb27fe33b6dcd2"
       }
     }
+  },
+  "gotestsum": {
+    "version": "1.13.0"
   }
 }

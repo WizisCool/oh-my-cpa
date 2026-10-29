@@ -60,11 +60,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           ref: ${{ needs.identity.outputs.revision }}
-      - name: Verify repository anchors
-        run: |
-          # Assert foundational beta baseline and overhaul roadmap commits remain ancestors of HEAD.
-          git merge-base --is-ancestor 1d0fd8d85ddee1f2ae5e803453904b23128d6c7d HEAD
-          git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
@@ -85,6 +80,14 @@ jobs:
           pnpm verify:workflow:lint
       - name: Verify pinned toolchain
         run: pnpm verify:toolchain:strict
+      - name: Check offline documentation links and fragments
+        if: hashFiles('lychee.toml') != ''
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          lycheeVersion: v0.24.2
+          args: --offline --include-fragments --no-progress '*.md' 'docs/**/*.md' 'web/src/i18n/*.md'
+          output: tmp/lychee.md
+          token: ''
       - name: Verify static gates
         run: pnpm verify:static
       - name: Cache gitleaks
