@@ -289,7 +289,6 @@ jobs:
   probes-full:
     needs: changes
     if: needs.changes.outputs.full == 'true'
-    name: probes-full (${{ matrix.shard }}/3)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
