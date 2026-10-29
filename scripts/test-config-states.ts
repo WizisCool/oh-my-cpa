@@ -6,7 +6,7 @@ import {
   isConfigSemanticallyEqual,
 } from '../web/src/components/config/configDirty.ts';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition } from '../web/src/types/configSchema.ts';
-import { readOutline } from '../web/src/components/config/configOutline.ts';
+import { readOutline } from '../web/src/components/config/outlineReading.ts';
 
 function schemaField(id: string): ConfigFieldDefinition {
   const found = ALL_CONFIG_FIELDS.find((item) => item.id === id);

@@ -3,7 +3,7 @@ import React from 'react';
 import { useT } from '../../i18n';
 import { isMotionReduced } from '../../utils/motionPreference';
 import { groupAnchorId } from './configSectionRenderers';
-import { readOutline } from './configOutline';
+import { readOutline } from './outlineReading';
 
 export interface ConfigOutlineEntry {
   id: string;
