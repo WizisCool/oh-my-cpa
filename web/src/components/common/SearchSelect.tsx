@@ -48,6 +48,17 @@ export function SearchSelect<ValueType = OptionValue | OptionValue[], OptionType
   // does not slide under their thumb with every letter; it gives way only to the keyboard.
   const [openedHeight, setOpenedHeight] = React.useState<number | null>(null);
   const viewport = useVisibleViewport(isSheet && isOpen);
+  // A tablet rotated wide swaps the sheet for the field. Left open, the state would reopen the
+  // sheet on the next rotation without the reader asking for it.
+  const isOpenRef = React.useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const notifyOpenChangeRef = React.useRef(props.onOpenChange);
+  notifyOpenChangeRef.current = props.onOpenChange;
+  React.useEffect(() => {
+    if (isSheet || !isOpenRef.current) return;
+    setIsOpen(false);
+    notifyOpenChangeRef.current?.(false);
+  }, [isSheet]);
   if (!isSheet) return <Select<ValueType, OptionType> {...props} aria-label={ariaLabel ?? label} />;
 
   const open = () => {
@@ -220,7 +231,15 @@ function SheetPanel<ValueType, OptionType extends DefaultOptionType>({
   }, []);
 
   return <div ref={panelRef} className={styles['panel']}>
-    {isInteractive && isSearchable && <SearchInput className={styles['search']} label={t('common.search')} value={query} onChange={setQuery} />}
+    {isInteractive && isSearchable && <SearchInput
+      className={styles['search']}
+      label={t('common.search')}
+      value={query}
+      onChange={setQuery}
+      // Enter commits a typed tag, as it does in the popup; with nothing to add it leaves the text
+      // alone, because a filter field must not submit on Enter.
+      onPressEnter={() => { if (canAdd) add(); }}
+    />}
     <div ref={listRef} className={styles['list']} role="listbox" aria-label={label} aria-multiselectable={isMultiple || undefined}>
       {isInteractive && canAdd && <button type="button" role="option" aria-selected={false} className={styles['option']} onClick={add}>
         <span className={styles['option-label']}>{t('common.add_value', { value: typed })}</span>

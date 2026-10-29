@@ -80,6 +80,7 @@ export async function mobileConsole({ base, page, check, errors }) {
   check('landscape content remains bounded', await page.locator('.app-content').evaluate((pane) => pane.scrollWidth <= pane.clientWidth + 1));
   await checkWorkspaceKeyboard({ base, page, check });
   await checkSearchSelectSheet({ base, page, check });
+  await checkTagSheetEnter({ base, page, check });
   check('the complete phone sweep has no runtime errors', errors.length === 0, errors.join(' | '));
 }
 
@@ -158,9 +159,16 @@ async function checkSearchSelectSheet({ base, page, check }) {
 
   const sheetHeight = async () => (await sheet.boundingBox()).height;
   const openedHeight = await sheetHeight();
-  await sheet.getByRole('textbox', { name: 'Search', exact: true }).fill('tokyo');
+  const search = sheet.getByRole('textbox', { name: 'Search', exact: true });
+  await search.fill('tokyo');
   await until(async () => await list.getByRole('option').count() === 1, { label: 'the list to narrow to the typed zone' });
   check('the sheet holds its height while the list narrows', Math.abs(await sheetHeight() - openedHeight) <= 1, `${openedHeight} -> ${await sheetHeight()}`);
+  // Only a tags picker commits on Enter; a filter leaves its text alone and picks nothing.
+  await search.press('Enter');
+  await settleLayout(page);
+  check('Enter in a filter sheet keeps its text and picks nothing', await sheet.isVisible() && await search.inputValue() === 'tokyo');
+  const selectedZone = await trigger.locator('xpath=ancestor::*[contains(@class, "ant-select ")][1]').innerText();
+  check('Enter in a filter sheet leaves the field unchanged', selectedZone.includes('Server time zone') && !selectedZone.includes('Tokyo'), selectedZone);
 
   await page.evaluate(() => {
     window.sheetViewportHeight = Object.getOwnPropertyDescriptor(window.visualViewport, 'height');
@@ -175,7 +183,42 @@ async function checkSearchSelectSheet({ base, page, check }) {
     window.visualViewport.dispatchEvent(new Event('resize'));
   });
 
+  // A rotation to a wide viewport swaps the sheet for the field; the sheet must not come back on
+  // the next rotation without the reader asking for it.
+  await page.setViewportSize({ width: 1000, height: 844 });
+  await sheet.waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settleLayout(page);
+  check('a sheet open across a wide viewport does not reopen on the way back', await sheet.isHidden());
+
+  await trigger.tap();
+  await list.waitFor({ state: 'visible' });
   await list.getByRole('option', { name: /Asia\/Tokyo/ }).tap();
   await sheet.waitFor({ state: 'hidden' });
   check('picking an option closes the sheet and sets the value', (await trigger.locator('xpath=ancestor::*[contains(@class, "ant-select ")][1]').innerText()).includes('Asia/Tokyo'));
+}
+
+/**
+ * A tags picker's typed value: Enter commits it, as it does in the popup, and a plain filter's
+ * Enter does not submit. The request page's Call model is the tags sheet; the model facet beside it
+ * is a filter.
+ */
+async function checkTagSheetEnter({ base, page, check }) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'More filters', exact: true }).tap();
+  const drawer = page.getByRole('dialog', { name: 'Advanced filters', exact: true });
+  await drawer.waitFor({ state: 'visible' });
+  const callModel = drawer.getByRole('combobox', { name: 'Call model', exact: true });
+  await callModel.scrollIntoViewIfNeeded();
+  await callModel.tap();
+  const sheet = page.getByRole('dialog', { name: 'Call model', exact: true });
+  await sheet.waitFor({ state: 'visible' });
+  const search = sheet.getByRole('textbox', { name: 'Search', exact: true });
+  await search.fill('zephyr-preview');
+  await search.press('Enter');
+  await until(async () => await sheet.getByRole('option', { name: /zephyr-preview/ }).count() === 1, { label: 'Enter to commit the typed tag' });
+  check('Enter commits a typed tag in a tags sheet', await search.inputValue() === '');
+  await sheet.getByRole('button', { name: 'Done', exact: true }).tap();
+  await sheet.waitFor({ state: 'hidden' });
 }
