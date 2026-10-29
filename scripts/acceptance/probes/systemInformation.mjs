@@ -1389,9 +1389,8 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
       await page.locator('[data-testid="sys-card-health"] .status-label.is-danger').count() === 1);
     await heads.nth(2).locator('.status-label.is-warn').waitFor({ state: 'visible' });
     check('a refused updater keeps its own warning verdict', await heads.nth(2).locator('.status-label.is-warn').count() === 1);
-    check('an unobserved latency and an update that never ran are not fabricated',
-      await page.locator('[data-testid="sys-component-facts"]').nth(0).locator('dd').innerText() === '—' &&
-      await page.locator('[data-testid="sys-component-facts"]').nth(2).locator('dd').first().innerText() === '—');
+    check('an unobserved latency is not fabricated',
+      await page.locator('[data-testid="sys-component-facts"]').nth(0).locator('dd').innerText() === '—');
     const isContained = await page.locator('[data-testid="sys-card-health"]').evaluate((card) => {
       const cardBox = card.getBoundingClientRect();
       return Array.from(card.querySelectorAll('.fact-list-row')).every((reading) => {
@@ -1402,30 +1401,20 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
     });
     check('health anomaly summaries fit without overlapping or overflowing', isContained);
 
-    updaterResponse = {
-      state: 'ready',
-      products: [
-        { product: 'omc', action: 'available', reason: '', image: 'example/omc:latest' },
-        { product: 'cpa', action: 'available', reason: '', image: 'example/cpa:latest' },
-      ],
-      job: {
-        id: 'failed-attempt', product: 'cpa', stage: 'failed', finished: true, error: 'pull failed',
-        from_version: '', to_version: '', started_at_ms: Date.now() - 3 * 86_400_000, finished_at_ms: Date.now() - 3_600_000,
-      },
-    };
+    updaterResponse = { state: 'ready', products: [], job: null };
     await page.locator('.terminal-page-actions').getByRole('button').click();
     await heads.nth(2).locator('.status-label.is-success').waitFor({ state: 'visible', timeout: 10_000 });
     check('page refresh reads the current updater status', await heads.nth(2).locator('.status-label.is-success').count() === 1);
-    const updaterValues = await page.locator('[data-testid="sys-component-facts"]').nth(2).locator('dd').allTextContents();
-    check('a failed job reports when the attempt started, not when it finished', updaterValues[0]?.startsWith('3'), updaterValues[0]);
-    check('only targets with an actionable update appear in the updater summary',
-      updaterValues.length === 2 && updaterValues[1].includes('Oh My CPA') && !updaterValues[1].includes('CLIProxyAPI'), JSON.stringify(updaterValues));
+    const updaterFacts = page.locator('[data-testid="sys-component-facts"]').nth(2);
+    const reading = { label: await updaterFacts.locator('dt').allTextContents(), value: await updaterFacts.locator('dd').allTextContents() };
+    check('the updater row carries one reading and it is the last check',
+      reading.label.length === 1 && reading.value.length === 1 && reading.value[0] !== '—', JSON.stringify(reading));
 
     updaterStatus = 503;
     await page.locator('.terminal-page-actions').getByRole('button').click();
     await heads.nth(2).locator('.status-label.is-warn').waitFor({ state: 'visible', timeout: 10_000 });
-    check('a failed status read does not present a cached healthy updater or targets',
-      (await page.locator('[data-testid="sys-component-facts"]').nth(2).locator('dd').allTextContents()).every((value) => value === '—'));
+    check('a failed status read does not present the cached healthy verdict',
+      await heads.nth(2).locator('.status-label.is-success').count() === 0);
     updaterStatus = 200;
     await page.locator('.terminal-page-actions').getByRole('button').click();
     await heads.nth(2).locator('.status-label.is-success').waitFor({ state: 'visible', timeout: 10_000 });

@@ -260,11 +260,8 @@ export const SystemPage: React.FC = () => {
     void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
   };
   const { updater, isUpdaterError, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
-  // Keep cached update progress for the version card, but do not report cached data as live health.
-  const observedUpdater = isUpdaterError ? undefined : updater;
-  const updaterVerdict = isUpdaterError ? UPDATER_READ_FAILED : observedUpdater ? UPDATER_VERDICTS[observedUpdater.state] : UPDATER_UNREPORTED;
-  // The latest job can be running, fail or roll back, so its start is an attempt, not a successful update.
-  const lastUpdaterAttemptMs = observedUpdater?.job?.started_at_ms;
+  // A failed read cannot certify the verdict an earlier answer gave.
+  const updaterVerdict = isUpdaterError ? UPDATER_READ_FAILED : updater ? UPDATER_VERDICTS[updater.state] : UPDATER_UNREPORTED;
   const handleApplyUpdate = async (product: ReleaseProduct) => {
     try {
       await applyUpdate(product);
@@ -332,14 +329,9 @@ export const SystemPage: React.FC = () => {
     refetchInterval: (query) => query.state.data?.omc_version.checking || query.state.data?.cpa_version.checking ? 2000 : false,
   });
 
-  // List only actions the version card can actually offer, not merely containers the sidecar sees.
-  const updateTargets = observedUpdater?.state === 'ready' && sysInfo
-    ? observedUpdater.products.filter((product) => {
-        const version = product.product === 'omc' ? sysInfo.omc_version : sysInfo.cpa_version;
-        const offer = deriveUpdateOffer(version, observedUpdater, product.product);
-        return offer.kind === 'available' && !offer.isBusy;
-      }).map((product) => productLabel(product.product))
-    : undefined;
+  // The newest check across both products: one reading, in the row that reports on updates.
+  // The attempt is used rather than the last success, so a recent failure reads as recent.
+  const lastUpdateCheckMs = Math.max(sysInfo?.omc_version.attempted_at_ms ?? 0, sysInfo?.cpa_version.attempted_at_ms ?? 0);
 
   // The process the state below belongs to. Job ids come from a counter that starts again with every
   // process, so a restart can mint an id this page has already seen: a job from the new process would
@@ -761,8 +753,7 @@ export const SystemPage: React.FC = () => {
                     emphasis="quiet"
                     testId="sys-component-facts"
                     facts={[
-                      { key: 'attempt', label: t('sys.fact_last_attempt'), value: lastUpdaterAttemptMs ? formatTimeAgo(lastUpdaterAttemptMs, Date.now(), t) : '—' },
-                      { key: 'targets', label: t('sys.fact_update_targets'), value: updateTargets ? updateTargets.join(', ') || t('sys.updater_no_targets') : '—' },
+                      { key: 'checked', label: t('sys.fact_last_check'), value: lastUpdateCheckMs > 0 ? formatTimeAgo(lastUpdateCheckMs, Date.now(), t) : '—' },
                     ]}
                   />
                 </div>
