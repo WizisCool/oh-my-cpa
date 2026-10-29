@@ -14,14 +14,3 @@
   height: 100%;
   object-fit: contain;
 }
-
-.glyph {
-  background-color: currentColor;
-  mask-mode: alpha;
-  mask-size: contain;
-  mask-position: center;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-}
