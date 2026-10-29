@@ -1205,10 +1205,60 @@ async function verifyVertexImportDialog({ page, check }) {
   await dialog.waitFor({ state: 'hidden' });
 }
 
+async function verifyPasteAuthJsonDialog({ page, check }) {
+  const uploads = [];
+  const isNamedUpload = (url) => url.pathname.endsWith('/management/auth-files') && url.searchParams.has('name');
+  const uploadHandler = async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    const name = new URL(route.request().url()).searchParams.get('name');
+    uploads.push({ name, body: route.request().postData() });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', uploaded: 1, files: [name] }) });
+  };
+  await page.route(isNamedUpload, uploadHandler);
+  try {
+    const existingName = await page.getByTestId('oauth-credential-record').first().getAttribute('data-file-name');
+    await page.getByRole('button', { name: 'Upload JSON', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Upload auth files' });
+    await dialog.waitFor();
+    check('the upload dialog opens on files and offers no submit for them', await dialog.getByRole('button', { name: 'Upload', exact: true }).count() === 0);
+    await dialog.getByText('Paste JSON', { exact: true }).click();
+    const credential = { type: 'codex', email: 'paste@fixture.test', access_token: 'SYNTHETIC-PASTE-TOKEN' };
+    const pasted = JSON.stringify(credential, null, 2);
+    await dialog.getByRole('textbox', { name: 'Paste JSON', exact: true }).fill(pasted);
+    const nameField = dialog.getByRole('textbox', { name: 'File name', exact: true });
+    check('pasted JSON is named after its type and account', await nameField.inputValue() === 'codex-paste@fixture.test.json');
+    const summary = await dialog.locator('dl').innerText();
+    check('pasted JSON is summarised without its tokens', summary.includes('paste@fixture.test') && !summary.includes('SYNTHETIC-PASTE-TOKEN'));
+    if (existingName) {
+      await nameField.fill(existingName);
+      const submit = dialog.getByRole('button', { name: 'Upload', exact: true });
+      check('reusing a stored name holds the upload until replacement is confirmed', await submit.isDisabled());
+      await dialog.getByRole('checkbox', { name: 'Replace', exact: true }).check();
+      check('confirming replacement allows the upload', await submit.isEnabled());
+      await nameField.fill('codex-paste@fixture.test.json');
+    }
+    await settleLayout(page);
+    await page.screenshot({ path: 'tmp/paste-auth-json-desktop.png' });
+    await dialog.getByRole('button', { name: 'Upload', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    check('pasted JSON uploads verbatim under its chosen name', uploads.length === 1
+      && uploads[0].name === 'codex-paste@fixture.test.json'
+      && uploads[0].body === pasted);
+    await page.getByRole('button', { name: 'Upload JSON', exact: true }).click();
+    await dialog.waitFor();
+    check('reopening the upload dialog discards pasted JSON', await dialog.getByRole('textbox', { name: 'Paste JSON', exact: true }).count() === 0);
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+  } finally {
+    await page.unroute(isNamedUpload, uploadHandler);
+  }
+}
+
 export async function oauthVertexImport({base, page, check, step}) {
   await page.goto(`${base}/oauth-management`);
   await page.getByTestId('oauth-credential-record').first().waitFor();
   await step('Vertex file lifecycle', () => verifyVertexImportDialog({page,check}));
+  await step('pasted credential JSON', () => verifyPasteAuthJsonDialog({page,check}));
 }
 export async function oauthModelRules(fixtures) {
   await fixtures.step('model alias and exclusion writes', () => checkOAuthModelRules(fixtures));

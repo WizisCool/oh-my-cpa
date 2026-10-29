@@ -73,6 +73,8 @@ const AuthFileDetailDrawer = React.lazy(createRouteLoader(() =>
   import('../../components/authFiles/AuthFileDetailDrawer').then(module => ({ default: module.AuthFileDetailDrawer }))));
 const OAuthModelRulesDrawer = React.lazy(createRouteLoader(() =>
   import('../../components/authFiles/OAuthModelRulesDrawer').then(module => ({ default: module.OAuthModelRulesDrawer }))));
+const AuthJsonUploadModal = React.lazy(createRouteLoader(() =>
+  import('../../components/authFiles/AuthJsonUploadModal').then(module => ({ default: module.AuthJsonUploadModal }))));
 const VertexImportModal = React.lazy(createRouteLoader(() =>
   import('../../components/authFiles/VertexImportModal').then(module => ({ default: module.VertexImportModal }))));
 const OAuthConnectPanel = React.lazy(createRouteLoader(() =>
@@ -367,7 +369,8 @@ export const OAuthManagementPage: React.FC = () => {
  const [hasWarmupDraft, setHasWarmupDraft] = React.useState(false);
  const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
   const [isVertexImportOpen, setIsVertexImportOpen] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploadOpen, setIsUploadOpen] = React.useState(false);
+  const fileNames = React.useMemo(() => new Set(records.map((record) => record.fileName)), [records]);
 
   const onTargetGone = React.useCallback((recordKey: string) => {
     setSelectedIdentity((current) => (current?.key === recordKey ? undefined : current));
@@ -542,24 +545,12 @@ export const OAuthManagementPage: React.FC = () => {
 
   return (
     <div className={`terminal-page oauth-management-page ${styles.page}`}>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        multiple
-        hidden
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          event.target.value = '';
-          actions.upload(files);
-        }}
-      />
       <PageHeader
         title={t('nav.auth_files')}
         mobileActions={(
           <>
             <ActionMenu>
-              <ToolButton icon={<UploadOutlined />} label={t('af.upload')} disabled={isDemo || actions.isOperating} onClick={() => fileInputRef.current?.click()} />
+              <ToolButton icon={<UploadOutlined />} label={t('af.upload')} disabled={isDemo || actions.isOperating} onClick={() => setIsUploadOpen(true)} />
               <ToolButton icon={<CloudUploadOutlined />} label={t('af.vertex_open')} disabled={isDemo || actions.isOperating} onClick={() => setIsVertexImportOpen(true)} />
               <ToolButton icon={<BranchesOutlined />} label={t('af.rules_open')} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-management-model-rules-open" />
             </ActionMenu>
@@ -572,7 +563,7 @@ export const OAuthManagementPage: React.FC = () => {
               icon={<UploadOutlined />}
               label={t('af.upload')}
               disabled={isDemo || actions.isOperating}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setIsUploadOpen(true)}
             />
             <ToolButton
               icon={<CloudUploadOutlined />}
@@ -932,6 +923,19 @@ export const OAuthManagementPage: React.FC = () => {
             setIsConnectOpen(false);
           }}
           sessions={sessionController}
+        />
+      </DeferredMount>
+
+      <DeferredMount isActive={isUploadOpen}>
+        <AuthJsonUploadModal
+          open={isUploadOpen}
+          existingNames={fileNames}
+          onClose={() => setIsUploadOpen(false)}
+          onChooseFiles={(files) => {
+            setIsUploadOpen(false);
+            actions.upload(files);
+          }}
+          onUploaded={actions.reloadWorkspace}
         />
       </DeferredMount>
 

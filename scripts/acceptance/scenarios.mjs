@@ -261,7 +261,7 @@ export const SCENARIOS = [
     run: oauthManagement,
   },
   { id: 'oauth-window-warmup', name: 'OAuth window warmup settings and guarded phone editor', options: { routes: oauthManagementProbeRoutes() }, run: oauthWindowWarmup },
-  { id: 'oauth-vertex-import', name: 'Vertex import file lifecycle', options: {routes: oauthManagementProbeRoutes()}, run: oauthVertexImport },
+  { id: 'oauth-vertex-import', name: 'Vertex import and pasted credential JSON', options: {routes: oauthManagementProbeRoutes()}, run: oauthVertexImport },
   { id: 'oauth-model-rules', name: 'OAuth model aliases and exclusions', options: {routes: oauthManagementProbeRoutes()}, run: oauthModelRules },
   { id: 'oauth-token-capacity', name: 'OAuth token capacity formatting and phone geometry', options: {routes: oauthManagementProbeRoutes()}, run: oauthTokenCapacity },
   { id: 'oauth-authorization-outcomes', name: 'OAuth completion identity and read-failure recovery', options: {routes: oauthManagementProbeRoutes()}, run: oauthAuthorizationOutcomes },
