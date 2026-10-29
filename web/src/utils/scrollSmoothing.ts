@@ -201,6 +201,24 @@ const consumedWheels = new WeakSet<Event>();
 /** Wheel events this layer took over from a virtualized list, which therefore did not move for them. */
 const claimedWheels = new WeakSet<Event>();
 
+/** A list that exposes its own offset setter can accept a glide without synthetic wheel events. */
+const virtualScrollDrivers = new WeakMap<Element, (top: number) => void>();
+
+/**
+ * registerVirtualScrollDriver lets a virtualized list take a glide as offsets rather than as wheel
+ * events.
+ *
+ * A list that keeps its offset in its own state applies a wheel delta on its next frame, so a glide
+ * that drove it that way would start a frame late and spend a second frame on every step. Being
+ * handed the offset directly, the list commits the position itself and stays the only writer of it.
+ */
+export function registerVirtualScrollDriver(element: Element, scrollTo: (top: number) => void): () => void {
+  virtualScrollDrivers.set(element, scrollTo);
+  return () => {
+    if (virtualScrollDrivers.get(element) === scrollTo) virtualScrollDrivers.delete(element);
+  };
+}
+
 /**
  * consumeWheel tells the smoothing layer that a component has given this wheel event a meaning of
  * its own and nothing must scroll for it.
@@ -241,6 +259,8 @@ interface Glide {
    * and the rows it renders always match the offset it shows.
    */
   isVirtual: boolean;
+  /** An explicitly registered list's own offset setter, instead of its deferred wheel handler. */
+  scrollVirtualTo?: (top: number) => void;
   /** Steps handed to a virtual list before the glide's first frame; see `handFirstStep`. */
   framesAhead: number;
   /**
@@ -376,7 +396,10 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
       const position = glidePosition(glide.from, glide.to, elapsed, durationMs);
       if (glide.isVirtual) {
         const stepPx = position - glide.written;
-        if (stepPx !== 0) handStep(element, stepPx);
+        if (stepPx !== 0) {
+          if (glide.scrollVirtualTo) glide.scrollVirtualTo(position);
+          else handStep(element, stepPx);
+        }
         glide.written = position;
         extendSpan(glide, position);
         if (elapsed >= durationMs) glide.settleFrames = VIRTUAL_SETTLE_FRAMES;
@@ -405,10 +428,11 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
    */
   const handFirstStep = (element: Element, glide: Glide, continuesChain: boolean) => {
     if (continuesChain) {
-      handStep(element, 0);
+      if (!glide.scrollVirtualTo) handStep(element, 0);
     } else {
       const position = glidePosition(glide.from, glide.to, FIRST_FRAME_MS, durationMs);
-      handStep(element, position - glide.written);
+      if (glide.scrollVirtualTo) glide.scrollVirtualTo(position);
+      else handStep(element, position - glide.written);
       glide.written = position;
       glide.framesAhead = 1;
       extendSpan(glide, position);
@@ -428,7 +452,10 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     const span = continuesChain ? current.span : { low: from, high: from };
     // A new step retargets the glide from where it is now, so a turning wheel accelerates instead of
     // queueing notches behind each other.
-    const glide: Glide = { from, to, startedAt: null, written: from, isVirtual, framesAhead: 0, span };
+    const glide: Glide = {
+      from, to, startedAt: null, written: from, isVirtual, framesAhead: 0, span,
+      scrollVirtualTo: isVirtual ? virtualScrollDrivers.get(element) : undefined,
+    };
     glides.set(element, glide);
     if (isVirtual) {
       handFirstStep(element, glide, continuesChain);

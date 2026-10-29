@@ -1,5 +1,6 @@
 import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
+import { registerVirtualScrollDriver } from '../utils/scrollSmoothing';
 import React from 'react';
 import {
   Badge,
@@ -434,6 +435,20 @@ export const UsageEventsPage: React.FC = () => {
   const hasActiveFilter = activeFilters.length > 0 || query.result !== 'all';
 
   const { hostRef: listHost, height } = useRequestListHeight(pageRef);
+  const hasList = isQueryEnabled && !result.isLoading && events.length > 0;
+  /**
+   * The list moves itself; the glide only names where it should be.
+   *
+   * The glide hands the list an offset instead of dispatching a wheel event it would apply a
+   * frame later, so the list's own offset stays its own: it is kept in React state, and writing the
+   * holder under it is reverted by the next commit, which spends a frame on the previous value.
+   */
+  React.useLayoutEffect(() => {
+    if (isNativeScroll || !hasList) return undefined;
+    const holder = listHost.current?.querySelector<HTMLElement>('.request-list .ant-listy-holder');
+    if (!holder) return undefined;
+    return registerVirtualScrollDriver(holder, (top) => listRef.current?.scrollTo({ top }));
+  }, [grouping, hasList, isNativeScroll, listHost, listRef, viewScope]);
 
   /**
    * Clear-all is offered in two places (the bar and the chip strip) and must
