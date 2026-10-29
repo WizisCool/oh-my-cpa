@@ -9,8 +9,18 @@ interface PluginIconProps {
   fallbackSize?: string;
 }
 
-/** SVG stays in image context, so untrusted plugin markup cannot enter the host DOM. */
+/**
+ * A plugin's mark, drawn from the artwork it publishes.
+ *
+ * Artwork stays in an isolated `<img>`, so untrusted plugin SVG markup cannot enter the host
+ * DOM and the console's CSP only has to allow `data:` images. It is shown as its author drew
+ * it, because a registry mark is artwork rather than a glyph: the published logos are opaque
+ * badges, gradients and embedded images, and a plugin that follows the console's theme does so
+ * from inside its own SVG. Repainting the artwork in the current text colour would flatten
+ * those marks into solid blocks.
+ */
 export function PluginIcon(props: PluginIconProps) {
+  // Remounting per source means a failed mark cannot outlive the artwork that replaced it.
   return <PluginArtwork key={props.logo} {...props} />;
 }
 
@@ -19,26 +29,16 @@ function PluginArtwork({ logo, className, fallbackSize = '1em' }: PluginIconProp
   const [hasFailed, setHasFailed] = React.useState(false);
   const isDrawable = isRenderableLogoURL(source) && !hasFailed;
   const isSvg = isDrawable && /^data:image\/svg\+xml[;,]/i.test(source);
-  React.useEffect(() => {
-    if (!isSvg) return;
-    // CSS masks expose no error event; an isolated image keeps broken-artwork fallback intact.
-    const image = new Image();
-    image.onerror = () => setHasFailed(true);
-    image.src = source;
-    return () => { image.onerror = null; };
-  }, [isSvg, source]);
-  const kind = isSvg ? 'svg' : isDrawable ? 'image' : 'fallback';
-  const mask = isSvg ? `url(${JSON.stringify(source)})` : undefined;
+  const kind = !isDrawable ? 'fallback' : isSvg ? 'svg' : 'image';
   return (
     <span
-      className={[styles.icon, isSvg && styles.glyph, className].filter(Boolean).join(' ')}
+      className={[styles.icon, className].filter(Boolean).join(' ')}
       aria-hidden="true"
       data-plugin-logo={kind}
-      style={isSvg ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
     >
-      {!isSvg && (isDrawable
+      {isDrawable
         ? <img src={source} alt="" onError={() => setHasFailed(true)} />
-        : <PuzzleOutlined size={fallbackSize} />)}
+        : <PuzzleOutlined size={fallbackSize} />}
     </span>
   );
 }
