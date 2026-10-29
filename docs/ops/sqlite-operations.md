@@ -29,7 +29,7 @@ This runbook is intended for system administrators and operators running Oh My C
 
 ### 2.1 Online Backups via SQLite `VACUUM INTO`
 
-While the service continues processing read and write requests, a consistent snapshot can be generated using SQLite's `VACUUM INTO` command. Note that the minimal production Alpine container (`FROM alpine:3.21`) does not include the `sqlite3` CLI; run this command on the host targeting the volume mount directory, or from an administrative sidecar container:
+While the service continues processing read and write requests, a consistent snapshot can be generated using SQLite's `VACUUM INTO` command. Note that the minimal production Alpine container does not include the `sqlite3` CLI; run this command on the host targeting the volume mount directory, or from an administrative sidecar container:
 
 ```bash
 # Executed on the host targeting the volume mount directory:
@@ -212,7 +212,7 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 3. **Agent Documents (`agent_documents`, migrations 026 and 036)**:
    - The encrypted latest Agent session and its capability operations live here; the session ciphertext is written with the same `OMCPA_MASTER_KEY` envelope as other protected payloads, so the key must exist to resume a conversation or read a pending operation;
    - Sessions retain their history until reset or explicit turn replacement and are exempt from the repository's 8 MiB document bound; long conversations increase database and backup size. A terminal operation is retained for 7 days. Purging is lazy - it happens during Agent requests under a one-minute throttle - so the Agent adds no background loop and there is no separate maintenance job to schedule;
-   - Migration 036 rebuilds the table to admit the `image` kind (ADR 0075), copying every row verbatim; the normal pre-migration backup covers it. An image attached to a message is one encrypted row, at most 5 MiB of content, retained while the conversation references it and deleted on reset. Replacing a turn reuses its images. Failed admission attempts to delete only newly written image rows; this best-effort cleanup can fail if the database is unavailable. Image storage grows with the retained conversation;
+   - Migration 036 rebuilds the table to admit the `image` kind, copying every row verbatim; the normal pre-migration backup covers it. An image attached to a message is one encrypted row, at most 5 MiB of content, retained while the conversation references it and deleted on reset. Replacing a turn reuses its images. Failed admission attempts to delete only newly written image rows; this best-effort cleanup can fail if the database is unavailable. Image storage grows with the retained conversation;
    - Restoring this table from a backup restores conversation and operation history, but approval requires a new decision: an operation that was `executing` when the process stopped is reported as `uncertain` rather than replayed.
 4. **CPA Configuration Backups (`cpa_config_backups`, migration 030; `cpa_config_backup_settings`, migration 033)**:
    - Before every configuration write, Oh My CPA stores CPA's `config.yaml` as it was, encrypted with the same `OMCPA_MASTER_KEY` envelope; without the key a copy cannot be read or restored. A write whose copy cannot be stored is refused, so a missing key or an unwritable database blocks configuration writes instead of making them unrecoverable;
@@ -227,7 +227,7 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
      a fault: WAL is reused between checkpoints rather than truncated continuously;
    - Two actions are available, and the System Information page runs both. The console's
      route is the safer of the two for a running deployment, because it takes the write
-     gate described in `docs/architecture.md` §11 - writers wait rather than fail, and a
+     gate described in [Architecture](../architecture.md#state-and-request-lifetimes) - writers wait rather than fail, and a
      failed write would stop the usage collector and with it the process:
      - **WAL checkpoint** (`PRAGMA wal_checkpoint(TRUNCATE)`) moves the log's frames back
        into the database and truncates the log. It is cheap and safe to run often. SQLite
@@ -255,7 +255,7 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 ### Native plugin writes
 
 Configuration-affecting trusted plugin-page native writes participate in the existing encrypted
-`cpa_config_backups` gate (ADR 0067). A page's explicit credential is checked against the stored key (ADR 0069) before creating a
+`cpa_config_backups` gate. A page's explicit credential is checked against the stored key before creating a
 snapshot, and snapshot failure prevents mutation. Copies use the existing retention and
 `config_changes` reason, with deduplication; no new table or migration is introduced.
 

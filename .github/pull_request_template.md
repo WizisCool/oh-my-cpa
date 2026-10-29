@@ -1,31 +1,22 @@
-<!--
-Title: type(scope): lowercase subject — e.g. feat(usage): keep dashboard statistics permanently
-Leave the PR number out; the squash merge appends it.
--->
+<!-- Title: type(scope): concise description of the adopted change. -->
 
 ## Summary
 
-<!-- The problem, and what this change does about it. Describe the adopted state, grouped by behavior rather than by file. Link issues with "Closes #123". -->
-
-## Documentation
-
-<!-- Name the documents this change made wrong and updated (AGENTS.md §7), or state that none is. -->
+<!-- What changes for users or maintainers, and why? Link issues with "Closes #123". -->
 
 ## Validation
 
-<!-- Tick what was run and add the result. Delete the rows the change cannot reach.
-For test changes: name the failure mode, its primary layer, existing coverage consolidated,
-and net execution/maintenance cost. No new behaviour or risk means no new test is needed. -->
+<!-- List checks actually run and their results, plus any unverified risk.
+Choose checks from docs/testing.md. For a bug fix, name the regression and show
+that it fails without the fix. Explain any test claim removed or moved. -->
 
-- [ ] `pnpm test:fast`
-- [ ] `pnpm check:ui` — the change touches UI interactions, layout or browser lifecycle
-- [ ] `pnpm verify:full` — build, embedded distribution, browser harness or workflow changes
-- [ ] `pnpm demo:generate` — console data, a route's response shape or a console read changed, and the dataset diff is committed
-- [ ] `pnpm readme:screenshots` — a pictured page changed how it looks
+## Documentation
 
-## Checklist
+<!-- Update the single guide this change makes inaccurate. If none, omit this section. -->
 
-- [ ] No API key, token, auth file or production data in the diff, the description or the screenshots.
-- [ ] New user-visible copy is in the appropriate file under `web/src/i18n/locales/` for every supported locale.
-- [ ] Schema changes arrive as a new migration; a consequential, hard-to-reverse decision arrives as an ADR (AGENTS.md §4).
-- [ ] New API responses go through the `internal/api` DTO allowlists.
+## Safety
+
+- [ ] No keys, tokens, auth files or production data in the diff, description or screenshots.
+- [ ] User-facing copy is translated in every supported locale.
+- [ ] Persistence changes preserve forward migrations and immutable history.
+- [ ] Response changes preserve the documented DTO and credential boundaries.

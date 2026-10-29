@@ -133,7 +133,7 @@
   }
 }
 /* ── reduced motion ─────────────────────────────────────────────────────────
-   §7's override is a promise this file has to keep for itself: the back-to-top
+   Reduced motion must also cover these local controls: the back-to-top
    affordance rises into place and the filter header folds and unfolds, and a
    reader who asked for less movement should get the state where it lands. The
    kill is on movement - a keyframe's transform, a disclosure's height - and the

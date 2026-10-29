@@ -27,7 +27,7 @@ function prettyJSON(text: string | undefined): string {
 }
 
 /**
- * One capability call as a disclosure (ADR 0084): a row an operator scans, and under it, on
+ * One capability call as a disclosure: a row an operator scans, and under it, on
  * request, what was sent and what came back.
  *
  * The row is a status mark, the call's title in the operator's language, its arguments in brief

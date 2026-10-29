@@ -458,13 +458,14 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 | [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | 备份、恢复与主密钥管理手册 |
 | [`docs/agent-capabilities.md`](docs/agent-capabilities.md) | 智能体能力清单、权限规则与 MCP 接入 |
 | [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) | CPA v8 基线与配置字段迁移对照 |
-| [`docs/cpamc-parity.md`](docs/cpamc-parity.md) | 与官方 CPA 管理中心的功能对照 |
+| [`docs/pricing.md`](docs/pricing.md) | 价格表、计费分层与锁定的费用快照 |
 
 **开发**
 
 | 文档 | 内容 |
 | --- | --- |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 开发环境与验证流程 |
+| [`docs/testing.md`](docs/testing.md) | 测试分层、本地反馈与 CI 验证 |
 | [`AGENTS.md`](AGENTS.md) | 编码 Agent 在本仓库中遵循的约定 |
 | [`docs/architecture.md`](docs/architecture.md) | 模块边界、数据流与架构约束 |
 | [`CONTEXT.md`](CONTEXT.md) · [`docs/design.md`](docs/design.md) | 领域术语 · 视觉系统 |

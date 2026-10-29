@@ -44,7 +44,7 @@ function keyOf<T extends object>(record: T, rowKey: ResponsiveListProps<T>['rowK
 }
 
 /**
- * One dataset, rendered as a table on a wide viewport and as labelled rows on a phone (ADR 0012).
+ * One dataset, rendered as a table on a wide viewport and as labelled rows on a phone.
  *
  * Five pages carried their own copy of this switch, and the copies had drifted: one paged the
  * phone list and one did not, one showed a paginator for a single page, one claimed "empty" while

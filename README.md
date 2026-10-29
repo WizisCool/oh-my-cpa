@@ -490,13 +490,14 @@ Browser ──▶ Direct listener / existing HTTPS ingress ──▶ Oh My CPA (
 | [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | Backup, restore and master-key runbook |
 | [`docs/agent-capabilities.md`](docs/agent-capabilities.md) | Agent capability contract and the MCP bridge |
 | [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) | CPA v8 baseline and configuration relocation |
-| [`docs/cpamc-parity.md`](docs/cpamc-parity.md) | Feature parity with the official CPA management center |
+| [`docs/pricing.md`](docs/pricing.md) | Price books, billing tiers and locked cost snapshots |
 
 **Developing OMC**
 
 | Document | Contents |
 | --- | --- |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development setup and the verification workflow |
+| [`docs/testing.md`](docs/testing.md) | Test layers, local feedback and CI verification |
 | [`AGENTS.md`](AGENTS.md) | The contract coding agents follow in this repository |
 | [`docs/architecture.md`](docs/architecture.md) | Module boundaries, data flows and invariants |
 | [`CONTEXT.md`](CONTEXT.md) · [`docs/design.md`](docs/design.md) | Domain vocabulary · visual system |

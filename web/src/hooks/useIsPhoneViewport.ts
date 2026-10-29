@@ -3,7 +3,7 @@ import React from 'react';
 /**
  * The console's phone breakpoint.
  *
- * Two viewport breakpoints exist and they mean different things (docs/design.md §8): at
+ * Two viewport breakpoints exist and they mean different things: at
  * 900px the shell changes shape, and at 640px the device is a phone, which is where a
  * list stops being a table. They are two constants rather than one so the difference is
  * stated in code instead of being re-derived at each call site.

@@ -1,313 +1,126 @@
 # Testing a change
 
-The rules for what to test are in `AGENTS.md` §5. This document says where each kind of
-test lives, how to add one, what CI runs when, and how to reproduce a failure.
+Use the lowest layer that detects the real failure. Prefer extending an existing
+case; a second layer needs a different claim, not another spelling of the same
+assertion. Keep security, data integrity and shipped-artifact checks hard.
 
-## Layers
+## Choose an entry point
 
-Put a claim in the lowest layer that can fail for the reason the test's name gives. One
-claim has one owner; a second test of the same claim in another layer is a cost every later
-change pays.
+| Work | Command |
+| --- | --- |
+| Routine edit, before pushing | `pnpm test:fast` (`--plan` explains selection; `--base <ref>` includes committed changes) |
+| Frontend behavior while editing | `pnpm test:frontend`, or `pnpm exec vitest related --run --config web/vitest.config.ts <source>` |
+| Layout, focus, navigation, scrolling or browser lifecycle | `pnpm check:ui` (`--plan` previews the affected scenarios) |
+| Build, embedding, browser infrastructure or CI changes | `pnpm verify:full` |
+| A failing CI lane | Run that lane first; do not repeat passing, unchanged checks |
 
-| The claim is about | Layer | Where | Runs with |
-| --- | --- | --- | --- |
-| Server behaviour: handlers, DTO allowlists, redaction, auth, repository queries, migrations, write serialisation, background loops | Go test | `*_test.go` beside the package | `go test ./...` |
-| What a parser or projection produces from an upstream payload | Go golden cases | `internal/<pkg>/testdata/golden/<name>/` | `go test ./...` |
-| A pure frontend function: URL/state derivation, formatting, sorting, validation | Logic suite | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
-| Rendered React wiring and the typed API client | Component and contract tests (Vitest + jsdom) | `web/tests/**/*.component.test.tsx`, `web/tests/**/*.contract.test.ts` | `pnpm test:components` |
-| What only a browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint | Probe scenario | a module under `scripts/acceptance/probes/`, registered in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI |
-| The built binary, embedded SPA, fake CPA and seeded SQLite together | Built-artifact acceptance | `scripts/browser-acceptance.mjs` and the steps it runs from `scripts/acceptance/` | `pnpm verify:browser` (`:smoke` on pull requests) |
-| The public demonstration | Demo acceptance | `scripts/demo-readiness.mjs` | `pnpm verify:demo` |
-| A repository script whose output ships: release planning, signing, the Worker, the embedded distribution | Script test | `scripts/*.test.mjs`, `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
+`pnpm test:fast` never builds the product or launches a browser. It selects static
+checks and Go packages with reverse dependants. Vitest owns frontend module
+resolution and related-test discovery. CSS-only edits run the logic suite, which
+owns stylesheet-derived contrast values, not jsdom layout claims. Setup, unknown assets,
+dependencies, deleted files and infrastructure changes widen to the complete suite. Unknown inputs widen
+rather than silently skipping verification. The planner prints its commands.
 
-Discovery is automatic except the probe catalog itself. A new scenario belongs in
-`scripts/acceptance/scenarios.mjs`; no second path-prefix list or shard-weight registration is
-needed. `scripts/affected-files.mjs` follows TypeScript-parsed imports (including literal dynamic
-imports and URL assets). The UI planner reads route declarations and each probe's imports and
-navigation literals, so shared components reach their actual pages. Unresolved ownership widens
-the selection and prints why. Shared common-component changes run recovery, settings and phone representatives;
-global runtime, API-client and authentication changes keep the complete catalog;
-the full catalog remains mandatory on `main`, nightly, manual and `full-ci` runs. Locale data
-and rendered-test changes alone select no browser: types/i18n and their owning test layer check
-them. An unfamiliar frontend path selects every scenario rather than silently selecting none.
+## Test ownership
 
-`pnpm test:fast --plan` lists actual suite commands. Local frontend changes select only logic
-and rendered suites that import them; test setup changes reach all rendered suites. Go source
-changes select their package and reverse dependants through `go list`, while a Go test change
-selects its own package. Global inputs or an unresolved package graph retain the full static
-fallback. `pnpm test:frontend:affected` is the frontend-only CI entrypoint (its `BASE` environment
-variable names the comparison revision); Go and repository checks remain separate required jobs.
-It uses the same affected plan for ordinary pull requests; full runs retain
-complete discovery. Do not copy the full gate into an iteration loop.
-
-## OpenUI generation and streaming
-
-`pnpm check:openui-prompt` compares the embedded Agent instructions with the official
-library's generated prompt and OMC's capability catalogue. It runs in the repository
-static lane and in affected checks for prompt sources, generated files and dependency
-changes. After changing those inputs, run `pnpm openui:prompt` and review the generated
-diff. Air watches `internal/agent/openui/openui.json` because the backend embeds it at
-build time; restart `pnpm dev` after changing Air's watcher configuration.
-
-The `agent-stream` probe holds the OpenUI tool's argument stream open and checks that
-content appears before the argument JSON is complete, then fills the same interface
-with a table and chart. This verifies browser streaming, not model generation quality.
-A real-inference check must also establish that the model receives the generated
-instructions and emits a renderable program progressively.
-
-## Asking the operator
-
-Two probes cover the two ways a turn can wait for the operator. `agent-ask` drives
-`ask_question`: the panel takes the composer's place, a digit key picks a single choice and moves
-on, every question has its own tab plus a review tab, and one decision carries each answer back.
-`agent-question` drives `prompt_openui`: the drawn form appears inside the answer, its submit
-decides once with the official action, and the submitted answer is drawn as the operator's own
-message under the form.
-
-`agent-followups` covers the third case, where nothing waits: on a phone-sized viewport, reading
-away from the newest end and then clicking a suggestion returns the transcript to its newest end,
-because the answer to what was just sent appears below. It fails without the scroll-on-send effect
-in `components/workspace/AssistantThread.tsx`.
-
-The probe harness prewarms selected heavy workspaces with the same authenticated API fixtures
-as the scenarios (`scripts/testing/probe-warmup.ts`). It waits for the workspace itself, not a
-sign-in screen, before interaction measurements. No interaction deadline is widened, and a
-startup failure is reported rather than silently swallowed.
-
-## Rendered tests and the in-memory OMC
-
-A component test renders the real component over the real typed client, and
-`web/tests/support/omcApi.ts` answers its requests from one in-memory state:
-preferences, providers, plugins, auth files and the health document are stateful, so a
-write is what the next read and the next mount see. A test seeds state, adds the
-endpoints its surface needs with `on`, serves a contract fixture from
-`scripts/acceptance/` with `serve`, holds a response with `hold`, and asserts on
-`requests`, `writes()` or the state itself. `renderWithOmc` (`web/tests/support/render.tsx`)
-mounts under the console's providers.
-
-```tsx
-const api = installOmcApi({ providers: [PROVIDER] });
-renderWithOmc(<Editor />);
-fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-await waitFor(() => expect(api.writes('/management/providers/openai-compat-0')).toHaveLength(1));
-```
-
-A request no route answers, or one sent without the session cookie, fails the test after
-it ends, so a component cannot pass by swallowing a rejected query. Files run in
-parallel, each in its own environment. The contract tests (`*.contract.test.ts`) stub
-`fetch` directly, because what they pin is the request the client forms.
-
-## Golden cases
-
-A golden case is two files: `<case>.input.json`, holding why the case exists, the instant
-it is evaluated at and the body the code reads, and `<case>.golden.json`, the whole
-encoded output.
-
-```json
-{ "why": "A free plan's primary window is monthly ...", "now_ms": 1735689600000, "body": { ... } }
-```
-
-`testkit.Cases(t, "testdata/golden/<name>", run)` runs `run` for every input and compares
-its result with the golden file. To add a case, add an input file and generate its output:
-
-```
-UPDATE_GOLDEN=1 go test ./internal/quota
-git diff internal/quota/testdata   # the review: is this the output the case should have?
-```
-
-A golden test that reads the clock or the zone calls `testkit.PinUTC(t)` first, so the
-file is the same on every machine. `internal/quota/golden_test.go` is the reference use.
-
-`internal/usage/golden_test.go` decodes CPA usage and error records the same way. Its
-case body is `{ "record": ..., "fingerprinted": bool, "secrets": [...] }`: the output
-leaves out zero fields so a golden file shows only what the record set, and the test
-fails when any listed secret survives anywhere in the decoded row, so a redaction case
-states its claim in the input rather than in a reviewer's reading of the output.
-
-`internal/cpa/management/golden_test.go` covers how a key family's v8 groups are read and
-written back. A case holds the stored groups, the runtime list and the console's edits by
-position (merged into the entry's wire form, `null` clearing a field); the golden file is
-the editable list and the whole set of groups the write sent, so a write that touched
-anything the operator did not change appears in its diff.
-
-## The demonstration dataset
-
-`deploy/cloudflare/data/responses.json` is generated by the real handlers.
-`TestExportDemoDataset` regenerates it in memory and fails when the committed copy
-differs; `pnpm demo:generate` writes it, and its diff is reviewed like a golden file. The
-comparison seeds a year of history (about fifteen seconds), so it is skipped under
-`-short` (which `pnpm test:fast` uses) and runs in CI.
-
-## What CI runs
-
-`scripts/ci-scope.mjs` reads the changed paths and decides the lanes.
-
-| Lane | Pull request against `main` | Push to `main`, nightly, manual run, label `full-ci` |
+| Claim | Owner | Location |
 | --- | --- | --- |
-| `static-repository`: docs, i18n, CSS modules, design gates, script tests, workflow lint, secrets | always | always |
-| `static-go`: `go test ./...`, golangci-lint (`.golangci.yml`) | Go paths changed | always |
-| `static-frontend`: type check, logic, components, antd lint | affected suites when web paths changed | complete discovery |
-| `browser`: build, bundle boundaries, built-artifact acceptance | smoke, when Go or web paths changed | full, plus demo acceptance |
-| `probes` | the scenarios the frontend change selects | the whole catalog in three shards |
+| Server behavior, auth, safe DTOs, migrations, persistence, CPA writes and backups | Go | `*_test.go` beside the package |
+| Complete parser/projection output | Go golden cases | `internal/<package>/testdata/golden/` |
+| Pure frontend derivation, formatting, validation and state transitions | Vitest `logic`, Node environment | `scripts/test-*.ts` |
+| Rendered React wiring and typed HTTP contracts | Vitest `components`, jsdom environment | `web/tests/**/*.component.test.tsx`, `web/tests/**/*.contract.test.ts` |
+| Browser-engine behavior: geometry, hit testing, focus, scrolling, navigation, touch and paint | Playwright probes | `scripts/acceptance/probes/`, registered in `scripts/acceptance/scenarios.mjs` |
+| Embedded SPA, Go binary, SQLite and fake CPA together | Built-artifact acceptance | `scripts/browser-acceptance.mjs` |
+| Public demonstration and route refusal | Worker tests and demo acceptance | `deploy/cloudflare/*.test.mjs`, `scripts/demo-readiness.mjs` |
+| Shipped repository outputs: archives, signing, deployment and asset synchronization | Node test runner | `scripts/*.test.mjs` |
 
-A change to a shared input (`package.json`, the lockfile, `ci.yml`, `ci-scope.mjs`) or a
-path the scope script does not recognise runs every lane. Branch protection requires
-`static`, `browser` and `probes`; a lane skipped by scope reports success.
+`pnpm test:frontend` runs both Vitest projects. `test:logic` and `test:components`
+select one project; `test:self` runs the repository and Worker suites, including
+the deployment health probe, and requires a POSIX shell. Test files
+remain isolated. Bound worker pools rather than multiplying workers at every
+nested runner. A jsdom render and a Chromium frame measurement should not compete
+with a compilation on a small machine.
 
-Weekly maintenance (`.github/workflows/maintenance.yml`) runs the race detector, fuzzing
-and the advisory scan.
+For a regression, show that the relevant case fails with the fix removed, then
+restore the fix and rerun that case. Preserve the failure evidence in the commit
+or PR. Do not test prose, translations, CSS spellings, workflow shape, or the test
+runner itself. Never repair a failure with retries, fixed sleeps, longer waits or
+skip switches.
 
-## Built-artifact acceptance
+### Golden data and contracts
 
-`pnpm verify:browser` is a handful of paths through the shipped binary, not a second copy
-of the suites below it: sign-in; the secret sweep, which renders every console route and
-requires that no DOM, browser storage or response carries the management key or OAuth
-material; the request list over the seeded database; an external agent over MCP; adding a
-provider through to the gateway; copying without the Clipboard API; the production YAML
-worker; and the trusted plugin host. `:smoke` stops before the last four. A claim about how a page behaves belongs in a
-component test or a probe; a step here earns its place by needing the built binary.
+Use `internal/testkit` for whole-output golden comparisons. Regenerate only the
+owning package with `UPDATE_GOLDEN=1 go test ./<package>` and review the diff.
+Shared HTTP corpora under `scripts/acceptance/contracts/` connect handler responses
+to the typed client without launching a browser. The public demo dataset is
+separately generated from real handlers: run `pnpm demo:generate` when response
+shapes change; `TestExportDemoDataset` owns freshness and `pnpm check:demo` owns
+route coverage and privacy.
 
-## When CI fails
+### Browser checks
 
-- Probe jobs upload `tmp/probe-failure/`, with separate directories per port and phase
-  so the exclusive run retains shared-run failures: the screenshot, DOM, URL, page errors and console
-  of each failed scenario. Reproduce with `pnpm check:ui --scenario <id>`.
-- Built-artifact acceptance uploads `tmp/browser-acceptance-failure/`. Reproduce with
-  `pnpm build && pnpm verify:browser`.
-- `pnpm verify:full` runs the full static, build, browser and demonstration catalog locally. CI additionally runs its workflow lint, golangci-lint and publication-specific gates.
-- Rerun only the failed command. A failure that passes on rerun is a flake to fix at its
-  assertion, never a reason to add a retry or lengthen a wait.
+`pnpm check:ui` uses the development server with mocked APIs. Its import/route
+ownership planner selects scenarios; global frontend changes run the catalog.
+Locale-only and component-test-only edits do not need a browser. Use `--list` to
+browse scenarios and `pnpm check:ui --scenario <id>` to reproduce one.
+Playwright owns workers, sharding, contexts and server readiness. `--shard i/n`
+works with both `check:ui` and `verify:probes`; empty native shards need no server. Probe processes
+own their server and output directories; an existing development server is not a
+test fixture. Each test installs its own routes, preferences and fault ledger.
 
-## Firefox plugin-page regression
+Browser failures retain diagnostics under `tmp/probe-failure/` and
+`tmp/browser-acceptance-failure/`. Inspect the failing assertion, DOM/screenshot,
+network and browser-fault evidence before changing a wait. Observe the state that
+makes an interaction ready, not elapsed time or a text fragment from an earlier UI.
 
-The existing `plugin-management` probe waits for actual plugin content, checks live theme
-propagation without losing an unsaved draft, reload, scrolling, opening a new tab, and
-recovering from a shell response that lacks the plugin frame.
-Run it in Firefox as well as the default Chromium when changing plugin-page hosting:
+A development-server pass does not prove packaging, production chunks, root/base
+path resolution, offline assets or secret safety. `pnpm verify:browser` exercises
+the real built binary and fake CPA; `:smoke` is the smaller PR path.
+`pnpm verify:demo` exercises the packaged public demonstration. Run the complete
+`verify:full` serial variant on resource-constrained machines rather than starting
+multiple full gates together.
 
-```sh
-pnpm exec playwright install firefox
-OMC_PROBE_IDS='["plugin-management"]' pnpm exec playwright test --config scripts/testing/probe-config.ts --browser firefox --workers 1
-```
+## CI and releases
 
-The pre-fix `srcdoc` host fails this probe because Firefox blocks the nested plugin frame
-under the console's `frame-src 'self' blob:` policy. Built-artifact acceptance additionally
-exercises the hashed shell asset through the embedded Go server and its MIME type.
+The workflows are the executable source of truth; do not duplicate their job DAG
+in documentation.
 
-## Waiting in tests
+- **Pull requests:** affected language lanes, repository/security checks,
+  built-artifact smoke when code is affected, and affected browser probes.
+- **Main, nightly, manual, or a PR labelled `full-ci`:** full static suites,
+  built-artifact acceptance, demo acceptance and the complete probe catalog.
+- **Weekly/manual maintenance:** race detection, bounded fuzzing, dependency
+  advisories and host-native runtime checks.
+- **Release:** complete verification before packaging and publication, immutable
+  version identity, signed manifests, image/runtime smoke and promotion gates.
+  See [Releasing](releasing.md).
 
-Wait on something observable: a response, an element state, `until(...)` from
-`scripts/acceptance/harness.mjs`, a Go channel, or an injected clock. A duration a Go test
-has to wait out belongs in the component's config with a production default, so the test
-can set it to milliseconds. Do not maintain source-text wait counts: they conflate polling and rejecting deadlines with sleeps. Keep readiness observable and investigate real execution-cost growth.
+Required aggregates reject failure, cancellation and an unexpectedly skipped
+selected lane. Superseded PR runs may be cancelled; main revisions retain their
+own results. No automatic test reruns hide failures. Go CI emits gotestsum
+JUnit/test2json artifacts, and native Actions job timings include setup/cache
+costs. Timings are diagnostic evidence, not a machine-load-dependent pass/fail
+budget. Compare cohorts with the same event, verification scope and cache state;
+one successful PR is not a new P50/P90 or a flakiness rate.
 
-Browser media emulation can precede the application's media-query change notification;
-wait for the resolved `data-reduced-motion` policy before inspecting motion. Chart creation
-is queued across frames, so wait for each chart the assertion reads rather than an aggregate
-SVG-path count. Popup visibility alone does not establish completed alignment or full opacity;
-use the state the following assertion needs. Scroll frame sampling starts when the trusted input
-arrives, so protocol dispatch cannot exhaust the observation window before the gesture begins.
+## Tooling
 
-## Verification cost and admission
+`package.json`, `go.mod` and `scripts/tools-versions.json` hold tool/dependency
+pins. JavaScript installation uses `pnpm install --frozen-lockfile`; install the
+matching Playwright Chromium with `node scripts/install-chromium.mjs` before
+browser checks. `pnpm verify:toolchain:strict` checks the reproducible toolchain.
 
-Before adding a test, identify a failure mode not already owned by a cheaper test. Extend
-that owner, or replace redundant checks. New features need observable behaviour and important
-contracts; internal refactors need no new test by default. A browser scenario must require an
-engine, not just a server response or React state. The PR template asks for that claim and net
-cost; review, rather than a file-count quota, decides whether it earns its place.
+Documentation links use **lychee v0.24.2**: install the published binary or use a
+package manager, then `pnpm check-docs`. Checks are offline, include local
+fragments and read `lychee.toml`; GitHub image-theme selectors are the only
+rendering-specific exclusion. CI installs the pinned tool through its action.
+The checker does not interpret arbitrary backticked prose as file paths or carry
+a retired-document inventory.
 
-`parallel-checks.mjs` retains per-check timings in `tmp/check-timings/`. Successful fast,
-UI and full invocations also record wall time under `tmp/verification-cost/`, separated by
-lane, OS, architecture, available CPU count and check ids with coarse suite-count buckets (small ≤2, medium ≤8, large or full), or exact
-scenario ids for UI. Adding cases retains its workload identity; unrelated one-suite edits
-share a useful baseline without mixing them with full catalogs. New suites also remain in
-the fixed CI-wide cost envelope. The first three successes establish a local
-median. The baseline freezes; one slow observation warns, and three successive observations
-above **1.5 × baseline + 10 seconds** fail with the slow-lane diagnosis. Failed tests do not
-become timing samples. Inactive local cost histories expire after 30 days. A new host starts its own baseline; cold-start observations are retained,
-not presented as warm-cache speedups. Explicit scenario runs, different affected plans and full catalogs are distinct
-workloads; reproduce a cost regression with comparable scope before changing its baseline.
-
-The required CI aggregate reads GitHub's native job timestamps, reports runner-seconds and
-execution critical path (setup plus the slowest parallel lane, excluding queue time), and
-checks the current run plus two preceding successful runs of the same event and catalog
-class. Successful native `probes-full` jobs identify a full catalog, including `full-ci`
-pull requests; those use the full-run budget, not the affected-PR budget. At most ten
-recent candidates are inspected with bounded API calls. Historical PR runs established a
-506-second execution baseline (448/506/513 seconds across three runs); full runs established
-282 seconds (262/282/370). Runner-time medians were 857 and 1,167 seconds respectively. CI allows **50% + 30 seconds** for
-runner/cache variation and rejects three successive significant overruns in either execution critical path or total runner-time. A lone cold runner
-warns. Missing GitHub timing telemetry warns explicitly and cannot erase or fail a product-test
-verdict. No extra monitoring service, retries, permanent governance suite or test-count quota is
-needed. API outages still leave native job durations available in Actions.
-
-On a sustained overrun, inspect the individual command/scenario timings, remove duplicate work,
-and compare three equivalent successful runs. If new product risk genuinely needs the cost,
-include those measurements, the owned failure mode and consolidation considered in the PR;
-update the CI baseline in `scripts/parallel-checks.mjs` and this section together. A same-host
-local baseline may be reset only with equivalent evidence. Never skip cases, loosen assertions,
-or simply rerun a failing cost gate until it goes green.
-
-## October 2026 verification audit
-
-Measurements on a four-CPU Linux ARM64 host used Node 22.23.4 and pnpm 11.19.0.
-The frontend-plan comparison ran the fast plan for the same `HeaderAction.tsx` change
-before and after selection changed. Both exclude production build and browser work; the
-old plan selected whole frontend suites and the new one selects their affected owners.
-
-| Workload | Before | After |
-| --- | --- | --- |
-| Equivalent local frontend fast plan, three successful runs | 99.07 / 99.36 / 98.27 s | 18.40 / 14.81 / 14.73 s |
-| Rendered suites selected for that component | all 30, plus all 89 logic suites | one rendered suite; unrelated logic omitted |
-| Authenticated Agent dev mount, module requests | 2,480 total; 2,239 optimized | 815 total; 572 optimized |
-
-The fast-plan median fell from 99.07 to 14.81 seconds (85%). The old Agent mount took
-9.70 seconds without the browser guard; three new mounts took 5.10 / 4.99 / 4.61 seconds
-with the guard, so request counts are the stronger comparison than those unequal timing
-conditions. Vite now leaves the ESM dynamic icon import map unoptimized; icons stay lazy
-instead of becoming thousands of eager shared chunks. Production bundle acceptance and
-browser fault/network guards retain their existing responsibilities.
-
-The PR execution baselines above come from runs 40223084404, 40224797884 and 40226144832;
-the full-run samples are 40217897363, 40222722525 and 40226823544. In the affected PR lane,
-probes alone took 405–461 seconds while build/smoke took 177–188 seconds: whole-catalog
-selection on shared paths, not just build time, dominated feedback. An initial local full
-run at `38bbfe9c` took 1,204.53 seconds and failed workspace bootstrap; that failed,
-colder run is diagnostic evidence, not a successful speedup denominator. The final
-pinned-Go full catalog passed three controlled runs in 1,016.72 / 989.28 / 1,011.66 seconds
-(median 1,011.66). In the first, build took 81.88, static 134.48, packaged browser 48.75,
-all 76 probes 679.31, and all 19 demo routes 59.98 seconds; the remainder was toolchain,
-secret and bundle gates. The four affected shell representatives passed in 120.06 / 118.12 /
-117.42 seconds (median 118.12), and both workload histories now have three successful
-same-host samples. Full-catalog cost remains substantial; the daily loop avoids paying
-it rather than hiding or weakening those checks.
-
-The three initial hosted full-catalog stack runs had 298 / 313 / 314-second execution
-paths and 1,238 / 1,293 / 1,293 runner-seconds. Their 313-second median is above the
-historical full-run median of 282 seconds; this audit does not establish a full-CI
-speedup or reduced memory use. Daily affected selection is the demonstrated improvement,
-and the fixed catalog-specific budget retains visibility into total regression cost.
-
-From the PR #166 merge to `15952aa3`, product source grew from 154,006 to 190,044 lines
-(23%), and tests from 90,623 to 104,309 (15%). Test volume did not outgrow product source
-in that interval. The actionable causes were selection fanout, duplicated certification,
-module startup and CPU scheduling rather than an unsupported claim about test counts.
-
-Six script suites were removed: five certified fixture implementations or synthetic data
-rather than product behaviour; the sixth counted source-text waits. Preference, updater
-and warmup wire claims remain owned by Go handler certification and the typed-client
-contract suites under `web/tests/`. Heatmap calendar behaviour remains in the API and
-logic tests. Four rendered cases and source-CSS assertions that pinned presentation were
-also removed; interaction, accessibility, lifecycle and real colour-contrast claims stay.
-No security, migration, CPA-write, updater or embedded-distribution test was removed.
-Across changed test files, the net reduction is 566 lines. The changed selector and
-orchestration files (including the two new entry/helpers) shrink from 1,123 to 1,001 lines,
-a net reduction of 122 despite the cost reporting and cancellation handling.
-
-Temporary development experiments verified ordinary page and shared-component selection,
-new-suite discovery, locale-only changes, shared test setup, global inputs and unknown-path
-fallback. Synthetic cost samples verified that one slow run warns, normal observations
-break the overrun streak, and three successive overruns fail. Admission exercises rejected another CSS-pin suite with no new failure mode and an E2E
-proposal for an already-owned pure mapping, while permitting a genuinely new engine-only
-claim. Semantic duplication and whether an E2E claim truly needs an engine remain review judgments;
-the fixed full-CI envelope catches sustained cost growth, not every redundant assertion.
+`pnpm verify:workflow:lint` uses actionlint 1.7.12 plus the repository's small
+supply-chain policy for pinned Actions, token-free checkouts and signing-key
+isolation. `pnpm lint:go` uses golangci-lint v2.15.0. Secret/history scans, signature
+verification and release checks remain required. CSS reference checks, i18n
+checks and generated OpenUI-prompt checks catch concrete broken references;
+visual intent lives in [Design](design.md) and its source tokens, not a second
+catalog of CSS spellings.

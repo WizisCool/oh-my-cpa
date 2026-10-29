@@ -23,7 +23,7 @@ import { Tooltip } from '../components/common/Tooltip';
  * console supplies the place, the heading and the way back to the plugin's settings, and
  * the plugin supplies everything inside. The frame is same-origin with the console, as it
  * is in CPA's management centre, because plugin pages build their requests from
- * `location.origin` and read the host's colour scheme from their parent (ADR 0060).
+ * `location.origin` and read the host's colour scheme from their parent.
  */
 export const PluginPageHost: React.FC = () => {
   const t = useT();

@@ -438,7 +438,7 @@
 .req-mode-none {
   color: var(--muted);
 }
-/* Coloured by the level's step on the reasoning-effort scale (docs/design.md §2).
+/* Coloured by the level's step on the reasoning-effort scale.
    The component passes the step as a token reference and nothing else; `none`
    and an unranked level pass nothing and keep the neutral step. That step is
    secondary text, not `--muted`: a level nobody ranked is still a reading, and
@@ -467,7 +467,7 @@
 }
 /* Latency carries no verdict colour. An agent request that thinks for minutes
    is working as intended, so an amber threshold would flag normal traffic as a
-   problem; design.md reserves the semantic hues for real state. */
+   problem; semantic hues are reserved for actual request state. */
 .req-ttft-val {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -567,7 +567,7 @@
    deliberately absent: a low hit rate is not a failure, and the danger hue
    belongs to failed requests. The component supplies the two stops and the
    weight; the mix happens here in OKLCH so the hue sweep stays even, and every
-   value derives from tokens (docs/design.md §2). */
+   value derives from tokens. */
 .req-col-cache {
   justify-content: center;
 }

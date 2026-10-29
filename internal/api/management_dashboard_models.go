@@ -73,9 +73,8 @@ type dashboardModelPoint struct {
 
 // dashboardModels answers the dashboard's two model-level panels.
 //
-// It is a separate endpoint rather than a block on the dashboard response for the reasons
-// ADR 0005 recorded for the token heatmap, and they still hold here. It groups the window
-// by model as well as by bucket, which makes it the page's widest read; attaching it to
+// Grouping the window by model as well as by bucket makes this the page's widest read.
+// It has a separate endpoint because attaching it to
 // `/management/dashboard` would pay that cost on every live tail poll, which fires as often
 // as every five seconds. It answers for the window the picker selected
 // but on its own cadence, and it is allowed to fail alone: an unavailable read leaves the six

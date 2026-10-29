@@ -362,7 +362,7 @@
    edge the two value columns share - a spend column flush right beside a name would read as a
    second name. Its track is `max-content`, so the amount's own width sets the column and every row
    starts it on the same edge; the partial and unpriced states are text-plus-tooltip rather than
-   colour, per design.md's rule that state may not ride on hue alone. */
+   colour, so unavailable pricing is not communicated by hue alone. */
 .model-usage-cost { color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; text-align: left; }
 .model-usage-cost.is-partial { color: var(--muted); }
 .model-usage-cost.is-unpriced { color: var(--muted); }
@@ -610,8 +610,7 @@
    that nothing is stored - so refusing the cursor would hide an interaction that does happen. */
 .heatmap-cell.is-interactive { cursor: pointer; }
 /* Hover acknowledges the pointer on the frame it arrives, and the motion is a `transform` scale
-   rather than a fade: design.md §7 rule 1 allows compositor-only properties and rule 7 forbids a
-   *colour* transition on hover, which is what would smear behind a fast sweep. A transform is
+   rather than a fade or colour transition, which would smear behind a fast sweep. A transform is
    handed to the compositor, so the lift costs no layout and no paint of the grid around it.
    The transition is on the transform only, and `position: relative` + `z-index` let the enlarged
    square sit above its neighbours instead of being tucked under them. */
@@ -695,8 +694,8 @@
   margin-bottom: 2px;
 }
 /* The label uses the secondary text token rather than `--muted`: muted is calibrated for the page
-   background, and against the popper's surface it lands at 4.4:1 - just under the WCAG AA floor
-   design.md requires. `--fg-2` clears it in both themes. */
+   background, and against the popper's surface it lands at 4.4:1 - just under the WCAG AA floor.
+   `--fg-2` clears it in both themes. */
 .heatmap-tip-row dt { color: var(--fg-2); }
 .heatmap-tip-row {
   display: flex;
@@ -722,8 +721,8 @@
      the bright accent reads 3.4:1 on the dark surface, and `--accent-hover` (the deeper step, meant
      for filled buttons) reads 1.96:1 there while being the only legible one on the light surface.
      So the light theme uses the deeper step and the dark theme lightens the accent until it clears
-     the floor - the same "lighten a semantic hue until its text is legible" rule the cache scale
-     follows in design.md §2. */
+     the floor - the same "lighten a semantic hue until its text is legible" approach used by the
+     cache scale. */
   color: var(--heatmap-tip-link);
   font-size: var(--text-xs);
 }
@@ -749,7 +748,7 @@
   border-radius: var(--radius-xs);
   background: color-mix(in oklch, var(--heatmap-quiet) var(--heatmap-quiet-share, 0%), var(--heatmap-busy));
 }
-/* Static skeleton, never a shimmer (design.md §7 rule 3). */
+/* Static skeleton, never a shimmer. */
 .heatmap-skeleton {
   margin-top: 14px;
   /* The measured field's own height: the month axis, then seven rows at the target size. */

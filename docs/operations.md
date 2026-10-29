@@ -107,7 +107,7 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
 - **Gateway configuration**: Omitted request retries and maximum cooldown wait
   both mean `0`; the example's `3` and `30` apply only when explicitly configured.
   Header passthrough forwards filtered upstream response headers to clients.
-  See `docs/cpa-v8-compat.md` for the other option semantics and upstream sources.
+  See the configuration editor for supported settings and [CPA integration](cpa-v8-compat.md) for write semantics.
 - **Base path**: New installations serve the console at `/`. A configured
   `OMCPA_BASE_PATH` is served with a trailing slash; OMC answers the bare prefix with
   a 308 redirect to it. An operator-owned proxy must preserve a configured prefix and
@@ -175,12 +175,11 @@ visit is not an operator asking a question. The **Check for updates** button wor
 either way. GitHub's unauthenticated budget is 60 requests per hour for the address
 making them, and the page says so when a check is refused for that reason. Release notes
 are held in memory rather than stored, so after a restart the page names the versions
-and links to the source while the notes themselves are unavailable — see
-`docs/architecture.md` §10.
+and links to the source while the notes themselves are unavailable.
 
 ## Console updates
 
-On a container deployment with an updater (ADR 0099), the System Information page offers
+On a container deployment with an updater, the System Information page offers
 **Update now** beside a product that has a newer release. `docs/install.md` ("Upgrading")
 is the operator's guide, including the one command that adds an updater to a deployment
 that predates it.
@@ -266,7 +265,7 @@ The System Information page can truncate the WAL or rebuild the database, and re
 the second while the first runs. Both wait for in-flight writes rather than interrupting
 them, and a rebuild is declined up front when the filesystem lacks the free space SQLite
 documents needing (up to twice the database file). A job cannot outlive a restart.
-`docs/ops/sqlite-operations.md` §6 covers the same operations from the host.
+[SQLite maintenance](ops/sqlite-operations.md#6-data-retention--periodic-maintenance) covers the same operations from the host.
 
 ## Agent and MCP
 
@@ -354,7 +353,7 @@ heartbeat interval. The dedicated stream can last ten minutes, with a 120-second
 upstream first-response or idle timeout. Ordinary API timeouts are unchanged. Request
 diagnostics never return credentials; copied cURL needs CPA_BASE_URL, CPA_API_KEY and
 replacement image data URLs. The public demonstration shows the page and model directory
-and offers one browser-local recorded example without inference (ADR 0092).
+and offers one browser-local recorded example without inference.
 
 ## Recovering Agent and Playground runs
 
@@ -452,7 +451,7 @@ The plugin store reads CPA's built-in `official` registry plus the registries in
 (`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json`)
 is a managed entry: the server adds it when the source is on (the default) and restores
 it after a configuration save that removed it, so the switch is **OMC Settings →
-Plugin store** (`omc_plugin_source_enabled`, ADR 0104), not the configuration editor
+Plugin store** (`omc_plugin_source_enabled`), not the configuration editor
 and not the source list on the plugin settings tab. Turning it off removes the
 address on the next plugin read, install or plugin-settings save. Its entries are
 marked Oh My CPA and listed first; like every entry outside CPA's built-in registry,
@@ -461,38 +460,23 @@ running code inside the gateway.
 
 ## Plugin pages
 
-A trusted installed page loads through `<base>/api/v1/plugin-host/` behind the console
-session; CPA need not be reachable from the browser. It can use CPA-native v0/v8 management
-routes and the fixed model directory, including configuration containing client and provider
-secrets. Install only plugins you trust: the page is same-origin with the console and acts
-with the signed-in operator's authority, while the plugin already runs inside CPA.
+Installed plugin pages open through OMC's authenticated same-origin host; CPA does
+not need to be reachable from the browser. Treat installation as granting trusted
+code access, not as opening an isolated dashboard: native management responses can
+include configuration credentials. Review the plugin's source and provenance before
+installing or opening it.
 
-The host adapts same-origin native API and resource fetches to carry the OMC session,
-including pages that set `credentials: 'omit'`. This does not grant access without a
-console session or change credentials on external requests. Plugin scripts that identify
-their provider through direct `location.pathname` access receive the CPA-native resource
-path, while the frame itself remains under the configured OMC base path.
+The host can supply the stored management key server-side when the page sends no
+credential. A key explicitly entered into a plugin page is checked instead, so an
+empty or incorrect key is not silently replaced. The model directory uses the page's
+client key and cannot borrow the management key. Plugin assets never receive an
+injected management key.
 
-A plugin page may ask for a management key of its own. The host compares a page's explicit
-Authorization or X-Management-Key with the stored CPA management key and answers a wrong one
-`401` itself; the wrong key is never sent to CPA, so it cannot count toward CPA's
-failed-attempt ban (five failures ban the client address for 30 minutes, and the console
-and every hosted page share one address). Only the key stored for the instance is accepted
-there. CPA has a single configured key, not a list, but may also honour `MANAGEMENT_PASSWORD`
-and a loopback-only `--password`; when those differ from the stored key, enter the stored one. When both
-headers are absent, management calls use the stored key; resources carry no key, and
-`GET /v1/models` uses only the page's client Authorization. OMC does not publish or store its management key in browser storage;
-a third-party page may independently ask for and store a key the operator supplies.
-
-API reads and writes are audited as `plugin.route_call` and responses are uncached.
-Configuration-affecting native writes are serialized with console writes and require a
-pre-write configuration backup; a backup failure blocks the mutation. All v8 writes and known core v0 writes are conservatively
-classified for these gates; ordinary deep plugin actions such as credential synchronization
-remain plugin-owned. Native config writes retain CPA's last-write semantics, so do
-not concurrently edit the same configuration in a plugin and an unsaved console draft.
-Cookies and Set-Cookie are excluded, redirects are not followed, and arbitrary outbound
-`api-call` bridges are refused. These routes remain unavailable in demo and are not Agent/MCP
-capabilities (ADR 0067).
+Configuration-affecting calls are audited, serialized and backed up. Native plugin
+writes still follow CPA's last-write semantics: do not edit the same settings in a
+plugin while keeping an unsaved console draft. These routes are unavailable in demo
+mode and are not Agent/MCP capabilities. The exact fixed-origin, header and path
+restrictions are defined in [Architecture](architecture.md#trusted-plugin-pages).
 
 ## Demo mode
 
@@ -512,10 +496,8 @@ OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 This mode is what generates the public demonstration's dataset, so it stays in use even
 though the public deployment does not run it; `OMCPA_PUBLIC_URL` states that
 deployment's origin. The public demo is the same console as static assets with its API
-answered by a Cloudflare Worker from that generated dataset: `docs/ops/cloudflare-demo.md`
-is its runbook, `docs/architecture.md` §13 and
-[ADR 0021](adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)
-record why.
+answered by a Cloudflare Worker from that generated dataset. See
+[the demo runbook](ops/cloudflare-demo.md) for its build and deployment procedure.
 
 ## Available model directory
 
@@ -580,7 +562,7 @@ reads but refuses durable changes.
 
 The `kimi-ai` connection method uses the international Kimi account system. Its
 quota observation is a server-initiated `GET` to the compiled, single-endpoint
-allowlist entry `https://api.kimi.ai/coding/v1/usages` (ADR 0064). Domestic Kimi
+allowlist entry `https://api.kimi.ai/coding/v1/usages`. Domestic Kimi
 credentials continue to use `https://api.kimi.com/coding/v1/usages`. Selection
 uses credential type, provider and file name; the console does not download the
 token to detect an account system or retry the token against the other host.
@@ -593,12 +575,12 @@ key, with the monthly Total pool the common case for a plan without a weekly lim
 A counted limit that already describes a period wins it, because it carries the
 absolute usage a share cannot, and a pool states no counts of its own. A pool key
 naming no known period keeps its own name as an unclassified window rather than
-being filed under a period it does not describe (ADR 0071).
+being filed under a period it does not describe.
 
 ## Automatic quota refresh
 
 OMC Settings → Quota holds the deployment-wide automatic quota refresh policy (the
-`omc_quota_auto_refresh` preference, ADR 0094). **Refresh after a quota resets** is on
+`omc_quota_auto_refresh` preference). **Refresh after a quota resets** is on
 by default: about a minute after a window a stored reading reported has reset, that
 credential is read again once. **Scheduled quota refresh** reads every enabled credential whose reading is
 older than the interval - six hours by default, adjustable from 5 minutes to 24 hours,
@@ -654,13 +636,13 @@ come from the daily host's `loadCodeAssist` endpoint, with paid tier taking
 precedence over current tier. If these supplemental reads fail, usage remains
 readable: xAI keeps its billing fallback, while Antigravity shows an unknown tier
 rather than assuming Pro. New endpoints are individually allowlisted and neither
-console nor Agent/MCP accepts a caller-chosen URL (ADR 0065, ADR 0071).
+console nor Agent/MCP accepts a caller-chosen URL.
 
 A refresh that succeeds without publishing any window is recorded as an
 `unpublished` reading rather than as a credential nobody has read, and the console
 says so with its own status and copy. Every provider's window parser can produce
 that reading, and it is what an unrecognized upstream document shape now surfaces
-as (ADR 0071).
+as.
 
 ## Credential management actions
 
@@ -687,7 +669,7 @@ failure is logged without tokens or uploaded key material.
 
 The public demonstration's Agent and Playground offer one browser-local recorded example
 each. Send/retry/cancel do not invoke a provider or write the Worker. Other questions are
-refused. The server-side demo security classification is unchanged; ADR 0092 documents replay.
+refused. The demo security boundary still refuses server-side writes.
 
 ## Credential window warmup
 

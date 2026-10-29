@@ -66,7 +66,7 @@ const { Text } = Typography;
 
 // Status classes are shown as the numeric class, not as invented English words:
 // the log line itself says 400, and a localized UI must not caption it SUCCESS
-// under a different reading language (design.md rule 3).
+// under a different reading language.
 /** Anything of antd's that Escape should close before it closes the fullscreen viewer. */
 const OPEN_OVERLAY_SELECTOR = '.ant-select-open, .ant-popover:not(.ant-popover-hidden), .ant-modal-wrap:not([style*="display: none"]), .ant-drawer-open';
 
@@ -205,7 +205,7 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
     },
   ];
 
-  // Below 640px one file per row (ADR 0012): the file name is the headline, the size and the
+  // Below 640px one file per row: the file name is the headline, the size and the
   // modified time are labelled fields, and the download control gets its own line.
   return (
     <ResponsiveList

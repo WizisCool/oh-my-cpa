@@ -107,7 +107,7 @@ function reasoningMarkup(text: string, labels: SnapshotLabels): string {
 const CALL_MARKS: Partial<Record<SnapshotCall['tone'], IconName>> = { success: 'check', warning: 'warning', error: 'close' };
 
 /**
- * One capability call as the disclosure the conversation draws (ADR 0084): a row of status mark,
+ * One capability call as the disclosure the conversation draws: a row of status mark,
  * title, arguments in brief and duration, and under it what was sent and what came back.
  */
 function callMarkup(call: SnapshotCall, labels: SnapshotLabels): string {

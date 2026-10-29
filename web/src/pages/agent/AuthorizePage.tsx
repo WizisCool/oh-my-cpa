@@ -32,7 +32,7 @@ import { Tag } from '../../components/common/Tag';
  * authorization screens of the services their agents connect to.
  *
  * The address only names the operation; the decision goes through the same card logic and
- * decision endpoint as the built-in Agent's approvals (ADR 0035), under the operator's session.
+ * decision endpoint as the built-in Agent's approvals, under the operator's session.
  */
 export function AuthorizePage() {
   const { t } = useI18n();

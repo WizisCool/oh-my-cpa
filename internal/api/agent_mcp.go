@@ -73,7 +73,7 @@ func (h *Handler) mcpHandler() (http.Handler, error) {
 	return h.agent.mcp, nil
 }
 
-// serveMCP is the capability registry as a Streamable HTTP MCP endpoint (ADR 0070).
+// serveMCP is the capability registry as a Streamable HTTP MCP endpoint.
 //
 // It accepts the management key as a bearer token and nothing else: a session cookie is not
 // an MCP credential, so a page open in the operator's browser cannot drive the endpoint.

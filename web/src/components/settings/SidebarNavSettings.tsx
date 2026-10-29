@@ -51,8 +51,7 @@ import { Tooltip } from '../common/Tooltip';
  * about reaching the setting, not about where the setting sits.
  *
  * Neither the row nor the panel carries a per-entry sentence: the group name says what it is, and
- * "Dashboard" needs no gloss - copy that only restates a label is the decorative text
- * `docs/design.md` §3 rules out.
+ * "Dashboard" needs no gloss, so repeating the name would add no information.
  */
 export const SidebarNavSettings: React.FC = () => {
   const t = useT();

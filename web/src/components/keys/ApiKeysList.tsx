@@ -50,7 +50,7 @@ export interface ApiKeysListProps {
 /**
  * The key list: one row per gateway client key, drawn with the provider list's parts - an identity
  * tile, the facts a reader compares across rows, and quiet row actions - so the two Gateway lists
- * read alike. Below 640px it renders labelled rows from the same columns (ADR 0012).
+ * read alike. Below 640px it renders labelled rows from the same columns.
  */
 export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   records,

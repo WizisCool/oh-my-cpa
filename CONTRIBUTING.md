@@ -1,99 +1,66 @@
 # Contributing to Oh My CPA
 
-Thank you for your interest in contributing to Oh My CPA! We welcome bug reports, feature suggestions, documentation improvements, and code contributions.
+Report bugs and feature requests through the [issue forms](.github/ISSUE_TEMPLATE/).
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+Do not upload production data, credentials, auth files or unredacted logs.
 
-Bug reports and feature requests go through the issue forms under [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/); security vulnerabilities are reported privately as described in [`SECURITY.md`](SECURITY.md).
+## Start locally
 
----
+Use the toolchains pinned by [package.json](package.json), [go.mod](go.mod) and the
+repository's tool-version files rather than version numbers copied into a guide.
+Install Air if you want the Go watcher used by `pnpm dev`.
 
-## Code of Conduct & Ground Rules
+```bash
+git clone https://github.com/<your-username>/oh-my-cpa.git
+cd oh-my-cpa
+pnpm install --frozen-lockfile
+cp .env.example .env
+pnpm dev
+```
 
-- **Zero Secret Exposure**: Never submit real API keys, tokens, auth files, or sensitive production data in pull requests, issues, or commit history.
-- **Explain Why, Not What**: Code comments must be written in **English** and focus on design rationale, non-obvious constraints, and edge cases.
-- **Keep Docs Accurate**: If your change alters an endpoint, configuration, UI token, or architectural boundary, update the documents it makes wrong in the same pull request (see [`AGENTS.md`](AGENTS.md) §7).
+Before starting, fill the private `.env` with a new 32-byte hex `OMCPA_MASTER_KEY`
+and your local CPA management key. Generate a master key with `openssl rand -hex 32`;
+never replace the key for an existing data directory. CPA must already be available,
+or be started separately with `pnpm cpa:start` after its local configuration is ready.
+The default development console is `http://127.0.0.1:5173/`.
 
----
+## Find the relevant context
 
-## Getting Started
+- [AGENTS.md](AGENTS.md): boundaries and a task-oriented guide map for all contributors.
+- [CONTEXT.md](CONTEXT.md): project vocabulary.
+- [Architecture](docs/architecture.md): ownership and trust boundaries.
+- [Design](docs/design.md): UI composition and interaction principles.
+- [Testing](docs/testing.md): test ownership, local checks and CI expectations.
 
-### Prerequisites
+Executable declarations own field lists, defaults and design-token values. Update the
+one guide your change makes wrong; a feature does not require a new architecture
+record, mirrored catalog or synchronized specification.
 
-- **Go**: 1.26+ (pinned to `1.27.3` in CI)
-- **Node.js**: 22+ (pinned to `22.23.4`)
-- **pnpm**: 11+ (pinned to `11.19.0`)
-- **Air**: (optional, for Go hot reloading): `go install github.com/air-verse/air@latest`
+## Verify a change
 
-### Local Development Setup
+Start with `pnpm test:fast`; use `--plan` to inspect affected-check selection.
+`pnpm test:frontend` runs frontend tests, and `pnpm check:ui` exercises browser
+behavior. Additional checks depend on the risk: see [Testing](docs/testing.md),
+including shipped-build and release verification. Do not substitute a dev-server
+pass for testing the embedded application.
 
-1. **Fork and clone the repository**:
-   ```bash
-   git clone https://github.com/<your-username>/oh-my-cpa.git
-   cd oh-my-cpa
-   pnpm install --frozen-lockfile
-   ```
+Prefer a small regression in the lowest layer that can fail for the right reason.
+Reuse existing cases and prove a bug test fails without the fix. Avoid duplicate
+claims, assertion-free smoke tests and checks of prose or implementation details.
+Fix timing and shared-state problems rather than adding sleeps, retries or skips.
 
-2. **Set up local environment**:
-   ```bash
-   cp .env.example .env
-   ```
-   Provide a 32-byte hex string for `OMCPA_MASTER_KEY` (`openssl rand -hex 32`) and your local CLIProxyAPI management key for `OMCPA_CPA_MANAGEMENT_KEY`.
+## Submit
 
-3. **Start the development servers**:
-   ```bash
-   pnpm dev
-   ```
-   This launches Air (watching Go backend on `:8080`) and Vite (frontend dev server on `:5173`) concurrently. Access the console at **`http://127.0.0.1:5173/`**.
+External contributors create a feature branch from `main` and open a pull request.
+Maintainers may land tested work directly on `main`; agents commit or push only when
+asked. Use focused commits, explain the behavior changed, and include verification
+results and any limitations. Keep unrelated edits separate.
 
----
+Use concise conventional commit subjects (`fix:`, `feat:`, `refactor:`, `docs:`).
+A draft PR is useful for large work in progress. Automated review supplements the
+repository checks and maintainer review; it does not replace either.
 
-## Verification Gates
-
-Run `pnpm test:fast` while editing and before pushing: it selects only the checks the
-changed files need. Add `pnpm check:ui` in the background when the change moves layout,
-interaction or browser lifecycle. Build, embedded distribution, browser harness and
-workflow changes also need `pnpm verify:full`.
-
-Pull requests run the CI lanes their paths reach. Every push to `main`, the nightly run,
-a manual run and the `full-ci` label run the full catalog, including the production SPA
-and embedded Go binary build, browser and demo acceptance, and every probe. Release tags
-are cut only from a commit whose `main` CI run is green.
-
-Do not rerun a gate after each edit. When a check fails, rerun that check first.
-[`AGENTS.md`](AGENTS.md) §5 defines the verification rules; [`docs/testing.md`](docs/testing.md)
-says which layer owns a claim. The full command list is in [`AGENTS.md`](AGENTS.md) §8
-and [`package.json`](package.json).
-
----
-
-## Development Guidelines
-
-### 1. Localization
-User-facing strings must never be hardcoded in backend responses or React components. New copy arrives in all four languages at once: add the id to `web/src/i18n/locales/zh/<area>.ts`, then to the same file under `en/`, `zh-Hant/` and `ms/`, then run `pnpm check-i18n`. Translators do not need to touch code: the catalogs are the whole surface.
-
-### 2. Styling & Theme Tokens
-- Never hardcode color hex values in components. Read the resolved palette from `web/src/theme/palette.ts` or use the CSS variables from `docs/design.md`; the eighteen derived tokens are computed, so reach for the relationship rather than re-deriving one.
-- Oh My CPA uses a **terminal-flat** design language: zero box shadows (`box-shadow: none`), 4px border radii, and 1px hairline borders. Status colors (green, amber, red) are reserved strictly for semantic system health.
-
-### 3. API & DTO Allowlisting
-- The backend enforces strict DTO allowlists in `internal/api/`. Ordinary responses must not pass through raw, unsanitized CPA payloads. The trusted Plugin Host is the bounded native-response exception in ADR 0067, with credential separation, auditing, serialization and backups. Arbitrary target URLs remain forbidden.
-
----
-
-## Contribution Workflow
-
-Maintainers may push tested changes directly to `main`. Agents commit or push only when
-the user asks. External contributors use a feature branch and open a pull request against
-`main`:
-
-1. Create a descriptive feature branch from `main`:
-   ```bash
-   git fetch origin main
-   git switch -c feat/your-feature-name origin/main
-   ```
-2. Commit your changes with concise, conventional commit messages (`feat: ...`, `fix: ...`, `docs: ...`, `test: ...`).
-3. Run `pnpm test:fast` and the additional checks the change needs, as described under
-   [Verification Gates](#verification-gates).
-4. Push your branch to your fork and open a Pull Request against `main`.
-5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md). A non-draft pull request is reviewed once, when it opens; comment `@coderabbitai review` to request a later review. A release preparation pull request, titled `chore(release): prepare vX.Y.Z`, is exempt: the changes it describes were reviewed when they merged.
-6. Fill in the pull request template ([`.github/pull_request_template.md`](.github/pull_request_template.md)): the problem and the solution, the context documents updated, and the gates that were run. Title the pull request `type(scope): lowercase subject`.
-7. When your Pull Request is squashed and merged, GitHub will automatically append `(#<PR_NUMBER>)` to the commit title (e.g. `feat: add client key alias (#12)`), maintaining an auditable, linear history matching the project standard.
+User-facing copy belongs in all four [locale catalogs](web/src/i18n/locales/) rather
+than hardcoded in components. Follow the [copy guide](web/src/i18n/STYLE.md).
+Technical prose and intent-focused code comments are English. Contributions are
+licensed under the project's [MIT license](LICENSE).

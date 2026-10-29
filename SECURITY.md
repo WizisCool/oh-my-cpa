@@ -43,7 +43,7 @@ When evaluating potential vulnerabilities, please keep the following security bo
 - **Secret Separation**: The storage encryption key (`OMCPA_MASTER_KEY`) encrypts credentials and raw usage payloads at rest via AES-GCM. Losing it permanently prevents decryption.
 - **Sanitized Projections**: Ordinary API responses use strict DTO allowlists and redact secrets (displaying only fingerprints or masks).
 - **Audited Administrative Surfaces**: Operations that intentionally access or modify secrets (such as viewing raw YAML source or revealing client API keys) require active admin sessions, CSRF / same-origin validation, and are recorded to the append-only `audit_events` log.
-- **The Updater Holds the Docker Socket, the Console Does Not**: Console updates (ADR 0099) are applied by a separate `oh-my-cpa-updater` container that mounts the Docker socket and is therefore equivalent to control of Docker on its host. It publishes no port, authenticates the console with an HMAC of `OMCPA_MASTER_KEY`, accepts only a product name (`omc` or `cpa`), replaces Oh My CPA only with the image named by an Ed25519-signed release manifest, and refuses pinned images. Reports that make it pull or run an image of the caller's choosing, or reach it without the token, are in scope; that a host administrator can remove or impersonate it is not.
+- **The Updater Holds the Docker Socket, the Console Does Not**: Console updates are applied by a separate `oh-my-cpa-updater` container that mounts the Docker socket and is therefore equivalent to control of Docker on its host. It publishes no port, authenticates the console with an HMAC of `OMCPA_MASTER_KEY`, accepts only a product name (`omc` or `cpa`), replaces Oh My CPA only with the image named by an Ed25519-signed release manifest, and refuses pinned images. Reports that make it pull or run an image of the caller's choosing, or reach it without the token, are in scope; that a host administrator can remove or impersonate it is not.
 - **No Arbitrary Upstream Proxying**: Generic `/api-call` forwarding is disabled for browser traffic to prevent SSRF.
 
 ## Dependency Security Overrides
@@ -76,9 +76,9 @@ Installing a plugin authorizes its same-origin page to act as the signed-in oper
 The authenticated Plugin Host intentionally exposes native v0/v8 management responses,
 including provider and client secrets, but never injects the stored management key into
 page resources or browser storage. An explicit page management credential is compared with the stored key inside OMC and
-never forwarded, so a wrong one cannot spend CPA's failed-attempt ban (ADR 0069);
+never forwarded, so a wrong one cannot spend CPA's failed-attempt ban;
 model-directory requests receive only the page's client Authorization. All API reads and
 writes are audited without request payloads, path suffixes or queries, and are uncached.
 Native config writes share serialization and encrypted pre-write backups. Both outbound
 `api-call` bridges are denied. This exception does not alter ordinary DTO projections,
-Agent/MCP capabilities or demo restrictions (ADR 0067).
+Agent/MCP capabilities or demo restrictions.

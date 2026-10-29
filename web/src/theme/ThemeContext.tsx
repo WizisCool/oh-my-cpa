@@ -383,7 +383,7 @@ export function useTheme(): ThemeContextValue {
  * ThemeServerSync carries the theme preference between this browser and the deployment.
  *
  * The rule is **the newer writer wins, and this browser's own unsaved change counts as newer than
- * whatever the deployment still holds** - see `docs/adr/0011-theme-modes-and-derived-palettes.md`.
+ * whatever the deployment still holds**.
  * It has to work that way because the preference endpoint needs a session and the sign-in screen
  * does not have one: an operator who switches to light before signing in has already expressed a
  * choice, and adopting the deployment's older value on arrival would silently undo it. The cost is

@@ -187,7 +187,7 @@ func TestPluginHostRequiresTheConsoleSession(t *testing.T) {
 }
 
 // A key mistyped into a plugin page must fail there, without becoming a failed
-// CPA authentication from the console's address (ADR 0069).
+// CPA authentication from the console's address.
 func TestPluginHostRefusesWrongPageCredentialsBeforeCPA(t *testing.T) {
 	client, baseURL, _, state := startPluginTestServer(t)
 	for _, target := range []string{"/v0/management/plugins/example/state", "/v0/management/config", "/v8/management/config/api-keys"} {

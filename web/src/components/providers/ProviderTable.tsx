@@ -368,7 +368,7 @@ export function ProviderTable({
     },
   ];
 
-  // Below 640px each credential line becomes a row (ADR 0012). The name is the headline, and the
+  // Below 640px each credential line becomes a row. The name is the headline, and the
   // state, the switch and the actions are the row's control strip - printing them twice would make
   // the row read as if it had two states that could disagree.
   return (

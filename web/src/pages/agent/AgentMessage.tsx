@@ -86,7 +86,7 @@ export function AgentUserMessage() {
 /**
  * Reasoning and capability calls form the answer's chain of thought; the answer stays outside it.
  * An OpenUI call is the answer, so it is drawn where the model made it, as the interface itself
- * (ADR 0082, 0088), never folded into the working above it.
+ * and never folded into the working above it.
  *
  * `agent/answerLayout.ts` states the same rule as a plain function for a saved copy of the
  * conversation; the two change together.
@@ -101,7 +101,7 @@ const GROUP_BY = groupPartByType({
 type GroupPart = { readonly type: `group-${string}`; readonly indices: readonly number[] };
 
 /**
- * A stretch of reasoning and calls, as a timeline (ADR 0084): one line that says how much work
+ * A stretch of reasoning and calls, as a timeline: one line that says how much work
  * there was, and under it the steps in the order they happened, joined by a rail.
  *
  * The stretch the run is working in right now is open, as is one where a call needs the operator;

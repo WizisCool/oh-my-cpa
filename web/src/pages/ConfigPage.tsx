@@ -145,7 +145,7 @@ export const ConfigPage: React.FC = () => {
 
   // ── API Keys ────────────────────────────────────────────
   // The key list is edited on its own page (/api-keys), which is the only editor
-  // of that field (ADR 0010). What the configuration panel owns is the pointer to
+  // of that field. What the configuration panel owns is the pointer to
   // it: a group that names the field, states how many keys are configured, and
   // leads there. Hiding the group instead - what this page did before - left the
   // panel silent about a field it owns. The `apiKeys` schema field itself stays:

@@ -153,7 +153,7 @@
    card holds a different list width than the same viewport with the rail open. The
    question "do the columns still fit" is about the box the columns are in, and only the
    container can answer it. It is therefore the one threshold in the console that is not a
-   viewport one, alongside the shell's 900px and the phone's 640px (docs/design.md §8). */
+   viewport one, alongside the shell's 900px and the phone's 640px. */
 @container reqstream (max-width: 920px) {
   .request-table-scroll-area {
     overflow-x: visible;
@@ -201,7 +201,7 @@
   line-height: 1.8;
 }
 /* The phone refinements, at the console's phone breakpoint rather than a third number of their
-   own (docs/design.md §8).
+   own.
 
    The head is one row of state and tools: the shell's bar already names the page and the window
    button already states the window, so neither is drawn twice. The list then runs to the screen's
@@ -286,7 +286,7 @@
     min-height: 0;
   }
 }
-/* Where a finger can scroll, the browser scrolls the list itself (ADR 0109). A drag that reaches
+/* Where a finger can scroll, the browser scrolls the list itself. A drag that reaches
    either end stays with the list: handed on, it used to scroll the page around the list and bounce
    it, or reload it when pulled down at the top. The list keeps the platform's own end bounce, which
    is part of a native scroller's feel; `contain` rather than `none` is what leaves it that. Rows away from the view keep their place in the scroll

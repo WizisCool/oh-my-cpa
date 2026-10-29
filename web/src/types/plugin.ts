@@ -17,7 +17,7 @@ export interface PluginMetadata {
   logo?: string;
 }
 
-/** A page a plugin serves itself, shown inside the console (ADR 0060). */
+/** A page a plugin serves itself, shown inside the console. */
 export interface PluginPage {
   /** CPA's own resource path, `/v0/resource/plugins/<id>/...`; the console reads it through its plugin host. */
   path: string;

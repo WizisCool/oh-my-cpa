@@ -24,7 +24,7 @@ import type {
 import type { Presentation } from './types';
 
 /**
- * The AG-UI events OMC's Agent emits (ADR 0041). Types come from `@ag-ui/core`; only its type
+ * The AG-UI events OMC's Agent emits. Types come from `@ag-ui/core`; only its type
  * declarations and the `EventType` enum are used, so the protocol's runtime validators never reach
  * the bundle. Validation here is the narrower check this console needs: a known type carrying the
  * fields the reducer reads.

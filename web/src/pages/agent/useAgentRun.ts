@@ -89,7 +89,7 @@ export class RunRejectedError extends Error {
 function newRunID(): string { return createID('run'); }
 
 /**
- * Drives one Agent run over AG-UI (ADR 0041).
+ * Drives one Agent run over AG-UI.
  *
  * The turn's authoritative state lives on the server: this hook folds the event stream into a
  * frame for display, writes back the conversation the run reports in its final snapshot, and

@@ -14,7 +14,7 @@
  * The document is stored twice on purpose: in `localStorage` under `omc-theme` so the console is
  * painted correctly in the first frame and on the sign-in screen where there is no session to read
  * a preference with, and in the deployment's `ui_preferences` so the choice outlives a browser.
- * `dirty` is the bridge between them - see `docs/adr/0011-theme-modes-and-derived-palettes.md`.
+ * `dirty` marks local edits that have not yet been synchronized with the deployment.
  */
 
 import {
@@ -249,9 +249,8 @@ export function resolveModePreference(preference: ThemeModePreference, systemMod
  *
  * The order is light, dark, system. Light and dark lead because they are the two states an operator
  * reaches for daily and the first click should answer the common case; system is the considered
- * choice and costs the extra click. `docs/design.md` §5 records why a cycling control is acceptable
- * here when the language control is a menu - the mode has three states and one visible consequence,
- * so the cycle is readable from the icon, where a list of six palettes was not.
+ * choice and costs the extra click. Unlike the language menu, the mode control has only three
+ * states and one visible consequence, so the cycle is readable from the icon.
  */
 export function nextModePreference(preference: ThemeModePreference): ThemeModePreference {
   const index = THEME_MODE_PREFERENCES.indexOf(preference);

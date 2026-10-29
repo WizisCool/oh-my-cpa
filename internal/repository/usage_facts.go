@@ -91,7 +91,7 @@ const (
 	// API-key request, and empty for every other record. CPA labels an API-key
 	// request with its family, the same label an OAuth request of that family
 	// carries, so the provider label alone cannot say which configured provider
-	// answered (ADR 0040).
+	// answered.
 	UsageDimensionServingKey UsageDimension = "serving_key"
 )
 

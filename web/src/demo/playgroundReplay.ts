@@ -6,7 +6,7 @@ import recording from './playgroundRecording.json';
 const THOUGHT_CHUNK = 14;
 
 /**
- * Replays the recorded Playground answer as the events a live request streams (ADR 0092).
+ * Replays the recorded Playground answer as the events a live request streams.
  *
  * The same idea as the Agent's replay: the demonstration calls no model, so this stands where
  * the chat request does and delivers the facade's own event vocabulary - the request's start,

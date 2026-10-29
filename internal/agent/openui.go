@@ -16,7 +16,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 )
 
-// The Agent answers in OpenUI (ADR 0107): the model writes an OpenUI Lang program into the official
+// The Agent answers in OpenUI: the model writes an OpenUI Lang program into the official
 // assistant-ui integration's tools, and the console renders it with the official OpenUI renderer.
 //
 //   - present_openui is the answer itself. It changes nothing, so it never reaches the executor: the

@@ -15,8 +15,8 @@ import (
 // The plugin host supplies the native CPA contract to trusted installed pages.
 // Unlike ordinary console DTOs, management responses may contain secrets; reads
 // and writes are audited. A page's own management credential is judged against
-// the stored key before CPA is called (ADR 0069), resource reads carry none, and
-// gateway models use only the page's client key (ADR 0067).
+// the stored key before CPA is called, resource reads carry none, and
+// gateway models use only the page's client key.
 
 // PLUGIN_HOST_ROUTE is the host's mount point below `/api/v1`.
 const PLUGIN_HOST_ROUTE = "/plugin-host"

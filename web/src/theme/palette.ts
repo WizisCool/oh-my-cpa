@@ -16,9 +16,7 @@
  *
  * The six built-in palettes are authored as nine tokens too, and their derived values are
  * computed like any other palette's. They are still hand-authored, just at nine values
- * instead of thirty. See `docs/adr/0011-theme-modes-and-derived-palettes.md` for the
- * formula, its constants, and the named places where it deliberately differs from the old
- * hand-tuned values.
+ * instead of thirty. Derivation and contrast bounds live here, alongside the authored values.
  */
 
 import type { MessageKey } from '../i18n/catalog';
@@ -29,7 +27,7 @@ import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice 
 // Live labels sweep this same foreground over secondary ink; motion adds no palette colour.
 export const THREAD_FILL_SHARES = { field: 5, fieldHover: 8, hairline: 12 } as const;
 
-// Conversation shapes sit on the console's corner scale (design.md §4): controls take the
+// Conversation shapes sit on the console's corner scale: controls take the
 // control step, printed documents and floating surfaces the menu steps, the composer the card step.
 export const THREAD_RADII = { document: 8, control: 6, surface: 10, thread: 12 } as const;
 
@@ -222,9 +220,8 @@ const LABEL_CONTRAST_TARGET = 4.6;
 /**
  * The floor every filled accent control's label is guaranteed to clear.
  *
- * Exported because it is a promise the console makes to itself rather than an implementation
- * detail: `scripts/test-theme-presets.ts` asserts it against every palette, built-in and authored
- * alike, and `docs/design.md` §2 states it as a rule.
+ * Exported so palette consumers and contrast checks share one bound for built-in and
+ * authored palettes alike.
  */
 export const ACCENT_LABEL_CONTRAST_FLOOR = 4.5;
 
@@ -262,12 +259,10 @@ type LadderDirection = 'deeper' | 'lighter';
  *
  * The status hues, the categorical series palette, the routing lane palette and the
  * reasoning-effort scale are *semantics*, not palette: green means healthy and never anything
- * else, a category slot is a fixed identity whose family survives a theme switch
- * (`docs/adr/0006-categorical-series-palette.md`), and an effort step is a fixed place on
- * one ordered sweep. Deriving them
- * from an operator's accent would make "green" depend on a colour choice, which is the one
- * thing `docs/design.md` §1 forbids. They are constants here, and a custom palette inherits
- * its mode's set - tuned on the mode's own palette and held to that contrast elsewhere by
+ * else, a category slot is a fixed identity whose family survives a theme switch,
+ * and an effort step is a fixed place on one ordered sweep. Deriving them from an operator's
+ * accent would make status depend on a colour choice. They are constants here, and a custom
+ * palette inherits its mode's set - tuned on the mode's own palette and held to that contrast by
  * `holdSignal`.
  */
 const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; series: readonly string[]; route: readonly string[]; effort: readonly string[] }> = {

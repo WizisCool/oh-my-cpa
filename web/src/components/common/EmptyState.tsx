@@ -22,8 +22,8 @@ export interface EmptyStateProps {
  *
  * The mark is a sheet carrying three shortening rules - the rows that are not there - with a second
  * sheet fanned behind it, drawn in CSS from the page's own layers in place of Ant Design's
- * illustrated tray: the console's only pictures are the shapes its pages are made of (design.md §1). Loading and failure are not empty states;
- * they belong to `PageLoading` and `LoadFailure`.
+ * illustrated tray. Reusing the page's shapes keeps the mark at home in either theme.
+ * Loading and failure are not empty states; they belong to `PageLoading` and `LoadFailure`.
  */
 export function EmptyState({ title, description, children, size = 'block', className, testId }: EmptyStateProps) {
   return (

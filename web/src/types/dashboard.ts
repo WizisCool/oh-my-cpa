@@ -105,8 +105,7 @@ export interface DashboardResponse {
 
 /**
  * Range presets offered by the dashboard picker, shortest first. "15m" is the
- * one the picker labels Live — see docs/design.md for why fifteen minutes and
- * not five.
+ * one the picker labels Live.
  *
  * "all" has no length of its own: the server starts it at the deployment's first
  * usage record, which is why no table here maps a preset to a span.

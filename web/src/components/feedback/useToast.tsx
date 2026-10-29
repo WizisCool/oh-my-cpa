@@ -19,7 +19,7 @@ export type { ToastItem, ToastItemGroup, ToastOptions, ToastTone } from './toast
  * A toast answers an action - saved, copied, refused, three of five refreshed - and then leaves.
  * What is true of a region for as long as it is on screen (its data failed to load, it is stale,
  * a feature is off) is not an outcome and belongs inline, through `Notice` or `LoadFailure`, where
- * the reader looks for the region and where its retry sits. `docs/design.md` §Feedback surfaces
+ * the reader looks for the region and where its retry sits. `docs/design.md` (Feedback and loading)
  * owns the rule; `pnpm check:feedback` keeps the raw Ant Design APIs from bypassing it.
  */
 export interface Toast {

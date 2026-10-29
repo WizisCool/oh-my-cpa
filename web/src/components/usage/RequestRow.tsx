@@ -120,7 +120,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
     // 2. Cache rate calculation, plus its stop on the 0–100% colour scale.
     //    The scale stops are design tokens; the badge mixes them in OKLCH via
-    //    CSS, so no colour is named here (docs/design.md §2).
+    //    CSS, so no colour is named here.
     const cache = eventCacheRate(event.tokens);
     const cacheLabel = cache.hasData ? formatCacheRate(cache.rate) : '—';
     const cacheScale = cacheScaleMix(cache.rate);
@@ -270,7 +270,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             )}
             {providerKeyMask && (
               /* The tooltip repeats the cell's own mask and nothing more: the value
-                 itself is never held by this page (ADR 0015). */
+                 itself is never held by this page. */
               <span className="req-provider-credential req-provider-key" title={providerKeyMask}>
                 {providerKeyMask}
               </span>

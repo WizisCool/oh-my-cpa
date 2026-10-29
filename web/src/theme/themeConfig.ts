@@ -26,13 +26,12 @@ export interface MotionToken {
 export const MOTION_FAST: MotionToken = { duration: 120, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
 /**
- * docs/design.md §7's `roll` token: the dashboard's KPI readouts sweeping to a new value, and the
+ * The `roll` token: the dashboard's KPI readouts sweeping to a new value, and the
  * chart marks behind them morphing between two revisions.
  *
- * The only motion in the console longer than `base`, and the only one allowed to run on a poll the
- * reader did not ask for - §7 rules 8 and 5 scope it, and ADR 0007 / ADR 0008 record the trade-off.
- * It lives here rather than in the components that consume it because it is a design token: a digit
- * move at `base` is indistinguishable from a redraw, which is the state 240ms exists to leave.
+ * Readout sweeps run on refresh so live KPI changes remain legible. The shared token keeps the
+ * number and chart revisions in step: a digit move at `base` is indistinguishable from a redraw,
+ * which is the state 240ms exists to leave.
  */
 export const MOTION_ROLL: MotionToken = { duration: 240, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
@@ -45,7 +44,7 @@ export const MOTION_ROLL: MotionToken = { duration: 240, easing: 'cubic-bezier(0
 export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 180, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
 /**
- * docs/design.md §7's `scroll` token: one wheel notch or scrolling key gliding to where it would have
+ * The `scroll` token: one wheel notch or scrolling key gliding to where it would have
  * jumped (`web/src/utils/scrollSmoothing.ts`).
  *
  * Long enough that a 100px notch reads as travel rather than a cut, short enough that a turning
@@ -57,10 +56,10 @@ export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 180, easing: 'cubic
 export const MOTION_SCROLL: MotionToken = { duration: 160, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' };
 
 /**
- * docs/design.md §7's `route` token: one hop of a stored request travelling the routing map, from
+ * The `route` token: one hop of a stored request travelling the routing map, from
  * the caller to the gateway or from the gateway to the credential that answered it.
  *
- * The only motion that runs on a live signal rather than on an action or a poll (§7 rule 9). It is
+ * This motion runs on a live signal rather than on an action or a poll. It is
  * longer than `roll` because the reader has to follow a point across most of the map's width, which
  * a quarter second does not allow; it is a fixed length rather than one scaled by distance so a
  * reroute's second hop lands on the same beat as a first. The easing starts and ends at rest, unlike
@@ -87,7 +86,7 @@ export const MOTION_ROUTE_PRESENCE: MotionToken = { duration: 300, easing: 'cubi
 /**
  * A routing-map row arriving: it fades in while drifting a few pixels from its own edge of the map,
  * on the console's decelerating curve. Longer than a transition because a row arriving is an event
- * the reader should notice, and never past its target: the console has no bounce (§7).
+ * the reader should notice, and never past its target: the console has no bounce.
  */
 export const MOTION_ROUTE_ENTER: MotionToken = { duration: 300, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
@@ -108,7 +107,7 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
 
   // Static surfaces stay flat: a card is a fill and a hairline. The stylesheet gives the floating
   // layers their shadow from `--shadow-float` and `--shadow-overlay`, so the elevation follows the
-  // palette's mode without the theme being rebuilt (design.md §4).
+  // palette's mode without the theme being rebuilt.
   const noShadow = {
     boxShadow: 'none',
     boxShadowSecondary: 'none',
@@ -168,7 +167,7 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       colorFillQuaternary: t.surface,
       colorBgSpotlight: t.tooltipBg,
 
-      // design.md §4's corner scale: controls 6, menus and popovers 8, cards and dialogs 12.
+      // The shared corner scale: controls 6, menus and popovers 8, cards and dialogs 12.
       borderRadius: 6,
       borderRadiusSM: 6,
       borderRadiusLG: 12,

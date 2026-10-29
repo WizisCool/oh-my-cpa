@@ -120,7 +120,7 @@ export const ModelMarkdown = React.memo(function ModelMarkdown({ content, isStre
     pre: Pre,
     table: Table,
   }), [externalImageLabel]);
-  // Arriving text fades in and a caret marks where the next words land (ADR 0080). Both are tied
+  // Arriving text fades in and a caret marks where the next words land. Both are tied
   // to the stream: with the animation left on, a stored answer would fade in as one block on mount.
   const streaming = React.useMemo(() => ({
     hasNextChunk: isStreaming,

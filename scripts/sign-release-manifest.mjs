@@ -1,5 +1,5 @@
 // Writes and signs the release manifest the updater verifies before it replaces the
-// console (ADR 0099). The manifest names the image digest a release was published as;
+// console. The manifest names the image digest a release was published as;
 // the signature is what lets an installation refuse an image the maintainers did not
 // build, even when the release's tag or attachments were replaced.
 //

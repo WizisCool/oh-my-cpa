@@ -213,7 +213,7 @@ export function RequestToolbar({
   );
 
   // A phone gets the same controls in two rows instead of five: what is typed or opened stays
-  // put, and every choice that is a single tap swipes in one strip (docs/design.md §8).
+  // put, and every choice that is a single tap swipes in one strip.
   if (isPhone) {
     return (
       <section className="request-toolbar is-phone" aria-label={t('events.filters')}>

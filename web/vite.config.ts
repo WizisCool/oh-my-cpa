@@ -109,7 +109,7 @@ export default defineConfig(({ command }) => ({
           if (id.includes('vite/preload-helper')) {
             return 'vendor-preload';
           }
-          // The SVG runtime shared by the dashboard and Insights stays lazy (ADR 0106).
+          // The SVG runtime shared by the dashboard and Insights stays lazy.
           if (id.includes('node_modules/echarts/') || id.includes('node_modules/zrender/')) {
             return 'vendor-echarts';
           }

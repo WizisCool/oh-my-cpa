@@ -7,10 +7,10 @@ import { useT } from '../../i18n';
  * content will land, so the frame that replaces them moves nothing.
  *
  * They breathe - an opacity cycle, staggered row by row so the wave runs down the frame - because a
- * frozen grey frame reads as a page that has stalled, while antd's sweeping gradient is the shimmer
- * design.md §7 rule 3 forbids. Opacity alone stays on the compositor, the cycle exists only while
+ * frozen grey frame reads as a page that has stalled. An opacity cycle stays on the compositor
+ * without sweeping a gradient across the content. The cycle exists only while
  * nothing has ever loaded (a refresh keeps its data on screen and never shows a placeholder), and
- * reduced motion freezes it. See ADR 0052.
+ * reduced motion freezes it.
  */
 
 type PlaceholderStyle = React.CSSProperties & { '--placeholder-row'?: number };

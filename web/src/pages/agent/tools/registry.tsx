@@ -15,9 +15,9 @@ import { OPENUI_TOOLKIT } from './openui';
  * Adding a view for a capability is one entry here; a capability without one is drawn by
  * `ToolFallback`, the generic call row, so a server-side addition is never invisible.
  *
- * The server owns the catalogue and executes every call (ADR 0041), so the toolkit contributes
+ * The server owns the catalogue and executes every call, so the toolkit contributes
  * views, never declarations the model would act on. The OpenUI tools are the official integration's
- * own renderers (ADR 0107); the ExternalStore runtime never executes them in the browser, so the
+ * own renderers; the ExternalStore runtime never executes them in the browser, so the
  * only thing they send back is a submitted `prompt_openui` form, through `onAddToolResult`.
  */
 

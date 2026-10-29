@@ -115,7 +115,7 @@ export interface AgentInterrupt {
 }
 
 /**
- * The official OpenUI assistant-ui tools (ADR 0107): `present_openui` is the answer itself and
+ * The official OpenUI assistant-ui tools: `present_openui` is the answer itself and
  * `prompt_openui` a form the turn waits on. The console declares `present_openui` on every run - it
  * renders OpenUI - and the server offers `prompt_openui` alongside it.
  */

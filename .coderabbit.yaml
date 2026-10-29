@@ -8,7 +8,7 @@
 # this repository.
 language: en-US
 tone_instructions: >-
-  Invariants live in AGENTS.md, CONTEXT.md and docs/architecture.md. Report
+  Read AGENTS.md for the guide map and docs/architecture.md for security boundaries. Report
   defects this change introduces, its security-boundary impact, and the
   documentation it makes stale; suggest the smallest correct fix.
 reviews:
@@ -128,7 +128,7 @@ reviews:
         stay in one serialized transaction.
     - path: 'internal/updater/**'
       instructions: >-
-        The updater role is the only component holding the Docker socket (ADR 0099).
+        The updater role is the only component holding the Docker socket.
         Flag any widening of its control surface: it takes a product name and
         resolves the container and image reference from Docker's own state, so a
         field, query or body that could name an image, container or registry is a
@@ -144,12 +144,10 @@ reviews:
         `web/src/i18n/locales/`. Requests go through the single
         typed client in `web/src/api/client.ts`; a page calling `fetch` directly is
         a defect. Colors come from the resolved palette in
-        `web/src/theme/palette.ts` - nine authored tokens with seventeen derived
-        from them, so re-deriving a relationship in a component is also a defect -
-        or from the CSS variables in `docs/design.md`; a color literal outside
-        those definitions is a defect; the visual
-        system is terminal-flat with no box shadows, and green/amber/red stay
-        reserved for system health. CSS-module classes are kebab-case and read
+        `web/src/theme/palette.ts` and the shared CSS tokens; use
+        `docs/design.md` for composition and interaction intent rather than
+        duplicating token values. Static structure is flat; overlays use the
+        shared elevation tokens. Status colors convey actual state. CSS-module classes are kebab-case and read
         as `styles['kebab-case']`. The SPA must stay embeddable in the single Go
         binary, so nothing may depend on a CDN or an externally hosted asset.
         State must not be communicated by color alone: keep keyboard
@@ -160,7 +158,7 @@ reviews:
     - path: 'web/src/**/*.css'
       instructions: >-
         Styles consume the palette through CSS variables; a hardcoded color, a
-        box shadow, or a class name that does not match its CSS-module
+        page-local replacement for a shared design token, or a class name that does not match its CSS-module
         definition (checked by `pnpm check-css-modules`) is a defect. Prefer an
         existing token over a new one, and keep motion optional under
         `prefers-reduced-motion`.
@@ -172,24 +170,16 @@ reviews:
         that moved while the prose did not. Verify each flagship claim against
         the implementation rather than against the intent of the change, and
         prefer a symbol or file reference over an absolute line number. Flag
-        references to retired pages, prototypes, or removed files, and flag a
-        `DESIGN.md`/`docs/design.md` pair that has drifted apart. Technical
+        broken references and duplicated catalogs that should link to their
+        executable source. Put design intent in `docs/design.md`. Technical
         prose is English; `README.zh-CN.md` and localized UI copy are the
         intended exceptions.
-    - path: 'docs/adr/**'
-      instructions: >-
-        Decision records. An ADR documents a consequential, hard-to-reverse
-        decision and its context; it is evidence, not a standing rule, and it
-        may be amended, superseded or deprecated. Flag a new ADR for a routine
-        choice that needs none, and flag an edit that reverses an accepted
-        decision without noting the reversal in its status.
     - path: 'migrations/**'
       instructions: >-
         Forward-only migrations, applied in filename order and one transaction
-        each. Never edit an applied migration; add the next number. A new table
-        or column needs the repository reader or writer, the storage section of
-        `docs/architecture.md`, and `docs/ops/sqlite-operations.md` when the
-        migration gate or the backup story changes. Preserve append-only
+        each. Never edit an applied migration; add the next number. Keep schema authority in migrations and repository code. Update
+        `docs/ops/sqlite-operations.md` when the migration gate or backup
+        procedure changes, not for every schema column. Preserve append-only
         guarantees (pricing versions, audit events) and the triggers enforcing
         them; a rollback is a new migration rather than a manual edit.
     - path: 'scripts/**'
@@ -201,7 +191,7 @@ reviews:
         credible owner and net cost. Prefer a case or replacement to another file or
         layer; internal refactors need no new tests by default. Flag a new self-test
         for tooling that does not ship, a skip switch, a retry or a longer wait
-        (AGENTS.md §5).
+        (see docs/testing.md).
     - path: '.github/workflows/**'
       instructions: >-
         Every `uses:` is pinned to a commit SHA and every checkout sets

@@ -16,7 +16,7 @@ import (
 
 // Trusted installed pages use CPA's native management contract. This is a bounded
 // exception to the ordinary facade's DTO projection: only this instance's fixed
-// management trees and model directory are reachable (ADR 0067).
+// management trees and model directory are reachable.
 
 const (
 	// PluginResourcePrefix is where CPA serves the browser-navigable resources of plugins.

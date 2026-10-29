@@ -227,7 +227,7 @@ type agentForwardedProps struct {
 	Present string `json:"present,omitempty"`
 }
 
-// The context entries a run may carry (ADR 0041): the console's reading language, which the prompt
+// The context entries a run may carry: the console's reading language, which the prompt
 // uses as the reply language's default, and how the console writes token counts, so an answer
 // writes them the way the pages beside it do. Anything else is refused.
 const (
@@ -289,7 +289,7 @@ func (h *Handler) agentDataRows(writer http.ResponseWriter, request *http.Reques
 	writeJSON(writer, 200, capability.Result{Status: "success", Data: data})
 }
 
-// runAgent serves one Agent run as an AG-UI event stream (ADR 0041).
+// runAgent serves one Agent run as an AG-UI event stream.
 //
 // A request the runtime refuses before it persisted the turn still gets a stream, but one without
 // RUN_STARTED: the browser reads that as "not accepted" and hands the message back to the
