@@ -13,7 +13,7 @@ import { settleLayout, until } from '../harness.mjs';
  */
 
 const LOGO = 'data:image/svg+xml;base64,' + Buffer.from(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#2a78d6"/><path d="M4 12l5 5L20 6" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 ).toString('base64');
 
 const PLUGINS = {
@@ -187,13 +187,8 @@ export async function pluginManagement({ base, page, check, writes }) {
   const pageListed = await isTrue(async () => pageEntry.isVisible(), 'the plugin page entry');
   check('a running plugin\'s page is a navigation entry under its registered label', pageListed && (await pageEntry.innerText()).includes('Logger Console'));
   check('a plugin that is not running gets no page entry', (await page.locator('.app-menu [data-route-path^="/plugin-pages/quota-notifier"]').count()) === 0);
-  check('the page entry carries the plugin\'s own artwork', (await pageEntry.locator('.app-menu-plugin-logo[data-plugin-logo="svg"]').count()) === 1);
-
-  await pageEntry.hover();
-  const hoverFollowsText = await isTrue(async () => pageEntry.locator('[data-plugin-logo="svg"]').evaluate((glyph) =>
-    getComputedStyle(glyph).backgroundColor === getComputedStyle(glyph.closest('li')).color,
-  ), 'the hovered menu glyph colour');
-  check('the SVG menu glyph inherits its hover text colour', hoverFollowsText);
+  const menuMark = pageEntry.locator('.app-menu-plugin-logo[data-plugin-logo="svg"] img');
+  check('the page entry carries the plugin\'s own artwork', (await menuMark.count()) === 1 && (await menuMark.getAttribute('src')) === LOGO);
 
   // ── store cards ─────────────────────────────────────────────────────────────
   const cards = page.locator('[data-plugin-panel="store"] article[data-store-id]');
@@ -215,22 +210,18 @@ export async function pluginManagement({ base, page, check, writes }) {
       && (await limiter.locator('a[href="https://limiter.example"]').count()) === 1,
   );
   const logger = page.locator('article[data-store-id="official/request-logger"]');
-  const cardGlyph = logger.locator('[data-plugin-logo="svg"]');
-  const logoLoaded = await isTrue(async () => cardGlyph.evaluate(async (glyph) => {
-    const source = getComputedStyle(glyph).maskImage.match(/^url\("(.*)"\)$/)?.[1];
-    if (!source) return false;
-    const image = new Image();
-    image.src = source;
+  const cardArtwork = logger.locator('[data-plugin-logo="svg"] img');
+  const logoLoaded = await isTrue(async () => (await cardArtwork.getAttribute('src')) === LOGO && await cardArtwork.evaluate(async (image) => {
     await image.decode();
     return image.naturalWidth > 0;
   }), 'the card logo');
   check('a card draws the plugin icon the registry publishes', logoLoaded);
-  const cardInk = await cardGlyph.evaluate((glyph) => {
-    const style = getComputedStyle(glyph);
-    return { mask: style.maskImage, ink: style.backgroundColor, text: getComputedStyle(glyph.closest('article')).color };
-  });
-  check('the SVG card mark uses the registry artwork as an alpha mask in the card text colour',
-    cardInk.mask.includes(LOGO) && cardInk.ink === cardInk.text, JSON.stringify(cardInk));
+  const cardMark = await logger.locator('[data-plugin-logo="svg"]').evaluate((mark) => ({
+    mask: getComputedStyle(mark).maskImage,
+    isPainted: getComputedStyle(mark).backgroundColor !== 'rgba(0, 0, 0, 0)',
+  }));
+  check('the card mark shows the artwork as drawn instead of repainting it in the card colour',
+    cardMark.mask === 'none' && !cardMark.isPainted, JSON.stringify(cardMark));
   check('a card without an icon draws the generic mark', (await limiter.locator('[data-plugin-logo="fallback"]').count()) === 1);
   check('an installed entry with a newer release offers the update', (await logger.getByRole('button', { name: /更新|Update/ }).count()) >= 1);
   check('the failing registry is named above the cards', (await page.getByText('down.example').count()) >= 1);
@@ -427,44 +418,33 @@ export async function pluginManagement({ base, page, check, writes }) {
     );
     check('the plugin page is the selected navigation entry', pageSelected);
     const selectedEntry = page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first();
-    const readInk = () => selectedEntry.locator('[data-plugin-logo="svg"]').evaluate((glyph) => {
-      const style = getComputedStyle(glyph);
-      return { ink: style.backgroundColor, text: getComputedStyle(glyph.closest('li')).color, mask: style.maskImage };
-    });
-    const readSettledInk = async (label) => {
-      let ink;
-      // Menu icons transition their ink independently of the entry's theme token.
-      await until(async () => {
-        ink = await readInk();
-        return ink.ink === ink.text;
-      }, { label });
-      return ink;
-    };
     await page.getByRole('button', { name: /^Theme: Light$/ }).click();
     await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'dark', 'the dark theme');
     await pluginDocument.locator('#plugin-theme').filter({ hasText: /^dark$/ }).waitFor();
     check('a theme change reaches the plugin without reloading its document', await draft.inputValue() === 'unsaved plugin state');
     check('theme synchronization leaves the plugin-owned theme attribute intact', await pluginDocument.locator('html').getAttribute('data-theme') === 'plugin-owned');
     await settleLayout(page);
-    const darkInk = await readSettledInk('the dark menu glyph colour');
-    check('the selected SVG menu glyph follows the entry text colour', darkInk.ink === darkInk.text && darkInk.mask.includes(LOGO), JSON.stringify(darkInk));
-    const headingGlyph = hosted.locator('[data-plugin-logo="svg"]');
-    const headingInk = await headingGlyph.evaluate((glyph) => {
-      const frame = glyph.parentElement;
-      return { ink: getComputedStyle(glyph).backgroundColor, title: getComputedStyle(frame.parentElement.nextElementSibling.firstElementChild).color, border: getComputedStyle(frame).borderColor, background: getComputedStyle(frame).backgroundColor };
-    });
-    check('the hosted SVG heading mark is unframed and inherits the heading colour',
-      headingInk.ink === headingInk.title && headingInk.border === 'rgba(0, 0, 0, 0)' && headingInk.background === 'rgba(0, 0, 0, 0)', JSON.stringify(headingInk));
+    const darkMark = await selectedEntry.locator('[data-plugin-logo="svg"]').evaluate((mark) => ({
+      source: mark.querySelector('img')?.getAttribute('src'),
+      mask: getComputedStyle(mark).maskImage,
+      isPainted: getComputedStyle(mark).backgroundColor !== 'rgba(0, 0, 0, 0)',
+    }));
+    check('a theme change keeps the menu entry\'s artwork as the plugin drew it',
+      darkMark.source === LOGO && darkMark.mask === 'none' && !darkMark.isPainted, JSON.stringify(darkMark));
+    const headingArtwork = hosted.locator('[data-plugin-logo="svg"] img');
+    const headingShown = await isTrue(async () => (await headingArtwork.getAttribute('src')) === LOGO && await headingArtwork.evaluate(async (image) => {
+      await image.decode();
+      return image.naturalWidth > 0;
+    }), 'the hosted page heading mark');
+    check('the hosted page\'s heading mark is the plugin\'s artwork', headingShown);
     await page.screenshot({ path: 'tmp/plugin-svg-logos/dark.png' });
     // Follow the operating-system preference, which exercises the real theme provider.
     await page.emulateMedia({ colorScheme: 'light' });
     await page.getByRole('button', { name: /^Theme: Dark$/ }).click();
-    const lightMode = await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'light', 'the light theme');
+    await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'light', 'the light theme');
     await pluginDocument.locator('#plugin-theme').filter({ hasText: /^light$/ }).waitFor();
     check('following the light system theme preserves plugin state', await draft.inputValue() === 'unsaved plugin state');
     await settleLayout(page);
-    const lightInk = await readSettledInk('the light menu glyph colour');
-    check('the SVG menu glyph changes ink with the light theme', lightMode && lightInk.ink === lightInk.text && lightInk.ink !== darkInk.ink, JSON.stringify({ darkInk, lightInk }));
     await page.screenshot({ path: 'tmp/plugin-svg-logos/light.png' });
     await page.getByRole('button', { name: /^Theme: Follow system$/ }).click();
     const scrolled = await pluginDocument.locator('body').evaluate((body) => {

@@ -20,10 +20,10 @@
   height: 100%;
 }
 
+/* Published SVG artwork brings its own shape and background, so it is not also put in a tinted chip. */
 .logo:has([data-plugin-logo="svg"]) {
   border-color: transparent;
   background: transparent;
-  color: inherit;
 }
 
 
