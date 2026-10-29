@@ -15,6 +15,7 @@ export default {
   'af.upload_drop_hint': '可多选，按原文件名保存',
   'af.upload_choose': '选择文件',
   'af.paste_json': '粘贴 JSON',
+  'af.paste_placeholder': '{"type": "codex", "email": "…", …}',
   'af.paste_problem_not_object': '内容不是 JSON 对象。',
   'af.paste_type': '类型',
   'af.paste_email': '账号',

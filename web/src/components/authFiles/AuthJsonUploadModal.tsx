@@ -124,7 +124,7 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
                 autoSize={{ minRows: 8, maxRows: 14 }}
                 spellCheck={false}
                 autoComplete="off"
-                placeholder='{"type": "codex", "email": "…", …}'
+                placeholder={t('af.paste_placeholder')}
                 onChange={(event) => setText(event.target.value)}
               />
               {reading && !reading.summary && <p className={styles.problem} role="alert">{t('af.paste_problem_not_object')}</p>}

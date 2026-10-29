@@ -18,6 +18,7 @@ export default {
   "af.upload_drop_hint": "可多選，按原檔名儲存",
   "af.upload_choose": "選擇檔案",
   "af.paste_json": "貼上 JSON",
+  "af.paste_placeholder": "{\"type\": \"codex\", \"email\": \"…\", …}",
   "af.paste_problem_not_object": "內容不是 JSON 物件。",
   "af.paste_type": "類型",
   "af.paste_email": "帳號",

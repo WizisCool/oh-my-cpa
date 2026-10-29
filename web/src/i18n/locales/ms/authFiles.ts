@@ -18,6 +18,7 @@ export default {
   "af.upload_drop_hint": "Pilih satu atau lebih; setiap fail mengekalkan namanya",
   "af.upload_choose": "Pilih fail",
   "af.paste_json": "Tampal JSON",
+  "af.paste_placeholder": "{\"type\": \"codex\", \"email\": \"…\", …}",
   "af.paste_problem_not_object": "Teks ini bukan objek JSON.",
   "af.paste_type": "Jenis",
   "af.paste_email": "Akaun",

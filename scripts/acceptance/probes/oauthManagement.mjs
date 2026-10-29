@@ -1246,7 +1246,8 @@ async function verifyPasteAuthJsonDialog({ page, check }) {
       && uploads[0].body === pasted);
     await page.getByRole('button', { name: 'Upload JSON', exact: true }).click();
     await dialog.waitFor();
-    check('reopening the upload dialog discards pasted JSON', await dialog.getByRole('textbox', { name: 'Paste JSON', exact: true }).count() === 0);
+    await dialog.getByText('Paste JSON', { exact: true }).click();
+    check('reopening the upload dialog discards pasted JSON', await dialog.getByRole('textbox', { name: 'Paste JSON', exact: true }).inputValue() === '');
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
   } finally {

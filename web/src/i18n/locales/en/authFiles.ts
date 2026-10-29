@@ -18,6 +18,7 @@ export default {
   'af.upload_drop_hint': 'Select one or more; each keeps its file name',
   'af.upload_choose': 'Choose files',
   'af.paste_json': 'Paste JSON',
+  'af.paste_placeholder': '{"type": "codex", "email": "…", …}',
   'af.paste_problem_not_object': 'The text is not a JSON object.',
   'af.paste_type': 'Type',
   'af.paste_email': 'Account',
