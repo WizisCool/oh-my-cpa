@@ -14,6 +14,8 @@
   gap: 16px;
 }
 
+/* The reading cards are one row: both start and end on the same edges, and each fills what it
+   reports rather than enclosing empty space below it. */
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -598,7 +600,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-bottom: 20px;
+  padding-bottom: 16px;
 }
 
 .storage-headline {
@@ -814,7 +816,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  /* The action sits on the title's line and takes the right edge there. It drops below only when
+     the two together no longer fit, which is a property of the language and the screen rather
+     than of a breakpoint: on a phone this head holds both, so stacking them spent a row of the
+     card head on one link. */
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 
 @media (max-width: 900px) {
@@ -842,16 +849,21 @@
   }
 }
 
-/* On a phone the card's action moves under its title instead of beside it.
-   Two side-by-side flex items cannot both keep their natural width in the space a 320px
-   screen leaves, and the failure was an overlap rather than an overflow: the title and the
-   button drew on top of each other, which no width comparison detects. Stacking removes the
-   competition for the row entirely. */
+/* The action keeps the title's line wherever both fit; the rows above decide that per card and
+   per language, so only the product header is forced to stack here. */
 @media (max-width: 640px) {
-  .card-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+  /* Once its text is hidden, the action needs a finger-sized target of its own. */
+  .check-updates-action {
+    min-width: 40px;
+    min-height: 40px;
+    padding-inline: 0;
+  }
+
+  /* A title must stay readable in every registered language while the action stays on its line.
+     The two cannot both keep their text on a phone, so the action gives up its label: the glyph,
+     the tooltip and the accessible name still say what pressing it does. */
+  .card-head-action-label {
+    display: none;
   }
 
   .product-header {
@@ -997,7 +1009,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--border-soft);
 }

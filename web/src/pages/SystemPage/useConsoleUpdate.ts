@@ -44,7 +44,7 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
   const onFinishedRef = React.useRef(onFinished);
   onFinishedRef.current = onFinished;
 
-  const { data, dataUpdatedAt, errorUpdatedAt } = useQuery({
+  const { data, dataUpdatedAt, errorUpdatedAt, isError } = useQuery({
     queryKey: UPDATER_QUERY_KEY,
     queryFn: api.getSystemUpdater,
     retry: false,
@@ -104,5 +104,13 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
     }
   }, [queryClient]);
 
-  return { updater, submittingProduct, apply };
+  return {
+    /** What the version card draws: the last working answer while a followed update restarts it. */
+    updater,
+    /** What the sidecar last answered, which is what a health reading must state. */
+    latest: data,
+    isUpdaterError: isError,
+    submittingProduct,
+    apply,
+  };
 }
