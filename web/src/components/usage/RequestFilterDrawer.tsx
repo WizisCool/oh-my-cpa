@@ -33,6 +33,7 @@ import { displayEffortName } from '../../theme/effortScale';
 import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { AppDrawer } from '../common/AppDrawer';
 import styles from './RequestFilterDrawer.module.css';
+import { SearchSelect } from '../common/SearchSelect';
 import { SectionHeading } from '../common/SectionHeading';
 import './requestMarks.css';
 import { Tooltip } from '../common/Tooltip';
@@ -256,7 +257,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
     row(
       spec.labelKey,
       `req-multi-${spec.key}`,
-      <Select
+      <SearchSelect
         id={`req-multi-${spec.key}`}
         // Aliases accept values the window does not report, because an operator
         // filtering by alias is often looking for one that has stopped appearing -
@@ -264,7 +265,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         // dimensions are facets of what exists, so they stay selection-only.
         mode={spec.key === 'model_alias' ? 'tags' : 'multiple'}
         className={styles['select']}
-        aria-label={t(spec.labelKey)}
+        label={t(spec.labelKey)}
         placeholder={t(spec.labelKey)}
         value={draft.multi[spec.key] ?? []}
         onChange={(values) => setMulti(spec.key, values as string[])}

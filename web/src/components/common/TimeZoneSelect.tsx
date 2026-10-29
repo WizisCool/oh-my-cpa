@@ -1,7 +1,7 @@
 import React from 'react';
-import { Select } from 'antd';
 import { useT } from '../../i18n';
 import { timeZoneOptions } from '../../utils/time';
+import { SearchSelect } from './SearchSelect';
 import styles from './TimeZoneSelect.module.css';
 
 export interface TimeZoneSelectProps {
@@ -32,7 +32,7 @@ export const TimeZoneSelect: React.FC<TimeZoneSelectProps> = ({ value, onChange,
       <span className={styles['timezone-offset']}>{byZone.get(zone)?.offset}</span>
     </span>
   ), [serverTimezone, serverLabel, byZone]);
-  return <Select
+  return <SearchSelect
     id={id}
     disabled={isDisabled}
     className={styles['timezone-select']}
@@ -43,7 +43,7 @@ export const TimeZoneSelect: React.FC<TimeZoneSelectProps> = ({ value, onChange,
     listHeight={320}
     listItemHeight={64}
     onOpenChange={(isOpen) => { if (isOpen) setOffsetMinute(Math.floor(Date.now() / 60_000)); }}
-    aria-label={ariaLabel ?? t('omc.timezone')}
+    label={ariaLabel ?? t('omc.timezone')}
     value={value || serverTimezone || 'UTC'}
     onChange={onChange}
     options={options}

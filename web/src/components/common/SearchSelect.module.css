@@ -1,0 +1,102 @@
+/* The sheet is a layer the reader summoned from the bottom edge, so it takes the floating layers'
+   rounded top and their fill. */
+.sheet :global(.ant-drawer-section) {
+  /* As tall as the content, between the floor and the cap the wrapper carries; past the cap the
+     list scrolls. */
+  height: auto;
+  min-height: inherit;
+  max-height: inherit;
+  background: var(--elevated);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.sheet :global(.ant-drawer-body) {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sheet :global(.ant-drawer-footer) {
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.search {
+  flex: none;
+  width: auto;
+  margin: 12px 16px 4px;
+}
+
+/* The page's own scroller under a finger: the browser scrolls it, and a fling that reaches either end
+   stops there instead of carrying on into the page behind the sheet. */
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 8px calc(12px + env(safe-area-inset-bottom));
+}
+
+.sheet:has(:global(.ant-drawer-footer)) .list {
+  padding-bottom: 8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.option:active:not(:disabled) {
+  background: var(--hover-inset);
+}
+
+.option-selected {
+  background: var(--selected-inset);
+  font-weight: 500;
+}
+
+.option:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.option-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.option-mark {
+  flex: none;
+  color: var(--fg);
+}
+
+.empty {
+  padding: 32px 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.done {
+  height: 44px;
+}

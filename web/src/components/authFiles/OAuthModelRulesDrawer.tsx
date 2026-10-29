@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntdApp, Button, Segmented, Select } from 'antd';
+import { App as AntdApp, Button, Segmented } from 'antd';
 import { DeleteOutlined, SaveOutlined } from '../icons';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { credentialProviderIconId, getCredentialProviderMetadata } from '../common/providerMetadata';
@@ -29,6 +29,7 @@ import styles from './OAuthModelRulesDrawer.module.css';
 import { LoadFailure, Notice, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { PageLoading } from '../common/PageLoading';
+import { SearchSelect } from '../common/SearchSelect';
 import { AppDrawer } from '../common/AppDrawer';
 
 export type OAuthModelRulesSection = 'aliases' | 'excluded';
@@ -437,7 +438,8 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
             <div className={styles['scope']}>
               <label className={styles['scope-label']} htmlFor="oauth-model-rules-provider">{t('af.rules_provider_label')}</label>
               <div data-testid="oauth-model-rules-provider" data-provider={provider} className={styles['scope-control']}>
-                <Select
+                <SearchSelect
+                  label={t('af.rules_provider_label')}
                   id="oauth-model-rules-provider"
                   className={styles['provider-select']}
                   value={provider || undefined}

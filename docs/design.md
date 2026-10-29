@@ -80,7 +80,10 @@ credible layer; browser timing is useful only where the browser engine is the su
 
 Design for content first, including a 390px-wide phone, dynamic viewport height and
 safe-area insets. Avoid page-level horizontal overflow. Dialogs and drawers must keep
-the current action and focused field reachable when the keyboard appears.
+the current action and focused field reachable when the keyboard appears. Opening a
+list must not raise the keyboard over it: a select the reader can type into uses
+[`SearchSelect`](../web/src/components/common/SearchSelect.tsx), which becomes a
+bottom sheet on narrow screens.
 
 Use visible labels, keyboard navigation, clear focus indicators and appropriate hit
 areas. Do not make hover the only route to information or an action. On coarse pointers,

@@ -79,6 +79,7 @@ export async function mobileConsole({ base, page, check, errors }) {
   await page.setViewportSize({ width: 844, height: 390 });
   check('landscape content remains bounded', await page.locator('.app-content').evaluate((pane) => pane.scrollWidth <= pane.clientWidth + 1));
   await checkWorkspaceKeyboard({ base, page, check });
+  await checkSearchSelectSheet({ base, page, check });
   check('the complete phone sweep has no runtime errors', errors.length === 0, errors.join(' | '));
 }
 
@@ -120,4 +121,61 @@ async function checkWorkspaceKeyboard({ base, page, check }) {
       check('/agent brings its page actions back when the keyboard goes', await pageActions.isVisible());
     }
   }
+}
+
+/**
+ * A searchable select on a phone opens as a bottom sheet. Its popup put the search field in focus on
+ * the opening tap, so the keyboard rose over the list it had just opened and the list could be
+ * neither read nor scrolled. The drag is real touch input through the DevTools protocol, and the
+ * keyboard is the visual viewport shrinking, as in the workspace check above.
+ */
+async function checkSearchSelectSheet({ base, page, check }) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  const trigger = page.getByRole('combobox', { name: 'Time zone', exact: true });
+  await trigger.tap();
+  const sheet = page.getByRole('dialog', { name: 'Time zone', exact: true });
+  const list = sheet.getByRole('listbox', { name: 'Time zone', exact: true });
+  await list.waitFor({ state: 'visible' });
+  await settleLayout(page);
+  const opened = await page.evaluate(() => ({
+    isEditableFocused: document.activeElement?.matches('input:not([readonly]), textarea') ?? false,
+    popups: document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').length,
+  }));
+  check('a searchable select opens a sheet on a phone without raising the keyboard', opened.popups === 0 && !opened.isEditableFocused, JSON.stringify(opened));
+
+  const box = await list.boundingBox();
+  const cdp = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2;
+  const touchAt = (y) => [{ x, y, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: touchAt(box.y + box.height - 20) });
+  for (let step = 1; step <= 20; step += 1) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: touchAt(box.y + box.height - 20 - ((box.height - 40) * step) / 20) });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await until(async () => await list.evaluate((node) => node.scrollTop > 0), { label: 'the sheet list to scroll under a finger' });
+  check('the sheet list scrolls under a finger', true);
+
+  const sheetHeight = async () => (await sheet.boundingBox()).height;
+  const openedHeight = await sheetHeight();
+  await sheet.getByRole('textbox', { name: 'Search', exact: true }).fill('tokyo');
+  await until(async () => await list.getByRole('option').count() === 1, { label: 'the list to narrow to the typed zone' });
+  check('the sheet holds its height while the list narrows', Math.abs(await sheetHeight() - openedHeight) <= 1, `${openedHeight} -> ${await sheetHeight()}`);
+
+  await page.evaluate(() => {
+    window.sheetViewportHeight = Object.getOwnPropertyDescriptor(window.visualViewport, 'height');
+    Object.defineProperty(window.visualViewport, 'height', { configurable: true, value: 420 });
+    window.visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await until(async () => (await sheet.boundingBox()).y + (await sheet.boundingBox()).height <= 421, { label: 'the sheet to stand above the keyboard' });
+  check('the sheet stands above the keyboard', true);
+  await page.evaluate(() => {
+    if (window.sheetViewportHeight) Object.defineProperty(window.visualViewport, 'height', window.sheetViewportHeight);
+    else delete window.visualViewport.height;
+    window.visualViewport.dispatchEvent(new Event('resize'));
+  });
+
+  await list.getByRole('option', { name: /Asia\/Tokyo/ }).tap();
+  await sheet.waitFor({ state: 'hidden' });
+  check('picking an option closes the sheet and sets the value', (await trigger.locator('xpath=ancestor::*[contains(@class, "ant-select ")][1]').innerText()).includes('Asia/Tokyo'));
 }

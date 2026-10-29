@@ -2,7 +2,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Checkbox, Segmented, Select, Tabs, Typography } from 'antd';
+import { Button, Checkbox, Segmented, Tabs, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -54,6 +54,7 @@ import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { SearchInput } from '../common/SearchInput';
+import { SearchSelect } from '../common/SearchSelect';
 import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
@@ -500,7 +501,7 @@ export const CpaLogPanel: React.FC = () => {
               <div className={`${styles['filter-field']} ${styles['filter-field-wide']}`}>
                 <span className={styles['filter-label']}>{t('logs.path_filter')}</span>
                 {facets.paths.length > 0 ? (
-                  <Select
+                  <SearchSelect
                     mode="multiple"
                     allowClear
                     maxTagCount="responsive"
@@ -508,7 +509,7 @@ export const CpaLogPanel: React.FC = () => {
                     className={styles['path-select']}
                     popupMatchSelectWidth={false}
                     placeholder={t('logs.path_filter')}
-                    aria-label={t('logs.path_filter')}
+                    label={t('logs.path_filter')}
                     value={filters.paths}
                     onChange={(paths: string[]) => patchFilters({ paths })}
                     options={facets.paths.map((option) => ({ value: option.path, count: option.count }))}

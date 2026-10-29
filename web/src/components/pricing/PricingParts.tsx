@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Input, InputNumber, Segmented, Select, TimePicker } from 'antd';
+import { Button, Checkbox, Input, InputNumber, Segmented, TimePicker } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
@@ -40,6 +40,7 @@ import {
 } from '../../types/pricingDisplay';
 import styles from './Pricing.module.css';
 import { SearchInput } from '../common/SearchInput';
+import { SearchSelect } from '../common/SearchSelect';
 import { EmptyState } from '../common/EmptyState';
 import { Pager } from '../common/Pager';
 import { Tooltip } from '../common/Tooltip';
@@ -320,7 +321,8 @@ const WindowField: React.FC<{
       </div>
       <div className={styles['tier-field']}>
         <span>{t('pricing.editor.window_zone')}</span>
-        <Select
+        <SearchSelect
+          label={t('pricing.editor.window_zone')}
           showSearch={{ filterOption: (input, option) => String(option?.searchText ?? '').includes(input.replace(/_/g, ' ').toLowerCase()) }}
           // Virtualized explicitly: a fixed popup width alone would switch antd to a plain list of
           // every zone, which the console's wheel smoothing does not drive.
@@ -329,7 +331,6 @@ const WindowField: React.FC<{
           value={draft.timeZone}
           onChange={(timeZone) => onChange({ timeZone })}
           options={zones}
-          aria-label={t('pricing.editor.window_zone')}
           data-testid="pricing-tier-time-zone"
         />
       </div>
@@ -525,14 +526,14 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
           <div className={clsx(styles['tier-row'], invalid?.index === laneIndex && styles['tier-row-invalid'])}>
             <label className={styles['tier-field']}>
               <span>{t('pricing.editor.lane_tiers')}</span>
-              <Select
+              <SearchSelect
+                label={t('pricing.editor.lane_tiers')}
                 mode="tags"
                 value={laneTiers}
                 onChange={renameLane}
                 tokenSeparators={[',', ' ']}
                 placeholder={t('pricing.editor.lane_tiers_placeholder')}
                 options={SERVICE_TIER_SUGGESTIONS.map((name) => ({ value: name, label: name }))}
-                aria-label={t('pricing.editor.lane_tiers')}
                 data-testid="pricing-lane-tiers"
               />
             </label>

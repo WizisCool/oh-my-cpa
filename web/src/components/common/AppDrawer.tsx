@@ -35,7 +35,8 @@ export interface AppDrawerProps
  * Twelve panels chose their own width - nine spellings between 400px and 760px - and six of them
  * laid out their own footer. The widths are three here, the close control is always at the trailing
  * end of the head and always named, and a footer is two slots rather than a `div` per panel. The
- * navigation sheet and the time-range sheet are not side panels and use antd's `Drawer` directly.
+ * navigation sheet, the time-range sheet and the search-select sheet are not side panels and use
+ * antd's `Drawer` directly.
  */
 export function AppDrawer({
   width = 'medium',
@@ -62,6 +63,9 @@ export function AppDrawer({
       placement="right"
       size={DRAWER_WIDTHS[width]}
       closable={{ placement: 'end', 'aria-label': t('common.close') }}
+      // A layer opened from inside the panel - a picker's bottom sheet - covers it; antd would
+      // otherwise shove the panel 180px aside, half off a phone's screen.
+      push={false}
       footer={hasFooter ? (
         <div className="app-drawer-footer">
           {isRendered(shown.footerStart) && <div className="app-drawer-footer-start">{shown.footerStart}</div>}
