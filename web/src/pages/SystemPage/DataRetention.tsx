@@ -3,10 +3,9 @@ import { describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import dayjs from '../../utils/time';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
-import { formatBytes } from '../../utils/format';
 import { formatRetentionDays, useDataRetention } from '../../hooks/useDataRetention';
 import { Meter } from '../../components/common/Meter';
-import { LoadFailure, Notice } from '../../components/feedback';
+import { LoadFailure } from '../../components/feedback';
 import styles from '../SystemPage.module.css';
 
 export { DATA_RETENTION_QUERY_KEY } from '../../hooks/useDataRetention';
@@ -51,16 +50,6 @@ export const DataRetention: React.FC = () => {
             <dt>{t('sys.retention_oldest')}</dt>
             <dd>{data.oldest_request_record_ms ? dayjs(data.oldest_request_record_ms).format('YYYY-MM-DD') : '—'}</dd>
           </dl>
-
-          {/* A file that predates incremental mode keeps what retention frees until it is rebuilt
-              once; saying how much is held is what makes the rebuild in the next card worth running. */}
-          {data.storage.auto_vacuum === 'none' && data.storage.free_page_bytes > 0 && (
-            <Notice
-              tone="info"
-              className={styles['maintenance-outcome-alert']}
-              description={t('sys.retention_space_held', { size: formatBytes(data.storage.free_page_bytes) })}
-            />
-          )}
         </>
       )}
     </section>

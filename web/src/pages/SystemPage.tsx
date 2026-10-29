@@ -28,12 +28,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
 import { api, describeError } from '../api/client';
 import { useT } from '../i18n';
+import type { MessageKey } from '../i18n/catalog';
 import { isDemoMode } from '../types/demoMode';
 import type {
   SystemInfoResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
   SystemMaintenanceStatus,
+  SystemUpdaterState,
   ReleaseProduct,
 } from '../types/system';
 import { PageHeader } from '../components/common/PageHeader';
@@ -42,11 +44,12 @@ import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
 import { PageLoading, SuspenseFallback } from '../components/common/PageLoading';
 import { StatusLabel } from '../components/common/StatusLabel';
+import type { StatusTone } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
 import { deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
 import type { UpdateOffer } from './SystemPage/versionPresentation';
-import { useConsoleUpdate } from './SystemPage/useConsoleUpdate';
+import { UPDATER_QUERY_KEY, useConsoleUpdate } from './SystemPage/useConsoleUpdate';
 import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
 import { DataRetention, DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
@@ -64,6 +67,24 @@ const { Text, Paragraph } = Typography;
 // The change log renders release notes as Markdown, and the Markdown renderer is the largest
 // dependency on this page. It is only needed once a reader opens a log, so it is loaded then.
 const ProductChangelog = React.lazy(() => import('../components/system/ProductChangelog').then((module) => ({ default: module.ProductChangelog })));
+
+/**
+ * The updater's own state as one verdict.
+ *
+ * A refused credential warrants attention. The other non-ready states describe the deployment
+ * rather than a failed request, so they read quietly.
+ */
+const UPDATER_VERDICTS: Record<SystemUpdaterState, { labelKey: MessageKey; tone: StatusTone }> = {
+  ready: { labelKey: 'sys.updater_state_ready', tone: 'success' },
+  not_installed: { labelKey: 'sys.updater_state_not_installed', tone: 'neutral' },
+  not_containerised: { labelKey: 'sys.updater_state_not_containerised', tone: 'neutral' },
+  disabled: { labelKey: 'sys.updater_state_disabled', tone: 'neutral' },
+  rejected: { labelKey: 'sys.updater_state_rejected', tone: 'warn' },
+};
+
+/** A sidecar that has not answered yet is not a state the updater reported. */
+const UPDATER_UNREPORTED: { labelKey: MessageKey; tone: StatusTone } = { labelKey: 'sys.updater_state_unreported', tone: 'neutral' };
+const UPDATER_READ_FAILED: { labelKey: MessageKey; tone: StatusTone } = { labelKey: 'sys.updater_state_read_failed', tone: 'warn' };
 
 /** Product version block with status, repository link, and changelog toggle. */
 interface ProductBlockProps {
@@ -238,7 +259,12 @@ export const SystemPage: React.FC = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
     void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
   };
-  const { updater, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
+  const { updater, isUpdaterError, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
+  // Keep cached update progress for the version card, but do not report cached data as live health.
+  const observedUpdater = isUpdaterError ? undefined : updater;
+  const updaterVerdict = isUpdaterError ? UPDATER_READ_FAILED : observedUpdater ? UPDATER_VERDICTS[observedUpdater.state] : UPDATER_UNREPORTED;
+  // The latest job can be running, fail or roll back, so its start is an attempt, not a successful update.
+  const lastUpdaterAttemptMs = observedUpdater?.job?.started_at_ms;
   const handleApplyUpdate = async (product: ReleaseProduct) => {
     try {
       await applyUpdate(product);
@@ -250,6 +276,9 @@ export const SystemPage: React.FC = () => {
 
   const [downloadingDiag, setDownloadingDiag] = useState(false);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  // One label for the head's action and for its accessible name: on a phone the button draws the
+  // glyph alone, and the name is what still says what it does.
+  const checkUpdatesLabel = isCheckingUpdates ? t('sys.checking_updates') : t('sys.check_updates');
   const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
   const updateCheckInFlightRef = useRef(false);
   // The action currently being submitted, so only its own button spins.
@@ -302,6 +331,15 @@ export const SystemPage: React.FC = () => {
     staleTime: 15000,
     refetchInterval: (query) => query.state.data?.omc_version.checking || query.state.data?.cpa_version.checking ? 2000 : false,
   });
+
+  // List only actions the version card can actually offer, not merely containers the sidecar sees.
+  const updateTargets = observedUpdater?.state === 'ready' && sysInfo
+    ? observedUpdater.products.filter((product) => {
+        const version = product.product === 'omc' ? sysInfo.omc_version : sysInfo.cpa_version;
+        const offer = deriveUpdateOffer(version, observedUpdater, product.product);
+        return offer.kind === 'available' && !offer.isBusy;
+      }).map((product) => productLabel(product.product))
+    : undefined;
 
   // The process the state below belongs to. Job ids come from a counter that starts again with every
   // process, so a restart can mint an id this page has already seen: a job from the new process would
@@ -584,6 +622,7 @@ export const SystemPage: React.FC = () => {
               void refetch();
               void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
               void queryClient.invalidateQueries({ queryKey: DATA_RETENTION_QUERY_KEY });
+              void queryClient.invalidateQueries({ queryKey: UPDATER_QUERY_KEY });
             }}
           />
         )}
@@ -606,20 +645,24 @@ export const SystemPage: React.FC = () => {
               <PanelTitle icon={<DashboardOutlined />}>{t('sys.version_card')}</PanelTitle>
               {/* The check lives on the card it acts on: it refreshes the versions below
                   it, and a page-level button that changed one card was a control placed
-                  away from its own effect. */}
+                  away from its own effect. On a phone the button keeps the title's line and
+                  sheds its label rather than pushing it onto a row of its own: a title has to
+                  stay readable in every language, and the accessible name keeps the meaning. */}
               <Button
                 type="link"
                 size="small"
+                className={styles['check-updates-action']}
                 icon={<CloudDownloadOutlined />}
                 loading={isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
                 // The demonstration refuses this route on the server, so the control is
                 // disabled rather than offered: a button whose only outcome is a refusal
                 // teaches the reader something untrue about the product.
                 disabled={isDemo || isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
-                title={isDemo ? t('demo.blocked') : undefined}
+                title={isDemo ? t('demo.blocked') : checkUpdatesLabel}
+                aria-label={checkUpdatesLabel}
                 onClick={() => void handleCheckUpdates()}
               >
-                {isCheckingUpdates ? t('sys.checking_updates') : t('sys.check_updates')}
+                <span className={styles['card-head-action-label']}>{checkUpdatesLabel}</span>
               </Button>
             </div>
           }
@@ -710,38 +753,16 @@ export const SystemPage: React.FC = () => {
 
                 <div className={styles['component-row']}>
                   <div className={styles['component-head']} data-testid="sys-component-head">
-                    <div className={styles['component-name']}>{t('sys.component_db')}</div>
-                    <StatusLabel tone={sysInfo.database.status === 'ok' ? 'success' : 'danger'}>
-                      {sysInfo.database.status === 'ok' ? t('sys.database_ready') : t('inst.db_error')}
-                    </StatusLabel>
-                  </div>
-                  <div data-testid="sys-db-records">
-                    <FactList
-                      className={styles['component-facts']}
-                      emphasis="quiet"
-                      testId="sys-component-facts"
-                      facts={[
-                        { key: 'usage', label: t('sys.fact_requests'), value: sysInfo.data_volumes.usage_events.toLocaleString() },
-                        ...(sysInfo.data_volumes.inbox_pending > 0 ? [{ key: 'pending', label: t('sys.fact_pending'), value: <StatusLabel tone="warn">{sysInfo.data_volumes.inbox_pending.toLocaleString()}</StatusLabel>, testId: 'sys-health-pending' }] : []),
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                <div className={styles['component-row']}>
-                  <div className={styles['component-head']} data-testid="sys-component-head">
-                    <div className={styles['component-name']}>{t('sys.component_collector')}</div>
-                    <StatusLabel tone={sysInfo.collector.status === 'active' ? 'success' : 'neutral'}>
-                      {sysInfo.collector.status === 'active' ? t('sys.collector_status_active') : t('sys.collector_status_disabled')}
-                    </StatusLabel>
+                    <div className={styles['component-name']}>{t('sys.component_updater')}</div>
+                    <StatusLabel tone={updaterVerdict.tone}>{t(updaterVerdict.labelKey)}</StatusLabel>
                   </div>
                   <FactList
                     className={styles['component-facts']}
                     emphasis="quiet"
                     testId="sys-component-facts"
                     facts={[
-                      { key: 'latest', label: t('sys.fact_last_usage'), value: sysInfo.data_volumes.last_event_ms ? formatTimeAgo(sysInfo.data_volumes.last_event_ms, Date.now(), t) : '—' },
-                      ...(sysInfo.collector.gap_count > 0 ? [{ key: 'gaps', label: t('sys.fact_gaps'), value: <StatusLabel tone="warn">{sysInfo.collector.gap_count.toLocaleString()}</StatusLabel>, testId: 'sys-health-gaps' }] : []),
+                      { key: 'attempt', label: t('sys.fact_last_attempt'), value: lastUpdaterAttemptMs ? formatTimeAgo(lastUpdaterAttemptMs, Date.now(), t) : '—' },
+                      { key: 'targets', label: t('sys.fact_update_targets'), value: updateTargets ? updateTargets.join(', ') || t('sys.updater_no_targets') : '—' },
                     ]}
                   />
                 </div>
@@ -749,13 +770,20 @@ export const SystemPage: React.FC = () => {
             )}
           </Panel>
 
-          {/* SQLite storage: how large the database is, and how long it keeps request records. */}
+          {/* SQLite storage: how large the database is, and how long it keeps request records. The
+              database's own verdict heads the card, since this card is the database: a broken
+              connection is the reason the readings beside it stop answering. */}
           <Panel
             className={`${styles['system-card']} ${styles['detail-card']}`}
             data-testid="sys-card-storage"
             title={(
               <PanelTitle
                 icon={<DatabaseOutlined />}
+                extra={sysInfo && (
+                  <StatusLabel tone={sysInfo.database.status === 'ok' ? 'success' : 'danger'}>
+                    {sysInfo.database.status === 'ok' ? t('sys.database_ready') : t('inst.db_error')}
+                  </StatusLabel>
+                )}
               >
                 {t('sys.storage_card')}
               </PanelTitle>

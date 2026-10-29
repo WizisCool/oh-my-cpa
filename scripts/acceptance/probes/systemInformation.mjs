@@ -1110,6 +1110,14 @@ export async function systemInformationNarrow({ base, page, check }) {
 
   await verifySystemOverview({ page, check });
 
+  const updateAction = page.locator('[data-testid="sys-card-head"] button');
+  const actionBox = await updateAction.boundingBox();
+  const titleBox = await page.locator('[data-testid="sys-card-head"] .panel-title').boundingBox();
+  check('the update check stays beside its title with a touch-sized target',
+    actionBox && titleBox && actionBox.width >= 40 && actionBox.height >= 40 &&
+      actionBox.x >= titleBox.x + titleBox.width && Math.abs(actionBox.y + actionBox.height / 2 - titleBox.y - titleBox.height / 2) <= 2,
+    JSON.stringify({ actionBox, titleBox }));
+
   const result = await page.evaluate(() => {
     const doc = document.documentElement;
     const overlapping = [];
@@ -1165,7 +1173,7 @@ export async function systemInformationNarrow({ base, page, check }) {
       return controlBox.left >= rowBox.left - 1 && controlBox.right <= rowBox.right + 1 && controlBox.height >= 28 && control.getAttribute('aria-label')?.includes(product);
     });
     const componentFacts = Array.from(document.querySelectorAll('[data-testid="sys-component-facts"]'));
-    const hasStructuredComponentFacts = componentFacts.length === 4 && componentFacts.every((facts) =>
+    const hasStructuredComponentFacts = componentFacts.length === 3 && componentFacts.every((facts) =>
       facts.tagName === 'DL' && facts.querySelectorAll('dt').length >= 1 && facts.querySelectorAll('dd').length === facts.querySelectorAll('dt').length);
     const detailTitles = Array.from(document.querySelectorAll('[data-testid="sys-card-maintenance"] .panel-title-text, [data-testid="sys-card-storage"] .panel-title-text, [data-testid="sys-card-health"] .panel-title-text'));
     const areDetailTitlesReadable = detailTitles.length === 3 && detailTitles.every((title) => title.scrollWidth <= title.clientWidth + 1);
@@ -1201,7 +1209,7 @@ export async function systemInformationNarrow({ base, page, check }) {
     result.collapsed.join(' | '),
   );
   check('version row actions have their own space beside the comparison, a product name and an aimable hit area at 320px', result.areChangelogControlsContained);
-  check('all four components expose paired labelled facts at 320px', result.hasStructuredComponentFacts);
+  check('all components expose paired labelled facts at 320px', result.hasStructuredComponentFacts);
   check('detail card titles remain fully readable at 320px', result.areDetailTitlesReadable);
   check('maintenance actions have three dedicated title/control rows at 320px', result.hasMaintenanceActionHeads);
   check('the page does not scroll sideways at 320px', !result.scrolls);
@@ -1325,8 +1333,8 @@ async function verifyVersionCheckFeedback({ page, base, check }) {
 async function verifySystemOverview({ page, check }) {
   check('system information is immediately readable without detail controls', await page.locator('[data-testid^="sys-details-"]').count() === 0);
   check('short maintenance explanations are visible by default', await page.locator('[data-testid="sys-maintenance-description"]:visible').count() === 3);
-  check('all four component verdicts and readings are visible by default', await page.locator('[data-testid="sys-component-head"]:visible').count() === 4 && await page.locator('[data-testid="sys-component-facts"]:visible').count() === 4);
-  const componentLayout = await page.locator('[data-testid="sys-component-facts"]').evaluateAll((lists) => lists.length === 4 && lists.every((list) => {
+  check('every component verdict and its readings are visible by default', await page.locator('[data-testid="sys-component-head"]:visible').count() === 3 && await page.locator('[data-testid="sys-component-facts"]:visible').count() === 3);
+  const componentLayout = await page.locator('[data-testid="sys-component-facts"]').evaluateAll((lists) => lists.length === 3 && lists.every((list) => {
     const style = getComputedStyle(list);
     const readings = Array.from(list.children);
     return style.display === 'flex' && readings.length <= 2 && readings.every((reading) => {
@@ -1339,7 +1347,6 @@ async function verifySystemOverview({ page, check }) {
     });
   }));
   check('component summaries keep at most two inline label/value pairs per row', componentLayout);
-  check('healthy components do not spend space on zero-valued anomaly readings', await page.locator('[data-testid="sys-health-pending"], [data-testid="sys-health-gaps"]').count() === 0);
   const maintenanceStyle = await page.evaluate(() => {
     const reference = document.querySelector('.terminal-page-actions .ant-btn');
     const actions = Array.from(document.querySelectorAll('[data-testid="sys-maintenance-action-head"] button'));
@@ -1360,28 +1367,31 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
     body: JSON.stringify({
       ...systemReading,
       update_check_on_page_load: false,
-      cpa: { ...systemReading.cpa, status: 'disconnected' },
+      omc_version: { ...systemReading.omc_version, state: 'update_available', reason: '' },
+      cpa_version: { ...systemReading.cpa_version, state: 'up_to_date' },
+      cpa: { ...systemReading.cpa, status: 'disconnected', latency_ms: 0 },
       database: { ...systemReading.database, status: 'error' },
-      collector: { ...systemReading.collector, status: 'disabled', gap_count: 3 },
-      data_volumes: { ...systemReading.data_volumes, credentials: null, last_event_ms: null, inbox_pending: 12 },
     }),
   });
+  // A sidecar that answered but refused this console's credential has its own verdict.
+  let updaterResponse = { state: 'rejected', products: [], job: null };
+  let updaterStatus = 200;
+  const updaterHandler = (route) => fulfillFixture(route, { status: updaterStatus, json: updaterResponse });
   await page.route('**/omc/api/v1/management/system', systemHandler);
+  await page.route('**/omc/api/v1/management/system/updater', updaterHandler);
   try {
     await page.goto(`${base}/system`, { waitUntil: 'domcontentloaded' });
-    await page.locator('[data-testid="sys-health-pending"]').waitFor({ state: 'visible' });
-    check('positive ingestion backlog and collection gaps remain directly visible',
-      (await page.locator('[data-testid="sys-health-pending"] dd').innerText()).includes('12') &&
-      (await page.locator('[data-testid="sys-health-gaps"] dd').innerText()).includes('3'));
-    check('nonzero ingestion anomalies retain semantic warning styling', await page.locator('[data-testid="sys-health-pending"] .status-label.is-warn, [data-testid="sys-health-gaps"] .status-label.is-warn').count() === 2);
+    await page.locator('[data-testid="sys-card-storage"] .status-label.is-danger').waitFor({ state: 'visible' });
     const heads = page.locator('[data-testid="sys-component-head"]');
-    check('gateway and database failures retain their explicit danger verdicts',
-      await heads.nth(0).locator('.status-label.is-danger').count() === 1 &&
-      await heads.nth(2).locator('.status-label.is-danger').count() === 1);
-    check('a disabled collector retains its independent status', await heads.nth(3).locator('.status-label.is-neutral').count() === 1);
-    check('missing gateway latency and usage observations are not fabricated',
+    check('a disconnected gateway keeps its explicit danger verdict', await heads.nth(0).locator('.status-label.is-danger').count() === 1);
+    check('a failed database states its verdict on the card that reports it',
+      await page.locator('[data-testid="sys-card-storage"] .status-label.is-danger').count() === 1 &&
+      await page.locator('[data-testid="sys-card-health"] .status-label.is-danger').count() === 1);
+    await heads.nth(2).locator('.status-label.is-warn').waitFor({ state: 'visible' });
+    check('a refused updater keeps its own warning verdict', await heads.nth(2).locator('.status-label.is-warn').count() === 1);
+    check('an unobserved latency and an update that never ran are not fabricated',
       await page.locator('[data-testid="sys-component-facts"]').nth(0).locator('dd').innerText() === '—' &&
-      await page.locator('[data-testid="sys-component-facts"]').nth(3).locator('dd').first().innerText() === '—');
+      await page.locator('[data-testid="sys-component-facts"]').nth(2).locator('dd').first().innerText() === '—');
     const isContained = await page.locator('[data-testid="sys-card-health"]').evaluate((card) => {
       const cardBox = card.getBoundingClientRect();
       return Array.from(card.querySelectorAll('.fact-list-row')).every((reading) => {
@@ -1391,8 +1401,37 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
       });
     });
     check('health anomaly summaries fit without overlapping or overflowing', isContained);
+
+    updaterResponse = {
+      state: 'ready',
+      products: [
+        { product: 'omc', action: 'available', reason: '', image: 'example/omc:latest' },
+        { product: 'cpa', action: 'available', reason: '', image: 'example/cpa:latest' },
+      ],
+      job: {
+        id: 'failed-attempt', product: 'cpa', stage: 'failed', finished: true, error: 'pull failed',
+        from_version: '', to_version: '', started_at_ms: Date.now() - 3 * 86_400_000, finished_at_ms: Date.now() - 3_600_000,
+      },
+    };
+    await page.locator('.terminal-page-actions').getByRole('button').click();
+    await heads.nth(2).locator('.status-label.is-success').waitFor({ state: 'visible', timeout: 10_000 });
+    check('page refresh reads the current updater status', await heads.nth(2).locator('.status-label.is-success').count() === 1);
+    const updaterValues = await page.locator('[data-testid="sys-component-facts"]').nth(2).locator('dd').allTextContents();
+    check('a failed job reports when the attempt started, not when it finished', updaterValues[0]?.startsWith('3'), updaterValues[0]);
+    check('only targets with an actionable update appear in the updater summary',
+      updaterValues.length === 2 && updaterValues[1].includes('Oh My CPA') && !updaterValues[1].includes('CLIProxyAPI'), JSON.stringify(updaterValues));
+
+    updaterStatus = 503;
+    await page.locator('.terminal-page-actions').getByRole('button').click();
+    await heads.nth(2).locator('.status-label.is-warn').waitFor({ state: 'visible', timeout: 10_000 });
+    check('a failed status read does not present a cached healthy updater or targets',
+      (await page.locator('[data-testid="sys-component-facts"]').nth(2).locator('dd').allTextContents()).every((value) => value === '—'));
+    updaterStatus = 200;
+    await page.locator('.terminal-page-actions').getByRole('button').click();
+    await heads.nth(2).locator('.status-label.is-success').waitFor({ state: 'visible', timeout: 10_000 });
   } finally {
     await page.unroute('**/omc/api/v1/management/system', systemHandler);
+    await page.unroute('**/omc/api/v1/management/system/updater', updaterHandler);
   }
 }
 

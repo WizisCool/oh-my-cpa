@@ -44,7 +44,7 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
   const onFinishedRef = React.useRef(onFinished);
   onFinishedRef.current = onFinished;
 
-  const { data, dataUpdatedAt, errorUpdatedAt } = useQuery({
+  const { data, dataUpdatedAt, errorUpdatedAt, isError } = useQuery({
     queryKey: UPDATER_QUERY_KEY,
     queryFn: api.getSystemUpdater,
     retry: false,
@@ -104,5 +104,5 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
     }
   }, [queryClient]);
 
-  return { updater, submittingProduct, apply };
+  return { updater, isUpdaterError: isError, submittingProduct, apply };
 }
