@@ -64,13 +64,45 @@ func TestRoutingApplyPreviewsAndAppliesThePreparedPlan(t *testing.T) {
 		t.Fatalf("no-op plan: %v", err)
 	}
 
-	// Priority changes on runtime-only members cannot be stored and are refused.
-	runtimePlan, _ := json.Marshal(map[string]any{"revision": board.Revision, "members": []any{map[string]any{"key": "credential:b.json", "priority": 10}}})
-	if res, err := executor.Invoke(ctx, principal, "routing_apply", runtimePlan, ""); err != nil || res.Code != "invalid_parameters" {
-		t.Fatalf("runtime member edit: res=%+v err=%v", res, err)
+	// Effective runtime-only edits must be refused before asking for approval.
+	weight, changedWeight, excludedWeight, priority := int64(2), int64(3), int64(0), 10
+	for _, test := range []struct {
+		name    string
+		current *int64
+		edit    RoutingMemberEdit
+	}{
+		{name: "priority", edit: RoutingMemberEdit{Priority: &priority}},
+		{name: "set weight", edit: RoutingMemberEdit{Weights: []RoutingWeightEdit{{Index: 0, Weight: &weight}}}},
+		{name: "exclude by weight", edit: RoutingMemberEdit{Weights: []RoutingWeightEdit{{Index: 0, Weight: &excludedWeight}}}},
+		{name: "change weight", current: &weight, edit: RoutingMemberEdit{Weights: []RoutingWeightEdit{{Index: 0, Weight: &changedWeight}}}},
+		{name: "clear weight", current: &weight, edit: RoutingMemberEdit{Weights: []RoutingWeightEdit{{Index: 0}}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			board.Members[1].Weights[0].Weight = test.current
+			board.Seal()
+			test.edit.Key = "credential:b.json"
+			runtimePlan, err := json.Marshal(RoutingPlan{Revision: board.Revision, Members: []RoutingMemberEdit{test.edit}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res, err := executor.Invoke(ctx, principal, "routing_apply", runtimePlan, ""); err != nil || res.Code != "invalid_parameters" || res.OperationID != "" {
+				t.Fatalf("runtime member edit must not await approval: res=%+v err=%v", res, err)
+			}
+		})
 	}
+	board.Members[1].Weights[0].Weight = nil
+	board.Seal()
 
-	result, err = executor.Invoke(ctx, principal, "routing_apply", plan(board.Revision, 10), "")
+	// Unchanged runtime-only values do not block edits on a writable member.
+	unchangedPriority := 0
+	preparedPlan, err := json.Marshal(RoutingPlan{Revision: board.Revision, Members: []RoutingMemberEdit{
+		{Key: "credential:a.json", Priority: &priority, Weights: []RoutingWeightEdit{{Index: 0, Weight: &weight}}},
+		{Key: "credential:b.json", Priority: &unchangedPriority, Weights: []RoutingWeightEdit{{Index: 0}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = executor.Invoke(ctx, principal, "routing_apply", preparedPlan, "")
 	if err != nil || result.Status != "pending" {
 		t.Fatalf("plan: %+v %v", result, err)
 	}

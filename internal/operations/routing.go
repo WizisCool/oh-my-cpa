@@ -353,6 +353,9 @@ func previewRoutingPlan(board RoutingBoard, plan NormalizedRoutingPlan) ([]routi
 			}
 			current := member.Weights[weight.Index].Weight
 			if (current == nil) != (weight.Weight == nil) || (current != nil && *current != *weight.Weight) {
+				if member.IsRuntimeOnly {
+					return nil, invalidParameters{edit.Key + " is runtime-only and cannot have its weight changed"}
+				}
 				changes = append(changes, routingPreviewChange{Key: member.Key, Name: member.Name, Field: "weight", From: current, To: weight.Weight})
 			}
 		}

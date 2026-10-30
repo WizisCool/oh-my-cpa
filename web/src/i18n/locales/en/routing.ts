@@ -3,8 +3,6 @@ import type source from '../zh/routing';
 
 export default {
   'orch.title': 'Routing',
-  'orch.subtitle': 'Manage priority tiers, within-tier allocation, and failover across upstream providers and credentials',
-  'orch.subtitle_phone': 'Manage priority tiers, within-tier allocation, and failover across upstream providers and credentials',
   'orch.load_failed': 'Routing could not be read',
   'orch.strategy': 'Within-tier strategy',
   'orch.strategy_rr': 'Round robin',
@@ -55,7 +53,6 @@ export default {
   'orch.weight_hint': 'Defaults to 1; 0 excludes from traffic allocation.',
   'orch.lens': 'Model',
   'orch.lens_placeholder': 'Select model to preview route',
-  'orch.lens_note': 'Preview is based on static priorities and weights only; excludes session affinity, live cooldowns, and WebSocket preferences.',
   'orch.lens_none': 'No provider or credential supports this model.',
   'orch.lens_failed': 'Credential models could not be read',
   'orch.changes': '{n, plural, one {# change} other {# changes}}',

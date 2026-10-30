@@ -1,7 +1,5 @@
 export default {
   'orch.title': '路由编排',
-  'orch.subtitle': '按层级调度上游提供商与凭据；当前层不可用时自动向下故障转移。',
-  'orch.subtitle_phone': '按层级调度上游提供商与凭据；当前层不可用时自动向下故障转移。',
   'orch.load_failed': '无法读取路由编排',
   'orch.strategy': '同层调度策略',
   'orch.strategy_rr': '轮询',
@@ -52,7 +50,6 @@ export default {
   'orch.weight_hint': '默认值为 1；设为 0 表示不分配流量。',
   'orch.lens': '模型',
   'orch.lens_placeholder': '选择模型预览路由',
-  'orch.lens_note': '预览仅基于静态优先级与权重，不包含会话粘连、实时冷却及 WebSocket 偏好。',
   'orch.lens_none': '暂无支持该模型的提供商或凭据。',
   'orch.lens_failed': '无法读取各凭据支持的模型',
   'orch.changes': '{n} 项更改',

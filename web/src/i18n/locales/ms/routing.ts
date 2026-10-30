@@ -3,8 +3,6 @@ import type source from '../zh/routing';
 
 export default {
   "orch.title": "Penghalaan",
-  "orch.subtitle": "Urus tingkat keutamaan, peruntukan dalam tingkat dan failover bagi penyedia serta kelayakan.",
-  "orch.subtitle_phone": "Urus tingkat keutamaan, peruntukan dalam tingkat dan failover bagi penyedia serta kelayakan.",
   "orch.load_failed": "Penghalaan tidak dapat dibaca",
   "orch.strategy": "Strategi dalam satu tingkat",
   "orch.strategy_rr": "Giliran",
@@ -55,7 +53,6 @@ export default {
   "orch.weight_hint": "Nilai lalai ialah 1; 0 mengecualikan daripada pengagihan trafik.",
   "orch.lens": "Model",
   "orch.lens_placeholder": "Pilih model untuk pratonton laluan",
-  "orch.lens_note": "Pratonton hanya berdasarkan keutamaan statik dan pemberat; tidak termasuk penyejukan semasa atau WebSocket.",
   "orch.lens_none": "Tiada penyedia atau kelayakan yang menyokong model ini.",
   "orch.lens_failed": "Model kelayakan tidak dapat dibaca",
   "orch.changes": "{n, plural, one {# perubahan} other {# perubahan}}",
@@ -81,7 +78,7 @@ export default {
   "orch.partial_board": "Sebahagian sumber tidak dapat dibaca: {sources}",
   "orch.empty": "Tiada kelayakan untuk disusun",
   "orch.empty_desc": "Tambah penyedia API atau kelayakan OAuth untuk menyusunnya di sini.",
-  "orch.priority_conflict": "Keutamaan kelayakan tetap tidak membenarkan susunan ini. Sertai peringkat sedia ada.",
+  "orch.priority_conflict": "Keutamaan kelayakan tetap tidak membenarkan susunan ini. Sertai tingkat sedia ada.",
   "orch.readback_pending": "Penghalaan telah dihantar, tetapi konfigurasi semasa belum dapat disahkan. Muat semula sebelum mengedit lagi.",
   "orch.leave_title": "Tinggalkan penghalaan?",
   "orch.leave_desc": "Perubahan yang belum disimpan akan dibuang. Perubahan yang telah digunakan kekal berkuat kuasa.",

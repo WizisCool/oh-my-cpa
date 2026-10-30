@@ -68,6 +68,32 @@ it('applies an arrangement as one plan naming only what changed', async () => {
   });
 });
 
+it.each([
+  { value: '', expected: 0 },
+  { value: '-1', expected: -1 },
+])('submits cooldown $expected when the input is "$value"', async ({ value, expected }) => {
+  const api = installOmcApi();
+  const currentBoard: RoutingBoard = { ...board, settings: { ...board.settings, transient_error_cooldown_seconds: 20 } };
+  const updatedBoard: RoutingBoard = { ...currentBoard, revision: 'rev-2', settings: { ...currentBoard.settings, transient_error_cooldown_seconds: expected } };
+  api.on('GET', '/management/routing', () => currentBoard);
+  api.on('PATCH', '/management/routing', () => ({ is_complete: true, results: [], board: updatedBoard }));
+  renderRoutingPage();
+
+  fireEvent.click(await screen.findByRole('button', { name: /^Failover/ }));
+  const input = screen.getByRole('spinbutton', { name: 'Transient Error Cooldown' }) as HTMLInputElement;
+  fireEvent.change(input, { target: { value } });
+  fireEvent.blur(input);
+  expect(input.value).toBe(String(expected));
+
+  fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+  await screen.findByText('Routing applied');
+  expect(api.requests.filter(request => request.method === 'PATCH').map(request => request.body)).toEqual([{
+    revision: 'rev-1',
+    settings: { transient_error_cooldown_seconds: expected },
+  }]);
+});
+
 it('reports a plan refused for a changed board and offers a reload', async () => {
   await arrangeAndApply(json({ error: 'changed', code: 'routing_conflict' }, 409));
   expect(await screen.findByText('Routing changed elsewhere. Reload and arrange again.')).toBeTruthy();

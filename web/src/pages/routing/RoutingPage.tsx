@@ -277,7 +277,6 @@ export function RoutingPage() {
     <div ref={pageRef} className={clsx('terminal-page terminal-page-stack', isDirty && styles['has-dirty-bar'])} data-testid="routing-page">
       <PageHeader
         title={t('orch.title')}
-        subtitle={t(isPhone ? 'orch.subtitle_phone' : 'orch.subtitle')}
         actions={<RefreshButton disabled={applyMutation.isPending} onRefresh={() => void (isDirty && !isAwaitingReadback ? boardQuery.refetch() : reload())} isRefreshing={boardQuery.isFetching} />}
       />
       {isAwaitingReadback && !boardQuery.isFetching && (
@@ -327,9 +326,9 @@ export function RoutingPage() {
             {modelsQuery.isError && (
               <LoadFailure tone="warning" title={t('orch.lens_failed')} error={modelsQuery.error} onRetry={() => void modelsQuery.refetch()} />
             )}
-            <p className={styles['lens-note']}>
-              {lens && preview.steps.length === 0 ? t('orch.lens_none') : t('orch.lens_note')}
-            </p>
+            {lens && preview.steps.length === 0 && (
+              <p className={styles['lens-note']}>{t('orch.lens_none')}</p>
+            )}
             <div className="sr-only" aria-live="polite">{announcement}</div>
           </section>
         )}

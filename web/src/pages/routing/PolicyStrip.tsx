@@ -133,7 +133,7 @@ export const PolicyStrip: React.FC<PolicyStripProps> = ({ settings, onChange, di
           <SettingRow
             label={t('cfg.f_transient_cooldown')}
             description={t('cfg.f_transient_cooldown_desc')}
-            control={<InputNumber size="small" min={-1} precision={0} aria-label={t('cfg.f_transient_cooldown')} value={settings.transient_error_cooldown_seconds} disabled={disabled} onChange={(value) => set('transient_error_cooldown_seconds', whole(value, -1))} />}
+            control={<InputNumber size="small" min={-1} precision={0} aria-label={t('cfg.f_transient_cooldown')} value={settings.transient_error_cooldown_seconds} disabled={disabled} onChange={(value) => set('transient_error_cooldown_seconds', whole(value ?? 0, -1))} />}
           />
           <SettingRow
             label={t('cfg.f_disable_cooling')}

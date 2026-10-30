@@ -3,8 +3,6 @@ import type source from '../zh/routing';
 
 export default {
   "orch.title": "路由編排",
-  "orch.subtitle": "按層級調度上游供應商與憑證；目前層級不可用時自動向下故障轉移。",
-  "orch.subtitle_phone": "按層級調度上游供應商與憑證；目前層級不可用時自動向下故障轉移。",
   "orch.load_failed": "無法讀取路由編排",
   "orch.strategy": "同層調度策略",
   "orch.strategy_rr": "輪詢",
@@ -55,7 +53,6 @@ export default {
   "orch.weight_hint": "預設值為 1；設為 0 表示不分配流量。",
   "orch.lens": "模型",
   "orch.lens_placeholder": "選擇模型預覽路由",
-  "orch.lens_note": "預覽僅基於靜態優先級與權重，不包含會話黏連、即時冷卻及 WebSocket 偏好。",
   "orch.lens_none": "暫無支援該模型的供應商或憑證。",
   "orch.lens_failed": "無法讀取各憑證支援的模型",
   "orch.changes": "{n} 項變更",
