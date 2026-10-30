@@ -89,7 +89,7 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     protocolMatchers: ['response'],
     requiresBaseURL: true,
     supportsErrorRules: true,
-    behaviorSwitches: ['alpha_search', 'codex_cloaking'],
+    behaviorSwitches: ['websockets', 'alpha_search', 'codex_cloaking'],
   },
   {
     id: 'claude',
@@ -128,6 +128,7 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     protocolMatchers: ['xai', 'grok'],
     requiresBaseURL: true,
     supportsErrorRules: true,
+    behaviorSwitches: ['websockets'],
   },
   {
     id: 'vertex',

@@ -8,6 +8,7 @@ export default {
   "pro.title": "Penyedia AI",
   "pro.col_provider": "Penyedia / Nama",
   "pro.col_protocol": "Protokol",
+  "pro.websockets_tag": "WS",
   "pro.col_endpoint": "URL Pangkalan Titik Akhir",
   "pro.col_status": "Status",
   "pro.delete_key_confirm": "Padamkan kunci API pelanggan ini? Pelanggan yang menggunakan kunci ini akan dinafikan akses.",

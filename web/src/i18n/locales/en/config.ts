@@ -530,6 +530,7 @@ export default {
   'policy.codex_cloaking_desc': 'Whether requests are reshaped to look like the official Codex client. Inherit uses the gateway-wide setting.',
   'policy.alpha_search': 'Enable alpha search',
   'policy.alpha_search_desc': 'Lets this provider use the Codex alpha search tool',
+  'policy.websockets_desc': 'When a client calls /v1/responses over a WebSocket, uses the upstream WebSocket transport and prefers this credential; ordinary HTTP requests are unaffected',
   'policy.rebuild_mid_system': 'Rebuild mid-conversation system messages',
   'policy.rebuild_mid_system_desc': 'Rewrites system messages that appear mid-conversation into a form the upstream accepts',
   'policy.native_tool_search': 'Native tool search',

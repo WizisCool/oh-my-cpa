@@ -5,6 +5,7 @@ export default {
   'pro.title': 'AI 提供商',
   'pro.col_provider': '提供商 / 标识',
   'pro.col_protocol': '协议驱动',
+  'pro.websockets_tag': 'WS',
   'pro.col_endpoint': '接入端点 (Base URL)',
   'pro.col_status': '状态',
   'pro.delete_key_confirm': '确定删除该客户端 API 密钥？删除后使用此密钥的客户端将无法访问。',

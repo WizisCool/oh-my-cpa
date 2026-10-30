@@ -107,6 +107,8 @@ export interface ProviderBehavior {
  openapi?: ProviderOverride;
  openapi_location?: string;
   alpha_search?: boolean;
+  /** Codex and xAI: serve downstream WebSocket requests over the upstream WebSocket transport. */
+  websockets?: boolean;
   codex_cloaking?: ProviderOverride;
   rebuild_mid_system_message?: boolean;
   /** Claude-only: trust the key's custom base URL with Anthropic native tool search. */
