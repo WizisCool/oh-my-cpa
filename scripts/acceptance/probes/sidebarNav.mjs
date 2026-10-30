@@ -268,7 +268,7 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('Reset order puts the model order back',
     await operateOrder() === '/dashboard,/agent,/playground,/model-square', await operateOrder());
   check('Reset order leaves visibility alone',
-    await page.locator('[data-nav-toggle] button[aria-checked=true]').count() === 17,
+    await page.locator('[data-nav-toggle] button[aria-checked=true]').count() === 18,
     await page.locator('[data-nav-toggle] button[aria-checked=true]').count() + ' shown');
 
   // A non-default order has to reach the phone sheet too: at that width the sheet is the rail's

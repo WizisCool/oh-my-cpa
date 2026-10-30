@@ -349,6 +349,7 @@ export default {
   "cfg.backups_reason_plugin_install": "安裝外掛",
   "cfg.backups_reason_plugin_delete": "移除外掛",
   "cfg.backups_reason_credential_status": "啟用或停用憑證",
+  "cfg.backups_reason_routing_plan": "修改路由編排",
   "cfg.backups_reason_restore": "還原備份",
   "cfg.backups_reason_manual": "手動備份",
   "cfg.backups_reason_legacy_conversion": "轉換為 v8 格式",

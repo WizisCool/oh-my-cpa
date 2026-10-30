@@ -46,6 +46,8 @@ type Service struct {
 	SetOAuthExcludedModels     func(context.Context, string, []string, string) error
 	NormalizeCredentialFields  func(map[string]any) (map[string]any, error)
 	UpdateCredentialFields     func(context.Context, CredentialTarget, map[string]any, string) error
+	ReadRouting                func(context.Context) (RoutingBoard, error)
+	ApplyRouting               func(context.Context, NormalizedRoutingPlan) (RoutingOutcome, error)
 }
 type Empty struct{}
 type Done struct {
@@ -88,7 +90,7 @@ func read[I, O any](registry *capability.Registry, name, description string, han
 	return capability.Register(registry, Meta(name, description, "read", "low"), nil, func(ctx context.Context, input I, _, _ string) (O, error) { return handler(ctx, input) })
 }
 func (s *Service) Register(registry *capability.Registry) error {
-	registrations := []func(*capability.Registry) error{s.registerUsage, s.registerKeys, s.registerConfig, s.registerProviders, s.registerProviderMutations, s.registerOAuth, s.registerQuota, s.registerQuotaActions, s.registerSystem, s.registerPricing, s.registerDatabase, s.registerTimezone, s.registerTpsCalculation, s.registerQuotaAutoRefresh, s.registerWarmup, s.registerCustomIcons, s.registerModelSquare}
+	registrations := []func(*capability.Registry) error{s.registerUsage, s.registerKeys, s.registerConfig, s.registerProviders, s.registerProviderMutations, s.registerOAuth, s.registerQuota, s.registerQuotaActions, s.registerSystem, s.registerPricing, s.registerDatabase, s.registerTimezone, s.registerTpsCalculation, s.registerQuotaAutoRefresh, s.registerWarmup, s.registerCustomIcons, s.registerModelSquare, s.registerRouting}
 	for _, register := range registrations {
 		if err := register(registry); err != nil {
 			return err

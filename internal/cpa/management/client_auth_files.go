@@ -208,11 +208,13 @@ type AuthFile struct {
 	ModelQuotas   map[string]map[string]any `json:"model_quotas"`
 	Models        []AuthModel               `json:"models"`
 	Priority      int                       `json:"priority"`
-	Weight        int64                     `json:"weight"`
-	Note          string                    `json:"note"`
-	CreatedAt     json.RawMessage           `json:"created_at"`
-	UpdatedAt     json.RawMessage           `json:"updated_at"`
-	LastRefresh   json.RawMessage           `json:"last_refresh"`
+	// Weight is absent when the credential states none, which CPA runs as 1; an
+	// explicit 0 instead excludes it from weighted routing, so the two differ.
+	Weight      *int64          `json:"weight"`
+	Note        string          `json:"note"`
+	CreatedAt   json.RawMessage `json:"created_at"`
+	UpdatedAt   json.RawMessage `json:"updated_at"`
+	LastRefresh json.RawMessage `json:"last_refresh"`
 }
 
 // CodexChatgptAccountID extracts the ChatGPT account id from CPA-projected

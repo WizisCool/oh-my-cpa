@@ -71,6 +71,7 @@ export type ConfigBackupReason =
   | 'plugin_install'
   | 'plugin_delete'
   | 'credential_status'
+  | 'routing_plan'
   | 'restore'
   | 'manual'
   | 'legacy_conversion';

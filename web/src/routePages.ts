@@ -15,6 +15,9 @@ export const PricingPage = React.lazy(loadPricingPage);
 export const loadProvidersPage = createPageLoader(() => import('./pages/ProvidersPage'), 'ProvidersPage');
 export const ProvidersPage = React.lazy(loadProvidersPage);
 
+export const loadRoutingPage = createPageLoader(() => import('./pages/routing/RoutingPage'), 'RoutingPage');
+export const RoutingPage = React.lazy(loadRoutingPage);
+
 export const loadApiKeysPage = createPageLoader(() => import('./pages/ApiKeysPage'), 'ApiKeysPage');
 export const ApiKeysPage = React.lazy(loadApiKeysPage);
 

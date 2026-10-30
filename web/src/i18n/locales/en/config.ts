@@ -349,6 +349,7 @@ export default {
   'cfg.backups_reason_plugin_install': 'Plugin install',
   'cfg.backups_reason_plugin_delete': 'Plugin removal',
   'cfg.backups_reason_credential_status': 'Credential enable or disable',
+  'cfg.backups_reason_routing_plan': 'Routing plan change',
   'cfg.backups_reason_restore': 'Backup restore',
   'cfg.backups_reason_manual': 'Manual backup',
   'cfg.backups_reason_legacy_conversion': 'Conversion to v8',

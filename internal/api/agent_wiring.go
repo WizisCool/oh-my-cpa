@@ -414,6 +414,30 @@ func (h *Handler) operationsService() *operations.Service {
 		}
 		return mapAgentProviderError(err)
 	}
+	service.ReadRouting = func(ctx context.Context) (operations.RoutingBoard, error) {
+		client, err := h.capabilityClient(ctx)
+		if err != nil {
+			return operations.RoutingBoard{}, err
+		}
+		return h.readRoutingBoard(ctx, client)
+	}
+	service.ApplyRouting = func(ctx context.Context, plan operations.NormalizedRoutingPlan) (operations.RoutingOutcome, error) {
+		client, err := h.capabilityClient(ctx)
+		if err != nil {
+			return operations.RoutingOutcome{}, err
+		}
+		// The capability executor owns the audit of an Agent operation.
+		outcome, err := h.applyRoutingPlan(ctx, client, plan, func(string, string, string, string, map[string]any) error { return nil })
+		var refusal *providerWriteError
+		if errors.As(err, &refusal) && refusal.status == http.StatusBadRequest {
+			return outcome, errors.New("invalid_parameters")
+		}
+		// Every other error is a refusal before anything was written.
+		if errors.Is(err, errProviderWriteBusy) {
+			return outcome, errors.New("write_busy")
+		}
+		return outcome, err
+	}
 	h.bindProviderOperations(service)
 	h.bindWarmupOperations(service)
 	return service

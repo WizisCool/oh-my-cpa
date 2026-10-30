@@ -349,6 +349,7 @@ export default {
   "cfg.backups_reason_plugin_install": "Pemasangan pemalam",
   "cfg.backups_reason_plugin_delete": "Pembuangan pemalam",
   "cfg.backups_reason_credential_status": "Mendayakan atau menyahdayakan kelayakan",
+  "cfg.backups_reason_routing_plan": "Perubahan pelan penghalaan",
   "cfg.backups_reason_restore": "Pemulihan sandaran",
   "cfg.backups_reason_manual": "Sandaran manual",
   "cfg.backups_reason_legacy_conversion": "Penukaran kepada v8",

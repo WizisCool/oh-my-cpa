@@ -11,6 +11,7 @@ import {
   InfoCircleOutlined,
   InsightsOutlined,
   KeyOutlined,
+  LayersOutlined,
   LoginOutlined,
   ProfileOutlined,
   RobotOutlined,
@@ -53,6 +54,8 @@ export const STATIC_NAV_GROUPS: readonly NavGroup[] = [
       // Authentication, credential management and quota are one credential-centred workspace.
       { key: '/oauth-management', labelKey: 'nav.auth_files', icon: <LoginOutlined /> },
       { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
+      // Then the order the credentials above are tried in.
+      { key: '/routing', labelKey: 'nav.routing', icon: <LayersOutlined /> },
     ],
   },
   {
