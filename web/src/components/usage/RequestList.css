@@ -650,11 +650,11 @@
   .request-table-header {
     display: none;
   }
-  /* A stacked record is three lines, each a pair: what was asked and what it cost, who answered
-     and how much came from cache, when it ran and how fast. Everything else the table shows
-     is one tap away in the detail drawer. A phone-wide list that repeats all of a table's
-     columns in small type is a table nobody can scan; the record is here to be recognised, and
-     the drawer is where it is read. */
+  /* A stacked record is three lines: what was asked and what it cost, who answered and how
+     much came from cache, and when it ran, whose key called, and how fast. Everything else
+     the table shows is one tap away in the detail drawer. A phone-wide list that repeats all
+     of a table's columns in small type is a table nobody can scan; the record is here to be
+     recognised, and the drawer is where it is read. */
   .request-row {
     display: flex;
     flex-wrap: wrap;
@@ -790,7 +790,7 @@
     order: 21;
   }
 
-  /* Line 3, the quiet one: when, the verdict, and how fast it ran. */
+  /* Line 3, the quiet one: when, the verdict, whose key called, and how fast it ran. */
   .req-time-text {
     order: 30;
     font-size: var(--text-sm);
@@ -803,6 +803,19 @@
     display: none;
   }
   .req-col-result { order: 32; }
+  /* The caller key is the one field the record keeps beyond the drawer's reach: whose
+     traffic a line is, is what an operator scans the list for. It is the line's cell that
+     may give way - a zero basis keeps a long key from taking a line of its own, as on the
+     first line, so it takes the room the line leaves and ellipsizes instead. */
+  .req-col-key {
+    order: 33;
+    flex: 1 1 0;
+    justify-content: flex-start;
+  }
+  .req-key-val {
+    font-weight: 400;
+    color: var(--fg-2);
+  }
   /* Throughput, as the table's TPS column computes it; a record with none to state (a failure, a
      response with no output) shows how long it took instead. */
   .req-col-tps,
@@ -843,7 +856,6 @@
   }
 
   /* The detail drawer carries these. */
-  .req-col-key,
   .req-col-ua,
   .req-ttft-val,
   .req-tokens-total,
