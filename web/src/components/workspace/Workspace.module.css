@@ -1786,28 +1786,6 @@
   from { opacity: 0; transform: translateY(4px); }
 }
 
-/* ── first load of a stored conversation ───────────────────────────────────── */
-
-.thread-placeholder {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: calc(var(--workspace-column) + 48px);
-  margin: 0 auto;
-  padding: 24px;
-  box-sizing: border-box;
-}
-
-.thread-placeholder-column {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.thread-placeholder-question {
-  align-self: flex-end;
-}
-
 :global(:root[data-reduced-motion='true']) {
   .live-text {
     animation: none;

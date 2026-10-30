@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Checkbox, Input, Select } from 'antd';
 import { Switch } from '../common/Switch';
-import { PageLoading } from '../common/PageLoading';
+import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
@@ -125,7 +125,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
   });
 
   if (settingsQuery.isLoading) {
-    return <PageLoading variant="block" className={styles.empty} />;
+    return <ListLoading className={styles.empty} />;
   }
   if (settingsQuery.isError || !current) {
     return <LoadFailure className={styles['store-notice']} title={t('plugin.settings_load_failed')} error={settingsQuery.error} onRetry={() => void settingsQuery.refetch()} />;

@@ -7,7 +7,7 @@ import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { PageHeader } from '../../components/common/PageHeader';
-import { PageLoading } from '../../components/common/PageLoading';
+import { PanelsPlaceholder } from '../../components/common/PageLoading';
 import { RefreshButton } from '../../components/common/RefreshButton';
 import { SearchSelect } from '../../components/common/SearchSelect';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -243,9 +243,14 @@ export function RoutingPage() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [shouldProtectDraft]);
 
-  if (boardQuery.isPending && !baseline) {
-    return <PageLoading />;
-  }
+  // Until the board is read and its draft seeded, the real head and the board's panels.
+  const loadingFrame = (
+    <div className="terminal-page terminal-page-stack" data-testid="routing-page">
+      <PageHeader title={t('orch.title')} actions={<RefreshButton isRefreshing onRefresh={() => void boardQuery.refetch()} />} />
+      <PanelsPlaceholder />
+    </div>
+  );
+  if (boardQuery.isPending && !baseline) return loadingFrame;
   if (boardQuery.isError && !baseline) {
     return (
       <div className="terminal-page terminal-page-stack" data-testid="routing-page">
@@ -254,7 +259,7 @@ export function RoutingPage() {
       </div>
     );
   }
-  if (!baseline || !draft || !preview) return <PageLoading />;
+  if (!baseline || !draft || !preview) return loadingFrame;
   if (!diff) {
     return <Notice tone="warning" title={t('orch.priority_conflict')} />;
   }

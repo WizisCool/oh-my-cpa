@@ -137,7 +137,7 @@ export const InsightsPage: React.FC = () => {
   // A narrowing reshapes the panels above the row it was chosen in; the row stays under the finger.
   const anchorPress = useScrollAnchor(search.toString());
 
-  const { value: range, ready: isRangeReady, set: setRange } = usePreference<InsightsRange>(
+  const { value: range, ready: isRangeReady, loaded: isRangeStored, set: setRange } = usePreference<InsightsRange>(
     INSIGHTS_RANGE_PREFERENCE, DEFAULT_INSIGHTS_RANGE, parseInsightsRange,
   );
 
@@ -398,14 +398,14 @@ export const InsightsPage: React.FC = () => {
       subtitle={subtitle}
       actions={(
         <>
-          <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} />
+          <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} isDisabled={!isRangeStored} />
           {compareButton}
           {refreshButton}
         </>
       )}
       mobileActions={(
         <>
-          <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} />
+          <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} isDisabled={!isRangeStored} />
           <ActionMenu>
             {compareButton}
             {refreshButton}

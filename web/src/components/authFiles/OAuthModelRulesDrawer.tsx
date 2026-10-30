@@ -28,7 +28,7 @@ import { OAuthModelAliasPanel } from './OAuthModelAliasPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
 import { LoadFailure, Notice, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
-import { PageLoading } from '../common/PageLoading';
+import { ListLoading } from '../common/PageLoading';
 import { SearchSelect } from '../common/SearchSelect';
 import { AppDrawer } from '../common/AppDrawer';
 
@@ -431,7 +431,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     >
       <div className={styles['drawer-content']}>
         {!isSettled ? (
-          <PageLoading variant="block" />
+          <ListLoading />
         ) : (
           <>
             <p className={styles['intro']}>{t('af.rules_intro')}</p>

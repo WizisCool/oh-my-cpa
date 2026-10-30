@@ -8,6 +8,8 @@ import { INSIGHTS_PRESETS, type InsightsPreset, type InsightsRange } from '../..
 interface InsightsRangeControlProps {
   range: InsightsRange;
   onChange: (range: InsightsRange) => void;
+  /** False until the stored window has been read; the trigger then shows it inertly. */
+  isDisabled?: boolean;
 }
 
 function formatSpan(from: number, to: number): string {
@@ -23,7 +25,7 @@ function formatSpan(from: number, to: number): string {
  * week") listed ahead of the spans, because a reader comparing keys asks about the calendar first.
  * A custom range is whole days, like the dashboard's.
  */
-const InsightsRangeControlView: React.FC<InsightsRangeControlProps> = ({ range, onChange }) => {
+const InsightsRangeControlView: React.FC<InsightsRangeControlProps> = ({ range, onChange, isDisabled }) => {
   useTimeZone();
   const t = useT();
   const label = range.from !== undefined
@@ -46,6 +48,7 @@ const InsightsRangeControlView: React.FC<InsightsRangeControlProps> = ({ range, 
       to={range.to}
       presets={presets}
       label={label}
+      isDisabled={isDisabled}
       onPresetChange={(preset) => onChange({ preset: preset as InsightsPreset })}
       onRangeChange={(from, to) => onChange({ from, to })}
     />

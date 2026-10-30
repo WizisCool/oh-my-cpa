@@ -5,12 +5,13 @@ import {
   MenuUnfoldOutlined,
 } from '../icons';
 import type { MenuProps } from 'antd';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
-import { RouteLoading } from './PageLoading';
+import { PageSkeleton, SuspenseFallback, type RouteLoadingHandle } from './PageLoading';
+import { DashboardSkeleton } from '../dashboard/DashboardSkeleton';
 import { CpaUpgradeRequired } from './CpaUpgradeRequired';
 import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -98,6 +99,17 @@ function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: b
       'data-route-path': entry.key,
     })),
   }));
+}
+
+/** The frame the matched route declared for its module download (`loadingAs` in `App.tsx`). */
+function RouteLoading() {
+  const matches = useMatches();
+  const loading = (matches.at(-1)?.handle as RouteLoadingHandle | undefined)?.loading ?? 'list';
+  return (
+    <SuspenseFallback>
+      {loading === 'dashboard' ? <DashboardSkeleton /> : <PageSkeleton body={loading} />}
+    </SuspenseFallback>
+  );
 }
 
 function isNarrowViewport(): boolean {

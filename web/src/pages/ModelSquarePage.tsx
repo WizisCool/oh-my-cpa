@@ -10,7 +10,7 @@ import { useT } from '../i18n';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
 import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, SyncOutlined, UpOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
-import { PageLoading } from '../components/common/PageLoading';
+import { ListLoading } from '../components/common/PageLoading';
 import { CopyButton } from '../components/common/CopyButton';
 import { StatusLabel } from '../components/common/StatusLabel';
 import { credentialProviderIconId, getCredentialProviderMetadata } from '../components/common/providerMetadata';
@@ -445,7 +445,7 @@ export const ModelSquarePage: React.FC = () => {
     <PageHeader title={t('nav.model_square')} subtitle={subtitle} actions={<CatalogRefreshButton onReread={reread} />} />
     {directory.isError && <LoadFailure title={t(needsKey ? 'models.key_required' : 'models.load_failed')} error={directory.error} onRetry={() => void directory.refetch()} />}
     {needsKey && <Link to="/api-keys">{t('models.manage_keys')}</Link>}
-    {directory.isPending ? <PageLoading variant="block" /> : directory.data && <>
+    {directory.isPending ? <ListLoading /> : directory.data && <>
       <Toolbar>
         <SearchInput className={styles['search']} label={t('models.search')} value={search} onChange={(text) => setParam('q', text)} />
         <span className={styles['result-count']} role="status">

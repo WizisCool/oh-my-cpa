@@ -17,6 +17,7 @@ import {
   type DropSide,
 } from '../../types/dashboardLayout';
 import styles from './DashboardBoard.module.css';
+import './dashboardGrid.css';
 import { Tooltip } from '../common/Tooltip';
 
 export interface DashboardBoardProps {

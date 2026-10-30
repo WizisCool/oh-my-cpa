@@ -41,6 +41,8 @@ export interface TimeRangePickerProps {
   placement?: 'bottomLeft' | 'bottomRight';
   onPresetChange: (preset: string) => void;
   onRangeChange: (from: number, to: number | null) => void;
+  /** Inactive until the page knows which window it began with, so a fallback is never written back. */
+  isDisabled?: boolean;
 }
 
 type PanelMode = 'quick' | 'custom';
@@ -79,6 +81,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   placement = 'bottomLeft',
   onPresetChange,
   onRangeChange,
+  isDisabled = false,
 }) => {
   const zone = useTimeZone();
   const { t, lang } = useI18n();
@@ -254,6 +257,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
         className ?? '',
       ].filter(Boolean).join(' ')}
       icon={<ClockCircleOutlined />}
+      disabled={isDisabled}
       title={t('time_range.title')}
       aria-haspopup="dialog"
       aria-expanded={isOpen}

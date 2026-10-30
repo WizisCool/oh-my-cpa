@@ -33,15 +33,34 @@ export interface LoadingRegionProps {
   className?: string;
 }
 
+// One full breath: the 1400ms keyframe run forwards and back.
+const BREATH_PERIOD_MS = 2800;
+
+const IsInLoadingRegion = React.createContext(false);
+
 /**
  * The status region a placeholder sits in. The region carries the name, because the blocks are
  * decoration and a bare `aria-busy` is announced as an unlabelled status.
+ *
+ * A region inside another is only a box, so a page frame can compose the body placeholders without
+ * announcing itself twice. Every region starts its breath at the same point of one document-wide
+ * cycle: a lazy route's frame hands over to the page's own first-load frame mid-breath, and a
+ * restarted cycle would make the blocks blink at the seam.
  */
 export function LoadingRegion({ children, className }: LoadingRegionProps) {
   const t = useT();
+  const isNested = React.useContext(IsInLoadingRegion);
+  const [epoch] = React.useState(() => `${-(performance.now() % BREATH_PERIOD_MS)}ms`);
+  if (isNested) return <div className={clsx('loading-region', className)}>{children}</div>;
   return (
-    <div className={clsx('loading-region', className)} role="status" aria-busy="true" aria-label={t('common.loading')}>
-      {children}
+    <div
+      className={clsx('loading-region', className)}
+      style={{ '--placeholder-epoch': epoch } as React.CSSProperties}
+      role="status"
+      aria-busy="true"
+      aria-label={t('common.loading')}
+    >
+      <IsInLoadingRegion.Provider value>{children}</IsInLoadingRegion.Provider>
     </div>
   );
 }
@@ -72,14 +91,14 @@ export function ListPlaceholder({ rows = 6, isFramed = false }: { rows?: number;
   );
 }
 
-/** The page head: the title and its one subtitle line, at the heights `PageHeader` renders them. */
+/**
+ * The page head: the title, in the line box `PageHeader` sets it in. No subtitle line, because most
+ * subtitles summarise data that has not arrived, so the head the page first draws is a title alone.
+ */
 export function PageHeadPlaceholder() {
   return (
     <div className="terminal-page-head placeholder-page-head">
-      <span className="placeholder-lines">
-        <Placeholder width={168} className="placeholder-title" />
-        <Placeholder width={312} row={1} className="placeholder-line is-subtitle" />
-      </span>
+      <Placeholder width={168} className="placeholder-title" />
     </div>
   );
 }
