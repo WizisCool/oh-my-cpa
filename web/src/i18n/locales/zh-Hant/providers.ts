@@ -8,6 +8,7 @@ export default {
   "pro.title": "AI 供應商",
   "pro.col_provider": "供應商 / 標識",
   "pro.col_protocol": "協議驅動",
+  "pro.websockets_tag": "WS",
   "pro.col_endpoint": "接入端點 (Base URL)",
   "pro.col_status": "狀態",
   "pro.delete_key_confirm": "確定刪除該客戶端 API 金鑰？刪除後使用此金鑰的客戶端將無法存取。",

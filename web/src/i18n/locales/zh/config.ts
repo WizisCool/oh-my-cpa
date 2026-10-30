@@ -527,6 +527,7 @@ export default {
   'policy.codex_cloaking_desc': '是否把请求改写成官方 Codex 客户端的形态；跟随全局时使用网关的全局设置',
   'policy.alpha_search': '启用 Alpha 搜索',
   'policy.alpha_search_desc': '允许该提供商使用 Codex 的 Alpha 搜索工具',
+  'policy.websockets_desc': '下游客户端通过 WebSocket 调用 /v1/responses 时，改用上游 WebSocket 传输并优先调度该凭据；普通 HTTP 请求不受影响',
   'policy.rebuild_mid_system': '重建对话中途的系统消息',
   'policy.rebuild_mid_system_desc': '把出现在对话中途的系统消息改写为上游接受的形式',
   'policy.native_tool_search': '原生工具搜索',

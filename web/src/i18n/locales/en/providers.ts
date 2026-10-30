@@ -8,6 +8,7 @@ export default {
   'pro.title': 'AI Providers',
   'pro.col_provider': 'Provider / Name',
   'pro.col_protocol': 'Protocol',
+  'pro.websockets_tag': 'WS',
   'pro.col_endpoint': 'Endpoint Base URL',
   'pro.col_status': 'Status',
   'pro.delete_key_confirm': 'Delete this client API key? Clients using this key will be denied access.',

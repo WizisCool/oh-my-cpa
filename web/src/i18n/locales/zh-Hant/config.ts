@@ -530,6 +530,7 @@ export default {
   "policy.codex_cloaking_desc": "是否把請求改寫成官方 Codex 用戶端的形態；跟隨全域時使用閘道的全域設定",
   "policy.alpha_search": "啟用 Alpha 搜尋",
   "policy.alpha_search_desc": "允許該供應商使用 Codex 的 Alpha 搜尋工具",
+  "policy.websockets_desc": "下游用戶端透過 WebSocket 呼叫 /v1/responses 時，改用上游 WebSocket 傳輸並優先排程該憑證；一般 HTTP 請求不受影響",
   "policy.rebuild_mid_system": "重建對話中途的系統訊息",
   "policy.rebuild_mid_system_desc": "把出現在對話中途的系統訊息改寫為上游接受的形式",
   "policy.native_tool_search": "原生工具搜尋",

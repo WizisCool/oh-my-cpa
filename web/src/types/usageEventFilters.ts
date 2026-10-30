@@ -1,7 +1,8 @@
 import type { MessageKey } from '../i18n/catalog';
-import type { UsageCostFilter, UsageResultFilter, UsageServedFilter } from './usageEvents';
+import type { UsageCostFilter, UsageResultFilter, UsageServedFilter, UsageTransportFilter } from './usageEvents';
 import {
   isUsageServedState,
+  isUsageTransport,
   USAGE_MULTI_FILTER_KEYS,
   USAGE_RANGE_FILTER_KEYS,
   formatUsageRangeBound,
@@ -52,6 +53,7 @@ export interface UsageEventsFilterDraft {
   ranges: Partial<Record<RangeFieldKey, { min?: RangeBound; max?: RangeBound }>>;
   cost: UsageCostFilter;
   served: UsageServedFilter;
+  transport: UsageTransportFilter;
   result: UsageResultFilter;
 }
 
@@ -61,6 +63,7 @@ export const EMPTY_FILTER_DRAFT: UsageEventsFilterDraft = {
   ranges: {},
   cost: 'all',
   served: 'all',
+  transport: 'all',
   result: 'all',
 };
 
@@ -90,6 +93,7 @@ export function draftFromView(view: UsageEventsView): UsageEventsFilterDraft {
     ranges: {},
     cost: 'all',
     served: 'all',
+    transport: 'all',
     result: view.result,
   };
   for (const key of EVENT_FILTER_KEYS) {
@@ -106,6 +110,10 @@ export function draftFromView(view: UsageEventsView): UsageEventsFilterDraft {
     }
     if (key === 'served') {
       if (isUsageServedState(values[0])) draft.served = values[0];
+      continue;
+    }
+    if (key === 'transport') {
+      if (isUsageTransport(values[0])) draft.transport = values[0];
       continue;
     }
     const rangeSide = rangeSideOf(key);
@@ -144,6 +152,10 @@ export function draftToView(draft: UsageEventsFilterDraft): UsageEventsView {
     }
     if (key === 'served') {
       if (isUsageServedState(draft.served)) params.served = [draft.served];
+      continue;
+    }
+    if (key === 'transport') {
+      if (isUsageTransport(draft.transport)) params.transport = [draft.transport];
       continue;
     }
     const rangeSide = rangeSideOf(key);

@@ -73,10 +73,14 @@ type ConfigAPIKey struct {
 	// value as "use the global setting" and 0 as "no additional retry rounds".
 	RequestRetry        *int                     `json:"request-retry,omitempty"`
 	RequestScopedErrors []RequestScopedErrorRule `json:"request-scoped-errors,omitempty"`
-	// The three settings below exist on some families only, and CPA decodes each
+	// The settings below exist on some families only, and CPA decodes each
 	// family strictly: one of them written to a family that lacks it makes CPA
 	// refuse the whole configuration. Callers set them per family.
 	AlphaSearch bool `json:"alpha-search,omitempty"`
+	// Websockets lets a Codex or xAI key serve a downstream WebSocket request
+	// over the upstream WebSocket transport. Meta decodes it too (its entry is
+	// CPA's CodexKey) but has no WebSocket executor.
+	Websockets bool `json:"websockets,omitempty"`
 	// Interactions enables native Vertex Interactions API routing for a vertex
 	// key; CPA omits an unset or false value, so a plain checkbox is the
 	// honest model rather than an inherit choice.

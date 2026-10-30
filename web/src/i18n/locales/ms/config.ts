@@ -530,6 +530,7 @@ export default {
   "policy.codex_cloaking_desc": "Sama ada permintaan dibentuk semula supaya kelihatan seperti klien Codex rasmi. Ikut global menggunakan tetapan seluruh gateway.",
   "policy.alpha_search": "Dayakan carian alpha",
   "policy.alpha_search_desc": "Membenarkan penyedia ini menggunakan alat carian alpha Codex",
+  "policy.websockets_desc": "Apabila klien memanggil /v1/responses melalui WebSocket, gunakan pengangkutan WebSocket huluan dan utamakan kelayakan ini; permintaan HTTP biasa tidak terjejas",
   "policy.rebuild_mid_system": "Bina semula mesej sistem di tengah perbualan",
   "policy.rebuild_mid_system_desc": "Menulis semula mesej sistem yang muncul di tengah perbualan ke bentuk yang diterima oleh upstream",
   "policy.native_tool_search": "Carian alat asli",

@@ -38,6 +38,7 @@ export const EMPTY_RUNTIME_POLICY_DRAFT: RuntimePolicyDraft = {
 
 export const EMPTY_BEHAVIOR_DRAFT: BehaviorDraft = {
   alpha_search: false,
+  websockets: false,
   codex_cloaking: 'inherit',
   rebuild_mid_system_message: false,
   native_tool_search: false,

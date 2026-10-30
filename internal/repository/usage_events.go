@@ -49,6 +49,21 @@ const (
 	ServedModelMatched     = "matched"
 )
 
+// Transport vocabulary: how CPA carried the request upstream. A WebSocket
+// executor names itself (CodexWebsocketsExecutor, XAIWebsocketsExecutor) and
+// takes precedence over the stream flag; any other executor is streamed or
+// non-streamed HTTP by that flag. A record with neither is in no state.
+const (
+	TransportAny       = ""
+	TransportWebsocket = "websocket"
+	TransportSSE       = "sse"
+	TransportHTTP      = "http"
+)
+
+// websocketExecutorSQL matches the WebSocket executors by the suffix CPA's
+// type names share. SQLite's LIKE ignores ASCII case.
+const websocketExecutorSQL = `e.executor_type LIKE '%WebsocketsExecutor'`
+
 // MaxUsageEventFilterValues bounds how many values one multi-select dimension
 // may carry. The filter panel never approaches it; the cap exists so a
 // hand-written URL cannot turn into a several-thousand-term IN list.
@@ -135,6 +150,9 @@ type UsageEventFilter struct {
 	// ServedModel narrows by whether the upstream served the requested model
 	// (ServedModelSubstituted/Matched).
 	ServedModel string
+
+	// Transport narrows by upstream transport (TransportWebsocket/SSE/HTTP).
+	Transport string
 
 	// SinceID asks for a count of matching records ingested after this row id,
 	// reported as ArrivedCount. It does not change which rows are returned.
@@ -957,6 +975,18 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		where = append(where, `e.model_substituted = 0 AND e.response_model <> ''`)
 	default:
 		return nil, nil, fmt.Errorf("%w: unknown served model state %q", ErrUsageFilterInvalid, filter.ServedModel)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(filter.Transport)) {
+	case TransportAny:
+	case TransportWebsocket:
+		where = append(where, websocketExecutorSQL)
+	case TransportSSE:
+		where = append(where, `e.stream = 1 AND NOT `+websocketExecutorSQL)
+	case TransportHTTP:
+		where = append(where, `e.stream = 0 AND NOT `+websocketExecutorSQL)
+	default:
+		return nil, nil, fmt.Errorf("%w: unknown transport %q", ErrUsageFilterInvalid, filter.Transport)
 	}
 
 	switch strings.ToLower(strings.TrimSpace(filter.Result)) {

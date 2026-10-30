@@ -190,23 +190,38 @@ export function ProviderTable({
       key: 'protocol',
       render: (_, record) => {
         const meta = matchProviderFamily(record.family, record.protocol);
+        // The transport is the one behaviour switch that changes how requests travel, so the row
+        // states it beside the protocol rather than only inside the editor.
+        const websocketTag = record.behavior?.websockets ? (
+          <Tooltip title={t('policy.websockets_desc')}>
+            {/* The mark is text only, so it is not focusable on its own; the row's edit button
+                opens the editor where the switch and its explanation live. */}
+            <Tag size="small" aria-label={t('policy.websockets_desc')}>{t('pro.websockets_tag')}</Tag>
+          </Tooltip>
+        ) : null;
         if (!meta) {
           return (
-            <Tag className={styles['protocol-tag']}>
-              {record.protocol || record.family || t('pro.none_text')}
-            </Tag>
+            <div className={styles['protocol']}>
+              <Tag className={styles['protocol-tag']}>
+                {record.protocol || record.family || t('pro.none_text')}
+              </Tag>
+              {websocketTag}
+            </div>
           );
         }
         // The family's brand colour is data (types/providerFamilies.ts), so it arrives as a custom
         // property and the stylesheet mixes the tint and the border from it.
         return (
-          <Tag
-            className={`${styles['protocol-tag']} ${styles['protocol-tag-branded']}`}
-            style={{ '--family-color': meta.color } as React.CSSProperties}
-          >
-            <LobeIcon iconId={meta.iconId} size={13} variant="mono" style={{ color: 'var(--family-color)' }} />
-            <span>{t(meta.labelKey)}</span>
-          </Tag>
+          <div className={styles['protocol']}>
+            <Tag
+              className={`${styles['protocol-tag']} ${styles['protocol-tag-branded']}`}
+              style={{ '--family-color': meta.color } as React.CSSProperties}
+            >
+              <LobeIcon iconId={meta.iconId} size={13} variant="mono" style={{ color: 'var(--family-color)' }} />
+              <span>{t(meta.labelKey)}</span>
+            </Tag>
+            {websocketTag}
+          </div>
         );
       },
     },

@@ -51,7 +51,8 @@
 }
 /* A mark is an icon in the badge's own box, so a row of them reads as one strip. */
 .req-mode-mark,
-.req-non-stream-icon {
+.req-non-stream-icon,
+.req-websocket-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -71,12 +72,14 @@
 .req-fast-icon svg {
   fill: currentColor;
 }
-.req-non-stream-icon {
+.req-non-stream-icon,
+.req-websocket-icon {
   background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--muted);
   transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
-.req-non-stream-icon:hover {
+.req-non-stream-icon:hover,
+.req-websocket-icon:hover {
   background: color-mix(in srgb, var(--fg) 10%, transparent);
   color: var(--fg);
 }

@@ -390,6 +390,7 @@ export const UsageEventsPage: React.FC = () => {
     cost_max: 'events.filter_chip_cost_max',
     cost: 'events.filter_chip_cost_state',
     served: 'events.filter_chip_served_model',
+    transport: 'events.filter_chip_transport',
   };
 
   const describeChip = React.useCallback(
@@ -421,6 +422,11 @@ export const UsageEventsPage: React.FC = () => {
         servedLabels: {
           substituted: t('events.served_substituted'),
           matched: t('events.served_matched'),
+        },
+        transportLabels: {
+          websocket: t('events.transport_websocket'),
+          sse: t('events.transport_sse'),
+          http: t('events.transport_http'),
         },
       });
       return { label: t(chipLabels[key], { val: shown }) };

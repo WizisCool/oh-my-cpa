@@ -39,7 +39,7 @@ const INK_WASH = 0.06;
 const HUE_TINT = 0.12;
 /**
  * The stroke paths of the glyphs the list draws as icons, on Lucide's 24-unit
- * grid: `RadioOff` for a non-streaming response, `ArrowLeftRight` for a
+ * grid: `RadioOff` for a non-streaming response, `Cable` for a WebSocket one, `ArrowLeftRight` for a
  * substituted model, `ChevronRight` for a routed one, `Lightbulb` for reasoning tokens, `Zap` for the fast lane
  * and `Box` for a model with no maker's mark - the ones `components/icons`
  * gives the row.
@@ -52,6 +52,15 @@ const GLYPH_PATHS: Record<SheetGlyph, readonly string[]> = {
     'm2 2 20 20',
     'M4.925 19.067a10 10 0 0 1 0-14.134',
     'M7.753 16.239a6 6 0 0 1 0-8.478',
+  ],
+  websocket: [
+    'M17 19a1 1 0 0 1-1-1v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a1 1 0 0 1-1 1z',
+    'M17 21v-2',
+    'M19 14V6.5a1 1 0 0 0-7 0v11a1 1 0 0 1-7 0V10',
+    'M21 21v-2',
+    'M3 5V3',
+    'M4 10a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2a2 2 0 0 1-2 2z',
+    'M7 5V3',
   ],
   substituted: ['M8 3 4 7l4 4', 'M4 7h16', 'm16 21 4-4-4-4', 'M20 17H4'],
   routed: ['m9 18 6-6-6-6'],

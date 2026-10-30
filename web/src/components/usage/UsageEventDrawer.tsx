@@ -9,6 +9,7 @@ import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
   ArrowRightOutlined,
   NonStreamOutlined,
+  WebsocketOutlined,
   DownloadOutlined,
   DownOutlined,
   SwapOutlined,
@@ -40,7 +41,7 @@ import {
   isFastTierEvent,
   fastTierHintKey,
   resolvedTierHintKey,
-  isNonStreamingEvent,
+  requestTransport,
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
 import { CostBreakdownView } from '../pricing/CostBreakdownView';
@@ -124,6 +125,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const isRelatedErrorsPartial = !!result.data?.partial_errors?.includes('related_errors');
   const missing = <span className="terminal-muted">{t('events.not_captured')}</span>;
   const value = (text: string | null | undefined) => text || missing;
+  const transport = requestTransport(event);
   const fields = (items: Array<[string, React.ReactNode]>) => (
     <FactList
       emphasis="quiet"
@@ -276,7 +278,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                     </span>
                   </Tooltip>
                 )}
-                {isNonStreamingEvent(event) && (
+                {transport === 'websocket' && (
+                  <Tooltip title={t('events.websocket_hint')}>
+                    <span className="req-websocket-icon" aria-label={t('events.websocket_hint')}>
+                      <WebsocketOutlined />
+                    </span>
+                  </Tooltip>
+                )}
+                {transport === 'http' && (
                   <Tooltip title={t('events.non_stream_hint')}>
                     <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
                       <NonStreamOutlined />
@@ -406,6 +415,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         [t('events.api_group_key'), value(event.api_group_key)],
                         [t('events.group_category'), value(event.api_group_label)],
                         [t('events.resource_id'), value(event.resource_id)],
+                        [t('events.transport'), value(transport && t(`events.transport_${transport}`))],
                         [t('events.executor'), value(event.executor_type)],
                         [t('events.endpoint'), value(event.endpoint)],
                       ]),

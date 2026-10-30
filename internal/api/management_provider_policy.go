@@ -53,6 +53,7 @@ type ProviderBehaviorDTO struct {
 	OpenAPI                 string  `json:"openapi,omitempty"`
 	OpenAPILocation         *string `json:"openapi_location,omitempty"`
 	AlphaSearch             *bool   `json:"alpha_search,omitempty"`
+	Websockets              *bool   `json:"websockets,omitempty"`
 	CodexCloaking           string  `json:"codex_cloaking,omitempty"`
 	RebuildMidSystemMessage *bool   `json:"rebuild_mid_system_message,omitempty"`
 	NativeToolSearch        *bool   `json:"native_tool_search,omitempty"`
@@ -67,6 +68,7 @@ type ProviderBehaviorDTO struct {
 type providerPolicyCapabilities struct {
 	hasErrorRules              bool
 	hasAlphaSearch             bool
+	hasWebsockets              bool
 	hasCodexCloaking           bool
 	hasRebuildMidSystemMessage bool
 	hasNativeToolSearch        bool
@@ -77,7 +79,9 @@ type providerPolicyCapabilities struct {
 func providerPolicyCapabilitiesFor(family string) providerPolicyCapabilities {
 	switch management.ConfigKeyFamily(family) {
 	case management.ConfigFamilyCodex:
-		return providerPolicyCapabilities{hasErrorRules: true, hasAlphaSearch: true, hasCodexCloaking: true}
+		return providerPolicyCapabilities{hasErrorRules: true, hasAlphaSearch: true, hasCodexCloaking: true, hasWebsockets: true}
+	case management.ConfigFamilyXAI:
+		return providerPolicyCapabilities{hasErrorRules: true, hasWebsockets: true}
 	case management.ConfigFamilyClaude:
 		return providerPolicyCapabilities{hasErrorRules: true, hasRebuildMidSystemMessage: true, hasNativeToolSearch: true}
 	case management.ConfigFamilyVertex:
@@ -143,6 +147,10 @@ func configKeyBehaviorDTO(entry management.ConfigAPIKey, capabilities providerPo
 		isEnabled := entry.AlphaSearch
 		behavior.AlphaSearch = &isEnabled
 	}
+	if capabilities.hasWebsockets {
+		isEnabled := entry.Websockets
+		behavior.Websockets = &isEnabled
+	}
 	if capabilities.hasCodexCloaking {
 		behavior.CodexCloaking = overrideState(entry.DisableCodexCloaking)
 	}
@@ -201,6 +209,7 @@ func resolveProviderPolicyEdit(family string, req SaveProviderRequest) (provider
 		capabilities := edit.capabilities
 		switch {
 		case behavior.AlphaSearch != nil && !capabilities.hasAlphaSearch,
+			behavior.Websockets != nil && !capabilities.hasWebsockets,
 			behavior.CodexCloaking != "" && !capabilities.hasCodexCloaking,
 			behavior.RebuildMidSystemMessage != nil && !capabilities.hasRebuildMidSystemMessage,
 			behavior.NativeToolSearch != nil && !capabilities.hasNativeToolSearch,
@@ -333,6 +342,9 @@ func (e providerPolicyEdit) applyBehaviorToConfigKey(entry *management.ConfigAPI
 	if behavior := e.behavior; behavior != nil {
 		if behavior.AlphaSearch != nil {
 			entry.AlphaSearch = *behavior.AlphaSearch
+		}
+		if behavior.Websockets != nil {
+			entry.Websockets = *behavior.Websockets
 		}
 		if behavior.CodexCloaking != "" {
 			entry.DisableCodexCloaking, _ = overrideValue(behavior.CodexCloaking)

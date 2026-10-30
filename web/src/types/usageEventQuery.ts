@@ -7,6 +7,7 @@ import {
   formatUsageRangeBound,
   isCostRange,
   isUsageServedState,
+  isUsageTransport,
   parseUsageRangeBound,
   usageRangeParamKey,
 } from './usageEvents';
@@ -49,6 +50,7 @@ export const EVENT_FILTER_KEYS = [
   ]),
   'cost',
   'served',
+  'transport',
 ] as const;
 
 export type EventFilterKey = (typeof EVENT_FILTER_KEYS)[number];
@@ -73,7 +75,8 @@ export function hasExplicitEventQuery(params: URLSearchParams): boolean {
 export function readEventQuery(params: URLSearchParams): UsageEventQuery {
   const preset = params.get('preset') || '1h';
   const result = params.get('result');
-  const cost = params.get('cost');
+  // Trimmed as rejectedEventParams trims, so a padded value is either applied or reported.
+  const cost = params.get('cost')?.trim();
   const limit = Number(params.get('limit') || 100);
   const query: UsageEventQuery = {
     preset: Object.prototype.hasOwnProperty.call(EVENT_PRESETS, preset) ? preset : '1h',
@@ -81,8 +84,10 @@ export function readEventQuery(params: URLSearchParams): UsageEventQuery {
     limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 500) : 100,
   };
   if (cost === 'priced' || cost === 'unpriced') query.cost = cost;
-  const served = params.get('served');
+  const served = params.get('served')?.trim();
   if (isUsageServedState(served)) query.served = served;
+  const transport = params.get('transport')?.trim();
+  if (isUsageTransport(transport)) query.transport = transport;
 
   const from = Number(params.get('from'));
   const to = Number(params.get('to'));
@@ -163,6 +168,7 @@ export function queryToFilterParams(query: UsageEventQuery): Partial<Record<Even
   }
   if (query.cost === 'priced' || query.cost === 'unpriced') result.cost = [query.cost];
   if (isUsageServedState(query.served)) result.served = [query.served];
+  if (isUsageTransport(query.transport)) result.transport = [query.transport];
   return result;
 }
 
@@ -220,6 +226,10 @@ export function rejectedEventParams(params: URLSearchParams): string[] {
     }
     if (key === 'served') {
       if (!isUsageServedState(raw.trim())) rejected.push(key);
+      continue;
+    }
+    if (key === 'transport') {
+      if (!isUsageTransport(raw.trim())) rejected.push(key);
       continue;
     }
     // Every other dimension is a literal string, so it is unusable only when it is

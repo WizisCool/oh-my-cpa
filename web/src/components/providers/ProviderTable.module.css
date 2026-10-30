@@ -68,6 +68,13 @@
   white-space: nowrap;
 }
 
+.protocol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .protocol-tag {
   gap: 5px;
   height: 24px;

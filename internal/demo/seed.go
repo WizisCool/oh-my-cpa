@@ -881,6 +881,11 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 		failure := demoFailures[int(latency)%len(demoFailures)]
 		event.FailStatusCode, event.FailBody = failure.statusCode, failure.body
 	}
+	// A share of Codex traffic arrives over the upstream WebSocket, derived from
+	// the latency already drawn so every other generated value stays where it was.
+	if profile.provider == "codex" && latency%3 == 0 {
+		event.ExecutorType = "CodexWebsocketsExecutor"
+	}
 	event.ResponseHeaders = demoResponseHeaders(started, latency, failed)
 	if !failed {
 		event.ResponseModel = profile.name

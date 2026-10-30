@@ -333,6 +333,7 @@ func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) 
 		Result:      strings.ToLower(strings.TrimSpace(query.Get("result"))),
 		CostState:   strings.ToLower(strings.TrimSpace(query.Get("cost"))),
 		ServedModel: strings.ToLower(strings.TrimSpace(query.Get("served"))),
+		Transport:   strings.ToLower(strings.TrimSpace(query.Get("transport"))),
 		Cursor:      query.Get("cursor"),
 	}
 	multi := []struct {
@@ -471,6 +472,10 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 	}
 	if !validServedModel(filter.ServedModel) {
 		writeError(writer, http.StatusBadRequest, "served must be one of substituted or matched")
+		return
+	}
+	if !validTransport(filter.Transport) {
+		writeError(writer, http.StatusBadRequest, "transport must be one of websocket, sse or http")
 		return
 	}
 	if err := repository.ValidUsageCursor(filter.Cursor); err != nil {
@@ -818,6 +823,16 @@ func validEventResult(value string) bool {
 func validServedModel(value string) bool {
 	switch value {
 	case repository.ServedModelAny, repository.ServedModelSubstituted, repository.ServedModelMatched:
+		return true
+	default:
+		return false
+	}
+}
+
+// validTransport mirrors the repository's accepted transport vocabulary.
+func validTransport(value string) bool {
+	switch value {
+	case repository.TransportAny, repository.TransportWebsocket, repository.TransportSSE, repository.TransportHTTP:
 		return true
 	default:
 		return false

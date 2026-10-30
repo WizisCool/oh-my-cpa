@@ -37,6 +37,9 @@ func TestProviderRuntimePolicyRoundTrip(t *testing.T) {
 	}}
 	fixture.state.mu.Unlock()
 
+	if got := listedProvider(t, fixture, "codex-0").Behavior; got == nil || got.Websockets == nil || !*got.Websockets {
+		t.Fatalf("stored behaviour = %+v, want the stored websockets switch reported", got)
+	}
 	if got := listedProvider(t, fixture, "codex-0").RuntimePolicy; got == nil || got.Cooling != providerOverrideInherit || got.RequestRetry != nil || !got.SupportsErrorRules {
 		t.Fatalf("stored policy = %+v, want inherited cooling, a negative retry read as inherited, error rules supported", got)
 	}
@@ -60,7 +63,7 @@ func TestProviderRuntimePolicyRoundTrip(t *testing.T) {
 		t.Fatalf("stored rule = %#v, want CPA's wire names and a normalized action", rule)
 	}
 	if stored["alpha-search"] != true || stored["disable-codex-cloaking"] != true || stored["websockets"] != true {
-		t.Fatalf("stored behaviour = %#v, want both switches set and the unmodelled setting kept", stored)
+		t.Fatalf("stored behaviour = %#v, want both switches set and websockets kept when not submitted", stored)
 	}
 
 	listed := listedProvider(t, fixture, "codex-0")
@@ -86,6 +89,18 @@ func TestProviderRuntimePolicyRoundTrip(t *testing.T) {
 	}
 	if stored["alpha-search"] != true {
 		t.Fatalf("alpha-search = %#v, want a request without behavior to leave it as stored", stored["alpha-search"])
+	}
+
+	// Turning websockets off removes the key rather than writing false.
+	body = `{"family":"codex","name":"Codex","base_url":"https://codex.test/v1","keys":[{"api_key":""}],"behavior":{"websockets":false}}`
+	if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", body); resp.StatusCode != http.StatusOK {
+		t.Fatalf("websockets update = %d %s", resp.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	stored = fixture.state.codexProviders[0]
+	fixture.state.mu.Unlock()
+	if _, isStored := stored["websockets"]; isStored {
+		t.Fatalf("websockets = %#v after turning it off, want it absent", stored["websockets"])
 	}
 }
 
@@ -143,6 +158,7 @@ func TestProviderPolicyRefusesWhatCPAWouldSkipOrReject(t *testing.T) {
 		{"uncompilable regex", "codex-0", codex(`"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match_regex":["("],"action":"stop"}]}`), "invalid regular expression"},
 		{"switch of another family", "codex-0", codex(`"behavior":{"rebuild_mid_system_message":true}`), "does not have"},
 		{"native tool search outside Claude", "codex-0", codex(`"behavior":{"native_tool_search":true}`), "does not have"},
+		{"websockets outside Codex and xAI", "vertex-0", `{"family":"vertex","name":"Vertex","keys":[{"api_key":""}],"behavior":{"websockets":true}}`, "does not have"},
 		{"rules on a family without them", "vertex-0", `{"family":"vertex","name":"Vertex","keys":[{"api_key":""}],"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match":["x"],"action":"stop"}]}}`, "does not support"},
 	}
 	for _, tc := range cases {

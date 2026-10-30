@@ -9,6 +9,7 @@ import type {
   UsageRegexField,
   UsageResultFilter,
   UsageServedFilter,
+  UsageTransportFilter,
 } from '../../types/usageEvents';
 import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventLabels';
 import { ResultMarker } from './ResultMarker';
@@ -484,6 +485,26 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             />,
           )}
           {REQUEST_FACETS.map(multiRow)}
+          {row(
+            'events.transport',
+            'req-transport-select',
+            // A select rather than a segmented control: four options do not fit one row of the
+            // narrow drawer, and a clipped label is the only thing an operator cannot read.
+            <Select<UsageTransportFilter>
+              id="req-transport-select"
+              aria-label={t('events.transport')}
+              className={styles['select']}
+              value={draft.transport}
+              popupMatchSelectWidth={false}
+              onChange={(transport) => setDraft((prev) => ({ ...prev, transport }))}
+              options={[
+                { value: 'all', label: t('events.filter_all') },
+                { value: 'websocket', label: t('events.transport_websocket') },
+                { value: 'sse', label: t('events.transport_sse') },
+                { value: 'http', label: t('events.transport_http') },
+              ]}
+            />,
+          )}
           {ALIAS_FACETS.map(multiRow)}
           {row(
             'events.served_model',

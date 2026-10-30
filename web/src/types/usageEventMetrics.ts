@@ -2,6 +2,7 @@ import type { MessageKey } from '../i18n/catalog';
 import { DEFAULT_TPS_CALCULATION_MODE, type TpsCalculationMode } from './tpsCalculation';
 import type {
   UsageEvent,
+  UsageTransport,
 } from './usageEvents';
 
 export function eventPageMetrics(events: UsageEvent[]) {
@@ -127,9 +128,21 @@ export function hasMeasurableTTFT(
     && ttft > 0 && ttft < latency;
 }
 
-/** Delivery speed cannot establish the client's requested streaming mode. */
-export function isNonStreamingEvent(event?: Partial<Pick<UsageEvent, 'stream'>>): boolean {
-  return event?.stream === false;
+/**
+ * How CPA carried the request upstream. CPA reports the executor's type name, and
+ * its WebSocket executors (`CodexWebsocketsExecutor`, `XAIWebsocketsExecutor`)
+ * share a suffix, which wins over the stream flag; otherwise the client's
+ * requested streaming mode decides. Delivery speed cannot establish that mode, so
+ * a record carrying neither has no transport. The server's `transport` filter
+ * applies the same rule.
+ */
+export function requestTransport(
+  event?: Partial<Pick<UsageEvent, 'executor_type' | 'stream'>>,
+): UsageTransport | null {
+  if (/websocketsexecutor$/i.test(event?.executor_type?.trim() ?? '')) return 'websocket';
+  if (event?.stream === true) return 'sse';
+  if (event?.stream === false) return 'http';
+  return null;
 }
 
 /** Canonical accounting establishes whether reasoning is included; legacy counts use their totals. */

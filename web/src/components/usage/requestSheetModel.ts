@@ -18,7 +18,7 @@ import {
   formatEventDuration,
   hasMeasurableTTFT,
   isFastTierEvent,
-  isNonStreamingEvent,
+  requestTransport,
 } from '../../types/usageEventMetrics';
 import type { TpsCalculationMode } from '../../types/tpsCalculation';
 import type { UsageEvent } from '../../types/usageEvents';
@@ -47,7 +47,7 @@ import { formatRequestTimestamp } from './requestTimestamp';
 export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn';
 
 /** The glyphs a cell uses where the list uses an icon: a marker a reader already knows from the list. */
-export type SheetGlyph = 'non_stream' | 'substituted' | 'routed' | 'fast' | 'model' | 'reasoning';
+export type SheetGlyph = 'non_stream' | 'websocket' | 'substituted' | 'routed' | 'fast' | 'model' | 'reasoning';
 
 export type SheetSegment =
   /** Plain text. The first text segment of a line is the one that gives way when the line is too long. */
@@ -209,6 +209,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
     const tps = eventTokensPerSecond(event, input.tpsMode);
     const isCallView = input.modelView === 'call';
     const displayModel = isCallView ? event.model_alias || event.model : event.model;
+    const transport = requestTransport(event);
     const modelIcon = displayModel ? modelMarkIconId(displayModel, event.model) : undefined;
     const modelMark: SheetSegment = modelIcon
       ? { kind: 'mark', mark: { iconId: modelIcon } }
@@ -266,7 +267,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       },
       mode: {
         lines: [
-          event.reasoning_effort || isFastTierEvent(event) || isNonStreamingEvent(event)
+          event.reasoning_effort || isFastTierEvent(event) || transport === 'websocket' || transport === 'http'
             ? [
                 ...(event.reasoning_effort
                   ? [{ kind: 'tag', text: effortBadgeName(event.reasoning_effort), tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
@@ -274,7 +275,10 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
                 ...(isFastTierEvent(event)
                   ? [{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true } as const]
                   : []),
-                ...(isNonStreamingEvent(event)
+                ...(transport === 'websocket'
+                  ? [{ kind: 'glyph', glyph: 'websocket', tone: 'muted', isBoxed: true } as const]
+                  : []),
+                ...(transport === 'http'
                   ? [{ kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true } as const]
                   : []),
               ]
