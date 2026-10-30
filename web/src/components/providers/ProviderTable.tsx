@@ -194,7 +194,9 @@ export function ProviderTable({
         // states it beside the protocol rather than only inside the editor.
         const websocketTag = record.behavior?.websockets ? (
           <Tooltip title={t('policy.websockets_desc')}>
-            <Tag size="small">{t('pro.websockets_tag')}</Tag>
+            {/* The mark is text only, so it is not focusable on its own; the row's edit button
+                opens the editor where the switch and its explanation live. */}
+            <Tag size="small" aria-label={t('policy.websockets_desc')}>{t('pro.websockets_tag')}</Tag>
           </Tooltip>
         ) : null;
         if (!meta) {

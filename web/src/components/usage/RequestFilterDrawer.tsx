@@ -487,12 +487,16 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           {REQUEST_FACETS.map(multiRow)}
           {row(
             'events.transport',
-            'req-transport-segmented',
-            <Segmented
-              id="req-transport-segmented"
+            'req-transport-select',
+            // A select rather than a segmented control: four options do not fit one row of the
+            // narrow drawer, and a clipped label is the only thing an operator cannot read.
+            <Select<UsageTransportFilter>
+              id="req-transport-select"
               aria-label={t('events.transport')}
+              className={styles['select']}
               value={draft.transport}
-              onChange={(value) => setDraft((prev) => ({ ...prev, transport: value as UsageTransportFilter }))}
+              popupMatchSelectWidth={false}
+              onChange={(transport) => setDraft((prev) => ({ ...prev, transport }))}
               options={[
                 { value: 'all', label: t('events.filter_all') },
                 { value: 'websocket', label: t('events.transport_websocket') },
