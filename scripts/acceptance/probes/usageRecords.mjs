@@ -43,6 +43,7 @@ export const alignmentRecords = (() => {
     auth_index: 'credential-1',
     auth_type: 'api_key',
     api_group_key: 'hmac:9f2a4c87b11e285daa03',
+    api_group_label: 'api_key',
     api_key_mask: 'sk-12345••••••••7890',
     user_agent: 'codex-cli/0.46',
     executor_type: 'openai',
@@ -312,13 +313,27 @@ export async function columnAlignment({ base, page, context, check }) {
       const node = row.querySelector(selector);
       return node ? Math.round(node.getBoundingClientRect().left - lineStart) : null;
     };
+    const callerKey = row.querySelector('.req-col-key');
+    const verdict = row.querySelector('.req-col-result');
     return {
-      display: { latency: display('.req-col-latency'), tokens: display('.req-col-tokens') },
+      display: {
+        latency: display('.req-col-latency'),
+        tokens: display('.req-col-tokens'),
+        key: display('.req-col-key'),
+      },
       lineOffsets: {
         model: offset('.req-col-model'),
         provider: offset('.req-col-provider'),
         time: offset('.req-time-text'),
       },
+      callerKey: callerKey && verdict
+        ? {
+            onVerdictLine: Math.abs(
+              callerKey.getBoundingClientRect().top - verdict.getBoundingClientRect().top,
+            ) <= 2,
+            text: row.querySelector('.req-key-val')?.textContent.trim() ?? null,
+          }
+        : null,
     };
   });
   check(
@@ -326,6 +341,12 @@ export async function columnAlignment({ base, page, context, check }) {
     stacked.display.latency === 'contents' && stacked.display.tokens === 'contents' &&
       Object.values(stacked.lineOffsets).every((value) => value === 0),
     JSON.stringify(stacked),
+  );
+  check(
+    'the stacked record names the caller key beside the verdict',
+    stacked.display.key !== 'none' && stacked.callerKey !== null &&
+      stacked.callerKey.onVerdictLine && stacked.callerKey.text === alignmentRecords[0].api_key_mask,
+    JSON.stringify(stacked.callerKey),
   );
 
   // The compact record omits the UUID text, but copying must still take the complete ID.
