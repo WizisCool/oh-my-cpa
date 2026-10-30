@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Dropdown } from 'antd';
 import { Switch } from '../common/Switch';
-import { PageLoading } from '../common/PageLoading';
+import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, SettingOutlined, ShopOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
@@ -114,7 +114,7 @@ export function InstalledPluginsPanel({
   });
 
   if (isLoading) {
-    return <PageLoading variant="block" className={styles.empty} />;
+    return <ListLoading className={styles.empty} />;
   }
 
   if (plugins.length === 0) {

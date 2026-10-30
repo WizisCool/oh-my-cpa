@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Input, Modal, Radio, Segmented } from 'antd';
-import { PageLoading } from '../common/PageLoading';
+import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DownloadOutlined,
@@ -95,7 +95,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
   };
 
   if (isLoading) {
-    return <PageLoading variant="block" className={styles.empty} />;
+    return <ListLoading className={styles.empty} />;
   }
 
   const filterLabels: Record<PluginStoreFilter, string> = {

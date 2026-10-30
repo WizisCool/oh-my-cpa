@@ -22,6 +22,8 @@ function formatSpan(from: number, to: number): string {
 interface TimeRangeControlProps {
   range: DashboardRange;
   onChange: (range: DashboardRange) => void;
+  /** False until the stored window has been read; the trigger then shows it inertly. */
+  isDisabled?: boolean;
 }
 
 /**
@@ -31,7 +33,7 @@ interface TimeRangeControlProps {
  * *through* that day, and an end left to track the present keeps the newest bucket arriving
  * the way a preset does.
  */
-const TimeRangeControlView: React.FC<TimeRangeControlProps> = ({ range, onChange }) => {
+const TimeRangeControlView: React.FC<TimeRangeControlProps> = ({ range, onChange, isDisabled }) => {
   useTimeZone();
   const t = useT();
   const label = range.from !== undefined
@@ -50,6 +52,7 @@ const TimeRangeControlView: React.FC<TimeRangeControlProps> = ({ range, onChange
       to={range.to}
       presets={DASHBOARD_PRESETS.map((preset) => ({ key: preset, label: t(`dash.range.${preset}`) }))}
       label={label}
+      isDisabled={isDisabled}
       onPresetChange={(preset) => onChange({ preset: preset as DashboardPreset })}
       onRangeChange={(from, to) => onChange({ from, to })}
     />

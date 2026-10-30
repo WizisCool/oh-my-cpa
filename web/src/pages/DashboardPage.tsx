@@ -7,7 +7,6 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Select } from 'antd';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
-import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -41,6 +40,7 @@ import {
 } from '../components/dashboard/CredentialQuota';
 import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import { DashboardBoard } from '../components/dashboard/DashboardBoard';
+import { DashboardTilesPlaceholder } from '../components/dashboard/DashboardSkeleton';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
 import {
   applyTail,
@@ -59,7 +59,6 @@ import {
 import {
   DASHBOARD_LAYOUT_PREFERENCE,
   DEFAULT_DASHBOARD_LAYOUT,
-  dashboardWidgetSpec,
   parseDashboardLayout,
   sameDashboardLayout,
   type DashboardLayout,
@@ -144,7 +143,7 @@ export const DashboardPage: React.FC = () => {
   // Nothing is fetched for a window that has not been read yet either: painting
   // the default and correcting it a moment later would show the wrong numbers
   // first, which is worse than a few extra milliseconds of skeleton.
-  const { value: range, ready: rangeReady, set: applyRange } = usePreference<DashboardRange>(
+  const { value: range, ready: rangeReady, loaded: isRangeStored, set: applyRange } = usePreference<DashboardRange>(
     DASHBOARD_RANGE_PREFERENCE,
     DEFAULT_DASHBOARD_RANGE,
     parseDashboardRange,
@@ -300,6 +299,72 @@ export const DashboardPage: React.FC = () => {
     void refetch();
   }, [merged?.broken, refetch]);
 
+  const arrangeActions = (
+    <>
+      <Button onClick={() => setLayoutDraft(DEFAULT_DASHBOARD_LAYOUT)} data-testid="dashboard-layout-reset">
+        {t('dash.layout.reset')}
+      </Button>
+      <Button onClick={() => setLayoutDraft(null)}>{t('common.cancel')}</Button>
+      <Button type="primary" onClick={() => void saveLayout()} data-testid="dashboard-layout-done">
+        {t('dash.layout.done')}
+      </Button>
+    </>
+  );
+
+  // One head for the first load and the loaded board, so its controls do not appear under the
+  // reader when the first reading lands. Arranging waits for a board to arrange.
+  const header = (
+    <PageHeader
+      title={t('nav.dashboard')}
+      mobileActions={isArranging ? arrangeActions : (
+        <>
+          <TimeRangeControl range={range} onChange={applyRange} isDisabled={!isRangeStored} />
+          <ActionMenu>
+            <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
+            <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
+            <ToolButton icon={<AppstoreOutlined />} label={t('dash.layout.arrange')} onClick={() => setLayoutDraft(layout)} disabled={!data} />
+          </ActionMenu>
+          {clientKeyOptions.length > 0 && (
+            <Select
+              allowClear
+              className="dashboard-key-filter"
+              placeholder={t('dash.filter_by_key')}
+              value={selectedApiKey}
+              onChange={setSelectedApiKey}
+              options={clientKeyOptions}
+              prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
+            />
+          )}
+        </>
+      )}
+      actions={isArranging ? arrangeActions : (
+        <>
+          <TimeRangeControl range={range} onChange={applyRange} isDisabled={!isRangeStored} />
+          {clientKeyOptions.length > 0 && (
+            <Select
+              allowClear
+              className="dashboard-key-filter"
+              placeholder={t('dash.filter_by_key')}
+              value={selectedApiKey}
+              onChange={(val) => setSelectedApiKey(val)}
+              options={clientKeyOptions}
+              prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
+            />
+          )}
+          <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
+          <ToolButton
+            icon={<AppstoreOutlined />}
+            label={t('dash.layout.arrange')}
+            onClick={() => setLayoutDraft(layout)}
+            disabled={!data}
+            data-testid="dashboard-layout-arrange"
+          />
+          <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
+        </>
+      )}
+    />
+  );
+
   if (!data) {
     if (isError) {
       return (
@@ -316,32 +381,11 @@ export const DashboardPage: React.FC = () => {
         </div>
       );
     }
-    // First load: keep the real page frame and draw each tile's own readouts - label, number,
-    // sparkline - where they will land, in the operator's arrangement, so nothing swaps in abruptly
-    // once data arrives. The panels below the tiles read on their own and are mounted with the page.
-    const loadingTiles = layout.filter((item) => !item.hidden && dashboardWidgetSpec(item.id).isMetric);
+    // First load: the real head, and each tile's readouts where they will land.
     return (
       <div className="terminal-page dashboard-page">
-        <PageHeader title={t('nav.dashboard')} subtitle={t('dash.loading')} />
-        <LoadingRegion className="dashboard-grid">
-          {loadingTiles.map((item, index) => (
-            <div key={item.id} className="dashboard-cell" data-span={item.span}>
-              {item.span > 1 ? (
-                <Panel className="dashboard-tile">
-                  <Placeholder width="28%" row={index} className="placeholder-line is-meta" />
-                  <Placeholder width="42%" height={34} row={index + 1} className="tile-placeholder-hero" />
-                  <Placeholder width="100%" height={44} row={index + 2} className="tile-placeholder-spark" />
-                </Panel>
-              ) : (
-                <Panel className="dashboard-tile">
-                  <Placeholder width="46%" row={index + 2} className="placeholder-line is-meta" />
-                  <Placeholder width="58%" height={24} row={index + 3} className="tile-placeholder-value" />
-                  <Placeholder width="72%" row={index + 4} className="placeholder-line is-meta" />
-                </Panel>
-              )}
-            </div>
-          ))}
-        </LoadingRegion>
+        {header}
+        <DashboardTilesPlaceholder layout={layout} />
       </div>
     );
   }
@@ -570,68 +614,9 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const arrangeActions = (
-    <>
-      <Button onClick={() => setLayoutDraft(DEFAULT_DASHBOARD_LAYOUT)} data-testid="dashboard-layout-reset">
-        {t('dash.layout.reset')}
-      </Button>
-      <Button onClick={() => setLayoutDraft(null)}>{t('common.cancel')}</Button>
-      <Button type="primary" onClick={() => void saveLayout()} data-testid="dashboard-layout-done">
-        {t('dash.layout.done')}
-      </Button>
-    </>
-  );
-
   return (
     <div className="terminal-page dashboard-page">
-      <PageHeader
-        title={t('nav.dashboard')}
-        mobileActions={isArranging ? arrangeActions : (
-          <>
-            <TimeRangeControl range={range} onChange={applyRange} />
-            <ActionMenu>
-              <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
-              <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
-              <ToolButton icon={<AppstoreOutlined />} label={t('dash.layout.arrange')} onClick={() => setLayoutDraft(layout)} />
-            </ActionMenu>
-            {clientKeyOptions.length > 0 && (
-              <Select
-                allowClear
-                className="dashboard-key-filter"
-                placeholder={t('dash.filter_by_key')}
-                value={selectedApiKey}
-                onChange={setSelectedApiKey}
-                options={clientKeyOptions}
-                prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
-              />
-            )}
-          </>
-        )}
-        actions={isArranging ? arrangeActions : (
-          <>
-            <TimeRangeControl range={range} onChange={applyRange} />
-            {clientKeyOptions.length > 0 && (
-              <Select
-                allowClear
-                className="dashboard-key-filter"
-                placeholder={t('dash.filter_by_key')}
-                value={selectedApiKey}
-                onChange={(val) => setSelectedApiKey(val)}
-                options={clientKeyOptions}
-                prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
-              />
-            )}
-            <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
-            <ToolButton
-              icon={<AppstoreOutlined />}
-              label={t('dash.layout.arrange')}
-              onClick={() => setLayoutDraft(layout)}
-              data-testid="dashboard-layout-arrange"
-            />
-            <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
-          </>
-        )}
-      />
+      {header}
 
       {data.partial_errors.length > 0 && (
         <LoadFailure

@@ -42,7 +42,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
-import { PageLoading, SuspenseFallback } from '../components/common/PageLoading';
+import { ListLoading, PanelsPlaceholder, SuspenseFallback } from '../components/common/PageLoading';
 import { StatusLabel } from '../components/common/StatusLabel';
 import type { StatusTone } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
@@ -593,33 +593,40 @@ export const SystemPage: React.FC = () => {
   if (expandedProduct !== null) lastChangelogProductRef.current = expandedProduct;
   const changelogProduct = expandedProduct ?? lastChangelogProductRef.current;
 
+  const header = (
+    <PageHeader
+      title={t('sys.title')}
+      actions={(
+        <RefreshButton
+          isRefreshing={isFetching}
+          onRefresh={() => {
+            // A refresh clears a completed result the reader has moved past, and never touches a
+            // running job: that one is live server state, and the panel below keeps showing it.
+            setDisplayedOutcome(null);
+            void refetch();
+            void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
+            void queryClient.invalidateQueries({ queryKey: DATA_RETENTION_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: UPDATER_QUERY_KEY });
+          }}
+        />
+      )}
+    />
+  );
+
+  // The first read keeps the real head and draws the page's stack of cards, so neither moves when the
+  // readings land.
   if (isLoading) {
     return (
-      <div className="terminal-page system-page">
-        <PageLoading />
+      <div className={`terminal-page terminal-page-stack system-page ${styles['system-page']}`}>
+        {header}
+        <PanelsPlaceholder count={4} />
       </div>
     );
   }
 
   return (
     <div className={`terminal-page terminal-page-stack system-page ${styles['system-page']}`}>
-      <PageHeader
-        title={t('sys.title')}
-        actions={(
-          <RefreshButton
-            isRefreshing={isFetching}
-            onRefresh={() => {
-              // A refresh clears a completed result the reader has moved past, and never touches a
-              // running job: that one is live server state, and the panel below keeps showing it.
-              setDisplayedOutcome(null);
-              void refetch();
-              void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
-              void queryClient.invalidateQueries({ queryKey: DATA_RETENTION_QUERY_KEY });
-              void queryClient.invalidateQueries({ queryKey: UPDATER_QUERY_KEY });
-            }}
-          />
-        )}
-      />
+      {header}
 
       {isError && <LoadFailure title={t('common.load_failed_title')} error={error} onRetry={() => void refetch()} />}
 
@@ -967,7 +974,7 @@ export const SystemPage: React.FC = () => {
         })}
       >
         {changelogProduct && (
-          <React.Suspense fallback={<SuspenseFallback><PageLoading variant="block" /></SuspenseFallback>}>
+          <React.Suspense fallback={<SuspenseFallback><ListLoading /></SuspenseFallback>}>
             <ProductChangelog product={changelogProduct} />
           </React.Suspense>
         )}

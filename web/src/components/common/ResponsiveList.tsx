@@ -3,7 +3,8 @@ import { Table } from 'antd';
 import type { TableProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { PageLoading } from './PageLoading';
+import { ListLoading } from './PageLoading';
+import { TablePlaceholder } from './ContentPlaceholder';
 import { PhoneRow } from './PhoneRow';
 import { phoneRowFields, renderedCell } from './phoneRowFields';
 import { EmptyState } from './EmptyState';
@@ -88,8 +89,11 @@ export function ResponsiveList<T extends object>({
   };
 
   const empty = isBlocked ? null : <EmptyState size="compact" title={emptyText} />;
+  const isFirstRead = isLoading && dataSource.length === 0;
 
   if (!isPhone) {
+    // A first read keeps the column header and draws rows under it, where a spinner over an empty
+    // table would show a frame of the wrong height. A later read keeps its rows on screen.
     return (
       <div className="table-scroll data-table" ref={listRef}>
         <Table<T>
@@ -97,15 +101,14 @@ export function ResponsiveList<T extends object>({
           columns={columns}
           dataSource={dataSource as T[]}
           rowKey={rowKey as TableProps<T>['rowKey']}
-          loading={isLoading}
           pagination={pageSize === false ? false : { current: safePage, onChange: changePage, pageSize, showSizeChanger: false, hideOnSinglePage: true }}
-          locale={{ ...tableProps?.locale, emptyText: empty ?? <span /> }}
+          locale={{ ...tableProps?.locale, emptyText: isFirstRead ? <TablePlaceholder rows={5} /> : empty ?? <span /> }}
         />
       </div>
     );
   }
 
-  if (isLoading && dataSource.length === 0) return <PageLoading variant="block" />;
+  if (isFirstRead) return <ListLoading />;
   if (dataSource.length === 0) return empty;
 
   const visible = pageSize === false

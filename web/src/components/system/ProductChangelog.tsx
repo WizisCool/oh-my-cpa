@@ -8,7 +8,7 @@ import { ArrowRightOutlined, LinkOutlined } from '../icons';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import type { ReleaseProduct } from '../../types/system';
-import { PageLoading } from '../common/PageLoading';
+import { ListLoading } from '../common/PageLoading';
 import styles from '../../pages/SystemPage.module.css';
 import { LoadFailure, Notice } from '../feedback';
 import { Tooltip } from '../common/Tooltip';
@@ -32,7 +32,7 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
     staleTime: 60000,
   });
 
-  if (isLoading) return <PageLoading variant="block" />;
+  if (isLoading) return <ListLoading />;
 
   if (isError) {
     return <LoadFailure title={t('common.load_failed_title')} error={error} onRetry={() => void refetch()} />;
