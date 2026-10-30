@@ -252,6 +252,8 @@ describe('routing', () => {
       '/api/v1/management/overview',
       '/api/v1/management/system',
       '/api/v1/management/providers',
+      '/api/v1/management/routing',
+      '/api/v1/management/routing/models',
       '/api/v1/management/api-keys',
       '/api/v1/management/auth-files',
       '/api/v1/management/auth-files/model-aliases',
@@ -363,6 +365,8 @@ describe('routing', () => {
       '/api/auth/session',
       '/api/v1/management/overview',
       '/api/v1/management/system',
+      '/api/v1/management/routing',
+      '/api/v1/management/routing/models',
       '/api/v1/preferences',
       '/api/v1/pricing',
       '/api/v1/usage/events',
@@ -378,6 +382,16 @@ describe('routing', () => {
         `${path} does not match its captured response`,
       );
     }
+  });
+
+  it('refuses routing plan writes', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const response = await worker.fetch(new Request('https://demo.example/api/v1/management/routing', {
+      method: 'PATCH',
+      body: '{}',
+    }), { ASSETS: { fetch: () => new Response('', { status: 200 }) } });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, 'demo_operation_refused');
   });
 
   it('does not answer a path it has no data for', () => {
