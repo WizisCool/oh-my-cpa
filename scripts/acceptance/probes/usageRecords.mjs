@@ -43,6 +43,7 @@ export const alignmentRecords = (() => {
     auth_index: 'credential-1',
     auth_type: 'api_key',
     api_group_key: 'hmac:9f2a4c87b11e285daa03',
+    api_group_label: 'api_key',
     api_key_mask: 'sk-12345••••••••7890',
     user_agent: 'codex-cli/0.46',
     executor_type: 'openai',
@@ -330,7 +331,7 @@ export async function columnAlignment({ base, page, context, check }) {
             onVerdictLine: Math.abs(
               callerKey.getBoundingClientRect().top - verdict.getBoundingClientRect().top,
             ) <= 2,
-            text: callerKey.textContent.trim(),
+            text: row.querySelector('.req-key-val')?.textContent.trim() ?? null,
           }
         : null,
     };
@@ -344,7 +345,7 @@ export async function columnAlignment({ base, page, context, check }) {
   check(
     'the stacked record names the caller key beside the verdict',
     stacked.display.key !== 'none' && stacked.callerKey !== null &&
-      stacked.callerKey.onVerdictLine && stacked.callerKey.text.length > 0,
+      stacked.callerKey.onVerdictLine && stacked.callerKey.text === alignmentRecords[0].api_key_mask,
     JSON.stringify(stacked.callerKey),
   );
 
