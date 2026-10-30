@@ -59,6 +59,9 @@ ordering, values, action reachability and empty/loading states in either present
   banner and dialog.
 - Initial absence can use a skeleton. Refreshing existing data should retain the data
   and its geometry, with a local activity indicator.
+- A route names the body its loading frame draws (`loadingAs` in `App.tsx`; the bodies
+  are in `PageLoading.tsx`). A page's first read keeps its real head and draws that same
+  body, so the download frame, the first-read frame and the content land in one place.
 - A progress estimate is not elapsed-time truth. Do not invent a time remaining or an
   exact accessibility percentage for work whose total cannot be measured.
 

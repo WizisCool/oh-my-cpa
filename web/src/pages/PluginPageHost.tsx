@@ -7,7 +7,7 @@ import { useT } from '../i18n';
 import { getAppConfig } from '../types/config';
 import { useTheme } from '../theme/ThemeContext';
 import { ExternalLinkOutlined, ReloadOutlined, SettingOutlined } from '../components/icons';
-import { PageLoading } from '../components/common/PageLoading';
+import { ListLoading } from '../components/common/PageLoading';
 import { LoadFailure } from '../components/feedback';
 import { PluginLogo } from '../components/plugins/PluginParts';
 import { collectPluginPages, findPluginPage, pluginPageFrameURL } from '../components/plugins/pluginPages';
@@ -63,7 +63,7 @@ export const PluginPageHost: React.FC = () => {
     setFrameState('loading');
   }, [frameURL, frameTitle, reloadCount]);
 
-  if (pluginsQuery.isLoading) return <PageLoading variant="block" />;
+  if (pluginsQuery.isLoading) return <ListLoading />;
   if (pluginsQuery.isError && !pluginsQuery.data) {
     return (
       <div className="terminal-page">
@@ -118,7 +118,7 @@ export const PluginPageHost: React.FC = () => {
           />
         ) : (
           <>
-            {isFrameLoading && <PageLoading variant="block" className={styles.loading} />}
+            {isFrameLoading && <ListLoading className={styles.loading} />}
             <iframe
               key={`${entry.route}:${frameURL}:${frameTitle}:${reloadCount}`}
               ref={shellRef}

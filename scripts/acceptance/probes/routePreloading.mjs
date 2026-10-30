@@ -48,10 +48,20 @@ export async function routePreloading({ base, page, context, check }) {
   }
   check('preloading config keeps the YAML editor on demand', !scriptPaths.some((path) => path.endsWith('/YamlSourceEditor.tsx')), scriptPaths.join(' | '));
 
+  // A route frame is the Suspense fallback directly under the route view; the page's own first-load
+  // frame sits inside the page.
+  await page.evaluate(() => {
+    window.__routeFramePainted = false;
+    const isFramed = () => document.querySelector('.route-transition > .terminal-page > .loading-region') !== null;
+    window.__routeFrameObserver = new MutationObserver(() => { if (isFramed()) window.__routeFramePainted = true; });
+    window.__routeFrameObserver.observe(document.body, { childList: true, subtree: true });
+  });
   const configRead = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/management/config'));
   await page.locator('.app-menu [data-route-path="/config"]').first().click();
   await configRead;
   await page.locator('.config-page').waitFor();
+  check('a preloaded route mounts without its module-download frame',
+    !await page.evaluate(() => { window.__routeFrameObserver.disconnect(); return window.__routeFramePainted; }));
   await until(() => new URL(page.url()).pathname.endsWith('/config'), { label: 'preloaded config navigation' });
   check('navigation mounts the preloaded page and its reads', new URL(page.url()).pathname.endsWith('/config'), page.url());
   check('navigation at the top avoids a redundant shell scroll reset',

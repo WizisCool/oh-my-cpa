@@ -1496,7 +1496,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   border-radius: var(--radius-sm);
   background: var(--border);
   animation: placeholder-breathe 1400ms var(--ease-standard) infinite alternate both;
-  animation-delay: calc(var(--placeholder-row, 0) * var(--motion-base));
+  animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * var(--motion-base));
 }
 @keyframes placeholder-breathe {
   from { opacity: 1; }
@@ -1506,11 +1506,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* Line heights are the glyph height of the copy they stand for, centred in its line box. */
 .placeholder-line { height: 10px; }
 .placeholder-line.is-meta { height: 8px; }
-.placeholder-line.is-subtitle { height: 9px; }
 .placeholder-title { height: 18px; }
 .loading-region { min-width: 0; }
-.placeholder-page-head { margin-bottom: 24px; }
-.placeholder-page-head .placeholder-lines { gap: 14px; padding: 5px 0 6px; }
+/* The title's 32px line box, so the body below starts where the real head ends. */
+.placeholder-page-head { padding: 7px 0; }
 .placeholder-list { display: flex; flex-direction: column; }
 .placeholder-list-row {
   display: flex;
@@ -1534,6 +1533,24 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .placeholder-table-row + .placeholder-table-row { border-top: 1px solid var(--border-soft); }
 .placeholder-table-cell { flex: 1 1 0; min-width: 0; }
+/* A table's own column header stays drawn on a first read; its body holds the rows instead of the
+   empty message, edge to edge as real rows would be. */
+.ant-table-placeholder:has(.placeholder-table) > .ant-table-cell { padding: 0; text-align: start; }
+.placeholder-panels { display: flex; flex-direction: column; gap: 16px; }
+.placeholder-panel-body { margin-top: 18px; }
+/* A conversation's first load, at the thread's reading column. Global because a lazy route draws it
+   before the workspace's own stylesheet has loaded. */
+.thread-placeholder {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: calc(var(--workspace-column, 760px) + 48px);
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.thread-placeholder-column { display: flex; flex-direction: column; gap: 24px; }
+.thread-placeholder-question { align-self: flex-end; }
 
 /* The shell's own placeholder, at the geometry `AppLayout` paints: a 236px rail, a 56px header. */
 .shell-loading {

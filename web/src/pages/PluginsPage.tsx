@@ -209,7 +209,7 @@ export const PluginsPage: React.FC = () => {
       {tab === 'store' && (
         <PluginStorePanel
           store={storeQuery.data}
-          isLoading={storeQuery.isLoading}
+          isLoading={storeQuery.isPending}
           isDemo={isDemo}
           onManage={manage}
           onOpenSettings={() => selectTab('settings')}
