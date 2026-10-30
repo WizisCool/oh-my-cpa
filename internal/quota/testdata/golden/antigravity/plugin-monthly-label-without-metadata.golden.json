@@ -20,7 +20,7 @@
     },
     {
       "id": "ag_Cline Pass_bucket_0_2",
-      "label": "Cline Pass · 每月限制 (Monthly)",
+      "label": "Cline Pass · monthly",
       "scope": "group",
       "used_percent": 75,
       "remaining_percent": 25,

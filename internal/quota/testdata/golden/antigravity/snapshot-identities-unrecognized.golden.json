@@ -2,7 +2,7 @@
   "windows": [
     {
       "id": "ag_Plugin_bucket_0_0",
-      "label": "Plugin · 每月限制 (Monthly)",
+      "label": "Plugin · monthly",
       "scope": "group",
       "used_percent": 87.5,
       "remaining_percent": 12.5,
@@ -11,7 +11,7 @@
     },
     {
       "id": "ag_Plugin_bucket_0_1",
-      "label": "Plugin · bucket_0_1",
+      "label": "Plugin · unreported-five",
       "scope": "group",
       "used_percent": 75,
       "remaining_percent": 25,
@@ -20,7 +20,7 @@
     },
     {
       "id": "ag_Plugin_upstream-week",
-      "label": "Plugin · 每周限制 (Weekly)",
+      "label": "Plugin · unreported-week",
       "scope": "group",
       "used_percent": 62.5,
       "remaining_percent": 37.5,
@@ -38,7 +38,7 @@
     },
     {
       "id": "ag_Plugin_bucket_0_4",
-      "label": "Plugin · bucket_0_4",
+      "label": "Plugin · unreported-week",
       "scope": "group",
       "used_percent": 37.5,
       "remaining_percent": 62.5,
@@ -47,7 +47,7 @@
     },
     {
       "id": "ag_Plugin_bucket_0_5",
-      "label": "Plugin · bucket_0_5",
+      "label": "Plugin · burst",
       "scope": "group",
       "used_percent": 25,
       "remaining_percent": 75,
@@ -56,7 +56,7 @@
     },
     {
       "id": "ag_Other_bucket_1_0",
-      "label": "Other · 每月限制 (Monthly)",
+      "label": "Other · monthly",
       "scope": "group",
       "used_percent": 12.5,
       "remaining_percent": 87.5,
