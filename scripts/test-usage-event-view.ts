@@ -171,6 +171,9 @@ test('usage event view', () => {
   assert.deepEqual(rejectedEventParams(new URLSearchParams('served=maybe')), ['served']);
   assert.deepEqual(rejectedEventParams(new URLSearchParams('served=matched')), []);
   assert.equal(read('transport=grpc').transport, undefined);
+  // A padded value is applied, as rejectedEventParams accepts it, never silently dropped.
+  assert.equal(read('transport=%20websocket%20').transport, 'websocket');
+  assert.deepEqual(rejectedEventParams(new URLSearchParams('transport=%20websocket%20')), []);
   assert.deepEqual(rejectedEventParams(new URLSearchParams('transport=grpc')), ['transport']);
 
   // A reversed range cannot match any record, so it is dropped instead of being
