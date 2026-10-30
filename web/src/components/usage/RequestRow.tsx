@@ -4,7 +4,7 @@ import { tokenAccountingMessage } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
-import { NonStreamOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
+import { NonStreamOutlined, WebsocketOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
@@ -29,7 +29,7 @@ import {
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
-  isNonStreamingEvent,
+  requestTransport,
 } from '../../types/usageEventMetrics';
 import {
   eventKeyLabel,
@@ -137,7 +137,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
     const effortLabel = effortBadgeName(event.reasoning_effort);
-    const isNonStreaming = isNonStreamingEvent(event);
+    const transport = requestTransport(event);
     const isFastTier = isFastTierEvent(event);
 
     const keyLabel = eventKeyLabel(event);
@@ -324,12 +324,12 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 5: mode - the reasoning effort, then a mark per way this request
-            departed from an ordinary streamed call: served on the fast lane, or
-            answered in one piece. The requested service tier ("auto") is not
+            departed from an ordinary streamed call: served on the fast lane,
+            carried over a WebSocket, or answered in one piece. The requested service tier ("auto") is not
             something operators scan for and stays in the drawer. */}
         <div className={`req-col req-col-mode ${requestColumnAlignClass('mode')}`}>
           <span className="req-mobile-label">{t('events.col_mode')}</span>
-          {event.reasoning_effort || isFastTier || isNonStreaming ? (
+          {event.reasoning_effort || isFastTier || transport === 'websocket' || transport === 'http' ? (
             <div className="req-mode-marks">
               {event.reasoning_effort && (
                 <RequestTooltip title={`${t('events.reasoning_effort')}: ${effortLabel}`}>
@@ -353,7 +353,14 @@ export const RequestRow = React.memo<RequestRowProps>(
                   </span>
                 </RequestTooltip>
               )}
-              {isNonStreaming && (
+              {transport === 'websocket' && (
+                <RequestTooltip title={t('events.websocket_hint')}>
+                  <span className="req-mode-mark req-websocket-icon" role="img" aria-label={t('events.websocket_hint')}>
+                    <WebsocketOutlined />
+                  </span>
+                </RequestTooltip>
+              )}
+              {transport === 'http' && (
                 <RequestTooltip title={t('events.non_stream_hint')}>
                   <span className="req-mode-mark req-non-stream-icon" role="img" aria-label={t('events.non_stream_hint')}>
                     <NonStreamOutlined />

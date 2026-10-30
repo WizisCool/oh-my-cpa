@@ -19,7 +19,8 @@
  * label template comes from the dictionary so every language stays localized.
  */
 import type { EventFilterKey } from '../../types/usageEventQuery';
-import type { UsageFacets } from '../../types/usageEvents';
+import type { UsageFacets, UsageTransport } from '../../types/usageEvents';
+import { isUsageTransport } from '../../types/usageEvents';
 import { displayEffortName } from '../../theme/effortScale';
 
 export interface ChipDisplayInput {
@@ -36,6 +37,8 @@ export interface ChipDisplayInput {
   costLabels: { priced: string; unpriced: string };
   /** The dictionary's names for the two served-model states. */
   servedLabels: { substituted: string; matched: string };
+  /** The dictionary's names for the three transports. */
+  transportLabels: Record<UsageTransport, string>;
 }
 
 /**
@@ -53,6 +56,7 @@ export function chipDisplayValue({
   resolveProviderName,
   costLabels,
   servedLabels,
+  transportLabels,
 }: ChipDisplayInput): string {
   if (key === 'auth_index') return credentialNames.get(value) || value;
   if (key === 'api_key') {
@@ -64,6 +68,7 @@ export function chipDisplayValue({
   if (key === 'reasoning') return displayEffortName(value);
   if (key === 'cost') return value === 'priced' ? costLabels.priced : costLabels.unpriced;
   if (key === 'served') return value === 'matched' ? servedLabels.matched : servedLabels.substituted;
+  if (key === 'transport') return isUsageTransport(value) ? transportLabels[value] : value;
   if (key.endsWith('_min') || key.endsWith('_max')) {
     // Cost bounds are nano-dollars on the wire and are shown in dollars, so the
     // sign is added here rather than stored.

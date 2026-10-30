@@ -7,6 +7,7 @@ import {
   formatUsageRangeBound,
   isCostRange,
   isUsageServedState,
+  isUsageTransport,
   parseUsageRangeBound,
   usageRangeParamKey,
 } from './usageEvents';
@@ -49,6 +50,7 @@ export const EVENT_FILTER_KEYS = [
   ]),
   'cost',
   'served',
+  'transport',
 ] as const;
 
 export type EventFilterKey = (typeof EVENT_FILTER_KEYS)[number];
@@ -83,6 +85,8 @@ export function readEventQuery(params: URLSearchParams): UsageEventQuery {
   if (cost === 'priced' || cost === 'unpriced') query.cost = cost;
   const served = params.get('served');
   if (isUsageServedState(served)) query.served = served;
+  const transport = params.get('transport');
+  if (isUsageTransport(transport)) query.transport = transport;
 
   const from = Number(params.get('from'));
   const to = Number(params.get('to'));
@@ -163,6 +167,7 @@ export function queryToFilterParams(query: UsageEventQuery): Partial<Record<Even
   }
   if (query.cost === 'priced' || query.cost === 'unpriced') result.cost = [query.cost];
   if (isUsageServedState(query.served)) result.served = [query.served];
+  if (isUsageTransport(query.transport)) result.transport = [query.transport];
   return result;
 }
 
@@ -220,6 +225,10 @@ export function rejectedEventParams(params: URLSearchParams): string[] {
     }
     if (key === 'served') {
       if (!isUsageServedState(raw.trim())) rejected.push(key);
+      continue;
+    }
+    if (key === 'transport') {
+      if (!isUsageTransport(raw.trim())) rejected.push(key);
       continue;
     }
     // Every other dimension is a literal string, so it is unusable only when it is

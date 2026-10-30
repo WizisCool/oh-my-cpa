@@ -283,6 +283,15 @@ export function isUsageServedState(value: unknown): value is Exclude<UsageServed
   return value === 'substituted' || value === 'matched';
 }
 
+/** How CPA carried a request upstream: a WebSocket executor, or HTTP streamed
+ *  (SSE) or answered in one payload. See `requestTransport`. */
+export type UsageTransport = 'websocket' | 'sse' | 'http';
+export type UsageTransportFilter = 'all' | UsageTransport;
+
+export function isUsageTransport(value: unknown): value is UsageTransport {
+  return value === 'websocket' || value === 'sse' || value === 'http';
+}
+
 /** Dimensions whose several selected values mean "any of these" (OR). Two
  *  different dimensions still mean AND, which is what makes the panel narrow as
  *  the operator adds a filter and widen as they remove one. */
@@ -510,6 +519,7 @@ export interface UsageEventQuery {
   result?: UsageResultFilter;
   cost?: UsageCostFilter;
   served?: UsageServedFilter;
+  transport?: UsageTransportFilter;
   /** Repeated-parameter dimensions, OR within each list. */
   filters?: Partial<Record<UsageMultiFilterKey, string[]>>;
   /** Literal substring dimensions. */
@@ -569,6 +579,7 @@ export function usageEventParams(query: UsageEventQuery): string {
   assign('result', query.result);
   assign('cost', query.cost);
   if (isUsageServedState(query.served)) assign('served', query.served);
+  if (isUsageTransport(query.transport)) assign('transport', query.transport);
   assign('cursor', query.cursor);
   assign('limit', query.limit);
   assign('since', query.since);

@@ -117,6 +117,8 @@ export const MoonOutlined = createIcon(Lucide.Moon, 'anticon-moon');
 // A request answered in one payload. A struck broadcast mark, because the stream is what is absent;
 // the boxes glyph belongs to Model Square.
 export const NonStreamOutlined = createIcon(Lucide.RadioOff, 'anticon-non-stream');
+// A request carried over an upstream WebSocket: a held connection, so a cable rather than a broadcast.
+export const WebsocketOutlined = createIcon(Lucide.Cable, 'anticon-websocket');
 export const MoreOutlined = createIcon(Lucide.MoreHorizontal, 'anticon-more');
 export const NodeIndexOutlined = createIcon(Lucide.Network, 'anticon-node-index');
 export const PauseCircleOutlined = createIcon(Lucide.PauseCircle, 'anticon-pause-circle');

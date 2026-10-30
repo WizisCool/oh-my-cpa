@@ -9,6 +9,7 @@ import type {
   UsageRegexField,
   UsageResultFilter,
   UsageServedFilter,
+  UsageTransportFilter,
 } from '../../types/usageEvents';
 import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventLabels';
 import { ResultMarker } from './ResultMarker';
@@ -484,6 +485,22 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             />,
           )}
           {REQUEST_FACETS.map(multiRow)}
+          {row(
+            'events.transport',
+            'req-transport-segmented',
+            <Segmented
+              id="req-transport-segmented"
+              aria-label={t('events.transport')}
+              value={draft.transport}
+              onChange={(value) => setDraft((prev) => ({ ...prev, transport: value as UsageTransportFilter }))}
+              options={[
+                { value: 'all', label: t('events.filter_all') },
+                { value: 'websocket', label: t('events.transport_websocket') },
+                { value: 'sse', label: t('events.transport_sse') },
+                { value: 'http', label: t('events.transport_http') },
+              ]}
+            />,
+          )}
           {ALIAS_FACETS.map(multiRow)}
           {row(
             'events.served_model',

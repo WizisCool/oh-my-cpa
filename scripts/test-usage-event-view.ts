@@ -44,7 +44,7 @@ import {
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
-  isNonStreamingEvent,
+  requestTransport,
 } from '../web/src/types/usageEventMetrics.ts';
 import {
   eventProviderIdentity,
@@ -152,7 +152,7 @@ test('usage event view', () => {
     'auth_type=oauth&reasoning=high&service_tier=flex&resolved_service_tier=priority&model_alias=fast',
     'q=codex&ua=codex-cli&endpoint=%2Fv1%2Fresponses&request_id=req-1',
     'latency_min=100&latency_max=60000&tokens_min=0&tokens_max=500000',
-    'cost_min=0.000001&cost_max=12.5&cost=unpriced&served=substituted',
+    'cost_min=0.000001&cost_max=12.5&cost=unpriced&served=substituted&transport=websocket',
   ].join('&');
   const everyQuery = read(everyFilter);
   assert.deepEqual(everyQuery.filters?.resolved_service_tier, ['priority']);
@@ -164,11 +164,14 @@ test('usage event view', () => {
   assert.equal(everyAgain.ranges?.cost?.min, '0.000001', 'a cost bound keeps its decimal text');
   assert.equal(everyAgain.cost, 'unpriced');
   assert.equal(everyAgain.served, 'substituted');
+  assert.equal(everyAgain.transport, 'websocket');
   // An unknown served state is dropped from the query and reported, never sent on
   // as a filter the server would refuse.
   assert.equal(read('served=maybe').served, undefined);
   assert.deepEqual(rejectedEventParams(new URLSearchParams('served=maybe')), ['served']);
   assert.deepEqual(rejectedEventParams(new URLSearchParams('served=matched')), []);
+  assert.equal(read('transport=grpc').transport, undefined);
+  assert.deepEqual(rejectedEventParams(new URLSearchParams('transport=grpc')), ['transport']);
 
   // A reversed range cannot match any record, so it is dropped instead of being
   // forwarded as a filter that renders a guaranteed-empty list.
@@ -862,6 +865,7 @@ test('usage event view', () => {
       cost_max: ['12.5'],
       cost: ['unpriced'],
       served: ['substituted'],
+      transport: ['sse'],
     },
   };
   const loaded = draftFromView(loadedView);
@@ -875,6 +879,7 @@ test('usage event view', () => {
   assert.equal(loaded.ranges.cost?.min, '0.000001');
   assert.equal(loaded.cost, 'unpriced');
   assert.equal(loaded.served, 'substituted');
+  assert.equal(loaded.transport, 'sse');
   assert.equal(loaded.result, 'failed');
   assert.deepEqual(draftToView(loaded), loadedView, 'a draft round trips through the view unchanged');
   assert.deepEqual(validateFilterDraft(loaded), {}, 'a loaded view is valid');
@@ -1320,8 +1325,17 @@ test('usage event view', () => {
   for (const [latency_ms, ttft_ms, expected] of [[31251, 4423, true], [61275, 61258, true], [10000, 10000, false], [10000, 10500, false]] as const) {
     assert.equal(hasMeasurableTTFT({ latency_ms, ttft_ms }), expected);
   }
-  for (const stream of [true, false, null, undefined]) {
-    assert.equal(isNonStreamingEvent({ stream }), stream === false);
+  // A WebSocket executor names the transport whatever the stream flag says; the server's
+  // `transport` filter applies the same rule.
+  for (const [executor_type, stream, expected] of [
+    ['CodexWebsocketsExecutor', false, 'websocket'],
+    ['XAIWebsocketsExecutor', null, 'websocket'],
+    ['CodexExecutor', true, 'sse'],
+    ['CodexExecutor', false, 'http'],
+    ['', null, null],
+    [undefined, undefined, null],
+  ] as const) {
+    assert.equal(requestTransport({ executor_type, stream }), expected, `${String(executor_type)}/${String(stream)}`);
   }
 
   // The mark consumes the backend's provider-aware evidence, not the response alone.

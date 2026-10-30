@@ -52,6 +52,7 @@ func TestUsageEventsRejectMalformedFilters(t *testing.T) {
 		"cost_min=2&cost_max=1":             "must not be greater",
 		"cost=maybe":                        "cost must be one of",
 		"served=maybe":                      "served must be one of",
+		"transport=grpc":                    "transport must be one of",
 		"q=" + strings.Repeat("x", 300):     "at most",
 		"model=" + strings.Repeat("m", 300): "at most",
 	} {
@@ -194,16 +195,24 @@ func TestUsageEventsGlobalSearchIsLiteralAndScoped(t *testing.T) {
 func TestUsageEventsRangeFiltersAndCostConversion(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	now := time.Now().UTC()
+	isStreamed, isBuffered := true, false
 	seedEvents(t, repo, now, []repository.UsageDecoded{
 		{Event: filterEventFor("slow", now.Add(-3*time.Minute), func(e *usage.Event) {
 			e.LatencyMS = 60_000
 			e.TotalTokens = 500_000
+			// A WebSocket executor is the WebSocket transport whatever the stream flag says.
+			e.ExecutorType = "CodexWebsocketsExecutor"
+			e.Stream = &isBuffered
 		})},
 		{Event: filterEventFor("fast", now.Add(-2*time.Minute), func(e *usage.Event) {
 			e.LatencyMS = 200
 			e.TotalTokens = 10
+			e.ExecutorType = "CodexExecutor"
+			e.Stream = &isBuffered
 		})},
 		{Event: filterEventFor("failed", now.Add(-time.Minute), func(e *usage.Event) {
+			e.ExecutorType = "CodexExecutor"
+			e.Stream = &isStreamed
 			e.LatencyMS = 100
 			e.Failed = true
 			e.ResponseModel = "gpt-5-mini"
@@ -250,6 +259,11 @@ func TestUsageEventsRangeFiltersAndCostConversion(t *testing.T) {
 	}
 	if got := ids("served=substituted"); len(got) != 1 || got[0] != "failed" {
 		t.Fatalf("served model filter = %v", got)
+	}
+	for transport, want := range map[string]string{"websocket": "slow", "http": "fast", "sse": "failed"} {
+		if got := ids("transport=" + transport); len(got) != 1 || got[0] != want {
+			t.Fatalf("transport=%s = %v, want [%s]", transport, got, want)
+		}
 	}
 	// Every record was priced before an explicit cost filter is applied, so
 	// "unpriced" is the empty set and "all" is everything.
