@@ -56,6 +56,45 @@ func TestAntigravityBucketLabelsFollowRenamedBuckets(t *testing.T) {
 			t.Errorf("label(%q, %q) = %q, want %q", scenario.name, scenario.window, got, scenario.want)
 		}
 	}
+
+	t.Run("plugin window label preserves built-in periods", func(t *testing.T) {
+		windows, err := ParseAntigravityUsage([]byte(`{"groups":[
+			{"displayName":"Gift plans","buckets":[
+				{"window":"ZCODE WEEKEND BUILD · glm-5.3-flash","remainingFraction":0.97,
+				 "resetTime":"2026-11-02T01:00:00Z","description":"Models: glm-5.3-flash"}
+			]},
+			{"displayName":"Gemini Models","buckets":[
+				{"displayName":"Weekly Limit Remaining","window":"weekly","remainingFraction":0.6},
+				{"displayName":"Five Hour Limit Remaining","window":"5h","remainingFraction":0.9}
+			]}
+		]}`), 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []struct {
+			id, label string
+			hours     float64
+		}{
+			{"ag_Gift plans_bucket_0_0", "Gift plans · ZCODE WEEKEND BUILD · glm-5.3-flash", 0},
+			{"ag_Gemini Models_bucket_1_0", "Gemini Models · 5小时限制 (5-Hour)", 5},
+			{"ag_Gemini Models_bucket_1_1", "Gemini Models · 每周限制 (Weekly)", 168},
+		}
+		if len(windows) != len(want) {
+			t.Fatalf("windows = %d, want %d", len(windows), len(want))
+		}
+		for index, expected := range want {
+			window := windows[index]
+			if window.Label != expected.label {
+				t.Errorf("window %d label = %q, want %q", index, window.Label, expected.label)
+			}
+			if window.ID != expected.id {
+				t.Errorf("window %d ID = %q, want %q", index, window.ID, expected.id)
+			}
+			if window.PeriodHours == nil || *window.PeriodHours != expected.hours {
+				t.Errorf("window %d has unexpected period: %+v, want %v hours", index, window, expected.hours)
+			}
+		}
+	})
 }
 
 func TestResolveAntigravityPlanNamesTheTier(t *testing.T) {

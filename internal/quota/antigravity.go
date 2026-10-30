@@ -170,15 +170,25 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 		for _, bucket := range buckets {
 			bucketID := bucket.BucketID
 
-			bName := bucket.DisplayName
-			if bName == "" {
-				bName = bucket.DisplayNameAlt
+			displayName := bucket.DisplayName
+			if displayName == "" {
+				displayName = bucket.DisplayNameAlt
 			}
-			if bName == "" {
-				bName = bucketID
+			bucketLabel := displayName
+			if bucketLabel == "" {
+				bucketLabel = bucket.Window
+			}
+			if bucketLabel == "" {
+				bucketLabel = bucketID
 			}
 
-			fullLabel := translateAntigravityBucketLabel(gName, bName, bucket.Window)
+			periodHours := parseAntigravityWindowHours(bucket.Window)
+			fullLabel := fmt.Sprintf("%s · %s", gName, bucketLabel)
+			// Plugin windows can be product names such as "WEEKEND BUILD";
+			// only recognized fixed periods permit keyword-based translation.
+			if periodHours > 0 {
+				fullLabel = translateAntigravityBucketLabel(gName, displayName, bucket.Window)
+			}
 
 			rawFrac := bucket.RemainingFraction
 			if rawFrac == nil {
@@ -218,8 +228,6 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 					resetLabel = formatResetInstant(ms, nowMS)
 				}
 			}
-
-			periodHours := parseAntigravityWindowHours(bucket.Window)
 
 			windows = append(windows, QuotaWindow{
 				ID:               fmt.Sprintf("ag_%s_%s", gName, bucketID),

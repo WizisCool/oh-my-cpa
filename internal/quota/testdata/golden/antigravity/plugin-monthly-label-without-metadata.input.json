@@ -1,5 +1,5 @@
 {
-  "why": "A plugin's calendar-month bucket without metadata is the named monthly limit with no fixed duration; later custom windows keep their names.",
+  "why": "A plugin window without metadata keeps its free-form label when no fixed duration is known; later custom windows keep their display names.",
   "now_ms": 0,
   "body": {
     "groups": [

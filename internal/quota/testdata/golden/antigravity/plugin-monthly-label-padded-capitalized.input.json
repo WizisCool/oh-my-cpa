@@ -1,5 +1,5 @@
 {
-  "why": "The calendar-month spelling ' Monthly ' reads as the same monthly limit.",
+  "why": "A free-form window label preserves its case and whitespace when no fixed duration is recognized.",
   "now_ms": 0,
   "body": {
     "groups": [
