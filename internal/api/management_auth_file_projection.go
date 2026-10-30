@@ -25,11 +25,13 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		Success:       nonNegative(file.Success),
 		Failed:        nonNegative(file.Failed),
 		Priority:      file.Priority,
-		Weight:        file.Weight,
 		Note:          boundedText(file.Note, managementAuthFileFieldLimit),
 		Models:        projectAuthModels(file.Models),
 		Quota:         projectQuota(file.Quota),
 		ModelQuotas:   projectModelQuotas(file.ModelQuotas),
+	}
+	if file.Weight != nil {
+		result.Weight = *file.Weight
 	}
 	for _, bucket := range file.RecentRequests {
 		if len(result.RecentRequests) >= managementOverviewBucketCount {

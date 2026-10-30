@@ -228,6 +228,8 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/config/source", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/backups", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/providers", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/routing", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/routing/models", demoAllow, ""},
 
 	// Credential metadata: the list, the per-credential model list and the fields a
 	// visitor can safely exercise. Editing a label, a priority or a note changes the
@@ -318,6 +320,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Gateway configuration and credential state.
 	{http.MethodPatch, "/api/v1/management/config", demoRefuse, "writing the gateway configuration is disabled"},
+	{http.MethodPatch, "/api/v1/management/routing", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "configuration backups hold the gateway's secrets"},
 	{http.MethodPost, "/api/v1/management/config/backups", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPut, "/api/v1/management/config/backups/settings", demoRefuse, "writing the gateway configuration is disabled"},

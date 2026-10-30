@@ -109,6 +109,7 @@ export default {
   "nav.insights": "洞察",
   "nav.providers": "AI 供應商",
   "nav.api_keys": "金鑰管理",
+  "nav.routing": "路由編排",
   "nav.auth_files": "OAuth 管理",
   "nav.logs": "日誌檢視",
   "nav.audit": "操作稽核",

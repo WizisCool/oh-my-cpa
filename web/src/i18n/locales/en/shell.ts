@@ -109,6 +109,7 @@ export default {
   'nav.insights': 'Insights',
   'nav.providers': 'AI providers',
   'nav.api_keys': 'Key management',
+  'nav.routing': 'Routing',
   'nav.auth_files': 'OAuth management',
   'nav.logs': 'Logs',
   'nav.audit': 'Audit trail',

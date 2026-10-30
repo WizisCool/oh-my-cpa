@@ -25,7 +25,7 @@ let api: OmcApi;
 /** The rail's model order, which is also the order a panel with no stored order lists. */
 const MODEL_ORDER = [
   'Dashboard', 'Agent', 'Playground', 'Model Square',
-  'AI providers', 'OAuth management', 'Key management',
+  'AI providers', 'OAuth management', 'Key management', 'Routing',
   'Insights', 'Request Events', 'Cost & Usage', 'Logs', 'Audit trail',
   'Plugin management', 'Plugin store',
   'Config', 'OMC Settings', 'System Information',

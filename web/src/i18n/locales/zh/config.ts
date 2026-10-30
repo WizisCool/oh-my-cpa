@@ -346,6 +346,7 @@ export default {
   'cfg.backups_reason_plugin_install': '安装插件',
   'cfg.backups_reason_plugin_delete': '删除插件',
   'cfg.backups_reason_credential_status': '启用或停用凭据',
+  'cfg.backups_reason_routing_plan': '修改路由编排',
   'cfg.backups_reason_restore': '恢复备份',
   'cfg.backups_reason_manual': '手动备份',
   'cfg.backups_reason_legacy_conversion': '转换为 v8 格式',

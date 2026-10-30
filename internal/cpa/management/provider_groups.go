@@ -187,19 +187,28 @@ func isSameStoredKey(fields map[string]any, apiKey, baseURL string) bool {
 
 // UpdateConfigAPIKeys writes the whole family as v8 groups.
 func (c *Client) UpdateConfigAPIKeys(ctx context.Context, family ConfigKeyFamily, entries []ConfigAPIKey) error {
-	groups, err := regroupConfigKeys(string(family), entries)
+	change, err := ConfigAPIKeysChange(family, entries)
 	if err != nil {
 		return err
 	}
-	return c.writeKeyGroups(ctx, family.GroupsPath(), groups)
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonProviderKeys), []ConfigChange{change})
 }
 
-func (c *Client) writeKeyGroups(ctx context.Context, path []string, groups []map[string]any) error {
-	ctx = WithBackupReason(ctx, BackupReasonProviderKeys)
-	if len(groups) == 0 {
-		return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: path, Remove: true}})
+// ConfigAPIKeysChange is the change that writes the edited family as v8 groups.
+// It lets a caller that edits several families send them as one change set.
+func ConfigAPIKeysChange(family ConfigKeyFamily, entries []ConfigAPIKey) (ConfigChange, error) {
+	groups, err := regroupConfigKeys(string(family), entries)
+	if err != nil {
+		return ConfigChange{}, err
 	}
-	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: path, Value: groups}})
+	return keyGroupsChange(family.GroupsPath(), groups), nil
+}
+
+func keyGroupsChange(path []string, groups []map[string]any) ConfigChange {
+	if len(groups) == 0 {
+		return ConfigChange{Path: path, Remove: true}
+	}
+	return ConfigChange{Path: path, Value: groups}
 }
 
 // regroupConfigKeys turns the edited flat list back into groups.
@@ -495,11 +504,21 @@ func runtimeKeyAuthIndex(provider OpenAICompatibility, apiKey string) string {
 // UpdateOpenAICompatibility writes the OpenAI-compatible providers as v8
 // groups, one per provider.
 func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
-	groups, err := openAICompatibilityGroups(entries)
+	change, err := OpenAICompatibilityChange(entries)
 	if err != nil {
 		return err
 	}
-	return c.writeKeyGroups(ctx, OPENAI_COMPATIBILITY_GROUPS_PATH, groups)
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonProviderKeys), []ConfigChange{change})
+}
+
+// OpenAICompatibilityChange is the change that writes the edited providers as
+// v8 groups, for a caller composing it into a larger change set.
+func OpenAICompatibilityChange(entries []OpenAICompatibility) (ConfigChange, error) {
+	groups, err := openAICompatibilityGroups(entries)
+	if err != nil {
+		return ConfigChange{}, err
+	}
+	return keyGroupsChange(OPENAI_COMPATIBILITY_GROUPS_PATH, groups), nil
 }
 
 func openAICompatibilityGroups(entries []OpenAICompatibility) ([]map[string]any, error) {

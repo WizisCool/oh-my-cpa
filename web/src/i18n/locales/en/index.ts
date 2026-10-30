@@ -16,6 +16,7 @@ import pricing from './pricing';
 import plugins from './plugins';
 import system from './system';
 import settings from './settings';
+import routing from './routing';
 
 export default {
   ...shell,
@@ -35,4 +36,5 @@ export default {
   ...plugins,
   ...system,
   ...settings,
+  ...routing,
 } satisfies Catalog;

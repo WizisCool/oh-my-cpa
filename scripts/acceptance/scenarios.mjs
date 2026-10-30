@@ -1,4 +1,5 @@
 import { modelSquare, modelSquareFixtures, modelSquareLedgerFixtures } from './probes/modelSquare.mjs';
+import { routingBoard, routingBoardFixtures, routingBoardPhone } from './probes/routingBoard.mjs';
 import { mobileConsole } from './probes/mobileConsole.mjs';
 import { insights, insightsFixtures, insightsPhone } from './probes/insights.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
@@ -916,6 +917,18 @@ export const SCENARIOS = [
     name: 'advertised models form maker sections with copyable call names, price and request linkage, and details',
     options: { routes: [...modelSquareFixtures(), ...modelSquareLedgerFixtures()] },
     run: modelSquare,
+  },
+  {
+    id: 'routing-board',
+    name: 'a dragged card opens a tier of its own and the model lens walks the new order',
+    options: { routes: routingBoardFixtures() },
+    run: routingBoard,
+  },
+  {
+    id: 'routing-board-phone',
+    name: 'on a phone the routing board fits and is arranged through each card menu',
+    options: { routes: routingBoardFixtures(), viewport: { width: 390, height: 844 }, hasTouch: true },
+    run: routingBoardPhone,
   },
   {
     id: 'mobile-console',

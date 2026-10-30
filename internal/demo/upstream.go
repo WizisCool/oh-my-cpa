@@ -166,9 +166,12 @@ func newUpstreamState(now time.Time) *upstreamState {
 			"success":         item.success,
 			"failed":          item.failed,
 			"priority":        item.priority,
-			"weight":          item.weight,
 			"excluded_models": []string{},
 			"recent_requests": recentRequests(now, item.success, item.failed),
+		}
+		// CPA lists a weight only where the credential states one; absent runs as 1.
+		if item.weight > 0 {
+			file["weight"] = item.weight
 		}
 		if item.provider == "codex" {
 			file["siwc_status"] = "off"

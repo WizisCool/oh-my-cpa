@@ -111,6 +111,7 @@ const BUILT_IN_ROUTES: Route[] = [
   },
   { method: 'GET', path: '/management/plugins', handler: (_request, state) => ({ plugins: state.plugins }) },
   { method: 'GET', path: '/management/providers', handler: (_request, state) => ({ providers: state.providers }) },
+  { method: 'GET', path: '/management/routing/models', handler: () => ({ models: {}, unknown: [] }) },
   {
     method: 'PUT', path: /^\/management\/providers\/[^/]+$/, handler: (request, state) => {
       const id = lastSegment(request.path);

@@ -67,7 +67,7 @@ func TestModelSquareNativeExclusionsApplyWithoutGuessingAliases(t *testing.T) {
 	}{
 		{"GPT-5", "gpt-*", true}, {"openai/gpt-5", "*gpt*", true}, {"claude-sonnet", "gpt-*", false}, {"model[1]", "model[1]", true},
 	} {
-		if got := isModelExcluded(input.model, []string{input.pattern}); got != input.isExcluded {
+		if got := IsModelExcluded(input.model, []string{input.pattern}); got != input.isExcluded {
 			t.Fatalf("%q / %q = %v", input.model, input.pattern, got)
 		}
 	}

@@ -62,7 +62,7 @@ func ProjectModelSquare(snapshot management.ConfiguredModelSnapshot, aliases map
 		directory.Providers = append(directory.Providers, ModelSquareProvider{ID: provider.ID, Family: provider.Family, Name: provider.Name, EndpointHost: provider.EndpointHost, IsOAuth: provider.IsOAuth})
 		if !provider.IsOAuth {
 			for _, route := range provider.Routes {
-				if isModelExcluded(route.UpstreamModel, provider.ExcludedModels) {
+				if IsModelExcluded(route.UpstreamModel, provider.ExcludedModels) {
 					continue
 				}
 				addRoute(ModelSquareRoute{provider.ID, route.UpstreamModel, route.CallPoint})
@@ -163,7 +163,7 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 			continue
 		}
 		for _, model := range models {
-			if isModelExcluded(model.ID, provider.ExcludedModels) {
+			if IsModelExcluded(model.ID, provider.ExcludedModels) {
 				continue
 			}
 			callPoint := model.ID
@@ -259,7 +259,9 @@ func RetainAdvertisedModels(directory ModelSquareDirectory, advertised []gateway
 	return directory
 }
 
-func isModelExcluded(model string, patterns []string) bool {
+// IsModelExcluded matches a model against CPA's excluded-models globs, where *
+// stands for any run of characters and case is ignored.
+func IsModelExcluded(model string, patterns []string) bool {
 	for _, pattern := range patterns {
 		expression := "(?i)^" + strings.ReplaceAll(regexp.QuoteMeta(strings.TrimSpace(pattern)), `\*`, ".*") + "$"
 		if matches, _ := regexp.MatchString(expression, model); matches {

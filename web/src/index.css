@@ -171,6 +171,10 @@
   /* Entrances decelerate hard and settle softly: the move is mostly over in the first third, so
      the reader sees the result arrive rather than watching it travel. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* A settle the operator's own hand started - a dragged card landing - overshoots a little and
+     comes to rest. Only hand-driven moves use it; reduced motion zeroes it with every transition. */
+  --motion-spring: 360ms;
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 :root[data-theme-mode='light'] {
@@ -1393,8 +1397,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    feel immediate and hand-following, not decorated. */
 .route-transition {
   /* A route change uses `base`, not the shorter acknowledgement for controls.
-     Keeping the named token preserves that distinction when durations change. */
-  animation: route-enter var(--motion-base) var(--ease-standard) both;
+     Keeping the named token preserves that distinction when durations change.
+     `backwards`, not `both`: the end state is the element's own style, and a transform animation
+     still filling after it ends makes the page the containing block of every fixed descendant,
+     which drew the routing board's drag overlay offset by the sidebar and header. */
+  animation: route-enter var(--motion-base) var(--ease-standard) backwards;
 }
 /* Held for the two frames a palette change takes to paint (ThemeContext): the console lands in
    the new palette at once instead of every surface easing its colours in a frame-dropping burst. */

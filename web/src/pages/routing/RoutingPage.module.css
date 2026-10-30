@@ -1,0 +1,209 @@
+.has-dirty-bar {
+  padding-bottom: calc(var(--routing-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 24px);
+}
+
+/* ── Workspace: the route, with the policy that governs it beside it ────── */
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 320px); gap: 16px; align-items: start; }
+.aside { position: sticky; top: 16px; min-width: 0; }
+
+/* ── Policy ─────────────────────────────────────────────────────────────── */
+.policy :global(.ant-card-body) { display: flex; flex-direction: column; gap: 12px; }
+.policy-strategy { display: flex; flex-direction: column; gap: 8px; }
+.policy-label { color: var(--fg); font-size: var(--text-sm); font-weight: 600; }
+.policy-hint { color: var(--muted); font-size: var(--text-sm); }
+.policy-inline { display: inline-flex; align-items: center; gap: 10px; }
+.ttl-input { width: 72px; font-family: var(--font-mono); }
+.strategy-control :global(.ant-segmented-item-label) { text-align: left; }
+.strategy-option { display: inline-flex; align-items: center; gap: 10px; }
+/* Three requests over two peers: the option shows its own distribution before it is read. */
+.strategy-glyph { display: inline-flex; flex-direction: column; gap: 2px; }
+.strategy-lane { display: inline-flex; gap: 2px; }
+.strategy-dot, .strategy-dot-idle { width: 4px; height: 4px; border-radius: 50%; }
+.strategy-dot { background: currentColor; }
+.strategy-dot-idle { background: color-mix(in srgb, currentColor 22%, transparent); }
+.failover-toggle {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; align-self: flex-start; padding: 4px 0;
+  border: 0; background: transparent; color: var(--fg-2); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer;
+}
+.failover-toggle:hover { color: var(--fg); }
+.failover-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); box-shadow: none !important; }
+.failover { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+
+/* ── Route ──────────────────────────────────────────────────────────────── */
+.board { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lens { flex: 0 1 280px; min-width: 180px; margin-left: auto; }
+.lens-note { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+
+/* Entry, tiers and exit hang on one rail: the step circles, the link lines and the end nodes all
+   centre on the same 24px line, so the page reads as one path from top to bottom. */
+.flow { display: flex; flex-direction: column; min-width: 0; }
+.flow-entry, .flow-exit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-height: 40px; padding: 0 13px; }
+.flow-node { position: relative; display: grid; flex: none; place-items: center; width: 24px; height: 24px; }
+.flow-node::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.flow-exit .flow-node::before { background: transparent; border: 2px solid var(--muted); }
+.flow-node-label { color: var(--fg); font-size: var(--text-sm); font-weight: 600; }
+.flow-node-hint { color: var(--muted); font-size: var(--text-sm); }
+
+.ladder { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+
+/* A link is the line a request falls down at rest and a landing strip while a card is in flight. It
+   keeps one height either way: the page must not move under a card the hand has just lifted. */
+.link { position: relative; display: flex; align-items: center; height: 32px; padding-left: 44px; }
+.link::before {
+  content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px;
+  background: color-mix(in srgb, var(--fg) 14%, transparent);
+}
+.link-label { position: relative; color: var(--muted); font-size: var(--text-xs); }
+.link-active::after {
+  content: ''; position: absolute; inset: 3px 0 3px 36px;
+  border: 1px dashed var(--border); border-radius: var(--radius-md);
+}
+.link-over::after { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.link-over .link-label { color: var(--accent); }
+
+.tier {
+  position: relative; display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface);
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
+}
+/* Only the band a card is about to land in lifts; the rest of the route stays flat. */
+.tier-over { border-color: var(--accent); box-shadow: var(--shadow-float); }
+/* A tier no request reaches - every member disabled, or none serving the chosen model - recedes. */
+.tier-skipped { opacity: 0.55; }
+.tier-gutter { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 2px; }
+.tier-step {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 24px;
+  border-radius: 50%; color: var(--fg-2); background: color-mix(in srgb, var(--fg) 8%, transparent);
+  font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums;
+}
+.tier-primary .tier-step { color: var(--bg); background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+.tier-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tier-name { color: var(--fg); font-size: var(--text-sm); font-weight: 600; }
+.tier-priority { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tier-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tier-role { color: var(--muted); font-size: var(--text-xs); }
+.tier-primary .tier-role { color: var(--accent); }
+.tier-cards { display: flex; flex-wrap: wrap; min-width: 0; margin: 0 -8px -8px 0; padding: 0; list-style: none; }
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+  min-width: 0; max-width: 360px; max-height: 60px; margin: 0 8px 8px 0; border-radius: var(--radius-md); outline: none;
+  transition: opacity var(--motion-base) var(--ease-standard),
+              transform var(--motion-base) var(--ease-standard),
+              max-width var(--motion-base) var(--ease-standard),
+              max-height var(--motion-base) var(--ease-standard),
+              margin var(--motion-base) var(--ease-standard),
+              padding var(--motion-base) var(--ease-standard);
+}
+.card:focus,
+.card:focus-visible {
+  outline: none;
+  box-shadow: none !important;
+}
+.card:focus-visible .card-face {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.card:focus:not(:focus-visible) .card-face {
+  outline: none;
+}
+.card-face {
+  display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 6px 8px 6px 6px;
+  border: 1px solid transparent; border-radius: var(--radius-md); background: var(--elevated);
+  box-shadow: var(--shadow-raised);
+  transition: border-color var(--motion-fast) var(--ease-standard),
+              opacity var(--motion-base) var(--ease-standard),
+              padding var(--motion-base) var(--ease-standard);
+}
+.card-draggable { cursor: grab; touch-action: none; }
+.card-draggable:hover .card-face {
+  border-color: var(--border-soft);
+}
+.card-grip { flex: none; color: var(--muted); font-size: var(--text-sm); }
+.card:not(.card-draggable) .card-grip { visibility: hidden; }
+.card-text { display: flex; flex-direction: column; min-width: 0; }
+.card-name { overflow: hidden; color: var(--fg); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; max-width: 240px; }
+.card-sub { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+.card-sub code { font-family: var(--font-mono); }
+.card-end { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding-left: 4px; }
+.card-share { color: var(--accent); font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+/* A standby tier's split is what it would take, not traffic it carries now. */
+.card-share-idle { color: var(--muted); }
+.card-dragging { opacity: 0.35; }
+.card-muted { opacity: 0.5; }
+
+/* When narrowed by the model lens, members that do not serve this model recede and collapse smoothly. */
+.card-hidden {
+  opacity: 0;
+  transform: scale(0.92);
+  width: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity var(--motion-base) var(--ease-standard),
+              transform var(--motion-base) var(--ease-standard),
+              max-width var(--motion-base) var(--ease-standard),
+              max-height var(--motion-base) var(--ease-standard),
+              margin var(--motion-base) var(--ease-standard),
+              visibility 0s linear var(--motion-base);
+}
+.card-hidden .card-face {
+  padding: 0 !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+/* The card following the pointer is the one lifted thing on the page. */
+.card-overlay { cursor: grabbing; border-color: transparent; box-shadow: var(--shadow-overlay); transform: scale(1.02); }
+/* A card the operator just placed settles into its tier on the hand-driven spring. */
+.card-landed .card-face { animation: card-land var(--motion-spring) var(--ease-spring); }
+@keyframes card-land {
+  from { transform: scale(0.94); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+
+.weight-chip {
+  min-width: 34px; height: 24px; padding: 0 6px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: transparent; color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-xs); cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+.weight-chip:hover { color: var(--fg); border-color: var(--fg-2); }
+.weight-chip:focus,
+.weight-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; box-shadow: none !important; }
+.weight-editor { display: flex; flex-direction: column; gap: 8px; max-width: 240px; }
+.weight-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--text-sm); }
+
+.review { display: flex; flex-direction: column; gap: 4px; max-width: 420px; max-height: 320px; margin: 0; padding: 0 0 0 16px; overflow: auto; font-size: var(--text-sm); }
+
+/* ── Narrow: the policy follows the route instead of standing beside it. ── */
+@media (max-width: 1100px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .aside { position: static; }
+}
+
+/* ── Phone: tiers stack as plain grouped lists; arranging is through each card's menu. ── */
+@media (max-width: 640px) {
+  .lens { flex: 1 1 100%; margin-left: 0; }
+  .strategy-glyph { display: none; }
+  .tier { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; }
+  /* The tier's inset is narrower here, so the rail moves with its step circles. */
+  .flow-entry, .flow-exit { padding: 0 11px; }
+  .link::before { left: 22px; }
+  .tier-gutter { padding-top: 0; }
+  .tier-cards { flex-direction: column; flex-wrap: nowrap; margin: 0; }
+  .card { margin: 0 0 8px 0; max-width: none; }
+  .card:last-child { margin-bottom: 0; }
+  .card-hidden { margin: 0 !important; }
+  .card-face { box-shadow: none; background: transparent; border-color: transparent; }
+  .card-name { max-width: none; }
+  .card-share { color: var(--fg); }
+  .tier-primary .tier-step { background: var(--fg-2); box-shadow: none; }
+  .tier-primary .tier-role { color: var(--fg-2); }
+  .flow-node::before { background: var(--fg-2); }
+}

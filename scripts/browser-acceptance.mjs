@@ -326,6 +326,7 @@ try {
     ['/ai-providers', '.providers-page'],
     ['/oauth-management', '.oauth-management-page', withProviderSecrets],
     ['/api-keys', '[data-testid="keys-count"]'],
+    ['/routing', '[data-testid="routing-page"] [data-member]', withProviderSecrets],
     ['/usage/events', '.usage-events-page', withProviderSecrets],
     ['/pricing', '[data-testid="pricing-page"]', withProviderSecrets],
     ['/logs', '.logs-page', withProviderSecrets],

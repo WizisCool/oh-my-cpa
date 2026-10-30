@@ -1,3 +1,4 @@
+import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } from '../types/routing';
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
@@ -733,6 +734,19 @@ export const api = {
     return request<{ status: string }>(`/management/providers/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  },
+
+  async getRouting(): Promise<RoutingBoard> {
+    return request<RoutingBoard>('/management/routing', { method: 'GET' });
+  },
+
+  async getRoutingModels(): Promise<RoutingModels> {
+    return request<RoutingModels>('/management/routing/models', { method: 'GET' });
+  },
+
+  /** Applies a routing plan prepared against `revision`; every target reports its own outcome. */
+  async patchRouting(plan: RoutingPlanRequest): Promise<RoutingOutcome> {
+    return request<RoutingOutcome>('/management/routing', { method: 'PATCH', body: JSON.stringify(plan) });
   },
 
   async patchManagementProviderStatus(

@@ -42,6 +42,7 @@ const (
 	BackupReasonPluginInstall    = "plugin_install"
 	BackupReasonPluginDelete     = "plugin_delete"
 	BackupReasonCredentialStatus = "credential_status"
+	BackupReasonRoutingPlan      = "routing_plan"
 	BackupReasonRestore          = "restore"
 	BackupReasonManual           = "manual"
 )

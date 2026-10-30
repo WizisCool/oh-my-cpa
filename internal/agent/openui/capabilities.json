@@ -6598,6 +6598,482 @@
     }
   },
   {
+    "name": "routing_apply",
+    "description": "Apply a routing plan from routing_read: new priorities and weights for named members (key from the board) and changed routing settings. Moving a member to a priority above every other makes it serve first. Writes CPA configuration after a backup; credentials are updated one by one.",
+    "permission": "write",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "session_affinity": {
+              "type": [
+                "null",
+                "boolean"
+              ]
+            },
+            "session_affinity_ttl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "request_retry": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "max_retry_credentials": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "max_retry_interval": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "disable_cooling": {
+              "type": [
+                "null",
+                "boolean"
+              ]
+            },
+            "transient_error_cooldown_seconds": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "members": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "priority": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "weights": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "index": {
+                      "type": "integer"
+                    },
+                    "weight": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "index",
+                    "weight"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "is_complete": {
+          "type": "boolean"
+        },
+        "results": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "board": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "revision": {
+              "type": "string"
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "type": "string"
+                },
+                "session_affinity": {
+                  "type": "boolean"
+                },
+                "session_affinity_ttl": {
+                  "type": "string"
+                },
+                "request_retry": {
+                  "type": "integer"
+                },
+                "max_retry_credentials": {
+                  "type": "integer"
+                },
+                "max_retry_interval": {
+                  "type": "integer"
+                },
+                "disable_cooling": {
+                  "type": "boolean"
+                },
+                "transient_error_cooldown_seconds": {
+                  "type": "integer"
+                },
+                "force_model_prefix": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "strategy",
+                "session_affinity",
+                "session_affinity_ttl",
+                "request_retry",
+                "max_retry_credentials",
+                "max_retry_interval",
+                "disable_cooling",
+                "transient_error_cooldown_seconds",
+                "force_model_prefix"
+              ],
+              "additionalProperties": false
+            },
+            "members": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "family": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "type": "integer"
+                  },
+                  "weights": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "index": {
+                          "type": "integer"
+                        },
+                        "auth_index": {
+                          "type": "string"
+                        },
+                        "weight": {
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "index",
+                        "weight"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "key_count": {
+                    "type": "integer"
+                  },
+                  "is_disabled": {
+                    "type": "boolean"
+                  },
+                  "is_unavailable": {
+                    "type": "boolean"
+                  },
+                  "is_runtime_only": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "key",
+                  "kind",
+                  "id",
+                  "family",
+                  "name",
+                  "priority",
+                  "weights",
+                  "key_count",
+                  "is_disabled",
+                  "is_unavailable",
+                  "is_runtime_only"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "partial": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "revision",
+            "settings",
+            "members"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "is_complete",
+        "results"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "routing_read",
+    "description": "Read CPA's routing board: every schedulable provider key and OAuth credential with its priority, weights and state, and the routing settings. Higher priority serves first; peers share by strategy, weight only under weighted-round-robin. The revision is what routing_apply quotes.",
+    "permission": "read",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "type": "string"
+            },
+            "session_affinity": {
+              "type": "boolean"
+            },
+            "session_affinity_ttl": {
+              "type": "string"
+            },
+            "request_retry": {
+              "type": "integer"
+            },
+            "max_retry_credentials": {
+              "type": "integer"
+            },
+            "max_retry_interval": {
+              "type": "integer"
+            },
+            "disable_cooling": {
+              "type": "boolean"
+            },
+            "transient_error_cooldown_seconds": {
+              "type": "integer"
+            },
+            "force_model_prefix": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "strategy",
+            "session_affinity",
+            "session_affinity_ttl",
+            "request_retry",
+            "max_retry_credentials",
+            "max_retry_interval",
+            "disable_cooling",
+            "transient_error_cooldown_seconds",
+            "force_model_prefix"
+          ],
+          "additionalProperties": false
+        },
+        "members": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "weights": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "index": {
+                      "type": "integer"
+                    },
+                    "auth_index": {
+                      "type": "string"
+                    },
+                    "weight": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "index",
+                    "weight"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "key_count": {
+                "type": "integer"
+              },
+              "is_disabled": {
+                "type": "boolean"
+              },
+              "is_unavailable": {
+                "type": "boolean"
+              },
+              "is_runtime_only": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "kind",
+              "id",
+              "family",
+              "name",
+              "priority",
+              "weights",
+              "key_count",
+              "is_disabled",
+              "is_unavailable",
+              "is_runtime_only"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "partial": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "revision",
+        "settings",
+        "members"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "system_health",
     "description": "Check the OMC database connection without disclosing host configuration.",
     "permission": "read",

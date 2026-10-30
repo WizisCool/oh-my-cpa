@@ -109,6 +109,7 @@ export default {
   "nav.insights": "Wawasan",
   "nav.providers": "Penyedia AI",
   "nav.api_keys": "Pengurusan kunci",
+  "nav.routing": "Penghalaan",
   "nav.auth_files": "Pengurusan OAuth",
   "nav.logs": "Log",
   "nav.audit": "Jejak audit",

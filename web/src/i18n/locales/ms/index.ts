@@ -13,6 +13,7 @@ import providers from './providers';
 import quota from './quota';
 import resources from './resources';
 import settings from './settings';
+import routing from './routing';
 import shell from './shell';
 import system from './system';
 import usageEvents from './usageEvents';
@@ -32,6 +33,7 @@ export default {
   ...quota,
   ...resources,
   ...settings,
+  ...routing,
   ...shell,
   ...system,
   ...usageEvents,

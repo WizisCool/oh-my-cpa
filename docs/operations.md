@@ -562,6 +562,45 @@ changes are serialized with other whole-config writes, backed up and audit logge
 (`oauth_model_alias.update` or `oauth_excluded_models.update`). Demo mode allows
 reads but refuses durable changes.
 
+## Routing
+
+The `/routing` page arranges CPA's request order. Each provider key, OpenAI-compatible
+provider and OAuth credential is a card. A tier is a set of cards that share one
+`priority`, so CPA routes to a higher tier first, and the tiers are drawn top-down.
+Inside a tier, the routing strategy divides traffic. Under fill-first, CPA's internal
+auth ID decides which card fills first, and OMC cannot see that ID. A strict A → B → C
+order therefore needs one tier per card. When an arrangement is numbered, cards whose
+tier is unchanged keep their stored priority where possible. Runtime-only credentials
+keep a fixed priority; an arrangement that cannot fit between fixed priorities is refused.
+New tiers fit within CPA's priority range, with smaller gaps near its limits.
+
+The model lens previews which tiers can serve one model, and each card's expected share
+within its tier. The preview cannot see session-affinity pins, live cooldowns or
+transport preferences, so a request may not follow it exactly. Failed model reads remain
+unknown rather than marking credentials ineligible. Aliases and exclusions
+are read-only on this page and are edited in their existing editors.
+
+Edits stay in a local draft, and leaving the page asks before discarding them.
+Applying a plan locks editing through its confirming readback. If that read fails,
+reload successfully before editing or applying again.
+
+`GET /api/v1/management/routing` returns the board and a revision computed from the
+routing-relevant fields only. `PATCH` takes that revision and only the changes. A
+changed board is refused with `routing_conflict` (409) before any write. Applying a
+plan works in this order:
+
+1. The routing audit attempt is recorded. If that fails, nothing is written.
+2. One configuration write covers provider priorities and weights together with the
+   routing settings. It takes one encrypted backup with reason `routing_plan`.
+3. Each OAuth credential is patched with its identity precondition and readback.
+   Patching stops at the first failure.
+
+CPA has no transaction across these steps, so the response reports each target as
+`applied`, `failed`, `uncertain` or `not_attempted`, and it never claims a rollback. A
+configuration backup restores only the configuration part. The Agent's
+`routing_apply` capability previews the same plan against a revision and applies it
+after approval. Demo mode allows reads and refuses the write.
+
 ## Kimi international quota
 
 The `kimi-ai` connection method uses the international Kimi account system. Its

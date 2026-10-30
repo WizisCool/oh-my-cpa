@@ -270,7 +270,7 @@ func managementAuthFileFieldMismatch(requested map[string]any, file management.A
 				return "priority"
 			}
 		case "weight":
-			if int64Value(raw) != file.Weight {
+			if raw == nil != (file.Weight == nil) || (raw != nil && int64Value(raw) != *file.Weight) {
 				return "weight"
 			}
 		case "note":
