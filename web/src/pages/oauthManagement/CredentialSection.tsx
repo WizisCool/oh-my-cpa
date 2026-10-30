@@ -564,9 +564,9 @@ function CredentialNameEditor({ initial, label, onCommit, onCancel }: Credential
 }
 
 /**
- * One reading: the share left, its bar, and - only while the window is not full - when it resets.
- * A full window has nothing to wait for. The window's own label, exact reset instant and capacity
- * estimate are its tooltip.
+ * One reading: the share left, its bar, and the reset time reported upstream. A window can
+ * already be counting down while its remaining share still rounds to 100%. The window's own
+ * label, exact reset instant and capacity estimate are its tooltip.
  */
 interface QuotaCellProps {
   columnKey: string;
@@ -591,7 +591,7 @@ function QuotaCell({ columnKey, phoneLabel, window, isPhoneWide, isFirstOfFamily
     );
   }
   const remaining = quotaRemainingPercent(window);
-  const reset = remaining != null && remaining < 100 ? quotaResetCountdown(window, nowMS, t) : '';
+  const reset = quotaResetCountdown(window, nowMS, t);
   const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
   const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean).join('\n');
   return (
