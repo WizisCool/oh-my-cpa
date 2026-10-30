@@ -397,6 +397,45 @@ function renderCredentialRow(
   );
 }
 
+describe("a credential row's reset time", () => {
+  const fullReadings: { provider: string; windowOverrides: Partial<QuotaWindow> }[] = [
+    { provider: 'codex', windowOverrides: {} },
+    { provider: 'claude', windowOverrides: { remaining_percent: undefined, used_percent: 0 } },
+    { provider: 'gemini', windowOverrides: { remaining_percent: 99.8 } },
+    { provider: 'antigravity', windowOverrides: { scope: 'group', label: 'Gemini · 5-hour limit', model_families: ['gemini'] } },
+  ];
+
+  it.each(fullReadings)('shows the reported reset even when $provider displays 100% remaining', ({ provider, windowOverrides }) => {
+    const { container } = renderCredentialRow(quota(`${provider}-full`, [
+      { ...quotaWindow('five_hour', 100, 2), ...windowOverrides },
+      quotaWindow('weekly', 100, 48),
+    ], { type: provider, provider }), { fileOverrides: { type: provider, provider } });
+    const cells = container.querySelectorAll<HTMLElement>('[data-quota-window-label]');
+    expect(cells).toHaveLength(2);
+    expect(within(cells[0]).getByText('100%')).toBeTruthy();
+    expect(within(cells[0]).getByText('2h left')).toBeTruthy();
+    expect(within(cells[1]).getByText('100%')).toBeTruthy();
+    expect(within(cells[1]).getByText('2d left')).toBeTruthy();
+  });
+
+  it('keeps the reset estimate marker on a full window', () => {
+    const { container } = renderCredentialRow(quota('codex-derived', [
+      { ...quotaWindow('five_hour', 100, 2), reset_accuracy: 'derived' },
+    ]));
+    const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
+    expect(within(cell).getByText('~2h left')).toBeTruthy();
+  });
+
+  it('does not invent a reset time when upstream reports none', () => {
+    const { container } = renderCredentialRow(quota('codex-idle', [
+      { ...quotaWindow('five_hour', 100, 2), reset_at_ms: undefined },
+    ]));
+    const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
+    expect(within(cell).getByText('100%')).toBeTruthy();
+    expect(within(cell).queryByText(/left|Recovered/)).toBeNull();
+  });
+});
+
 describe('a row that says it is out of date', () => {
   const staleItem = (overrides: Partial<QuotaItem> = {}): QuotaItem =>
     quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
