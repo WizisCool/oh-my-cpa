@@ -41,6 +41,10 @@ import {
   successRateTone,
   SUCCESS_RATE_DEGRADED_PERCENT,
   SUCCESS_RATE_HEALTHY_PERCENT,
+  latencyTone,
+  LATENCY_WARN_MS,
+  LATENCY_SLOW_MS,
+  LATENCY_DANGER_MS,
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
@@ -1481,5 +1485,32 @@ test('usage event view', () => {
     SUCCESS_RATE_HEALTHY_PERCENT > SUCCESS_RATE_DEGRADED_PERCENT &&
       SUCCESS_RATE_DEGRADED_PERCENT > 0,
     'the healthy band sits above the degraded band',
+  );
+
+  // latencyTone: the console's one published band, read by the request list's
+  // latency column, the exported sheet and the detail drawer. Four fixed
+  // colours, so the same duration cannot be green in one place and orange in
+  // another.
+  assert.equal(latencyTone(null), 'neutral', 'a null latency carries no verdict');
+  assert.equal(latencyTone(undefined), 'neutral', 'a missing latency carries no verdict');
+  assert.equal(latencyTone(Number.NaN), 'neutral', 'an unreadable latency carries no verdict');
+  assert.equal(latencyTone(Number.POSITIVE_INFINITY), 'neutral', 'an infinite latency carries no verdict');
+  assert.equal(latencyTone(-1), 'neutral', 'a negative latency is not a reading');
+  // The quick band ends at the warn boundary, and a measured zero is a reading.
+  assert.equal(latencyTone(0), 'success', 'an instant request is green, not neutral');
+  assert.equal(latencyTone(LATENCY_WARN_MS - 1), 'success', 'just under the warn boundary is green');
+  assert.equal(latencyTone(LATENCY_WARN_MS), 'warn', 'the warn boundary itself is amber');
+  assert.equal(latencyTone(LATENCY_SLOW_MS - 1), 'warn', 'just under the slow boundary is amber');
+  assert.equal(latencyTone(LATENCY_SLOW_MS), 'slow', 'the slow boundary itself is orange');
+  assert.equal(latencyTone(LATENCY_DANGER_MS - 1), 'slow', 'just under the danger boundary is orange');
+  assert.equal(latencyTone(LATENCY_DANGER_MS), 'danger', 'the danger boundary itself is red');
+  assert.equal(latencyTone(300_000), 'danger', 'a five-minute request is red');
+  // A measured zero is the fastest reading there is; an absent latency is not a
+  // measurement at all. They must not paint the same colour.
+  assert.notEqual(latencyTone(0), latencyTone(null), 'an instant request is not the same as no reading');
+  // The bands are ordered, so a duration can never fall through the scale.
+  assert.ok(
+    LATENCY_DANGER_MS > LATENCY_SLOW_MS && LATENCY_SLOW_MS > LATENCY_WARN_MS && LATENCY_WARN_MS > 0,
+    'each band sits above the one before it',
   );
 });

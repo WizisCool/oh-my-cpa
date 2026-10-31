@@ -29,6 +29,7 @@ import {
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
+  latencyTone,
   requestTransport,
 } from '../../types/usageEventMetrics';
 import {
@@ -133,6 +134,9 @@ export const RequestRow = React.memo<RequestRowProps>(
       : undefined;
 
     const tpsInfo = eventTokensPerSecond(event, tpsMode);
+    // The total's place on the console's one latency band; an absent or unreadable
+    // latency stays neutral and keeps the plain foreground.
+    const latencyBand = latencyTone(event.latency_ms);
     // The level's place on the effort scale, as a token reference; absent for
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
@@ -392,7 +396,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 7: total latency */}
         <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
-          <strong className="req-latency-val">
+          <strong className={`req-latency-val${latencyBand === 'neutral' ? '' : ` is-${latencyBand}`}`}>
             {formatEventDuration(event.latency_ms)}
           </strong>
           {hasMeasurableTTFT(event) && (
