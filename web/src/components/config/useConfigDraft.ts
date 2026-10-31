@@ -4,7 +4,7 @@ import { App as AntdApp } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
 
-import { api, ApiError, describeError } from '../../api/client';
+import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { getFieldSemanticValue, updateFieldWithBaseline, isConfigSemanticallyEqual } from './configDirty';
 import { computeConfigChanges, rebaseDraft } from './configPatch';
@@ -219,7 +219,7 @@ export function useConfigDraft() {
       void queryClient.invalidateQueries({ queryKey: ['management-config-backups'] });
     },
     onError: (err: unknown) => {
-      if (err instanceof ApiError && (err.status === 409 || (err.data as Record<string, unknown>)?.code === 'config_conflict')) {
+      if (err instanceof ApiError && apiErrorCode(err) === 'config_conflict') {
         const currentRev = String((err.data as Record<string, unknown>)?.current_revision || '');
         setConflictState({ currentRevision: currentRev });
         return;

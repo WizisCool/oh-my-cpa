@@ -32,6 +32,47 @@ func IsV8Document(rawYAML string) (bool, error) {
 	return err == nil && version >= V8_CONFIG_VERSION, nil
 }
 
+// ManagementSecretKey reports the management key stored in a configuration
+// document. It accepts the current v8 path and the legacy spelling so a write
+// that would rotate either one can be refused before CPA applies it.
+func ManagementSecretKey(rawYAML string) (string, bool, error) {
+	root, err := parseRootMapping(rawYAML)
+	if err != nil {
+		return "", false, err
+	}
+	for _, path := range [][]string{
+		{"management", "secret-key"},
+		{"remote-management", "secret-key"},
+	} {
+		node := root
+		for _, key := range path {
+			if node == nil || node.Kind != yaml.MappingNode {
+				node = nil
+				break
+			}
+			var matched *yaml.Node
+			for index := 0; index+1 < len(node.Content); index += 2 {
+				if node.Content[index].Value != key {
+					continue
+				}
+				if matched != nil {
+					return "", false, fmt.Errorf("%s contains duplicate %q keys", pathLabel(path[:len(path)-1]), key)
+				}
+				matched = resolveAlias(node.Content[index+1])
+			}
+			node = matched
+		}
+		if node == nil {
+			continue
+		}
+		if node.Kind != yaml.ScalarNode {
+			return "", true, fmt.Errorf("%s must be a scalar", pathLabel(path))
+		}
+		return node.Value, true, nil
+	}
+	return "", false, nil
+}
+
 // RestoreSentinelsAt is RestoreSentinels for one value of a sparse write: the
 // value the console submits for `path` has its masked secrets and cleaned proxy
 // URLs put back from the stored document at the same path, under the same

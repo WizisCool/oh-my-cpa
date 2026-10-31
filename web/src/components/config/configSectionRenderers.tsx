@@ -74,6 +74,7 @@ export function sectionIcon(view: ConfigSectionContext, id: ConfigSectionId) {
 }
 
 export function renderFieldControl(view: ConfigSectionContext, field: ConfigFieldDefinition, disabled = false) {
+  disabled = disabled || field.isReadOnly === true;
   const {
     updateFieldInDoc,
     getFieldValue,

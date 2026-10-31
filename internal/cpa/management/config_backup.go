@@ -102,9 +102,21 @@ func (c *Client) IsStoredConfigV8(ctx context.Context) (bool, string, error) {
 // Without a store a v8 file is written uncopied, since nothing CPA does to it
 // is irreversible; a pre-v8 file is not, because its conversion is.
 func (c *Client) keepStoredConfig(ctx context.Context) (string, error) {
+	return c.keepStoredConfigChecked(ctx, nil)
+}
+
+// keepStoredConfigChecked is keepStoredConfig with a policy check between the
+// read and the backup. A write that the check refuses has not changed CPA and
+// therefore has nothing to restore, so it must not leave a misleading snapshot.
+func (c *Client) keepStoredConfigChecked(ctx context.Context, check func(string) error) (string, error) {
 	isV8, stored, err := c.IsStoredConfigV8(ctx)
 	if err != nil {
 		return "", fmt.Errorf("read the stored configuration before writing it: %w", err)
+	}
+	if check != nil {
+		if err := check(stored); err != nil {
+			return "", err
+		}
 	}
 	if c.configBackup == nil {
 		if isV8 {

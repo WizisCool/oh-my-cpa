@@ -189,10 +189,7 @@ export const ApiKeysPage: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ['management-config'] });
     },
     onError: (err: unknown) => {
-      if (
-        err instanceof ApiError &&
-        (err.status === 409 || (err.data as Record<string, unknown>)?.code === 'config_conflict')
-      ) {
+      if (err instanceof ApiError && apiErrorCode(err) === 'config_conflict') {
         // Another writer moved the document. Nothing was written here, so the honest answer is
         // the current list and an invitation to repeat the change against it.
         toast.warning(t('keys.conflict_reloaded'));

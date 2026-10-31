@@ -27,6 +27,29 @@ func TestIsV8DocumentReadsTheMigrationMarker(t *testing.T) {
 	}
 }
 
+func TestManagementSecretKeyReadsCurrentAndLegacyPaths(t *testing.T) {
+	for source, want := range map[string]struct {
+		key     string
+		present bool
+	}{
+		"management:\n  secret-key: current\n":       {"current", true},
+		"remote-management:\n  secret-key: legacy\n": {"legacy", true},
+		"management:\n  allow-remote: true\n":        {"", false},
+		"":                                           {"", false},
+	} {
+		got, present, err := ManagementSecretKey(source)
+		if err != nil || got != want.key || present != want.present {
+			t.Errorf("ManagementSecretKey(%q) = %q, %v, %v; want %q, %v", source, got, present, err, want.key, want.present)
+		}
+	}
+	if _, _, err := ManagementSecretKey("management:\n  secret-key: [a]\n"); err == nil {
+		t.Error("a non-scalar management key must be reported")
+	}
+	if _, _, err := ManagementSecretKey("management:\n  secret-key: one\n  secret-key: two\n"); err == nil {
+		t.Error("duplicate management keys must be reported")
+	}
+}
+
 func TestRestoreSentinelsAtPutsBackMaskedValues(t *testing.T) {
 	stored := `management:
   secret-key: stored-secret

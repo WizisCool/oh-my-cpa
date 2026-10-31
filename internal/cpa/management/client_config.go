@@ -174,13 +174,23 @@ func (c *Client) UpdateConfigYAML(ctx context.Context, rawYAML string) error {
 	if len(rawYAML) > CONFIG_YAML_LIMIT {
 		return errors.New("configuration YAML exceeds 2MB limit")
 	}
-	stored, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigSource))
+	stored, err := c.keepStoredConfigChecked(
+		WithBackupReason(ctx, BackupReasonConfigSource),
+		func(stored string) error { return ensureDocumentManagementSecretKeyUnchanged(stored, rawYAML) },
+	)
 	if err != nil {
 		return err
 	}
 	version := storedConfigVersion(stored)
 	return c.writeConfigAt(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", &version)
 }
+
+// ErrManagementSecretKeyChange reports a configuration write that would rotate
+// the CPA management key. That key is also OMC's deployment credential, login
+// password and usage-collector credential; changing only CPA's copy leaves
+// every running OMC client on the old value and cannot survive a restart from
+// the unchanged environment.
+var ErrManagementSecretKeyChange = errors.New("the CPA management key is deployment-owned; rotate it through the deployment environment and restart CPA and Oh My CPA together")
 
 // ErrConfigChanged reports a write CPA refused because the stored file is no
 // longer the version OMC read (and backed up) before writing: another writer
@@ -261,7 +271,10 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	if len(changes) == 0 {
 		return nil
 	}
-	stored, err := c.keepStoredConfig(ctx)
+	stored, err := c.keepStoredConfigChecked(
+		ctx,
+		func(stored string) error { return ensureChangesManagementSecretKeyUnchanged(stored, changes) },
+	)
 	if err != nil {
 		return err
 	}
@@ -341,6 +354,80 @@ func scrubWriteRejection(err error, storedYAML string, changes []ConfigChange) {
 		body = configyaml.ScrubStoredSecrets(body, string(encoded))
 	}
 	httpErr.Body = body
+}
+
+var managementSecretKeyPaths = [][]string{
+	{"management", "secret-key"},
+	{"remote-management", "secret-key"},
+}
+
+func ensureChangesManagementSecretKeyUnchanged(stored string, changes []ConfigChange) error {
+	current, currentPresent, err := configyaml.ManagementSecretKey(stored)
+	if err != nil {
+		return fmt.Errorf("read the stored management key: %w", err)
+	}
+	for _, change := range changes {
+		for _, secretPath := range managementSecretKeyPaths {
+			if !isPathPrefix(change.Path, secretPath) && !isPathPrefix(secretPath, change.Path) {
+				continue
+			}
+			if isPathPrefix(secretPath, change.Path) && !isPathPrefix(change.Path, secretPath) {
+				// A nested edit below the key is not a valid scalar change, and
+				// accepting it could leave CPA and OMC with different values.
+				return ErrManagementSecretKeyChange
+			}
+			desired, desiredPresent, valid := managementSecretValueAfterChange(change, secretPath)
+			if !valid || currentPresent != desiredPresent || (currentPresent && current != desired) {
+				return ErrManagementSecretKeyChange
+			}
+		}
+	}
+	return nil
+}
+
+func ensureDocumentManagementSecretKeyUnchanged(stored, candidate string) error {
+	current, currentPresent, err := configyaml.ManagementSecretKey(stored)
+	if err != nil {
+		return fmt.Errorf("read the stored management key: %w", err)
+	}
+	desired, desiredPresent, err := configyaml.ManagementSecretKey(candidate)
+	if err != nil {
+		// The submitted document cannot hold a valid management key. It is still a
+		// key-rotation refusal rather than a CPA outage, so the console can say why
+		// nothing was sent while retaining the parse detail for diagnostics.
+		return fmt.Errorf("%w: read the submitted management key: %v", ErrManagementSecretKeyChange, err)
+	}
+	if currentPresent != desiredPresent || (currentPresent && current != desired) {
+		return ErrManagementSecretKeyChange
+	}
+	return nil
+}
+
+// managementSecretValueAfterChange applies one sparse change to the secret
+// path. Replacing an ancestor mapping with an object keeps only the keys that
+// object names; replacing it with a scalar removes the key. The third result
+// reports whether the submitted value could represent a management key at all.
+func managementSecretValueAfterChange(change ConfigChange, secretPath []string) (string, bool, bool) {
+	if change.Remove {
+		return "", false, true
+	}
+	value := change.Value
+	for _, key := range secretPath[len(change.Path):] {
+		mapping, ok := value.(map[string]any)
+		if !ok {
+			return "", false, true
+		}
+		next, found := mapping[key]
+		if !found {
+			return "", false, true
+		}
+		value = next
+	}
+	if value == nil {
+		return "", false, true
+	}
+	key, ok := value.(string)
+	return key, true, ok
 }
 
 func validateConfigChanges(changes []ConfigChange) error {
