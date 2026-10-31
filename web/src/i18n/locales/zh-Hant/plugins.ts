@@ -226,6 +226,7 @@ export default {
   "plugin.builtin_runtime_version": "執行 {version}",
   "plugin.builtin_reason_automation_disabled": "內建外掛功能已關閉。",
   "plugin.builtin_reason_catalog_unavailable": "暫時無法讀取官方外掛版本。",
+  "plugin.builtin_reason_callback_unconfigured": "此部署未設定回呼位址，閘道無法讀取本主控台的外掛清單。請將 OMCPA_BUILTIN_REGISTRY_ORIGIN 設為閘道可達的來源，然後重新啟動。",
   "plugin.builtin_reason_unowned_plugin_exists": "CPA 中存在此外掛 ID 的檔案，但沒有 OMC 安裝記錄；OMC 不會接管或覆寫它。",
   "plugin.builtin_reason_installed_from_another_source": "CPA 中的同名外掛來自其他來源，OMC 不會接管或覆寫它。",
   "plugin.builtin_reason_runtime_not_confirmed": "外掛檔案存在，但 CPA 尚未確認它在執行。",

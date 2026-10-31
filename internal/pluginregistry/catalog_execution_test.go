@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,4 +153,107 @@ func (store *failingCatalogStore) SaveBuiltinCatalog(ctx context.Context, raw []
 		return errors.New("synthetic snapshot write failed")
 	}
 	return store.Repository.SaveBuiltinCatalog(ctx, raw, manifest)
+}
+
+// One publisher's outage must not freeze the others. Before the fix, Refresh returned
+// on the first resolveRelease error, so a single unreachable repository left every
+// builtin on its old release and skipped the reconcile pass entirely.
+func TestFailedPublisherDoesNotFreezeOtherBuiltins(t *testing.T) {
+	ctx := context.Background()
+	db, err := repository.Open(ctx, fmt.Sprintf("file:builtin_isolation_%d?mode=memory&cache=shared", time.Now().UnixNano()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.New(db)
+
+	var failTarget atomic.Bool
+	original := http.DefaultTransport
+	http.DefaultTransport = releaseTransport(func(request *http.Request) (*http.Response, error) {
+		if failTarget.Load() {
+			return nil, errors.New("synthetic transport failure")
+		}
+		raw, _ := json.Marshal(releaseDocument("0.1.4", strings.Repeat("a", 64)))
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(string(raw))), Request: request}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = original })
+
+	catalog := pluginregistry.NewCatalog(repo)
+	if err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("initial refresh: %v", err)
+	}
+	first := catalog.State()
+	if first.Status != "ready" || len(first.PluginErrors) != 0 {
+		t.Fatalf("initial state = %+v", first)
+	}
+
+	failTarget.Store(true)
+	// The publisher is unreachable, but this process still holds a usable release. The
+	// refresh reports the failure, commits the snapshot on the fallback, and leaves the
+	// executable release unchanged: an outage must not empty the catalog.
+	if err := catalog.Refresh(ctx); err == nil {
+		t.Fatal("a publisher outage was not reported")
+	}
+	state := catalog.State()
+	if state.Status != "ready" || state.Revision != first.Revision {
+		t.Fatalf("fallback changed the executable snapshot: %+v", state)
+	}
+	if _, failed := state.PluginErrors["omc-zcode-oauth"]; !failed {
+		t.Fatalf("publisher outage was not reported for the plugin: %+v", state.PluginErrors)
+	}
+	// Recovery clears the recorded failure.
+	failTarget.Store(false)
+	if err := catalog.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if state := catalog.State(); len(state.PluginErrors) != 0 {
+		t.Fatalf("recovered refresh kept a failure: %+v", state.PluginErrors)
+	}
+}
+
+// A publisher who withdraws a release and republishes a lower one is refused until a
+// higher version appears. This is intended: a silent downgrade is the failure the check
+// exists to prevent, so there is no operator override to bypass it.
+func TestWithdrawnReleaseRepublishedLowerIsRefusedPermanently(t *testing.T) {
+	ctx := context.Background()
+	db, err := repository.Open(ctx, fmt.Sprintf("file:builtin_withdraw_%d?mode=memory&cache=shared", time.Now().UnixNano()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.New(db)
+
+	version := "0.2.0"
+	original := http.DefaultTransport
+	http.DefaultTransport = releaseTransport(func(request *http.Request) (*http.Response, error) {
+		raw, _ := json.Marshal(releaseDocument(version, strings.Repeat("a", 64)))
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(string(raw))), Request: request}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = original })
+
+	catalog := pluginregistry.NewCatalog(repo)
+	if err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("initial release: %v", err)
+	}
+	// The publisher withdraws 0.2.0 and publishes 0.1.9 instead.
+	version = "0.1.9"
+	err = catalog.Refresh(ctx)
+	if err == nil {
+		t.Fatal("a withdrawn release republished lower was accepted")
+	}
+	if state := catalog.State(); state.Manifest.Plugins[0].Version != "0.2.0" {
+		t.Fatalf("refused downgrade changed the executable snapshot: %+v", state)
+	}
+	// Still refused on every later pass, not merely once.
+	if err := catalog.Refresh(ctx); err == nil {
+		t.Fatal("the downgrade was accepted on a later pass")
+	}
+	// A higher version is the only way out.
+	version = "0.2.1"
+	if err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("a higher release was refused: %v", err)
+	}
+	if state := catalog.State(); state.Manifest.Plugins[0].Version != "0.2.1" {
+		t.Fatalf("recovery did not advance: %+v", state)
+	}
 }

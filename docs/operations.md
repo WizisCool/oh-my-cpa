@@ -531,8 +531,29 @@ cannot change which bytes it selects.
 The official repository and its release permissions are the publisher trust boundary.
 HTTPS and checksums protect the transfer and artifact identity; they do not protect
 against a compromised publisher. OMC persists observed identities and refuses changed
-bytes for an existing version or an automatic downgrade. If discovery fails, the round
-makes no automatic change and currently running plugins stay as they are.
+bytes for an existing version.
+
+A refused downgrade is permanent, and that is deliberate. Once OMC has observed a
+version, a release that is withdrawn and republished lower is rejected until the
+publisher issues a higher version again. There is no automatic rollback and no operator
+override, because a silent downgrade is the failure this check exists to prevent. To
+recover from a release withdrawn for a real defect, publish a higher version that
+contains the fix; a lower one is never accepted.
+
+A failed discovery is isolated per plugin. The plugin whose publisher could not be
+reached keeps the release this process already holds, its installed copy is left exactly
+as it is, and its row reports that the release could not be checked. Every other builtin
+keeps converging in the same pass, so one publisher's outage cannot freeze the rest of
+the set. Only a round in which no builtin has a usable release stops the pass, and even
+then the previous snapshot stays executable: an outage never empties the catalog. A
+builtin whose publisher is unreachable is also skipped by the drift repair, so a copy
+already installed stays untouched rather than being repaired to a version it cannot
+verify.
+
+Retiring a builtin is a normal host release: remove its entry from the approved set.
+The next reconciliation uninstalls the copy OMC owns for that id and records
+`plugin.builtin_retire` in the audit log. Nothing is left running that the console no
+longer lists.
 
 Another CPA management panel can change the same plugin records. A read-only check runs
 once a minute and queues reconciliation when an owned copy disappears, has the wrong

@@ -66,6 +66,10 @@ type CatalogState struct {
 	Status   string
 	Revision string
 	Manifest Manifest
+	// PluginErrors names the builtins whose last refresh failed. Those entries keep
+	// their previous release, so a publisher's outage stays that plugin's problem
+	// instead of freezing every other builtin. The messages never leave the process.
+	PluginErrors map[string]string
 }
 type CatalogStore interface {
 	LoadBuiltinCatalog(context.Context) ([]byte, []Plugin, error)
@@ -115,7 +119,9 @@ func (c *Catalog) Load(ctx context.Context) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.state = catalogState(manifest, raw)
+	// A snapshot loaded at startup has no live discovery result. Every entry in it was
+	// resolved before it was stored, so none is reported as failing.
+	c.state = catalogState(manifest, raw, nil)
 	c.history = history
 	return nil
 }
@@ -129,10 +135,16 @@ func (c *Catalog) Accept(ctx context.Context, raw []byte) error {
 	if err != nil {
 		return err
 	}
-	return c.accept(ctx, raw, manifest)
+	return c.acceptLocal(ctx, raw, manifest)
 }
 
-func (c *Catalog) accept(ctx context.Context, raw []byte, manifest Manifest) error {
+// acceptLocal commits a snapshot that did not come from remote discovery. It clears any
+// recorded discovery failure, because the caller resolved every plugin itself.
+func (c *Catalog) acceptLocal(ctx context.Context, raw []byte, manifest Manifest) error {
+	return c.accept(ctx, raw, manifest, nil)
+}
+
+func (c *Catalog) accept(ctx context.Context, raw []byte, manifest Manifest, failures map[string]string) error {
 	if c.store == nil {
 		return errors.New("builtin catalog persistence is required")
 	}
@@ -148,7 +160,7 @@ func (c *Catalog) accept(ctx context.Context, raw []byte, manifest Manifest) err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.state = catalogState(manifest, raw)
+	c.state = catalogState(manifest, raw, failures)
 	c.history = history
 	return nil
 }
@@ -157,18 +169,75 @@ func (c *Catalog) Refresh(ctx context.Context) error {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
 	manifest := Manifest{SchemaVersion: 2, Plugins: builtinPlugins()}
+	// A plugin that cannot be resolved keeps the release this process already holds.
+	// Its installed copies stay exactly as they are, and the periodic drift repair
+	// keeps working on that version rather than stopping for every builtin.
+	previous := c.currentPlugins()
+	failures := map[string]string{}
+	usable := 0
 	for index := range manifest.Plugins {
 		plugin, err := c.resolveRelease(ctx, manifest.Plugins[index])
-		if err != nil {
-			return err
+		if err == nil {
+			manifest.Plugins[index] = plugin
+			usable++
+			continue
 		}
-		manifest.Plugins[index] = plugin
+		failures[manifest.Plugins[index].ID] = err.Error()
+		if fallback, ok := previous[manifest.Plugins[index].ID]; ok && pluginExecutable(fallback) {
+			manifest.Plugins[index] = fallback
+			usable++
+		}
+	}
+	if usable == 0 {
+		return errors.New("no builtin release could be resolved")
 	}
 	raw, err := json.Marshal(manifest)
 	if err != nil {
 		return err
 	}
-	return c.accept(ctx, raw, manifest)
+	// The resolved set is committed even when one publisher failed, so the healthy
+	// plugins still advance. The failure is returned as well: the caller reports it and
+	// proceeds with the plugins that did resolve.
+	if err := c.accept(ctx, raw, manifest, failures); err != nil {
+		return err
+	}
+	return refreshFailure(failures)
+}
+
+// refreshFailure turns the per-plugin messages into one error for the log. Callers treat
+// it as a partial result, not as a reason to abandon the pass.
+func refreshFailure(failures map[string]string) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(failures))
+	for id := range failures {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, id+": "+failures[id])
+	}
+	return fmt.Errorf("builtin release unavailable for %d plugin(s): %s", len(ids), strings.Join(parts, "; "))
+}
+
+// currentPlugins is the executable release each builtin resolved to last time.
+func (c *Catalog) currentPlugins() map[string]Plugin {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	plugins := make(map[string]Plugin, len(c.state.Manifest.Plugins))
+	for _, plugin := range c.state.Manifest.Plugins {
+		if pluginExecutable(plugin) {
+			plugins[plugin.ID] = plugin
+		}
+	}
+	return plugins
+}
+
+// pluginExecutable reports whether a snapshot entry names a release CPA could install.
+func pluginExecutable(plugin Plugin) bool {
+	return plugin.Version != "" && len(plugin.Install.Artifacts) > 0
 }
 
 func (c *Catalog) State() CatalogState {
@@ -180,12 +249,16 @@ func (c *Catalog) State() CatalogState {
 	raw, _ := json.Marshal(c.state.Manifest)
 	var manifest Manifest
 	_ = json.Unmarshal(raw, &manifest)
-	return CatalogState{Status: c.state.Status, Revision: c.state.Revision, Manifest: manifest}
+	failures := make(map[string]string, len(c.state.PluginErrors))
+	for id, reason := range c.state.PluginErrors {
+		failures[id] = reason
+	}
+	return CatalogState{Status: c.state.Status, Revision: c.state.Revision, Manifest: manifest, PluginErrors: failures}
 }
 
-func catalogState(manifest Manifest, raw []byte) CatalogState {
+func catalogState(manifest Manifest, raw []byte, failures map[string]string) CatalogState {
 	sum := sha256.Sum256(raw)
-	return CatalogState{Status: "ready", Revision: hex.EncodeToString(sum[:]), Manifest: manifest}
+	return CatalogState{Status: "ready", Revision: hex.EncodeToString(sum[:]), Manifest: manifest, PluginErrors: failures}
 }
 
 func decodeSnapshot(raw []byte) (Manifest, error) {

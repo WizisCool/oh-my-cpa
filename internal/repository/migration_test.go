@@ -352,3 +352,86 @@ func TestBackupRestoreSmokeAndFreeSpaceCheck(t *testing.T) {
 		t.Fatalf("expected at most 2 retained backups, got %d", encFiles)
 	}
 }
+
+// An applied migration that was edited afterwards leaves the database on a schema
+// nothing re-verified. Without a digest the next start silently continued, which is how
+// a development database ended up with a table from an earlier draft of migration 055
+// while the code queried the final shape. The refusal names the file and changes nothing.
+func TestRewrittenAppliedMigrationIsRefused(t *testing.T) {
+	ctx := context.Background()
+	directory := t.TempDir()
+	path := filepath.Join(directory, "rewrite.db")
+
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("initial migrate: %v", err)
+	}
+	var recorded string
+	if err := db.SQL.QueryRowContext(ctx, `SELECT digest FROM schema_migrations WHERE version = 55`).Scan(&recorded); err != nil {
+		t.Fatalf("applied migration recorded no digest: %v", err)
+	}
+	if recorded == "" {
+		t.Fatal("applied migration recorded an empty digest")
+	}
+	// Rewriting the row is what happens to a database whose migration file changed under
+	// an already-recorded version: the version no longer describes the shape it produced.
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE schema_migrations SET digest = ? WHERE version = 55`, strings.Repeat("f", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open applies pending migrations, so the refusal belongs to the reopen. The database
+	// is not handed back with a schema nothing validated.
+	reopened, err := Open(ctx, path)
+	if err == nil {
+		reopened.Close()
+		t.Fatal("a rewritten applied migration was accepted")
+	}
+	if !strings.Contains(err.Error(), "055_builtin_release_snapshot.sql") {
+		t.Fatalf("refusal did not name the rewritten migration: %v", err)
+	}
+}
+
+// A database created before digests existed has rows with no digest. Those migrations
+// really ran, so they are adopted rather than refused, and the same database then starts
+// being checked for rewrites.
+func TestPreDigestMigrationRowsAreAdopted(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy.db")
+
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Recreate the pre-digest bookkeeping and drop the column's information entirely.
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE schema_migrations SET digest = ''`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if err := reopened.Migrate(ctx); err != nil {
+		t.Fatalf("a pre-digest database was refused: %v", err)
+	}
+	var empty int
+	if err := reopened.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE digest = ''`).Scan(&empty); err != nil {
+		t.Fatal(err)
+	}
+	if empty != 0 {
+		t.Fatalf("%d migration rows were left without a digest", empty)
+	}
+}

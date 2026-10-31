@@ -602,6 +602,14 @@ builtin's own switch disables it without uninstalling it. The policy belongs to 
 binding: rotating the management key preserves it, while pointing OMC at another CPA
 starts a new default-on policy.
 
+Builtin plugins need `OMCPA_BUILTIN_REGISTRY_ORIGIN`: CPA reads this console's release
+listing from that origin while it installs a builtin, so the gateway has to reach it.
+The full-stack Compose file sets it to `http://oh-my-cpa:8080`; a separately deployed
+console has to set the origin CPA dials, then restart. Without it the builtin page
+reports that no callback address is configured and installs nothing. The value is never
+inferred from the browser URL, `Host` or forwarding headers, because it is a
+server-to-server address.
+
 The plugin store remains an operator-installed catalog and is independent of the builtin
 switch. See [Operations](operations.md#builtin-plugin-policy) for the reconciliation and
 publisher trust boundaries.

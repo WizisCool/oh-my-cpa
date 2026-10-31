@@ -153,6 +153,20 @@ it('shows unavailable release discovery and an unknown reason as plain text', as
   expect(screen.getByText('Signs in to ZCode.')).toBeTruthy();
 });
 
+it('reports a failed release check on the affected plugin while the catalog stays ready', async () => {
+  const api = installOmcApi();
+  // The catalog is ready: the snapshot committed and other plugins advance. Only the
+  // plugin whose publisher could not be reached reports the failure, on its own row.
+  api.on('GET', '/management/builtin-plugins', () => builtins({
+    plugins: [{ ...ZCODE, status: 'blocked', reason: 'catalog_unavailable' }],
+  }));
+  renderWithOmc(<PluginsPage />, { route: '/plugins/builtins' });
+
+  // No page-level banner: the rest of the set is fine.
+  expect(screen.queryByText('Could not check for plugin updates')).toBeNull();
+  expect(await screen.findByText('The official plugin release is unavailable right now.')).toBeTruthy();
+});
+
 it('keeps built-in plugins out of the installed list and only counts them there', async () => {
   const api = installOmcApi({ plugins: [
     { id: 'omc-zcode-oauth', source_kind: 'builtin', configured: true, registered: true, enabled: true, effective_enabled: true, config_fields: [] },

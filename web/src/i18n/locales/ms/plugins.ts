@@ -226,6 +226,7 @@ export default {
   "plugin.builtin_runtime_version": "Berjalan {version}",
   "plugin.builtin_reason_automation_disabled": "Pengurusan pemalam terbina dalam dimatikan.",
   "plugin.builtin_reason_catalog_unavailable": "Keluaran pemalam rasmi tidak tersedia buat masa ini.",
+  "plugin.builtin_reason_callback_unconfigured": "Deployment ini tiada alamat panggil balik, jadi get laluan tidak dapat membaca senarai pemalam konsol ini. Tetapkan OMCPA_BUILTIN_REGISTRY_ORIGIN kepada asalan yang dapat dicapai oleh get laluan, kemudian mulakan semula.",
   "plugin.builtin_reason_unowned_plugin_exists": "CPA mempunyai fail pemalam dengan ID ini tetapi tiada rekod pemasangan OMC; OMC tidak mengambil alih atau menggantikannya.",
   "plugin.builtin_reason_installed_from_another_source": "CPA mempunyai pemalam dengan ID ini daripada sumber lain; OMC tidak mengambil alih atau menggantikannya.",
   "plugin.builtin_reason_runtime_not_confirmed": "Fail pemalam wujud, tetapi CPA belum mengesahkan ia sedang berjalan.",

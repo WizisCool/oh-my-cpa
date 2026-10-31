@@ -74,7 +74,7 @@
     "builtin-plugins": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",
-      "body": "{\"catalog\":{\"revision\":\"4bba808acdb0a4121c62ac64a560952e73cb22322858e048555af39b455d3d24\",\"status\":\"ready\"},\"last_reconcile_at\":\"\",\"plugins\":[{\"description\":\"Z.ai and BigModel OAuth, model discovery and quota.\",\"effective_enabled\":false,\"id\":\"omc-zcode-oauth\",\"installed_version\":\"\",\"name\":\"ZCode OAuth\",\"policy\":{\"enabled\":true},\"reason\":\"\",\"registered\":false,\"runtime_version\":\"\",\"source_id\":\"\",\"source_kind\":\"builtin\",\"status\":\"not_installed\",\"version\":\"0.1.6\"}],\"policy\":{\"enabled\":true,\"revision\":1}}"
+      "body": "{\"catalog\":{\"revision\":\"4bba808acdb0a4121c62ac64a560952e73cb22322858e048555af39b455d3d24\",\"status\":\"ready\"},\"last_reconcile_at\":\"\",\"plugins\":[{\"description\":\"Z.ai and BigModel OAuth, model discovery and quota.\",\"effective_enabled\":false,\"id\":\"omc-zcode-oauth\",\"installed_version\":\"\",\"name\":\"ZCode OAuth\",\"policy\":{\"enabled\":true},\"reason\":\"callback_unconfigured\",\"registered\":false,\"runtime_version\":\"\",\"source_id\":\"\",\"source_kind\":\"builtin\",\"status\":\"blocked\",\"version\":\"0.1.6\"}],\"policy\":{\"enabled\":true,\"revision\":1}}"
     },
     "capabilities": {
       "status": 200,

@@ -241,7 +241,25 @@ func (h *Handler) projectBuiltinPlugins(instance domain.CPAInstance, policy repo
 			} else {
 				item.InstalledVersion = operation.Version
 			}
-			item.Reason = operation.Reason
+			// An operation with no reason says nothing; it must not erase a reason this
+			// function already derived from the release check or the configuration.
+			if operation.Reason != "" && item.Reason == "" {
+				item.Reason = operation.Reason
+			}
+		}
+		// These are the reasons the operator has to act on, so they outlive the operation's
+		// own state: an installed plugin keeps a saved `running` record, and without this
+		// the row would look healthy next to a reason that says it cannot be managed.
+		if _, failed := state.PluginErrors[plugin.ID]; failed {
+			item.Status = "blocked"
+			item.Reason = "catalog_unavailable"
+		}
+		// Without a callback origin CPA cannot read this console's snapshot, so nothing can
+		// be installed or updated. Say that, rather than leaving a healthy-looking row over
+		// a page that silently does nothing: the operator sets the variable and restarts.
+		if sourceURL == "" {
+			item.Status = "blocked"
+			item.Reason = "callback_unconfigured"
 		}
 		if override.State == "disabled" {
 			item.Status = "disabled"
@@ -466,10 +484,17 @@ func (h *Handler) StartBuiltinWorker(ctx context.Context) error {
 					shouldRefresh = false
 				}
 				if shouldRefresh {
-					if err := h.builtinCatalog().Refresh(callCtx); err != nil {
-						h.logger.Warn("builtin reconciliation skipped: release refresh failed", "error", err)
+					// A refresh reports the publishers it could not reach, but the plugins that
+					// did resolve have already been committed. Only a round where nothing resolved
+					// leaves the catalog unusable, and only that stops the pass.
+					err := h.builtinCatalog().Refresh(callCtx)
+					if h.builtinCatalog().State().Status != "ready" {
+						h.logger.Warn("builtin reconciliation skipped: no usable release snapshot", "error", err)
 						stop()
 						continue
+					}
+					if err != nil {
+						h.logger.Warn("builtin releases could not all be checked; the rest keep their last release", "error", err)
 					}
 				}
 				if err := h.runBuiltinReconcile(callCtx, instance); err != nil {
@@ -600,6 +625,13 @@ func (h *Handler) builtinDesiredStateDrift(ctx context.Context, instance domain.
 	if state.Status != "ready" {
 		return false, nil
 	}
+	// A plugin whose release check failed cannot be repaired this round: the reconcile
+	// skips it. Reporting it as drifted would queue an attempt every minute that then
+	// does nothing, so it waits for the publisher like the reconcile does.
+	state.Manifest.Plugins = builtinPluginsWithoutFailures(state)
+	if len(state.Manifest.Plugins) == 0 {
+		return false, nil
+	}
 	list, err := client.PluginList(ctx)
 	if err != nil {
 		return false, err
@@ -700,6 +732,20 @@ func (h *Handler) runBuiltinReconcile(ctx context.Context, expected domain.CPAIn
 	}
 	state := h.builtinCatalog().State()
 	if state.Status != "ready" {
+		return pluginregistry.ErrFrozen
+	}
+	// Retiring a builtin from the allowlist must not leave its executable copy behind.
+	// The page lists only current entries and ordinary deletion refuses an OMC-owned
+	// record, so this pass is the only place that can finish the lifecycle. It reads the
+	// unfiltered state itself: a publisher outage must never read as a retirement.
+	if err := h.retireBuiltinPluginsLocked(ctx, request, expected, client, sourceURL, state); err != nil {
+		return err
+	}
+	// A builtin whose publisher could not be reached keeps its last release. Skip it in
+	// the install loop and converge the rest; its next pass retries.
+	state.Manifest.Plugins = builtinPluginsWithoutFailures(state)
+	if len(state.Manifest.Plugins) == 0 {
+		// Nothing resolved this round, so no install can be verified.
 		return pluginregistry.ErrFrozen
 	}
 	// Reachability is verified before modifying CPA; use our own local public
@@ -1258,4 +1304,72 @@ func builtinPublicAuthRule(settings configyaml.PluginSettings, sourceURL string)
 		return false, errors.New("builtin registry conflicts with an existing CPA store auth rule")
 	}
 	return true, nil
+}
+
+// builtinPluginsWithoutFailures drops the entries whose last release check failed. Their
+// installed copies stay as they are, and the next pass retries the publisher.
+func builtinPluginsWithoutFailures(state pluginregistry.CatalogState) []pluginregistry.Plugin {
+	plugins := make([]pluginregistry.Plugin, 0, len(state.Manifest.Plugins))
+	for _, plugin := range state.Manifest.Plugins {
+		if _, failed := state.PluginErrors[plugin.ID]; failed {
+			continue
+		}
+		plugins = append(plugins, plugin)
+	}
+	return plugins
+}
+
+// retireBuiltinPluginsLocked uninstalls OMC-owned copies whose id is no longer in the
+// approved set. Without it a retired builtin keeps running executable code that the
+// console never shows and that ordinary deletion refuses to remove.
+func (h *Handler) retireBuiltinPluginsLocked(ctx context.Context, request *http.Request, instance domain.CPAInstance, client *management.Client, sourceURL string, state pluginregistry.CatalogState) error {
+	if h.configBackupSink() == nil {
+		return management.ErrConfigBackupUnavailable
+	}
+	records, err := readPluginInstallRecords(ctx, client)
+	if err != nil {
+		return err
+	}
+	// Every entry the catalog holds is still approved, including one whose last release
+	// check failed. Taking the caller's filtered slice here would delete the copy an
+	// outage is meant to leave untouched.
+	active := make(map[string]bool, len(state.Manifest.Plugins))
+	for _, plugin := range state.Manifest.Plugins {
+		active[plugin.ID] = true
+	}
+	retired := make([]string, 0, len(records))
+	for id, record := range records {
+		if active[id] || !builtinInstallRecordOwned(record, true, sourceURL) {
+			continue
+		}
+		retired = append(retired, id)
+	}
+	sort.Strings(retired)
+	for _, id := range retired {
+		if err := h.repo.CheckBuiltinBinding(ctx, instance); err != nil {
+			return err
+		}
+		record := records[id]
+		if err := h.recordAudit(request, "plugin.builtin_retire", "builtin_plugin", id, "attempt", map[string]any{"version": record.Version}); err != nil {
+			return err
+		}
+		result, err := client.DeletePlugin(ctx, id)
+		if err != nil {
+			_ = h.recordAudit(request, "plugin.builtin_retire", "builtin_plugin", id, "failure", map[string]any{"outcome": "unknown"})
+			return err
+		}
+		// A retired id never returns to the approved set, so its record carries no state a
+		// later pass would act on. The audit entries are the durable evidence.
+		state, reason := "removed", ""
+		if result.RestartRequired {
+			state, reason = "restart_required", "removal_requires_restart"
+		}
+		if err := h.repo.SaveBuiltinOperation(ctx, instance, id, repository.BuiltinOperation{Version: record.Version, State: state, Reason: reason}); err != nil {
+			return err
+		}
+		if err := h.recordAudit(request, "plugin.builtin_retire", "builtin_plugin", id, "success", map[string]any{"state": state, "version": record.Version}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

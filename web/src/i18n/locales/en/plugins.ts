@@ -226,6 +226,7 @@ export default {
   'plugin.builtin_runtime_version': 'Running {version}',
   'plugin.builtin_reason_automation_disabled': 'Built-in plugin management is off.',
   "plugin.builtin_reason_catalog_unavailable": "The official plugin release is unavailable right now.",
+  "plugin.builtin_reason_callback_unconfigured": "This deployment has no callback address configured, so the gateway cannot read this console's plugin listing. Set OMCPA_BUILTIN_REGISTRY_ORIGIN to an origin the gateway can reach, then restart.",
   'plugin.builtin_reason_unowned_plugin_exists': 'CPA has a plugin file with this id but no OMC install record; OMC does not take it over or replace it.',
   'plugin.builtin_reason_installed_from_another_source': 'CPA has a plugin with this id from another source; OMC does not take it over or replace it.',
   'plugin.builtin_reason_runtime_not_confirmed': 'The plugin file is present, but CPA has not confirmed it is running.',

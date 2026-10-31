@@ -35,8 +35,11 @@ type builtinGatewayFixture struct {
 	installRegisters bool
 	pluginsEnabled   bool
 	dangerousAuth    bool
-	mutations        atomic.Int32
-	callback         chan struct{}
+	// retiredID is an OMC-owned install whose id has left the allowlist. It is served
+	// in CPA's config and plugin list so the worker has to clean it up.
+	retiredID string
+	mutations atomic.Int32
+	callback  chan struct{}
 }
 
 func (fixture *builtinGatewayFixture) setState(installed, nativeOnly, enabled, registered, effective bool, runtimeVersion, installedVersion string) {
@@ -88,6 +91,9 @@ func (fixture *builtinGatewayFixture) serve(writer http.ResponseWriter, request 
 			}
 			fmt.Fprintf(writer, "  configs:\n    omc-zcode-oauth:\n      enabled: %t\n      store:\n        source-id: %s\n        source-url: %s\n        version: %s\n", fixture.enabled, sourceID, sourceURL, fixture.installedVersion)
 		}
+		if fixture.retiredID != "" {
+			fmt.Fprintf(writer, "    %s:\n      enabled: true\n      store:\n        source-id: %s\n        source-url: %s\n        version: 0.0.9\n", fixture.retiredID, sourceID, sourceURL)
+		}
 	case request.URL.Path == "/v8/management/config" && request.Method == http.MethodPatch:
 		var body map[string]any
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
@@ -113,7 +119,11 @@ func (fixture *builtinGatewayFixture) serve(writer http.ResponseWriter, request 
 			}
 			path := "plugins/omc-zcode-oauth.so"
 			configured := fixture.installed
-			_ = json.NewEncoder(writer).Encode(map[string]any{"plugins_enabled": fixture.pluginsEnabled, "plugins": []any{map[string]any{"id": "omc-zcode-oauth", "path": path, "configured": configured, "registered": fixture.registered, "enabled": fixture.enabled, "effective_enabled": fixture.effective, "metadata": metadata}}})
+			plugins := []any{map[string]any{"id": "omc-zcode-oauth", "path": path, "configured": configured, "registered": fixture.registered, "enabled": fixture.enabled, "effective_enabled": fixture.effective, "metadata": metadata}}
+			if fixture.retiredID != "" {
+				plugins = append(plugins, map[string]any{"id": fixture.retiredID, "path": "plugins/" + fixture.retiredID + ".so", "configured": true, "registered": true, "enabled": true, "effective_enabled": true, "metadata": map[string]any{"name": "Retired", "version": "0.0.9"}})
+			}
+			_ = json.NewEncoder(writer).Encode(map[string]any{"plugins_enabled": fixture.pluginsEnabled, "plugins": plugins})
 		} else {
 			_, _ = writer.Write([]byte(fmt.Sprintf(`{"plugins_enabled":%t,"plugins":[]}`, fixture.pluginsEnabled)))
 		}
@@ -167,7 +177,13 @@ func (fixture *builtinGatewayFixture) serve(writer http.ResponseWriter, request 
 			fixture.runtimeVersion = body.Version
 		}
 		_ = json.NewEncoder(writer).Encode(map[string]any{"status": "installed", "id": "omc-zcode-oauth", "version": body.Version, "plugins_enabled": fixture.pluginsEnabled, "restart_required": fixture.restart})
-	case request.URL.Path == "/v8/management/plugins/omc-zcode-oauth" && request.Method == http.MethodDelete:
+	case request.URL.Path == "/v8/management/plugins/"+strings.TrimPrefix(request.URL.Path, "/v8/management/plugins/") && request.Method == http.MethodDelete:
+		if id := strings.TrimPrefix(request.URL.Path, "/v8/management/plugins/"); fixture.retiredID != "" && id == fixture.retiredID {
+			fixture.retiredID = ""
+			writer.WriteHeader(http.StatusOK)
+			_, _ = writer.Write([]byte(`{"status":"deleted"}`))
+			return
+		}
 		if !fixture.installed {
 			http.NotFound(writer, request)
 			return
@@ -826,5 +842,140 @@ func TestBuiltinCallbackAuthUsesFirstApplicableRuleAndNormalizedRequestKind(t *t
 				t.Fatalf("first applicable auth=%v", err)
 			}
 		})
+	}
+}
+
+// Retiring a builtin from the allowlist has to finish the lifecycle of the copy OMC
+// already installed. The page lists only current entries and ordinary deletion refuses
+// an OMC-owned record, so without the reconcile pass the plugin keeps running forever
+// while nothing in the console shows it.
+func TestRetiredBuiltinIsUninstalledByTheWorker(t *testing.T) {
+	handler, fixture, _, _, instance := newBuiltinFixture(t)
+	if err := handler.runBuiltinReconcile(context.Background(), instance); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	if !fixture.currentInstalled() {
+		t.Fatal("fixture did not install the builtin")
+	}
+	// An id that has left the allowlist, whose install record still points at OMC, is
+	// exactly what a retired builtin looks like from the worker's side.
+	fixture.mu.Lock()
+	fixture.retiredID = "omc-zcode-retired"
+	fixture.mu.Unlock()
+
+	if err := handler.runBuiltinReconcile(context.Background(), instance); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	fixture.mu.Lock()
+	left := fixture.retiredID
+	fixture.mu.Unlock()
+	if left != "" {
+		t.Fatal("retired builtin was left installed")
+	}
+}
+
+// A deployment without a callback origin cannot install anything, because CPA has no
+// address to read this console's listing from. The page has to say that instead of
+// leaving the switch on over rows that silently do nothing, which is what an operator
+// upgrading a single-container deployment would otherwise see.
+func TestBuiltinsReportAMissingCallbackOrigin(t *testing.T) {
+	handler, _, client, baseURL, instance := newBuiltinFixture(t)
+	handler.cfg.BuiltinRegistryOrigin = ""
+	if err := handler.runBuiltinReconcile(context.Background(), instance); err == nil {
+		t.Fatal("reconcile without a callback origin reported success")
+	}
+	response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/builtin-plugins")
+	var dto BuiltinPluginsDTO
+	if err := json.Unmarshal(body, &dto); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != 200 || len(dto.Plugins) != 1 {
+		t.Fatalf("builtin page = %d %s", response.StatusCode, body)
+	}
+	plugin := dto.Plugins[0]
+	if plugin.Status != "blocked" || plugin.Reason != "callback_unconfigured" {
+		t.Fatalf("missing callback origin = %+v", plugin)
+	}
+	// An installed plugin keeps a saved `running` record. That record must not make the
+	// row look healthy while the reason says this deployment cannot manage it at all.
+	if err := handler.repo.SaveBuiltinOperation(context.Background(), instance, "omc-zcode-oauth", repository.BuiltinOperation{Version: "0.1.4", State: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	_, body = getJSON(t, client, baseURL+"/omc/api/v1/management/builtin-plugins")
+	dto = BuiltinPluginsDTO{}
+	if err := json.Unmarshal(body, &dto); err != nil {
+		t.Fatal(err)
+	}
+	if plugin := dto.Plugins[0]; plugin.Status != "blocked" || plugin.Reason != "callback_unconfigured" {
+		t.Fatalf("a saved operation overwrote the missing callback origin: %+v", plugin)
+	}
+	if !dto.Policy.Enabled {
+		t.Fatal("the feature switch reported itself off; only the callback is missing")
+	}
+}
+
+// A failed release check is reported on the row even when the plugin has a normal
+// operation record. An installed plugin always has one, and its empty reason used to
+// overwrite the failure, so the row claimed nothing was wrong.
+func TestFailedReleaseCheckSurvivesAnOperationRecord(t *testing.T) {
+	handler, _, client, baseURL, instance := newBuiltinFixture(t)
+	if err := handler.repo.SaveBuiltinOperation(context.Background(), instance, "omc-zcode-oauth", repository.BuiltinOperation{Version: "0.1.4", State: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	// A real failed release check: the catalog holds a usable release, the publisher is
+	// unreachable, so the failure is recorded and the snapshot keeps its release.
+	original := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "api.github.com" {
+			return nil, errors.New("synthetic publisher outage")
+		}
+		return original.RoundTrip(request)
+	})
+	t.Cleanup(func() { http.DefaultTransport = original })
+	if err := handler.builtinCatalog().Refresh(context.Background()); err == nil {
+		t.Fatal("the publisher outage was not reported")
+	}
+
+	response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/builtin-plugins")
+	var dto BuiltinPluginsDTO
+	if err := json.Unmarshal(body, &dto); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != 200 || len(dto.Plugins) != 1 {
+		t.Fatalf("builtin page = %d %s", response.StatusCode, body)
+	}
+	if plugin := dto.Plugins[0]; plugin.Status != "blocked" || plugin.Reason != "catalog_unavailable" {
+		t.Fatalf("an operation record erased the failed release check: %+v", plugin)
+	}
+}
+
+// A publisher outage must never read as a retirement. Retirement takes the catalog state
+// itself, so a plugin whose release check failed is still approved and its installed copy
+// survives the pass that skips it in the install loop.
+func TestPublisherOutageDoesNotRetireTheInstalledCopy(t *testing.T) {
+	handler, fixture, _, _, instance := newBuiltinFixture(t)
+	if err := handler.runBuiltinReconcile(context.Background(), instance); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	if !fixture.currentInstalled() {
+		t.Fatal("fixture did not install the builtin")
+	}
+	original := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "api.github.com" {
+			return nil, errors.New("synthetic publisher outage")
+		}
+		return original.RoundTrip(request)
+	})
+	t.Cleanup(func() { http.DefaultTransport = original })
+	if err := handler.builtinCatalog().Refresh(context.Background()); err == nil {
+		t.Fatal("the publisher outage was not reported")
+	}
+
+	// The pass cannot install anything while the outage lasts, but retirement must not
+	// run against the filtered view: doing so would delete the managed copy.
+	_ = handler.runBuiltinReconcile(context.Background(), instance)
+	if !fixture.currentInstalled() {
+		t.Fatal("a publisher outage uninstalled the plugin it was meant to leave alone")
 	}
 }

@@ -223,6 +223,7 @@ export default {
   'plugin.builtin_runtime_version': '运行 {version}',
   'plugin.builtin_reason_automation_disabled': '内置插件功能已关闭。',
   "plugin.builtin_reason_catalog_unavailable": "暂时无法读取官方插件版本。",
+  "plugin.builtin_reason_callback_unconfigured": "此部署未配置回调地址，网关无法读取本控制台的插件清单。请将 OMCPA_BUILTIN_REGISTRY_ORIGIN 设为网关可访问的来源，然后重启。",
   'plugin.builtin_reason_unowned_plugin_exists': 'CPA 中存在此 ID 的插件文件，但没有 OMC 安装记录；OMC 不会接管或覆盖它。',
   'plugin.builtin_reason_installed_from_another_source': 'CPA 中的同名插件来自其他来源，OMC 不会接管或覆盖它。',
   'plugin.builtin_reason_runtime_not_confirmed': '插件文件存在，但 CPA 尚未确认它在运行。',

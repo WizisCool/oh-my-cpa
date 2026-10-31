@@ -21,6 +21,7 @@ export const BUILTIN_STATUS_TONES: Record<BuiltinPluginStatus, StatusTone> = {
 const BUILTIN_REASONS: Record<string, MessageKey> = {
   automation_disabled: 'plugin.builtin_reason_automation_disabled',
   catalog_unavailable: 'plugin.builtin_reason_catalog_unavailable',
+  callback_unconfigured: 'plugin.builtin_reason_callback_unconfigured',
   installed_from_another_source: 'plugin.builtin_reason_installed_from_another_source',
   unowned_plugin_exists: 'plugin.builtin_reason_unowned_plugin_exists',
   runtime_not_confirmed: 'plugin.builtin_reason_runtime_not_confirmed',

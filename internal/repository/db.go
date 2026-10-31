@@ -199,9 +199,16 @@ func (db *DB) Migrate(ctx context.Context) error {
 	if _, err := db.SQL.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
-			applied_at INTEGER NOT NULL
+			applied_at INTEGER NOT NULL,
+			digest TEXT NOT NULL DEFAULT ''
 		)`); err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+	// A database created before digests existed has no column to compare against. Add it
+	// rather than refusing to start: the rows it already holds record a migration that
+	// really ran, and only future rewrites can be detected.
+	if err := db.ensureMigrationDigestColumn(ctx); err != nil {
+		return err
 	}
 
 	entries, err := fs.ReadDir(migrations.Files, ".")
@@ -211,6 +218,9 @@ func (db *DB) Migrate(ctx context.Context) error {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	seenVersions := make(map[int]string, len(entries))
 	pending := make([]fs.DirEntry, 0, len(entries))
+	// Rows applied before this build recorded a digest are adopted in place, so an
+	// existing database starts being checked from the next start onward.
+	var adopt []migrationDigestRecord
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
@@ -227,12 +237,31 @@ func (db *DB) Migrate(ctx context.Context) error {
 			continue
 		}
 		var applied int
-		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, version).Scan(&applied); err != nil {
+		var recorded string
+		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1), COALESCE(MAX(digest), '') FROM schema_migrations WHERE version = ?`, version).Scan(&applied, &recorded); err != nil {
 			return fmt.Errorf("check migration %d: %w", version, err)
 		}
 		if applied == 0 {
 			pending = append(pending, entry)
+			continue
 		}
+		// An applied migration whose bytes changed no longer describes the schema that
+		// database has. Continuing would run the code against a shape nothing verified, so
+		// this refuses to start and names the file. Rows written before digests existed
+		// carry an empty value and are adopted below rather than rejected.
+		current, err := migrationDigest(entry.Name())
+		if err != nil {
+			return err
+		}
+		if recorded != "" && recorded != current {
+			return fmt.Errorf("applied migration %s no longer matches its recorded contents; restore the original file or add a new migration instead of editing an applied one", entry.Name())
+		}
+		if recorded == "" {
+			adopt = append(adopt, migrationDigestRecord{name: entry.Name(), version: version, digest: current})
+		}
+	}
+	if err := db.recordMigrationDigests(ctx, adopt); err != nil {
+		return err
 	}
 	if len(pending) == 0 {
 		return nil
@@ -249,6 +278,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
+		digest := migrationDigestOf(script)
 		tx, err := db.SQL.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("begin migration %d: %w", version, err)
@@ -272,7 +302,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 				return fmt.Errorf("govern migration %d: %w", version, err)
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, unixepoch())`, version); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at, digest) VALUES (?, unixepoch(), ?)`, version, digest); err != nil {
 			return fmt.Errorf("record migration %d: %w", version, err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -574,6 +604,65 @@ func migrationHook(version int) func(context.Context, *sql.Tx, *DB) error {
 		return sanitizeHistoricalDataTx
 	case 25:
 		return addReleaseCheckTruncatedTx
+	}
+	return nil
+}
+
+// migrationDigestRecord is an applied migration whose stored digest is empty because it
+// ran before digests were recorded.
+type migrationDigestRecord struct {
+	name    string
+	version int
+	digest  string
+}
+
+func migrationDigest(name string) (string, error) {
+	script, err := migrations.Files.ReadFile(name)
+	if err != nil {
+		return "", fmt.Errorf("read migration %s: %w", name, err)
+	}
+	return migrationDigestOf(script), nil
+}
+
+func migrationDigestOf(script []byte) string {
+	sum := sha256.Sum256(script)
+	return hex.EncodeToString(sum[:])
+}
+
+// ensureMigrationDigestColumn adds the digest column to a database created before it
+// existed. The rows it already holds keep an empty digest, which the caller adopts.
+func (db *DB) ensureMigrationDigestColumn(ctx context.Context) error {
+	rows, err := db.SQL.QueryContext(ctx, `SELECT name FROM pragma_table_info('schema_migrations')`)
+	if err != nil {
+		return fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return fmt.Errorf("inspect schema_migrations: %w", err)
+		}
+		if name == "digest" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	rows.Close()
+	if _, err := db.SQL.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN digest TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("add schema_migrations digest: %w", err)
+	}
+	return nil
+}
+
+// recordMigrationDigests adopts rows that predate digest recording. It runs before the
+// pending list is applied so a rewrite is caught by the next start either way.
+func (db *DB) recordMigrationDigests(ctx context.Context, records []migrationDigestRecord) error {
+	for _, record := range records {
+		if _, err := db.SQL.ExecContext(ctx, `UPDATE schema_migrations SET digest = ? WHERE version = ? AND digest = ''`, record.digest, record.version); err != nil {
+			return fmt.Errorf("record migration %s digest: %w", record.name, err)
+		}
 	}
 	return nil
 }
