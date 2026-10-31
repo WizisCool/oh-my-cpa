@@ -463,11 +463,20 @@
   font-size: var(--text-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--fg);
+  color: var(--latency-tone, var(--fg));
 }
-/* Latency carries no verdict colour. An agent request that thinks for minutes
-   is working as intended, so an amber threshold would flag normal traffic as a
-   problem; semantic hues are reserved for actual request state. */
+/* The total carries the console's one latency band - quick under 15 s, then
+   amber, orange past 30 s and red past a minute - so a scan of the column finds
+   the unhurried requests. Orange is not a token: it is the warn stop mixed
+   toward danger, the midpoint the band skips. The tone arrives as a custom
+   property rather than restating `color`: the stacked record draws its figures
+   in the text colours, and its own `color` rule still wins there. */
+.req-latency-val.is-success { --latency-tone: var(--success); }
+.req-latency-val.is-warn { --latency-tone: var(--warn); }
+.req-latency-val.is-slow { --latency-tone: color-mix(in oklch, var(--warn) 60%, var(--danger)); }
+.req-latency-val.is-danger { --latency-tone: var(--danger); }
+/* TTFT keeps the muted step: a first token's pace is detail about the request,
+   not a verdict on it. */
 .req-ttft-val {
   font-size: var(--text-xs);
   color: var(--muted);

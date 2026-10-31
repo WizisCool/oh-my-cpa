@@ -115,3 +115,5 @@ it.each(['invalid', 'unsupported', 'inconsistent', 'unclassified'] as const)('sh
   expect(explanation).toContain('100');
   expect(explanation).toContain('30');
 });
+
+

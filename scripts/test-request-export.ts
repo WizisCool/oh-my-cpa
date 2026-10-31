@@ -158,6 +158,27 @@ test('request export', () => {
     [[{ kind: 'text', text: '—', tone: 'muted', size: 12, weight: 400, isMono: false }]],
     'a request with nothing to mark draws a dash, not an empty cell',
   );
+
+  // The latency cell carries the list's band: the total takes the tone the row
+  // would show, while TTFT - detail about the request, not a verdict on it -
+  // stays muted.
+  const latencySheet = (event: UsageEvent) =>
+    buildRequestSheet({ rows: [event], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials })
+      .rows[0].cells.latency.lines;
+  assert.deepEqual(latencySheet(events[0]), [
+    [{ kind: 'text', text: '1.25 s', tone: 'success', size: 13, weight: 500, isMono: false }],
+    [{ kind: 'text', text: 'TTFT 300 ms', tone: 'muted', size: 11, weight: 400, isMono: false }],
+  ], 'a quick request draws its total green and its first token muted');
+  const slowTotal = latencySheet({ ...events[0], latency_ms: 45_000 })[0][0];
+  assert.ok(
+    slowTotal.kind === 'text' && slowTotal.tone === 'slow',
+    'a request past the slow boundary draws its total orange',
+  );
+  const dangerTotal = latencySheet({ ...events[0], latency_ms: 65_000 })[0][0];
+  assert.ok(
+    dangerTotal.kind === 'text' && dangerTotal.tone === 'danger',
+    'a request past a minute draws its total red',
+  );
   const fastSheet = buildRequestSheet({
     rows: [{ ...events[1], provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority', resolved_service_tier_source: 'request' }] as UsageEvent[],
     masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,
