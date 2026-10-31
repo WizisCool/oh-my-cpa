@@ -66,11 +66,22 @@ func TestResolveCodexPlanTierNamesCurrentPlans(t *testing.T) {
 		wantLabel string
 	}{
 		{"pro", "elite", "Pro 200"},
+		{"promax", "elite", "Pro 500"},
+		{"pro-max", "elite", "Pro 500"},
+		{"pro_max", "elite", "Pro 500"},
+		{"  ProMax  ", "elite", "Pro 500"},
+		{"  PRO-MAX  ", "elite", "Pro 500"},
+		{"  Pro_Max  ", "elite", "Pro 500"},
 		{"ProLite", "premium", "Pro 100"},
 		{"pro-lite", "premium", "Pro 100"},
 		{"pro_lite", "premium", "Pro 100"},
 		{"self_serve_business_prolite", "premium", "Business Premium"},
 		{"plus", "standard", "Plus"},
+		{"team", "standard", "Team"},
+		{"free", "free", "Free"},
+		{" future_plan ", "standard", "Future_plan"},
+		{"promax_future", "standard", "Promax_future"},
+		{"", "unknown", "未知套餐"},
 	}
 	for _, tc := range cases {
 		tier, label := resolveCodexPlanTier(tc.planType)
@@ -105,5 +116,22 @@ func TestParseCodexUsageReadsAccountCredits(t *testing.T) {
 		if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 			t.Errorf("%s: credits = %+v, want %+v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestParseCodexUsagePreservesProMaxIdentity(t *testing.T) {
+	for _, rawType := range []string{"promax", "pro-max", "pro_max", "  ProMax  "} {
+		t.Run(rawType, func(t *testing.T) {
+			for _, field := range []string{"plan_type", "planType"} {
+				raw := []byte(`{"` + field + `":"` + rawType + `"}`)
+				plan, _, _, err := ParseCodexUsage(raw, 1_800_000_000_000)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if plan.PlanType != rawType || plan.PlanLabel != "Pro 500" || plan.Tier != "elite" {
+					t.Fatalf("%s plan = %+v, want raw identity %q and Pro 500/elite", field, plan, rawType)
+				}
+			}
+		})
 	}
 }

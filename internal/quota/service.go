@@ -37,6 +37,9 @@ const (
 	XaiBillingWeeklyURL        = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
 	XaiApiMeURL                = "https://api.x.ai/v1/me"
 	XaiApiChatURL              = "https://api.x.ai/v1/chat/completions"
+
+	KimiProfileURL              = "https://api.kimi.com/coding/v1/me"
+	KimiInternationalProfileURL = "https://api.kimi.ai/coding/v1/me"
 )
 
 // Official upstream headers, plus the model id the xAI paid-account health probe
@@ -70,6 +73,7 @@ var AllowedURLPrefixes = []string{
 	"https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
 	"https://api.kimi.com/coding/v1/",
 	KimiInternationalUsageURL,
+	KimiInternationalProfileURL,
 	"https://cli-chat-proxy.grok.com/v1/billing",
 	"https://api.x.ai/v1/",
 	DevinSeatStatusURL,
@@ -429,14 +433,12 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 			}
 
 		case "kimi":
-			windows, err := s.fetchKimiQuota(ctx, file, nowMS)
+			plan, windows, err := s.fetchKimiQuota(ctx, file, nowMS)
 			if err != nil {
 				fetchErr = err
 			} else {
+				result.Plan = plan
 				result.Windows = windows
-				if result.Plan == nil {
-					result.Plan = &QuotaPlan{PlanType: "standard", PlanLabel: "Kimi Coding API", Tier: "standard"}
-				}
 			}
 
 		case "xai":
@@ -782,23 +784,46 @@ func kimiUsageURLFor(file management.AuthFile) string {
 	return KimiUsageURL
 }
 
-func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
+func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
 	headers := management.WithQuotaCredential(map[string]string{
 		"Accept": "application/json",
 	})
-	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", kimiUsageURLFor(file), headers, "")
+	usageURL := kimiUsageURLFor(file)
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", usageURL, headers, "")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	normBody, err := resp.NormalizedBody()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, errors.New(sanitizeError(resp.StatusCode, normBody))
+		return nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
+	}
+	windows, err := ParseKimiUsage(normBody, nowMS)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return ParseKimiUsage(normBody, nowMS)
+	// The profile is optional metadata, not quota evidence. A failed read must
+	// neither discard these windows nor claim the previous plan is still current.
+	plan := &QuotaPlan{PlanType: "standard", PlanLabel: "Kimi Coding API", Tier: "standard"}
+	profileURL := KimiProfileURL
+	if usageURL == KimiInternationalUsageURL {
+		profileURL = KimiInternationalProfileURL
+	}
+	profileCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	profileResp, err := s.SafeApiCall(profileCtx, file.AuthIndex, "GET", profileURL, headers, "")
+	if err != nil || profileResp.StatusCode < 200 || profileResp.StatusCode >= 300 {
+		return plan, windows, nil
+	}
+	if profileBody, err := profileResp.NormalizedBody(); err == nil {
+		if label := parseKimiPlanName(profileBody); label != "" {
+			plan.PlanLabel = label
+		}
+	}
+	return plan, windows, nil
 }
 
 // fetchXaiQuota reads the CLI's two billing documents, and falls back to the paid-account health

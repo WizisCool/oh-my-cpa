@@ -9,6 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 type RawKimiDetail struct {
@@ -436,4 +440,37 @@ func parseKimiRatioPools(pools map[string]RawKimiRatioPool, counted []QuotaWindo
 	}
 
 	return windows
+}
+
+// parseKimiPlanName projects only the verified profile's display name. Profiles
+// can contain credentials and identity details, so neither raw data nor parse
+// errors may escape this optional enrichment.
+func parseKimiPlanName(raw []byte) string {
+	var profile struct {
+		UserID        string `json:"user_id"`
+		UserLevelName string `json:"user_level_name"`
+	}
+	if err := json.Unmarshal(raw, &profile); err != nil || strings.TrimSpace(profile.UserID) == "" {
+		return ""
+	}
+	label := strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) || (unicode.IsControl(r) && !unicode.IsSpace(r)) {
+			return -1
+		}
+		return r
+	}, profile.UserLevelName)
+	label = security.RedactText(strings.Join(strings.Fields(label), " "))
+	if label == security.RedactedValue {
+		return ""
+	}
+	// Match the Agent projection's byte budget without cutting UTF-8 characters.
+	const maxLabelBytes = 256
+	if len(label) > maxLabelBytes {
+		end := maxLabelBytes
+		for !utf8.RuneStart(label[end]) {
+			end--
+		}
+		label = strings.TrimSpace(label[:end])
+	}
+	return label
 }
