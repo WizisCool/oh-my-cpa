@@ -60,6 +60,10 @@ import {
   DataRetentionResponse,
 } from '../types/system';
 import type {
+  BuiltinPluginPolicyUpdate,
+  BuiltinPluginsResponse,
+  BuiltinPolicyUpdate,
+  OmcCommunityPluginsResponse,
   PluginConfigResponse,
   PluginDeleteResponse,
   PluginInstallResponse,
@@ -1161,8 +1165,37 @@ export const api = {
     });
   },
 
-  async getPluginStore(): Promise<PluginStoreResponse> {
-    return request<PluginStoreResponse>('/management/plugin-store', { method: 'GET' });
+  /** One registry at a time; without `sourceId` the server reads CPA's official registry. */
+  async getPluginStore(sourceId?: string): Promise<PluginStoreResponse> {
+    const query = sourceId ? `?source_id=${encodeURIComponent(sourceId)}` : '';
+    return request<PluginStoreResponse>(`/management/plugin-store${query}`, { method: 'GET' });
+  },
+
+  async getOmcCommunityPlugins(): Promise<OmcCommunityPluginsResponse> {
+    return request<OmcCommunityPluginsResponse>('/management/omc-community-plugins', { method: 'GET' });
+  },
+
+  async getBuiltinPlugins(): Promise<BuiltinPluginsResponse> {
+    return request<BuiltinPluginsResponse>('/management/builtin-plugins', { method: 'GET' });
+  },
+
+  async updateBuiltinPolicy(update: BuiltinPolicyUpdate): Promise<BuiltinPluginsResponse> {
+    return request<BuiltinPluginsResponse>('/management/builtin-plugins/policy', {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    });
+  },
+
+  async updateBuiltinPluginPolicy(id: string, update: BuiltinPluginPolicyUpdate): Promise<BuiltinPluginsResponse> {
+    return request<BuiltinPluginsResponse>(`/management/builtin-plugins/${encodeURIComponent(id)}/policy`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    });
+  },
+
+  /** Queues a reconciliation; the response is the state at queue time, not its outcome. */
+  async reconcileBuiltinPlugins(): Promise<BuiltinPluginsResponse> {
+    return request<BuiltinPluginsResponse>('/management/builtin-plugins/reconcile', { method: 'POST' });
   },
 
   async installPlugin(id: string, options: { sourceId?: string; version?: string } = {}): Promise<PluginInstallResponse> {

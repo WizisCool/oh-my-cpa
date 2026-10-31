@@ -16,20 +16,10 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
-/**
- * Oh My CPA's own plugin registry as a store source.
- *
- * CPA lists the built-in official registry and every `plugins.store-sources` entry.
- * Oh My CPA's registry is not in the file because an operator put it there: it is
- * part of what this console ships, so the store reconciles the file with the
- * operator's preference before it is read, and a configuration save that drops the
- * address is repaired in the same transaction. The preference
- * (`omc_plugin_source_enabled`) is the only switch; the URL is compiled in.
- *
- * A source CPA cannot see would be a source whose entries cannot be installed, so
- * the rule is kept in one direction only: the address is present exactly when the
- * preference says it is.
- */
+// OMC Community has a fixed source address and an operator-owned visibility
+// preference. Catalog reads do not repair CPA configuration; manual installs and
+// configuration writes reconcile the source inside their shared write gate.
+// The preference is independent from signed builtin lifecycle authorization.
 
 // isOMCPluginStoreURL reports whether a registry URL or a store entry's source URL is
 // Oh My CPA's own registry.

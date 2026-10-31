@@ -119,6 +119,7 @@ export default {
   "nav.omc_settings": "OMC 設定",
   "nav.plugins": "外掛管理",
   "nav.plugin_store": "外掛商店",
+  "nav.plugin_builtins": "內建外掛",
   "nav.system": "系統資訊",
   "nav.update_available": "有可用更新",
   "header.collapse_sidebar": "收起側欄",

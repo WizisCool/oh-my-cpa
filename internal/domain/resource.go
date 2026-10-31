@@ -21,6 +21,7 @@ func (s ResourceStatus) Valid() bool {
 }
 
 type CPAInstance struct {
+	BindingGeneration       int64
 	ID                      string
 	Name                    string
 	BaseURL                 string

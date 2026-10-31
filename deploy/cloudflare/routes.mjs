@@ -99,7 +99,8 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/client-key-aliases', 'client-key-aliases'],
   ['/api/v1/management/plugins', 'plugins'],
   ['/api/v1/management/plugins/settings', 'plugins-settings'],
-  ['/api/v1/management/plugin-store', 'plugin-store'],
+  ['/api/v1/management/builtin-plugins', 'builtin-plugins'],
+  ['/api/v1/management/omc-community-plugins', 'omc-community-plugins'],
   ['/api/v1/management/auth-files', 'auth-files'],
   ['/api/v1/management/auth-files/model-aliases', 'auth-files-model-aliases'],
   ['/api/v1/management/auth-files/excluded-models', 'auth-files-excluded-models'],
@@ -195,6 +196,18 @@ const PARAMETERISED_ROUTES = [
   { path: '/api/v1/management/oauth/status', resolve: () => 'oauth-status' },
   { path: '/api/v1/management/logs', resolve: () => 'logs' },
   { path: '/api/v1/management/quota/auth-codex-01', resolve: () => 'quota-codex' },
+  // One registry of the store. The dataset holds the registries it captured, the official
+  // one under the bare name; another registry has no answer rather than the official
+  // registry's cards shown under its name.
+  {
+    path: '/api/v1/management/plugin-store',
+    resolve: (url) => {
+      const source = url.searchParams.get('source_id') ?? '';
+      if (source === '' || source === 'official') return 'plugin-store';
+      const name = `plugin-store-${source}`;
+      return Object.hasOwn(dataset.responses, name) ? name : undefined;
+    },
+  },
   // One installed plugin's settings document, captured per fixture plugin. A plugin the
   // dataset does not hold has no answer rather than another plugin's settings.
   {

@@ -295,6 +295,13 @@ describe('routing', () => {
     assert.equal(responseNameFor(request('/api/v1/management/plugins/not-installed/config')), undefined);
   });
 
+  it('answers a store registry only for a registry the dataset holds', () => {
+    // Another registry's cards would be a source switch that did not happen.
+    assert.equal(responseNameFor(request('/api/v1/management/plugin-store')), 'plugin-store');
+    assert.equal(responseNameFor(request('/api/v1/management/plugin-store?source_id=official')), 'plugin-store');
+    assert.equal(responseNameFor(request('/api/v1/management/plugin-store?source_id=not-captured')), undefined);
+  });
+
   it('answers a price editor read only for a model the dataset holds', () => {
     // Another model's price history would be the wrong history shown under this name.
     assert.equal(responseNameFor(request('/api/v1/pricing/models/gpt-5.4-mini-high')), 'pricing-model-gpt-5.4-mini-high');

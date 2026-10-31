@@ -39,7 +39,11 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 	// from the message so the console can frame it in the reader's language.
 	reason := ""
 	var httpErr *management.HTTPError
-	if errors.Is(err, management.ErrInvalidOAuthProxy) {
+	if errors.Is(err, management.ErrPluginMutationConflict) {
+		status = http.StatusConflict
+		code = "plugin_mutation_conflict"
+		message = "plugin mutation may have completed with concurrent configuration changes; inspect the gateway before retrying"
+	} else if errors.Is(err, management.ErrInvalidOAuthProxy) {
 		status = http.StatusBadRequest
 		code = "invalid_oauth_proxy"
 		message = "invalid OAuth proxy URL"

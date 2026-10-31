@@ -38,6 +38,7 @@ const ROUTE_LOADERS: Record<string, () => Promise<unknown>> = {
   '/auth-files': loadLegacyOAuthManagementRedirect,
   '/system': loadSystemPage,
   '/plugins': loadPluginsPage,
+  '/plugins/builtins': loadPluginsPage,
   '/plugins/store': loadPluginsPage,
   '/omc-settings': loadOmcSettingsPage,
 };

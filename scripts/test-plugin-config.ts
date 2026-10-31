@@ -7,18 +7,32 @@ import {
   pluginFieldDefaultText,
   pluginFieldKind,
   undeclaredPluginKeys,
+  withSavedEnabled,
 } from '../web/src/components/plugins/pluginConfigForm.ts';
 import {
+  builtinChanges,
+  builtinReasonKey,
+  builtinVersionFacts,
+  builtinWriteFailure,
+  needsAttention,
+} from '../web/src/components/plugins/builtinPluginLogic.ts';
+import { pluginDescription } from '../web/src/components/plugins/pluginDescription.ts';
+import {
+  cpaStoreSources,
   filterStorePlugins,
+  installedPluginDescription,
   normalizePluginSettingsDraft,
   STORE_INSTALL_WARNINGS,
   storeFilterCounts,
   storeInstallConfirmToken,
-  storeListingsByPluginId,
+  installedListing,
+  sortRecommendedFirst,
+  storeEntryKey,
+  storeListingsBySource,
   storePluginOrigin,
   validatePluginSettingsDraft,
 } from '../web/src/components/plugins/pluginStoreLogic.ts';
-import type { PluginConfigField, StorePluginItem } from '../web/src/types/plugin.ts';
+import type { PluginConfigField, PluginItem, StorePluginItem } from '../web/src/types/plugin.ts';
 import { test } from 'vitest';
 
 test('plugin config', () => {
@@ -151,7 +165,7 @@ test('plugin config', () => {
   // ── the store ──────────────────────────────────────────────────────────────
   function entry(overrides: Partial<StorePluginItem>): StorePluginItem {
     return {
-      store_id: 'official/x', source_id: 'official', source_name: 'official', id: 'x', name: 'X', tags: [], platforms: [],
+      store_id: 'official/x', source_id: 'official', source_name: 'official', source_kind: 'official', id: 'x', name: 'X', tags: [], platforms: [],
       is_official: true, is_official_repository: true, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
       update_available: false, ...overrides,
     };
@@ -161,11 +175,99 @@ test('plugin config', () => {
     entry({ store_id: 'official/logger', id: 'logger', name: 'Logger', installed: true, update_available: true, install_source_status: 'matched' }),
     entry({ store_id: 'mirror/logger', source_id: 'mirror', id: 'logger', name: 'Logger', is_official: false, installed: true, install_source_status: 'different', description: 'mirror copy' }),
   ];
-  assert.deepEqual(storeFilterCounts(STORE), { all: 3, installed: 2, available: 1, updates: 1 });
-  assert.deepEqual(filterStorePlugins(STORE, 'NETWORK', 'all').map((item) => item.store_id), ['official/limiter']);
-  assert.deepEqual(filterStorePlugins(STORE, '', 'updates').map((item) => item.store_id), ['official/logger']);
-  // The listing an installed card borrows is the one it was installed from.
-  assert.equal(storeListingsByPluginId(STORE).get('logger')?.store_id, 'official/logger');
+  assert.deepEqual(storeFilterCounts(STORE), { all: 3, recommended: 0, installed: 2, available: 1, updates: 1 });
+  assert.deepEqual(filterStorePlugins(STORE, 'NETWORK', 'all', 'en').map((item) => item.store_id), ['official/limiter']);
+  assert.deepEqual(filterStorePlugins(STORE, '', 'updates', 'en').map((item) => item.store_id), ['official/logger']);
+
+  // The OMC tag is matched exactly: a near miss is an ordinary community entry, not a recommendation.
+  const TAGGED = [
+    entry({ store_id: 'c/a', id: 'a', tags: ['OMC'], is_official: false }),
+    entry({ store_id: 'c/b', id: 'b', tags: ['omc', 'OMC-ready'], is_official: false }),
+  ];
+  assert.deepEqual(filterStorePlugins(TAGGED, '', 'recommended', 'en').map((item) => item.store_id), ['c/a']);
+  assert.equal(storeFilterCounts(TAGGED).recommended, 1);
+
+  // A description reads in the reading language, then English, then the registry's own text;
+  // a blank translation never hides the registry's description.
+  const described = { description: 'native', description_i18n: { en: 'english', zh: '中文', ms: '  ' } };
+  assert.equal(pluginDescription('zh', described), '中文');
+  assert.equal(pluginDescription('zh-Hant', described), 'english');
+  assert.equal(pluginDescription('ms', described), 'english');
+  assert.equal(pluginDescription('en', { description: 'native' }), 'native');
+  // The store search finds an entry by the description its card shows, and by the registry's.
+  const localized = [entry({ store_id: 'c/l', description: 'Token buckets', description_i18n: { zh: '令牌桶限流' } })];
+  assert.equal(filterStorePlugins(localized, '令牌桶', 'all', 'zh').length, 1);
+  assert.equal(filterStorePlugins(localized, 'token', 'all', 'zh').length, 1);
+
+  // The built-in catalog and the OMC community registry have pages of their own; neither
+  // is a choice in CPA's store.
+  assert.deepEqual(
+    cpaStoreSources([
+      { id: 'official', name: 'official', url: 'https://o', is_official: true, source_kind: 'official' },
+      { id: 'builtin', name: 'OMC', url: 'https://b', is_official: false, source_kind: 'builtin' },
+      { id: 'omc-community', name: 'Oh My CPA', url: 'https://c', is_official: false, source_kind: 'omc_community' },
+      { id: 'mirror', name: 'mirror', url: 'https://m', is_official: false, source_kind: 'community' },
+    ]).map((source) => source.id),
+    ['official', 'mirror'],
+  );
+
+  // An installed row is described by the registry it came from: a built-in entry with the same
+  // id does not describe a copy installed from elsewhere.
+  const installed = (overrides: Partial<PluginItem>): PluginItem => ({
+    id: 'zc', configured: true, registered: true, enabled: true, effective_enabled: true, config_fields: [], source_kind: 'community', ...overrides,
+  });
+  const storeEntry = entry({ id: 'zc', description: 'store text' });
+  assert.equal(installedPluginDescription('zh', installed({}), storeEntry), 'store text');
+  // Built-ins are not shown in the ordinary installed list, and a same-id store
+  // listing is never allowed to describe them by accident.
+  assert.equal(installedPluginDescription('zh', installed({ source_kind: 'builtin' }), storeEntry), 'store text');
+  assert.equal(installedPluginDescription('en', installed({ description: 'own', description_i18n: { en: 'own en' } }), storeEntry), 'own en');
+
+  // ── built-in plugins ───────────────────────────────────────────────────────
+  // Only the server's explicit code may report a policy as saved; anything else is a failure.
+  assert.equal(builtinWriteFailure('policy_revision_conflict', 409), 'conflict');
+  assert.equal(builtinWriteFailure('builtin_policy_apply_incomplete', 502), 'saved-unconfirmed');
+  assert.equal(builtinWriteFailure('', 400), 'refused');
+  // No answer, or a server fault without a code, says nothing about whether the write landed.
+  assert.equal(builtinWriteFailure('', 0), 'unknown');
+  assert.equal(builtinWriteFailure('', 500), 'unknown');
+  assert.equal(builtinReasonKey('automation_disabled'), 'plugin.builtin_reason_automation_disabled');
+  assert.equal(builtinReasonKey('toString'), undefined);
+
+  // A built-in's switch is its policy's: a settings save never moves it, from either view.
+  assert.deepEqual(withSavedEnabled({ enabled: false, region: 'cn' }, { enabled: true }), { enabled: true, region: 'cn' });
+  assert.deepEqual(withSavedEnabled({ enabled: false, region: 'cn' }, {}), { region: 'cn' });
+
+  // Versions name only what differs from the installed copy.
+  assert.deepEqual(builtinVersionFacts({ version: '0.1.5', installed_version: '0.1.5', runtime_version: '0.1.5' }), { current: 'v0.1.5', update: undefined, running: undefined });
+  assert.deepEqual(builtinVersionFacts({ version: '0.2.0', installed_version: '0.1.5', runtime_version: '0.1.4' }), { current: 'v0.1.5', update: 'v0.2.0', running: 'v0.1.4' });
+  assert.deepEqual(builtinVersionFacts({ version: '0.2.0', installed_version: '', runtime_version: '' }), { available: 'v0.2.0', running: undefined });
+
+  const builtin = { id: 'z', name: 'Z', description: '', version: '0.2.0', source_id: 'b', source_kind: 'builtin' as const, policy: { enabled: true },
+    status: 'running' as const, installed_version: '0.1.5', runtime_version: '0.1.5', registered: true, effective_enabled: true, reason: '' };
+  assert.deepEqual(builtinChanges([builtin], [{ ...builtin, installed_version: '0.2.0' }]), [{ id: 'z', name: 'Z', kind: 'updated', version: 'v0.2.0' }]);
+  assert.deepEqual(builtinChanges([{ ...builtin, installed_version: '' }], [builtin]), [{ id: 'z', name: 'Z', kind: 'installed', version: 'v0.1.5' }]);
+  assert.deepEqual(builtinChanges([builtin], [{ ...builtin, installed_version: '' }]), [{ id: 'z', name: 'Z', kind: 'removed', version: 'v0.1.5' }]);
+  assert.deepEqual(builtinChanges([builtin], [builtin]), []);
+  // A plugin the operator switched off, or one still being worked on, is not a problem to report.
+  assert.equal(needsAttention({ ...builtin, status: 'disabled' }, true), false);
+  assert.equal(needsAttention({ ...builtin, status: 'pending' }, true), false);
+  assert.equal(needsAttention({ ...builtin, status: 'restart_required' }, true), true);
+  assert.equal(needsAttention({ ...builtin, status: 'not_installed' }, true), true);
+  assert.equal(needsAttention({ ...builtin, status: 'not_installed', policy: { enabled: false } }, true), false);
+  // Two registries listing one id are two cards, and an installed row borrows only from the
+  // registry its install record names.
+  assert.notEqual(storeEntryKey(STORE[1]), storeEntryKey(STORE[2]));
+  const listings = storeListingsBySource(STORE);
+  const loggerInstalled = { id: 'logger', configured: true, registered: true, enabled: true, effective_enabled: true, config_fields: [], source_kind: 'community' } as PluginItem;
+  assert.equal(installedListing(listings, { ...loggerInstalled, source_id: 'mirror' })?.store_id, 'mirror/logger');
+  assert.equal(installedListing(listings, { ...loggerInstalled, source_id: 'official' })?.store_id, 'official/logger');
+  assert.equal(installedListing(listings, { ...loggerInstalled, source_id: 'elsewhere' }), undefined);
+  assert.equal(installedListing(listings, loggerInstalled), undefined);
+  assert.deepEqual(
+    sortRecommendedFirst([entry({ id: 'a' }), entry({ id: 'b', tags: ['OMC'] }), entry({ id: 'c' })]).map((item) => item.id),
+    ['b', 'a', 'c'],
+  );
 
   // The origin mark keeps the registry that listed an entry apart from whose code it names:
   // the official registry is a catalogue, and it lists community authors' repositories.
@@ -175,14 +277,14 @@ test('plugin config', () => {
       entry({ is_official_repository: false }),
       entry({ is_official: false }),
       entry({ is_official: false, is_official_repository: false }),
-      entry({ is_official: false, is_omc: true }),
+      entry({ is_official: false, source_kind: 'omc_community' }),
     ].map(storePluginOrigin),
-    ['official', 'official-source', 'third-party', 'third-party', 'omc'],
+    ['official', 'official-source', 'third-party', 'third-party', 'omc-community'],
   );
   // Only the vendor's own code from the vendor's own registry installs without an
   // acknowledgement; every other origin's warning block is what the operator types into.
   assert.deepEqual(
-    (['omc', 'official', 'official-source', 'third-party'] as const).map((origin) => STORE_INSTALL_WARNINGS[origin]?.title ?? null),
+    (['omc-community', 'official', 'official-source', 'third-party'] as const).map((origin) => STORE_INSTALL_WARNINGS[origin]?.title ?? null),
     [
       'plugin.omc_plugin_title',
       null,

@@ -119,6 +119,7 @@ export default {
   'nav.omc_settings': 'OMC Settings',
   'nav.plugins': 'Plugin management',
   'nav.plugin_store': 'Plugin store',
+  'nav.plugin_builtins': 'Built-in plugins',
   'nav.system': 'System Information',
   'nav.update_available': 'Update available',
   'header.collapse_sidebar': 'Collapse sidebar',

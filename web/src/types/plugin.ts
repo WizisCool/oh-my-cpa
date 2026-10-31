@@ -25,9 +25,30 @@ export interface PluginPage {
   description?: string;
 }
 
+/**
+ * A plugin's descriptions by reading language, already validated as plain text by the
+ * server. Any subset may be present; the registry's own `description` stays the last resort.
+ */
+export type PluginDescriptionI18n = Partial<Record<'zh' | 'en' | 'zh-Hant' | 'ms', string>>;
+
+/**
+ * Which kind of registry a plugin or source belongs to. `builtin` is Oh My CPA's own
+ * fixed official repositories, managed by its automation; `omc_community` is the community registry
+ * Oh My CPA hosts, whose plugins are third-party code installed by hand; `official` and
+ * `community` are CPA's store. `unknown` is an installed plugin whose origin the gateway
+ * cannot prove. The kind names where a plugin came from; it grants nothing.
+ */
+export type PluginSourceKind = 'builtin' | 'omc_community' | 'official' | 'community' | 'unknown';
+
 export interface PluginItem {
   id: string;
   path?: string;
+  /** The registry the installed copy came from, as its install record proves it. */
+  source_kind: PluginSourceKind;
+  source_id?: string;
+  installed_version?: string;
+  description?: string;
+  description_i18n?: PluginDescriptionI18n;
   configured: boolean;
   registered: boolean;
   enabled: boolean;
@@ -71,6 +92,7 @@ export interface PluginStoreSource {
   name: string;
   url: string;
   is_official: boolean;
+  source_kind: PluginSourceKind;
 }
 
 export interface PluginStoreSourceError {
@@ -88,6 +110,8 @@ export interface StorePluginItem {
   id: string;
   name: string;
   description?: string;
+  description_i18n?: PluginDescriptionI18n;
+  source_kind: PluginSourceKind;
   author?: string;
   version?: string;
   repository_url?: string;
@@ -122,6 +146,18 @@ export interface PluginStoreResponse {
   total: number;
 }
 
+/**
+ * The OMC community registry, read on its own. The server owns the registry's address;
+ * while the operator has switched the source off it answers with no plugins and
+ * `source_enabled: false`, and reading it never switches it on. A switched-off read asks
+ * CPA nothing, so it may carry no `plugins_enabled`: absent is unknown, not off.
+ */
+export interface OmcCommunityPluginsResponse extends Omit<PluginStoreResponse, 'plugins_enabled'> {
+  plugins_enabled?: boolean;
+  source_enabled: boolean;
+  source_id: string;
+}
+
 export interface PluginInstallResponse {
   status: string;
   id: string;
@@ -129,6 +165,64 @@ export interface PluginInstallResponse {
   source_name?: string;
   plugins_enabled: boolean;
   restart_required: boolean;
+}
+
+// ── built-in plugins ────────────────────────────────────────────────────────
+
+export type BuiltinCatalogStatus = 'ready' | 'unavailable';
+export type BuiltinPluginStatus =
+  | 'not_installed' | 'pending' | 'running' | 'disabled'
+  | 'restart_required' | 'indeterminate' | 'source_conflict' | 'blocked';
+
+/**
+ * The feature-level switch for every built-in plugin. It is on by default; switching it
+ * off uninstalls the built-in copies OMC manages. `revision` guards every policy write,
+ * global or per plugin.
+ */
+export interface BuiltinGlobalPolicy {
+  enabled: boolean;
+  revision: number;
+}
+
+export interface BuiltinCatalog {
+  status: BuiltinCatalogStatus;
+  revision: string;
+}
+
+export interface BuiltinPlugin {
+  id: string;
+  name: string;
+  description: string;
+  description_i18n?: PluginDescriptionI18n;
+  /** The latest stable release observed in the official repository. */
+  version: string;
+  source_id: string;
+  source_kind: 'builtin';
+  policy: { enabled: boolean };
+  status: BuiltinPluginStatus;
+  installed_version: string;
+  runtime_version: string;
+  registered: boolean;
+  effective_enabled: boolean;
+  /** A machine code explaining `status`; empty when the status needs none. */
+  reason: string;
+}
+
+export interface BuiltinPluginsResponse {
+  policy: BuiltinGlobalPolicy;
+  catalog: BuiltinCatalog;
+  plugins: BuiltinPlugin[];
+  last_reconcile_at: string;
+}
+
+export interface BuiltinPolicyUpdate {
+  enabled: boolean;
+  revision: number;
+}
+
+export interface BuiltinPluginPolicyUpdate {
+  enabled: boolean;
+  revision: number;
 }
 
 export type PluginStoreAuthType = 'none' | 'bearer' | 'github-token' | 'basic' | 'header';
@@ -164,4 +258,11 @@ export type PluginSettingsUpdate = Pick<PluginSettings, 'revision' | 'enabled' |
 /** The name a plugin is called by in the console: its registered name, then its id. */
 export function pluginDisplayName(plugin: { id: string; metadata?: { name?: string } }): string {
   return plugin.metadata?.name?.trim() || plugin.id;
+}
+
+/** A version as the plugin declares it: `v` is added once, never doubled. */
+export function formatPluginVersion(version: string | undefined): string {
+  const trimmed = (version ?? '').trim();
+  if (!trimmed) return '';
+  return /^v\d/i.test(trimmed) ? trimmed : `v${trimmed}`;
 }

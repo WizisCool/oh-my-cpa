@@ -72,7 +72,7 @@ export const ROUTE_READS: Record<string, string[]> = {
   '/pricing': ['pricing', 'pricing-attention', 'pricing-catalog', 'pricing-model-claude-opus-5.5'],
   '/config': ['config', 'config-source'],
   '/omc-settings': ['preferences', 'system', 'fonts'],
-  '/plugins': ['plugins', 'plugin-store', 'plugins-settings', 'plugin-config-usage-exporter'],
+  '/plugins': ['plugins', 'builtin-plugins', 'omc-community-plugins', 'plugin-store', 'plugins-settings', 'plugin-config-usage-exporter'],
   '/system': ['system', 'system-releases', 'system-maintenance'],
 };
 

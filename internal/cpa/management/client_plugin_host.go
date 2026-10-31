@@ -168,6 +168,16 @@ func refusedPluginHostCredential(credential string) PluginHostResponse {
 // address; every hosted page shares this process's address, so a key mistyped
 // into a plugin's own prompt would otherwise lock the whole console out of CPA.
 // A page that sends no credential acts with the session's stored key.
+// IsPluginHostCredentialAllowed performs CPA's credential precedence check
+// before an API handler changes any local plugin policy or takes a write gate.
+func (c *Client) IsPluginHostCredentialAllowed(header http.Header) bool {
+	if c == nil {
+		return false
+	}
+	credential, explicit := pluginHostManagementCredential(header)
+	return !explicit || subtle.ConstantTimeCompare([]byte(credential), []byte(c.management)) == 1
+}
+
 func (c *Client) PluginRoute(ctx context.Context, method, routePath, rawQuery string, header http.Header, body []byte) (PluginHostResponse, error) {
 	cleaned, ok := PluginRoutePath(routePath)
 	if !ok {
@@ -176,10 +186,14 @@ func (c *Client) PluginRoute(ctx context.Context, method, routePath, rawQuery st
 	if c == nil {
 		return PluginHostResponse{}, errors.New("CPA client is not initialized")
 	}
-	if credential, isExplicit := pluginHostManagementCredential(header); isExplicit && subtle.ConstantTimeCompare([]byte(credential), []byte(c.management)) != 1 {
+	if !c.IsPluginHostCredentialAllowed(header) {
+		credential, _ := pluginHostManagementCredential(header)
 		return refusedPluginHostCredential(credential), nil
 	}
 	if IsPluginHostNativeWrite(method, cleaned) {
+		if c.configBackup == nil {
+			return PluginHostResponse{}, ErrConfigBackupUnavailable
+		}
 		if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigChanges)); err != nil {
 			return PluginHostResponse{}, err
 		}

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -32,12 +33,13 @@ plugins:
 // a configuration write changes it. That is what lets a test see whether the file
 // ended up agreeing with the operator's switch.
 type managedSourceCPA struct {
-	mu      sync.Mutex
-	sources []string
-	writes  []string
-	reads   int
-	install string
-	yaml    string
+	mu        sync.Mutex
+	sources   []string
+	writes    []string
+	reads     int
+	install   string
+	onInstall func()
+	yaml      string
 	// abortConfigRead closes the connection instead of answering the configuration
 	// read, which is how a transport failure - not an HTTP error - reaches the handler.
 	abortConfigRead bool
@@ -99,9 +101,11 @@ func (f *managedSourceCPA) serve(writer http.ResponseWriter, request *http.Reque
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	writer.Header().Set("Content-Type", "application/json")
-	path := strings.TrimPrefix(request.URL.Path, "/v8/management")
+	path := strings.TrimPrefix(strings.TrimPrefix(request.URL.Path, "/v8/management"), "/v0/management")
 
 	switch {
+	case request.Method == http.MethodGet && path == "/config":
+		_, _ = writer.Write([]byte(`{"plugins":{"enabled":true}}`))
 	case request.Method == http.MethodGet && path == "/config.yaml":
 		if f.abortConfigRead {
 			if hijacker, ok := writer.(http.Hijacker); ok {
@@ -152,10 +156,10 @@ func (f *managedSourceCPA) serve(writer http.ResponseWriter, request *http.Reque
 	case request.Method == http.MethodGet && path == "/plugins/store":
 		f.reads++
 		sources := []map[string]any{{
-			"id": "official", "name": "official", "url": "https://plugins.router-for-me.example/registry.json",
+			"id": "official", "name": "official", "url": pluginregistry.OfficialSourceURL,
 		}}
 		plugins := []map[string]any{managedStoreEntry(
-			"official/limiter", "official", "official", "https://plugins.router-for-me.example/registry.json",
+			"official/limiter", "official", "official", pluginregistry.OfficialSourceURL,
 			"limiter", "Rate limiter", "1.2.0", "router-for-me/limiter",
 		)}
 		if f.hasSource(pluginregistry.OMCSourceURL) {
@@ -173,6 +177,9 @@ func (f *managedSourceCPA) serve(writer http.ResponseWriter, request *http.Reque
 			"sources": sources, "source_errors": []any{}, "plugins": plugins,
 		})
 	case request.Method == http.MethodPost && strings.HasPrefix(path, "/plugins/store/") && strings.HasSuffix(path, "/install"):
+		if f.onInstall != nil {
+			f.onInstall()
+		}
 		f.install = path + "?" + request.URL.RawQuery
 		_, _ = writer.Write([]byte(`{"status":"installed","source_id":"` + pluginregistry.SourceID(pluginregistry.OMCSourceURL) + `","id":"usage-digest","version":"0.3.0","plugins_enabled":true,"restart_required":false}`))
 	default:
@@ -201,7 +208,11 @@ type managedStoreResponse struct {
 
 func readManagedStore(t *testing.T, client *http.Client, baseURL string) managedStoreResponse {
 	t.Helper()
-	response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
+	return readManagedStoreSource(t, client, baseURL, "")
+}
+func readManagedStoreSource(t *testing.T, client *http.Client, baseURL, sourceID string) managedStoreResponse {
+	t.Helper()
+	response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store?source_id="+sourceID)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("plugin store: status %d body %s", response.StatusCode, body)
 	}
@@ -215,91 +226,6 @@ func readManagedStore(t *testing.T, client *http.Client, baseURL string) managed
 // The registry this console ships is present without anyone configuring it, and it is
 // listed before the other registries so an operator looking for an Oh My CPA plugin
 // finds it without searching.
-func TestPluginStoreAddsTheManagedSource(t *testing.T) {
-	gateway := &managedSourceCPA{}
-	client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-
-	store := readManagedStore(t, client, baseURL)
-	writes := gateway.recordedWrites()
-	if len(writes) != 1 || !strings.Contains(writes[0], pluginregistry.OMCSourceURL) {
-		t.Fatalf("configuration writes = %q, want one write adding the registry", writes)
-	}
-	// The repair is an ordinary configuration write, so it keeps a copy first and
-	// records why it happened rather than changing the file silently.
-	backups := listConfigBackupsForTest(t, client, baseURL)
-	if len(backups.Backups) != 1 || backups.Backups[0].Reason != "plugin_settings" || backups.Backups[0].Layout != "v8" {
-		t.Fatalf("backups = %+v, want the pre-repair copy with the plugin-settings reason", backups.Backups)
-	}
-	events, err := repo.ListAuditEvents(context.Background(), 20)
-	if err != nil {
-		t.Fatalf("list audit events: %v", err)
-	}
-	isAudited := false
-	for _, event := range events {
-		if event.Action == "plugin.source" && event.Result == "success" && event.TargetID == "plugins.store-sources" {
-			isAudited = true
-			break
-		}
-	}
-	if !isAudited {
-		t.Fatalf("audit events = %+v, want a successful plugin.source record", events)
-	}
-	if len(store.Plugins) != 2 {
-		t.Fatalf("store entries = %#v, want the built-in and the managed registry's", store.Plugins)
-	}
-	if !store.Plugins[0].IsOMC || store.Plugins[0].SourceName != pluginregistry.OMCSourceName {
-		t.Fatalf("first entry = %#v, want the managed registry's entry named and pinned first", store.Plugins[0])
-	}
-	if store.Plugins[1].IsOMC || !store.Plugins[1].IsOfficial {
-		t.Fatalf("second entry = %#v, want the official one after it", store.Plugins[1])
-	}
-	if len(store.Sources) != 2 || store.Sources[1].Name != pluginregistry.OMCSourceName {
-		t.Fatalf("sources = %#v, want the managed registry renamed", store.Sources)
-	}
-
-	// Reading again is idempotent: the file already agrees with the switch.
-	readManagedStore(t, client, baseURL)
-	if writes := gateway.recordedWrites(); len(writes) != 1 {
-		t.Fatalf("configuration writes = %q, want no second repair", writes)
-	}
-}
-
-// Switching the source off removes it from the gateway's file and from the catalogue;
-// switching it back on restores both.
-func TestPluginStoreFollowsTheManagedSourceSwitch(t *testing.T) {
-	gateway := &managedSourceCPA{sources: []string{"https://plugins.example/registry.json", pluginregistry.OMCSourceURL}}
-	client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-
-	setManagedSourcePreference(t, repo, false)
-	store := readManagedStore(t, client, baseURL)
-	if gateway.hasSource(pluginregistry.OMCSourceURL) {
-		t.Fatalf("the switched-off registry remained in the file: %q", gateway.sourceList())
-	}
-	if len(store.Plugins) != 1 || store.Plugins[0].IsOMC {
-		t.Fatalf("store entries = %#v, want none from the switched-off registry", store.Plugins)
-	}
-	for _, source := range store.Sources {
-		if source.Name == pluginregistry.OMCSourceName {
-			t.Fatalf("sources = %#v, want the switched-off registry absent", store.Sources)
-		}
-	}
-	// The operator's own registry is untouched.
-	if !gateway.hasSource("https://plugins.example/registry.json") {
-		t.Fatalf("the operator's registry was removed with it: %q", gateway.sourceList())
-	}
-
-	setManagedSourcePreference(t, repo, true)
-	store = readManagedStore(t, client, baseURL)
-	if !gateway.hasSource(pluginregistry.OMCSourceURL) {
-		t.Fatalf("the switched-on registry is missing from the file: %q", gateway.sourceList())
-	}
-	if len(store.Plugins) != 2 || !store.Plugins[0].IsOMC {
-		t.Fatalf("store entries = %#v, want the managed registry back and first", store.Plugins)
-	}
-}
-
-// The managed registry is not one of the sources the settings page edits: it is
-// omitted from the editable list, reported separately, and put back on every save.
 func TestPluginSettingsKeepTheManagedSourceOutOfTheEditableList(t *testing.T) {
 	gateway := &managedSourceCPA{sources: []string{pluginregistry.OMCSourceURL}}
 	client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
@@ -439,7 +365,24 @@ func TestConfigurationSourceSaveRestoresTheManagedSource(t *testing.T) {
 // from a source it knows.
 func TestPluginInstallReconcilesTheManagedSource(t *testing.T) {
 	gateway := &managedSourceCPA{}
-	client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+	var handler *Handler
+	client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve, func(current *Handler) { handler = current })
+	gateway.onInstall = func() {
+		if len(handler.providerWrites.permits) != 1 {
+			t.Error("community installer escaped shared write gate")
+		}
+	}
+	instance, err := repo.GetInstance(context.Background(), "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := repo.BuiltinPolicy(context.Background(), instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.Enabled || len(before.Overrides) != 0 {
+		t.Fatalf("community source changed the builtin default policy: %+v", before)
+	}
 
 	response, body := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/plugin-store/usage-digest/install",
 		`{"source_id":"`+pluginregistry.SourceID(pluginregistry.OMCSourceURL)+`"}`)
@@ -451,6 +394,10 @@ func TestPluginInstallReconcilesTheManagedSource(t *testing.T) {
 	}
 	if !gateway.hasSource(pluginregistry.OMCSourceURL) {
 		t.Fatalf("the install did not repair the file: %q", gateway.sourceList())
+	}
+	after, err := repo.BuiltinPolicy(context.Background(), instance)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("manual community install changed builtin policy: before=%+v after=%+v error=%v", before, after, err)
 	}
 }
 
@@ -464,8 +411,8 @@ func TestPluginStoreInADemonstrationMarksTheManagedSource(t *testing.T) {
 		handler.cfg.IsDemoMode = true
 	})
 
-	store := readManagedStore(t, client, baseURL)
-	if len(store.Plugins) != 2 || !store.Plugins[0].IsOMC || store.Plugins[0].SourceName != pluginregistry.OMCSourceName {
+	store := readManagedStoreSource(t, client, baseURL, pluginregistry.SourceID(pluginregistry.OMCSourceURL))
+	if len(store.Plugins) != 1 || !store.Plugins[0].IsOMC || store.Plugins[0].SourceName != pluginregistry.OMCSourceName {
 		t.Fatalf("store entries = %#v, want the managed registry's entry marked and pinned first", store.Plugins)
 	}
 	if writes := gateway.recordedWrites(); len(writes) != 0 {
@@ -496,25 +443,6 @@ func TestPluginStoreInADemonstrationFiltersTheSwitchedOffManagedSource(t *testin
 // the operator chose: it is a document this build cannot read, and the source's
 // default is on. The write path refuses it, but a value stored by an older build or
 // another writer still has to be read safely.
-func TestPluginStoreTreatsAStoredNullPreferenceAsOn(t *testing.T) {
-	gateway := &managedSourceCPA{}
-	client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-	if err := repo.PutPreference(context.Background(), repository.PreferenceOMCPluginSource, "null"); err != nil {
-		t.Fatalf("store the null preference: %v", err)
-	}
-
-	store := readManagedStore(t, client, baseURL)
-	if !gateway.hasSource(pluginregistry.OMCSourceURL) {
-		t.Fatalf("a null preference removed the managed registry: %q", gateway.sourceList())
-	}
-	if len(store.Plugins) != 2 || !store.Plugins[0].IsOMC {
-		t.Fatalf("store entries = %#v, want the managed registry's entry", store.Plugins)
-	}
-}
-
-// A configuration save can leave a plugins section this build cannot read back. The
-// save has already landed at that point, so the refusal has to say so rather than read
-// as "nothing happened" and leave the editor's next save in a conflict it cannot explain.
 func TestPluginSourceReconcileErrorAfterASaveSaysTheSaveLanded(t *testing.T) {
 	unreadable := fmt.Errorf("%w: plugins: scalar", configyaml.ErrPluginSettingsUnreadable)
 
@@ -610,26 +538,6 @@ func TestWritePluginSourceErrorKeepsErrorDetailOutOfTheResponse(t *testing.T) {
 // console's fixed internal-error answer and the detail stays in the log. Nothing is
 // written without a readable switch, and a save that landed says so.
 func TestPluginSourceReconcileHidesPreferenceReadFailure(t *testing.T) {
-	t.Run("store read", func(t *testing.T) {
-		gateway := &managedSourceCPA{}
-		client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-		if _, err := repo.SQL().Exec(`DROP TABLE ui_preferences`); err != nil {
-			t.Fatalf("drop the preference table: %v", err)
-		}
-
-		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
-		if response.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("plugin store: status %d body %s, want an internal failure", response.StatusCode, body)
-		}
-		for _, leaked := range []string{"ui_preferences", "no such table", "SELECT"} {
-			if strings.Contains(string(body), leaked) {
-				t.Fatalf("response leaked %q: %s", leaked, body)
-			}
-		}
-		if writes := gateway.recordedWrites(); len(writes) != 0 {
-			t.Fatalf("configuration writes = %q, want none without a readable switch", writes)
-		}
-	})
 
 	t.Run("after a configuration save", func(t *testing.T) {
 		gateway := &managedSourceCPA{}
@@ -663,45 +571,6 @@ func TestPluginSourceReconcileHidesPreferenceReadFailure(t *testing.T) {
 
 // CPA's failure text can carry the gateway's URL or the content it refused. The
 // response names the failure in the allowlist's words and nothing else.
-func TestPluginSourceReconcileReportsCPAFailuresWithoutTheirDetail(t *testing.T) {
-	t.Run("transport failure", func(t *testing.T) {
-		gateway := &managedSourceCPA{abortConfigRead: true}
-		client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-
-		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
-		if response.StatusCode != http.StatusBadGateway {
-			t.Fatalf("plugin store: status %d body %s, want a gateway failure", response.StatusCode, body)
-		}
-		if !strings.Contains(string(body), "CPA management request failed") {
-			t.Fatalf("response = %s, want the allowlisted CPA failure", body)
-		}
-		for _, leaked := range []string{"127.0.0.1", "/v8/management/config.yaml", "EOF"} {
-			if strings.Contains(string(body), leaked) {
-				t.Fatalf("response leaked %q: %s", leaked, body)
-			}
-		}
-	})
-
-	t.Run("rejected content", func(t *testing.T) {
-		gateway := &managedSourceCPA{rejectStoreSourcesWrite: true}
-		client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-
-		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
-		if response.StatusCode != http.StatusBadGateway {
-			t.Fatalf("plugin store: status %d body %s, want a gateway failure", response.StatusCode, body)
-		}
-		if !strings.Contains(string(body), "CPA rejected the configuration") {
-			t.Fatalf("response = %s, want the allowlisted rejection", body)
-		}
-		if strings.Contains(string(body), "SUPER-SECRET-VALUE") {
-			t.Fatalf("response echoed the refused content: %s", body)
-		}
-	})
-}
-
-// An audit record that cannot be written refuses the repair. The response is a fixed
-// sentence rather than the database's account of the failed insert, and the gateway's
-// file keeps whatever the operator had.
 func TestPluginSourceReconcileAuditFailureIsFixedAndFailClosed(t *testing.T) {
 	rejectSourceAudit := func(t *testing.T, repo *repository.Repository) {
 		t.Helper()
@@ -711,28 +580,6 @@ func TestPluginSourceReconcileAuditFailureIsFixedAndFailClosed(t *testing.T) {
 			t.Fatalf("create the audit trigger: %v", err)
 		}
 	}
-
-	t.Run("store read", func(t *testing.T) {
-		gateway := &managedSourceCPA{}
-		client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
-		rejectSourceAudit(t, repo)
-
-		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
-		if response.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("plugin store: status %d body %s, want a refusal", response.StatusCode, body)
-		}
-		if !strings.Contains(string(body), "audit record could not be written") {
-			t.Fatalf("response = %s, want the fixed audit refusal", body)
-		}
-		for _, leaked := range []string{"disk I/O error", "RAISE", "audit insert failed"} {
-			if strings.Contains(string(body), leaked) {
-				t.Fatalf("response leaked %q: %s", leaked, body)
-			}
-		}
-		if writes := gateway.recordedWrites(); len(writes) != 0 {
-			t.Fatalf("configuration writes = %q, want none without an audit record", writes)
-		}
-	})
 
 	t.Run("after a configuration save", func(t *testing.T) {
 		gateway := &managedSourceCPA{}

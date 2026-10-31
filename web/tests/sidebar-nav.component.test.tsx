@@ -27,7 +27,7 @@ const MODEL_ORDER = [
   'Dashboard', 'Agent', 'Playground', 'Model Square',
   'AI providers', 'OAuth management', 'Key management', 'Routing',
   'Insights', 'Request Events', 'Cost & Usage', 'Logs', 'Audit trail',
-  'Plugin management', 'Plugin store',
+  'Built-in plugins', 'Plugin management', 'Plugin store',
   'Config', 'OMC Settings', 'System Information',
 ];
 

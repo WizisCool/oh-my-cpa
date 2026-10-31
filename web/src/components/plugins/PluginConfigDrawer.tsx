@@ -9,12 +9,13 @@ import { AppstoreOutlined, ClearOutlined, UndoOutlined } from '../icons';
 import { SecretInput } from '../common/SecretInput';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
+import { formatPluginVersion, pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
 import { PluginConfigEditor } from './PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual, pluginConfigSummary } from './pluginConfig';
 import {
   buildPluginConfigDraft,
   composePluginConfig,
+  withSavedEnabled,
   isPluginFieldChanged,
   isSecretPluginField,
   pluginFieldDefaultText,
@@ -26,7 +27,7 @@ import {
   type PluginFieldDraft,
   type PluginFieldError,
 } from './pluginConfigForm';
-import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
+import { PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
 import { collectPluginPages } from './pluginPages';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
@@ -64,6 +65,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   const navigate = useNavigate();
   const pluginId = plugin?.id ?? '';
   const fields = React.useMemo(() => plugin?.config_fields ?? [], [plugin]);
+  const isBuiltin = plugin?.source_kind === 'builtin';
 
   const configQuery = useQuery({
     queryKey: ['management-plugin-config', pluginId],
@@ -99,13 +101,15 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   }, [plugin, saved, fields, isReading]);
 
   const composed = React.useMemo(() => {
+    const owned = (value: Record<string, unknown> | undefined) => (value && isBuiltin && saved ? withSavedEnabled(value, saved) : value);
     if (mode === 'json') {
       const parsed = parsePluginConfig(jsonText);
-      return { value: parsed.value, errors: {} as Record<string, PluginFieldError>, jsonError: parsed.error };
+      return { value: owned(parsed.value), errors: {} as Record<string, PluginFieldError>, jsonError: parsed.error };
     }
     if (!draft) return { value: undefined, errors: {} as Record<string, PluginFieldError>, jsonError: undefined };
-    return { ...composePluginConfig(draft, fields, base), jsonError: undefined };
-  }, [mode, jsonText, draft, fields, base]);
+    const result = composePluginConfig(draft, fields, base);
+    return { ...result, value: owned(result.value), jsonError: undefined };
+  }, [mode, jsonText, draft, fields, base, isBuiltin, saved]);
 
   const isDirty = saved !== undefined && (composed.value === undefined || !pluginConfigsEqual(composed.value, saved));
   const errorCount = Object.keys(composed.errors).length + (composed.jsonError ? 1 : 0);
@@ -264,12 +268,12 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
                 <div className={styles['config-field']}>
                   <div>
                     <div className={styles['config-field-label']}>enabled</div>
-                    <div className={styles['config-field-desc']}>{t('plugin.config_enabled_hint')}</div>
+                    <div className={styles['config-field-desc']}>{t(isBuiltin ? 'plugin.config_enabled_builtin_hint' : 'plugin.config_enabled_hint')}</div>
                   </div>
                   <div className={styles['config-control']}>
                     <Switch
                       checked={draft.enabled}
-                      disabled={isDemo}
+                      disabled={isDemo || isBuiltin}
                       onChange={(checked) => setDraft({ ...draft, enabled: checked })}
                       aria-label="enabled"
                     />

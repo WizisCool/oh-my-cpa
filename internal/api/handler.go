@@ -30,20 +30,23 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/fontasset"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/web"
 )
 
 type Handler struct {
-	agent           agentState
-	browserRuns     browserRuns
-	playgroundSlots chan struct{}
-	cfg             config.Config
-	repo            *repository.Repository
-	cipher          *appcrypto.Cipher
-	discoverer      *discovery.Discoverer
-	logger          *slog.Logger
+	builtins           builtinRuntime
+	pluginDescriptions *pluginDescriptionCache
+	agent              agentState
+	browserRuns        browserRuns
+	playgroundSlots    chan struct{}
+	cfg                config.Config
+	repo               *repository.Repository
+	cipher             *appcrypto.Cipher
+	discoverer         *discovery.Discoverer
+	logger             *slog.Logger
 	// consoleRoot is the built console's root: the directory holding index.html,
 	// manifest.webmanifest and the icons that manifest names. Production points it at
 	// the embedded dist; a test points it at the committed web/public directory,
@@ -88,9 +91,6 @@ type Handler struct {
 	fontInstaller     *fontasset.GoogleInstaller
 	fontInstallerErr  error
 	fontInstallerOnce sync.Once
-	// pluginIdentities remembers the name and logo each installed plugin is listed under
-	// in the store, for a plugin CPA has not loaded and so reports by id alone.
-	pluginIdentities *pluginIdentityCache
 	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
 	// the token-activity grid, the dashboard's all-time window, quota reads and the price book's
 	// recent traffic. Nil means the wall
@@ -136,22 +136,23 @@ func (h *Handler) now() time.Time {
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
 	handler := &Handler{
-		playgroundSlots:  make(chan struct{}, 4),
-		consoleRoot:      consoleRootFiles(),
-		cfg:              cfg,
-		repo:             repo,
-		cipher:           cipher,
-		discoverer:       discovery.NewDiscoverer(cipher),
-		logger:           logger,
-		serviceLog:       applog.BufferOf(logger),
-		auth:             authManager,
-		startTime:        time.Now(),
-		limiter:          newLoginLimiter(),
-		trustedProxies:   parseTrustedProxyNetworks(cfg.TrustedProxyCIDRs),
-		providerWrites:   newProviderWriteGate(),
-		providerKeyMasks: newProviderKeyMaskCache(),
-		pluginLogos:      newPluginLogoFetcher(),
-		pluginIdentities: newPluginIdentityCache(),
+		pluginDescriptions: newPluginDescriptionCache(),
+		builtins:           builtinRuntime{catalog: pluginregistry.NewCatalog(repo), queue: make(chan domain.CPAInstance, 16)},
+		playgroundSlots:    make(chan struct{}, 4),
+		consoleRoot:        consoleRootFiles(),
+		cfg:                cfg,
+		repo:               repo,
+		cipher:             cipher,
+		discoverer:         discovery.NewDiscoverer(cipher),
+		logger:             logger,
+		serviceLog:         applog.BufferOf(logger),
+		auth:               authManager,
+		startTime:          time.Now(),
+		limiter:            newLoginLimiter(),
+		trustedProxies:     parseTrustedProxyNetworks(cfg.TrustedProxyCIDRs),
+		providerWrites:     newProviderWriteGate(),
+		providerKeyMasks:   newProviderKeyMaskCache(),
+		pluginLogos:        newPluginLogoFetcher(),
 	}
 	if handler.logger == nil {
 		// A handler built without a logger - which several tests do - must still be able
@@ -165,6 +166,12 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		// at all and the console falls back to its own bundled mark.
 		handler.pluginLogos = nil
 	}
+	if repo != nil {
+		if err := handler.builtinCatalog().Load(context.Background()); err != nil {
+			handler.logger.Warn("builtin catalog unavailable", "error", err)
+		}
+	}
+
 	return handler
 }
 
@@ -201,6 +208,7 @@ func (h *Handler) routes() chi.Router {
 		base = "/"
 	}
 	router.Route(base, func(r chi.Router) {
+		r.HandleFunc(pluginregistry.PublicRegistryPath, h.publicBuiltinRegistry)
 		r.Route("/api", func(apiRouter chi.Router) {
 			apiRouter.Use(compressAPIResponses)
 			apiRouter.Get("/healthz", h.healthz)
@@ -369,6 +377,11 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/management/system/maintenance/vacuum", h.postSystemMaintenanceVacuum)
 				v1.Get("/management/system/data-retention", h.getDataRetention)
 				v1.Put("/management/system/data-retention", h.putDataRetention)
+				v1.Get("/management/builtin-plugins", h.getBuiltinPlugins)
+				v1.Put("/management/builtin-plugins/policy", h.putBuiltinPolicy)
+				v1.Put("/management/builtin-plugins/{id}/policy", h.putBuiltinPluginPolicy)
+				v1.Post("/management/builtin-plugins/reconcile", h.reconcileBuiltinPlugins)
+				v1.Get("/management/plugin-descriptions", h.getPluginDescription)
 				v1.Get("/management/plugins", h.listPlugins)
 				v1.Get("/management/plugins/settings", h.getPluginSettings)
 				v1.Put("/management/plugins/settings", h.putPluginSettings)
@@ -377,6 +390,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/plugins/{id}/config", h.getPluginConfig)
 				v1.Put("/management/plugins/{id}/config", h.setPluginConfig)
 				v1.Get("/management/plugin-store", h.listPluginStore)
+				v1.Get("/management/omc-community-plugins", h.listOMCCommunityPlugins)
 				v1.Post("/management/plugin-store/{id}/install", h.installPlugin)
 				// A plugin's own page and the plugin routes its script calls.
 				v1.Get(PLUGIN_HOST_ROUTE+"/v0/resource/plugins/*", h.servePluginResource)

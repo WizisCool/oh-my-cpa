@@ -24,6 +24,17 @@ never replace the key for an existing data directory. CPA must already be availa
 or be started separately with `pnpm cpa:start` after its local configuration is ready.
 The default development console is `http://127.0.0.1:5173/`.
 
+Builtin plugins follow the same official repository releases in development and
+production. The publisher allowlist lives in [`internal/pluginregistry`](internal/pluginregistry).
+
+The dev launcher starts a registry-only HTTP bridge so CPA can read the catalog
+without exposing the management API. It uses loopback for a local CPA or, when
+it can identify a locally published Docker CPA port, that container network's
+host gateway. For a remote CPA, Docker Desktop, or an ambiguous network, set
+`OMCPA_BUILTIN_REGISTRY_ORIGIN` to an origin reachable from both CPA and OMC and
+serve the public registry there. Changing builtins from this development server
+changes the connected CPA, so use a disposable gateway when experimenting.
+
 ## Find the relevant context
 
 - [AGENTS.md](AGENTS.md): boundaries and a task-oriented guide map for all contributors.

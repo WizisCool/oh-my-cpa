@@ -67,6 +67,11 @@ type PluginMetadataDTO struct {
 }
 
 type PluginItemDTO struct {
+	SourceKind       string                 `json:"source_kind"`
+	SourceID         string                 `json:"source_id"`
+	InstalledVersion string                 `json:"installed_version"`
+	Description      string                 `json:"description"`
+	DescriptionI18n  map[string]string      `json:"description_i18n,omitempty"`
 	ID               string                 `json:"id"`
 	Path             string                 `json:"path,omitempty"`
 	Configured       bool                   `json:"configured"`
@@ -93,6 +98,7 @@ type PluginPageDTO struct {
 }
 
 type PluginStoreSourceDTO struct {
+	SourceKind string `json:"source_kind"`
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	URL        string `json:"url"`
@@ -107,31 +113,33 @@ type PluginStoreSourceErrorDTO struct {
 }
 
 type StorePluginItemDTO struct {
-	StoreID              string   `json:"store_id"`
-	SourceID             string   `json:"source_id"`
-	SourceName           string   `json:"source_name"`
-	ID                   string   `json:"id"`
-	Name                 string   `json:"name"`
-	Description          string   `json:"description,omitempty"`
-	Author               string   `json:"author,omitempty"`
-	Version              string   `json:"version,omitempty"`
-	RepositoryURL        string   `json:"repository_url,omitempty"`
-	Homepage             string   `json:"homepage,omitempty"`
-	License              string   `json:"license,omitempty"`
-	Tags                 []string `json:"tags"`
-	Logo                 string   `json:"logo,omitempty"`
-	InstallType          string   `json:"install_type,omitempty"`
-	Platforms            []string `json:"platforms"`
-	IsOfficial           bool     `json:"is_official"`
-	IsOfficialRepository bool     `json:"is_official_repository"`
-	IsOMC                bool     `json:"is_omc"`
-	AuthRequired         bool     `json:"auth_required"`
-	AuthConfigured       bool     `json:"auth_configured"`
-	Installed            bool     `json:"installed"`
-	InstalledVersion     string   `json:"installed_version,omitempty"`
-	InstallSourceStatus  string   `json:"install_source_status,omitempty"`
-	EffectiveEnabled     bool     `json:"effective_enabled"`
-	UpdateAvailable      bool     `json:"update_available"`
+	SourceKind           string            `json:"source_kind"`
+	DescriptionI18n      map[string]string `json:"description_i18n,omitempty"`
+	StoreID              string            `json:"store_id"`
+	SourceID             string            `json:"source_id"`
+	SourceName           string            `json:"source_name"`
+	ID                   string            `json:"id"`
+	Name                 string            `json:"name"`
+	Description          string            `json:"description,omitempty"`
+	Author               string            `json:"author,omitempty"`
+	Version              string            `json:"version,omitempty"`
+	RepositoryURL        string            `json:"repository_url,omitempty"`
+	Homepage             string            `json:"homepage,omitempty"`
+	License              string            `json:"license,omitempty"`
+	Tags                 []string          `json:"tags"`
+	Logo                 string            `json:"logo,omitempty"`
+	InstallType          string            `json:"install_type,omitempty"`
+	Platforms            []string          `json:"platforms"`
+	IsOfficial           bool              `json:"is_official"`
+	IsOfficialRepository bool              `json:"is_official_repository"`
+	IsOMC                bool              `json:"is_omc"`
+	AuthRequired         bool              `json:"auth_required"`
+	AuthConfigured       bool              `json:"auth_configured"`
+	Installed            bool              `json:"installed"`
+	InstalledVersion     string            `json:"installed_version,omitempty"`
+	InstallSourceStatus  string            `json:"install_source_status,omitempty"`
+	EffectiveEnabled     bool              `json:"effective_enabled"`
+	UpdateAvailable      bool              `json:"update_available"`
 }
 
 // projectPluginItems projects the installed plugin list, preserving CPA's order.
@@ -153,6 +161,7 @@ func projectPluginItem(plugin management.PluginItem) PluginItemDTO {
 		repository = plugin.Metadata.GitHubRepository
 	}
 	return PluginItemDTO{
+		SourceKind:       "unknown",
 		ID:               boundedText(plugin.ID, pluginTextLimit),
 		Path:             boundedText(plugin.Path, pluginTextLimit),
 		Configured:       plugin.Configured,
@@ -242,18 +251,22 @@ func projectPluginConfigFields(fields []management.PluginConfigField) []PluginCo
 	return result
 }
 
-func projectPluginStoreSources(sources []management.PluginStoreSource) []PluginStoreSourceDTO {
+func projectPluginStoreSources(sources []management.PluginStoreSource, builtinURLs ...string) []PluginStoreSourceDTO {
+	builtinURL := ""
+	if len(builtinURLs) > 0 {
+		builtinURL = builtinURLs[0]
+	}
 	result := make([]PluginStoreSourceDTO, 0, len(sources))
 	for _, source := range sources {
 		name := boundedText(source.Name, pluginTextLimit)
-		if isOMCPluginStoreURL(source.URL) {
+		if isOMCCommunitySource(source.ID, source.URL) {
 			name = pluginregistry.OMCSourceName
 		}
 		result = append(result, PluginStoreSourceDTO{
-			ID:         boundedText(source.ID, pluginTextLimit),
+			SourceKind: sourceKind(source, builtinURL), ID: boundedText(source.ID, pluginTextLimit),
 			Name:       name,
-			URL:        boundedText(source.URL, pluginTextLimit),
-			IsOfficial: strings.EqualFold(strings.TrimSpace(source.ID), officialPluginSourceID),
+			URL:        publicPluginSourceURL(source.URL),
+			IsOfficial: sourceKind(source, builtinURL) == "official",
 		})
 	}
 	return result
@@ -263,13 +276,13 @@ func projectPluginStoreSourceErrors(sourceErrors []management.PluginStoreSourceE
 	result := make([]PluginStoreSourceErrorDTO, 0, len(sourceErrors))
 	for _, sourceError := range sourceErrors {
 		name := boundedText(sourceError.SourceName, pluginTextLimit)
-		if isOMCPluginStoreURL(sourceError.SourceURL) {
+		if isOMCCommunitySource(sourceError.SourceID, sourceError.SourceURL) {
 			name = pluginregistry.OMCSourceName
 		}
 		result = append(result, PluginStoreSourceErrorDTO{
 			SourceID:   boundedText(sourceError.SourceID, pluginTextLimit),
 			SourceName: name,
-			SourceURL:  boundedText(sourceError.SourceURL, pluginTextLimit),
+			SourceURL:  publicPluginSourceURL(sourceError.SourceURL),
 			Message:    boundedText(sourceError.Message, pluginTextLimit),
 		})
 	}
@@ -283,12 +296,12 @@ func projectPluginStoreSourceErrors(sourceErrors []management.PluginStoreSourceE
 func projectStorePlugins(plugins []management.StorePluginItem) []StorePluginItemDTO {
 	result := make([]StorePluginItemDTO, 0, len(plugins))
 	for _, plugin := range plugins {
-		if isOMCPluginStoreURL(plugin.SourceURL) {
+		if isOMCCommunitySource(plugin.SourceID, plugin.SourceURL) {
 			result = append(result, projectStorePlugin(plugin))
 		}
 	}
 	for _, plugin := range plugins {
-		if !isOMCPluginStoreURL(plugin.SourceURL) {
+		if !isOMCCommunitySource(plugin.SourceID, plugin.SourceURL) {
 			result = append(result, projectStorePlugin(plugin))
 		}
 	}
@@ -296,7 +309,7 @@ func projectStorePlugins(plugins []management.StorePluginItem) []StorePluginItem
 }
 
 func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
-	isOMC := isOMCPluginStoreURL(plugin.SourceURL)
+	isOMC := isOMCCommunitySource(plugin.SourceID, plugin.SourceURL)
 	sourceName := boundedText(plugin.SourceName, pluginTextLimit)
 	if isOMC {
 		// CPA names a custom source after its URL's host; the managed registry is
@@ -314,7 +327,9 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 			platforms = append(platforms, goos+"/"+goarch)
 		}
 	}
+	kind := sourceKind(management.PluginStoreSource{ID: plugin.SourceID, URL: plugin.SourceURL}, "")
 	return StorePluginItemDTO{
+		SourceKind: kind, DescriptionI18n: plugin.DescriptionI18n,
 		StoreID:              boundedText(plugin.StoreID, pluginTextLimit),
 		SourceID:             boundedText(plugin.SourceID, pluginTextLimit),
 		SourceName:           sourceName,
@@ -330,7 +345,7 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		Logo:                 plugin.Logo,
 		InstallType:          boundedText(plugin.InstallType, 64),
 		Platforms:            platforms,
-		IsOfficial:           isOfficialStoreSource(plugin.SourceID),
+		IsOfficial:           kind == "official",
 		IsOfficialRepository: isOfficialPluginRepository(repositoryURL),
 		IsOMC:                isOMC,
 		AuthRequired:         plugin.AuthRequired,
@@ -441,4 +456,13 @@ func projectPluginDefault(raw json.RawMessage) json.RawMessage {
 		return nil
 	}
 	return compact.Bytes()
+}
+
+// Registry addresses are public discovery data, never a channel for URL credentials.
+func publicPluginSourceURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return ""
+	}
+	return httpURLOrEmpty(raw)
 }

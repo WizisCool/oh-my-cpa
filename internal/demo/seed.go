@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -109,6 +111,18 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	stats := SeedStats{}
 	now = now.UTC()
 	if err := ensureInstance(ctx, repo, now); err != nil {
+		return SeedStats{}, err
+	}
+	// The demo observes a synthetic release without contacting its publisher.
+	plugin := pluginregistry.NewCatalog(nil).State().Manifest.Plugins[0]
+	plugin.Version = "0.1.6"
+	plugin.Install = pluginregistry.Install{Type: "direct", Artifacts: []pluginregistry.Artifact{{GOOS: "linux", GOARCH: "amd64", URL: "https://plugins.example/demo-builtin.zip", SHA256: strings.Repeat("a", 64), Size: 1024}}}
+	manifest := pluginregistry.Manifest{SchemaVersion: 2, Plugins: []pluginregistry.Plugin{plugin}}
+	snapshot, err := json.Marshal(manifest)
+	if err != nil {
+		return SeedStats{}, err
+	}
+	if err := repo.SaveBuiltinCatalog(ctx, snapshot, manifest); err != nil {
 		return SeedStats{}, err
 	}
 	// Synthetic display rates keep the demonstration self-contained.

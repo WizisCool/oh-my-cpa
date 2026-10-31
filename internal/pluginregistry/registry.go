@@ -14,12 +14,15 @@ import (
 )
 
 const (
+	OfficialSourceURL = "https://raw.githubusercontent.com/router-for-me/CLIProxyAPI-Plugins-Store/main/registry.json"
 	// OMCSourceURL is where CPA reads Oh My CPA's plugin registry.
 	OMCSourceURL = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"
 	// OMCSourceName is what the console calls the registry. CPA derives a source's
 	// name from the URL's host, which for a raw GitHub address says nothing about
 	// who publishes it.
-	OMCSourceName = "Oh My CPA"
+	OMCSourceName = "OMC Community"
+	// BuiltinSourceName is independent from the manually installed community source.
+	BuiltinSourceName = "Oh My CPA"
 )
 
 // SourceID is the id CPA assigns a configured registry: `source-` followed by the

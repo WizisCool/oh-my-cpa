@@ -23,6 +23,7 @@ type PluginConfigField struct {
 }
 
 type PluginMetadata struct {
+	Description      string              `json:"description,omitempty"`
 	Name             string              `json:"name,omitempty"`
 	Version          string              `json:"version,omitempty"`
 	Author           string              `json:"author,omitempty"`
@@ -112,6 +113,7 @@ type StorePluginItem struct {
 	ID                  string                `json:"id"`
 	Name                string                `json:"name"`
 	Description         string                `json:"description"`
+	DescriptionI18n     map[string]string     `json:"description_i18n,omitempty"`
 	Author              string                `json:"author"`
 	Version             string                `json:"version"`
 	Repository          string                `json:"repository"`
@@ -320,19 +322,31 @@ func (c *Client) DeletePlugin(ctx context.Context, id string) (PluginDeleteResul
 	if err != nil {
 		return PluginDeleteResult{}, err
 	}
-	if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonPluginDelete)); err != nil {
+	before, err := c.pluginMutationPreflight(ctx, BackupReasonPluginDelete)
+	if err != nil {
 		return PluginDeleteResult{}, err
 	}
 	var result PluginDeleteResult
 	if err := c.DoJSON(ctx, http.MethodDelete, endpoint, &result); err != nil {
 		return PluginDeleteResult{}, err
 	}
+	if err := c.pluginMutationReadback(ctx, before, id); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
 func (c *Client) PluginStore(ctx context.Context) (PluginStore, error) {
+	return c.PluginStoreSource(ctx, "")
+}
+
+func (c *Client) PluginStoreSource(ctx context.Context, sourceID string) (PluginStore, error) {
+	endpoint := "/plugins/store"
+	if sourceID != "" {
+		endpoint += "?" + url.Values{"source": []string{sourceID}}.Encode()
+	}
 	var raw json.RawMessage
-	if err := c.DoJSON(ctx, http.MethodGet, "/plugins/store", &raw); err != nil {
+	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &raw); err != nil {
 		return PluginStore{}, err
 	}
 	result := PluginStore{}
@@ -367,12 +381,21 @@ func (c *Client) InstallPlugin(ctx context.Context, id, sourceID, version string
 	if version = strings.TrimSpace(version); version != "" {
 		payload["version"] = version
 	}
-	if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonPluginInstall)); err != nil {
+	before, err := c.pluginMutationPreflight(ctx, BackupReasonPluginInstall)
+	if err != nil {
 		return PluginInstallResult{}, err
+	}
+	if c.pluginExecutionGuard != nil {
+		if err := c.pluginExecutionGuard(ctx); err != nil {
+			return PluginInstallResult{}, err
+		}
 	}
 	var result PluginInstallResult
 	if err := c.doJSONBody(ctx, http.MethodPost, endpoint, payload, &result); err != nil {
 		return PluginInstallResult{}, err
+	}
+	if err := c.pluginMutationReadback(ctx, before, id); err != nil {
+		return result, err
 	}
 	return result, nil
 }

@@ -27,6 +27,7 @@ import (
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/demo"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -142,6 +143,8 @@ func demoExportCases() []demoExportCase {
 		{Name: "pricing", Path: "/api/v1/pricing"},
 		{Name: "pricing-attention", Path: "/api/v1/pricing/attention"},
 		{Name: "pricing-catalog", Path: "/api/v1/pricing/catalog"},
+		{Name: "builtin-plugins", Path: "/api/v1/management/builtin-plugins"},
+		{Name: "plugin-descriptions", Path: "/api/v1/management/plugin-descriptions?source_id=official&plugin_id=usage-exporter&version=1.4.2"},
 		{Name: "plugins", Path: "/api/v1/management/plugins"},
 		{Name: "plugins-settings", Path: "/api/v1/management/plugins/settings"},
 		// Each installed plugin's settings document, for the editor the list opens. The
@@ -150,6 +153,10 @@ func demoExportCases() []demoExportCase {
 		{Name: "plugin-config-prompt-redactor", Path: "/api/v1/management/plugins/prompt-redactor/config", Route: "/api/v1/management/plugins/{id}/config"},
 		{Name: "plugin-config-quota-notifier", Path: "/api/v1/management/plugins/quota-notifier/config", Route: "/api/v1/management/plugins/{id}/config"},
 		{Name: "plugin-store", Path: "/api/v1/management/plugin-store"},
+		{Name: "omc-community-plugins", Path: "/api/v1/management/omc-community-plugins"},
+		{Name: "plugin-config-usage-digest", Path: "/api/v1/management/plugins/usage-digest/config", Route: "/api/v1/management/plugins/{id}/config"},
+		{Name: "plugin-store-" + pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json"), Path: "/api/v1/management/plugin-store?source_id=" + pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json")},
+		{Name: "plugin-store-" + pluginregistry.SourceID(pluginregistry.OMCSourceURL), Path: "/api/v1/management/plugin-store?source_id=" + pluginregistry.SourceID(pluginregistry.OMCSourceURL)},
 		{Name: "auth-files", Path: "/api/v1/management/auth-files"},
 		// The model and alias lists are asked for per credential; `auth-files-models`
 		// without a name is what the console's own model picker sends.
@@ -656,6 +663,13 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 			default:
 				typed[key] = demoExportRebase(item, deltaMS, requestIDs)
 			}
+		}
+		// A production approval carries its real issuance expiry. The static demo
+		// anchors the rest of its history at demoExportReference, so leave the catalog
+		// expiry on that same fixed timeline instead of letting the committed dataset
+		// drift with the time at which it was generated.
+		if typed["status"] == "ready" && typed["revision"] != nil && typed["expires_at"] != nil {
+			typed["expires_at"] = demoExportReference.Add(31 * 24 * time.Hour).Format(time.RFC3339)
 		}
 		return typed
 	case []any:

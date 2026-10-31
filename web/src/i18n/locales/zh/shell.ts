@@ -116,6 +116,7 @@ export default {
   'nav.omc_settings': 'OMC 设置',
   'nav.plugins': '插件管理',
   'nav.plugin_store': '插件商店',
+  'nav.plugin_builtins': '内置插件',
   'nav.system': '系统信息',
   'nav.update_available': '有可用更新',
   'header.collapse_sidebar': '收起侧栏',

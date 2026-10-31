@@ -509,6 +509,12 @@ func pluginCatalog() []pluginEntry {
 			config: map[string]any{},
 		},
 		{
+			id: "usage-digest", name: "Usage digest", version: "0.3.0", author: "oh-my-cpa",
+			repository: "WizisCool/omc-plugin-usage-digest", logo: fixtureLogo("UD", "#0369A1"),
+			isEnabled: false, isConfigured: true, isRegistered: true,
+			configFields: []map[string]any{}, config: map[string]any{"enabled": false},
+		},
+		{
 			id: "quota-notifier", name: "Quota notifier", version: "2.1.0", author: "community",
 			repository: "cpa-community/quota-notifier", logo: fixtureLogo("QN", "#B45309"),
 			isEnabled: false, isConfigured: true, isRegistered: true,
@@ -552,26 +558,26 @@ func pluginStoreCatalog() []storePluginEntry {
 			description: "Posts a webhook when a credential's quota window crosses a threshold.",
 			repository:  "cpa-community/quota-notifier", license: "MIT",
 			tags: []string{"quota", "alerting"}, logo: fixtureLogo("QN", "#B45309"),
-			sourceID: "community", installedVersion: "2.1.0"},
+			sourceID: pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json"), installedVersion: "2.1.0"},
 		{id: "team-router", name: "Team router", version: "1.2.0", author: "community",
 			description: "Routes a caller key to a credential pool by team.",
 			repository:  "cpa-community/team-router", license: "BSD-3-Clause",
-			tags: []string{"routing"}, logo: fixtureLogo("TR", "#BE185D"), sourceID: "community"},
+			tags: []string{"routing"}, logo: fixtureLogo("TR", "#BE185D"), sourceID: pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json")},
 		// Oh My CPA's own registry: the source the console manages itself, and the one
 		// whose entries it pins above every other registry's.
 		{id: "usage-digest", name: "Usage digest", version: "0.3.0", author: "oh-my-cpa",
 			description: "Posts a daily spend and request summary for this console to a webhook.",
 			repository:  "WizisCool/omc-plugin-usage-digest", license: "MIT",
 			tags: []string{"observability", "digest"}, logo: fixtureLogo("UD", "#0369A1"),
-			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL)},
+			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL), installedVersion: "0.3.0"},
 	}
 }
 
 // pluginStoreSources are the registries the fixture's store lists, keyed by source id.
 func pluginStoreSources() []map[string]any {
 	return []map[string]any{
-		{"id": "official", "name": "official", "url": "https://plugins.router-for-me.example/registry.json"},
-		{"id": "community", "name": "plugins.cpa-community.example", "url": "https://plugins.cpa-community.example/registry.json"},
+		{"id": "official", "name": "official", "url": pluginregistry.OfficialSourceURL},
+		{"id": pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json"), "name": "plugins.cpa-community.example", "url": "https://plugins.cpa-community.example/registry.json"},
 		// CPA names a custom source after its URL host; the console renames this one.
 		{"id": pluginregistry.SourceID(pluginregistry.OMCSourceURL), "name": "raw.githubusercontent.com", "url": pluginregistry.OMCSourceURL},
 	}
@@ -582,7 +588,26 @@ func pluginsSection() map[string]any {
 	configs := map[string]any{}
 	for _, plugin := range pluginCatalog() {
 		if plugin.isConfigured {
-			configs[plugin.id] = plugin.config
+			config := map[string]any{}
+			for key, value := range plugin.config {
+				config[key] = value
+			}
+			sourceID, sourceURL, sourceName, description := "", "", "", ""
+			for _, entry := range pluginStoreCatalog() {
+				if entry.id == plugin.id {
+					description = entry.description
+					sourceID = entry.sourceID
+					for _, source := range pluginStoreSources() {
+						if source["id"] == sourceID {
+							sourceURL, sourceName = source["url"].(string), source["name"].(string)
+							break
+						}
+					}
+					break
+				}
+			}
+			config["store"] = map[string]any{"id": plugin.id, "name": plugin.name, "version": plugin.version, "author": plugin.author, "repository": "https://github.com/" + plugin.repository, "description": description, "source-id": sourceID, "source-url": sourceURL, "source-name": sourceName}
+			configs[plugin.id] = config
 		}
 	}
 	return map[string]any{
