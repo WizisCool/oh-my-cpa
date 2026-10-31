@@ -128,6 +128,8 @@ export default {
   'audit.action.provider.update': '修改提供商',
   'audit.action.provider.delete': '删除提供商',
   'audit.action.provider.toggle_status': '切换提供商启用状态',
+  'audit.action.provider.name_set': '设置提供商名称',
+  'audit.action.provider.name_clear': '清除提供商名称',
   'audit.action.provider.reveal_keys': '查看提供商密钥明文',
   'audit.action.provider.probe': '测试提供商连通性',
   'audit.action.auth_file.delete': '删除凭证文件',
