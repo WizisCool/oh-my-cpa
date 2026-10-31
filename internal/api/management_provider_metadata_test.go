@@ -286,6 +286,12 @@ func TestProviderNameWritesOnlyTheOverlay(t *testing.T) {
 		if resp.StatusCode != http.StatusConflict {
 			t.Fatalf("%s: a shifted row must be refused, got %d body %s", testCase.id, resp.StatusCode, payload)
 		}
+		var refusal struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(payload, &refusal); err != nil || refusal.Code != "provider_stale_identity" {
+			t.Fatalf("%s: a shifted row must carry code provider_stale_identity, got body %s", testCase.id, payload)
+		}
 		assertNoProviderOverlay(t, fixture, testCase.id, testCase.id)
 
 		resp, payload = rename(testCase.id, `{"name":" Team relay ",`+testCase.precondition+`}`)

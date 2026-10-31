@@ -28,7 +28,7 @@ import { Tag } from '../common/Tag';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Meter } from '../common/Meter';
 import { Tooltip } from '../common/Tooltip';
-import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../common/InlineName';
+import { InlineNameEditor, inlineNameEditableClass, inlineNamePersistentClass, RenameButton } from '../common/InlineName';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -81,7 +81,9 @@ export function ProviderTable({
   onRename,
 }: ProviderTableProps) {
   const t = useT();
-  // One row's name is edited at a time, like a credential's on the OAuth page.
+  // One row's name is edited at a time, like a credential's on the OAuth page. The editor's name
+  // field is a full save that also rewrites CPA's entry; the glyph is the only overlay-only rename,
+  // so it stays painted on touch screens and phones.
   const [renamingID, setRenamingID] = React.useState<string | null>(null);
   // Provider definitions live in the gateway's configuration, so creating, editing,
   // enabling and deleting one are all refused by the demonstration.
@@ -158,7 +160,7 @@ export function ProviderTable({
             >
               <ProviderBrandIcon iconId={iconId} logo={pluginLogo} providerKeys={[record.family, record.upstream_name, record.name, record.id]} fallbackIconId={getProviderDefaultIcon(record.family, record.name, record.base_url)} size={22} />
             </div>
-            <div className={clsx(styles['provider-text'], inlineNameEditableClass)}>
+            <div className={clsx(styles['provider-text'], inlineNameEditableClass, inlineNamePersistentClass)}>
               {renamingID !== record.id && (
                 <RenameButton label={record.name} onClick={() => setRenamingID(record.id)} data-testid="provider-rename" />
               )}

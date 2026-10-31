@@ -8,6 +8,9 @@ import styles from './InlineName.module.css';
 /** The class a row's identity block takes so its rename glyph can sit beside the name. */
 export const inlineNameEditableClass = styles.editable;
 
+/** Added beside the editable class where no row menu offers the same rename, so touch can reach it. */
+export const inlineNamePersistentClass = styles.persistent;
+
 interface RenameButtonProps {
   /** What the glyph renames, for assistive tech. */
   label: string;
@@ -18,8 +21,8 @@ interface RenameButtonProps {
 
 /**
  * The glyph that opens a row's name editor. It appears while the pointer is over the name's cell
- * or the block has focus, and is not shown on touch screens, where the row's other entry points
- * are the way to rename.
+ * or the block has focus. On a touch screen it is hidden where a row menu offers the same rename,
+ * and stays painted where nothing else does (`inlineNamePersistentClass`).
  */
 export function RenameButton({ label, disabled, onClick, 'data-testid': testId }: RenameButtonProps) {
   const t = useT();

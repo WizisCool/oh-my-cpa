@@ -46,3 +46,15 @@ td:hover .rename,
   .editable { padding-inline-end: 0; }
   .rename { display: none; }
 }
+
+/* A row whose menu does not offer the same rename keeps its glyph painted wherever nothing can
+   hover to reveal it: a touch screen, and the phone layout. */
+.editable.persistent { padding-inline-end: 28px; }
+
+@media (hover: none), (max-width: 640px) {
+  .persistent .rename {
+    display: grid;
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
