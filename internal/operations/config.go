@@ -90,7 +90,9 @@ func (s *Service) registerConfig(registry *capability.Registry) error {
 // or one refused before anything was sent, is known not to have changed the
 // file, so it keeps its own error; anything else may have landed.
 func configWriteOutcome(err error) error {
-	if errors.Is(err, management.ErrConfigBackupUnavailable) || errors.Is(err, management.ErrManagementV8Required) {
+	if errors.Is(err, management.ErrConfigBackupUnavailable) ||
+		errors.Is(err, management.ErrManagementV8Required) ||
+		errors.Is(err, management.ErrManagementSecretKeyChange) {
 		return err
 	}
 	if _, rejected := management.IsConfigRejected(err); rejected {

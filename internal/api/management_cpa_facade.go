@@ -64,6 +64,10 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 		status = http.StatusBadGateway
 		code = "config_partially_applied"
 		message = "CPA applied only part of the configuration change before a request failed; reload the configuration to see what was saved"
+	} else if errors.Is(err, management.ErrManagementSecretKeyChange) {
+		status = http.StatusConflict
+		code = "management_key_environment_owned"
+		message = "the CPA management key is deployment-owned; rotate it through the deployment environment and restart CPA and Oh My CPA together"
 	} else if errors.Is(err, management.ErrConfigChanged) {
 		// CPA refused the first request because another writer saved after the
 		// file was read and backed up, so nothing was written. The editors

@@ -115,6 +115,73 @@ func TestApplyConfigChangesSendsOnlyTheChangedSettings(t *testing.T) {
 	}
 }
 
+func TestConfigWritesCannotRotateTheManagementKey(t *testing.T) {
+	stored := "config-version: 8\nmanagement:\n  secret-key: deployment-secret\n"
+	tests := map[string][]ConfigChange{
+		"scalar replacement": {{Path: []string{"management", "secret-key"}, Value: "new-secret"}},
+		"mapping replacement": {{
+			Path:  []string{"management"},
+			Value: map[string]any{"secret-key": "new-secret"},
+		}},
+		"mapping removal": {{Path: []string{"management"}, Remove: true}},
+	}
+	for name, changes := range tests {
+		t.Run(name, func(t *testing.T) {
+			gateway := &configGateway{stored: stored}
+			client := newConfigClient(t, gateway)
+			backup := &recordingBackup{}
+			client.WithConfigBackup(backup)
+			err := client.ApplyConfigChanges(context.Background(), changes)
+			if !errors.Is(err, ErrManagementSecretKeyChange) {
+				t.Fatalf("err = %v, want ErrManagementSecretKeyChange", err)
+			}
+			if got := gateway.sent(); len(got) != 1 || got[0] != "GET /v0/management/config.yaml" {
+				t.Fatalf("refused write reached CPA: %v", got)
+			}
+			if len(backup.snapshots) != 0 {
+				t.Fatalf("refused write kept a misleading backup: %v", backup.snapshots)
+			}
+		})
+	}
+
+	for name, candidate := range map[string]string{
+		"new value":        "config-version: 8\nmanagement:\n  secret-key: new-secret\n",
+		"non-scalar value": "config-version: 8\nmanagement:\n  secret-key: [new-secret]\n",
+		"duplicate key":    "config-version: 8\nmanagement:\n  secret-key: first\n  secret-key: second\n",
+	} {
+		t.Run("whole document "+name, func(t *testing.T) {
+			gateway := &configGateway{stored: stored}
+			client := newConfigClient(t, gateway)
+			backup := &recordingBackup{}
+			client.WithConfigBackup(backup)
+			err := client.UpdateConfigYAML(context.Background(), candidate)
+			if !errors.Is(err, ErrManagementSecretKeyChange) {
+				t.Fatalf("err = %v, want ErrManagementSecretKeyChange", err)
+			}
+			if got := gateway.sent(); len(got) != 1 || got[0] != "GET /v0/management/config.yaml" {
+				t.Fatalf("refused write reached CPA: %v", got)
+			}
+			if len(backup.snapshots) != 0 {
+				t.Fatalf("refused write kept a misleading backup: %v", backup.snapshots)
+			}
+		})
+	}
+}
+
+func TestConfigWritesAllowAnUnchangedManagementKey(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\nmanagement:\n  secret-key: deployment-secret\n"}
+	client := newConfigClient(t, gateway)
+	if err := client.ApplyConfigChanges(context.Background(), []ConfigChange{{
+		Path:  []string{"management"},
+		Value: map[string]any{"secret-key": "deployment-secret", "allow-remote": true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := gateway.sent(); len(got) != 2 || got[1] != "PUT /v8/management/config/management" {
+		t.Fatalf("requests = %v", got)
+	}
+}
+
 func TestApplyConfigChangesToleratesRemovingAnAbsentKey(t *testing.T) {
 	gateway := &configGateway{stored: "config-version: 8\n", answer: func(method, _ string) (int, string) {
 		if method == http.MethodDelete {

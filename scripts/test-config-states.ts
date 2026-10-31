@@ -40,6 +40,10 @@ function createConfigStateMachine(): ConfigStateMachine {
   };
 }
 
+test('The management key is deployment-owned in the visual editor', () => {
+  assert.equal(schemaField('rmSecretKey').isReadOnly, true);
+});
+
 test('State Machine: Initial -> Loading -> Error blocks editing and saving', () => {
   const sm = createConfigStateMachine();
   assert.equal(sm.status, 'initial');

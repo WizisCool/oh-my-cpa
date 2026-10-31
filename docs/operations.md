@@ -126,6 +126,35 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   Docker network. It does not replace the gateway or other panels; collection ownership
   must be resolved separately. See `docs/install.md` and `docs/install-for-agents.md`.
 
+## Rotating the CPA management key
+
+The CPA management key is deployment-owned: it authenticates OMC's management
+clients and usage collector, signs console sessions, and authorizes remote MCP
+calls. The visual configuration editor shows it read-only; OMC refuses ordinary
+configuration writes or backup restores that would change it. A CPA-only write
+would leave the running clients and login verifier on the old value, and an
+unchanged `OMCPA_CPA_MANAGEMENT_KEY` would restore that value on the next start.
+
+Trusted plugin pages are the native-response exception. A Plugin Host request can
+reach CPA's native configuration tree, including `/v8/management/config.yaml`, so
+it can change the management key without this check. Do not rotate the management
+key through a plugin.
+
+Rotate both processes from one deployment change:
+
+1. Back up the environment file and OMC's data directory.
+2. Set CPA's management key and OMC's `OMCPA_CPA_MANAGEMENT_KEY` to the same new
+   value. In the full-stack Compose file, set `CPA_MANAGEMENT_KEY` once: it supplies
+   both CPA's `MANAGEMENT_PASSWORD` and OMC.
+3. Recreate both Compose containers so they load the updated environment:
+   `docker compose up -d --force-recreate cpa oh-my-cpa`. `docker compose restart`
+   keeps the old container environment and is not sufficient.
+4. Sign in with the new key. Sessions signed with the old key are invalid.
+
+For an existing CPA on separate hosts, update its `management.secret-key` (or
+`MANAGEMENT_PASSWORD`) and OMC's environment in the same maintenance window, then
+stop and start both processes so they load the new values.
+
 ## Time zone
 
 Set `TZ=Asia/Kuala_Lumpur` (or another IANA timezone) in the deployment environment to

@@ -23,6 +23,8 @@ export function describeConfigSaveError(
     }
     case 'config_backup_failed':
       return t('cfg.save_backup_failed');
+    case 'management_key_environment_owned':
+      return t('cfg.save_management_key_environment_owned');
     case 'cpa_request_too_large':
       return t('cfg.save_too_large');
     case 'config_partially_applied':

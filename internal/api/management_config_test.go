@@ -374,7 +374,7 @@ func TestManagementConfigSourcePutReportsCPARejection(t *testing.T) {
 
 func TestManagementConfigPatchSendsOnlyTheChangedSettings(t *testing.T) {
 	fixture := &configFixtureCPA{}
-	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	client, baseURL, _ := startDashboardTestServerStoring(t, configFixtureYAML, fixture.serve)
 	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
 	var loaded struct {
 		Revision     string `json:"revision"`
@@ -432,6 +432,49 @@ func TestManagementConfigPatchSendsOnlyTheChangedSettings(t *testing.T) {
 	}
 }
 
+func TestManagementConfigCannotRotateTheDeploymentOwnedKey(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	client, baseURL, _ := startDashboardTestServerStoring(t, configFixtureYAML, fixture.serve)
+
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(payload, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	patch, _ := json.Marshal(map[string]any{
+		"revision": loaded.Revision,
+		"changes": []any{map[string]any{
+			"path":  []string{"management", "secret-key"},
+			"value": "replacement-management-key",
+		}},
+	})
+	resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(patch))
+	var refusal map[string]any
+	_ = json.Unmarshal(payload, &refusal)
+	if resp.StatusCode != http.StatusConflict || refusal["code"] != "management_key_environment_owned" {
+		t.Fatalf("patch status = %d body %s", resp.StatusCode, payload)
+	}
+	if writes, _ := fixture.recordedWrites(); len(writes) != 0 {
+		t.Fatalf("a refused key rotation reached CPA: %v", writes)
+	}
+
+	source, _ := json.Marshal(map[string]string{
+		"revision": loaded.Revision,
+		"yaml":     strings.Replace(configFixtureYAML, "top-secret-management-key", "replacement-management-key", 1),
+	})
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(source))
+	refusal = nil
+	_ = json.Unmarshal(payload, &refusal)
+	if resp.StatusCode != http.StatusConflict || refusal["code"] != "management_key_environment_owned" {
+		t.Fatalf("source status = %d body %s", resp.StatusCode, payload)
+	}
+	if writes, _ := fixture.recordedWrites(); len(writes) != 0 {
+		t.Fatalf("a refused source rotation reached CPA: %v", writes)
+	}
+}
+
 func TestManagementConfigPatchReportsCPARejection(t *testing.T) {
 	fixture := &configFixtureCPA{rejectWrites: true}
 	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
@@ -451,7 +494,7 @@ func TestManagementConfigPatchReportsCPARejection(t *testing.T) {
 // secrets back into what it sends; the reason reaches the console without them.
 func TestManagementConfigPatchRejectionDoesNotEchoRestoredSecrets(t *testing.T) {
 	fixture := &configFixtureCPA{rejectWrites: true, rejectMessage: `management.secret-key: "top-secret-management-key" is too short`}
-	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	client, baseURL, _ := startDashboardTestServerStoring(t, configFixtureYAML, fixture.serve)
 	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
 	var loaded struct {
 		Revision string `json:"revision"`

@@ -42,6 +42,8 @@ export interface ConfigFieldDefinition {
   /** Earlier v8 layout; also the compatible write path when neither spelling is present. */
   legacyYamlPath?: string[];
   type: ConfigFieldType;
+  /** The value is shown for context but owned outside this editor. */
+  isReadOnly?: boolean;
   /**
    * The CPA YAML key a scalar setting is stored under when the console's field id is not it
    * (`proxy_url` for `proxyUrl`'s value). Not copy.
@@ -407,6 +409,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_rm_secret_key_desc',
     yamlPath: ['management', 'secret-key'],
     type: 'string',
+    isReadOnly: true,
     keywords: ['management', 'secret', 'password'],
   },
   {
