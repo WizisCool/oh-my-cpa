@@ -466,3 +466,34 @@ func TestQuotaOverviewAdvertisesPluginRefresh(t *testing.T) {
 			overview.Quotas[0].Capabilities)
 	}
 }
+
+func TestQuotaSnapshotRoundTripsPlanLabelsWithoutRewritingHistory(t *testing.T) {
+	for _, test := range []struct{ provider, planType, label, tier string }{
+		{"kimi", "standard", "Kimi For Coding", "standard"},
+		{"codex", "pro_max", "Pro 500", "elite"},
+	} {
+		t.Run(test.provider, func(t *testing.T) {
+			handler := capacityTestHandler(t)
+			ctx := context.Background()
+			prior := &quota.NormalizedQuota{AuthIndex: "fixture-plan", Provider: test.provider, Status: "healthy", ObservedAtMS: 1_800_000_000_000, Plan: &quota.QuotaPlan{PlanType: test.planType, PlanLabel: "Previous label", Tier: test.tier}}
+			if err := handler.persistNormalizedQuotaSnapshot(ctx, prior); err != nil {
+				t.Fatal(err)
+			}
+			current := &quota.NormalizedQuota{AuthIndex: prior.AuthIndex, Provider: test.provider, Status: "healthy", ObservedAtMS: prior.ObservedAtMS + 1, Plan: &quota.QuotaPlan{PlanType: test.planType, PlanLabel: test.label, Tier: test.tier}}
+			if err := handler.persistNormalizedQuotaSnapshot(ctx, current); err != nil {
+				t.Fatal(err)
+			}
+			restored := handler.loadPriorNormalizedQuota(ctx, prior.AuthIndex)
+			if restored == nil || restored.Plan == nil || restored.Plan.PlanType != test.planType || restored.Plan.PlanLabel != test.label || restored.Plan.Tier != test.tier {
+				t.Fatalf("plan was not preserved: %+v", restored)
+			}
+			history, err := handler.repo.GetQuotaSnapshotHistory(ctx, prior.AuthIndex, 10)
+			if err != nil || len(history) != 2 {
+				t.Fatalf("history count = %d, err = %v", len(history), err)
+			}
+			if oldPlan := planFromSnapshot(history[1]); oldPlan == nil || oldPlan.PlanLabel != "Previous label" {
+				t.Fatalf("historical plan was rewritten: %+v", oldPlan)
+			}
+		})
+	}
+}

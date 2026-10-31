@@ -1,9 +1,15 @@
 package quota
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -138,7 +144,171 @@ func TestKimiUsageHostFollowsTheCredentialDomain(t *testing.T) {
 			t.Errorf("%+v reads %s, want %s", tc.file, got, tc.want)
 		}
 	}
-	if !IsAllowedQuotaURL(KimiInternationalUsageURL) || IsAllowedQuotaURL("https://api.kimi.ai/coding/v1/chat/completions") {
-		t.Fatal("the allowlist must admit the kimi.ai usage endpoint and nothing else on that host")
+	for _, target := range []string{KimiInternationalUsageURL, "https://api.kimi.ai/coding/v1/me"} {
+		if !IsAllowedQuotaURL(target) {
+			t.Errorf("Kimi observation endpoint refused: %s", target)
+		}
+	}
+	for _, target := range []string{
+		"https://api.kimi.ai/coding/v1/chat/completions",
+		"https://api.kimi.ai/coding/v1/me-extra",
+		"https://api.kimi.ai/coding/v1/me/extra",
+		"https://api.kimi.ai/coding/v1/me/../chat/completions",
+		"https://api.kimi.ai/coding/v1/%2e%2e/me",
+		"https://api.kimi.ai.attacker.invalid/coding/v1/me",
+	} {
+		if IsAllowedQuotaURL(target) {
+			t.Errorf("unexpected allowed profile target: %s", target)
+		}
+	}
+}
+
+func TestKimiQuotaEnrichesPlanWithoutLosingUsage(t *testing.T) {
+	for _, host := range []struct{ provider, usageURL, profileURL string }{
+		{"kimi", KimiUsageURL, "https://api.kimi.com/coding/v1/me"},
+		{"kimi-ai", KimiInternationalUsageURL, "https://api.kimi.ai/coding/v1/me"},
+	} {
+		for _, profile := range []struct {
+			name, body, label string
+			status            int
+			err               error
+		}{
+			{name: "success", status: http.StatusOK, body: `{"user_id":"fixture-user","user_level_name":"  Kimi For Coding  "}`, label: "Kimi For Coding"},
+			{name: "string body", status: http.StatusOK, body: `"{\"user_id\":\"fixture-user\",\"user_level_name\":\"Kimi For Coding\"}"`, label: "Kimi For Coding"},
+			{name: "transport failure", err: errors.New("profile connection refused")},
+			{name: "timeout", err: context.DeadlineExceeded},
+			{name: "unauthorized", status: http.StatusUnauthorized},
+			{name: "forbidden", status: http.StatusForbidden},
+			{name: "missing endpoint", status: http.StatusNotFound},
+			{name: "rate limited", status: http.StatusTooManyRequests},
+			{name: "server failure", status: http.StatusBadGateway},
+			{name: "invalid JSON", status: http.StatusOK, body: `{"user_id":`},
+			{name: "missing user", status: http.StatusOK, body: `{"user_level_name":"Unverified"}`},
+			{name: "missing name", status: http.StatusOK, body: `{"user_id":"fixture-user"}`},
+		} {
+			t.Run(host.provider+"/"+profile.name, func(t *testing.T) {
+				file := management.AuthFile{AuthIndex: "fixture-kimi", Name: host.provider + ".json", Type: host.provider}
+				usageCalls, profileCalls := 0, 0
+				client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+					if req.AuthIndex != file.AuthIndex || req.Method != http.MethodGet || req.Header["Authorization"] != "Bearer $TOKEN$" || req.Header["Accept"] != "application/json" || req.Data != "" {
+						t.Fatalf("unexpected quota request: %+v", req)
+					}
+					switch req.URL {
+					case host.usageURL:
+						usageCalls++
+						return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"usages":{"limit_5h":{"used_ratio":0.25}}}`)}, nil
+					case host.profileURL:
+						profileCalls++
+						if usageCalls != 1 {
+							t.Fatal("profile requested before usable quota")
+						}
+						deadline, hasDeadline := ctx.Deadline()
+						if !hasDeadline || time.Until(deadline) > 8*time.Second {
+							t.Fatal("optional profile request has no short timeout")
+						}
+						return management.ApiCallResponse{StatusCode: profile.status, Body: json.RawMessage(profile.body)}, profile.err
+					default:
+						t.Fatalf("request crossed the selected Kimi host: %s", req.URL)
+						return management.ApiCallResponse{}, nil
+					}
+				}}
+				prior := &NormalizedQuota{Plan: &QuotaPlan{PlanType: "standard", PlanLabel: "Previous subscription", Tier: "standard"}}
+				reading, err := NewService(client).RefreshCredentialQuota(context.Background(), file, prior)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if usageCalls != 1 || profileCalls != 1 {
+					t.Fatalf("usage/profile calls = %d/%d, want 1/1", usageCalls, profileCalls)
+				}
+				if reading.Status != "healthy" || reading.Error != "" || reading.RateLimit != nil || len(reading.Windows) != 1 || reading.Windows[0].UsedPercent == nil || *reading.Windows[0].UsedPercent != 25 {
+					t.Fatalf("usable quota was lost: %+v", reading)
+				}
+				wantLabel := profile.label
+				if wantLabel == "" {
+					wantLabel = "Kimi Coding API"
+				}
+				if reading.Plan == nil || reading.Plan.PlanLabel != wantLabel || reading.Plan.PlanType != "standard" || reading.Plan.Tier != "standard" {
+					t.Fatalf("plan = %+v, want fresh %q/standard", reading.Plan, wantLabel)
+				}
+				if prior.Plan.PlanLabel != "Previous subscription" {
+					t.Fatal("enrichment mutated the prior observation")
+				}
+			})
+		}
+	}
+}
+
+func TestKimiQuotaPreservesUsageFailureAndEmptySemantics(t *testing.T) {
+	for _, test := range []struct {
+		name, body, status string
+		code               int
+		err                error
+		wantProfile        bool
+	}{
+		{name: "transport", err: errors.New("usage connection refused"), status: "stale"},
+		{name: "HTTP error", code: http.StatusUnauthorized, status: "error"},
+		{name: "invalid usage", code: http.StatusOK, body: `{"usages":`, status: "stale"},
+		{name: "empty reading", code: http.StatusOK, body: `{}`, status: QuotaStatusUnpublished, wantProfile: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profileCalls := 0
+			client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+				if req.URL == KimiUsageURL {
+					return management.ApiCallResponse{StatusCode: test.code, Body: json.RawMessage(test.body)}, test.err
+				}
+				if req.URL != "https://api.kimi.com/coding/v1/me" {
+					t.Fatalf("unexpected request: %s", req.URL)
+				}
+				profileCalls++
+				return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"user_id":"fixture-user","user_level_name":"Current subscription"}`)}, nil
+			}}
+			usedPercent := 25.0
+			prior := &NormalizedQuota{Plan: &QuotaPlan{PlanType: "standard", PlanLabel: "Previous subscription", Tier: "standard"}, Windows: []QuotaWindow{{ID: "prior-window", UsedPercent: &usedPercent}}}
+			reading, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{AuthIndex: "fixture-kimi", Type: "kimi"}, prior)
+			if err != nil || reading.Status != test.status {
+				t.Fatalf("reading = %+v, err = %v, want %s", reading, err, test.status)
+			}
+			if test.wantProfile {
+				if profileCalls != 1 || len(reading.Windows) != 0 || reading.Plan.PlanLabel != "Current subscription" {
+					t.Fatalf("empty usage was replaced with prior windows: %+v", reading)
+				}
+			} else if profileCalls != 0 || reading.Plan.PlanLabel != "Previous subscription" || len(reading.Windows) != 1 || reading.Windows[0].ID != "prior-window" {
+				t.Fatalf("failed usage lost the prior reading: %+v", reading)
+			}
+		})
+	}
+}
+
+func TestParseKimiPlanNameProjectsOnlyVerifiedSanitizedNames(t *testing.T) {
+	for _, test := range []struct{ name, payload, want string }{
+		{"display name", `{"user_id":"fixture-user","user_level_name":"  Kimi For Coding  ","access_token":"synthetic-private-token"}`, "Kimi For Coding"},
+		{"no user", `{"user_level_name":"Unverified"}`, ""},
+		{"blank user", `{"user_id":" ","user_level_name":"Unverified"}`, ""},
+		{"non-string user", `{"user_id":123,"user_level_name":"Unverified"}`, ""},
+		{"no name", `{"user_id":"fixture-user"}`, ""},
+		{"blank name", `{"user_id":"fixture-user","user_level_name":" \n\t "}`, ""},
+		{"non-string name", `{"user_id":"fixture-user","user_level_name":123}`, ""},
+		{"invalid JSON", `{"user_id":`, ""},
+		{"array", `[]`, ""},
+		{"null", `null`, ""},
+		{"control characters", `{"user_id":"fixture-user","user_level_name":"Coding\u0000 \n\t Pro\u202e"}`, "Coding Pro"},
+		{"obfuscated secret", `{"user_id":"fixture-user","user_level_name":"Coding Bear\u202eer synthetic-private-token"}`, "Coding Bearer [redacted]"},
+		{"secret redaction", `{"user_id":"fixture-user","user_level_name":"Coding Bearer synthetic-private-token"}`, "Coding Bearer [redacted]"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := parseKimiPlanName([]byte(test.payload)); got != test.want {
+				t.Fatalf("plan name = %q, want %q", got, test.want)
+			}
+		})
+	}
+	for _, name := range []string{strings.Repeat("a", 300), strings.Repeat("套餐", 100), strings.Repeat("a", 255) + "套餐"} {
+		raw, err := json.Marshal(map[string]string{"user_id": "fixture-user", "user_level_name": name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := parseKimiPlanName(raw)
+		if got == "" || len(got) > 256 || !utf8.ValidString(got) || !strings.HasPrefix(name, got) {
+			t.Fatalf("unbounded or invalid UTF-8 name: %q", got)
+		}
 	}
 }

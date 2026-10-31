@@ -633,12 +633,23 @@ after approval. Demo mode allows reads and refuses the write.
 ## Kimi international quota
 
 The `kimi-ai` connection method uses the international Kimi account system. Its
-quota observation is a server-initiated `GET` to the compiled, single-endpoint
-allowlist entry `https://api.kimi.ai/coding/v1/usages`. Domestic Kimi
+quota observation is a server-initiated `GET` to the compiled usage endpoint
+`https://api.kimi.ai/coding/v1/usages`. Domestic Kimi
 credentials continue to use `https://api.kimi.com/coding/v1/usages`. Selection
 uses credential type, provider and file name; the console does not download the
 token to detect an account system or retry the token against the other host.
 Neither the browser nor Agent/MCP can supply an arbitrary upstream target.
+
+After a successful usage read, OMC optionally reads `/coding/v1/me` on that same
+fixed host. Only a profile with a nonempty `user_id` can supply its
+`user_level_name` as the sanitized, bounded subscription label; identity fields
+and the raw profile are not stored or returned. The international host admits
+only its usage and profile endpoints, as defined in
+[`internal/quota/service.go`](../internal/quota/service.go). A missing name,
+failed request, malformed profile or profile timeout leaves the quota windows
+intact and uses the generic Kimi label for this reading, not a previous name.
+Labels do not infer quota entitlements, and historical snapshots keep the labels
+observed at their own time.
 
 The usage document is decoded in both shapes Kimi publishes. Counted limits
 (`limits[]`, or a lone `usage` object) carry absolute usage, and the newer ratio
