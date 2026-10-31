@@ -531,6 +531,32 @@ export async function requestListInteractions({ base, page, check }) {
   check('Escape dismisses the shared request tooltip', await cacheCell.getAttribute('aria-describedby') === null);
   await page.mouse.move(0, 0);
 
+  // Every seeded record is under 15 s, so its latency reads on the quick band:
+  // the verdict hue must arrive in the engine, not just the class list, and the
+  // band must be named in a channel colour is not - the cell's tooltip text.
+  const latencyReading = await page.evaluate(() => {
+    const value = document.querySelector('.request-row .req-latency-val');
+    const plain = document.querySelector('.request-row .req-model-name');
+    if (!value || !plain) return null;
+    const probe = document.createElement('i');
+    probe.style.color = 'var(--success)';
+    value.parentElement.appendChild(probe);
+    const reading = {
+      colour: getComputedStyle(value).color,
+      band: getComputedStyle(probe).color,
+      plain: getComputedStyle(plain).color,
+      label: value.getAttribute('data-request-tooltip') ?? null,
+    };
+    probe.remove();
+    return reading;
+  });
+  check(
+    'a quick request draws its latency in the band colour and names the band',
+    latencyReading !== null && latencyReading.colour === latencyReading.band &&
+      latencyReading.colour !== latencyReading.plain && Boolean(latencyReading.label),
+    JSON.stringify(latencyReading),
+  );
+
   // A failed pill explains itself: the list knows the status, and the upstream's
   // own error body is read for that one record when the pill is pointed at.
   const detailReads = [];

@@ -41,6 +41,7 @@ import {
   isFastTierEvent,
   fastTierHintKey,
   latencyTone,
+  latencyBandLabelKey,
   resolvedTierHintKey,
   requestTransport,
 } from '../../types/usageEventMetrics';
@@ -239,6 +240,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const rate = eventTokensPerSecond(event, tpsMode);
   const latency = event?.latency_ms ?? 0;
   const latencyBand = latencyTone(event?.latency_ms);
+  const latencyBandKey = latencyBandLabelKey(latencyBand);
   const isMeasurable = hasMeasurableTTFT(event);
   const ttft = isMeasurable && event?.ttft_ms != null ? event.ttft_ms : 0;
   const streamTime = Math.max(0, latency - ttft);
@@ -311,9 +313,19 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
           <div className="request-detail-metrics">
             <div>
               <span>{t('events.duration')}</span>
-              <strong className={latencyBand === 'neutral' ? undefined : `is-${latencyBand}`}>
-                {formatEventDuration(event.latency_ms)}
-              </strong>
+              {latencyBandKey !== null ? (
+                <Tooltip title={t(latencyBandKey)}>
+                  <strong
+                    tabIndex={0}
+                    className={`is-${latencyBand}`}
+                    aria-label={`${t('events.duration')}: ${formatEventDuration(event.latency_ms)}. ${t(latencyBandKey)}`}
+                  >
+                    {formatEventDuration(event.latency_ms)}
+                  </strong>
+                </Tooltip>
+              ) : (
+                <strong>{formatEventDuration(event.latency_ms)}</strong>
+              )}
             </div>
             {rate.basis !== null && (
               <div>
@@ -476,7 +488,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       <div className="req-waterfall-box">
                         <div className="req-waterfall-header">
                           <h4>{t('events.waterfall_title')}</h4>
-                          <span className={`req-waterfall-total${latencyBand === 'neutral' ? '' : ` is-${latencyBand}`}`}>{formatEventDuration(latency)}</span>
+                          <span
+                            className={`req-waterfall-total${latencyBand === 'neutral' ? '' : ` is-${latencyBand}`}`}
+                            title={latencyBandKey !== null ? t(latencyBandKey) : undefined}
+                          >
+                            {formatEventDuration(latency)}
+                          </span>
                         </div>
                         {isMeasurable && ttft > 0 ? (
                           <>

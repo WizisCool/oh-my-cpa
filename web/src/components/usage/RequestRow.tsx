@@ -30,6 +30,7 @@ import {
   isFastTierEvent,
   fastTierHintKey,
   latencyTone,
+  latencyBandLabelKey,
   requestTransport,
 } from '../../types/usageEventMetrics';
 import {
@@ -134,9 +135,10 @@ export const RequestRow = React.memo<RequestRowProps>(
       : undefined;
 
     const tpsInfo = eventTokensPerSecond(event, tpsMode);
-    // The total's place on the console's one latency band; an absent or unreadable
-    // latency stays neutral and keeps the plain foreground.
+    // The total's place on the console's one latency band, and its name: an absent
+    // or unreadable latency stays neutral and keeps the plain foreground.
     const latencyBand = latencyTone(event.latency_ms);
+    const latencyBandKey = latencyBandLabelKey(latencyBand);
     // The level's place on the effort scale, as a token reference; absent for
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
@@ -396,9 +398,20 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 7: total latency */}
         <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
-          <strong className={`req-latency-val${latencyBand === 'neutral' ? '' : ` is-${latencyBand}`}`}>
-            {formatEventDuration(event.latency_ms)}
-          </strong>
+          {/* The band is a verdict on the reading, so it cannot travel by hue
+              alone: the cell names it in the tooltip for the pointer and in the
+              popup's description for assistive tech. */}
+          {latencyBandKey !== null ? (
+            <RequestTooltip title={t(latencyBandKey)}>
+              <strong className={`req-latency-val is-${latencyBand}`}>
+                {formatEventDuration(event.latency_ms)}
+              </strong>
+            </RequestTooltip>
+          ) : (
+            <strong className="req-latency-val">
+              {formatEventDuration(event.latency_ms)}
+            </strong>
+          )}
           {hasMeasurableTTFT(event) && (
             <span className="req-ttft-val">
               TTFT {formatEventDuration(event.ttft_ms)}

@@ -93,6 +93,21 @@ export function latencyTone(latencyMs: number | null | undefined): LatencyTone {
   return 'success';
 }
 
+/**
+ * latencyBandLabelKey names a band for the operator, so the verdict travels as
+ * text as well as hue: the list cell's tooltip and the drawer's duration
+ * readouts read it, and a neutral band has nothing to name.
+ */
+export function latencyBandLabelKey(band: LatencyTone): MessageKey | null {
+  switch (band) {
+    case 'success': return 'events.latency_band_quick';
+    case 'warn': return 'events.latency_band_long';
+    case 'slow': return 'events.latency_band_slow';
+    case 'danger': return 'events.latency_band_very_slow';
+    default: return null;
+  }
+}
+
 export function formatEventDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return '—';
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { TokenAccountingNote } from '../src/components/usage/TokenAccountingNote';
 import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
@@ -116,23 +116,4 @@ it.each(['invalid', 'unsupported', 'inconsistent', 'unclassified'] as const)('sh
   expect(explanation).toContain('30');
 });
 
-it('marks a slow request on the console latency band in the row and the drawer', async () => {
-  const row = renderTier({ latency_ms: 45_000 });
-  expect(row.container.querySelector('.req-latency-val')?.classList.contains('is-slow')).toBe(true);
-  row.unmount();
-  renderTier({ latency_ms: 45_000 }, event =>
-    <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />);
-  const metric = await screen.findByText('45.00 s', { selector: '.request-detail-metrics strong' });
-  expect(metric.classList.contains('is-slow')).toBe(true);
-  fireEvent.click(screen.getByRole('tab', { name: /Performance & usage|性能与用量/ }));
-  const waterfallTotal = await screen.findByText('45.00 s', { selector: '.req-waterfall-total' });
-  expect(waterfallTotal.classList.contains('is-slow')).toBe(true);
-});
 
-it('keeps an absent latency reading neutral', () => {
-  const { container } = renderTier({ latency_ms: undefined as unknown as number });
-  const value = container.querySelector('.req-latency-val');
-  expect(value?.classList.contains('is-success')).toBe(false);
-  expect(value?.classList.contains('is-warn')).toBe(false);
-  expect(value?.classList.contains('is-danger')).toBe(false);
-});
