@@ -222,6 +222,10 @@ test('plugin config', () => {
   // listing is never allowed to describe them by accident.
   assert.equal(installedPluginDescription('zh', installed({ source_kind: 'builtin' }), storeEntry), 'store text');
   assert.equal(installedPluginDescription('en', installed({ description: 'own', description_i18n: { en: 'own en' } }), storeEntry), 'own en');
+  // One source describes the row. A plugin that declared only its plain text keeps it:
+  // taking the listing's translations alongside the plugin's own words would show the
+  // registry's wording - which may describe a newer release than the installed copy.
+  assert.equal(installedPluginDescription('en', installed({ description: 'own' }), entry({ id: 'zc', description: 'store text', description_i18n: { en: 'store en' } })), 'own');
 
   // ── built-in plugins ───────────────────────────────────────────────────────
   // Only the server's explicit code may report a policy as saved; anything else is a failure.

@@ -1190,15 +1190,19 @@ func (h *Handler) ensureBuiltinSourceLocked(ctx context.Context, request *http.R
 	return h.recordAudit(request, "plugin.builtin_source", "config", "plugins", "success", map[string]any{"changed_paths": paths})
 }
 
-// CPA chooses the first auth rule by case-insensitive scheme/host and a path
-// boundary, not by a raw URL prefix. Match those semantics before permitting a
-// public callback, so an existing credential rule cannot win over a later none.
-func builtinPublicAuthRule(settings configyaml.PluginSettings, sourceURL string) (bool, error) {
-	target, err := url.Parse(sourceURL)
+// storeAuthRuleFor is the rule CPA would apply to a request of one kind: the first
+// entry whose match covers the address's scheme, host and path boundary and whose
+// `apply-to` includes that kind. CPA compiles the rules in document order and stops at
+// the first match, so a later rule never overrides an earlier one. A blank kind list
+// applies to every kind. This is the only place OMC reproduces that order: a
+// caller-added policy on top of it (a `none` rule is broad, a credential one is not)
+// must not re-derive the matching itself.
+func storeAuthRuleFor(rules []configyaml.PluginStoreAuthRule, rawURL, requestKind string) (configyaml.PluginStoreAuthRule, bool) {
+	target, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
-		return false, err
+		return configyaml.PluginStoreAuthRule{}, false
 	}
-	for _, rule := range settings.StoreAuth {
+	for _, rule := range rules {
 		parsed, err := url.Parse(strings.TrimSpace(rule.Match))
 		if err != nil {
 			continue
@@ -1217,22 +1221,41 @@ func builtinPublicAuthRule(settings configyaml.PluginSettings, sourceURL string)
 				continue
 			}
 			hasRequestKind = true
-			if strings.EqualFold(normalized, "registry") {
+			if strings.EqualFold(normalized, requestKind) {
 				applies = true
 			}
 		}
 		// CPA removes blank kinds before matching; an empty normalized list
-		// applies to every request, including registry callbacks.
+		// applies to every request.
 		if !hasRequestKind {
 			applies = true
 		}
-		if !applies {
-			continue
+		if applies {
+			return rule, true
 		}
-		if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != target.Path || !strings.EqualFold(strings.TrimSpace(rule.Type), "none") || (strings.EqualFold(target.Scheme, "http") && !rule.AllowInsecure) {
-			return false, errors.New("builtin registry conflicts with an existing CPA store auth rule")
-		}
-		return true, nil
 	}
-	return false, nil
+	return configyaml.PluginStoreAuthRule{}, false
+}
+
+// builtinPublicAuthRule reports whether a builtin's public callback is safe to add:
+// `true` when the first applicable rule explicitly injects no credential over plain
+// HTTP. A credential rule, a narrowed path or a scheme this callback cannot use is an
+// error, because the callback would then be read with credentials or not at all.
+func builtinPublicAuthRule(settings configyaml.PluginSettings, sourceURL string) (bool, error) {
+	rule, found := storeAuthRuleFor(settings.StoreAuth, sourceURL, "registry")
+	if !found {
+		return false, nil
+	}
+	target, err := url.Parse(sourceURL)
+	if err != nil {
+		return false, err
+	}
+	parsed, err := url.Parse(strings.TrimSpace(rule.Match))
+	if err != nil {
+		return false, err
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != target.Path || !strings.EqualFold(strings.TrimSpace(rule.Type), "none") || (strings.EqualFold(target.Scheme, "http") && !rule.AllowInsecure) {
+		return false, errors.New("builtin registry conflicts with an existing CPA store auth rule")
+	}
+	return true, nil
 }

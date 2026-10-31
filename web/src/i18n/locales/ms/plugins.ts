@@ -243,7 +243,7 @@ export default {
   "plugin.settings_title": "Tetapan pemalam",
   "plugin.settings_subtitle": "Hidupkan atau matikan sistem pemalam, dan urus sumber pemalam serta kelayakan muat turun.",
   "plugin.builtins_subtitle": "Pemalam yang disertakan dengan OMC. Hidupkan dan ia dikemas kini secara automatik.",
-  "plugin.store_subtitle": "Layari dan pasang pemalam. Pemalam dari luar repositori rasmi berjalan dalam gateway, jadi pemasangannya meminta ID pemalam ditaip.",
+  "plugin.store_subtitle": "Layari dan pasang pemalam. Pemalam dari luar repositori rasmi berjalan dalam get laluan, jadi pemasangannya meminta ID pemalam ditaip.",
   "plugin.builtin_update_to": "Kemas kini ke {version}",
   "plugin.builtin_check_done": "Semakan selesai",
   "plugin.builtin_outcome_current": "Semua pemalam terbina dalam sudah dikemas kini.",

@@ -358,13 +358,6 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 	}
 }
 
-// isOfficialStoreSource reports whether CPA's built-in registry listed the entry. Only
-// that registry carries CPA's fixed source id - a configured registry's id is derived
-// from its URL - so no other source can claim it.
-func isOfficialStoreSource(sourceID string) bool {
-	return strings.EqualFold(strings.TrimSpace(sourceID), officialPluginSourceID)
-}
-
 // isOfficialPluginRepository reports whether the entry's artifact is published by the
 // gateway vendor. It is a separate fact from the registry that listed the entry: the
 // official registry is a catalogue and lists plugins whose code stays in each author's

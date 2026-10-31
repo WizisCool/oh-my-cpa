@@ -98,9 +98,14 @@ export function installedPluginDescription(
   plugin: PluginItem,
   listing: StorePluginItem | undefined,
 ): string {
+  // The plugin's own declaration is one source: taking its plain text from itself and
+  // its translations from the listing would let a registry's newer wording describe the
+  // installed copy. The listing describes the entry only when the plugin declared nothing.
+  const declared = plugin.description?.trim() || plugin.description_i18n;
+  const source = declared ? plugin : listing;
   return pluginDescription(lang, {
-    description: plugin.description || listing?.description,
-    description_i18n: plugin.description_i18n ?? listing?.description_i18n,
+    description: source?.description,
+    description_i18n: source?.description_i18n,
   });
 }
 

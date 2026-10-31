@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -254,6 +255,77 @@ func TestOMCCommunitySourceProjectionRequiresExactProvenance(t *testing.T) {
 			}
 			if plugin.IsOMC != (entry.wantKind == "omc_community") {
 				t.Fatalf("OMC marker must use the same exact source identity: %+v", plugin)
+			}
+		})
+	}
+}
+
+// A source whose applicable registry rule injects a credential is refused, because OMC
+// cannot forward one. Which rule applies follows CPA's order and matching: the earlier
+// substring guess also refused sources that need no credential, and let a differently
+// cased origin that CPA would authenticate reach a credential-free request.
+func TestCommunityCatalogAuthRefusalUsesCPARuleOrder(t *testing.T) {
+	sourceURL := "https://community.example/registry.json"
+	credential := fmt.Sprintf("  store-auth:\n    - match: %s\n      type: bearer\n      token-env: SYNTHETIC_TOKEN\n      apply-to: [registry]\n", sourceURL)
+	for _, entry := range []struct {
+		name      string
+		storeAuth string
+		wantReads int
+		wantError bool
+	}{
+		{"credential rule refuses", credential, 0, true},
+		{"blank kind list applies to the registry read", "  store-auth:\n    - match: " + sourceURL + "\n      type: bearer\n      token-env: SYNTHETIC_TOKEN\n", 0, true},
+		{"differently cased origin still applies", fmt.Sprintf("  store-auth:\n    - match: %s\n      type: bearer\n      apply-to: [registry]\n", "HTTPS://Community.EXAMPLE/registry.json"), 0, true},
+		{"artifact-only rule does not decide the registry read", "  store-auth:\n    - match: " + sourceURL + "\n      type: bearer\n      apply-to: [artifact]\n", 1, false},
+		{"no rule reads without a credential", "", 1, false},
+		{"none rule injects nothing", "  store-auth:\n    - match: " + sourceURL + "\n      type: none\n      apply-to: [registry]\n", 1, false},
+		{"a later rule cannot override the first match", "  store-auth:\n    - match: https://community.example/\n      type: bearer\n      apply-to: [registry]\n    - match: " + sourceURL + "\n      type: none\n      apply-to: [registry]\n", 0, true},
+	} {
+		t.Run(entry.name, func(t *testing.T) {
+			var reads atomic.Int32
+			raw := "config-version: 8\nplugins:\n  enabled: true\n  store-sources:\n    - " + sourceURL + "\n" + entry.storeAuth
+			client, baseURL, _ := startDashboardTestServerStoring(t, raw, func(writer http.ResponseWriter, request *http.Request) {
+				switch request.URL.Path {
+				case "/v8/management/config.yaml":
+					_, _ = writer.Write([]byte(raw))
+				case "/v8/management/plugins":
+					_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins":[]}`))
+				default:
+					http.NotFound(writer, request)
+				}
+			}, func(current *Handler) {
+				current.pluginDescriptions.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					if request.Header.Get("Authorization") != "" || request.Header.Get("Cookie") != "" {
+						t.Error("management credentials sent to a registry")
+					}
+					reads.Add(1)
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"schema_version":2,"plugins":[{"id":"example","name":"Example","author":"community","description":"A plugin","version":"1.0.0"}]}`)), Request: request}, nil
+				})}
+			})
+			response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store?source_id="+pluginregistry.SourceID(sourceURL))
+			var dto struct {
+				Plugins      []StorePluginItemDTO        `json:"plugins"`
+				SourceErrors []PluginStoreSourceErrorDTO `json:"source_errors"`
+				Total        int                         `json:"total"`
+			}
+			if err := json.Unmarshal(body, &dto); err != nil {
+				t.Fatal(err)
+			}
+			// A refusing source is one failed source inside a page that still renders, so
+			// the refusal is read from the per-source error, not a page-level status.
+			if response.StatusCode != 200 || int(reads.Load()) != entry.wantReads {
+				t.Fatalf("reads=%d want=%d status=%d body=%s", reads.Load(), entry.wantReads, response.StatusCode, body)
+			}
+			if entry.wantError {
+				// The page reports a refusing source with one fixed sentence rather than
+				// the reason, so the response cannot quote CPA's configuration back.
+				if len(dto.SourceErrors) != 1 || dto.SourceErrors[0].Message != "selected plugin source is unavailable" || dto.Total != 0 || len(dto.Plugins) != 0 {
+					t.Fatalf("refusal = %+v %s", dto, body)
+				}
+				return
+			}
+			if len(dto.SourceErrors) != 0 || dto.Total != 1 || len(dto.Plugins) != 1 || dto.Plugins[0].ID != "example" || dto.Plugins[0].Version != "1.0.0" {
+				t.Fatalf("permitted source = %+v %s", dto, body)
 			}
 		})
 	}

@@ -72,24 +72,6 @@ func (h *Handler) pluginSourceEnabled(ctx context.Context) (bool, error) {
 	return enabled, nil
 }
 
-// reconcileOMCPluginSource makes CPA's store-source list agree with the preference
-// and reports whether the source is on. It takes the same gate and mutex a
-// configuration save does, so it can never interleave with one.
-func (h *Handler) reconcileOMCPluginSource(ctx context.Context, request *http.Request, client *management.Client) (bool, error) {
-	if h.cfg.IsDemoMode {
-		// The demonstration serves a fixture and refuses configuration writes; its
-		// dataset already lists the registry.
-		return h.pluginSourceEnabled(ctx)
-	}
-	if err := h.providerWrites.acquire(ctx); err != nil {
-		return false, err
-	}
-	defer h.providerWrites.release()
-	h.configMu.Lock()
-	defer h.configMu.Unlock()
-	return h.reconcileOMCPluginSourceLocked(ctx, request, client)
-}
-
 // reconcileOMCPluginSourceLocked assumes the caller already holds the provider write
 // gate and the configuration mutex. A configuration save calls it inside its own
 // lock scope, so repairing what that save removed cannot land between the save and
@@ -127,23 +109,6 @@ func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *h
 	}
 	_ = h.recordAudit(request, "plugin.source", "config", "plugins.store-sources", "success", details)
 	return enabled, nil
-}
-
-// dropOMCPluginSource removes the managed registry and its entries from a store
-// document. It runs when the switch is off but CPA still returned the source. Only a
-// demonstration reaches that state - it never writes its fixture, so its fixed
-// catalogue keeps listing the registry; a deployment's read repairs the file first and
-// fails instead of serving entries the switch turned off.
-func dropOMCPluginSource(store *management.PluginStore) {
-	store.Plugins = slices.DeleteFunc(store.Plugins, func(item management.StorePluginItem) bool {
-		return isOMCPluginStoreURL(item.SourceURL)
-	})
-	store.Sources = slices.DeleteFunc(store.Sources, func(source management.PluginStoreSource) bool {
-		return isOMCPluginStoreURL(source.URL)
-	})
-	store.SourceErrors = slices.DeleteFunc(store.SourceErrors, func(sourceError management.PluginStoreSourceError) bool {
-		return isOMCPluginStoreURL(sourceError.SourceURL)
-	})
 }
 
 // writePluginSourceError reports that the managed registry could not be brought in

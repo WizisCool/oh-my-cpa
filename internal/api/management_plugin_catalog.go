@@ -163,11 +163,12 @@ func (h *Handler) readPluginCatalogSource(ctx context.Context, client *managemen
 	}
 	// CPA owns store-auth environment variables. OMC must not read them or forward
 	// management credentials to registries; authentication-required sources fail
-	// visibly rather than falling back to CPA's aggregate endpoint.
-	for _, rule := range settings.StoreAuth {
-		if rule.Type != "" && rule.Type != "none" && (strings.Contains(source.URL, strings.TrimSpace(rule.Match)) || rule.Match == "*") {
-			return result, errors.New("source authentication is available only in CPA")
-		}
+	// visibly rather than falling back to CPA's aggregate endpoint. The rule is read
+	// with CPA's own semantics - first rule that matches the origin and the registry
+	// request kind wins - so a blank kind list, an artifact-only rule or a differently
+	// cased origin decides exactly as CPA would, not as a substring guess would.
+	if rule, found := storeAuthRuleFor(settings.StoreAuth, source.URL, "registry"); found && !strings.EqualFold(strings.TrimSpace(rule.Type), "none") {
+		return result, errors.New("source authentication is available only in CPA")
 	}
 	parsedSource, parseErr := url.Parse(source.URL)
 	if parseErr != nil || !isPluginLogoURLAllowed(parsedSource) || parsedSource.RawQuery != "" || parsedSource.Fragment != "" {
