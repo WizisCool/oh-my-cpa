@@ -243,6 +243,8 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPatch, "/api/v1/management/auth-files/status", demoAllow, ""},
 	{http.MethodPatch, "/api/v1/management/auth-files/fields", demoAllow, ""},
 	{http.MethodPut, "/api/v1/management/auth-files/display-name", demoAllow, ""},
+	// A provider row's name is the console's own overlay; it never reaches the gateway.
+	{http.MethodPut, "/api/v1/management/providers/{id}/name", demoAllow, ""},
 
 	// Quota reads. The refresh is answered by the fixture's own provider payloads,
 	// so it performs no upstream request.

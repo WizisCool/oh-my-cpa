@@ -131,6 +131,8 @@ export default {
   'audit.action.provider.update': 'Updated a provider',
   'audit.action.provider.delete': 'Deleted a provider',
   'audit.action.provider.toggle_status': 'Switched a provider on or off',
+  'audit.action.provider.name_set': 'Named a provider',
+  'audit.action.provider.name_clear': 'Cleared a provider\'s name',
   'audit.action.provider.reveal_keys': 'Revealed provider keys',
   'audit.action.provider.probe': 'Probed provider connectivity',
   'audit.action.auth_file.delete': 'Deleted a credential file',

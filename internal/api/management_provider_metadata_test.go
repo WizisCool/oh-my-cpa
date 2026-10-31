@@ -264,3 +264,63 @@ func TestProviderOverlayFailureReportsPartialCommit(t *testing.T) {
 		}
 	})
 }
+
+// A rename from the list is the console's own overlay. It must leave CPA's entry
+// alone - an OpenAI-compatible provider's configured name is the label its usage
+// records carry - and it must refuse a row whose position now holds another
+// provider, or a delete in another session would turn it into a relabel of the
+// neighbour.
+func TestProviderNameWritesOnlyTheOverlay(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	rename := func(id, body string) (*http.Response, []byte) {
+		return doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+"/omc/api/v1/management/providers/"+id+"/name", body)
+	}
+
+	for _, testCase := range []struct {
+		id, precondition, stale, fallback string
+	}{
+		{id: "codex-0", precondition: `"expected_auth_index":"c-1"`, stale: `"expected_auth_index":"c-9"`, fallback: "Codex (codex-line)"},
+		{id: "openai-compat-0", precondition: `"expected_name":"relay-station"`, stale: `"expected_name":"other"`, fallback: "relay-station"},
+	} {
+		resp, payload := rename(testCase.id, `{"name":"Team relay",`+testCase.stale+`}`)
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("%s: a shifted row must be refused, got %d body %s", testCase.id, resp.StatusCode, payload)
+		}
+		var refusal struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(payload, &refusal); err != nil || refusal.Code != "provider_stale_identity" {
+			t.Fatalf("%s: a shifted row must carry code provider_stale_identity, got body %s", testCase.id, payload)
+		}
+		assertNoProviderOverlay(t, fixture, testCase.id, testCase.id)
+
+		resp, payload = rename(testCase.id, `{"name":" Team relay ",`+testCase.precondition+`}`)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: rename status = %d body %s", testCase.id, resp.StatusCode, payload)
+		}
+		if got := websiteOfProvider(t, fixture.client, fixture.baseURL, testCase.id).Name; got != "Team relay" {
+			t.Fatalf("%s: renamed row reads %q", testCase.id, got)
+		}
+
+		resp, payload = rename(testCase.id, `{"name":"",`+testCase.precondition+`}`)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: clear status = %d body %s", testCase.id, resp.StatusCode, payload)
+		}
+		if got := websiteOfProvider(t, fixture.client, fixture.baseURL, testCase.id).Name; got != testCase.fallback {
+			t.Fatalf("%s: a cleared name must fall back to %q, got %q", testCase.id, testCase.fallback, got)
+		}
+	}
+
+	fixture.state.mu.Lock()
+	upstream := fixture.state.oaiProviders[0]["name"]
+	fixture.state.mu.Unlock()
+	if upstream != "relay-station" {
+		t.Fatalf("a rename must not rewrite CPA's entry, its name is now %v", upstream)
+	}
+	if resp, payload := rename("codex-9", `{"name":"Ghost"}`); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("an absent row must be refused, got %d body %s", resp.StatusCode, payload)
+	}
+	if resp, payload := rename("codex-0", `{"name":"line\nbreak"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a control character must be refused, got %d body %s", resp.StatusCode, payload)
+	}
+}

@@ -131,6 +131,8 @@ export default {
   "audit.action.provider.update": "Mengemas kini penyedia",
   "audit.action.provider.delete": "Memadam penyedia",
   "audit.action.provider.toggle_status": "Menukar status penyedia",
+  "audit.action.provider.name_set": "Menamakan penyedia",
+  "audit.action.provider.name_clear": "Mengosongkan nama penyedia",
   "audit.action.provider.reveal_keys": "Mendedahkan kunci penyedia",
   "audit.action.provider.probe": "Menguji kesambungan penyedia",
   "audit.action.auth_file.delete": "Memadam fail kelayakan",

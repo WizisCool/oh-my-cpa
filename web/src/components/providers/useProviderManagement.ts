@@ -13,6 +13,7 @@ import { providerStatusPayload } from '../../types/providerId';
 import { lookupProviderFamily } from '../../types/providerFamilies';
 import { modelsToAdd } from '../../utils/modelOptions';
 import { isMotionReduced } from '../../utils/motionPreference';
+import { credentialNameProblem, MAX_CREDENTIAL_NAME_LENGTH } from '../authFiles/authFileLogic';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -562,6 +563,39 @@ export function useProviderManagement({
     },
   });
 
+  /**
+   * Names a row from the list, or clears its name, without opening the editor. The outcome is a
+   * toast; the promise answers whether the name was saved, so the field stays open over one that
+   * was not. A row another session shifted is refused and the list re-read.
+   */
+  const renameProvider = async (provider: ProviderItem, name: string): Promise<boolean> => {
+    const next = name.trim();
+    // The server counts code points and refuses control characters under the credential-name
+    // rules; checking here gives the refusal the same localized message.
+    const problem = credentialNameProblem(next);
+    if (problem) {
+      toast.warning(problem === 'too_long'
+        ? t('af.rename_too_long', { n: MAX_CREDENTIAL_NAME_LENGTH })
+        : t('af.rename_control'));
+      return false;
+    }
+    try {
+      await api.setManagementProviderName(provider.id, next, {
+        expectedAuthIndex: provider.auth_index,
+        expectedName: provider.upstream_name,
+      });
+      toast.success(t(next ? 'af.renamed' : 'af.rename_cleared'));
+      await queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      return true;
+    } catch (err) {
+      toast.error(providerWriteMessage(err));
+      if (apiErrorCode(err) === 'provider_stale_identity') {
+        await queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      }
+      return false;
+    }
+  };
+
   const handleOpenCreate = () => {
     setEditingProvider(null);
     setFormFamily('openai-compatibility');
@@ -784,6 +818,7 @@ export function useProviderManagement({
     createProviderMutation,
     deleteProviderMutation,
     updateProviderMutation,
+    renameProvider,
     statusQueue,
     providerDrawerOpen,
     editingProvider,
