@@ -36,6 +36,11 @@ func (r *Repository) SQL() *sql.DB {
 }
 
 func (r *Repository) UpsertInstance(ctx context.Context, instance domain.CPAInstance) error {
+	normalized, normalizeErr := NormalizeGatewayURL(instance.BaseURL)
+	if normalizeErr != nil {
+		return normalizeErr
+	}
+	instance.BaseURL = normalized
 	if r == nil || r.db == nil || r.db.SQL == nil {
 		return errors.New("repository is not initialized")
 	}
@@ -71,12 +76,12 @@ func (r *Repository) GetInstance(ctx context.Context, id string) (domain.CPAInst
 	var createdAt, updatedAt int64
 	err := r.db.SQL.QueryRowContext(ctx, `
 		SELECT id, name, base_url, usage_addr, management_key_ciphertext,
-		       management_key_nonce, status, last_seen_at, last_error, created_at, updated_at
+		       management_key_nonce, status, last_seen_at, last_error, created_at, updated_at, binding_generation
 		FROM cpa_instances WHERE id = ?
 	`, id).Scan(
 		&instance.ID, &instance.Name, &instance.BaseURL, &instance.UsageAddr,
 		&instance.ManagementKeyCiphertext, &instance.ManagementKeyNonce,
-		&instance.Status, &lastSeen, &lastError, &createdAt, &updatedAt,
+		&instance.Status, &lastSeen, &lastError, &createdAt, &updatedAt, &instance.BindingGeneration,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -27,10 +27,6 @@
 }
 
 
-.toolbar-spaced {
-  margin-top: 12px;
-}
-
 .store-filters {
   max-width: 100%;
   overflow-x: auto;
@@ -136,6 +132,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.status-strip-value[data-tone='warn'] {
+  color: var(--warn);
+}
+
 .status-strip-path {
   margin-left: 6px;
   color: var(--fg-2);
@@ -163,6 +163,11 @@
   padding: 12px 14px;
   border-radius: var(--radius-md);
   transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+/* A list that opens its panel needs no gap above its first row. */
+.installed-list:first-child {
+  margin-top: -6px;
 }
 
 /* Rows of the card that holds them, not cards of their own: a frame inside a frame said the list
@@ -217,11 +222,118 @@
   align-items: center;
   gap: 8px;
   height: 28px;
+}
+
+/* A rule parts the switch from the row's tools, so the two never read as one group. */
+.switch-cell[data-has-tools] {
   padding-right: 12px;
   border-right: 1px solid var(--border-soft);
 }
 
+/* ── built-in plugins ──────────────────────────────────────────────────── */
+
+.builtin-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The feature switch is one card read like a settings row: its name and sentence, the switch at
+   the edge, the catalog it follows as quiet facts beneath, and any condition that holds it back
+   inside the card. */
+.automation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.automation-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.automation-title {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.automation-notice {
+  margin-top: 12px;
+}
+
+/* Why a plugin is not in the state it was asked for: a line under its facts in the state's
+   colour, with the glyph that says the same thing without it. */
+.row-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.row-note > :global(.anticon) {
+  flex: none;
+  transform: translateY(2px);
+}
+
+.row-note[data-tone='warn'] > :global(.anticon) {
+  color: var(--warn);
+}
+
+.row-note[data-tone='danger'] > :global(.anticon) {
+  color: var(--danger);
+}
+
+.meta-accent {
+  color: var(--accent);
+}
+
+/* The installed list's last line: the plugins it leaves to their own page. */
+.list-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 /* ── store cards ───────────────────────────────────────────────────────── */
+
+.source-select {
+  min-width: 180px;
+}
+
+.store-section + .store-section {
+  margin-top: 8px;
+}
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 20px 0 0;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.section-count {
+  color: var(--meta);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
 
 .store-notice {
   margin-top: 12px;
@@ -651,18 +763,58 @@
 }
 
 @media (max-width: 640px) {
+  /* A phone row keeps the desktop's three columns at a smaller scale: the switch stays at the
+     edge beside the name it belongs to, and the row's tools sit under it, rather than falling
+     to a line of their own below the description. */
   .installed-row {
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 4px 12px;
   }
 
   .installed-row .logo {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .installed-row .plugin-id {
+    display: none;
+  }
+
+  .installed-row .description {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 
   .installed-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .switch-cell[data-has-tools] {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .installed-actions :global(.row-actions) {
+    gap: 2px;
+  }
+
+  .automation {
+    gap: 12px 16px;
+  }
+
+  .search {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .source-select {
+    min-width: 0;
+    flex: 1 1 40%;
   }
 
   .card-grid {

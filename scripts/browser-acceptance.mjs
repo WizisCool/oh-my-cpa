@@ -332,6 +332,7 @@ try {
     ['/logs', '.logs-page', withProviderSecrets],
     ['/audit', '[data-testid="audit-page"]', withProviderSecrets],
     ['/plugins', '.plugins-page', withProviderSecrets],
+    ['/plugins/builtins', '[data-plugin-panel="builtins"]', withProviderSecrets],
     ['/plugins/store', '[data-plugin-panel="store"]', withProviderSecrets],
     ['/plugins/settings', '[data-plugin-panel="settings"]', withProviderSecrets],
     ['/config', '.config-page'],

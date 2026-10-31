@@ -119,6 +119,7 @@ export default {
   "nav.omc_settings": "Tetapan OMC",
   "nav.plugins": "Pengurusan pemalam",
   "nav.plugin_store": "Kedai pemalam",
+  "nav.plugin_builtins": "Pemalam terbina dalam",
   "nav.system": "Maklumat Sistem",
   "nav.update_available": "Kemas kini tersedia",
   "header.collapse_sidebar": "Runtuhkan bar sisi",

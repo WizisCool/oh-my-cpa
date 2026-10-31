@@ -273,3 +273,15 @@ export function isPluginFieldChanged(
   if (read.error) return true;
   return !pluginConfigsEqual(read.value, saved[field.name]);
 }
+
+/**
+ * The document with `enabled` exactly as `saved` has it. A built-in plugin's switch belongs
+ * to OMC's built-in policy, which the automation enforces: a settings save that moved it
+ * would be undone by the next run, so the drawer never sends a change to it, from either view.
+ */
+export function withSavedEnabled(value: Record<string, unknown>, saved: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...value };
+  if (Object.prototype.hasOwnProperty.call(saved, 'enabled')) next.enabled = saved.enabled;
+  else delete next.enabled;
+  return next;
+}

@@ -4,7 +4,7 @@ import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
+import { DeleteOutlined, PlusOutlined, PuzzleOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
 import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { PluginSettings, PluginStoreAuthRule, PluginStoreAuthTarget, PluginStoreAuthType } from '../../types/plugin';
@@ -233,7 +233,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
               <span className={styles['source-fixed-label']}>{t('plugin.settings_official_source')}</span>
             </div>
             <div className={styles['source-fixed']} data-plugin-omc-source>
-              <SafetyCertificateOutlined />
+              <PuzzleOutlined />
               <span className={styles['source-fixed-label']}>{t('plugin.settings_omc_source')}</span>
               <Button type="link" size="small" className={styles['source-fixed-action']} onClick={() => navigate('/omc-settings')}>
                 {t('plugin.settings_omc_source_open')}

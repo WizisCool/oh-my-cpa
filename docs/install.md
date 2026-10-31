@@ -592,6 +592,20 @@ version is to restore a backup. OMC takes an encrypted backup by itself before i
 applies a migration; `docs/ops/sqlite-operations.md` is the runbook for backups taken by
 hand, and for restoring one. Back up `.env` separately.
 
+### Builtin plugin updates
+
+Builtin plugin management is on by default for a new installation and for a newly bound
+CPA instance. OMC follows stable releases from its fixed official plugin repositories,
+keeps compatible plugins current without an OMC release, and reconciles changes made by another CPA
+management panel. The global switch uninstalls the exact builtin copies OMC owns; each
+builtin's own switch disables it without uninstalling it. The policy belongs to the CPA
+binding: rotating the management key preserves it, while pointing OMC at another CPA
+starts a new default-on policy.
+
+The plugin store remains an operator-installed catalog and is independent of the builtin
+switch. See [Operations](operations.md#builtin-plugin-policy) for the reconciliation and
+publisher trust boundaries.
+
 An existing container keeps its explicit `OMCPA_BASE_PATH` through the console updater
 and through `docker compose pull` followed by `docker compose up -d`, so its current
 URL and reverse-proxy rule remain valid. If you replace the Compose file itself, carry

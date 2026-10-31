@@ -101,6 +101,12 @@ const (
 // preferences, credential metadata, configuration reads, quota reads and the
 // in-process discovery sweep.
 var demoPolicy = []demoPolicyRule{
+	{http.MethodGet, "/plugin-registry/v2.json", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/builtin-plugins", demoAllow, ""},
+	{http.MethodPut, "/api/v1/management/builtin-plugins/policy", demoRefuse, "builtin lifecycle changes are disabled in the demo"},
+	{http.MethodPut, "/api/v1/management/builtin-plugins/{id}/policy", demoRefuse, "builtin lifecycle changes are disabled in the demo"},
+	{http.MethodPost, "/api/v1/management/builtin-plugins/reconcile", demoRefuse, "builtin lifecycle execution is disabled in the demo"},
+	{http.MethodGet, "/api/v1/management/plugin-descriptions", demoAllow, ""},
 	{http.MethodGet, "/api/v1/custom-icons", demoAllow, ""},
 	{http.MethodGet, "/api/v1/custom-icons/{id}/content", demoAllow, ""},
 	{http.MethodHead, "/api/v1/custom-icons/{id}/content", demoAllow, ""},
@@ -263,6 +269,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/plugins/settings", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/plugins/{id}/config", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/plugin-store", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/omc-community-plugins", demoAllow, ""},
 
 	// Sign-in: starting a real OAuth exchange is the one thing a public demo must
 	// never do, because it would mint a credential against a real provider account.
@@ -531,4 +538,10 @@ func writeDemoRefusal(writer http.ResponseWriter, reason string) {
 		"error": "demo mode — " + reason,
 		"code":  demoRefusedCode,
 	})
+}
+
+func init() {
+	for _, method := range []string{http.MethodHead, http.MethodConnect, http.MethodDelete, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, "QUERY", http.MethodTrace} {
+		demoPolicy = append(demoPolicy, demoPolicyRule{method, "/plugin-registry/v2.json", demoRefuse, "only GET is supported by the public registry"})
+	}
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, Modal, Radio, Segmented } from 'antd';
+import { Button, Input, Modal, Radio, Segmented, Select } from 'antd';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -10,13 +10,17 @@ import {
   SafetyCertificateOutlined,
   SettingOutlined,
   SyncOutlined,
+  TagOutlined,
   WarningOutlined,
 } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
-import { useT } from '../../i18n';
-import type { PluginStoreResponse, StorePluginItem } from '../../types/plugin';
+import { useI18n, useT } from '../../i18n';
+import { formatPluginVersion, type PluginStoreSourceError, type StorePluginItem } from '../../types/plugin';
 import {
   filterStorePlugins,
+  isOmcRecommended,
+  sortRecommendedFirst,
+  storeEntryKey,
   isStoreInstallBlocked,
   PLUGIN_STORE_FILTERS,
   STORE_INSTALL_WARNINGS,
@@ -25,14 +29,16 @@ import {
   storePluginOrigin,
   type PluginStoreFilter,
 } from './pluginStoreLogic';
-import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
+import { pluginDescription } from './pluginDescription';
+import { PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
-import { Notice } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
@@ -46,8 +52,8 @@ const DESCRIPTION_CLAMP_CHARS = 150;
 function StoreOriginBadge({ entry }: { entry: StorePluginItem }) {
   const t = useT();
   switch (storePluginOrigin(entry)) {
-    case 'omc':
-      return <span className={`${styles.badge} ${styles['badge-accent']}`}><PuzzleOutlined />{t('plugin.badge_omc')}</span>;
+    case 'omc-community':
+      return <span className={`${styles.badge} ${styles['badge-warn']}`}><PuzzleOutlined />{t('plugin.badge_omc')}</span>;
     case 'official':
       return <span className={`${styles.badge} ${styles['badge-success']}`}><SafetyCertificateOutlined />{t('plugin.badge_official')}</span>;
     case 'official-source':
@@ -57,121 +63,181 @@ function StoreOriginBadge({ entry }: { entry: StorePluginItem }) {
   }
 }
 
-interface PluginStorePanelProps {
-  store: PluginStoreResponse | undefined;
+/** One registry the store shows, read on its own: its own loading, failure and notice. */
+export interface StoreSection {
+  /** `official`, `omc`, or the id of a source the operator configured. */
+  key: string;
+  title: string;
+  data: { plugins: StorePluginItem[]; source_errors: PluginStoreSourceError[]; plugins_enabled?: boolean } | undefined;
   isLoading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  /** Why the registry lists nothing, when the page can say so (a source switched off). */
+  notice?: React.ReactNode;
+}
+
+interface PluginStorePanelProps {
+  sections: readonly StoreSection[];
+  /** The source filter: every default registry, or one registry. */
+  sourceOptions: ReadonlyArray<{ value: string; label: string }>;
+  sourceFilter: string;
+  onSelectSource: (value: string) => void;
   isDemo: boolean;
   onManage: (pluginId: string) => void;
   onOpenSettings: () => void;
 }
 
 /**
- * The plugin store: every registry CPA is configured with, as cards.
+ * The plugin store: CPA's official registry and Oh My CPA's plugin registry side by side,
+ * and any registry the operator added, one section per registry.
  *
- * Installing a plugin runs its code inside the gateway, so the card says two things
- * before anything else: which registry listed the entry, and whose code it names. Oh My
- * CPA's own registry is marked and pinned above the others; the built-in registry with
- * the vendor's repository is the only combination that installs without acknowledging
- * the code by typing the plugin's id.
+ * Each registry is read on its own, so one that cannot be read, or that is switched off,
+ * says so in its own section without hiding the others. A card belongs to the registry
+ * that listed it: two registries may list the same plugin id, and each card installs from
+ * its own registry. Installing a plugin runs its code inside the gateway, so the card says
+ * two things before anything else: which registry listed the entry, and whose code it
+ * names. CPA's official registry with the vendor's repository is the only combination that
+ * installs without acknowledging the code by typing the plugin's id.
+ *
+ * Entries tagged as adapted for Oh My CPA lead their section. The tag is a recommendation
+ * for compatibility, not a grant: those plugins install with the same acknowledgement,
+ * and the built-in automation never manages them.
  */
-export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSettings }: PluginStorePanelProps) {
-  const t = useT();
+export function PluginStorePanel({ sections, sourceOptions, sourceFilter, onSelectSource, isDemo, onManage, onOpenSettings }: PluginStorePanelProps) {
+  const { t, lang } = useI18n();
+  const isPhone = useIsPhoneViewport();
   const [query, setQuery] = React.useState('');
   const [filter, setFilter] = React.useState<PluginStoreFilter>('all');
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set());
-  const [installing, setInstalling] = React.useState<StorePluginItem | null>(null);
+  const [installing, setInstalling] = React.useState<{ entry: StorePluginItem; pluginsEnabled: boolean | undefined } | null>(null);
 
-  const entries = React.useMemo(() => store?.plugins ?? [], [store]);
+  const entries = React.useMemo(() => sections.flatMap((section) => section.data?.plugins ?? []), [sections]);
   const counts = React.useMemo(() => storeFilterCounts(entries), [entries]);
-  const visible = React.useMemo(() => filterStorePlugins(entries, query, filter), [entries, query, filter]);
+  const isLoadingAll = sections.every((section) => section.isLoading);
 
-  const toggleDescription = (storeId: string) => {
+  const toggleDescription = (key: string) => {
     setExpanded((current) => {
       const next = new Set(current);
-      if (next.has(storeId)) next.delete(storeId);
-      else next.add(storeId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  if (isLoading) {
-    return <ListLoading className={styles.empty} />;
-  }
-
   const filterLabels: Record<PluginStoreFilter, string> = {
     all: t('plugin.filter_all'),
+    recommended: t('plugin.filter_recommended'),
     installed: t('plugin.filter_installed'),
     available: t('plugin.filter_available'),
     updates: t('plugin.filter_updates'),
   };
 
+  const filterOptions = PLUGIN_STORE_FILTERS.map((value) => ({ value, label: `${filterLabels[value]} ${counts[value]}` }));
+
   return (
     <div data-plugin-panel="store">
-      <Notice
-        className={styles['store-notice']}
-        tone="info"
-        icon={<SafetyCertificateOutlined />}
-        title={t('plugin.store_notice_title')}
-        description={t('plugin.store_notice_desc')}
-      />
-
-      {(store?.source_errors.length ?? 0) > 0 && (
-        <Notice
-          className={styles['store-notice']}
-          tone="warning"
-          title={t('plugin.source_errors_title')}
-          description={(
-            <ul>
-              {store?.source_errors.map((sourceError) => (
-                <li key={sourceError.source_id || sourceError.source_url}>
-                  <strong>{sourceError.source_name || sourceError.source_url}</strong>: {sourceError.message}
-                </li>
-              ))}
-            </ul>
-          )}
-          action={<Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
+      <Toolbar>
+        <Select
+          className={styles['source-select']}
+          value={sourceFilter}
+          onChange={onSelectSource}
+          aria-label={t('plugin.store_source')}
+          options={sourceOptions.map((option) => ({ ...option }))}
         />
-      )}
-
-      <Toolbar className={styles['toolbar-spaced']}>
+        {/* Five counted filters do not fit a phone's width as tabs; there they are a list
+            beside the source, and the search takes the line below. */}
+        {isPhone && (
+          <Select
+            className={styles['source-select']}
+            value={filter}
+            disabled={isLoadingAll}
+            onChange={(value) => setFilter(value)}
+            aria-label={t('plugin.store_filter')}
+            options={filterOptions}
+          />
+        )}
         <SearchInput
           className={styles.search}
           value={query}
           onChange={setQuery}
           label={t('plugin.search_store')}
         />
-        <Segmented
-          className={styles['store-filters']}
-          value={filter}
-          onChange={(value) => setFilter(value as PluginStoreFilter)}
-          options={PLUGIN_STORE_FILTERS.map((value) => ({
-            value,
-            label: `${filterLabels[value]} ${counts[value]}`,
-          }))}
-        />
+        {!isPhone && (
+          <Segmented
+            className={styles['store-filters']}
+            value={filter}
+            disabled={isLoadingAll}
+            onChange={(value) => setFilter(value as PluginStoreFilter)}
+            options={filterOptions}
+          />
+        )}
       </Toolbar>
 
-      {visible.length === 0 ? (
-        <EmptyState className={styles.empty} title={entries.length === 0 ? t('plugin.store_empty') : t('plugin.search_empty')} />
-      ) : (
-        <div className={styles['card-grid']}>
-          {visible.map((entry) => (
-            <StoreCard
-              key={entry.store_id || `${entry.source_id}/${entry.id}`}
-              entry={entry}
-              isExpanded={expanded.has(entry.store_id)}
-              isDemo={isDemo}
-              onToggleDescription={() => toggleDescription(entry.store_id)}
-              onInstall={() => setInstalling(entry)}
-              onManage={() => onManage(entry.id)}
-            />
-          ))}
-        </div>
-      )}
+      {sections.map((section) => {
+        const listed = section.data?.plugins ?? [];
+        const visible = sortRecommendedFirst(filterStorePlugins(listed, query, filter, lang));
+        return (
+          <section key={section.key} className={styles['store-section']} data-store-source={section.key}>
+            {sections.length > 1 && (
+              <h3 className={styles['section-title']}>
+                <span>{section.title}</span>
+                {section.data && <span className={styles['section-count']}>{listed.length}</span>}
+              </h3>
+            )}
+            {section.isLoading ? (
+              <ListLoading className={styles.empty} />
+            ) : section.error ? (
+              <LoadFailure className={styles['store-notice']} title={t('plugin.source_errors_title')} error={section.error} onRetry={section.onRetry} />
+            ) : (
+              <>
+                {section.notice}
+                {(section.data?.source_errors.length ?? 0) > 0 && (
+                  <Notice
+                    className={styles['store-notice']}
+                    tone="warning"
+                    title={t('plugin.source_errors_title')}
+                    description={(
+                      <ul>
+                        {section.data?.source_errors.map((sourceError) => (
+                          <li key={sourceError.source_id || sourceError.source_url}>
+                            <strong>{sourceError.source_name || sourceError.source_url}</strong>: {sourceError.message}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    action={<Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
+                  />
+                )}
+                {visible.length > 0 ? (
+                  <div className={styles['card-grid']}>
+                    {visible.map((entry) => {
+                      const key = storeEntryKey(entry);
+                      return (
+                        <StoreCard
+                          key={key}
+                          entry={entry}
+                          description={pluginDescription(lang, entry)}
+                          isExpanded={expanded.has(key)}
+                          isDemo={isDemo}
+                          onToggleDescription={() => toggleDescription(key)}
+                          onInstall={() => setInstalling({ entry, pluginsEnabled: section.data?.plugins_enabled })}
+                          onManage={() => onManage(entry.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : !section.notice && (section.data?.source_errors.length ?? 0) === 0 && (
+                  <EmptyState className={styles.empty} title={listed.length === 0 ? t('plugin.store_empty') : t('plugin.search_empty')} />
+                )}
+              </>
+            )}
+          </section>
+        );
+      })}
 
       <PluginInstallModal
-        entry={installing}
-        isPluginSystemEnabled={store?.plugins_enabled ?? true}
+        entry={installing?.entry ?? null}
+        isPluginSystemEnabled={installing?.pluginsEnabled}
         onClose={() => setInstalling(null)}
         onOpenSettings={onOpenSettings}
       />
@@ -181,6 +247,8 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
 
 interface StoreCardProps {
   entry: StorePluginItem;
+  /** The description in the reading language, resolved by the caller. */
+  description: string;
   isExpanded: boolean;
   isDemo: boolean;
   onToggleDescription: () => void;
@@ -188,7 +256,7 @@ interface StoreCardProps {
   onManage: () => void;
 }
 
-function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, onManage }: StoreCardProps) {
+function StoreCard({ entry, description, isExpanded, isDemo, onToggleDescription, onInstall, onManage }: StoreCardProps) {
   const t = useT();
   const blocked = isStoreInstallBlocked(entry);
   const isFromOtherSource = entry.installed && entry.install_source_status === 'different';
@@ -196,7 +264,6 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
   const version = isUpdate && entry.installed_version
     ? t('plugin.version_arrow', { from: formatPluginVersion(entry.installed_version), to: formatPluginVersion(entry.version) })
     : formatPluginVersion(entry.installed ? entry.installed_version || entry.version : entry.version);
-  const description = entry.description?.trim() ?? '';
   const isLong = description.length > DESCRIPTION_CLAMP_CHARS;
   const actionTitle = isDemo ? t('demo.blocked') : blocked === 'auth' ? t('plugin.auth_required_hint') : undefined;
 
@@ -212,6 +279,11 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
 
       <span className={styles.badges}>
         <StoreOriginBadge entry={entry} />
+        {isOmcRecommended(entry) && (
+          <Tooltip title={t('plugin.badge_recommended_hint')}>
+            <span className={styles.badge} data-store-recommended><TagOutlined />{t('plugin.badge_recommended')}</span>
+          </Tooltip>
+        )}
         {isUpdate ? (
           <span className={`${styles.badge} ${styles['badge-accent']}`}>{t('plugin.badge_update')}</span>
         ) : entry.installed ? (
@@ -243,7 +315,7 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
           entry.author && t('plugin.by_author', { author: entry.author }),
           entry.license,
           entry.source_name && t('plugin.from_source', {
-            source: entry.is_omc
+            source: entry.source_kind === 'omc_community'
               ? t('plugin.source_omc')
               : entry.is_official ? t('plugin.source_official') : entry.source_name,
           }),
@@ -286,7 +358,8 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
 
 interface PluginInstallModalProps {
   entry: StorePluginItem | null;
-  isPluginSystemEnabled: boolean;
+  /** CPA's plugin switch as the list read it; absent when the read could not tell. */
+  isPluginSystemEnabled: boolean | undefined;
   onClose: () => void;
   onOpenSettings: () => void;
 }
@@ -341,6 +414,10 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
         toast.warning(t('plugin.update_restart_required'));
         return;
       }
+      if (code === 'builtin_policy_blocks_install') {
+        toast.warning(t('plugin.install_blocked_builtin'));
+        return;
+      }
       if (code === 'plugin_store_rate_limited') {
         toast.error(t('plugin.rate_limited'));
         return;
@@ -380,7 +457,7 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
         <PluginMeta
           items={[
             t('plugin.from_source', {
-              source: entry.is_omc
+              source: entry.source_kind === 'omc_community'
                 ? t('plugin.source_omc')
                 : entry.is_official ? t('plugin.source_official') : entry.source_name,
             }),
@@ -388,7 +465,7 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
             entry.platforms.length > 0 && t('plugin.platforms', { platforms: entry.platforms.join(', ') }),
           ]}
         />
-        {!isPluginSystemEnabled && <Notice tone="warning" title={t('plugin.installed_while_disabled')} />}
+        {isPluginSystemEnabled === false && <Notice tone="warning" title={t('plugin.installed_while_disabled')} />}
         <div>
           <div className={styles['setting-label']}>{t('plugin.version_label')}</div>
           <Radio.Group value={versionMode} onChange={(event) => setVersionMode(event.target.value)}>

@@ -479,17 +479,109 @@ also carry `tps_basis` and `tps_mode`.
 
 ## Plugin store
 
-The plugin store reads CPA's built-in `official` registry plus the registries in
-`plugins.store-sources`. Oh My CPA's own registry
-(`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json`)
-is a managed entry: the server adds it when the source is on (the default) and restores
-it after a configuration save that removed it, so the switch is **OMC Settings →
-Plugin store** (`omc_plugin_source_enabled`), not the configuration editor
-and not the source list on the plugin settings tab. Turning it off removes the
-address on the next plugin read, install or plugin-settings save. Its entries are
-marked Oh My CPA and listed first; like every entry outside CPA's built-in registry,
-installing one requires typing the plugin id, because the confirmation is about
-running code inside the gateway.
+The console has two plugin entry points: **Builtins**, which manages the official plugins
+Oh My CPA itself installs and keeps current, and the **plugin store**, which lists CPA's
+official registry together with Oh My CPA's own community registry
+(`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json`) and
+labels every entry with the source it came from. The community source is managed in
+`plugins.store-sources` according to the **OMC Settings → Plugin store** switch
+(`omc_plugin_source_enabled`), which defaults to on. Manual plugin installs,
+configuration saves and plugin-settings saves synchronize the stored source list with
+that preference. Catalog reads leave CPA configuration unchanged.
+
+`plugins/registry.json` is Oh My CPA's community catalog and stays that way: it keeps
+its address, source id and plugin ids, so an installation that already uses it keeps its
+entries, configuration and history without reinstalling anything. Builtin publishers
+are fixed in [`internal/pluginregistry`](../internal/pluginregistry), independently of
+community source settings.
+
+An entry keeps the kind of source it came from: `official` or `community` for CPA
+sources, `omc_community` for this repository's community registry, `builtin` for the
+official builtin repositories. The kind is display origin only — it decides which entry point and
+source label an entry gets and stops one catalog from standing in for another;
+`omc_community` carries no managed authority. A community entry installs like any store
+entry and still asks for the plugin id, because that confirmation is about running code
+inside the gateway.
+
+### Builtin plugin policy
+
+First-class plugins are Oh My CPA's own: OMC installs them and keeps them current.
+Everything in the plugin store stays an operator install, and listing a source is not an
+endorsement of the code behind it. Every entry keeps the kind of source it came from
+(`official`, `community`, `omc_community`, `builtin`), so an entry is never attributed to
+the wrong catalog.
+
+The builtin feature is on by default for a new or newly bound CPA instance. The global
+switch uninstalls the exact builtin install records OMC owns when it is turned off and
+reinstalls and updates the approved set when it is turned on. Each builtin also has the
+same enable/disable switch as an ordinary plugin. There is no version pinning or
+per-plugin removal: those would prevent OMC from maintaining one coherent builtin set.
+Turning a plugin off keeps its managed copy installed but disabled; the next approved
+update can still replace that copy. The global and per-plugin choices are stored against
+the CPA binding, survive management-key rotation, and do not leak to a different CPA
+address.
+
+Builtins follow normal stable GitHub Releases from their fixed official repositories.
+OMC checks at startup and every fifteen minutes; **Check for updates** requests a check
+immediately. It validates the stable version, the complete platform archive set, exact
+repository download paths, sizes and GitHub's SHA-256 asset digests. CPA receives an exact
+version and direct checksummed artifacts, so a release published during installation
+cannot change which bytes it selects.
+
+The official repository and its release permissions are the publisher trust boundary.
+HTTPS and checksums protect the transfer and artifact identity; they do not protect
+against a compromised publisher. OMC persists observed identities and refuses changed
+bytes for an existing version or an automatic downgrade. If discovery fails, the round
+makes no automatic change and currently running plugins stay as they are.
+
+Another CPA management panel can change the same plugin records. A read-only check runs
+once a minute and queues reconciliation when an owned copy disappears, has the wrong
+version or enablement, or remains installed after the global switch is turned off.
+The check itself never writes. While CPA's plugin system is off, OMC waits. A same-id
+file or install from another source remains a source conflict rather than being claimed
+or replaced.
+
+Updates that require a newer host interface still need a host update. Runtime outcomes
+such as a required CPA restart or an unconfirmed operation remain visible in the list.
+The routes in [`internal/api`](../internal/api) own the response fields and states.
+
+### Registry snapshot and callbacks
+
+OMC serves its resolved releases as a local, public snapshot at
+`<base>/plugin-registry/v2.json`. It carries the exact release assets OMC observed. That address is server-to-server: the gateway reads it while installing,
+so an external CPA needs an origin it can reach, configured explicitly by the operator.
+It is never inferred from `Host`, forwarding headers or any public base-URL setting.
+
+A plain-HTTP callback only belongs on a trusted Compose network or an isolated test
+network. CPA refuses an insecure store registry unless the source address is exact and
+carries a store-auth rule that injects no credential at all: type `none`, applied to the
+registry, and `allow-insecure`. Oh My CPA writes that rule only for its own snapshot
+address and stops on any broader or credentialed rule that already matches instead of
+widening it. An external CPA reached across an untrusted network uses HTTPS. Verifying
+artifact hashes does not make an insecure callback safe: it protects the plugin bytes,
+not the transport that delivered the manifest.
+
+Because the handler is public, it must not take the write gate or configuration mutex a
+reconciliation holds while installing. Doing so would make CPA's install wait on a lock
+held by the request that install is waiting for. Keep it cacheable, credential-free and
+independent of install state.
+
+### OMC community catalog
+
+`plugins/registry.json` remains Oh My CPA's long-lived community registry, owned here.
+Its entries appear in the plugin store under the Oh My CPA community source, and the
+source toggle only registers and displays them: it grants nothing, and it stays
+independent of the builtin feature switch. Community entries are manual installs that
+require typing the plugin id.
+
+`omcpa-codex-candy-eval` is the adaptation published from this catalog; CPA's official
+store lists a different upstream plugin under `cpa-codex-candy-eval`. The ids are not
+interchangeable and both may be installed. Curation stays in this repository, and an Oh
+My CPA release tag adds no trust to community code.
+
+A plugin may also publish a localized description; [Plugin description
+declaration](plugin-declaration.md) fixes what that file contains and how an unknown or
+mismatched document is treated.
 
 ## Plugin pages
 

@@ -1,8 +1,8 @@
 import { settleLayout, until } from '../harness.mjs';
 
 /**
- * Plugin management: the installed list, the store's cards and the plugin system settings,
- * on one page, and the pages plugins register, in the navigation.
+ * Plugin management: the installed list, Oh My CPA's built-in plugins, the store's cards and
+ * the plugin system settings, on one page, and the pages plugins register, in the navigation.
  *
  * What a browser establishes here is what the operator sees and can reach: a store card draws
  * the registry's own artwork and links, an install of anything but the vendor's own code cannot
@@ -24,6 +24,10 @@ const PLUGINS = {
     {
       id: 'request-logger',
       path: '/srv/cpa/plugins/request-logger.so',
+      source_kind: 'official',
+      source_id: 'official',
+      installed_version: '1.0.0',
+      description: 'Logs request metadata.',
       configured: true,
       registered: true,
       enabled: true,
@@ -43,6 +47,7 @@ const PLUGINS = {
     },
     {
       id: 'quota-notifier',
+      source_kind: 'unknown',
       configured: false,
       registered: false,
       enabled: true,
@@ -55,48 +60,82 @@ const PLUGINS = {
   ],
 };
 
-const STORE = {
+const STORE_SOURCES = [
+  { id: 'official', name: 'official', url: 'https://registry.example/plugins.json', is_official: true, source_kind: 'official' },
+  { id: 'source-builtin', name: 'Oh My CPA', url: 'https://omc.example/builtin/registry.json', is_official: false, source_kind: 'builtin' },
+  { id: 'source-omc-community', name: 'Oh My CPA', url: 'https://omc.example/community/registry.json', is_official: false, source_kind: 'omc_community' },
+  { id: 'source-mirror', name: 'mirror.example', url: 'https://mirror.example/registry.json', is_official: false, source_kind: 'community' },
+  { id: 'source-down', name: 'down.example', url: 'https://down.example/r.json', is_official: false, source_kind: 'community' },
+];
+
+const STORE_PLUGINS = [
+  {
+    store_id: 'official/request-logger', source_id: 'official', source_name: 'official', source_kind: 'official', id: 'request-logger', name: 'Request Logger',
+    description: 'Logs request metadata.', author: 'router-for-me', version: '1.1.0', repository_url: 'https://github.com/router-for-me/request-logger',
+    license: 'MIT', tags: ['logging'], logo: LOGO, platforms: ['linux/amd64'], is_official: true, is_official_repository: true, auth_required: false, auth_configured: false,
+    installed: true, installed_version: '1.0.0', install_source_status: 'matched', effective_enabled: true, update_available: true,
+  },
+  {
+    store_id: 'official/rate-limiter', source_id: 'official', source_name: 'official', source_kind: 'official', id: 'rate-limiter', name: 'Rate Limiter',
+    description: 'Token buckets per caller key.', author: 'router-for-me', version: '2.0.0', repository_url: 'https://github.com/router-for-me/rate-limiter',
+    homepage: 'https://limiter.example', license: 'Apache-2.0', tags: ['network', 'limits'], platforms: [], is_official: true, is_official_repository: true,
+    auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+  },
+  {
+    // Listed by the official registry, published in the author's own repository.
+    store_id: 'official/deepseek-search', source_id: 'official', source_name: 'official', source_kind: 'official', id: 'deepseek-search', name: 'DeepSeek Search',
+    description: 'Adds DeepSeek-powered web search.', author: 'karuboniru', version: '0.1.0', repository_url: 'https://github.com/karuboniru/deepseek-search',
+    license: 'MIT', tags: ['search'], platforms: [], is_official: true, is_official_repository: false,
+    auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+  },
+  {
+    store_id: 'source-mirror/team-router', source_id: 'source-mirror', source_name: 'mirror.example', source_kind: 'community', id: 'team-router', name: 'Team Router',
+    description: 'Routes by team.', author: 'someone', version: '0.3.0', tags: [], platforms: [], is_official: false, is_official_repository: false, is_omc: false,
+    auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+  },
+  {
+    // A community author's plugin tagged as adapted for Oh My CPA: recommended, still third-party.
+    store_id: 'source-mirror/codex-candy', source_id: 'source-mirror', source_name: 'mirror.example', source_kind: 'community', id: 'codex-candy', name: 'Codex Candy',
+    description: 'Evaluates Codex candy.', description_i18n: { en: 'Scores Codex sessions.', zh: '为 Codex 会话评分。' }, author: 'someone',
+    version: '1.0.0', tags: ['OMC'], platforms: [], is_official: false, is_official_repository: false, is_omc: false,
+    auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+  },
+];
+
+/** One registry per read, as the server answers it: a source that cannot be read reports itself. */
+function storeOf(sourceId) {
+  const source = STORE_SOURCES.find((candidate) => candidate.id === (sourceId || 'official'));
+  const plugins = STORE_PLUGINS.filter((plugin) => plugin.source_id === source.id);
+  const errors = source.id === 'source-down'
+    ? [{ source_id: source.id, source_name: source.name, source_url: source.url, message: 'fetch registry: 503' }]
+    : [];
+  return { plugins_enabled: true, plugins_dir: '/srv/cpa/plugins', sources: STORE_SOURCES, source_errors: errors, plugins, total: plugins.length };
+}
+
+const OMC_COMMUNITY = {
   plugins_enabled: true,
   plugins_dir: '/srv/cpa/plugins',
-  sources: [
-    { id: 'official', name: 'official', url: 'https://registry.example/plugins.json', is_official: true },
-    { id: 'source-mirror', name: 'mirror.example', url: 'https://mirror.example/registry.json', is_official: false },
-    { id: 'source-omc', name: 'Oh My CPA', url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json', is_official: false },
-  ],
-  source_errors: [{ source_id: 'source-down', source_name: 'down.example', source_url: 'https://down.example/r.json', message: 'fetch registry: 503' }],
-  total: 5,
-  plugins: [
-    {
-      store_id: 'source-omc/usage-digest', source_id: 'source-omc', source_name: 'Oh My CPA', id: 'usage-digest', name: 'Usage Digest',
-      description: 'Posts a daily spend and request summary.', author: 'oh-my-cpa', version: '0.3.0', repository_url: 'https://github.com/WizisCool/omc-plugin-usage-digest',
-      license: 'MIT', tags: ['digest'], platforms: [], is_official: false, is_official_repository: false, is_omc: true,
-      auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
-    },
-    {
-      store_id: 'official/request-logger', source_id: 'official', source_name: 'official', id: 'request-logger', name: 'Request Logger',
-      description: 'Logs request metadata.', author: 'router-for-me', version: '1.1.0', repository_url: 'https://github.com/router-for-me/request-logger',
-      license: 'MIT', tags: ['logging'], logo: LOGO, platforms: ['linux/amd64'], is_official: true, is_official_repository: true, auth_required: false, auth_configured: false,
-      installed: true, installed_version: '1.0.0', install_source_status: 'matched', effective_enabled: true, update_available: true,
-    },
-    {
-      store_id: 'official/rate-limiter', source_id: 'official', source_name: 'official', id: 'rate-limiter', name: 'Rate Limiter',
-      description: 'Token buckets per caller key.', author: 'router-for-me', version: '2.0.0', repository_url: 'https://github.com/router-for-me/rate-limiter',
-      homepage: 'https://limiter.example', license: 'Apache-2.0', tags: ['network', 'limits'], platforms: [], is_official: true, is_official_repository: true,
-      auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
-    },
-    {
-      // Listed by the official registry, published in the author's own repository.
-      store_id: 'official/deepseek-search', source_id: 'official', source_name: 'official', id: 'deepseek-search', name: 'DeepSeek Search',
-      description: 'Adds DeepSeek-powered web search.', author: 'karuboniru', version: '0.1.0', repository_url: 'https://github.com/karuboniru/deepseek-search',
-      license: 'MIT', tags: ['search'], platforms: [], is_official: true, is_official_repository: false,
-      auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
-    },
-    {
-      store_id: 'source-mirror/team-router', source_id: 'source-mirror', source_name: 'mirror.example', id: 'team-router', name: 'Team Router',
-      description: 'Routes by team.', author: 'someone', version: '0.3.0', tags: [], platforms: [], is_official: false, is_official_repository: false,
-      auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
-    },
-  ],
+  source_enabled: true,
+  source_id: 'source-omc-community',
+  sources: [STORE_SOURCES[2]],
+  source_errors: [],
+  total: 1,
+  plugins: [{
+    store_id: 'source-omc-community/usage-digest', source_id: 'source-omc-community', source_name: 'Oh My CPA', source_kind: 'omc_community', id: 'usage-digest', name: 'Usage Digest',
+    description: 'Posts a daily spend and request summary.', author: 'someone', version: '0.3.0', tags: ['digest'], platforms: [],
+    is_official: false, is_official_repository: false, is_omc: true, auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+  }],
+};
+
+const BUILTINS = {
+  policy: { enabled: true, revision: 3 },
+  catalog: { status: 'ready', revision: 'catalog-7' },
+  plugins: [{
+    id: 'omc-zcode-oauth', name: 'ZCode OAuth', description: 'ZCode OAuth provider', description_i18n: { en: 'Signs in to ZCode.', zh: '登录 ZCode。' },
+    version: '0.2.0', source_id: 'source-builtin', source_kind: 'builtin', policy: { enabled: true },
+    status: 'running', installed_version: '0.2.0', runtime_version: '0.2.0', registered: true, effective_enabled: true, reason: '',
+  }],
+  last_reconcile_at: '',
 };
 
 const SETTINGS = {
@@ -114,7 +153,35 @@ const SETTINGS = {
 /** The fixtures, with a log of the writes each scenario can assert against. */
 export function pluginManagementFixtures(writes) {
   const installedPlugins = structuredClone(PLUGINS);
+  let builtins = structuredClone(BUILTINS);
   return [
+    [(url, method) => method === 'PUT' && url.pathname.endsWith('/management/builtin-plugins/policy'), (url, method, request) => {
+      const body = JSON.parse(request.postData() ?? '{}');
+      writes.push({ kind: 'builtin-policy', body });
+      // Switching on starts a run, which the fixture completes at once and stamps as the worker does.
+      builtins = {
+        ...builtins,
+        policy: { enabled: body.enabled, revision: body.revision + 1 },
+        plugins: builtins.plugins.map((plugin) => ({ ...plugin, status: body.enabled ? 'running' : 'blocked', reason: body.enabled ? '' : 'automation_disabled' })),
+        last_reconcile_at: body.enabled ? `2026-10-31T10:0${body.revision}:00Z` : builtins.last_reconcile_at,
+      };
+      return builtins;
+    }],
+    [(url, method) => method === 'PUT' && /\/management\/builtin-plugins\/[^/]+\/policy$/.test(url.pathname), (url, method, request) => {
+      const body = JSON.parse(request.postData() ?? '{}');
+      writes.push({ kind: 'builtin-plugin-policy', body });
+      builtins = {
+        ...builtins,
+        policy: { ...builtins.policy, revision: body.revision + 1 },
+        plugins: builtins.plugins.map((plugin) => plugin.id === 'omc-zcode-oauth'
+          ? { ...plugin, policy: { enabled: body.enabled }, status: body.enabled ? 'running' : 'disabled', reason: '' }
+          : plugin),
+        last_reconcile_at: body.enabled ? `2026-10-31T11:0${body.revision}:00Z` : builtins.last_reconcile_at,
+      };
+      return builtins;
+    }],
+    [(url) => url.pathname.endsWith('/management/builtin-plugins'), () => builtins],
+    [(url) => url.pathname.endsWith('/management/omc-community-plugins'), () => OMC_COMMUNITY],
     [(url) => url.pathname.endsWith('/plugin-host/v0/resource/plugins/request-logger/console'), () => ({ contentType: 'text/html', body: `<!doctype html><html data-theme="plugin-owned"><body>
       <h1>Probe plugin console</h1><input aria-label="Plugin draft"><output id="plugin-theme"></output>
       <div style="height:1600px"></div>
@@ -146,7 +213,7 @@ export function pluginManagementFixtures(writes) {
       writes.push({ kind: 'install', path: url.pathname, body: JSON.parse(request.postData() ?? '{}') });
       return { status: 'ok', id: 'team-router', version: '0.3.0', plugins_enabled: true, restart_required: false };
     }],
-    [(url) => url.pathname.endsWith('/management/plugin-store'), () => STORE],
+    [(url) => url.pathname.endsWith('/management/plugin-store'), (url) => storeOf(url.searchParams.get('source_id'))],
     [(url, method) => method === 'DELETE' && /\/management\/plugins\/[^/]+$/.test(url.pathname), (url, method) => {
       if (method !== 'DELETE') throw new Error(`Unexpected plugin operation: ${method}`);
       const pluginId = decodeURIComponent(url.pathname.split('/').pop());
@@ -190,16 +257,31 @@ export async function pluginManagement({ base, page, check, writes }) {
   const menuMark = pageEntry.locator('.app-menu-plugin-logo[data-plugin-logo="svg"] img');
   check('the page entry carries the plugin\'s own artwork', (await menuMark.count()) === 1 && (await menuMark.getAttribute('src')) === LOGO);
 
-  // ── store cards ─────────────────────────────────────────────────────────────
+  // ── store cards: CPA's official registry and the OMC registry, side by side ──
   const cards = page.locator('[data-plugin-panel="store"] article[data-store-id]');
-  const cardsShown = await isTrue(async () => (await cards.count()) === 5, 'the store cards');
-  check('the store renders one card per registry entry', cardsShown, String(await cards.count()));
+  const cardsShown = await isTrue(async () => (await cards.count()) === 4, 'the store cards');
+  check('the store opens on CPA\'s official registry and the OMC registry together', cardsShown
+    && (await page.locator('[data-store-source="official"] article').count()) === 3
+    && (await page.locator('[data-store-source="omc"] article').count()) === 1, String(await cards.count()));
   if (!cardsShown) return;
+  const sourceSelect = page.getByRole('combobox', { name: /插件源|Plugin source/ });
+  await sourceSelect.click();
+  const sourceOptions = await page.locator('.ant-select-dropdown:visible .ant-select-item-option').allInnerTexts();
+  check('the source filter offers both registries together, each alone, and the operator\'s own; never the built-in catalog',
+    sourceOptions.length === 5 && !sourceOptions.includes('Oh My CPA') && sourceOptions.includes('mirror.example'), JSON.stringify(sourceOptions));
+  await page.keyboard.press('Escape');
 
-  const omc = page.locator('article[data-store-id="source-omc/usage-digest"]');
-  check('the Oh My CPA registry is pinned above the other registries', (await cards.first().getAttribute('data-store-id')) === 'source-omc/usage-digest');
-  const omcText = await omc.innerText();
-  check('an Oh My CPA entry carries its own badge and source name', /Oh My CPA/.test(omcText) && !/Third-party|第三方/.test(omcText), omcText);
+  // ── the OMC registry: hosted by Oh My CPA, installed as third-party code ─────
+  const omcCard = page.locator('[data-store-source="omc"] article[data-store-id="source-omc-community/usage-digest"]');
+  const omcCardText = await omcCard.innerText();
+  check('an OMC registry entry is marked as such, not as a built-in',
+    (await omcCard.getAttribute('data-store-origin')) === 'omc-community'
+      && /OMC 插件源|OMC registry/.test(omcCardText) && !/内置插件|Built-in/.test(omcCardText), omcCardText);
+  await omcCard.getByRole('button', { name: /安装|Install/ }).click();
+  const omcInstall = page.locator('.ant-modal:visible');
+  await omcInstall.waitFor({ timeout: 5000 });
+  check('an OMC registry install needs its id typed', await omcInstall.locator('.ant-modal-footer .ant-btn-primary').isDisabled());
+  await omcInstall.getByRole('button', { name: /取消|Cancel/ }).click();
 
   const limiter = page.locator('article[data-store-id="official/rate-limiter"]');
   const limiterText = await limiter.innerText();
@@ -224,7 +306,6 @@ export async function pluginManagement({ base, page, check, writes }) {
     cardMark.mask === 'none' && !cardMark.isPainted, JSON.stringify(cardMark));
   check('a card without an icon draws the generic mark', (await limiter.locator('[data-plugin-logo="fallback"]').count()) === 1);
   check('an installed entry with a newer release offers the update', (await logger.getByRole('button', { name: /更新|Update/ }).count()) >= 1);
-  check('the failing registry is named above the cards', (await page.getByText('down.example').count()) >= 1);
 
   // ── the official registry's community entry ─────────────────────────────────
   const communityCard = page.locator('article[data-store-id="official/deepseek-search"]');
@@ -246,6 +327,22 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('the store search matches tags', searched, String(await cards.count()));
   await page.getByPlaceholder(/搜索名称|Search by name/).fill('');
 
+  // ── a registry that cannot be read says so, and another one can still be chosen ──
+  await page.goto(`${base}/plugins/store?source=source-down`, { waitUntil: 'domcontentloaded' });
+  const downNamed = await isTrue(async () => (await page.getByText('down.example').count()) >= 1, 'the failing registry notice');
+  check('the failing registry is named in place of its cards', downNamed && (await cards.count()) === 0);
+  await page.getByRole('combobox', { name: /插件源|Plugin source/ }).click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option', { hasText: 'mirror.example' }).click();
+  const mirrorRead = await isTrue(async () => new URL(page.url()).searchParams.get('source') === 'source-mirror' && (await cards.count()) === 2, 'the mirror registry');
+  check('choosing another registry reads that one', mirrorRead, page.url());
+
+  // ── an entry adapted for Oh My CPA leads, still as third-party code ──────────
+  const recommended = page.locator('[data-store-source="source-mirror"] article').first();
+  check('an entry tagged for Oh My CPA leads its registry', (await recommended.getAttribute('data-store-id')) === 'source-mirror/codex-candy');
+  const candyText = await recommended.innerText();
+  check('the recommended entry shows its declared description in the reading language', /Scores Codex sessions\.|为 Codex 会话评分。/.test(candyText), candyText);
+  check('a recommendation does not make the entry first-party', (await recommended.getAttribute('data-store-origin')) === 'third-party');
+
   // ── a third-party install needs the typed id ────────────────────────────────
   const mirror = page.locator('article[data-store-id="source-mirror/team-router"]');
   await mirror.getByRole('button', { name: /安装|Install/ }).click();
@@ -261,15 +358,26 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('the install names the registry the card came from', installed && install.body.source_id === 'source-mirror' && install.path.endsWith('/team-router/install'), JSON.stringify(install));
 
   // ── the installed list and a plugin's settings ──────────────────────────────
-  // Switched in place rather than reloaded: the store read above is what supplies the
-  // installed rows' descriptions, and a reload would start without it.
-  await page.locator('.plugins-tabs .ant-segmented-item').first().click();
+  // Switched in place rather than reloaded: the official registry's read is what tells an
+  // installed row about a newer release, and a reload would start without it.
+  await page.getByRole('combobox', { name: /插件源|Plugin source/ }).click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await isTrue(async () => (await cards.count()) === 4, 'both default registries again');
+  const installedEntry = page.locator('.app-menu [data-route-path="/plugins"]').first();
+  await installedEntry.click();
+  const installedSelected = await isTrue(
+    async () => new URL(page.url()).pathname.endsWith('/plugins') && /ant-menu-item-selected/.test((await installedEntry.getAttribute('class')) ?? ''),
+    'the plugin management entry',
+  );
+  check('the installed list is plugin management, a navigation entry of its own', installedSelected, page.url());
   const rows = page.locator('[data-plugin-panel="installed"] article[data-plugin-id]');
   await isTrue(async () => (await rows.count()) === 2, 'the installed rows');
   const waitingText = await page.locator('article[data-plugin-id="quota-notifier"]').innerText();
   check('an enabled plugin that is not running says so', /未运行|not running/.test(waitingText), waitingText);
   const describedText = await page.locator('article[data-plugin-id="request-logger"]').innerText();
-  check('an installed row borrows the store description once the store was read', describedText.includes('Logs request metadata.'), describedText);
+  check('an installed row shows its own description', describedText.includes('Logs request metadata.'), describedText);
+  check('an installed row names the registry it came from', /CPA 官方源|CPA official/.test(describedText), describedText);
+  check('an installed row no install record vouches for says its source is unknown', /来源未知|Unknown source/.test(waitingText), waitingText);
   check('an installed row names the release it can update to', /v1\.1\.0/.test(describedText), describedText);
 
   const loggerRow = page.locator('article[data-plugin-id="request-logger"]');
@@ -496,21 +604,72 @@ export async function pluginManagement({ base, page, check, writes }) {
     Boolean(panelLogoBox) && panelLogoBox.width <= 16 && panelLogoBox.height <= 16, JSON.stringify(panelLogoBox));
   await page.keyboard.press('Escape');
 
+  // ── Oh My CPA's built-in plugins: default-on automation and per-plugin switches ──
+  await page.goto(`${base}/plugins/builtins`, { waitUntil: 'domcontentloaded' });
+  const builtinEntry = page.locator('.app-menu [data-route-path="/plugins/builtins"]').first();
+  const builtinSelected = await isTrue(
+    async () => /ant-menu-item-selected/.test((await builtinEntry.getAttribute('class')) ?? ''),
+    'the built-in navigation selection',
+  );
+  check('the built-in plugins are a navigation entry of their own, selected on their page', builtinSelected);
+  check('the plugin group names three places besides plugin pages: built-in plugins, plugin management and the store',
+    JSON.stringify(await page.locator('.app-menu [data-route-path^="/plugins"]').evaluateAll((nodes) => [...new Set(nodes.map((node) => node.getAttribute('data-route-path')))].sort()))
+      === JSON.stringify(['/plugins', '/plugins/builtins', '/plugins/store']));
+  const builtinRow = page.locator('[data-plugin-panel="builtins"] article[data-plugin-id="omc-zcode-oauth"]');
+  await builtinRow.waitFor();
+  const builtinText = await builtinRow.innerText();
+  const automation = page.locator('[data-plugin-panel="builtins"] [data-builtin-enabled]').getByRole('switch');
+  check('the built-in plugin is on by default and shows its declared description',
+    (await automation.getAttribute('aria-checked')) === 'true'
+      && (await builtinRow.getAttribute('data-builtin-status')) === 'running'
+      && /登录 ZCode。|Signs in to ZCode\./.test(builtinText), builtinText);
+  await automation.click();
+  const stopped = await isTrue(async () => writes.some((write) => write.kind === 'builtin-policy'), 'the global switch write');
+  const stopWrite = writes.find((write) => write.kind === 'builtin-policy');
+  check('turning the feature off writes the visible revision with no consent field',
+    stopped && stopWrite.body.enabled === false && stopWrite.body.revision === 3 && !('consent' in stopWrite.body), JSON.stringify(stopWrite));
+  const featureOff = await isTrue(
+    async () => (await page.locator('[data-plugin-panel="builtins"] [data-builtin-enabled]').getAttribute('data-builtin-enabled')) === 'false',
+    'the disabled built-in feature',
+  );
+  check('turning the feature off says managed copies are uninstalled',
+    featureOff && await page.getByText(/内置插件已停用|Built-in plugins are off/).first().isVisible());
+  check('with the feature off the page holds only its switch', (await builtinRow.count()) === 0);
+  await automation.click();
+  const featureOn = await isTrue(
+    async () => (await page.locator('[data-plugin-panel="builtins"] [data-builtin-enabled]').getAttribute('data-builtin-enabled')) === 'true',
+    'the re-enabled built-in feature',
+  );
+  const resumed = await isTrue(async () => writes.filter((write) => write.kind === 'builtin-policy').length === 2, 'the global switch resume');
+  const resumeWrite = writes.filter((write) => write.kind === 'builtin-policy')[1];
+  check('turning the feature back on reuses the next visible revision',
+    featureOn && resumed && resumeWrite.body.enabled === true && resumeWrite.body.revision === 4, JSON.stringify(resumeWrite));
+  const resumeReported = await isTrue(async () => page.getByText(/已启用内置插件|Built-in plugins are on/).first().isVisible(), 'the resume outcome');
+  check('turning the feature on reports once the run it started has finished', resumeReported);
+  await builtinRow.getByRole('switch').click();
+  const perPlugin = await isTrue(async () => writes.some((write) => write.kind === 'builtin-plugin-policy'), 'the per-plugin switch write');
+  const perPluginWrite = writes.find((write) => write.kind === 'builtin-plugin-policy');
+  check('the per-plugin switch writes only that plugin policy and keeps the built-in installed',
+    perPlugin && perPluginWrite.body.enabled === false && perPluginWrite.body.revision === 5
+      && /v0\.2\.0/.test(await builtinRow.innerText()),
+    JSON.stringify(perPluginWrite));
+
   // ── plugin system settings ──────────────────────────────────────────────────
   await page.goto(`${base}/plugins/settings`, { waitUntil: 'domcontentloaded' });
   const settings = page.locator('[data-plugin-panel="settings"]');
   await settings.waitFor({ timeout: 10000 });
   const omcRow = settings.locator('[data-plugin-omc-source]');
-  check('the managed Oh My CPA source is a fixed row rather than an editable source',
+  check('the managed OMC plugin registry is a fixed row rather than an editable source',
     (await omcRow.count()) === 1 && (await omcRow.locator('input').count()) === 0
-      && (await omcRow.innerText()).includes('Oh My CPA'));
+      && /OMC 插件源|OMC plugin registry/.test(await omcRow.innerText()));
   const omcRowText = await omcRow.innerText();
   check('the managed source row is one compact line: no registry address and no state label',
     !/https?:\/\//.test(omcRowText) && !/(已启用|已关闭|\bOn\b|\bOff\b)/.test(omcRowText), omcRowText);
   const glyphOf = (row) => row.locator('svg').first().evaluate((node) => node.outerHTML);
   const omcGlyph = await glyphOf(omcRow);
-  check('the managed source row draws the official source\'s glyph',
-    omcGlyph === (await glyphOf(settings.locator('[data-plugin-official-source]'))), omcGlyph.slice(0, 120));
+  // It lists other authors' plugins, so it must not borrow the official source's mark.
+  check('the community registry row does not draw the official source\'s glyph',
+    omcGlyph !== (await glyphOf(settings.locator('[data-plugin-official-source]'))), omcGlyph.slice(0, 120));
   check('the store auth rule is shown as a form, not YAML', (await settings.locator('[data-plugin-auth-rule]').count()) === 1
     && (await settings.locator('input[value="MIRROR_TOKEN"]').count()) === 1);
   await settings.getByRole('button', { name: /添加源|Add source/ }).click();

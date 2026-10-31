@@ -78,6 +78,50 @@ do not promise the console's revision-checked editing contract for those calls.
 These rules live in `management_plugin_host.go` and
 `internal/cpa/management/client_plugin_host.go`; they do not widen ordinary DTOs.
 
+### First-class plugins
+
+The console has two plugin entry points. **Builtins** manages the official plugins Oh My
+CPA installs and keeps current from the fixed official repositories in
+[`internal/pluginregistry`](../internal/pluginregistry). The **plugin store** lists CPA's official registry and
+Oh My CPA's own community registry together, labelling each entry with its source;
+community entries stay manual installs that ask for the plugin id. Listing a source is
+not an endorsement of the code behind it, and community entries never inherit builtin
+management authority.
+
+Builtin management is a default-on desired-state loop, not a one-time grant. The global
+switch installs and updates the approved set while it is on, and uninstalls only the
+exact OMC-owned copies while it is off. Each builtin can be enabled or disabled like an
+ordinary plugin; disabled copies remain installed but unloaded. There is no version pin
+or per-plugin removal, because either would make “maintain the latest approved set”
+false.
+
+The policy belongs to the CPA binding. Changing the bound address creates a new
+default-on policy, while rotating the management key preserves the existing switches.
+An entry keeps its origin kind (`official`, `community`, `omc_community`, `builtin`) so a
+community source cannot silently stand in for a builtin of the same id. A same-id copy
+from another source, or a native file without an OMC install record, is reported as a
+source conflict instead of being claimed by precedence. The kind is display origin only
+and never grants managed authority.
+
+Because CPA plugins can also be changed by another management panel, OMC runs a
+read-only drift check once a minute. It compares the desired policy with the exact
+owned install record and native plugin observation; a difference queues the normal
+audited reconciliation, which reinstalls, disables, updates or uninstalls as required.
+OMC discovers stable GitHub Releases from those repositories, validates the exact
+asset names, repository paths and SHA-256 digests, and gives CPA an immutable local
+snapshot for installation. A failed release check stops changes for that round.
+Previously observed artifact identities cannot change and versions cannot move backwards.
+The trust boundary is the official repositories and their release permissions; an
+asset checksum protects integrity, not against a compromised publisher.
+
+OMC never writes plugin files. It asks CPA to install and reads back what CPA reports,
+so archive layout, checksums and load semantics stay CPA's. Enablement reaches CPA's
+configuration through CPA's own operation rather than the console's revision-checked
+editor: treat it like a plugin page write, keep unsaved drafts out of the way, and
+expect CPA's last-write semantics. The encrypted pre-write backup and adoption rules in
+[CPA integration](cpa-v8-compat.md) still apply to these operations; the editor's
+revision check applies to editor writes.
+
 ### Agent and MCP
 
 The [capability executor](agent-capabilities.md) owns authorization, approval and audit

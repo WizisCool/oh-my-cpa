@@ -12,7 +12,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveApiTarget, resolveBasePath, resolveListenAddr } from './api-target.mjs';
+import { readEnvOrFile, resolveApiTarget, resolveBasePath, resolveListenAddr } from './api-target.mjs';
+import { devRegistryPort, discoverDockerGateway, startBuiltinRegistryBridge } from './dev-builtin-registry.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const apiOnly = process.argv.includes('--api-only');
@@ -20,6 +21,7 @@ const isWindows = process.platform === 'win32';
 const children = new Map();
 let stopping = false;
 let shutdownPromise;
+let builtinRegistryBridge;
 
 function executableOnPath(command) {
   const pathEntries = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
@@ -162,7 +164,9 @@ function shutdown(exitCode, reason) {
   if (shutdownPromise) return shutdownPromise;
   stopping = true;
   if (reason) console.error(`\n[dev] ${reason}; stopping the development loop.`);
-  shutdownPromise = Promise.all([...children.values()].map(stopChild)).then(() => {
+  const tasks = [...children.values()].map(stopChild);
+  if (builtinRegistryBridge) tasks.push(new Promise((resolve) => builtinRegistryBridge.close(resolve)));
+  shutdownPromise = Promise.all(tasks).then(() => {
     process.exitCode = exitCode;
   });
   return shutdownPromise;
@@ -175,6 +179,19 @@ try {
   const air = resolveAir();
   const apiTarget = resolveApiTarget(root);
   const devBasePath = resolveBasePath(root);
+  const explicitRegistryOrigin = readEnvOrFile(root, 'OMCPA_BUILTIN_REGISTRY_ORIGIN');
+  const apiEnv = { ...process.env };
+  if (!explicitRegistryOrigin) {
+    const cpaBaseURL = readEnvOrFile(root, 'OMCPA_CPA_BASE_URL');
+    const bridgeHost = discoverDockerGateway(cpaBaseURL) || '127.0.0.1';
+    const bridgePort = devRegistryPort(apiTarget);
+    builtinRegistryBridge = await startBuiltinRegistryBridge({ host: bridgeHost, port: bridgePort, apiTarget, basePath: devBasePath });
+    apiEnv.OMCPA_BUILTIN_REGISTRY_ORIGIN = `http://${bridgeHost}:${bridgePort}`;
+    // HTTP clients must reach this local-only bridge directly, never through a
+    // developer's configured corporate proxy.
+    for (const name of ['NO_PROXY', 'no_proxy']) apiEnv[name] = [apiEnv[name], bridgeHost].filter(Boolean).join(',');
+    console.log(`[dev] builtin registry bridge: ${apiEnv.OMCPA_BUILTIN_REGISTRY_ORIGIN}${devBasePath}plugin-registry/v2.json`);
+  }
   if (apiOnly) {
     console.log(`[dev] mode: Go API only (${resolveListenAddr(root)})`);
   } else {
@@ -183,7 +200,7 @@ try {
   }
   console.log('[dev] CPA is external; start it separately with `pnpm cpa:start` when needed.\n');
 
-  start('Go API', air, []);
+  start('Go API', air, [], { env: apiEnv });
   if (!apiOnly) start('Vite', process.execPath, [resolveVite()], { cwd: path.join(root, 'web') });
 } catch (error) {
   await shutdown(1, error instanceof Error ? error.message : String(error));

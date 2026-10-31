@@ -1,4 +1,5 @@
 import {
+  BoxOutlined,
   PuzzleOutlined,
   ShopOutlined,
   AuditOutlined,
@@ -93,6 +94,7 @@ export function buildNavGroups(pluginPages: readonly PluginPageEntry[]): NavGrou
     key: 'plugins',
     labelKey: 'nav.group.plugins',
     items: [
+      { key: '/plugins/builtins', labelKey: 'nav.plugin_builtins', icon: <BoxOutlined /> },
       { key: '/plugins', labelKey: 'nav.plugins', icon: <PuzzleOutlined /> },
       { key: '/plugins/store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
       ...pluginPages.map((page): NavEntry => ({

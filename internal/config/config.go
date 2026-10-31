@@ -20,19 +20,20 @@ var BuildVersion = "v0.1.0-dev"
 // Config contains process configuration. Secrets are read once at startup and
 // are never included in API responses.
 type Config struct {
-	ListenAddr     string
-	BasePath       string
-	DataDir        string
-	DatabasePath   string
-	CPA            CPAConfig
-	MasterKey      string
-	Usage          UsageConfig
-	PublicURL      string
-	Version        string
-	RequestTimeout time.Duration
-	TLSSkipVerify  bool
-	Release        ReleaseConfig
-	Updater        UpdaterConfig
+	BuiltinRegistryOrigin string
+	ListenAddr            string
+	BasePath              string
+	DataDir               string
+	DatabasePath          string
+	CPA                   CPAConfig
+	MasterKey             string
+	Usage                 UsageConfig
+	PublicURL             string
+	Version               string
+	RequestTimeout        time.Duration
+	TLSSkipVerify         bool
+	Release               ReleaseConfig
+	Updater               UpdaterConfig
 	// GoogleFontsURL is the stylesheet API the font library installs Google Fonts
 	// families from (OMCPA_GOOGLE_FONTS_URL); a compatible mirror serves a deployment
 	// that cannot reach Google. Validated when the installer is built.
@@ -288,22 +289,23 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		ListenAddr:        listenAddr,
-		Usage:             usage,
-		BasePath:          basePath,
-		DataDir:           dataDir,
-		DatabasePath:      databasePath,
-		MasterKey:         masterKey,
-		PublicURL:         publicURL,
-		Version:           envOr("OMCPA_VERSION", BuildVersion),
-		RequestTimeout:    timeout,
-		TLSSkipVerify:     tlsSkipVerify,
-		TrustedProxyCIDRs: trustedProxyCIDRs,
-		Release:           releaseConfig,
-		Updater:           updaterConfig,
-		GoogleFontsURL:    strings.TrimSpace(os.Getenv("OMCPA_GOOGLE_FONTS_URL")),
-		CPA:               cpa,
-		IsDemoMode:        demoMode,
+		BuiltinRegistryOrigin: strings.TrimSpace(os.Getenv("OMCPA_BUILTIN_REGISTRY_ORIGIN")),
+		ListenAddr:            listenAddr,
+		Usage:                 usage,
+		BasePath:              basePath,
+		DataDir:               dataDir,
+		DatabasePath:          databasePath,
+		MasterKey:             masterKey,
+		PublicURL:             publicURL,
+		Version:               envOr("OMCPA_VERSION", BuildVersion),
+		RequestTimeout:        timeout,
+		TLSSkipVerify:         tlsSkipVerify,
+		TrustedProxyCIDRs:     trustedProxyCIDRs,
+		Release:               releaseConfig,
+		Updater:               updaterConfig,
+		GoogleFontsURL:        strings.TrimSpace(os.Getenv("OMCPA_GOOGLE_FONTS_URL")),
+		CPA:                   cpa,
+		IsDemoMode:            demoMode,
 	}, nil
 }
 

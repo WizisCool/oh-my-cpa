@@ -1,34 +1,70 @@
 import type { MessageKey } from '../../i18n/catalog';
+import type { Lang } from '../../i18n/language';
 import type {
   PluginItem,
+  PluginStoreSource,
   PluginStoreAuthRule,
   PluginStoreAuthTarget,
   PluginStoreAuthType,
   StorePluginItem,
 } from '../../types/plugin';
 
-export type PluginStoreFilter = 'all' | 'installed' | 'available' | 'updates';
+import { pluginDescription } from './pluginDescription';
 
-export const PLUGIN_STORE_FILTERS: readonly PluginStoreFilter[] = ['all', 'installed', 'available', 'updates'];
+export type PluginStoreFilter = 'all' | 'recommended' | 'installed' | 'available' | 'updates';
+
+export const PLUGIN_STORE_FILTERS: readonly PluginStoreFilter[] = ['all', 'recommended', 'installed', 'available', 'updates'];
+
+/**
+ * The registry tag a community author sets to say a plugin is adapted for Oh My CPA.
+ *
+ * Matched exactly. It earns the entry a place in the recommended section and nothing
+ * else: the plugin is still third-party code, installed with the same acknowledgement,
+ * and never joins the built-in catalog or its automation.
+ */
+export const OMC_RECOMMENDED_TAG = 'OMC';
+
+export function isOmcRecommended(entry: StorePluginItem): boolean {
+  return entry.tags.includes(OMC_RECOMMENDED_TAG);
+}
+
+/** Recommended entries first, each group in the registry's own order. */
+export function sortRecommendedFirst(entries: readonly StorePluginItem[]): StorePluginItem[] {
+  return [...entries.filter(isOmcRecommended), ...entries.filter((entry) => !isOmcRecommended(entry))];
+}
+
+/**
+ * A store card's identity: the registry that listed it and the entry. Two registries may
+ * list the same plugin id, and each is a card of its own that installs from its registry.
+ */
+export function storeEntryKey(entry: Pick<StorePluginItem, 'source_id' | 'id'>): string {
+  return `${entry.source_id}\n${entry.id}`;
+}
 
 function matchesQuery(haystack: Array<string | undefined>, query: string): boolean {
   if (!query) return true;
   return haystack.some((value) => (value ?? '').toLowerCase().includes(query));
 }
 
-/** The store entries a search and a filter chip leave, in the registry's own order. */
+/**
+ * The store entries a search and a filter chip leave, in the registry's own order. The
+ * search reads the description the card shows as well as the registry's own, so a reader
+ * finds a plugin by either.
+ */
 export function filterStorePlugins(
   entries: readonly StorePluginItem[],
   query: string,
   filter: PluginStoreFilter,
+  lang: Lang,
 ): StorePluginItem[] {
   const needle = query.trim().toLowerCase();
   return entries.filter((entry) => {
+    if (filter === 'recommended' && !isOmcRecommended(entry)) return false;
     if (filter === 'installed' && !entry.installed) return false;
     if (filter === 'available' && entry.installed) return false;
     if (filter === 'updates' && !(entry.installed && entry.update_available)) return false;
     return matchesQuery(
-      [entry.id, entry.name, entry.description, entry.author, entry.source_name, ...entry.tags],
+      [entry.id, entry.name, pluginDescription(lang, entry), entry.description, entry.author, entry.source_name, ...entry.tags],
       needle,
     );
   });
@@ -37,10 +73,35 @@ export function filterStorePlugins(
 export function storeFilterCounts(entries: readonly StorePluginItem[]): Record<PluginStoreFilter, number> {
   return {
     all: entries.length,
+    recommended: entries.filter(isOmcRecommended).length,
     installed: entries.filter((entry) => entry.installed).length,
     available: entries.filter((entry) => !entry.installed).length,
     updates: entries.filter((entry) => entry.installed && entry.update_available).length,
   };
+}
+
+/**
+ * The registry sources CPA's store offers: CPA's official registry and the operator's
+ * own. Oh My CPA's built-in catalog and its community registry each have a page of their
+ * own, so neither is a choice in the store's source picker.
+ */
+export function cpaStoreSources(sources: readonly PluginStoreSource[] | undefined): PluginStoreSource[] {
+  return (sources ?? []).filter((source) => source.source_kind === 'official' || source.source_kind === 'community');
+}
+
+/**
+ * The description an installed row shows: the plugin's own, then the listing of the
+ * registry it was installed from. Another registry listing the same id never describes it.
+ */
+export function installedPluginDescription(
+  lang: Lang,
+  plugin: PluginItem,
+  listing: StorePluginItem | undefined,
+): string {
+  return pluginDescription(lang, {
+    description: plugin.description || listing?.description,
+    description_i18n: plugin.description_i18n ?? listing?.description_i18n,
+  });
 }
 
 /** The installed plugins a search leaves, matched on what the card shows. */
@@ -48,13 +109,15 @@ export function filterInstalledPlugins(
   plugins: readonly PluginItem[],
   query: string,
   catalog: ReadonlyMap<string, StorePluginItem>,
+  lang: Lang,
 ): PluginItem[] {
   const needle = query.trim().toLowerCase();
   return plugins.filter((plugin) => {
-    const listing = catalog.get(plugin.id);
+    const listing = installedListing(catalog, plugin);
     return matchesQuery(
       [
-        plugin.id, plugin.metadata?.name, plugin.metadata?.author, plugin.oauth_provider, listing?.description,
+        plugin.id, plugin.metadata?.name, plugin.metadata?.author, plugin.oauth_provider,
+        installedPluginDescription(lang, plugin, listing),
         ...(listing?.tags ?? []), ...(plugin.pages ?? []).map((page) => page.label),
       ],
       needle,
@@ -63,21 +126,19 @@ export function filterInstalledPlugins(
 }
 
 /**
- * The store listing that describes each installed plugin, by plugin id.
+ * The store listings that were read, by registry and plugin id.
  *
- * CPA's installed list carries what the plugin registered - name, version, author - but
- * not the description, tags or homepage a registry publishes, so an installed card
- * borrows them from the store when the store has been read. When two registries list
- * the same id, the one the plugin was installed from wins, then the official one.
+ * An installed row borrows tags, a homepage and update news from the listing of the
+ * registry its install record names, and only that one: another registry listing the same
+ * id says nothing about the copy that is installed.
  */
-export function storeListingsByPluginId(entries: readonly StorePluginItem[] | undefined): Map<string, StorePluginItem> {
-  const listings = new Map<string, StorePluginItem>();
-  const rank = (entry: StorePluginItem) => (entry.install_source_status === 'matched' ? 2 : 0) + (entry.is_official ? 1 : 0);
-  for (const entry of entries ?? []) {
-    const existing = listings.get(entry.id);
-    if (!existing || rank(entry) > rank(existing)) listings.set(entry.id, entry);
-  }
-  return listings;
+export function storeListingsBySource(entries: readonly StorePluginItem[]): Map<string, StorePluginItem> {
+  return new Map(entries.map((entry) => [storeEntryKey(entry), entry]));
+}
+
+/** The listing of the registry an installed plugin came from, when that registry was read. */
+export function installedListing(catalog: ReadonlyMap<string, StorePluginItem>, plugin: PluginItem): StorePluginItem | undefined {
+  return plugin.source_id ? catalog.get(storeEntryKey({ source_id: plugin.source_id, id: plugin.id })) : undefined;
 }
 
 /** Whether the store's installed/update state for an entry can be acted on. */
@@ -91,12 +152,14 @@ export function isStoreInstallBlocked(entry: StorePluginItem): 'auth' | undefine
  *
  * `official` is the only combination whose code the gateway vendor publishes itself.
  * The official registry is a catalogue, and most of what it lists lives in the authors'
- * own repositories, so a listing alone never reads as reviewed code.
+ * own repositories, so a listing alone never reads as reviewed code. The OMC community
+ * registry is hosted by Oh My CPA but lists other authors' plugins: it is named for
+ * where it lives, and installs as third-party code.
  */
-export type StorePluginOrigin = 'omc' | 'official' | 'official-source' | 'third-party';
+export type StorePluginOrigin = 'omc-community' | 'official' | 'official-source' | 'third-party';
 
 export function storePluginOrigin(entry: StorePluginItem): StorePluginOrigin {
-  if (entry.is_omc) return 'omc';
+  if (entry.source_kind === 'omc_community') return 'omc-community';
   if (!entry.is_official) return 'third-party';
   return entry.is_official_repository ? 'official' : 'official-source';
 }
@@ -115,7 +178,7 @@ export interface StoreInstallWarning {
 }
 
 export const STORE_INSTALL_WARNINGS: Record<StorePluginOrigin, StoreInstallWarning | undefined> = {
-  omc: { title: 'plugin.omc_plugin_title', description: 'plugin.omc_plugin_desc' },
+  'omc-community': { title: 'plugin.omc_plugin_title', description: 'plugin.omc_plugin_desc' },
   official: undefined,
   'official-source': { title: 'plugin.official_source_plugin_title', description: 'plugin.official_source_plugin_desc' },
   'third-party': { title: 'plugin.third_party_title', description: 'plugin.third_party_desc' },

@@ -103,7 +103,7 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 
 	// An installed plugin the host has not loaded reports no name or logo of its own;
 	// the store's listing of it supplies them, before the logos are inlined below.
-	h.pluginIdentities.fill(request.Context(), client, list.Plugins)
+	// Runtime observations remain native; catalog identity never supplies a runtime version.
 
 	// A plugin's logo is its own to declare, but the browser that draws it must not
 	// depend on the plugin's host: the mark is inlined here instead. A logo that
@@ -112,6 +112,7 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 	h.pluginLogos.inline(request.Context(), list.Plugins)
 
 	projected := projectPluginItems(list.Plugins)
+	h.enrichInstalledPluginDTOs(request.Context(), client, list.Plugins, projected)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"plugins_enabled": list.PluginsEnabled,
 		"plugins_dir":     boundedText(list.PluginsDir, pluginTextLimit),
@@ -166,6 +167,10 @@ func (h *Handler) setPluginEnabled(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	defer h.leaveConfigWrite()
+	if err := h.rejectBuiltinNativeMutationLocked(request, client, pluginID); err != nil {
+		writeBuiltinPolicyError(writer, err)
+		return
+	}
 
 	action := "plugin.enable"
 	if !*req.Enabled {
@@ -282,6 +287,14 @@ func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request
 		return
 	}
 
+	if !h.enterConfigWrite(writer, request) {
+		return
+	}
+	defer h.leaveConfigWrite()
+	if err := h.rejectBuiltinNativeMutationLocked(request, client, pluginID); err != nil {
+		writeBuiltinPolicyError(writer, err)
+		return
+	}
 	target := security.RedactText(pluginID)
 	if auditErr := h.recordAudit(request, "plugin.delete", "plugin", target, "attempt", nil); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; plugin deletion aborted")
@@ -319,37 +332,36 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	// Oh My CPA's own registry is part of what this console ships, so the source is
-	// put in place before CPA is asked: a source CPA does not list is a source whose
-	// entries cannot be installed.
-	isOMCSourceEnabled, err := h.reconcileOMCPluginSource(request.Context(), request, client)
+	store, err := h.readPluginCatalog(request.Context(), client, strings.TrimSpace(request.URL.Query().Get("source_id")))
 	if err != nil {
-		writePluginSourceError(writer, err, false)
-		return
+		if errors.Is(err, errPluginSourceNotConfigured) {
+			writeError(writer, http.StatusNotFound, "plugin source is not configured")
+			return
+		}
+		if len(store.Sources) == 0 {
+			writePluginFacadeError(writer, err)
+			return
+		}
+		selected := request.URL.Query().Get("source_id")
+		if selected == "" {
+			selected = officialPluginSourceID
+		}
+		for _, source := range store.Sources {
+			if source.ID == selected {
+				store.SourceErrors = []management.PluginStoreSourceError{{SourceID: source.ID, SourceName: source.Name, SourceURL: source.URL, Message: "selected plugin source is unavailable"}}
+				break
+			}
+		}
+		store.Plugins = []management.StorePluginItem{}
 	}
 
-	store, err := client.PluginStore(request.Context())
-	if err != nil {
-		writePluginFacadeError(writer, err)
-		return
-	}
-	if !isOMCSourceEnabled {
-		// A demonstration cannot write its fixture, so its fixed catalogue still
-		// lists the registry after the switch is turned off; the response withholds it
-		// instead. A deployment does not reach this with entries to drop: the
-		// reconciliation either removed the source before CPA was read or failed the
-		// read.
-		dropOMCPluginSource(&store)
-	}
-
-	h.pluginIdentities.remember(store.Plugins)
 	h.pluginLogos.inlineStore(request.Context(), store.Plugins)
 
 	projected := projectStorePlugins(store.Plugins)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"plugins_enabled": store.PluginsEnabled,
 		"plugins_dir":     boundedText(store.PluginsDir, pluginTextLimit),
-		"sources":         projectPluginStoreSources(store.Sources),
+		"sources":         projectPluginStoreSources(store.Sources, h.mustBuiltinRegistryURL()),
 		"source_errors":   projectPluginStoreSourceErrors(store.SourceErrors),
 		"plugins":         projected,
 		"total":           len(projected),
@@ -400,10 +412,15 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	// An install names a source, so the managed registry has to be in CPA's list
-	// before the request reaches it - including after a configuration edit that
-	// removed it.
-	if _, err := h.reconcileOMCPluginSource(request.Context(), request, client); err != nil {
+	if !h.enterConfigWrite(writer, request) {
+		return
+	}
+	defer h.leaveConfigWrite()
+	if err := h.rejectBuiltinStoreInstall(pluginID, req.SourceID); err != nil {
+		writeJSON(writer, http.StatusConflict, map[string]any{"error": "built-in plugins are managed from their dedicated page", "code": "builtin_plugins_managed_separately"})
+		return
+	}
+	if _, err := h.reconcileOMCPluginSourceLocked(request.Context(), request, client); err != nil {
 		writePluginSourceError(writer, err, false)
 		return
 	}

@@ -203,6 +203,12 @@ func (h *Handler) servePluginRoute(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
+	if !client.IsPluginHostCredentialAllowed(forwardedPluginHeaders(request)) {
+		h.serveAuditedPluginCall(writer, request, routePath, func() (management.PluginHostResponse, error) {
+			return client.PluginRoute(request.Context(), request.Method, routePath, request.URL.RawQuery, forwardedPluginHeaders(request), body)
+		})
+		return
+	}
 	isNativeWrite := management.IsPluginHostNativeWrite(request.Method, routePath)
 	if isNativeWrite {
 		if err := h.providerWrites.acquire(request.Context()); err != nil {
@@ -210,6 +216,12 @@ func (h *Handler) servePluginRoute(writer http.ResponseWriter, request *http.Req
 			return
 		}
 		defer h.providerWrites.release()
+		h.configMu.Lock()
+		defer h.configMu.Unlock()
+		if err := h.guardNativeBuiltinRouteLocked(request, client, routePath, body); err != nil {
+			writeJSON(writer, http.StatusConflict, map[string]any{"error": "builtin policy blocks the native plugin operation", "code": "builtin_policy_blocks_install"})
+			return
+		}
 	}
 	h.serveAuditedPluginCall(writer, request, routePath, func() (management.PluginHostResponse, error) {
 		response, err := client.PluginRoute(request.Context(), request.Method, routePath, request.URL.RawQuery, forwardedPluginHeaders(request), body)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -224,6 +225,11 @@ func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *h
 
 // afterConfigWrite drops what a configuration write may have made stale.
 func (h *Handler) afterConfigWrite() {
+	if !h.cfg.IsDemoMode && h.repo != nil {
+		if instance, err := h.repo.GetInstance(context.Background(), defaultInstanceID()); err == nil {
+			h.queueBuiltinReconcile(instance)
+		}
+	}
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}

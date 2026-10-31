@@ -103,7 +103,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // changes the gateway's configuration rather than this console's presentation: the store and
   // the configuration readers consult the same boolean, so the row has to write it as a boolean
   // and nothing else.
-  const pluginSourceSwitch = page.getByRole('switch', { name: 'Oh My CPA plugin registry', exact: true });
+  const pluginSourceSwitch = page.getByRole('switch', { name: 'OMC plugin registry', exact: true });
   await until(() => pluginSourceSwitch.isEnabled(), { label: 'the plugin source switch after the preference read' });
   check('the Oh My CPA plugin registry defaults to on', await pluginSourceSwitch.getAttribute('aria-checked') === 'true');
   await pluginSourceSwitch.click();

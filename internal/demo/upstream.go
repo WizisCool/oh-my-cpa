@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"gopkg.in/yaml.v3"
 	"log/slog"
 	"net"
@@ -260,8 +261,8 @@ func newUpstreamState(now time.Time) *upstreamState {
 			"logo":              plugin.logo,
 			"install_type":      "github_release",
 			"platforms":         []map[string]any{{"goos": "linux", "goarch": "amd64"}, {"goos": "linux", "goarch": "arm64"}},
-			"auth_required":     plugin.sourceID == "community",
-			"auth_configured":   plugin.sourceID == "community",
+			"auth_required":     plugin.sourceID == pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json"),
+			"auth_configured":   plugin.sourceID == pluginregistry.SourceID("https://plugins.cpa-community.example/registry.json"),
 			"installed":         isInstalled,
 			"installed_version": plugin.installedVersion,
 			"effective_enabled": isInstalled && local.isEnabled,

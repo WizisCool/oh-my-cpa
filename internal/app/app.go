@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -397,10 +398,14 @@ func (a *App) Run(ctx context.Context) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	listener, err := net.Listen("tcp", a.cfg.ListenAddr)
+	if err != nil {
+		return fmt.Errorf("listen for HTTP: %w", err)
+	}
 	serverErrors := make(chan error, 1)
 	go func() {
-		a.logger.Info("HTTP server listening", "addr", a.cfg.ListenAddr, "base_path", a.cfg.BasePath)
-		serverErrors <- a.httpServer.ListenAndServe()
+		a.logger.Info("HTTP server listening", "addr", listener.Addr().String(), "base_path", a.cfg.BasePath)
+		serverErrors <- a.httpServer.Serve(listener)
 	}()
 
 	// Background loops run under a context this function owns, so every way out -
@@ -478,6 +483,10 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
+	if err := a.handler.StartBuiltinWorker(runCtx); err != nil {
+		return err
+	}
+
 	// Automatic quota refresh is best effort too: a round that cannot reach CPA leaves the
 	// stored readings as they were. It reads providers through the gateway with each
 	// credential, so a demo, whose gateway is the fixture, never starts it.
@@ -530,6 +539,7 @@ func (a *App) Run(ctx context.Context) error {
 	stop()
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	a.handler.CloseBuiltinWorker()
 	a.handler.CloseBrowserRuns()
 	a.handler.CloseUpdateWatchers()
 	select {
@@ -571,6 +581,7 @@ func (a *App) Close() error {
 	if a == nil {
 		return nil
 	}
+	a.handler.CloseBuiltinWorker()
 	a.handler.CloseBrowserRuns()
 	a.handler.CloseUpdateWatchers()
 	// The fixture listens on a loopback socket, so it has to be closed with the
@@ -648,7 +659,10 @@ func bootstrapDefaultInstance(ctx context.Context, cfg config.Config, repo *repo
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("load default CPA instance: %w", err)
 	}
-	return repo.UpsertInstance(ctx, instance)
+	if err := repo.UpsertInstance(ctx, instance); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (l *cpaModelLister) ListConfiguredModels(ctx context.Context) ([]string, error) {

@@ -57,6 +57,18 @@ installations require one manual upgrade to a build carrying the new public key;
 do not add an unverified fallback. Forks that do not configure a key cannot offer
 signed automatic OMC updates.
 
+### Builtin plugin releases
+
+Publish a normal stable release in the official plugin repository. OMC discovers it
+automatically and installs the exact platform archives with their GitHub-provided
+SHA-256 digests. The publisher allowlist and archive naming rules live in
+[`internal/pluginregistry`](../internal/pluginregistry); adding a publisher is a host
+code change, while publishing its next stable version is not.
+
+Keep the plugin's release workflow and repository publishing permissions protected.
+Publish the complete archive set before making the release public. [Operations](operations.md#builtin-plugin-policy)
+describes discovery, failed checks and runtime outcomes.
+
 ## Prepare and publish
 
 1. Update root and web package versions together and add user-visible changes and

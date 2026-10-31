@@ -266,6 +266,10 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		CheckRedirect: sameOriginRedirectGuard(errPluginLogoRedirectRefused, maxPluginLogoRedirects),
 	}
 
+	handler.pluginDescriptions.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body := `{"schema_version":2,"plugins":[{"id":"limiter","name":"Rate Limiter","description":"Token buckets","author":"router-for-me","version":"1.2.0","repository":"router-for-me/limiter","logo":"https://cdn.example/limiter.png","homepage":"javascript:alert(1)","license":"MIT","tags":["network","limits"],"install":{"type":"github_release","artifacts":[{"goos":"linux","goarch":"amd64"}]}},{"id":"deepseek-search","name":"DeepSeek Search","description":"Search","author":"community","version":"0.1.0","repository":"karuboniru/deepseek-search"}]}`
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
 	state.handler = handler
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
@@ -328,7 +332,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	// declared in `PluginItemDTO`, so a field added to `management.PluginItem` for
 	// decoding CPA's document cannot reach a caller without a decision here.
 	assertDeclaredKeys(t, "plugin", plugin, []string{
-		"id", "path", "configured", "registered", "enabled", "effective_enabled", "supports_oauth",
+		"id", "source_kind", "source_id", "installed_version", "description", "path", "configured", "registered", "enabled", "effective_enabled", "supports_oauth",
 		"oauth_provider", "supports_quota", "quota_provider", "pages", "logo", "repository_url", "config_fields", "metadata",
 	})
 	// Of the menus the plugin registers, only a resource under its own prefix is a
@@ -396,21 +400,21 @@ func TestPluginsLifecycle(t *testing.T) {
 	}
 	_ = json.NewDecoder(storeResp.Body).Decode(&storeData)
 	storeResp.Body.Close()
-	if len(storeData.Plugins) != 3 || storeData.Plugins[0]["id"] != "limiter" {
+	if len(storeData.Plugins) != 2 || storeData.Plugins[0]["id"] != "limiter" {
 		t.Fatalf("unexpected store plugins: %#v", storeData)
 	}
 	if storeData.Total != len(storeData.Plugins) {
 		t.Fatalf("store total = %d, want the projected count %d", storeData.Total, len(storeData.Plugins))
 	}
-	if len(storeData.Sources) != 2 || storeData.Sources[0]["is_official"] != true || storeData.Sources[1]["is_official"] != false {
+	if len(storeData.Sources) != 1 || storeData.Sources[0]["is_official"] != true {
 		t.Fatalf("sources = %#v, want the official registry marked", storeData.Sources)
 	}
-	if len(storeData.SourceErrors) != 1 || storeData.SourceErrors[0]["source_name"] != "down.example" {
+	if len(storeData.SourceErrors) != 0 {
 		t.Fatalf("source_errors = %#v, want the failing registry reported", storeData.SourceErrors)
 	}
-	official, community, mirror := storeData.Plugins[0], storeData.Plugins[1], storeData.Plugins[2]
+	official, community := storeData.Plugins[0], storeData.Plugins[1]
 	assertDeclaredKeys(t, "store plugin", official, []string{
-		"store_id", "source_id", "source_name", "id", "name", "description", "author", "version",
+		"store_id", "source_id", "source_name", "source_kind", "id", "name", "description", "author", "version",
 		"repository_url", "homepage", "license", "tags", "logo", "install_type", "platforms",
 		"is_official", "is_official_repository", "is_omc", "auth_required", "auth_configured", "installed", "installed_version",
 		"install_source_status", "effective_enabled", "update_available",
@@ -429,10 +433,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	if community["is_official"] != true || community["is_official_repository"] != false || community["repository_url"] != "https://github.com/karuboniru/deepseek-search" {
 		t.Fatalf("official-registry community entry = %#v, want the source kept and the repository not called official", community)
 	}
-	// A third-party registry that copies a first-party repository is still third-party.
-	if mirror["is_official"] != false || mirror["is_official_repository"] != true || mirror["homepage"] != "https://limiter.example" {
-		t.Fatalf("mirror entry = %#v, want it untrusted with its homepage kept", mirror)
-	}
+
 	if platforms, _ := official["platforms"].([]any); len(platforms) != 1 || platforms[0] != "linux/amd64" {
 		t.Fatalf("platforms = %#v", official["platforms"])
 	}

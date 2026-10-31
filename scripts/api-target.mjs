@@ -78,7 +78,7 @@ function readDotEnvValue(root, name) {
 // Mirrors os.LookupEnv plus config.Load: an explicitly set variable, even an
 // empty one, suppresses the dotenv file, and an empty result falls back to the
 // documented default.
-function readEnvOrFile(root, name) {
+export function readEnvOrFile(root, name) {
   if (name in process.env) return (process.env[name] || '').trim();
   return readDotEnvValue(root, name).trim();
 }

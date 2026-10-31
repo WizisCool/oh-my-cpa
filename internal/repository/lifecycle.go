@@ -65,6 +65,12 @@ type TableLifecycle struct {
 // whose rows should roll declares a rule and is deleted by the same batched,
 // horizon-publishing engine as everything else; it does not write its own loop.
 var TABLE_LIFECYCLES = map[string]TableLifecycle{
+	"builtin_catalog":            {Kind: LifecycleReplaced, Reason: "current builtin release snapshot"},
+	"builtin_artifacts":          {Kind: LifecyclePermanent, Reason: "immutable approved executable identities"},
+	"builtin_releases":           {Kind: LifecyclePermanent, Reason: "explicit historical approved versions"},
+	"builtin_policies":           {Kind: LifecyclePermanent, Reason: "gateway-bound builtin switches"},
+	"builtin_plugin_policies":    {Kind: LifecyclePermanent, Reason: "operator pins and removal tombstones"},
+	"builtin_operations":         {Kind: LifecycleReplaced, Reason: "last dispatch outcome per gateway generation and plugin"},
 	"channel_model_prices":       {Kind: LifecycleReplaced, Reason: "operator prices keyed by the usage channel and upstream model; history lives in model_price_versions"},
 	"credential_warmup_policies": {Kind: LifecyclePermanent, Reason: "operator-approved scheduling policies, bound to instance and exact credential identity"},
 	"credential_warmup_state":    {Kind: LifecycleOwnerBounded, Reason: "one scheduling record per credential; preserved for restart deduplication"},
