@@ -194,7 +194,9 @@ export function RoutingPanel() {
   });
   const { providerIcons, pluginLogos } = useProviderBranding();
   const credentials = React.useMemo(() => indexCredentialFiles(authFiles.data?.files || []), [authFiles.data]);
-  const configuredProviders = providersQuery.data?.providers;
+  const configuredProviders = providersQuery.isFetching || providersQuery.isError
+    ? undefined
+    : providersQuery.data?.providers;
   const sources = React.useMemo<IdentitySources>(
     () => ({ credentials, providerIcons, configuredProviders, pluginLogos }),
     [credentials, providerIcons, configuredProviders, pluginLogos],

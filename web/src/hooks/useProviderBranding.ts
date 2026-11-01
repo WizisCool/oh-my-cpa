@@ -13,5 +13,10 @@ export function useProviderBranding() {
   // Positional ids can have moved in the editor since another route read the catalog.
   const providers = useQuery({ queryKey: ['management-providers-sanitized'], queryFn: () => api.getManagementProviders(false), staleTime: 0 });
   const providersByID = useMemo(() => new Map((providers.data?.providers ?? []).map((provider) => [provider.id, provider])), [providers.data]);
-  return useMemo(() => ({ providerIcons, pluginLogos, providersByID, isProviderCatalogUnknown: !providers.data }), [providerIcons, pluginLogos, providersByID, providers.data]);
+  return useMemo(() => ({
+    providerIcons,
+    pluginLogos,
+    providersByID,
+    isProviderCatalogUnknown: providers.isFetching || providers.isError || !providers.data,
+  }), [providerIcons, pluginLogos, providersByID, providers.data, providers.isFetching, providers.isError]);
 }

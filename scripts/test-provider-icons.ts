@@ -228,6 +228,16 @@ test('a connection keeps its selected mark across surfaces without relabelling O
   assert.equal(resolveProviderMark(unknown).iconId, '');
   assert.equal(resolveProviderPickerIcon(unknown), 'OpenAI');
   assert.equal(modelMarkIconId('gpt-5'), 'OpenAI');
+  assert.deepEqual(
+    resolveProviderMark({ id: 'codex-0', family: 'codex', name: 'Codex' }).providerKeys,
+    ['codex-0'],
+    'an API-key family is not proof of plugin ownership',
+  );
+  assert.deepEqual(
+    resolveProviderMark({ id: 'compat-0', family: 'openai-compatibility', name: 'Relay', upstream_name: 'plugin-relay' }).providerKeys,
+    ['plugin-relay', 'compat-0'],
+    'a plugin upstream name is proof of plugin ownership',
+  );
 });
 
 test('DOM and exported marks share ownership, revision, missing-resource and colour rules', () => {

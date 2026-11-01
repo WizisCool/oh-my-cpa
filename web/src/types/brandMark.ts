@@ -10,6 +10,7 @@ export interface BrandMark {
   iconId?: string;
   logo?: string;
   fallbackIconId?: string;
+  /** Keys proven to identify a plugin-owned provider; a protocol family alone is not proof. */
   providerKeys?: readonly string[];
   /** A projected connection has not yet been joined to the canonical provider catalog. */
   isIdentityUnknown?: boolean;
@@ -47,8 +48,15 @@ export function resolveProviderMark(provider: ProviderBrandIdentity, sources: Pr
   const canonical = provider.id ? sources.providersByID?.get(provider.id) : undefined;
   const hasCanonicalIdentity = !sources.isProviderCatalogUnknown && canonical && canonical.family === provider.family && canonical.name === provider.name;
   if (hasCanonicalIdentity) provider = { ...canonical, ...provider, base_url: provider.base_url ?? canonical.base_url };
-  const providerKeys = [provider.family, provider.upstream_name, provider.name, provider.id, ...(provider.aliases ?? [])]
+  const logoKeys = [provider.family, provider.upstream_name, provider.name, provider.id, ...(provider.aliases ?? [])]
     .filter((key): key is string => Boolean(key));
+  // A protocol family names how a connection speaks, not who owns its artwork. Only an
+  // OAuth channel's family is a provider identity; an API-key family is not.
+  const providerKeys = [
+    provider.upstream_name,
+    provider.id,
+    ...(provider.is_oauth ? [provider.family, provider.name, ...(provider.aliases ?? [])] : []),
+  ].filter((key): key is string => Boolean(key));
   const fallbackIconId = provider.is_oauth
     ? credentialProviderIconId(provider.family ?? '', provider.name)
     : inferProviderIcon(provider.family ?? '', provider.name, provider.base_url) ?? '';
@@ -57,7 +65,7 @@ export function resolveProviderMark(provider: ProviderBrandIdentity, sources: Pr
     || provider.aliases?.map((key) => icons[key]).find(Boolean);
   return {
     iconId: selected || fallbackIconId,
-    logo: resolveLogo(providerKeys, sources.pluginLogos),
+    logo: resolveLogo(logoKeys, sources.pluginLogos),
     fallbackIconId,
     providerKeys,
     isIdentityUnknown: Boolean(provider.id && (sources.isProviderCatalogUnknown || (sources.providersByID && provider.family === 'openai-compatibility' && !hasCanonicalIdentity))),

@@ -533,7 +533,7 @@ export function aggregateProviders({
     const meta = isOAuth ? OAUTH_CHANNEL_META[normIdentity] : undefined;
     const name = isOAuth && meta ? meta.name : (cp.name || cp.upstream_name || cp.id);
 
-    const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth, aliases: [cp.family] }, { providerIcons: customIcons, pluginLogos });
+    const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
 
     let configuredCreds = 0;
     if (cp.key_entries && cp.key_entries.length > 0) {
@@ -603,7 +603,7 @@ export function aggregateProviders({
 
     const meta = OAUTH_CHANNEL_META[normType];
     const name = meta ? meta.name : capitalize(item.type);
-    const mark = resolveProviderMark({ id: item.type, family: item.type, name: item.type, is_oauth: true }, { providerIcons: customIcons, pluginLogos });
+    const mark = resolveProviderMark({ id: item.type, family: item.type, name: item.type, is_oauth: true, aliases: [normType] }, { providerIcons: customIcons, pluginLogos });
 
     const traffic = resolveTraffic([item.type]);
 

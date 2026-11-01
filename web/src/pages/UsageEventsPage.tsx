@@ -334,7 +334,9 @@ export const UsageEventsPage: React.FC = () => {
     queryFn: () => api.getManagementProviders(false),
     staleTime: 60_000,
   });
-  const configuredProviders = providersQuery.data?.providers;
+  const configuredProviders = providersQuery.isFetching || providersQuery.isError
+    ? undefined
+    : providersQuery.data?.providers;
   // Resolves CPA's stored provider key to the name the operator configured, so
   // the filter names a line the same way the providers page does.
   const providerName = React.useMemo(

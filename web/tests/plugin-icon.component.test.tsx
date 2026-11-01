@@ -62,7 +62,7 @@ describe('plugin artwork', () => {
 });
 
 describe('provider artwork', () => {
-  it('retains a verified provider identity during background metadata revalidation', async () => {
+  it('retains a verified provider identity while metadata revalidation is unknown', async () => {
     const api = installOmcApi();
     const client = createTestQueryClient();
     client.setQueryData(['management-providers-sanitized'], { providers: [{ id: 'compat-0', family: 'openai-compatibility', name: 'Relay', upstream_name: 'plugin-relay' }], total: 1 });
@@ -73,9 +73,10 @@ describe('provider artwork', () => {
     try {
       await pending.arrived;
       expect(view.result.current.providersByID.get('compat-0')?.upstream_name).toBe('plugin-relay');
-      expect(view.result.current.isProviderCatalogUnknown).toBe(false);
-    } finally {
+      expect(view.result.current.isProviderCatalogUnknown).toBe(true);
       await act(async () => { pending.release(); });
+      await waitFor(() => expect(view.result.current.isProviderCatalogUnknown).toBe(false));
+    } finally {
       view.unmount();
     }
   });
