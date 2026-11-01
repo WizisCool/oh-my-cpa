@@ -118,17 +118,38 @@ it.each(['invalid', 'unsupported', 'inconsistent', 'unclassified'] as const)('sh
   expect(explanation).toContain('30');
 });
 
-it('exposes independent duration and TTFT intervals in the row and drawer', async () => {
-  renderTier({ latency_ms: 65_000, ttft_ms: 3_000 }, event => <>
+it('paints the duration from its ramp in the row and drawer, and leaves TTFT in the secondary ink', async () => {
+  const { container } = renderTier({ latency_ms: 65_000, ttft_ms: 3_000 }, event => <>
     <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
     <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
   </>);
-  expect(await screen.findAllByLabelText(/65\.00 s.*≥ 30\.00 s/)).toHaveLength(2);
-  const ttftAccessibleName = `${usageEventMessages['events.ttft']}: 3.00 s. TTFT ≤ 3.00 s`;
-  expect(screen.getAllByLabelText(ttftAccessibleName)).toHaveLength(2);
+  const duration = await screen.findAllByText('65.00 s');
+  expect(duration).toHaveLength(2);
+  // One reading, one ramp: every duration readout asks for the same three values.
+  for (const readout of duration) {
+    expect(readout.style.getPropertyValue('--duration-from')).toBe('var(--timing-green)');
+    expect(readout.style.getPropertyValue('--duration-to')).toBe('var(--timing-orange)');
+    expect(readout.style.getPropertyValue('--duration-from-share')).toBe('0%');
+  }
+  // TTFT is detail, not a verdict: a minute of waiting must not paint it.
+  const ttft = container.querySelector('.req-ttft-val');
+  expect(ttft?.textContent).toBe('TTFT 3.00 s');
+  expect(ttft?.className).not.toContain('req-timing-value');
+  expect(container.querySelector('.req-ttft-val .req-timing-value')).toBeNull();
   fireEvent.click(screen.getByRole('tab', { name: /Performance/ }));
-  expect(await screen.findAllByLabelText(ttftAccessibleName)).toHaveLength(3);
-  expect(screen.getAllByLabelText(/65\.00 s.*≥ 30\.00 s/)).toHaveLength(3);
+  await screen.findByRole('heading', { name: usageEventMessages['events.waterfall_title'] });
+  // The drawer's hero, the waterfall header and the total legend all read the same ramp, and each
+  // of them asks for it; the drawer renders in a portal, so the document is the container.
+  const ramps = [...document.querySelectorAll<HTMLElement>('.req-timing-value')];
+  expect(ramps).toHaveLength(3);
+  for (const readout of ramps) {
+    expect(readout.textContent).toBe('65.00 s');
+    expect(readout.style.getPropertyValue('--duration-from-share')).toBe('0%');
+  }
+  // TTFT is detail: neither its readouts nor the waterfall legend may carry the ramp.
+  const ttftReadouts = screen.getAllByText('3.00 s');
+  expect(ttftReadouts.length).toBeGreaterThan(0);
+  expect(ttftReadouts.every((node) => !node.className.includes('req-timing-value'))).toBe(true);
 });
 
 it.each([undefined, null, 0, -1, 65_000, 65_001])('keeps an unmeasured TTFT (%s) out of the row and drawer', async ttft => {
@@ -137,7 +158,7 @@ it.each([undefined, null, 0, -1, 65_000, 65_001])('keeps an unmeasured TTFT (%s)
     <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
   </>);
   expect(await screen.findAllByText('65.00 s')).toHaveLength(2);
-  expect(screen.queryByLabelText(/TTFT.*(?:≤|<|≥)/)).toBeNull();
+  expect(document.body.textContent).not.toContain('TTFT');
 });
 
 it('reads structured detail in the drawer without merging observations into canonical totals or estimated costs', async () => {

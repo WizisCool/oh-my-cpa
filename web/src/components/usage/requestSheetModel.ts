@@ -17,11 +17,12 @@ import {
   eventCacheRate,
   eventTokensPerSecond,
   formatEventDuration,
+  hasMeasurableTTFT,
   isFastTierEvent,
-  latencyTone,
-  ttftTone,
   requestTransport,
 } from '../../types/usageEventMetrics';
+import { durationScaleMix } from '../../theme/durationScale';
+import type { TwoStopMix } from '../../theme/twoStopMix';
 import type { TpsCalculationMode } from '../../types/tpsCalculation';
 import type { UsageEvent } from '../../types/usageEvents';
 import { maskKeyText } from '../../utils/maskKey';
@@ -46,7 +47,7 @@ import { formatRequestTimestamp } from './requestTimestamp';
  * no document to clone and no style to compute.
  */
 
-export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn' | 'timing-green' | 'timing-amber' | 'timing-orange';
+export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn';
 
 /** The glyphs a cell uses where the list uses an icon: a marker a reader already knows from the list. */
 export type SheetGlyph = 'non_stream' | 'websocket' | 'substituted' | 'routed' | 'fast' | 'model' | 'reasoning';
@@ -66,6 +67,12 @@ export type SheetSegment =
    * unless the word is given a tone of its own.
    */
   | { kind: 'dot'; text: string; tone: SheetTone; textTone?: SheetTone; isWashed?: boolean; cacheRate?: number }
+  /**
+   * A reading painted from a two-stop mix: the request's duration. The image gets the same
+   * ramp the list asks CSS for, mixed here because a canvas has no `color-mix` of its own - the
+   * one place the console computes a stop-to-stop blend itself (`durationScale.ts`).
+   */
+  | { kind: 'duration'; text: string; mix: TwoStopMix; size: number; weight: 400 | 500 | 600 }
   /** One of the list's own glyphs, boxed when the list draws it as a badge and filled when the list fills it. */
   | { kind: 'glyph'; glyph: SheetGlyph; tone: SheetTone; isBoxed?: boolean; isFilled?: boolean }
   /** A brand mark drawn inline at the text's size: the model's maker. */
@@ -204,8 +211,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
     );
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);
-    const latencyBand = latencyTone(event.latency_ms);
-    const ttftBand = ttftTone(event);
+    const durationScale = durationScaleMix(event.latency_ms);
     const tps = eventTokensPerSecond(event, input.tpsMode);
     const isCallView = input.modelView === 'call';
     const displayModel = isCallView ? event.model_alias || event.model : event.model;
@@ -288,15 +294,13 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       latency: {
         lines: [
           [
-            text(
-              formatEventDuration(event.latency_ms),
-              latencyBand === 'neutral' ? 'fg' : `timing-${latencyBand}`,
-              13,
-              500,
-            ),
+            durationScale
+              ? { kind: 'duration', text: formatEventDuration(event.latency_ms), mix: durationScale, size: 13, weight: 500 }
+              : text(formatEventDuration(event.latency_ms), 'fg', 13, 500),
           ],
-          ...(ttftBand !== 'neutral'
-            ? [[text('TTFT', 'muted', 11), text(formatEventDuration(event.ttft_ms), `timing-${ttftBand}`, 11)]]
+          // TTFT is request detail and stays in the sheet's secondary ink, as the list draws it.
+          ...(hasMeasurableTTFT(event)
+            ? [[text('TTFT', 'muted', 11), text(formatEventDuration(event.ttft_ms), 'muted', 11)]]
             : []),
         ],
       },

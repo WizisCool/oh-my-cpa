@@ -479,7 +479,14 @@
   white-space: nowrap;
   color: var(--fg);
 }
-/* The TTFT label stays secondary while its value uses the shared timing scale. */
+/* Duration is the one continuous reading in the list: one stop-to-stop mix, asked of CSS in OKLCH,
+   the way the cache-rate badge asks for its own (theme/durationScale.ts). The stops arrive as custom
+   properties, so this rule names no colour. It is two classes rather than one so it outranks the
+   plain-ink rule above without depending on which stylesheet loads last. */
+.req-latency-val.req-timing-value {
+  color: color-mix(in oklch, var(--duration-from) var(--duration-from-share), var(--duration-to));
+}
+/* The TTFT label stays secondary the whole way: it is request detail, not a verdict on the request. */
 .req-ttft-val {
   font-size: var(--text-xs);
   color: var(--muted);
