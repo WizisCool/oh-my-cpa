@@ -42,7 +42,8 @@ import {
   isFastTierEvent,
   fastTierHintKey,
   latencyTone,
-  latencyBandLabelKey,
+  timingBandLabel,
+  ttftTone,
   resolvedTierHintKey,
   requestTransport,
 } from '../../types/usageEventMetrics';
@@ -241,7 +242,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const rate = eventTokensPerSecond(event, tpsMode);
   const latency = event?.latency_ms ?? 0;
   const latencyBand = latencyTone(event?.latency_ms);
-  const latencyBandKey = latencyBandLabelKey(latencyBand);
+  const latencyLabel = timingBandLabel(t, 'latency', latencyBand);
+  const ttftBand = ttftTone(event);
+  const ttftLabel = timingBandLabel(t, 'ttft', ttftBand);
   const isMeasurable = hasMeasurableTTFT(event);
   const ttft = isMeasurable && event?.ttft_ms != null ? event.ttft_ms : 0;
   const streamTime = Math.max(0, latency - ttft);
@@ -314,12 +317,13 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
           <div className="request-detail-metrics">
             <div>
               <span>{t('events.duration')}</span>
-              {latencyBandKey !== null ? (
-                <Tooltip title={t(latencyBandKey)}>
+              {latencyLabel !== null ? (
+                <Tooltip title={latencyLabel}>
                   <strong
                     tabIndex={0}
-                    className={`is-${latencyBand}`}
-                    aria-label={`${t('events.duration')}: ${formatEventDuration(event.latency_ms)}. ${t(latencyBandKey)}`}
+                    className="req-timing-value"
+                    data-timing-band={latencyBand}
+                    aria-label={`${t('events.duration')}: ${formatEventDuration(event.latency_ms)}. ${latencyLabel}`}
                   >
                     {formatEventDuration(event.latency_ms)}
                   </strong>
@@ -336,10 +340,19 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 </Tooltip>
               </div>
             )}
-            {isMeasurable && (
+            {ttftLabel !== null && (
               <div>
                 <span>{t('events.ttft')}</span>
-                <strong>{formatEventDuration(event.ttft_ms)}</strong>
+                <Tooltip title={ttftLabel}>
+                  <strong
+                    className="req-timing-value"
+                    data-timing-band={ttftBand}
+                    tabIndex={0}
+                    aria-label={`${t('events.ttft')}: ${formatEventDuration(event.ttft_ms)}. ${ttftLabel}`}
+                  >
+                    {formatEventDuration(event.ttft_ms)}
+                  </strong>
+                </Tooltip>
               </div>
             )}
             <div>
@@ -490,8 +503,11 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         <div className="req-waterfall-header">
                           <h4>{t('events.waterfall_title')}</h4>
                           <span
-                            className={`req-waterfall-total${latencyBand === 'neutral' ? '' : ` is-${latencyBand}`}`}
-                            title={latencyBandKey !== null ? t(latencyBandKey) : undefined}
+                            className="req-waterfall-total req-timing-value"
+                            data-timing-band={latencyBand}
+                            tabIndex={0}
+                            title={latencyLabel ?? undefined}
+                            aria-label={`${t('events.duration')}: ${formatEventDuration(latency)}${latencyLabel ? `. ${latencyLabel}` : ''}`}
                           >
                             {formatEventDuration(latency)}
                           </span>
@@ -514,7 +530,13 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                               <div className="req-waterfall-legend-item">
                                 <span className="req-waterfall-pip req-waterfall-pip-ttft" />
                                 <span>{t('events.waterfall_ttft')}</span>
-                                <strong>{formatEventDuration(ttft)}</strong>
+                                <strong
+                                  className="req-timing-value"
+                                  data-timing-band={ttftBand}
+                                  tabIndex={0}
+                                  title={ttftLabel ?? undefined}
+                                  aria-label={`${t('events.ttft')}: ${formatEventDuration(ttft)}. ${ttftLabel}`}
+                                >{formatEventDuration(ttft)}</strong>
                               </div>
                               <div className="req-waterfall-legend-item">
                                 <span className="req-waterfall-pip req-waterfall-pip-stream" />
@@ -536,7 +558,13 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                               <div className="req-waterfall-legend-item">
                                 <span className="req-waterfall-pip req-waterfall-pip-total" />
                                 <span>{t('events.duration')}</span>
-                                <strong>{formatEventDuration(latency)}</strong>
+                                <strong
+                                  className="req-timing-value"
+                                  data-timing-band={latencyBand}
+                                  tabIndex={0}
+                                  title={latencyLabel ?? undefined}
+                                  aria-label={`${t('events.duration')}: ${formatEventDuration(latency)}${latencyLabel ? `. ${latencyLabel}` : ''}`}
+                                >{formatEventDuration(latency)}</strong>
                               </div>
                             </div>
                           </>

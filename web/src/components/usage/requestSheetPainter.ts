@@ -104,9 +104,9 @@ const toneColor = (palette: ThemePalette, tone: SheetTone): string =>
     success: palette.success,
     danger: palette.danger,
     warn: palette.warn,
-    // The latency band's orange step: not a token, but the warn stop mixed
-    // toward danger, the same midpoint the list's `is-slow` rule mixes.
-    slow: `color-mix(in oklch, ${palette.warn} 60%, ${palette.danger})`,
+    'timing-green': palette.timingGreen,
+    'timing-amber': palette.timingAmber,
+    'timing-orange': palette.timingOrange,
   })[tone];
 
 /**

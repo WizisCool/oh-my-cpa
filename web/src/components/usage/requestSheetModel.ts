@@ -17,9 +17,9 @@ import {
   eventCacheRate,
   eventTokensPerSecond,
   formatEventDuration,
-  hasMeasurableTTFT,
   isFastTierEvent,
   latencyTone,
+  ttftTone,
   requestTransport,
 } from '../../types/usageEventMetrics';
 import type { TpsCalculationMode } from '../../types/tpsCalculation';
@@ -46,7 +46,7 @@ import { formatRequestTimestamp } from './requestTimestamp';
  * no document to clone and no style to compute.
  */
 
-export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn' | 'slow';
+export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn' | 'timing-green' | 'timing-amber' | 'timing-orange';
 
 /** The glyphs a cell uses where the list uses an icon: a marker a reader already knows from the list. */
 export type SheetGlyph = 'non_stream' | 'websocket' | 'substituted' | 'routed' | 'fast' | 'model' | 'reasoning';
@@ -205,6 +205,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);
     const latencyBand = latencyTone(event.latency_ms);
+    const ttftBand = ttftTone(event);
     const tps = eventTokensPerSecond(event, input.tpsMode);
     const isCallView = input.modelView === 'call';
     const displayModel = isCallView ? event.model_alias || event.model : event.model;
@@ -286,17 +287,16 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       },
       latency: {
         lines: [
-          // The total keeps the list's latency band; TTFT is detail, and stays muted.
           [
             text(
               formatEventDuration(event.latency_ms),
-              latencyBand === 'neutral' ? 'fg' : latencyBand,
+              latencyBand === 'neutral' ? 'fg' : `timing-${latencyBand}`,
               13,
               500,
             ),
           ],
-          ...(hasMeasurableTTFT(event)
-            ? [[text(`TTFT ${formatEventDuration(event.ttft_ms)}`, 'muted', 11)]]
+          ...(ttftBand !== 'neutral'
+            ? [[text('TTFT', 'muted', 11), text(formatEventDuration(event.ttft_ms), `timing-${ttftBand}`, 11)]]
             : []),
         ],
       },

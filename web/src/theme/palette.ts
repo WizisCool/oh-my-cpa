@@ -122,6 +122,10 @@ export interface ThemePalette extends ThemeCore {
   success: string;
   warn: string;
   danger: string;
+  /** Text-safe duration scale shared by total latency and TTFT. */
+  timingGreen: string;
+  timingAmber: string;
+  timingOrange: string;
   cacheRateYellow: string;
   cacheRateGreen: string;
   tooltipBg: string;
@@ -257,19 +261,18 @@ type LadderDirection = 'deeper' | 'lighter';
 /**
  * Per-mode values that are not derived from the nine authored tokens.
  *
- * The status hues, the categorical series palette, the routing lane palette and the
- * reasoning-effort scale are *semantics*, not palette: green means healthy and never anything
- * else, a category slot is a fixed identity whose family survives a theme switch,
- * and an effort step is a fixed place on one ordered sweep. Deriving them from an operator's
- * accent would make status depend on a colour choice. They are constants here, and a custom
- * palette inherits its mode's set - tuned on the mode's own palette and held to that contrast by
- * `holdSignal`.
+ * Status hues, timing bands, category identities, routing lanes and reasoning effort have
+ * their own colour roles. A category keeps its identity through a theme switch, and an effort
+ * step keeps its place on an ordered sweep. Deriving those roles from an operator's accent
+ * would make their meaning depend on a colour choice. A custom palette inherits its mode's
+ * set, with contrast held by `holdSignal`.
  */
-const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; series: readonly string[]; route: readonly string[]; effort: readonly string[] }> = {
+const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; timingOrange: string; series: readonly string[]; route: readonly string[]; effort: readonly string[] }> = {
   dark: {
     success: '#10b981',
     warn: '#f59e0b',
     danger: '#ef4444',
+    timingOrange: '#fb923c',
     series: ['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4'],
     // The routing map's lanes carry model identity on a page where green, amber and red are
     // verdicts. Every slot therefore stays on the cool side of the wheel - blue, violet, cyan,
@@ -281,6 +284,7 @@ const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger:
     success: '#059669',
     warn: '#b45309',
     danger: '#dc2626',
+    timingOrange: '#c2410c',
     series: ['#2563eb', '#059669', '#7c3aed', '#e11d48', '#b45309', '#0891b2'],
     route: ['#2563eb', '#7c3aed', '#0891b2', '#db2777', '#c026d3', '#475569'],
     effort: ['#39626e', '#00686c', '#3057a3', '#6343a4', '#8a2b8a', '#9b2065'],
@@ -317,10 +321,11 @@ const SIGNAL_REFERENCE: Record<ThemeMode, BuiltInPaletteId> = { dark: 'omc-dark'
  *
  * The contrast held is capped (`SIGNAL_CONTRAST_CEILING`): a pastel effort step reads 7:1 on OMC
  * Dark, and chasing that on a lighter ground would bleach it toward white for legibility nobody needs.
+ * Small timing text additionally sets a floor so its reference hue cannot inherit weak contrast.
  */
-function holdSignal(color: string, grounds: readonly string[], reference: readonly string[], ceiling: number): string {
+function holdSignal(color: string, grounds: readonly string[], reference: readonly string[], ceiling: number, floor = 0): string {
   const weakest = (candidate: string, on: readonly string[]) => Math.min(...on.map((ground) => contrastRatio(candidate, ground)));
-  const target = Math.min(weakest(color, reference), ceiling);
+  const target = Math.max(floor, Math.min(weakest(color, reference), ceiling));
   let best = { color, ratio: weakest(color, grounds) };
   if (best.ratio >= target) return color;
   const lightness = oklchLightness(color);
@@ -445,6 +450,7 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
   const blend = NEUTRAL_BLEND[mode];
   const semantics = MODE_SEMANTICS[mode];
   const hover = mixOklch(core.bg, core.fg, blend.hover);
+  const selected = mixOklch(hover, core.accent, blend.selected);
   const borderSoft = standOff(core.bg, mixOklch(core.bg, core.border, blend.borderSoft), core.fg, BORDER_SOFT_FLOOR);
   const ladder = accentLadder(mode, core.accent);
   const canvasBlend = CANVAS_BLEND[mode];
@@ -456,6 +462,9 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     holdSignal(color, [core.bg, core.surface, hover], [reference.bg, reference.surface, referenceHover], SIGNAL_CONTRAST_CEILING.badge);
   const success = hold(semantics.success);
   const warn = hold(semantics.warn);
+  // Timing values are small text on rows and drawers, including hover and selection fills.
+  const timingGrounds = [core.bg, core.surface, core.elevated, hover, selected];
+  const holdTiming = (color: string) => holdSignal(color, timingGrounds, [reference.bg, reference.surface], 4.5, 4.5);
   return {
     ...core,
     canvas: mixOklch(core.bg, canvasBlend.toward === 'fg' ? core.fg : '#000000', canvasBlend.share),
@@ -467,13 +476,16 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     // Dark mode's inset step is the page itself - a control on a panel has nowhere further
     // to go - while a light page has room for a step darker than the panel.
     hoverInset: blend.hoverInset === 0 ? core.bg : mixOklch(core.bg, core.fg, blend.hoverInset),
-    selected: mixOklch(hover, core.accent, blend.selected),
+    selected,
     accentHover: ladder.hover,
     accentActive: ladder.active,
     accentOn: ladder.ink,
     success,
     warn,
     danger: hold(semantics.danger),
+    timingGreen: holdTiming(semantics.success),
+    timingAmber: holdTiming(semantics.warn),
+    timingOrange: holdTiming(semantics.timingOrange),
     cacheRateYellow: warn,
     cacheRateGreen: success,
     // A dark tooltip sits on the surface it floats over; a light page's tooltip is the

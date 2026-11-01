@@ -80,17 +80,6 @@
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
-/* The drawer's duration readouts carry the request list's one latency band:
-   quick under 15 s, then amber, orange past 30 s and red past a minute. Orange
-   is the warn stop mixed toward danger, as the list mixes it. */
-.request-detail-metrics strong.is-success,
-.req-waterfall-total.is-success { color: var(--success); }
-.request-detail-metrics strong.is-warn,
-.req-waterfall-total.is-warn { color: var(--warn); }
-.request-detail-metrics strong.is-slow,
-.req-waterfall-total.is-slow { color: color-mix(in oklch, var(--warn) 60%, var(--danger)); }
-.request-detail-metrics strong.is-danger,
-.req-waterfall-total.is-danger { color: var(--danger); }
 .req-waterfall-track {
   width: 100%;
   height: 8px;

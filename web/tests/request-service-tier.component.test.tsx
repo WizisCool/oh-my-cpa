@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import usageEventMessages from '../src/i18n/locales/en/usageEvents';
 import { StructuredUsageView } from '../src/components/usage/StructuredUsageView';
 import { TokenAccountingNote } from '../src/components/usage/TokenAccountingNote';
 import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
@@ -115,6 +116,28 @@ it.each(['invalid', 'unsupported', 'inconsistent', 'unclassified'] as const)('sh
   expect(tooltipReasons).toContain(explanation);
   expect(explanation).toContain('100');
   expect(explanation).toContain('30');
+});
+
+it('exposes independent duration and TTFT intervals in the row and drawer', async () => {
+  renderTier({ latency_ms: 65_000, ttft_ms: 3_000 }, event => <>
+    <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
+    <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
+  </>);
+  expect(await screen.findAllByLabelText(/65\.00 s.*≥ 30\.00 s/)).toHaveLength(2);
+  const ttftAccessibleName = `${usageEventMessages['events.ttft']}: 3.00 s. TTFT ≤ 3.00 s`;
+  expect(screen.getAllByLabelText(ttftAccessibleName)).toHaveLength(2);
+  fireEvent.click(screen.getByRole('tab', { name: /Performance/ }));
+  expect(await screen.findAllByLabelText(ttftAccessibleName)).toHaveLength(3);
+  expect(screen.getAllByLabelText(/65\.00 s.*≥ 30\.00 s/)).toHaveLength(3);
+});
+
+it.each([undefined, null, 0, -1, 65_000, 65_001])('keeps an unmeasured TTFT (%s) out of the row and drawer', async ttft => {
+  renderTier({ latency_ms: 65_000, ttft_ms: ttft }, event => <>
+    <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
+    <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
+  </>);
+  expect(await screen.findAllByText('65.00 s')).toHaveLength(2);
+  expect(screen.queryByLabelText(/TTFT.*(?:≤|<|≥)/)).toBeNull();
 });
 
 it('reads structured detail in the drawer without merging observations into canonical totals or estimated costs', async () => {

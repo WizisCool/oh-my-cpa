@@ -476,24 +476,15 @@
   font-size: var(--text-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--latency-tone, var(--fg));
+  white-space: nowrap;
+  color: var(--fg);
 }
-/* The total carries the console's one latency band - quick under 15 s, then
-   amber, orange past 30 s and red past a minute - so a scan of the column finds
-   the unhurried requests. Orange is not a token: it is the warn stop mixed
-   toward danger, the midpoint the band skips. The tone arrives as a custom
-   property rather than restating `color`: the stacked record draws its figures
-   in the text colours, and its own `color` rule still wins there. */
-.req-latency-val.is-success { --latency-tone: var(--success); }
-.req-latency-val.is-warn { --latency-tone: var(--warn); }
-.req-latency-val.is-slow { --latency-tone: color-mix(in oklch, var(--warn) 60%, var(--danger)); }
-.req-latency-val.is-danger { --latency-tone: var(--danger); }
-/* TTFT keeps the muted step: a first token's pace is detail about the request,
-   not a verdict on it. */
+/* The TTFT label stays secondary while its value uses the shared timing scale. */
 .req-ttft-val {
   font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 /* Column 6: TPS (Output Token Rate) */
 .req-col-tps {
@@ -856,11 +847,8 @@
     display: none;
   }
 
-  /* Colour is for the exception. Side by side in a table, each mark's tint has a column to
-     itself; folded into a few lines they all land in one glance and none of them reads as a
-     signal. So a stacked record is drawn in the text colours, and what keeps a hue is what an
-     operator scans a list for: the verdict's pip, a failure in full, and the reasoning effort's
-     badge, which is the one mark that explains a record's cost and latency at a glance. */
+  /* Compact records retain the status pip, effort badge and timing scale;
+     the remaining metadata uses the text colours. */
   .req-result-pill.is-success,
   .req-result-pill.is-failed {
     padding: 0;

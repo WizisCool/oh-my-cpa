@@ -109,6 +109,13 @@ test('theme presets', () => {
     }
 
     assertSignalsHold(definition.mode, palette, where);
+    assert.equal(new Set([palette.timingGreen, palette.timingAmber, palette.timingOrange, palette.danger]).size, 4,
+      `${where} duration bands and failure remain visually distinct`);
+    for (const color of [palette.timingGreen, palette.timingAmber, palette.timingOrange]) {
+      for (const ground of [palette.bg, palette.surface, palette.elevated, palette.rowHover, palette.selected]) {
+        assert.ok(contrastRatio(color, ground) >= 4.5, `${where} timing text ${color} remains readable on ${ground}`);
+      }
+    }
 
     // The accent ladder has to be a ladder: a filled control whose resting and hover fills are the
     // same colour has no hover state, and one whose hover and pressed fills match has no press.
@@ -159,6 +166,11 @@ test('theme presets', () => {
     for (const accent of ACCENT_SWEEP) {
       const core: ThemeCore = { ...getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core, accent };
       const palette = derivePalette(mode, core);
+      for (const color of [palette.timingGreen, palette.timingAmber, palette.timingOrange]) {
+        for (const ground of [palette.bg, palette.surface, palette.elevated, palette.rowHover, palette.selected]) {
+          assert.ok(contrastRatio(color, ground) >= 4.5, `${mode} accent ${accent}: timing text remains readable`);
+        }
+      }
       const hoverLabel = contrastRatio(palette.accentOn, palette.accentHover);
       assert.ok(
         hoverLabel >= ACCENT_LABEL_CONTRAST_FLOOR,

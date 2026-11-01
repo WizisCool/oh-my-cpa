@@ -1,4 +1,4 @@
-import type { MessageKey } from '../i18n/catalog';
+import type { MessageKey, TFunc } from '../i18n/catalog';
 import { DEFAULT_TPS_CALCULATION_MODE, type TpsCalculationMode } from './tpsCalculation';
 import type {
   UsageEvent,
@@ -51,61 +51,53 @@ export function successRateTone(successRate: number | null | undefined): Verdict
   return 'danger';
 }
 
-/**
- * Colour a latency verdict may carry. Like `VerdictTone` plus the `slow` step
- * between warn and danger: a request past thirty seconds is unhurried without
- * being the alarm that a full minute is.
- */
-export type LatencyTone = 'success' | 'warn' | 'slow' | 'danger' | 'neutral';
+/** Timing bands describe observed duration; request outcome is rendered separately. */
+export type TimingTone = 'green' | 'amber' | 'orange' | 'neutral';
 
-/**
- * The boundaries of the console's latency band: at or above 15 s a request is no
- * longer quick, at or above 30 s it is slow, at or above 60 s it is the alarm.
- * The band starts on the one CPMP's realtime panel publishes (its 15 s and 30 s
- * steps) so an operator moving between the two consoles reads one scale.
- */
-export const LATENCY_WARN_MS = 15_000;
-export const LATENCY_SLOW_MS = 30_000;
-export const LATENCY_DANGER_MS = 60_000;
+export const LATENCY_AMBER_MS = 15_000;
+export const LATENCY_ORANGE_MS = 30_000;
+export const TTFT_GREEN_MAX_MS = 3_000;
+export const TTFT_ORANGE_MS = 10_000;
 
-/**
- * latencyTone classifies a request's total latency on the console's one published
- * band, read wherever a duration carries a colour: the request list's latency
- * column, the exported sheet and the detail drawer.
- *
- * An *absent* or unreadable latency carries no verdict and stays neutral, the way
- * a window with no traffic does. A measured 0 ms is a real reading - the fastest
- * one there is - so it takes the quick end of the band rather than the neutral
- * step.
- *
- *   missing, negative or non-finite  -> neutral (nothing to judge)
- *   below 15 s                       -> success
- *   at or above 15 s, below 30 s     -> warn
- *   at or above 30 s, below 60 s     -> slow (orange)
- *   at or above 60 s                 -> danger
- */
-export function latencyTone(latencyMs: number | null | undefined): LatencyTone {
-  if (latencyMs === null || latencyMs === undefined) return 'neutral';
-  if (!Number.isFinite(latencyMs) || latencyMs < 0) return 'neutral';
-  if (latencyMs >= LATENCY_DANGER_MS) return 'danger';
-  if (latencyMs >= LATENCY_SLOW_MS) return 'slow';
-  if (latencyMs >= LATENCY_WARN_MS) return 'warn';
-  return 'success';
+/** Shared by the request list, details and image export. Measured zero remains a reading. */
+export function latencyTone(latencyMs: number | null | undefined): TimingTone {
+  if (latencyMs == null || !Number.isFinite(latencyMs) || latencyMs < 0) return 'neutral';
+  if (latencyMs >= LATENCY_ORANGE_MS) return 'orange';
+  if (latencyMs >= LATENCY_AMBER_MS) return 'amber';
+  return 'green';
 }
 
-/**
- * latencyBandLabelKey names a band for the operator, so the verdict travels as
- * text as well as hue: the list cell's tooltip and the drawer's duration
- * readouts read it, and a neutral band has nothing to name.
- */
-export function latencyBandLabelKey(band: LatencyTone): MessageKey | null {
-  switch (band) {
-    case 'success': return 'events.latency_band_quick';
-    case 'warn': return 'events.latency_band_long';
-    case 'slow': return 'events.latency_band_slow';
-    case 'danger': return 'events.latency_band_very_slow';
-    default: return null;
-  }
+/** CPA's zero TTFT means unmeasured; only an observed interval receives a band. */
+export function ttftTone(event?: Partial<Pick<UsageEvent, 'latency_ms' | 'ttft_ms'>>): TimingTone {
+  const ttft = event?.ttft_ms;
+  if (!hasMeasurableTTFT(event) || ttft == null) return 'neutral';
+  if (ttft >= TTFT_ORANGE_MS) return 'orange';
+  if (ttft > TTFT_GREEN_MAX_MS) return 'amber';
+  return 'green';
+}
+
+const TIMING_BAND_LABEL_KEYS = {
+  latency: {
+    green: 'events.latency_band_green',
+    amber: 'events.latency_band_amber',
+    orange: 'events.latency_band_orange',
+  },
+  ttft: {
+    green: 'events.ttft_band_green',
+    amber: 'events.ttft_band_amber',
+    orange: 'events.ttft_band_orange',
+  },
+} as const;
+
+/** Name the exact interval even when formatting rounds two boundary-adjacent readings alike. */
+export function timingBandLabel(t: TFunc, metric: 'latency' | 'ttft', tone: TimingTone): string | null {
+  if (tone === 'neutral') return null;
+  const first = metric === 'latency' ? LATENCY_AMBER_MS : TTFT_GREEN_MAX_MS;
+  const second = metric === 'latency' ? LATENCY_ORANGE_MS : TTFT_ORANGE_MS;
+  return t(TIMING_BAND_LABEL_KEYS[metric][tone], {
+    min: formatEventDuration(tone === 'orange' ? second : first),
+    max: formatEventDuration(tone === 'green' ? first : second),
+  });
 }
 
 export function formatEventDuration(ms: number | null | undefined): string {

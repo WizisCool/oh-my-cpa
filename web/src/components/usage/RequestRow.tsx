@@ -25,11 +25,11 @@ import {
   eventTokensPerSecond,
   tpsCalculationHintKey,
   formatEventDuration,
-  hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
   latencyTone,
-  latencyBandLabelKey,
+  timingBandLabel,
+  ttftTone,
   requestTransport,
 } from '../../types/usageEventMetrics';
 import {
@@ -137,10 +137,10 @@ export const RequestRow = React.memo<RequestRowProps>(
       : undefined;
 
     const tpsInfo = eventTokensPerSecond(event, tpsMode);
-    // The total's place on the console's one latency band, and its name: an absent
-    // or unreadable latency stays neutral and keeps the plain foreground.
     const latencyBand = latencyTone(event.latency_ms);
-    const latencyBandKey = latencyBandLabelKey(latencyBand);
+    const latencyLabel = timingBandLabel(t, 'latency', latencyBand);
+    const ttftBand = ttftTone(event);
+    const ttftLabel = timingBandLabel(t, 'ttft', ttftBand);
     // The level's place on the effort scale, as a token reference; absent for
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
@@ -407,12 +407,14 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 7: total latency */}
         <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
-          {/* The band is a verdict on the reading, so it cannot travel by hue
-              alone: the cell names it in the tooltip for the pointer and in the
-              popup's description for assistive tech. */}
-          {latencyBandKey !== null ? (
-            <RequestTooltip title={t(latencyBandKey)}>
-              <strong className={`req-latency-val is-${latencyBand}`}>
+          {latencyLabel !== null ? (
+            <RequestTooltip title={latencyLabel}>
+              <strong
+                className="req-latency-val req-timing-value"
+                data-timing-band={latencyBand}
+                tabIndex={0}
+                aria-label={`${t('events.duration')}: ${formatEventDuration(event.latency_ms)}. ${latencyLabel}`}
+              >
                 {formatEventDuration(event.latency_ms)}
               </strong>
             </RequestTooltip>
@@ -421,10 +423,16 @@ export const RequestRow = React.memo<RequestRowProps>(
               {formatEventDuration(event.latency_ms)}
             </strong>
           )}
-          {hasMeasurableTTFT(event) && (
-            <span className="req-ttft-val">
-              TTFT {formatEventDuration(event.ttft_ms)}
-            </span>
+          {ttftLabel !== null && (
+            <RequestTooltip title={ttftLabel}>
+              <span
+                className="req-ttft-val"
+                tabIndex={0}
+                aria-label={`${t('events.ttft')}: ${formatEventDuration(event.ttft_ms)}. ${ttftLabel}`}
+              >
+                TTFT <span className="req-timing-value" data-timing-band={ttftBand}>{formatEventDuration(event.ttft_ms)}</span>
+              </span>
+            </RequestTooltip>
           )}
         </div>
 
