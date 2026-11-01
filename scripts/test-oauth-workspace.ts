@@ -1,4 +1,4 @@
-import { renewalLabel, recoveryStageLabel, renewalTone } from '../web/src/components/authFiles/credentialRecovery.ts';
+import { renewalDetail, renewalLabel, renewalTone } from '../web/src/components/authFiles/credentialRecovery.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ManagementAuthFile } from '../web/src/types/managementAuthFile.ts';
@@ -626,6 +626,7 @@ test('renewal evidence stays independent of healthy quota, SIWC and inference', 
   assert.equal(renewalTone(record.file), 'warn');
   assert.equal(renewalLabel(file({ inference_verified: true, adopted: true })), 'recovery.unknown');
   assert.equal(renewalTone(file({ inference_verified: true, adopted: true })), 'neutral');
-  assert.equal(recoveryStageLabel(file({ recovery_stage: 'loaded' })), 'recovery.loaded');
+  assert.equal(renewalDetail(file({ renewal_state: 'renewal_verified' })), 'recovery.detail_verified');
+  assert.equal(renewalDetail(file({ renewal_state: 'retry_scheduled' })), 'recovery.detail_retry');
   assert.equal(renewalLabel(file({ renewal_state: 'awaiting_first_renewal' })), 'recovery.awaiting_first_renewal');
 });

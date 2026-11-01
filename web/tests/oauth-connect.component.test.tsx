@@ -287,6 +287,31 @@ it('does not offer an ordinary login as a fallback for unsupported targeted reco
   } finally { surface.unmount(); }
 });
 
+it('states an active quota block even when inference was already confirmed', () => {
+  const file: ManagementAuthFile = {
+    name: 'blocked.json', auth_index: 'blocked', provider: 'codex', disabled: false, unavailable: false, runtime_only: false,
+    success: 0, failed: 0, recovery_supported: true, requires_sign_in: false, renewal_state: 'renewal_verified',
+    recovery_stage: 'quota_blocked', adopted: true, inference_verified: true, renewal_verified: true,
+  };
+  const surface = renderWithOmc(<CredentialRecoveryPanel file={file} canEdit onChanged={() => {}} />);
+  try {
+    // CPA ranks an active quota block above verified inference, so the panel must not hide it.
+    expect(surface.getByText('Quota blocked')).toBeTruthy();
+  } finally { surface.unmount(); }
+});
+
+it('offers no token-consuming verification once inference is confirmed', () => {
+  const file: ManagementAuthFile = {
+    name: 'verified.json', auth_index: 'verified', provider: 'codex', disabled: false, unavailable: false, runtime_only: false,
+    success: 0, failed: 0, recovery_supported: true, requires_sign_in: false, renewal_state: 'renewal_verified',
+    recovery_stage: 'renewal_verified', adopted: true, inference_verified: true, renewal_verified: true,
+  };
+  const surface = renderWithOmc(<CredentialRecoveryPanel file={file} canEdit onChanged={() => {}} />);
+  try {
+    expect(surface.baseElement.querySelector('[data-credential-verify]')).toBeNull();
+  } finally { surface.unmount(); }
+});
+
 it.each([true, false])('verifies the selected credential only when confirmation is accepted: %s', async (shouldConfirm) => {
   const server = installOmcApi();
   server.on('POST', '/management/auth-files/verify', () => ({ status: 'ok', verified: true }));
@@ -294,7 +319,7 @@ it.each([true, false])('verifies the selected credential only when confirmation 
   const file: ManagementAuthFile = {
     name: 'selected.json', auth_index: 'selected', provider: 'codex', disabled: false, unavailable: false, runtime_only: false,
     success: 0, failed: 0, recovery_supported: true, requires_sign_in: false, renewal_state: 'awaiting_first_renewal',
-    recovery_stage: 'inference_verified', adopted: true, inference_verified: true, renewal_verified: false,
+    recovery_stage: 'loaded', adopted: true, inference_verified: false, renewal_verified: false,
   };
   const surface = renderWithOmc(<CredentialRecoveryPanel file={file} canEdit onChanged={changed} />);
   try {
