@@ -45,11 +45,14 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 			detail["cpa_status"] = upstream.StatusCode
 		}
 		_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "failure", detail)
-		if err.Error() == "resource_conflict" {
+		switch err.Error() {
+		case "resource_conflict":
 			writeError(writer, http.StatusNotFound, "auth file not found")
-			return
+		case "write_busy":
+			writeProviderWriteError(writer, errProviderWriteBusy)
+		default:
+			writeCPAFacadeError(writer, err)
 		}
-		writeCPAFacadeError(writer, err)
 		return
 	}
 	// The inference has already run; an outcome-audit failure must not invite

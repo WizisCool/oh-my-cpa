@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const recoveryCredentialFixture = `{"id":"runtime-codex-id","name":"codex.json","auth_index":"idx-1","provider":"codex","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"sign_in_required","access_token_expires_at":"2026-11-02T01:00:00+01:00","next_refresh_after":"2026-11-01T01:00:00Z","adopted":true,"inference_verified":false,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"OPAQUE-SECRET https://provider.test/?code=PRIVATE-CODE","access_token":"OPAQUE-SECRET"},"next_action":"sign_in","recovery_hint":"OPAQUE-SECRET","renewal_event":{"account":"OPAQUE-SECRET"},"refresh_token":"OPAQUE-SECRET"}`
@@ -214,5 +215,36 @@ func TestOAuthRecoveryPrivateFailureBoundary(t *testing.T) {
 	response, raw := doJSON(t, client, http.MethodDelete, base+"/omc/api/v1/management/oauth/session?state=private-state", "")
 	if response.StatusCode != 500 || !strings.Contains(string(raw), "cancellation aborted") {
 		t.Fatalf("cancellation admission: %d %s", response.StatusCode, raw)
+	}
+}
+
+func TestCredentialVerificationHonoursProviderWriteGate(t *testing.T) {
+	var verifications atomic.Int32
+	var handler *Handler
+	client, base, _ := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			fmt.Fprintf(w, `{"files":[%s]}`, recoveryCredentialFixture)
+		case "/v8/management/credentials/verify":
+			verifications.Add(1)
+			fmt.Fprint(w, `{"status":"ok","verified":true}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}, func(h *Handler) { handler = h })
+	handler.providerWrites.permits <- struct{}{}
+	previousTimeout := handler.providerWrites.acquireTimeout
+	handler.providerWrites.acquireTimeout = 50 * time.Millisecond
+	t.Cleanup(func() {
+		handler.providerWrites.acquireTimeout = previousTimeout
+		<-handler.providerWrites.permits
+	})
+	response, raw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex.json","auth_index":"idx-1"}`)
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(raw, &body)
+	if response.StatusCode != http.StatusServiceUnavailable || body.Code != providerWriteBusyCode || verifications.Load() != 0 {
+		t.Fatalf("busy verification must be refused as write_busy: %d %s verifications=%d", response.StatusCode, raw, verifications.Load())
 	}
 }
