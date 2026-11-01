@@ -16,6 +16,7 @@ export default {
   "recovery.sign_in": "Sign in again",
   "recovery.recover_hint": "When renewal cannot continue, sign in to this credential’s original account on this instance.",
   "recovery.renewal": "Automatic renewal",
+  "recovery.view_details": "Click to view auto-renewal details",
   "recovery.unknown": "No evidence yet",
   "recovery.confirmed": "Confirmed",
   "recovery.unconfirmed": "Not yet confirmed",

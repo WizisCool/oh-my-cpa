@@ -13,6 +13,7 @@ export default {
   "recovery.sign_in": "重新登录",
   "recovery.recover_hint": "无法自动续期时，在本实例登录此凭证原有账号。",
   "recovery.renewal": "自动续期",
+  "recovery.view_details": "点击查看自动续期详情",
   "recovery.unknown": "尚无证据",
   "recovery.confirmed": "已确认",
   "recovery.unconfirmed": "尚未确认",

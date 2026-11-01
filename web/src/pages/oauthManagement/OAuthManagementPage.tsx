@@ -371,7 +371,7 @@ export const OAuthManagementPage: React.FC = () => {
   const hasUnselectedFilteredRecords = selectableFilteredRecords.some((record) => !selectedKeySet.has(record.key));
 
   const [selectedIdentity, setSelectedIdentity] = React.useState<SelectedIdentity>();
-  const [drawerSection, setDrawerSection] = React.useState<'overview' | 'configuration' | 'models'>('overview');
+  const [drawerSection, setDrawerSection] = React.useState<'overview' | 'renewal' | 'configuration' | 'models'>('overview');
   const selectedRecord = selectedIdentity
     ? records.find((record) => record.key === selectedIdentity.key)
     : undefined;
@@ -440,7 +440,7 @@ export const OAuthManagementPage: React.FC = () => {
 
   const openCredential = (
     record: OAuthWorkspaceRecord,
-    section: 'overview' | 'configuration' | 'models' = 'overview',
+    section: 'overview' | 'renewal' | 'configuration' | 'models' = 'overview',
   ) => {
     setDrawerSection(section);
     setSelectedIdentity({ key: record.key, name: record.fileName, authIndex: record.authIndex });

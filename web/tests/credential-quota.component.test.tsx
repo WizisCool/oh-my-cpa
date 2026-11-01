@@ -372,8 +372,9 @@ describe('a failed refresh stays on the page', () => {
 
 function renderCredentialRow(
   item: QuotaItem,
-  { onRefresh, onRename = vi.fn(async () => true), fileOverrides = {} }: {
+  { onRefresh, onOpen = vi.fn(), onRename = vi.fn(async () => true), fileOverrides = {} }: {
     onRefresh?: () => void;
+    onOpen?: CredentialRowActions['onOpen'];
     onRename?: CredentialRowActions['onRename'];
     fileOverrides?: Partial<ManagementAuthFile>;
   } = {},
@@ -382,7 +383,7 @@ function renderCredentialRow(
   const [section] = buildCredentialSections(records, records);
   const actions: CredentialRowActions = {
     isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
-    onSelect: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen: vi.fn(), onRename,
+    onSelect: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen, onRename,
     onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
   };
   if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
@@ -471,6 +472,37 @@ describe('a row that says it is out of date', () => {
     expect(screen.getByTestId('oauth-credential-refresh').getAttribute('data-needs-refresh')).toBeNull();
     expect(screen.getByTestId('oauth-credential-refresh').getAttribute('aria-label')).not.toMatch(/Needs refresh/);
     expect(container.querySelector('[data-quota-failure-line]')).toBeNull();
+  });
+});
+
+describe("a credential row's auto-renewal badge", () => {
+  it('keeps normal renewal quiet on the row while keeping full details in the status tooltip', () => {
+    const onOpen = vi.fn();
+    const { container } = renderCredentialRow(quota('codex-renewal', [quotaWindow('five_hour', 80, 2)]), {
+      onOpen,
+      fileOverrides: { renewal_state: 'renewal_verified', access_token_expires_at: '2026-10-15T12:00:00Z' },
+    });
+    // In exception-management mode, healthy credentials stay silent without extra icon badges or green boxes
+    expect(container.querySelector('[data-testid="oauth-credential-renewal-badge"]')).toBeNull();
+    expect(container.querySelector('[data-credential-renewal]')).toBeTruthy();
+
+    expect(container.querySelector('.renewal-status')).toBeNull();
+  });
+
+  it('reflects warning state and accessible label when re-authentication is required', () => {
+    const onOpen = vi.fn();
+    const { container } = renderCredentialRow(quota('codex-reauth', []), {
+      onOpen,
+      fileOverrides: { requires_sign_in: true, renewal_state: 'sign_in_required' },
+    });
+    const badge = container.querySelector('[data-testid="oauth-credential-renewal-badge"]');
+    expect(badge).toBeTruthy();
+    expect(badge?.getAttribute('data-renewal-state')).toBe('sign_in_required');
+    expect(badge?.getAttribute('aria-label')).toBe('Automatic renewal: Sign-in required');
+    expect(badge?.getAttribute('data-renewal-tone')).toBe('danger');
+
+    fireEvent.click(badge!);
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'codex-reauth' }), 'renewal');
   });
 });
 
