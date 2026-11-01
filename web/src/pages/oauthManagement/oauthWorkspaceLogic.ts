@@ -301,7 +301,7 @@ export function buildOAuthWorkspaceProjection(
       quota,
       quotaMatch,
       quotaCondition: condition,
-      isQuotaAttention: isQuotaAttention(condition)
+      isQuotaAttention: file.requires_sign_in === true || isQuotaAttention(condition)
         || quota?.recommendation?.action === 'reauth',
       isQuotaUnsupported: unsupported,
       isQuotaObserved: quota ? hasMeaningfulObservation(quota) : false,

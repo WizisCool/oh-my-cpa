@@ -1,8 +1,11 @@
+import type { OAuthRecoveryTarget } from '../../types/oauth';
+import { Notice } from '../../components/feedback';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
+  Checkbox,
   Input,
   Space,
   Spin,
@@ -30,6 +33,8 @@ import { SecretInput } from '../../components/common/SecretInput';
 import { Tag } from '../../components/common/Tag';
 
 interface OAuthConnectPanelProps {
+  recoveryTarget?: OAuthRecoveryTarget;
+  isRecoverySupported?: boolean;
   open: boolean;
   choices: OAuthProviderChoice[];
   selectedProviderId?: string;
@@ -47,6 +52,8 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   onClose,
   onViewCredentials,
   sessions,
+  recoveryTarget,
+  isRecoverySupported = false,
 }) => {
   const t = useT();
   const navigate = useNavigate();
@@ -60,6 +67,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   const isError = session?.status === 'error';
   const hasStarted = Boolean(session?.url || isWaiting || isSuccess || isError);
 
+  const target = session?.recoveryTarget ?? recoveryTarget;
+  const [shouldVerify, setShouldVerify] = React.useState(false);
+  React.useEffect(() => {
+    setShouldVerify((session?.status === 'starting' || session?.status === 'waiting') && target?.verify === true);
+  }, [open, selectedProviderId, target?.name, target?.auth_index, target?.verify, session?.status]);
   const [proxyUrl, setProxyUrl] = React.useState('');
   React.useEffect(() => { setProxyUrl(''); }, [open, selectedProviderId]);
 
@@ -72,16 +84,16 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     && !isWaiting;
 
   const startAuthorization = () => {
-    if (!choice || isStartBlocked) return;
+    if (!choice || isStartBlocked || (target && !isRecoverySupported)) return;
     const selectedProxy = proxyUrl.trim();
     setProxyUrl('');
-    void sessions.start(choice.id, selectedProxy || undefined);
+    void sessions.start(choice.id, selectedProxy || undefined, target ? { ...target, verify: shouldVerify } : undefined);
   };
 
   const useDefaultRoute = () => {
-    if (!choice) return;
+    if (!choice || (target && !isRecoverySupported)) return;
     setProxyUrl('');
-    void sessions.startDefaultRoute(choice.id);
+    void sessions.startDefaultRoute(choice.id, target ? { ...target, verify: shouldVerify } : undefined);
   };
 
   const copyValue = async (value?: string, successKey: MessageKey = 'oauth.link_copied') => {
@@ -107,7 +119,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
 
   return (
     <AppDrawer
-      title={t('omc.connect_account')}
+      title={t(target ? 'recovery.recover' : 'omc.connect_account')}
       width="wide"
       open={open}
       onClose={onClose}
@@ -127,6 +139,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <SearchSelect
                 label={t('omc.connect_provider')}
                 id="oauth-connect-provider"
+                disabled={Boolean(target)}
                 value={selectedProviderId}
                 placeholder={t('omc.connect_provider_placeholder')}
                 showSearch={{ optionFilterProp: 'title' }}
@@ -181,18 +194,19 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 <label className={styles['field-label']} htmlFor="oauth-connect-provider">
                   {t('omc.connect_provider')}
                 </label>
-                <Button
+                {!target && <Button
                   size="small"
                   type="link"
                   onClick={() => onSelectProvider('')}
                   style={{ padding: 0 }}
                 >
                   {t('omc.change_provider')}
-                </Button>
+                </Button>}
               </div>
               <SearchSelect
                 label={t('omc.connect_provider')}
                 id="oauth-connect-provider"
+                disabled={Boolean(target)}
                 value={selectedProviderId}
                 placeholder={t('omc.connect_provider_placeholder')}
                 showSearch={{ optionFilterProp: 'title' }}
@@ -218,6 +232,13 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               </div>
             </div>
 
+            {target && <>
+              <Notice tone="info" title={t('recovery.target', { name: target.name })} description={t('recovery.target_hint')} />
+              {!isRecoverySupported && <Notice tone="warning" title={t('recovery.upgrade_required')} />}
+              <Checkbox checked={shouldVerify} disabled={isWaiting || session?.starting || isDemo || !isRecoverySupported} onChange={(event) => setShouldVerify(event.target.checked)}>
+                {t('recovery.verify_opt_in')}
+              </Checkbox>
+            </>}
             {!choice.pluginPageRoute && !isWaiting && !session?.starting && (
               <div>
                 <label className={styles['field-label']} htmlFor="oauth-connect-proxy">{t('oauth.session_proxy')}</label>
@@ -247,7 +268,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <Button
                 type="primary"
                 loading={session?.starting}
-                disabled={isWaiting || isStartBlocked || (isDemo && !choice.pluginPageRoute)}
+                disabled={isWaiting || isStartBlocked || (Boolean(target) && !isRecoverySupported) || (isDemo && !choice.pluginPageRoute)}
                 onClick={() => {
                   if (choice.pluginPageRoute) {
                     onClose();
@@ -259,7 +280,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 data-oauth-start={choice.pluginPageRoute ? undefined : choice.id}
                 data-plugin-connect={choice.pluginPageRoute ? choice.id : undefined}
               >
-                {isSuccess ? t('oauth.login_another') : choice.loginLabel}
+                {target ? t('recovery.recover') : isSuccess ? t('oauth.login_another') : choice.loginLabel}
               </Button>
               {isStartBlocked && (
                 <Button type="link" data-oauth-default-route onClick={useDefaultRoute}>
@@ -398,7 +419,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       <CheckCircleOutlined className={styles['success-icon']} />
                       <div className={styles['success-copy']}>
                         <span className={styles['success-title']}>{t('oauth.status_success_badge')}</span>
-                        <span className={styles['success-desc']}>{t('oauth.status_success')}</span>
+                        <span className={styles['success-desc']}>{t(target ? 'recovery.complete' : 'oauth.status_success')}</span>
                       </div>
                       <div className={styles['success-actions']}>
                         <Button

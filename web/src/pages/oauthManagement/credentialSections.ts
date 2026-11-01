@@ -210,6 +210,7 @@ export function credentialStatusOf(record: OAuthWorkspaceRecord, isDisabled: boo
   );
   if (record.file.runtime_only) return status('neutral', 'af.runtime_only_badge');
   if (isDisabled) return status('neutral', 'af.disabled');
+  if (record.file.requires_sign_in) return status('warn', 'recovery.sign_in_required', { needsReauth: true });
   switch (record.quotaCondition) {
     case 'reauth': return status('danger', 'omc.status_reauth', { needsReauth: true });
     case 'cooldown': return status('danger', 'quota.status_cooldown');

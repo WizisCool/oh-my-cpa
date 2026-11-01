@@ -1,3 +1,5 @@
+import { renewalLabel } from '../../components/authFiles/credentialRecovery';
+import { formatGatewayTimestamp } from '../../utils/time';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
@@ -349,17 +351,24 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
           </div>
         </div>
       </td>
-      <td className={styles['td-status']} data-testid="oauth-credential-status">
-        <Tooltip title={explanation ?? undefined}>
-          <StatusLabel tone={status.tone} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
+      <td className={styles['td-status']} data-testid="oauth-credential-status" data-credential-renewal>
+        <Tooltip title={<>
+          {explanation && <div>{explanation}</div>}
+          <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
+          {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
+          {quota?.observed_at_ms && <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div>}
+        </>}>
+          <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
         </Tooltip>
         {status.needsReauth ? (
           <button type="button" className={styles['status-action']} onClick={() => actions.onReauthenticate(record)}>{t('omc.reauthenticate')}</button>
         ) : failure ? (
           <span className={clsx(styles['status-sub'], styles['status-failed'])} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
-        ) : quota?.observed_at_ms ? (
-          <span className={styles['status-sub']}>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</span>
-        ) : null}
+        ) : (
+          <span className={clsx(styles['status-sub'], styles['renewal-status'])} aria-label={`${t('recovery.renewal')}: ${t(renewalLabel(file))}`} title={`${t('recovery.renewal')}: ${t(renewalLabel(file))}`}>
+            {t(renewalLabel(file))}
+          </span>
+        )}
       </td>
       <td className={styles['td-switch']}>
         <Switch

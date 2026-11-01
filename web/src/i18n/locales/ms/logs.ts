@@ -140,6 +140,7 @@ export default {
   "audit.action.auth_file.fields_read": "Membaca medan kelayakan",
   "audit.action.auth_file.fields_update": "Mengemas kini medan kelayakan",
   "audit.action.auth_file.refresh": "Menyegar semula kelayakan",
+  "audit.action.auth_file.verify": "Mengesahkan inferens kelayakan (menggunakan token)",
   "audit.action.auth_file.vertex_import": "Mengimport akaun perkhidmatan Vertex",
   "audit.action.auth_file.status_update": "Menukar status kelayakan",
   "audit.action.oauth.siwc.bind": "Memulakan pengikatan SIWC",

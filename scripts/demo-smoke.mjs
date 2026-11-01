@@ -42,13 +42,13 @@ const PAGES = [
   { route: 'model-square', label: 'model square', selector: '.model-square-page [data-model-identity]', min: 1 },
   { route: 'ai-providers', label: 'providers', selector: '.ant-table-row', min: 2 },
   { route: 'api-keys', label: 'gateway keys', selector: '.ant-table-row', min: 2 },
-  { route: 'agent', label: 'agent', selector: '[data-testid="agent-directory"] code', min: 1 },
+  { route: 'agent', label: 'agent', selector: '[data-testid="agent-directory"] code', min: 1, prepare: page => page.getByTestId('agent-directory-open').click() },
   { route: 'audit', label: 'audit', selector: '[data-testid="audit-entry"]', min: 1 },
   { route: 'oauth-management', label: 'OAuth workspace', selector: '[data-testid="oauth-credential-record"]', min: 4 },
   { route: 'auth-files', label: 'legacy credentials', selector: '[data-testid="oauth-credential-record"]', min: 4, redirectedPath: '/oauth-management' },
   { route: 'oauth', label: 'legacy OAuth connect', selector: '[data-oauth-card]', min: 4, redirectedPath: '/oauth-management' },
   // Legacy quota links now land on credential rows carrying their matched quota data.
-  { route: 'quota', label: 'legacy quota', selector: '[data-quota-focus-anchor] [data-testid="oauth-credential-record"]', min: 6, redirectedPath: '/oauth-management' },
+  { route: 'quota', label: 'legacy quota', selector: '[data-quota-focus-anchor][data-testid="oauth-credential-record"]', min: 6, redirectedPath: '/oauth-management' },
   { route: 'logs', label: 'logs', selector: '.ant-typography, .log-line, .ant-tabs', min: 1 },
   { route: 'usage/events', label: 'request records', selector: '.ant-table-row, .request-row, [data-request-row]', min: 1 },
   { route: 'pricing', label: 'pricing', selector: '.ant-table-row', min: 5 },
@@ -68,6 +68,7 @@ const PAGES = [
 const REFUSED = [
   { method: 'POST', path: '/api/v1/management/oauth/start', body: { provider: 'codex' } },
   { method: 'POST', path: '/api/v1/management/oauth/callback', body: { provider: 'codex', code: 'x' } },
+  { method: 'POST', path: '/api/v1/management/auth-files/verify', body: { name: 'codex-team-primary.json' } },
   { method: 'GET', path: '/api/v1/management/auth-files/download?name=codex-team-primary.json' },
   { method: 'POST', path: '/api/v1/management/auth-files?name=uploaded.json', body: { type: 'codex' } },
   { method: 'DELETE', path: '/api/v1/management/auth-files', body: { names: ['codex-team-primary.json'] } },
@@ -254,6 +255,7 @@ async function main() {
       failedRequests.length = 0;
       consoleErrors.length = 0;
       await page.goto(`${demo.base}/${definition.route}`, { waitUntil: 'domcontentloaded' });
+      await definition.prepare?.(page);
       const ok = await until(async () => (await page.locator(definition.selector).count()) >= definition.min, {
         label: `${definition.label} to render at least ${definition.min} ${definition.selector}`,
         timeoutMs: 20_000,

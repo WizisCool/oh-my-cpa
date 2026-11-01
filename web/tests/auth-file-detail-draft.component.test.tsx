@@ -6,10 +6,10 @@ import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 
-const FILE: ManagementAuthFile = { name: 'claude.json', auth_index: 'exact-claude', type: 'claude', provider: 'claude', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, note: 'Original note' };
+const FILE: ManagementAuthFile = { recovery_supported: true, name: 'claude.json', auth_index: 'exact-claude', type: 'claude', provider: 'claude', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, note: 'Original note' };
 const FIELDS = { proxy_url: 'socks5h://%5Bredacted%5D@proxy.example.test:1080', name: FILE.name, note: FILE.note, disable_cooling: false, websockets: false, using_api: false, excluded_models: [], model_aliases: [] };
 function mountDetail(holdSave?: Promise<void>) {
-  const onClose = vi.fn(); const onSaved = vi.fn();
+  const onClose = vi.fn(); const onSaved = vi.fn(); const onRecover = vi.fn();
   const api = installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }] });
   if (holdSave) {
     const save = api.hold('PATCH', '/management/auth-files/fields');
@@ -33,11 +33,11 @@ function mountDetail(holdSave?: Promise<void>) {
     const [shouldSuspend, setShouldSuspend] = React.useState(false);
     updateExternalDraft = setHasDraft;
     suspendDraftRemoval = () => React.startTransition(() => { setHasDraft(false); setShouldSuspend(true); });
-    return <React.Suspense fallback={<span>Draft update pending</span>}><AuthFileDetailDrawer file={FILE} open canEdit initialSection="warmup" hasExternalDraft={hasDraft} onClose={onClose} onSaved={onSaved} onDownload={() => {}}
+    return <React.Suspense fallback={<span>Draft update pending</span>}><AuthFileDetailDrawer file={FILE} open canEdit onRecover={onRecover} initialSection="warmup" hasExternalDraft={hasDraft} onClose={onClose} onSaved={onSaved} onDownload={() => {}}
       warmupContent={<label>Warmup draft<input aria-label="Warmup draft" value={warmupDraft} onChange={event => { setWarmupDraft(event.target.value); setHasDraft(Boolean(event.target.value)); }} /></label>} /><RenderGate shouldSuspend={shouldSuspend} /></React.Suspense>;
   }
   const surface = renderWithOmc(<Harness />, { isStrict: true });
-  return { ...surface, onClose, onSaved, suspendedRender,
+  return { ...surface, onClose, onSaved, onRecover, suspendedRender,
     get writes() { return api.writes('/management/auth-files/fields').map(request => request.body); },
     updateExternalDraft: (hasDraft: boolean) => updateExternalDraft(hasDraft),
     suspendDraftRemoval: () => suspendDraftRemoval(), releaseDraftRemoval };
@@ -135,4 +135,18 @@ it('preserves credential status when only its name is saved', async () => {
   await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
   expect(onSaved.mock.calls[0][0]).toEqual({ ...file, display_name: 'Team seat', display_name_version: 1 });
   expect(api.writes('/management/auth-files/fields')).toHaveLength(0);
+});
+
+it('requires explicit discard before leaving an external draft for credential recovery', async () => {
+  const surface = mountDetail();
+  try {
+    fireEvent.change(await screen.findByLabelText('Warmup draft'), { target: { value: 'Unsaved warmup policy' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Quota' }));
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-recover]')!);
+    const cancel = await screen.findByRole('button', { name: 'Cancel' });
+    expect(surface.onRecover).not.toHaveBeenCalled();
+    fireEvent.click(cancel);
+    expect(surface.onRecover).not.toHaveBeenCalled();
+    expect((await screen.findByLabelText('Warmup draft') as HTMLInputElement).value).toBe('Unsaved warmup policy');
+  } finally { surface.unmount(); }
 });

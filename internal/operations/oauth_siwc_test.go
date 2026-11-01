@@ -15,13 +15,13 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 )
 
-func TestAgentCredentialReadProjectsSIWCSummariesOnly(t *testing.T) {
+func TestAgentCredentialReadProjectsSafeLifecycleSummariesOnly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v8/management/config/config-version" {
 			fmt.Fprint(w, "8")
 			return
 		}
-		fmt.Fprint(w, `{"files":[{"name":"codex.json","provider":"codex","siwc_bind_supported":true,"use_siwc":true,"siwc_status":"invalid","siwc_bound":true,"siwc_expires_at":"2026-10-21T00:00:00Z","metadata":{"siwc":{"access_token":"SYNTHETIC-TOKEN"}}}]}`)
+		fmt.Fprint(w, `{"files":[{"name":"codex.json","provider":"codex","siwc_bind_supported":true,"use_siwc":true,"siwc_status":"invalid","siwc_bound":true,"siwc_expires_at":"2026-10-21T00:00:00Z","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"loaded","adopted":true,"inference_verified":true,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"SYNTHETIC-TOKEN"},"metadata":{"siwc":{"access_token":"SYNTHETIC-TOKEN"}}}]}`)
 	}))
 	defer server.Close()
 	client, err := management.NewClient(server.URL, "synthetic-management", time.Second, false)
@@ -46,6 +46,11 @@ func TestAgentCredentialReadProjectsSIWCSummariesOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := json.Marshal(value)
+	for _, field := range []string{`"requires_sign_in":true`, `"renewal_state":"sign_in_required"`, `"recovery_stage":"loaded"`, `"inference_verified":true`, `"renewal_verified":false`, `"code":"invalid_grant"`} {
+		if !strings.Contains(string(body), field) {
+			t.Fatalf("missing lifecycle field %s: %s", field, body)
+		}
+	}
 	if !strings.Contains(string(body), `"siwc_status":"invalid"`) || !strings.Contains(string(body), `"siwc_bind_supported":true`) || !strings.Contains(string(body), `"siwc_bound":true`) || !strings.Contains(string(body), `"use_siwc":true`) || !strings.Contains(string(body), `"siwc_expires_at":"2026-10-21T00:00:00Z"`) || strings.Contains(string(body), "SYNTHETIC-TOKEN") {
 		t.Fatalf("credential projection: %s", body)
 	}

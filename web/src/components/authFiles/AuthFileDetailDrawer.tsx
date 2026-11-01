@@ -1,3 +1,4 @@
+import { CredentialRecoveryPanel } from './CredentialRecoveryPanel';
 import { SecretInput } from '../common/SecretInput';
 import type { MessageKey } from '../../i18n/catalog';
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
@@ -80,6 +81,7 @@ interface AuthFileDetailDrawerProps {
   onClose: () => void;
   onSaved: (file?: ManagementAuthFile) => void;
   onDownload: (file: ManagementAuthFile) => void;
+  onRecover?: () => void;
   quotaContent?: React.ReactNode;
   warmupContent?: React.ReactNode;
   hasExternalDraft?: boolean;
@@ -192,6 +194,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onClose,
   onSaved,
   onDownload,
+  onRecover,
   quotaContent,
   warmupContent,
   hasExternalDraft = false,
@@ -353,7 +356,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     },
   });
 
-  const handleAttemptClose = useCallback(() => {
+  const confirmDiscardFor = useCallback((action: () => void) => {
     if (saveMutation.isPending || isPendingRef.current) return;
     if (isDirty || hasExternalDraft) {
       modal.confirm({
@@ -365,13 +368,15 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
         okButtonProps: { danger: true },
         onOk: () => {
           setIsDirty(false);
-          onClose();
+          action();
         },
       });
     } else {
-      onClose();
+      action();
     }
-  }, [isDirty, hasExternalDraft, modal, onClose, saveMutation.isPending, t]);
+  }, [isDirty, hasExternalDraft, modal, saveMutation.isPending, t]);
+
+  const handleAttemptClose = useCallback(() => confirmDiscardFor(onClose), [confirmDiscardFor, onClose]);
 
   const safeFieldsQuery = useQuery({
     queryKey: ['auth-file-safe-fields', file?.name, file?.auth_index],
@@ -606,6 +611,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 disabled: saveMutation.isPending,
                 children: (
                   <div>
+                    <CredentialRecoveryPanel file={file} canEdit={canEdit} onRecover={onRecover ? () => confirmDiscardFor(onRecover) : undefined} onChanged={onSaved} />
                     {quotaContent}
                     <details className={styles['credential-metadata']}>
                       <summary>{t('common.details')}</summary>

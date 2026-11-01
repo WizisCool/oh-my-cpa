@@ -1,3 +1,9 @@
+export interface OAuthRecoveryTarget {
+  name: string;
+  auth_index?: string;
+  verify?: boolean;
+}
+
 export interface OAuthProviderItem {
   id: string;
   name: string;

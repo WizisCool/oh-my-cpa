@@ -525,6 +525,77 @@ export async function oauthManagement({ base, page, check }) {
   check('OAuth priority sorting survives a fresh entry and orders the collection',
     (await page.locator('#oauth-collection-filters').innerText()).includes('Priority (High to Low)')
       && (await page.getByTestId('oauth-credential-record').first().getAttribute('data-auth-index')) === 'auth-02');
+
+  // The new recovery controls must fit and stay keyboard-reachable in the phone
+  // drawer even when quota is usable and the access token has not expired.
+  const recoveryFiles = files.map((file, index) => index === 0 || index === 4 ? {
+    ...file, recovery_supported: true, requires_sign_in: true,
+    renewal_state: 'sign_in_required', recovery_stage: 'loaded',
+    access_token_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+    adopted: true, inference_verified: false, renewal_verified: false,
+  } : file);
+  await page.route('**/api/v1/management/auth-files*', async (route) => {
+    if (!new URL(route.request().url()).pathname.endsWith('/auth-files')) return route.fallback();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files: recoveryFiles, total: recoveryFiles.length }) });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/oauth-management?provider=codex`, { waitUntil: 'domcontentloaded' });
+  const recoveryRow = page.locator('[data-auth-index="auth-01"]');
+  await recoveryRow.locator('[data-credential-renewal]').waitFor();
+  const verificationPosts = [];
+  await page.route('**/management/auth-files/verify', (route) => {
+    verificationPosts.push(route.request().postDataJSON());
+    return fulfillFixture(route, { json: { status: 'ok', verified: true } });
+  });
+  await recoveryRow.getByRole('button', { name: /^Details:/ }).click();
+  await page.locator('.ant-drawer-open [data-credential-verify]').click();
+  const verificationDialog = page.getByRole('dialog', { name: 'Verify inference (uses tokens)', exact: true });
+  await verificationDialog.waitFor();
+  check('showing verification confirmation consumes no tokens', verificationPosts.length === 0);
+  await verificationDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await verificationDialog.waitFor({ state: 'hidden' });
+  check('cancelling inference verification sends no request', verificationPosts.length === 0);
+  await page.locator('.ant-drawer-open .ant-drawer-close').click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
+  await recoveryRow.getByRole('button', { name: 'Reauthenticate', exact: true }).click();
+  const recoveryPanel = page.getByTestId('oauth-connect-panel');
+  await recoveryPanel.waitFor();
+  const optIn = recoveryPanel.getByRole('checkbox');
+  check('targeted recovery leaves token-consuming verification unchecked', !(await optIn.isChecked()));
+  await optIn.focus();
+  await page.keyboard.press('Space');
+  check('phone recovery verification opt-in is keyboard-operable', await optIn.isChecked());
+  const recoveryGeometry = await recoveryPanel.evaluate((panel) => ({
+    overflow: panel.scrollWidth - panel.clientWidth,
+    controls: [...panel.querySelectorAll('button, input')].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && (rect.left < -1 || rect.right > window.innerWidth + 1);
+    }).length,
+  }));
+  check('targeted recovery controls stay inside the phone drawer', recoveryGeometry.overflow <= 1 && recoveryGeometry.controls === 0, JSON.stringify(recoveryGeometry));
+  check('targeted recovery locks the provider selector', await recoveryPanel.locator('#oauth-connect-provider').isDisabled());
+  await page.screenshot({ path: 'tmp/oauth-credential-recovery-390.png' });
+  const targetedStarts = [];
+  await page.route('**/management/oauth/start', (route) => {
+    targetedStarts.push(route.request().postDataJSON());
+    return fulfillFixture(route, { json: { url: 'https://auth.example.test/authorize', state: 'recovery-probe-state' } });
+  });
+  await page.route('**/management/oauth/status?*', (route) => fulfillFixture(route, { json: { status: 'wait' } }));
+  await page.route('**/management/oauth/session?*', (route) => fulfillFixture(route, { json: { status: 'ok', cancelled: true } }));
+  await recoveryPanel.locator('[data-oauth-start]').click();
+  await recoveryPanel.getByRole('button', { name: 'Cancel Authorization', exact: true }).waitFor();
+  check('recovery starts only the selected account with explicit consent', targetedStarts.length === 1
+    && targetedStarts[0].name === files[0].name && targetedStarts[0].auth_index === files[0].auth_index
+    && targetedStarts[0].verify === true);
+  await page.locator('.ant-drawer-open .ant-drawer-close').click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
+  await page.locator('[data-auth-index="auth-05"]').getByRole('button', { name: 'Reauthenticate', exact: true }).click();
+  check('another credential cannot relabel an active provider authorization', !(await recoveryPanel.isVisible()) && targetedStarts.length === 1);
+  await recoveryRow.getByRole('button', { name: 'Reauthenticate', exact: true }).click();
+  await recoveryPanel.waitFor();
+  check('reopening the active recovery retains its verification consent', await optIn.isChecked() && await optIn.isDisabled());
+  await recoveryPanel.getByRole('button', { name: 'Cancel Authorization', exact: true }).click();
+  await page.locator('.ant-drawer-open .ant-drawer-close').click();
 }
 
 

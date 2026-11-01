@@ -1,6 +1,9 @@
+import { CredentialRecoveryPanel } from '../src/components/authFiles/CredentialRecoveryPanel';
+import type { ManagementAuthFile } from '../src/types/managementAuthFile';
+import type { OAuthRecoveryTarget } from '../src/types/oauth';
 import React from 'react';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { expect, it } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
 import { OAuthConnectPanel } from '../src/pages/oauthManagement/OAuthConnectPanel';
 import { useOAuthSessions } from '../src/pages/oauthManagement/useOAuthSessions';
 import type { OAuthProviderChoice } from '../src/pages/oauthProviderLogic';
@@ -11,7 +14,7 @@ const CHOICES: OAuthProviderChoice[] = ['codex', 'anthropic'].map(id => ({
   id, title: id, description: '', iconId: '', flow: 'manual-callback', loginLabel: id,
 }));
 
-function ConnectWorkspace() {
+function ConnectWorkspace({ recovery, isRecoverySupported = true }: { recovery?: OAuthRecoveryTarget; isRecoverySupported?: boolean } = {}) {
   const [isOpen, setIsOpen] = React.useState(true);
   const [providerId, setProviderId] = React.useState('codex');
   const sessions = useOAuthSessions(CHOICES);
@@ -20,7 +23,7 @@ function ConnectWorkspace() {
     <button data-testid="reopen" onClick={() => setIsOpen(true)} />
     <button data-testid="other-provider" onClick={() => setProviderId(current => current === 'codex' ? 'anthropic' : 'codex')} />
     <output data-testid="sessions">{JSON.stringify(sessions.states)}</output>
-    <OAuthConnectPanel open={isOpen} choices={CHOICES} selectedProviderId={providerId}
+    <OAuthConnectPanel recoveryTarget={recovery} isRecoverySupported={isRecoverySupported} open={isOpen} choices={CHOICES} selectedProviderId={providerId}
       onSelectProvider={setProviderId} onClose={() => setIsOpen(false)} onViewCredentials={() => {}} sessions={sessions} />
   </>;
 }
@@ -236,5 +239,75 @@ it('requires a fresh route decision when a proxied session later reports a statu
       { provider: 'anthropic' },
       { provider: 'anthropic' },
     ]);
+  } finally { surface.unmount(); }
+});
+
+it('keeps targeted recovery pinned across failure/minimizing and requires an unchecked verification opt-in', async () => {
+  const server = installOmcApi();
+  let shouldSucceed = false;
+  server.on('POST', '/management/oauth/start', () => shouldSucceed
+    ? { url: 'https://auth.example.test/authorize', state: 'targeted-state' }
+    : json({ code: 'oauth_recovery_upgrade_required', error: 'upgrade required' }, 501));
+  server.on('GET', '/management/oauth/status', () => ({ status: 'wait' }));
+  const recovery = { name: 'same-account.json', auth_index: 'account-index' };
+  const surface = renderWithOmc(<ConnectWorkspace recovery={recovery} />, { route: '/omc/oauth-management' });
+  const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start]')!;
+  const verification = () => screen.getByRole('checkbox', { name: /Verify inference after sign-in/ });
+  try {
+    expect((verification() as HTMLInputElement).checked).toBe(false);
+    expect(surface.baseElement.querySelector<HTMLInputElement>('#oauth-connect-provider')!.disabled).toBe(true);
+    fireEvent.click(start());
+    await waitFor(() => expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'codex', ...recovery, verify: false }]));
+    await waitFor(() => expect(JSON.parse(screen.getByTestId('sessions').textContent!).codex.status).toBe('error'));
+    fireEvent.click(screen.getByTestId('minimize'));
+    fireEvent.click(screen.getByTestId('reopen'));
+    expect((verification() as HTMLInputElement).checked).toBe(false);
+    expect(surface.baseElement.textContent).toContain('same-account.json');
+    shouldSucceed = true;
+    fireEvent.click(verification());
+    fireEvent.click(start());
+    await waitFor(() => expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([
+      { provider: 'codex', ...recovery, verify: false }, { provider: 'codex', ...recovery, verify: true },
+    ]));
+    expect(JSON.parse(screen.getByTestId('sessions').textContent!).codex.recoveryTarget.name).toBe(recovery.name);
+    fireEvent.click(screen.getByTestId('minimize'));
+    fireEvent.click(screen.getByTestId('reopen'));
+    expect((verification() as HTMLInputElement).checked).toBe(true);
+    expect((verification() as HTMLInputElement).disabled).toBe(true);
+  } finally { surface.unmount(); }
+});
+
+it('does not offer an ordinary login as a fallback for unsupported targeted recovery', () => {
+  const server = installOmcApi();
+  const surface = renderWithOmc(<ConnectWorkspace recovery={{ name: 'old.json', auth_index: 'old' }} isRecoverySupported={false} />, { route: '/omc/oauth-management' });
+  try {
+    expect(surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start]')!.disabled).toBe(true);
+    expect((screen.getByRole('checkbox', { name: /Verify inference after sign-in/ }) as HTMLInputElement).disabled).toBe(true);
+    expect(server.writes('/management/oauth/start')).toHaveLength(0);
+  } finally { surface.unmount(); }
+});
+
+it.each([true, false])('verifies the selected credential only when confirmation is accepted: %s', async (shouldConfirm) => {
+  const server = installOmcApi();
+  server.on('POST', '/management/auth-files/verify', () => ({ status: 'ok', verified: true }));
+  const changed = vi.fn();
+  const file: ManagementAuthFile = {
+    name: 'selected.json', auth_index: 'selected', provider: 'codex', disabled: false, unavailable: false, runtime_only: false,
+    success: 0, failed: 0, recovery_supported: true, requires_sign_in: false, renewal_state: 'awaiting_first_renewal',
+    recovery_stage: 'inference_verified', adopted: true, inference_verified: true, renewal_verified: false,
+  };
+  const surface = renderWithOmc(<CredentialRecoveryPanel file={file} canEdit onChanged={changed} />);
+  try {
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-verify]')!);
+    const confirmation = await screen.findByRole('dialog');
+    expect(server.writes('/management/auth-files/verify')).toHaveLength(0);
+    await act(async () => { fireEvent.click(within(confirmation).getByRole('button', { name: shouldConfirm ? 'Verify inference (uses tokens)' : 'Cancel' })); });
+    if (shouldConfirm) {
+      await waitFor(() => expect(server.writes('/management/auth-files/verify').map(request => request.body)).toEqual([{ name: 'selected.json', auth_index: 'selected' }]));
+      await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    } else {
+      expect(server.writes('/management/auth-files/verify')).toHaveLength(0);
+      expect(changed).not.toHaveBeenCalled();
+    }
   } finally { surface.unmount(); }
 });

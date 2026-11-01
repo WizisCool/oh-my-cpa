@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/agent"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
@@ -49,7 +50,7 @@ func (h *Handler) startAgentOAuth(writer http.ResponseWriter, request *http.Requ
 			writePlaygroundError(writer, 503, "capability_unavailable")
 			return
 		}
-		flow, err = client.OAuthAuthURL(request.Context(), input.Provider, "")
+		flow, err = client.OAuthAuthURL(request.Context(), input.Provider, management.OAuthStartOptions{})
 		parsed, parseErr := url.Parse(flow.URL)
 		if err != nil || parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || flow.State == "" {
 			writePlaygroundError(writer, 502, "operation_failed")

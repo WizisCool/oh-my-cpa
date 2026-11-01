@@ -26,6 +26,7 @@ type oauthCPAState struct {
 	// lastAuthURLQuery records the is_webui value CPA received on the most
 	// recent authorization-URL request.
 	lastAuthURLQuery string
+	lastStatusState  string
 	startCalls       int
 	startMethod      string
 	startQuery       string
@@ -86,6 +87,7 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 			if reqState == "" {
 				reqState = request.URL.Query().Get("session_id")
 			}
+			state.lastStatusState = reqState
 			// A session whose browser auto-callback already finished the
 			// exchange reports completed, so the facade can reconcile a
 			// repeated manual submission.
@@ -226,8 +228,16 @@ func TestOAuthFlowLifecycle(t *testing.T) {
 		Status  string `json:"status"`
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(payload, &pollRes); err != nil || pollRes.Status != "wait" || !strings.Contains(pollRes.Message, "cpa-state-webui") {
+	if err := json.Unmarshal(payload, &pollRes); err != nil || pollRes.Status != "wait" || pollRes.Message != "" {
 		t.Fatalf("unexpected poll status: %s", payload)
+	}
+
+	// Session routing must be preserved without reflecting private state in text.
+	state.mu.Lock()
+	polledState := state.lastStatusState
+	state.mu.Unlock()
+	if polledState != startRes.State {
+		t.Fatalf("polled state = %q, want the active authorization", polledState)
 	}
 
 	// 3b. Legacy CPA aliases ("success"/"pending") normalize to the facade contract.

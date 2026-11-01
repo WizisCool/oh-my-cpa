@@ -47,6 +47,29 @@ credential separation, audit and write-backup requirements are in
 [Architecture](architecture.md#trusted-plugin-pages). It is not permission to add
 native responses to the ordinary facade or an arbitrary HTTP proxy.
 
+## Credential recovery evidence
+
+The credential facade and Agent reads share a bounded renewal/recovery projection.
+Missing lifecycle fields remain unknown, not healthy. Quota reads, SIWC local status,
+runtime adoption, successful inference and automatic renewal are independent evidence.
+Refresh failure projection retains only allowlisted codes and an HTTP status, never
+provider messages, OAuth codes, account profiles or native credential bodies.
+
+Selected-credential sign-in resolves the name/index pair before asking CPA to pin the
+account. Lifecycle fields are required evidence of support, and the auth-url response
+must acknowledge the same target ID before OMC releases the login URL: a provider
+handler can otherwise ignore the selectors even on a gateway with lifecycle fields.
+Missing support, acknowledgement or endpoints must refuse recovery, never restart it
+as ordinary login. CPA owns account
+matching, exchange and persistence, including refusal of a different account.
+
+Inference verification is a separate, explicitly confirmed token-consuming action;
+post-login verification defaults to false. Both paths require audit admission before
+execution. A completed sign-in is not proof of inference or automatic renewal, and a
+failed summary read after completion is reported as a read failure, not a rolled-back
+login. Recovery and verification remain operator-driven browser actions; Agent reads
+receive the same safe evidence without OAuth interaction material.
+
 ## Where the live contract is defined
 
 | Concern | Source |
