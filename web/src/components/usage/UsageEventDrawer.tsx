@@ -22,6 +22,7 @@ import { groupResponseHeaders, responseHeadersText } from '../../types/responseH
 import dayjs from '../../utils/time';
 import { api, ApiError } from '../../api/client';
 import { displayEffortName } from '../../theme/effortScale';
+import { durationScaleMix } from '../../theme/durationScale';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { maskKeyText } from '../../utils/maskKey';
@@ -41,9 +42,6 @@ import {
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
-  latencyTone,
-  timingBandLabel,
-  ttftTone,
   resolvedTierHintKey,
   requestTransport,
 } from '../../types/usageEventMetrics';
@@ -241,10 +239,17 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
 
   const rate = eventTokensPerSecond(event, tpsMode);
   const latency = event?.latency_ms ?? 0;
-  const latencyBand = latencyTone(event?.latency_ms);
-  const latencyLabel = timingBandLabel(t, 'latency', latencyBand);
-  const ttftBand = ttftTone(event);
-  const ttftLabel = timingBandLabel(t, 'ttft', ttftBand);
+  // One duration reading, one ramp. The stops travel as custom properties and CSS mixes
+  // them, so every readout in the drawer - hero, waterfall header and legend - asks the
+  // same question of the same three values. TTFT is detail and keeps the secondary ink.
+  const durationScale = durationScaleMix(event?.latency_ms);
+  const durationScaleStyle = durationScale
+    ? ({
+        '--duration-from': durationScale.from,
+        '--duration-to': durationScale.to,
+        '--duration-from-share': durationScale.fromShare,
+      } as React.CSSProperties)
+    : undefined;
   const isMeasurable = hasMeasurableTTFT(event);
   const ttft = isMeasurable && event?.ttft_ms != null ? event.ttft_ms : 0;
   const streamTime = Math.max(0, latency - ttft);
@@ -317,17 +322,10 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
           <div className="request-detail-metrics">
             <div>
               <span>{t('events.duration')}</span>
-              {latencyLabel !== null ? (
-                <Tooltip title={latencyLabel}>
-                  <strong
-                    tabIndex={0}
-                    className="req-timing-value"
-                    data-timing-band={latencyBand}
-                    aria-label={`${t('events.duration')}: ${formatEventDuration(event.latency_ms)}. ${latencyLabel}`}
-                  >
-                    {formatEventDuration(event.latency_ms)}
-                  </strong>
-                </Tooltip>
+              {durationScaleStyle ? (
+                <strong className="req-timing-value" style={durationScaleStyle}>
+                  {formatEventDuration(event.latency_ms)}
+                </strong>
               ) : (
                 <strong>{formatEventDuration(event.latency_ms)}</strong>
               )}
@@ -340,19 +338,10 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 </Tooltip>
               </div>
             )}
-            {ttftLabel !== null && (
+            {isMeasurable && (
               <div>
                 <span>{t('events.ttft')}</span>
-                <Tooltip title={ttftLabel}>
-                  <strong
-                    className="req-timing-value"
-                    data-timing-band={ttftBand}
-                    tabIndex={0}
-                    aria-label={`${t('events.ttft')}: ${formatEventDuration(event.ttft_ms)}. ${ttftLabel}`}
-                  >
-                    {formatEventDuration(event.ttft_ms)}
-                  </strong>
-                </Tooltip>
+                <strong>{formatEventDuration(event.ttft_ms)}</strong>
               </div>
             )}
             <div>
@@ -504,10 +493,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           <h4>{t('events.waterfall_title')}</h4>
                           <span
                             className="req-waterfall-total req-timing-value"
-                            data-timing-band={latencyBand}
-                            tabIndex={0}
-                            title={latencyLabel ?? undefined}
-                            aria-label={`${t('events.duration')}: ${formatEventDuration(latency)}${latencyLabel ? `. ${latencyLabel}` : ''}`}
+                            style={durationScaleStyle}
                           >
                             {formatEventDuration(latency)}
                           </span>
@@ -530,13 +516,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                               <div className="req-waterfall-legend-item">
                                 <span className="req-waterfall-pip req-waterfall-pip-ttft" />
                                 <span>{t('events.waterfall_ttft')}</span>
-                                <strong
-                                  className="req-timing-value"
-                                  data-timing-band={ttftBand}
-                                  tabIndex={0}
-                                  title={ttftLabel ?? undefined}
-                                  aria-label={`${t('events.ttft')}: ${formatEventDuration(ttft)}. ${ttftLabel}`}
-                                >{formatEventDuration(ttft)}</strong>
+                                <strong>{formatEventDuration(ttft)}</strong>
                               </div>
                               <div className="req-waterfall-legend-item">
                                 <span className="req-waterfall-pip req-waterfall-pip-stream" />
@@ -560,10 +540,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                                 <span>{t('events.duration')}</span>
                                 <strong
                                   className="req-timing-value"
-                                  data-timing-band={latencyBand}
-                                  tabIndex={0}
-                                  title={latencyLabel ?? undefined}
-                                  aria-label={`${t('events.duration')}: ${formatEventDuration(latency)}${latencyLabel ? `. ${latencyLabel}` : ''}`}
+                                  style={durationScaleStyle}
                                 >{formatEventDuration(latency)}</strong>
                               </div>
                             </div>

@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import {
   ACCENT_LABEL_CONTRAST_FLOOR,
   BUILT_IN_PALETTES,
+  DURATION_RAMP_CONTRAST_FLOOR,
   BUILT_IN_PALETTE_IDS,
   CONTRAST_FLOORS,
   CORE_TOKEN_CONTRAST_ROLES,
@@ -37,7 +38,7 @@ import {
   resolvedBuiltInPalette,
   type ThemeCore,
 } from '../web/src/theme/palette.ts';
-import { contrastRatio, normalizeHex } from '../web/src/theme/colorMath.ts';
+import { contrastRatio, mixOklch, normalizeHex } from '../web/src/theme/colorMath.ts';
 import {
   DEFAULT_THEME_PREFERENCES,
   migrateLegacyThemeValue,
@@ -84,6 +85,28 @@ test('theme presets', () => {
     });
   }
 
+  /**
+   * The request duration ramp has to be legible at *every* position, not at its two ends.
+   *
+   * A reading between green and orange is painted from an OKLCH mix of the stops, and a mix of two
+   * legible colours is not automatically legible: the mid-blend loses up to about three tenths of a
+   * ratio point against the same ground. So the sweep is sampled rather than trusted, on every
+   * surface a duration can sit on - a row, a hovered row, a selected row, and the drawer's panels.
+   */
+  function assertDurationRampLegible(palette: ReturnType<typeof derivePalette>, where: string): void {
+    const grounds = [palette.bg, palette.surface, palette.elevated, palette.rowHover, palette.selected];
+    for (let step = 0; step <= 100; step += 1) {
+      const blend = mixOklch(palette.timingGreen, palette.timingOrange, step / 100);
+      for (const ground of grounds) {
+        const ratio = contrastRatio(blend, ground);
+        assert.ok(
+          ratio >= DURATION_RAMP_CONTRAST_FLOOR,
+          `${where} duration ${blend} (${step}% along the ramp) reads ${ratio.toFixed(2)}:1 on ${ground}, want >= ${DURATION_RAMP_CONTRAST_FLOOR}:1`,
+        );
+      }
+    }
+  }
+
   for (const definition of BUILT_IN_PALETTES) {
     const palette = derivePalette(definition.mode, definition.core);
     const where = `${definition.id}:`;
@@ -109,13 +132,10 @@ test('theme presets', () => {
     }
 
     assertSignalsHold(definition.mode, palette, where);
-    assert.equal(new Set([palette.timingGreen, palette.timingAmber, palette.timingOrange, palette.danger]).size, 4,
-      `${where} duration bands and failure remain visually distinct`);
-    for (const color of [palette.timingGreen, palette.timingAmber, palette.timingOrange]) {
-      for (const ground of [palette.bg, palette.surface, palette.elevated, palette.rowHover, palette.selected]) {
-        assert.ok(contrastRatio(color, ground) >= 4.5, `${where} timing text ${color} remains readable on ${ground}`);
-      }
-    }
+    assert.notEqual(palette.timingGreen, palette.timingOrange, `${where} the duration ramp has two distinct ends`);
+    assert.ok(![palette.timingGreen, palette.timingOrange].includes(palette.danger),
+      `${where} a slow request never borrows the failure hue`);
+    assertDurationRampLegible(palette, `${where} `);
 
     // The accent ladder has to be a ladder: a filled control whose resting and hover fills are the
     // same colour has no hover state, and one whose hover and pressed fills match has no press.
@@ -166,11 +186,7 @@ test('theme presets', () => {
     for (const accent of ACCENT_SWEEP) {
       const core: ThemeCore = { ...getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core, accent };
       const palette = derivePalette(mode, core);
-      for (const color of [palette.timingGreen, palette.timingAmber, palette.timingOrange]) {
-        for (const ground of [palette.bg, palette.surface, palette.elevated, palette.rowHover, palette.selected]) {
-          assert.ok(contrastRatio(color, ground) >= 4.5, `${mode} accent ${accent}: timing text remains readable`);
-        }
-      }
+      assertDurationRampLegible(palette, `${mode} accent ${accent}: `);
       const hoverLabel = contrastRatio(palette.accentOn, palette.accentHover);
       assert.ok(
         hoverLabel >= ACCENT_LABEL_CONTRAST_FLOOR,

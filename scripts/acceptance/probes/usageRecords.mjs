@@ -481,50 +481,85 @@ export async function requestListInteractions({ base, page, check }) {
   await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
 
-  // Keep the rounded boundary readings and independent timing hues readable in both themes.
+  // The duration ramp is continuous: a reading is painted from where it sits between two stops, so
+  // two fast requests no longer paint alike, and the measured value follows the mix the row asks
+  // the engine for. TTFT is detail and keeps the secondary ink in both themes.
+  // The expected colours are painted by the engine as well, so a serialisation the browser chose
+  // for one expression cannot be compared against a different one it chose for another.
+  const readDurations = (count) => page.evaluate((count) => {
+    const probe = document.createElement('i');
+    document.body.appendChild(probe);
+    const painted = (css) => {
+      probe.style.color = css;
+      return getComputedStyle(probe).color;
+    };
+    const palette = {
+      green: painted('var(--timing-green)'),
+      orange: painted('var(--timing-orange)'),
+      danger: painted('var(--danger)'),
+      muted: painted('var(--muted)'),
+    };
+    const rows = [...document.querySelectorAll('.request-row')].slice(0, count).map((row) => {
+      const total = row.querySelector('.req-latency-val');
+      const ttft = row.querySelector('.req-ttft-val');
+      const from = total?.style.getPropertyValue('--duration-from') ?? '';
+      const to = total?.style.getPropertyValue('--duration-to') ?? '';
+      const fromShare = total?.style.getPropertyValue('--duration-from-share') ?? '';
+      return {
+        text: total?.textContent ?? null,
+        color: total ? getComputedStyle(total).color : null,
+        from,
+        to,
+        fromShare,
+        // The mix the row asked for, painted independently of the row, as a self-check of the
+        // stops it carries. The ramp's own colours are asserted against the stops below.
+        expected: from && to && fromShare ? painted(`color-mix(in oklch, ${from} ${fromShare}, ${to})`) : null,
+        atGreen: from && fromShare ? painted(`color-mix(in oklch, ${from} ${fromShare}, ${palette.green})`) : null,
+        atOrange: to && fromShare ? painted(`color-mix(in oklch, ${to} ${fromShare}, ${palette.orange})`) : null,
+        ttft: ttft?.textContent ?? null,
+        ttftColor: ttft ? getComputedStyle(ttft).color : null,
+        ttftHasRamp: ttft?.querySelector('.req-timing-value') != null,
+      };
+    });
+    probe.remove();
+    return { palette, rows };
+  }, count);
+
   for (const mode of ['light', 'dark']) {
     await page.evaluate((mode) => localStorage.setItem('omc-theme', JSON.stringify({ mode })), mode);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('.request-row').first().waitFor();
     await until(async () => await page.locator('html').getAttribute('data-theme-mode') === mode,
-      { label: `${mode} timing palette applied` });
-    const samples = [
-      ['65.00 s', '3.00 s', 'orange', 'green'],
-      ['15.00 s', '3.00 s', 'green', 'green'],
-      ['15.00 s', '3.00 s', 'amber', 'amber'],
-      ['30.00 s', '10.00 s', 'amber', 'amber'],
-      ['30.00 s', '10.00 s', 'orange', 'orange'],
-      ['300.00 s', '100.00 s', 'orange', 'orange'],
-    ];
-    for (const [index, [duration, ttft, totalBand, firstBand]] of samples.entries()) {
-      const reading = await page.locator('.request-row').nth(index).evaluate((row, bands) => {
-        const total = row.querySelector('.req-latency-val');
-        const first = row.querySelector('.req-ttft-val .req-timing-value');
-        const firstLabel = row.querySelector('.req-ttft-val');
-        const token = document.createElement('i');
-        row.appendChild(token);
-        const colors = bands.map((band) => {
-          token.style.color = `var(--timing-${band})`;
-          return getComputedStyle(token).color;
-        });
-        token.style.color = 'var(--muted)';
-        const muted = getComputedStyle(token).color;
-        token.style.color = 'var(--danger)';
-        const danger = getComputedStyle(token).color;
-        token.remove();
-        return {
-          values: [total.textContent, first.textContent],
-          colors: [getComputedStyle(total).color, getComputedStyle(first).color],
-          labels: [total.getAttribute('aria-label'), firstLabel.getAttribute('aria-label')],
-          labelColor: getComputedStyle(firstLabel).color,
-          expected: colors, muted, danger,
-        };
-      }, [totalBand, firstBand]);
-      check(`${mode}: request ${index} paints each timing value in its independent band`,
-        reading.values[0] === duration && reading.values[1] === ttft &&
-        reading.colors.every((color, index) => color === reading.expected[index] && color !== reading.danger) &&
-        reading.labels.every(Boolean) && reading.labelColor === reading.muted, JSON.stringify(reading));
+      { label: `${mode} duration palette applied` });
+    // The fixture's latencies are 65 s, 14.999 s, 15 s, 29.999 s, 30 s and 300 s, in that order.
+    const { palette, rows } = await readDurations(6);
+    for (const [index, reading] of rows.entries()) {
+      check(`${mode}: request ${index} paints its duration from the shared ramp`,
+        reading.from === 'var(--timing-green)' && reading.to === 'var(--timing-orange)' &&
+        reading.fromShare !== '' && reading.expected !== null && reading.color === reading.expected,
+        JSON.stringify(reading));
+      check(`${mode}: request ${index} leaves TTFT in the secondary ink`,
+        reading.ttft?.startsWith('TTFT ') && reading.ttftColor === palette.muted && !reading.ttftHasRamp,
+        JSON.stringify(reading));
     }
+    // A minute and beyond is the orange end of the ramp. The fixture's latencies are 65 s,
+    // 14.999 s, 15 s, 29.999 s, 30 s and 300 s, in that order, so the two halves are exactly
+    // the two ends, and the middle pair is a half minute.
+    check(`${mode}: a minute or more sits at the orange end of the ramp`,
+      rows[0].fromShare === '0%' && rows[5].fromShare === '0%',
+      `${rows[0].fromShare} / ${rows[5].fromShare}`);
+    check(`${mode}: half a minute sits halfway along the ramp`,
+      rows[3].fromShare === '50%' && rows[4].fromShare === '50%',
+      `${rows[3].fromShare} / ${rows[4].fromShare}`);
+    // The ramp answers with intermediate positions, which is what a band cannot do: 14.999 s is
+    // three quarters of the way from the orange end, and 29.999 s is half. Under the old bands
+    // both of those were simply "green" or "amber" and could not differ from their neighbours.
+    check(`${mode}: the duration ramp is continuous rather than banded`,
+      rows[1].fromShare === '75%' && rows[3].fromShare === '50%' &&
+      new Set(rows.map((reading) => reading.fromShare)).size > 2,
+      rows.map((reading) => reading.fromShare).join(' '));
+    check(`${mode}: no duration reading borrows the failure hue`,
+      rows.every((reading) => reading.color !== palette.danger));
   }
 
   const mountWindow = await page.evaluate(() => {
@@ -918,25 +953,33 @@ export async function requestListInteractions({ base, page, check }) {
   await rows.first().click();
   await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
   check('clicking a row opens the request detail', await page.locator('.request-detail').isVisible());
+  // Every duration readout in the drawer sits at the far end of one ramp, and TTFT never joins it.
   const readDrawerTiming = () => page.locator('.request-detail').evaluate((drawer) => {
-    const token = document.createElement('i');
-    drawer.appendChild(token);
-    const colors = {};
-    for (const band of ['green', 'orange']) {
-      token.style.color = `var(--timing-${band})`;
-      colors[band] = getComputedStyle(token).color;
-    }
-    token.remove();
-    return [...drawer.querySelectorAll('.req-timing-value')].filter((value) => value.getClientRects().length > 0).map((value) => ({
-      text: value.textContent,
-      label: value.getAttribute('aria-label'),
-      color: getComputedStyle(value).color,
-      expected: value.textContent === '65.00 s' ? colors.orange : colors.green,
-    }));
+    const probe = document.createElement('i');
+    drawer.appendChild(probe);
+    const painted = (css) => {
+      probe.style.color = css;
+      return getComputedStyle(probe).color;
+    };
+    const orange = painted('var(--timing-orange)');
+    const muted = painted('var(--muted)');
+    const readings = [...drawer.querySelectorAll('.req-timing-value')]
+      .filter((value) => value.getClientRects().length > 0)
+      .map((value) => ({
+        text: value.textContent,
+        share: value.style.getPropertyValue('--duration-from-share'),
+        color: getComputedStyle(value).color,
+      }));
+    const ttft = [...drawer.querySelectorAll('strong, span')]
+      .filter((node) => node.textContent === '3.00 s')
+      .map((node) => ({ hasRamp: node.classList.contains('req-timing-value') }));
+    probe.remove();
+    return { readings, ttft, orange, muted };
   });
   const heroTiming = await readDrawerTiming();
-  check('request details paint total duration and TTFT with their independent bands',
-    heroTiming.length === 2 && heroTiming.every((value) => value.color === value.expected && Boolean(value.label)),
+  check('request details paint the total duration from one ramp and leave TTFT uncoloured',
+    heroTiming.readings.length === 1 && heroTiming.readings.every((value) => value.text === '65.00 s' && value.share === '0%') &&
+    heroTiming.ttft.length > 0 && heroTiming.ttft.every((value) => !value.hasRamp),
     JSON.stringify(heroTiming));
   // The first record rode the inline access path: the routing facts name it.
   // The value is CPA's vocabulary, so the assertion holds in every language.
@@ -947,8 +990,11 @@ export async function requestListInteractions({ base, page, check }) {
   const upstreamUsage = page.getByRole('region', { name: 'Upstream usage details', exact: true });
   await expect(upstreamUsage).toBeVisible();
   const performanceTiming = await readDrawerTiming();
-  check('the performance breakdown retains the same total and TTFT hues',
-    performanceTiming.length === 4 && performanceTiming.every((value) => value.color === value.expected && Boolean(value.label)),
+  // The waterfall header, the total segment's legend and, when TTFT is measurable, the TTFT legend:
+  // only the two totals carry the ramp, and both read the same end of it.
+  check('the performance breakdown keeps the duration on its ramp and leaves TTFT uncoloured',
+    performanceTiming.readings.length === 2 && performanceTiming.readings.every((value) => value.text === '65.00 s' && value.share === '0%') &&
+    performanceTiming.ttft.length > 0 && performanceTiming.ttft.every((value) => !value.hasRamp),
     JSON.stringify(performanceTiming));
   const detailViewport = page.viewportSize();
   await page.setViewportSize({ width: 390, height: detailViewport.height });

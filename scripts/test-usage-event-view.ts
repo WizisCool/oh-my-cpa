@@ -41,8 +41,6 @@ import {
   successRateTone,
   SUCCESS_RATE_DEGRADED_PERCENT,
   SUCCESS_RATE_HEALTHY_PERCENT,
-  latencyTone,
-  ttftTone,
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
@@ -82,6 +80,8 @@ import {
   type UsageEvent,
 } from '../web/src/types/usageEvents.ts';
 import { cacheScaleMix, formatCacheRate, MAX_CACHE_RATE } from '../web/src/theme/cacheScale.ts';
+import { DURATION_SCALE_MAX_MS, durationScaleMix, durationScalePosition } from '../web/src/theme/durationScale.ts';
+import { twoStopMix } from '../web/src/theme/twoStopMix.ts';
 import { test } from 'vitest';
 
 test('usage event view', () => {
@@ -1518,28 +1518,33 @@ test('usage event view', () => {
     'the healthy band sits above the degraded band',
   );
 
-  for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1]) {
-    assert.equal(latencyTone(value), 'neutral', `${value} is not a duration reading`);
+  // The duration ramp is continuous, so it answers "how far along" rather than "which band".
+  for (const value of [null, undefined, Number.NaN, Number.NEGATIVE_INFINITY, -1]) {
+    assert.equal(durationScalePosition(value), null, `${value} is not a duration reading`);
+    assert.equal(durationScaleMix(value), null, `${value} has no ramp to sit on`);
   }
-  for (const [value, expected] of [
-    [0, 'green'], [14_999, 'green'], [15_000, 'amber'], [29_999, 'amber'],
-    [30_000, 'orange'], [60_000, 'orange'], [300_000, 'orange'],
-  ] as const) {
-    assert.equal(latencyTone(value), expected, `total duration ${value} ms`);
-  }
-  for (const [value, expected] of [
-    [1, 'green'], [2_999, 'green'], [3_000, 'green'], [3_001, 'amber'],
-    [9_999, 'amber'], [10_000, 'orange'], [60_000, 'orange'], [300_000, 'orange'],
-  ] as const) {
-    assert.equal(ttftTone({ latency_ms: 600_000, ttft_ms: value }), expected, `TTFT ${value} ms`);
-  }
-  for (const value of [null, undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 600_000, 600_001]) {
-    assert.equal(ttftTone({ latency_ms: 600_000, ttft_ms: value }), 'neutral', `${value} is not an observed TTFT interval`);
-  }
-  for (const value of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-    assert.equal(ttftTone({ latency_ms: value, ttft_ms: 100 }), 'neutral', 'TTFT needs a valid total duration');
-  }
-  assert.equal(ttftTone(), 'neutral');
-  assert.equal(ttftTone({ latency_ms: 1_000, ttft_ms: 1 }), 'green');
-  assert.notEqual(latencyTone(0), latencyTone(null), 'a measured instant is distinct from no reading');
+  assert.equal(durationScalePosition(0), 0, 'an instant is the green end, not an absent reading');
+  assert.equal(durationScalePosition(DURATION_SCALE_MAX_MS), 1, 'a minute reaches the orange end');
+  assert.equal(durationScalePosition(DURATION_SCALE_MAX_MS * 100), 1, 'past a minute the ramp has nothing left to say');
+  // A non-finite duration is a broken reading rather than a slow one, so it keeps the plain ink.
+  assert.equal(durationScalePosition(Number.POSITIVE_INFINITY), null, 'an unreadable duration has no position');
+  // Continuous: every reading in what used to be the green band now differs from its neighbour.
+  assert.notEqual(durationScalePosition(1_000), durationScalePosition(14_999), 'duration is not banded');
+  assert.ok(durationScalePosition(15_000) > durationScalePosition(14_999), 'the ramp never reverses');
+  assert.deepEqual(
+    durationScaleMix(0),
+    { from: 'var(--timing-green)', to: 'var(--timing-orange)', fromShare: '100%' },
+    'an instant is entirely the green stop',
+  );
+  assert.equal(durationScaleMix(30_000)?.fromShare, '50%', 'half a minute is halfway between the stops');
+  assert.equal(durationScaleMix(DURATION_SCALE_MAX_MS)?.fromShare, '0%', 'a minute is entirely the orange stop');
+  assert.notEqual(durationScaleMix(0)?.from, durationScaleMix(0)?.to, 'the ramp is not one colour');
+
+  // Both ramps share one mixer, so the cache rate's arithmetic and the duration's cannot drift apart.
+  assert.deepEqual(twoStopMix('a', 'b', 0), { from: 'a', to: 'b', fromShare: '100%' });
+  assert.deepEqual(twoStopMix('a', 'b', 1), { from: 'a', to: 'b', fromShare: '0%' });
+  assert.deepEqual(twoStopMix('a', 'b', 0.375), { from: 'a', to: 'b', fromShare: '62.5%' });
+  assert.deepEqual(twoStopMix('a', 'b', -1), twoStopMix('a', 'b', 0), 'a position below the scale clamps to its low end');
+  assert.deepEqual(twoStopMix('a', 'b', 2), twoStopMix('a', 'b', 1), 'a position above the scale clamps to its high end');
+  assert.deepEqual(twoStopMix('a', 'b', Number.NaN), twoStopMix('a', 'b', 0), 'a broken reading sits at the low end');
 });

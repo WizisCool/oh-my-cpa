@@ -122,9 +122,9 @@ export interface ThemePalette extends ThemeCore {
   success: string;
   warn: string;
   danger: string;
-  /** Text-safe duration scale shared by total latency and TTFT. */
+  /** The request duration ramp's low stop, green. Mixed toward `timingOrange` by CSS. */
   timingGreen: string;
-  timingAmber: string;
+  /** The request duration ramp's high stop, orange. */
   timingOrange: string;
   cacheRateYellow: string;
   cacheRateGreen: string;
@@ -321,25 +321,101 @@ const SIGNAL_REFERENCE: Record<ThemeMode, BuiltInPaletteId> = { dark: 'omc-dark'
  *
  * The contrast held is capped (`SIGNAL_CONTRAST_CEILING`): a pastel effort step reads 7:1 on OMC
  * Dark, and chasing that on a lighter ground would bleach it toward white for legibility nobody needs.
- * Small timing text additionally sets a floor so its reference hue cannot inherit weak contrast.
  */
 function holdSignal(color: string, grounds: readonly string[], reference: readonly string[], ceiling: number, floor = 0): string {
   const weakest = (candidate: string, on: readonly string[]) => Math.min(...on.map((ground) => contrastRatio(candidate, ground)));
   const target = Math.max(floor, Math.min(weakest(color, reference), ceiling));
-  let best = { color, ratio: weakest(color, grounds) };
-  if (best.ratio >= target) return color;
+  return holdContrast((candidate) => weakest(candidate, grounds), color, target);
+}
+
+/**
+ * The least contrast every readout on the request duration ramp must clear.
+ *
+ * Above the 4.5:1 text floor rather than at it, because the guarantee is about the *sweep* and not
+ * its endpoints: the stops are searched in twenty-sample steps while the paint is a continuous
+ * blend, so a stop solved to exactly 4.5 can leave a reading between samples a few hundredths below
+ * it. Aiming at 4.6 and then measuring the ramp at a thousand points leaves the worst reading at
+ * 4.60:1 on the built-ins and across the accent sweep.
+ */
+export const DURATION_RAMP_CONTRAST_FLOOR = 4.6;
+
+/** How finely the ramp is sampled while its stops are solved: twenty points between them. */
+const DURATION_RAMP_SAMPLES = 20;
+
+/**
+ * holdContrast moves a colour in lightness until `measure` reports the floor, and returns the most
+ * legible candidate it saw otherwise.
+ *
+ * The step size is the accent ladder's - 0.005 of OKLCH lightness, below the threshold at which a
+ * small coloured value can be told from its neighbour - and both directions are tried one step at a
+ * time, so the smaller move wins and neither a dark page nor a light one is assumed. Chroma gives way
+ * only as far as the new lightness leaves the gamut (`withLightness`), so the hue survives the move.
+ */
+function holdContrast(measure: (candidate: string) => number, color: string, floor: number): string {
+  const start = measure(color);
+  if (start >= floor) return color;
+  let best = { color, ratio: start };
   const lightness = oklchLightness(color);
   for (let stepIndex = 1; stepIndex <= MAX_LADDER_STEPS; stepIndex += 1) {
     for (const travel of [LADDER_STEP, -LADDER_STEP]) {
       const moved = lightness + travel * stepIndex;
       if (moved < 0 || moved > 1) continue;
       const candidate = withLightness(color, moved);
-      const ratio = weakest(candidate, grounds);
-      if (ratio >= target) return candidate;
+      const ratio = measure(candidate);
+      if (ratio >= floor) return candidate;
       if (ratio > best.ratio) best = { color: candidate, ratio };
     }
   }
   return best.color;
+}
+
+/**
+ * durationRampStops solves the two ends of the request duration ramp.
+ *
+ * They are solved **together**, because the promise is about the ramp and not about its ends: a
+ * reading anywhere between green and orange has to clear `DURATION_RAMP_CONTRAST_FLOOR` on every
+ * surface it can sit on, and holding each stop in isolation leaves the mid-blend - where an
+ * eight-bit OKLCH interpolation loses up to about three tenths of a ratio point - unmeasured.
+ *
+ * Both ends travel the same way, one step at a time, as the accent ladder's two fills do: which end
+ * is short of the floor depends on the palette's own ground, so the direction is read from the
+ * measurement rather than from the mode. A palette whose ramp already qualifies keeps its hues
+ * untouched, which is the six built-ins' dark cases.
+ *
+ * The hues stay the mode's own success and orange steps, so a slow request never inherits the danger
+ * hue that a failure uses.
+ */
+function durationRampStops(
+  green: string,
+  orange: string,
+  grounds: readonly string[],
+): { green: string; orange: string } {
+  const sweepWorst = (from: string, to: string): number => {
+    let weakest = Number.POSITIVE_INFINITY;
+    for (let step = 0; step <= DURATION_RAMP_SAMPLES; step += 1) {
+      const blend = mixOklch(from, to, step / DURATION_RAMP_SAMPLES);
+      weakest = Math.min(weakest, ...grounds.map((ground) => contrastRatio(blend, ground)));
+    }
+    return weakest;
+  };
+  const start = sweepWorst(green, orange);
+  if (start >= DURATION_RAMP_CONTRAST_FLOOR) return { green, orange };
+  const greenLightness = oklchLightness(green);
+  const orangeLightness = oklchLightness(orange);
+  let best = { green, orange, ratio: start };
+  for (let stepIndex = 1; stepIndex <= MAX_LADDER_STEPS; stepIndex += 1) {
+    for (const travel of [LADDER_STEP, -LADDER_STEP]) {
+      const nextGreen = greenLightness + travel * stepIndex;
+      const nextOrange = orangeLightness + travel * stepIndex;
+      if (nextGreen < 0 || nextGreen > 1 || nextOrange < 0 || nextOrange > 1) continue;
+      const candidateGreen = withLightness(green, nextGreen);
+      const candidateOrange = withLightness(orange, nextOrange);
+      const ratio = sweepWorst(candidateGreen, candidateOrange);
+      if (ratio >= DURATION_RAMP_CONTRAST_FLOOR) return { green: candidateGreen, orange: candidateOrange };
+      if (ratio > best.ratio) best = { green: candidateGreen, orange: candidateOrange, ratio };
+    }
+  }
+  return { green: best.green, orange: best.orange };
 }
 
 /**
@@ -462,9 +538,14 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     holdSignal(color, [core.bg, core.surface, hover], [reference.bg, reference.surface, referenceHover], SIGNAL_CONTRAST_CEILING.badge);
   const success = hold(semantics.success);
   const warn = hold(semantics.warn);
-  // Timing values are small text on rows and drawers, including hover and selection fills.
+  // The request duration ramp. Two stops, mixed in OKLCH by the browser, so the reading at
+  // 0 s is green and the one at a minute is orange with every wait in between on the way.
+  // Timing values are small text on rows and drawers, including hover and selection fills,
+  // and a mix of two legible stops is not automatically legible - an eight-bit midpoint
+  // can lose two or three tenths of a ratio point. So the stops are solved as a *pair*,
+  // each against the ramp the two of them produce, while red stays reserved for failure.
   const timingGrounds = [core.bg, core.surface, core.elevated, hover, selected];
-  const holdTiming = (color: string) => holdSignal(color, timingGrounds, [reference.bg, reference.surface], 4.5, 4.5);
+  const timingRamp = durationRampStops(semantics.success, semantics.timingOrange, timingGrounds);
   return {
     ...core,
     canvas: mixOklch(core.bg, canvasBlend.toward === 'fg' ? core.fg : '#000000', canvasBlend.share),
@@ -483,9 +564,8 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     success,
     warn,
     danger: hold(semantics.danger),
-    timingGreen: holdTiming(semantics.success),
-    timingAmber: holdTiming(semantics.warn),
-    timingOrange: holdTiming(semantics.timingOrange),
+    timingGreen: timingRamp.green,
+    timingOrange: timingRamp.orange,
     cacheRateYellow: warn,
     cacheRateGreen: success,
     // A dark tooltip sits on the surface it floats over; a light page's tooltip is the

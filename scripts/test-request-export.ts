@@ -159,31 +159,35 @@ test('request export', () => {
     'a request with nothing to mark draws a dash, not an empty cell',
   );
 
-  // Each timing reading retains its own band; the TTFT label stays secondary.
+  // Duration is one reading on one ramp; TTFT stays secondary and is never painted.
   const latencySheet = (event: UsageEvent) =>
     buildRequestSheet({ rows: [event], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials })
       .rows[0].cells.latency.lines;
-  assert.deepEqual(latencySheet(events[0]), [
-    [{ kind: 'text', text: '1.25 s', tone: 'timing-green', size: 13, weight: 500, isMono: false }],
-    [
-      { kind: 'text', text: 'TTFT', tone: 'muted', size: 11, weight: 400, isMono: false },
-      { kind: 'text', text: '300 ms', tone: 'timing-green', size: 11, weight: 400, isMono: false },
-    ],
-  ], 'a short request has independently green timing values');
-  for (const [latency, ttft, totalTone, firstTone] of [
-    [65_000, 3_000, 'timing-orange', 'timing-green'],
-    [15_000, 3_001, 'timing-amber', 'timing-amber'],
-    [30_000, 10_000, 'timing-orange', 'timing-orange'],
-    [300_000, 100_000, 'timing-orange', 'timing-orange'],
-  ] as const) {
-    const lines = latencySheet({ ...events[0], latency_ms: latency, ttft_ms: ttft });
-    assert.ok(lines[0][0].kind === 'text' && lines[0][0].tone === totalTone);
-    assert.ok(lines[1][1].kind === 'text' && lines[1][1].tone === firstTone);
-  }
+  const durationOf = (event: UsageEvent) => {
+    const segment = latencySheet(event)[0][0];
+    assert.ok(segment.kind === 'duration', 'the duration is drawn from its ramp, not from a fixed tone');
+    return segment;
+  };
+  assert.equal(durationOf(events[0]).text, '1.25 s');
+  assert.deepEqual(latencySheet(events[0])[1], [
+    { kind: 'text', text: 'TTFT', tone: 'muted', size: 11, weight: 400, isMono: false },
+    { kind: 'text', text: '300 ms', tone: 'muted', size: 11, weight: 400, isMono: false },
+  ], 'TTFT is request detail and keeps the secondary ink');
+  // A green start, an even middle and an orange end: the ramp is continuous rather than banded.
+  assert.equal(durationOf({ ...events[0], latency_ms: 0 }).mix.fromShare, '100%', 'an instant sits at the green end');
+  assert.equal(durationOf({ ...events[0], latency_ms: 30_000 }).mix.fromShare, '50%', 'half a minute is halfway along');
+  assert.equal(durationOf({ ...events[0], latency_ms: 60_000 }).mix.fromShare, '0%', 'a minute is the orange end');
+  assert.equal(durationOf({ ...events[0], latency_ms: 300_000 }).mix.fromShare, '0%', 'past a minute the ramp has nothing left to say');
+  // Two readings inside what used to be one band must no longer paint alike.
+  assert.notEqual(durationOf({ ...events[0], latency_ms: 1_000 }).mix.fromShare, durationOf({ ...events[0], latency_ms: 14_999 }).mix.fromShare,
+    'duration is continuous, so two readings in one old band still differ');
   for (const ttft of [undefined, null, 0, -1, 65_000, 65_001, Number.NaN]) {
     assert.equal(latencySheet({ ...events[0], latency_ms: 65_000, ttft_ms: ttft }).length, 1,
-      'image export omits unavailable TTFT rather than assigning it a band');
+      'image export omits unavailable TTFT rather than painting it');
   }
+  // A record with no duration has no ramp to sit on: the sheet falls back to the plain ink.
+  const missingDuration = latencySheet({ ...events[0], latency_ms: undefined as unknown as number })[0][0];
+  assert.ok(missingDuration.kind === 'text' && missingDuration.tone === 'fg', 'a missing duration is not a fast one');
   const fastSheet = buildRequestSheet({
     rows: [{ ...events[1], provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority', resolved_service_tier_source: 'request' }] as UsageEvent[],
     masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,

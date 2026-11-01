@@ -5,25 +5,16 @@
  * danger hue belongs to failed requests. The ramp now runs between two adjacent
  * hues, so it reads as one quality going from "barely cached" to "well cached".
  *
- * The interpolation is done by CSS `color-mix(in oklch, …)`: OKLCH keeps the
- * hue sweep perceptually even, and letting the browser mix means the stops stay
- * design tokens instead of hex values baked into a component. This module
- * answers only "which two stops, and how much of the first one?" — the caller
- * passes the strings through as CSS custom properties.
+ * This is the same two-stop helper the request duration scale reads (`twoStopMix.ts`):
+ * the ramps differ in their stops and their position, not in how they are mixed.
  *
  * The stops are CSS tokens; filled labels must clear 4.5:1 contrast across the ramp.
  */
 
 import type { RollingReadout } from '../types/rollingNumber';
+import { twoStopMix, type TwoStopMix } from './twoStopMix';
 
-export interface CacheScaleMix {
-  /** Low end of the scale (a near-zero hit rate), as a CSS value. */
-  from: string;
-  /** High end of the scale (a near-total hit rate), as a CSS value. */
-  to: string;
-  /** Weight of `from`, e.g. `"62.5%"`; `to` receives the remainder. */
-  fromShare: string;
-}
+export type CacheScaleMix = TwoStopMix;
 
 /**
  * The highest rate the badge will ever read.
@@ -45,14 +36,7 @@ const GREEN = 'var(--cache-rate-green)';
  * which is the yellow end of the scale.
  */
 export function cacheScaleMix(rate: number): CacheScaleMix {
-  const clamped = Number.isNaN(rate) ? 0 : Math.min(100, Math.max(0, rate));
-  return { from: YELLOW, to: GREEN, fromShare: share(1 - clamped / 100) };
-}
-
-/** Round the weight to 0.01% so the custom property stays short; 10,000 steps
- *  is far finer than the eye or an 11px badge can resolve. */
-function share(weight: number): string {
-  return `${Number((weight * 100).toFixed(2))}%`;
+  return twoStopMix(YELLOW, GREEN, (Number.isNaN(rate) ? 0 : rate) / 100);
 }
 
 /**

@@ -1,7 +1,9 @@
-/* Numeric timing readouts keep one text-safe scale across rows and drawers. */
-.req-timing-value[data-timing-band='green'] { color: var(--timing-green); }
-.req-timing-value[data-timing-band='amber'] { color: var(--timing-amber); }
-.req-timing-value[data-timing-band='orange'] { color: var(--timing-orange); }
+/* Numeric timing readouts ask for one stop-to-stop mix, the way the cache-rate badge asks for its
+   own (theme/twoStopMix.ts). The stops arrive as custom properties from the caller, so this rule
+   names no colour; a reading with no measurement passes none and keeps the ink it inherited. */
+.req-timing-value {
+  color: color-mix(in oklch, var(--duration-from) var(--duration-from-share), var(--duration-to));
+}
 
 /* A filter option led by the mark its rows carry. The label keeps the truncation; the mark never
    shrinks, so a long model name cannot squeeze the picture that identifies it. */

@@ -43,9 +43,11 @@
   --success: #10b981;
   --warn: #f59e0b;
   --danger: #ef4444;
-  /* Duration and TTFT text, held to AA on the reading's background fills. */
+  /* The request duration ramp's two stops, mixed in OKLCH by the browser: green at an instant,
+     orange from a minute on, every wait in between on the way. Red is deliberately absent - a slow
+     request is slow, not broken, and the danger hue belongs to failures. The stops are solved as a
+     pair so the whole sweep clears 4.5:1 on the surfaces a reading can sit on. */
   --timing-green: #10b981;
-  --timing-amber: #f59e0b;
   --timing-orange: #fb923c;
   /* Cache-rate sequential scale: 0% yellow → 100% green,
      interpolated in OKLCH so the hue sweep stays perceptually even. Red is
@@ -211,8 +213,7 @@
   --warn: #b45309;
   --danger: #dc2626;
   --timing-green: #027954;
-  --timing-amber: #ae4f04;
-  --timing-orange: #c03f08;
+  --timing-orange: #9d3000;
   /* The same two hues read as their darker steps on a light page; a saturated
      yellow cannot also be legible there, so the low end is ochre. */
   --cache-rate-yellow: #b45309;

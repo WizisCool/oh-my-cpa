@@ -1,4 +1,6 @@
 import type { MarkArtwork } from '../../types/brandMark';
+import { mixOklch } from '../../theme/colorMath';
+import type { TwoStopMix } from '../../theme/twoStopMix';
 import { brandDataUri, brandDrawing } from '../../assets/brand/markup';
 import type { ThemePalette } from '../../theme/palette';
 import { exportPixelRatio } from './requestSelection';
@@ -104,10 +106,18 @@ const toneColor = (palette: ThemePalette, tone: SheetTone): string =>
     success: palette.success,
     danger: palette.danger,
     warn: palette.warn,
-    'timing-green': palette.timingGreen,
-    'timing-amber': palette.timingAmber,
-    'timing-orange': palette.timingOrange,
   })[tone];
+
+/**
+ * The duration ramp's colour for one reading.
+ *
+ * The list asks CSS for this mix; a canvas has no `color-mix`, so this is the one place the
+ * console computes a stop-to-stop blend itself. Both stops are the palette's own tokens and the
+ * whole sweep has been held to the text floor (`palette.ts`), so a reading is legible at any
+ * position on the ramp - which is what a picture of a hundred rows depends on.
+ */
+const durationColor = (palette: ThemePalette, mix: TwoStopMix): string =>
+  mixOklch(palette.timingGreen, palette.timingOrange, 1 - Number.parseFloat(mix.fromShare) / 100);
 
 /**
  * Loads an image without tainting the canvas it will be drawn on.
@@ -260,8 +270,8 @@ export async function paintRequestSheet(
   // An effort tag is the list's `text-xs` badge; OAuth and preflight are its smaller `text-2xs` ones.
   const tagSize = (segment: Extract<SheetSegment, { kind: 'tag' }>) => (segment.effortStep !== undefined ? 11 : 10);
   const segmentFont = (segment: SheetSegment): string =>
-    segment.kind === 'text'
-      ? font(segment.size, segment.weight, segment.isMono)
+    segment.kind === 'text' || segment.kind === 'duration'
+      ? font(segment.size, segment.weight, segment.kind === 'text' && segment.isMono)
       : segment.kind === 'tag'
         ? font(tagSize(segment), 500)
         : segment.kind === 'dot' && segment.cacheRate !== undefined
@@ -332,6 +342,11 @@ export async function paintRequestSheet(
     context.textAlign = 'left';
     if (segment.kind === 'text') {
       context.fillStyle = toneColor(palette, segment.tone);
+      context.fillText(fit(segment.text, width), x, centreY);
+      return;
+    }
+    if (segment.kind === 'duration') {
+      context.fillStyle = durationColor(palette, segment.mix);
       context.fillText(fit(segment.text, width), x, centreY);
       return;
     }

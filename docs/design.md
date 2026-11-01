@@ -36,10 +36,13 @@ chart colors identify series and must remain distinguishable in both modes. Do n
 encode success, failure or selection in color alone. An unavailable reading is not
 zero, and an unpriced request is not free.
 
-Timing readouts use a shared green–amber–orange duration scale, with separate bands
-for total duration and TTFT. Their descriptions name the interval; request outcome
-is shown separately. Derive text-safe timing colours in the palette so small values
-remain readable on row, hover, selection and drawer fills.
+Request duration reads on one continuous green-to-orange scale, from an instant to a
+minute. It uses its own `--timing-*` stops, mixed by the same helper the cache-rate badge
+reads; the two ramps share the mixing rule, not their colours. Duration is a measurement,
+never a verdict: red stays with failure, and a slow request is not a failed one. TTFT is
+request detail and keeps the secondary ink. Each ramp's stops are solved against the blends
+they produce, so every reading between them clears 4.5:1 on row, hover, selection and
+drawer fills.
 
 ## Brand marks
 

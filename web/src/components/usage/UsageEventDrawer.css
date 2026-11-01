@@ -78,6 +78,10 @@
   font-size: var(--text-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+/* The colour of a measured duration belongs to the reading, not to the element that holds it:
+   a total carrying the ramp keeps the ramp's colour, and only an unramped one takes plain ink. */
+.req-waterfall-total:not(.req-timing-value) {
   color: var(--fg);
 }
 .req-waterfall-track {
@@ -126,8 +130,10 @@
   background: var(--accent);
 }
 .req-waterfall-legend-item strong {
-  color: var(--fg);
   font-variant-numeric: tabular-nums;
+}
+.req-waterfall-legend-item strong:not(.req-timing-value) {
+  color: var(--fg);
 }
 /* Token Cards Grid */
 .req-token-cards-grid {
