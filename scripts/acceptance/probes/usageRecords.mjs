@@ -436,6 +436,15 @@ export function interactionRecordDetail(id) {
       ...record,
       ...(record.failed ? { fail_body: INTERACTION_FAILURE_BODY } : {}),
       response_headers: INTERACTION_RESPONSE_HEADERS,
+      structured_usage: {
+        tokens: { text_input_tokens: 0, image_input_tokens: 128 },
+        cache_details: { by_ttl: { '5m': 0 } },
+        tool_usage_details: { web_search_calls: 0 },
+        requested_image_details: { size: '1024x1024' },
+        image_details: { size: '1536x1024' },
+        iterations: [{ model: `fixture-model-${'x'.repeat(110)}`, output_tokens: 0 }],
+        cost_details: { cost: 0, is_byok: false },
+      },
       // The access path is diagnostic: the single-record view carries it while
       // the list projection omits it. The values are CPA's own vocabulary.
       access_provider: 'config-inline',
@@ -867,6 +876,18 @@ export async function requestListInteractions({ base, page, check }) {
   // The value is CPA's vocabulary, so the assertion holds in every language.
   check('the detail names the access path that served the request',
     (await page.locator('.request-detail').innerText()).includes('config-inline'));
+
+  await page.locator('.request-detail .ant-tabs-tab[data-node-key="usage"]').click();
+  const upstreamUsage = page.getByRole('region', { name: 'Upstream usage details', exact: true });
+  await expect(upstreamUsage).toBeVisible();
+  const detailViewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: detailViewport.height });
+  await settleLayout(page);
+  const detailOverflow = await page.locator('.request-detail .ant-drawer-body').evaluate((element) => element.scrollWidth - element.clientWidth);
+  check('structured usage remains inside a phone-width request drawer', detailOverflow <= 1, `overflow=${detailOverflow}`);
+  await upstreamUsage.getByRole('heading', { name: 'Upstream usage details', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'tmp/request-structured-usage.png' });
+  await page.setViewportSize(detailViewport);
   await page.keyboard.press('Escape');
   await page
     .locator('.request-detail')

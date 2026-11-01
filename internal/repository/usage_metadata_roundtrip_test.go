@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -22,7 +23,10 @@ const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-alias",`
 	`"model":"fixture-vendor/fixture-model","provider":"openai-compatible-fixture vendor",` +
 	`"reasoning_effort":"high","request_id":"fixture-request-1","service_tier":"auto",` +
 	`"response_service_tier":"default","response_model":"fixture-model-mini","x_forwarded_for":"198.51.100.7, 203.0.113.9",` +
-	`"tokens":{"total_tokens":5}}`
+	`"web_search_requests":0,"tool_usage_details":{"web_search_calls":0},` +
+	`"requested_image_details":{"size":"1024x1024"},"image_details":{"size":"1536x1024"},` +
+	`"iterations":[{"input_tokens":5,"cache_creation":{"by_ttl":{"5m":0}}}],` +
+	`"cost_details":{"cost":0,"is_byok":false},"tokens":{"total_tokens":5,"text_input_tokens":0}}`
 
 // TestRequestMetadataSurvivesIngestAndPersistence walks a raw payload through
 // the real production path - decode, then insert - and reads it back through
@@ -82,6 +86,9 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	detail, err := repo.GetUsageEvent(context.Background(), row.ID)
 	if err != nil {
 		t.Fatalf("get usage event: %v", err)
+	}
+	if event.StructuredUsage == nil || !reflect.DeepEqual(detail.StructuredUsage, event.StructuredUsage) || row.StructuredUsage != nil {
+		t.Fatalf("detail-only structured usage: list=%+v detail=%+v want=%+v", row.StructuredUsage, detail.StructuredUsage, event.StructuredUsage)
 	}
 	if detail.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("detail endpoint = %q", detail.Endpoint)
@@ -155,6 +162,10 @@ func TestCommitUsageDecodedKeepsRequestMetadata(t *testing.T) {
 		t.Fatalf("stored %d rows, want 1", len(page.Items))
 	}
 	row := page.Items[0]
+	detail, detailErr := repo.GetUsageEvent(context.Background(), row.ID)
+	if detailErr != nil || event.StructuredUsage == nil || !reflect.DeepEqual(detail.StructuredUsage, event.StructuredUsage) || row.StructuredUsage != nil {
+		t.Fatalf("inbox structured usage: %+v want %+v: %v", detail.StructuredUsage, event.StructuredUsage, detailErr)
+	}
 	if row.ClientIP == nil || *row.ClientIP != "192.0.2.10" {
 		t.Fatalf("stored client IP = %v, want the original address", derefString(row.ClientIP))
 	}
@@ -193,8 +204,9 @@ func TestMissingRequestMetadataStaysNull(t *testing.T) {
 	}
 	// The row still has to be readable, which is the history-compatibility
 	// guarantee the console relies on.
-	if _, err := repo.GetUsageEvent(context.Background(), row.ID); err != nil {
-		t.Fatalf("read record without metadata: %v", err)
+	detail, err := repo.GetUsageEvent(context.Background(), row.ID)
+	if err != nil || detail.StructuredUsage != nil {
+		t.Fatalf("legacy detail invented structured evidence: %+v %v", detail.StructuredUsage, err)
 	}
 }
 

@@ -1,3 +1,4 @@
+import type { StructuredUsageDetails } from './structuredUsage';
 import type { MessageKey } from '../i18n/catalog';
 import type { TokenAccounting, TokenAccountingStatus } from './tokenAccounting';
 import type { RequestCostBreakdown } from './pricing';
@@ -19,6 +20,8 @@ export interface UsageEventTokens {
 }
 
 export interface UsageEvent {
+  /** Present only on single-request reads; older records remain unknown. */
+  structured_usage?: StructuredUsageDetails | null;
   accounting_status?: TokenAccountingStatus;
   token_accounting?: TokenAccounting | null;
   id: number;

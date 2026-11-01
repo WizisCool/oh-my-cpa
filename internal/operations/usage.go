@@ -152,6 +152,12 @@ func projectRequest(row repository.UsageEventRow) RequestItem {
 	return item
 }
 
+// Full upstream evidence is detail-only; request pages remain bounded summaries.
+type RequestDetail struct {
+	RequestItem
+	StructuredUsage *usage.StructuredUsageDetails `json:"structured_usage,omitempty"`
+}
+
 type RequestPage struct {
 	Items      []RequestItem `json:"items"`
 	NextCursor string        `json:"next_cursor,omitempty"`
@@ -192,9 +198,9 @@ func (s *Service) registerUsage(registry *capability.Registry) error {
 	}
 	if err := read(registry, "requests_get", "Read one request's safe accounting metadata; excludes raw logs and network identity.", func(ctx context.Context, input struct {
 		ID int64 `json:"id"`
-	}) (RequestItem, error) {
+	}) (RequestDetail, error) {
 		row, err := s.Repo.GetUsageEvent(ctx, input.ID)
-		return projectRequest(row), err
+		return RequestDetail{RequestItem: projectRequest(row), StructuredUsage: usage.SanitizeStructuredUsage(row.StructuredUsage)}, err
 	}); err != nil {
 		return err
 	}

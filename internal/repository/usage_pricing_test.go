@@ -210,6 +210,10 @@ func TestCanonicalAccountingSurvivesPricingAndRetention(t *testing.T) {
 					Input:  usage.TokenInputBreakdown{TotalTokens: 100, UncachedTokens: 80, CacheReadTokens: 20},
 					Output: usage.TokenOutputBreakdown{TotalTokens: 40, NonReasoningTokens: 30, ReasoningTokens: 10}}
 			}
+			payload["web_search_requests"] = 0
+			payload["tool_usage_details"] = map[string]any{"web_search_calls": 0, "code_execution_calls": 2}
+			payload["cost_details"] = map[string]any{"cost": 999.0}
+			payload["iterations"] = []any{map[string]any{"input_tokens": 5000, "output_tokens": 9000}}
 			raw, err := json.Marshal(payload)
 			if err != nil {
 				t.Fatal(err)
@@ -242,6 +246,12 @@ func TestCanonicalAccountingSurvivesPricingAndRetention(t *testing.T) {
 				if record.Tokens.OutputTokens != tc.wantOutput || !reflect.DeepEqual(record.Accounting, event.Accounting) {
 					t.Fatalf("stored accounting: %+v", record)
 				}
+			}
+			if detail.StructuredUsage == nil || !reflect.DeepEqual(detail.StructuredUsage, event.StructuredUsage) {
+				t.Fatal("lost independent usage evidence")
+			}
+			if _, err := repo.SQL().Exec(`UPDATE usage_events SET structured_usage=NULL WHERE id=?`, row.ID); err == nil {
+				t.Fatal("structured usage evidence is mutable")
 			}
 			cost, err := repo.GetUsageEventCostBreakdown(ctx, row.ID)
 			if err != nil {

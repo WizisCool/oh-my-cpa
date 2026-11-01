@@ -87,6 +87,28 @@ field presence, credential grouping, revision conflicts, write preservation and
 secrets. Extend the smallest existing contract case rather than maintaining a
 spreadsheet of mirrored routes and version introductions.
 
+## Structured request-usage evidence
+
+The usage decoder retains the allowlisted structured observations published by CPA's
+existing queue: modality and cache-TTL counters, cache and tool details, requested and
+observed image settings, media counts, iterations, upstream costs and execution metadata.
+[`structured_details.go`](../internal/usage/structured_details.go) owns the field schema
+and capture bounds. Invalid or shortened observations set `is_partial`; an absent field
+stays unknown, while explicit zero and false survive storage and projection. Named
+TTL/tool counters are also allowlisted; unrecognized names make the capture partial
+rather than opening a free-text export path.
+
+Evidence is saved with the request in `usage_events.structured_usage`, follows request
+retention, and is immutable after insertion. Historical rows remain NULL; no inbox replay
+or backfill is implied. The single-request API and Agent/MCP `requests_get` expose bounded
+typed projections. Lists and permanent aggregate facts do not acquire this detail payload.
+
+These observations are independent of the canonical disjoint token partition. Iteration,
+modality and cache-TTL counters must not be added to existing totals. Upstream-reported
+amounts retain their published units and remain separate from OMC's locked price-book
+estimate; they neither introduce tariffs nor reprice stored requests. Image settings
+requested by a caller are not evidence of the settings observed upstream.
+
 ## Adoption and coexistence
 
 Installing OMC must not rewrite or upgrade an existing CPA deployment implicitly.

@@ -157,11 +157,12 @@ const MaxFailBodyRunes = 4096
 
 // Event is the decoded row for usage_events.
 type Event struct {
-	Accounting    *TokenAccounting
-	InstanceID    string
-	EventKey      string
-	APIGroupKey   string
-	APIGroupLabel string
+	StructuredUsage *StructuredUsageDetails
+	Accounting      *TokenAccounting
+	InstanceID      string
+	EventKey        string
+	APIGroupKey     string
+	APIGroupLabel   string
 	// APIKeyMask is the display mask of the client key CPA published. It is not
 	// an identity: grouping, filtering and credential binding all use
 	// APIGroupKey, because two different keys can share a mask.
@@ -285,6 +286,7 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		CacheCreationTokens: nonNegative(payload.Tokens.CacheCreationTokens),
 		TotalTokens:         totalTokens(payload.Tokens),
 	}
+	event.StructuredUsage = decodeStructuredUsage([]byte(raw))
 	event.Accounting = decodeTokenAccounting(payload.AccountingVersion, payload.TokenBreakdown, payload.Tokens)
 	if accounting := event.Accounting; accounting != nil && accounting.Status == "complete" {
 		breakdown := accounting.Breakdown

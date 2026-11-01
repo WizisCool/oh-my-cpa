@@ -1,0 +1,150 @@
+{
+  "why": "Every allowlisted upstream detail survives decoding; requested and observed images remain distinct, and unknown nested fields never become evidence.",
+  "now_ms": 1800000000000,
+  "body": {
+    "record": {
+      "tokens": {
+        "cache_creation_5m_tokens": 1,
+        "cache_creation_30m_tokens": 2,
+        "cache_creation_1h_tokens": 3,
+        "cache_creation_12h_tokens": 4,
+        "text_input_tokens": 5,
+        "image_input_tokens": 6,
+        "audio_input_tokens": 7,
+        "video_input_tokens": 8,
+        "file_input_tokens": 9,
+        "cached_text_tokens": 10,
+        "text_output_tokens": 11,
+        "image_output_tokens": 12,
+        "audio_output_tokens": 13,
+        "accepted_prediction_tokens": 14,
+        "rejected_prediction_tokens": 15,
+        "input_tokens": 100,
+        "output_tokens": 40,
+        "reasoning_tokens": 10,
+        "total_tokens": 140
+      },
+      "cache_details": {
+        "mode": "fixture-mode",
+        "ttl": "fixture-ttl",
+        "retention": "fixture-retention",
+        "ephemeral_5m_input_tokens": 4,
+        "ephemeral_30m_input_tokens": 5,
+        "ephemeral_1h_input_tokens": 6,
+        "ephemeral_12h_input_tokens": 7,
+        "by_ttl": {
+          "5m": 0
+        }
+      },
+      "tool_usage_details": {
+        "web_search_calls": 1,
+        "web_search_queries": 2,
+        "web_fetch_calls": 3,
+        "num_search_results": 4,
+        "num_sources_used": 5,
+        "num_server_side_tools_used": 6,
+        "tool_calls_requested": 7,
+        "tool_calls_executed": 8,
+        "x_search_calls": 9,
+        "x_posts_fetched": 10,
+        "x_users_fetched": 11,
+        "code_execution_calls": 12,
+        "file_search_calls": 13,
+        "mcp_calls": 14,
+        "document_search_calls": 15,
+        "image_generation_calls": 16,
+        "extra": {
+          "image_search_calls": 0,
+          "tool_use_prompt_tokens": 2,
+          "google_maps_chunks": 1
+        },
+        "credential": "fixture-private-tool-secret"
+      },
+      "web_search_requests": 4,
+      "image_count": 5,
+      "requested_image_details": {
+        "size": "1024x1024",
+        "resolution": "fixture-resolution",
+        "image_size": "fixture-image_size",
+        "aspect_ratio": "fixture-aspect_ratio",
+        "quality": "fixture-quality",
+        "background": "fixture-background",
+        "output_format": "fixture-output_format",
+        "response_format": "fixture-response_format",
+        "mime_type": "fixture-mime_type",
+        "input_fidelity": "fixture-input_fidelity"
+      },
+      "image_details": {
+        "size": "1536x1024",
+        "resolution": "fixture-resolution",
+        "image_size": "fixture-image_size",
+        "aspect_ratio": "fixture-aspect_ratio",
+        "quality": "fixture-quality",
+        "background": "fixture-background",
+        "output_format": "fixture-output_format",
+        "response_format": "fixture-response_format",
+        "mime_type": "fixture-mime_type",
+        "input_fidelity": "fixture-input_fidelity"
+      },
+      "media_counts": {
+        "prompt_media": 1,
+        "completion_media": 2,
+        "prompt_audio": 3,
+        "audio_seconds": 0.04
+      },
+      "iterations": [
+        {
+          "type": "fixture-type",
+          "model": "fixture-model",
+          "input_tokens": 3,
+          "output_tokens": 4,
+          "thinking_tokens": 5,
+          "reasoning_tokens": 6,
+          "cache_read_input_tokens": 7,
+          "cache_creation_input_tokens": 8,
+          "cache_creation_5m_tokens": 9,
+          "cache_creation_1h_tokens": 10,
+          "cache_creation": {
+            "mode": "fixture-mode",
+            "ttl": "fixture-ttl",
+            "retention": "fixture-retention",
+            "ephemeral_5m_input_tokens": 4,
+            "ephemeral_30m_input_tokens": 5,
+            "ephemeral_1h_input_tokens": 6,
+            "ephemeral_12h_input_tokens": 7,
+            "by_ttl": {
+              "5m": 0
+            }
+          }
+        },
+        {
+          "output_tokens": 0
+        }
+      ],
+      "cost_details": {
+        "cost": 0.01,
+        "upstream_inference_cost": 0.02,
+        "upstream_inference_prompt_cost": -0.01,
+        "upstream_inference_completions_cost": 0.04,
+        "cost_in_usd_ticks": -5,
+        "is_byok": false,
+        "headers": {
+          "authorization": "fixture-private-tool-secret"
+        }
+      },
+      "speed": "fixture-speed",
+      "inference_geo": "fixture-inference_geo",
+      "upstream_service_tier": "fixture-upstream_service_tier",
+      "request_id": "structured-full",
+      "failed": false,
+      "stream": true,
+      "model": "fixture-model",
+      "unknown_usage_blob": {
+        "secret": "fixture-private-tool-secret"
+      }
+    },
+    "secrets": [
+      "fixture-private-tool-secret"
+    ]
+  }
+}

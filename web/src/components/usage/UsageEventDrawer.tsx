@@ -1,3 +1,4 @@
+import { StructuredUsageView } from './StructuredUsageView';
 import { formatCurrency } from '../../types/currencyDisplay';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from './TokenAccountingNote';
@@ -572,6 +573,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       <CostBreakdownView breakdown={result.data?.cost_breakdown} model={event.model} costUsd={event.cost_usd} />,
                     )}
                     <p className="request-detail-note">{t('events.token_note')}</p>
+                    <StructuredUsageView details={event.structured_usage} />
                   </>
                 ),
               },
