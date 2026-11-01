@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { StructuredUsageView } from '../src/components/usage/StructuredUsageView';
 import { TokenAccountingNote } from '../src/components/usage/TokenAccountingNote';
 import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
 import { PricingEditorProvider } from '../src/components/pricing/PricingEditorContext';
@@ -114,4 +115,44 @@ it.each(['invalid', 'unsupported', 'inconsistent', 'unclassified'] as const)('sh
   expect(tooltipReasons).toContain(explanation);
   expect(explanation).toContain('100');
   expect(explanation).toContain('30');
+});
+
+it('reads structured detail in the drawer without merging observations into canonical totals or estimated costs', async () => {
+  renderTier({ cost_usd: 0.25, structured_usage: {
+    tokens: { text_input_tokens: 0, image_input_tokens: 12 },
+    cache_details: { by_ttl: { '5m': 0 } },
+    tool_usage_details: { web_search_calls: 0, code_execution_calls: 2 },
+    web_search_requests: 0,
+    image_count: 0,
+    requested_image_details: { size: '1024x1024', quality: 'high' },
+    image_details: { size: '1536x1024' },
+    media_counts: { audio_seconds: 0 },
+    iterations: [{ output_tokens: 0, cache_creation: { by_ttl: { '1h': 5 } } }],
+    cost_details: { cost: 0, upstream_inference_cost: 0.0000000000001, is_byok: false, cost_in_usd_ticks: 0 },
+    is_partial: true,
+  } }, event => <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />);
+  fireEvent.click(await screen.findByRole('tab', { name: /Performance/ }));
+  const details = within(await screen.findByRole('region', { name: 'Upstream usage details' }));
+  const valueFor = (label: string) => within(details.getByText(label).parentElement!).getByRole('definition').textContent;
+  expect(valueFor('Text input tokens')).toBe('0');
+  expect(valueFor('Web search calls')).toBe('0');
+  expect(valueFor('Reported cost')).toBe('0');
+  expect(valueFor('Upstream inference cost')).toBe('0.0000000000001');
+  expect(valueFor('Bring your own key')).toBe('No');
+  expect(valueFor('Audio duration (seconds)')).toBe('0');
+  expect(details.queryByText('Web fetch calls')).toBeNull();
+  expect(within(details.getByRole('heading', { name: 'Requested image settings' }).parentElement!).getByText('1024x1024')).toBeTruthy();
+  expect(within(details.getByRole('heading', { name: 'Upstream-observed image settings' }).parentElement!).getByText('1536x1024')).toBeTruthy();
+  expect(within(details.getByRole('region', { name: 'Iteration 1' })).getByText('5')).toBeTruthy();
+  expect(details.getByRole('status')).toBeTruthy();
+  // A zero reported upstream does not replace the stored OMC estimate in the drawer.
+  expect(details.queryByText('$0.25')).toBeNull();
+  expect(screen.getAllByText(/0.25/).length).toBeGreaterThan(0);
+});
+
+it('keeps legacy structured usage unknown instead of fabricating zero-valued counters', () => {
+  renderWithOmc(<StructuredUsageView />);
+  const details = within(screen.getByRole('region', { name: 'Upstream usage details' }));
+  expect(details.getByText('Not captured')).toBeTruthy();
+  expect(details.queryByRole('definition')).toBeNull();
 });

@@ -1,0 +1,39 @@
+{
+  "why": "A failed stream retains independently reported counters, including zero and false; capture metadata cannot be supplied upstream.",
+  "now_ms": 1800000000000,
+  "body": {
+    "record": {
+      "request_id": "structured-zero",
+      "failed": true,
+      "stream": true,
+      "tokens": {
+        "input_tokens": 7,
+        "output_tokens": 2,
+        "total_tokens": 9,
+        "text_input_tokens": 0,
+        "image_output_tokens": 0
+      },
+      "web_search_requests": 0,
+      "image_count": 0,
+      "cache_details": {
+        "ephemeral_5m_input_tokens": 0,
+        "by_ttl": {
+          "5m": 0
+        }
+      },
+      "tool_usage_details": {
+        "web_search_calls": 0
+      },
+      "iterations": [
+        {
+          "output_tokens": 0
+        }
+      ],
+      "cost_details": {
+        "cost": 0,
+        "is_byok": false
+      },
+      "is_partial": true
+    }
+  }
+}

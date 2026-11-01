@@ -678,6 +678,9 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"x_forwarded_for":              row.XForwardedFor,
 		"user_agent":                   row.UserAgent,
 	}
+	if details := projectStructuredUsage(row.StructuredUsage); details != nil {
+		detail["structured_usage"] = details
+	}
 	// Present only when a credential was actually identified: an absent key and an
 	// empty one read differently to a consumer, and the console prints no key line
 	// for a record it cannot attribute.

@@ -6304,6 +6304,567 @@
         },
         "user_agent": {
           "type": "string"
+        },
+        "structured_usage": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "tokens": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "cache_creation_5m_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "cache_creation_30m_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "cache_creation_1h_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "cache_creation_12h_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "text_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "image_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "audio_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "video_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "file_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "cached_text_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "text_output_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "image_output_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "audio_output_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "accepted_prediction_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "rejected_prediction_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "cache_details": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "mode": {
+                  "type": "string"
+                },
+                "ttl": {
+                  "type": "string"
+                },
+                "retention": {
+                  "type": "string"
+                },
+                "ephemeral_5m_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "ephemeral_30m_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "ephemeral_1h_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "ephemeral_12h_input_tokens": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "by_ttl": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "tool_usage_details": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "web_search_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "web_search_queries": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "web_fetch_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "num_search_results": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "num_sources_used": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "num_server_side_tools_used": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "tool_calls_requested": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "tool_calls_executed": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "x_search_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "x_posts_fetched": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "x_users_fetched": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "code_execution_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "file_search_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "mcp_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "document_search_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "image_generation_calls": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "extra": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "web_search_requests": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "image_count": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "requested_image_details": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "size": {
+                  "type": "string"
+                },
+                "resolution": {
+                  "type": "string"
+                },
+                "image_size": {
+                  "type": "string"
+                },
+                "aspect_ratio": {
+                  "type": "string"
+                },
+                "quality": {
+                  "type": "string"
+                },
+                "background": {
+                  "type": "string"
+                },
+                "output_format": {
+                  "type": "string"
+                },
+                "response_format": {
+                  "type": "string"
+                },
+                "mime_type": {
+                  "type": "string"
+                },
+                "input_fidelity": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "image_details": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "size": {
+                  "type": "string"
+                },
+                "resolution": {
+                  "type": "string"
+                },
+                "image_size": {
+                  "type": "string"
+                },
+                "aspect_ratio": {
+                  "type": "string"
+                },
+                "quality": {
+                  "type": "string"
+                },
+                "background": {
+                  "type": "string"
+                },
+                "output_format": {
+                  "type": "string"
+                },
+                "response_format": {
+                  "type": "string"
+                },
+                "mime_type": {
+                  "type": "string"
+                },
+                "input_fidelity": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "media_counts": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "prompt_media": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "completion_media": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "prompt_audio": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "audio_seconds": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "iterations": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "input_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "output_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "thinking_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "reasoning_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "cache_read_input_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "cache_creation_input_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "cache_creation_5m_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "cache_creation_1h_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "cache_creation": {
+                    "type": [
+                      "null",
+                      "object"
+                    ],
+                    "properties": {
+                      "mode": {
+                        "type": "string"
+                      },
+                      "ttl": {
+                        "type": "string"
+                      },
+                      "retention": {
+                        "type": "string"
+                      },
+                      "ephemeral_5m_input_tokens": {
+                        "type": [
+                          "null",
+                          "integer"
+                        ]
+                      },
+                      "ephemeral_30m_input_tokens": {
+                        "type": [
+                          "null",
+                          "integer"
+                        ]
+                      },
+                      "ephemeral_1h_input_tokens": {
+                        "type": [
+                          "null",
+                          "integer"
+                        ]
+                      },
+                      "ephemeral_12h_input_tokens": {
+                        "type": [
+                          "null",
+                          "integer"
+                        ]
+                      },
+                      "by_ttl": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "cost_details": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "cost": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "upstream_inference_cost": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "upstream_inference_prompt_cost": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "upstream_inference_completions_cost": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "cost_in_usd_ticks": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "is_byok": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "speed": {
+              "type": "string"
+            },
+            "inference_geo": {
+              "type": "string"
+            },
+            "upstream_service_tier": {
+              "type": "string"
+            },
+            "is_partial": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [

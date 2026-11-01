@@ -1,7 +1,9 @@
 package usage
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -79,5 +81,65 @@ func TestFilterResponseHeadersBoundsTheSnapshot(t *testing.T) {
 	bounded := FilterResponseHeaders(crowded)
 	if len(bounded) != MaxResponseHeaders || len([]rune(bounded[0].Value)) != MaxResponseHeaderValueRunes {
 		t.Fatalf("bounds not applied: %d headers, value %d runes", len(bounded), len([]rune(bounded[0].Value)))
+	}
+}
+
+func TestStructuredUsageBoundsAndInvalidCounters(t *testing.T) {
+	counters := map[string]int64{"negative": -1, "image_search_calls": 0, "tool_use_prompt_tokens": 2, "google_maps_chunks": 1}
+	for index := 0; index < 25; index++ {
+		counters[fmt.Sprintf("tool-%02d", index)] = int64(index)
+	}
+	counters[strings.Repeat("界", 100)] = 0
+	iterations := make([]IterationUsageDetails, MaxStructuredUsageIterations+5)
+	negative, zero := int64(-1), int64(0)
+	infinity := math.Inf(1)
+	source := &StructuredUsageDetails{
+		Speed:             strings.Repeat("界", MaxStructuredUsageStringRunes+10),
+		WebSearchRequests: &zero,
+		ToolUsageDetails:  &ToolUsageDetails{Extra: counters, WebFetchCalls: &negative},
+		MediaCounts:       &MediaUsageCounts{AudioSeconds: &infinity},
+		Iterations:        iterations,
+	}
+	got := SanitizeStructuredUsage(source)
+	if got == nil || !got.IsPartial || len([]rune(got.Speed)) != MaxStructuredUsageStringRunes ||
+		len(got.Iterations) != MaxStructuredUsageIterations || len(got.ToolUsageDetails.Extra) != 3 ||
+		got.ToolUsageDetails.WebFetchCalls != nil || got.MediaCounts != nil || got.WebSearchRequests == nil || *got.WebSearchRequests != 0 {
+		t.Fatalf("bounded evidence = %+v", got)
+	}
+	if _, err := json.Marshal(got); err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(got)
+	again, _ := json.Marshal(SanitizeStructuredUsage(source))
+	if string(encoded) != string(again) {
+		t.Fatal("bounded counter selection is not deterministic")
+	}
+	if source.ToolUsageDetails.WebFetchCalls == nil || len(source.ToolUsageDetails.Extra) != len(counters) || source.MediaCounts.AudioSeconds == nil {
+		t.Fatal("sanitization mutated the supplied evidence")
+	}
+	if _, ok := got.ToolUsageDetails.Extra["image_search_calls"]; !ok {
+		t.Fatal("lost known zero-valued extra counter")
+	}
+	large := &StructuredUsageDetails{}
+	for index := 0; index < MaxStructuredUsageIterations; index++ {
+		text := strings.Repeat("\x00", MaxStructuredUsageStringRunes)
+		large.Iterations = append(large.Iterations, IterationUsageDetails{
+			Type: text, Model: text,
+			CacheCreation: &CacheUsageDetails{Mode: text, TTL: text, Retention: text, ByTTL: map[string]int64{"5m": math.MaxInt64}},
+		})
+	}
+	bounded := SanitizeStructuredUsage(large)
+	encoded, err := json.Marshal(bounded)
+	if err != nil || len(encoded) > MaxStructuredUsageBytes || !bounded.IsPartial || len(bounded.Iterations) == 0 {
+		t.Fatalf("overall capture budget: %d bytes, %+v, %v", len(encoded), bounded, err)
+	}
+	invalidDuration := -1.0
+	withoutDuration := SanitizeStructuredUsage(&StructuredUsageDetails{MediaCounts: &MediaUsageCounts{AudioSeconds: &invalidDuration}})
+	if withoutDuration == nil || !withoutDuration.IsPartial || withoutDuration.MediaCounts != nil {
+		t.Fatal("retained a negative media duration")
+	}
+	sensitive := SanitizeStructuredUsage(&StructuredUsageDetails{InferenceGeo: "Bearer abcdefghijklmnopqrstuvwxyz0123456789"})
+	if strings.Contains(sensitive.InferenceGeo, "abcdefghijklmnopqrstuvwxyz0123456789") {
+		t.Fatal("kept sensitive metadata")
 	}
 }

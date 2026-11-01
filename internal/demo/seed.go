@@ -886,6 +886,15 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 	if profile.provider == "codex" && latency%3 == 0 {
 		event.ExecutorType = "CodexWebsocketsExecutor"
 	}
+	// Synthetic upstream observations share the existing deterministic draws;
+	// they do not change the event's token partition, estimated cost or ordering.
+	toolCalls := latency % 3
+	event.StructuredUsage = &usage.StructuredUsageDetails{
+		Tokens:           &usage.StructuredTokenUsage{TextInputTokens: &input, TextOutputTokens: &output},
+		CacheDetails:     &usage.CacheUsageDetails{ByTTL: map[string]int64{"5m": cacheCreation}},
+		ToolUsageDetails: &usage.ToolUsageDetails{WebSearchCalls: &toolCalls},
+		Iterations:       []usage.IterationUsageDetails{{InputTokens: &input, OutputTokens: &output}},
+	}
 	event.ResponseHeaders = demoResponseHeaders(started, latency, failed)
 	if !failed {
 		event.ResponseModel = profile.name

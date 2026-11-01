@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -564,6 +565,11 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	event.ResponseHeaders = `{"cf-ray":"fixture-ray-NRT","set-cookie":"fixture=1"}`
 	event.AccessProvider = "config-inline"
 	event.IsNativeKey = true
+	observed, err := usage.DecodeEvent(`{"request_id":"detail-evidence","tokens":{"text_input_tokens":0},"web_search_requests":0,"tool_usage_details":{"web_search_calls":0,"private_payload":"fixture-private-evidence"},"requested_image_details":{"size":"1024x1024"},"image_details":{"size":"1536x1024"},"iterations":[{"output_tokens":0,"cache_creation":{"by_ttl":{"5m":0}}}],"cost_details":{"cost":0,"is_byok":false}}`, "default", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event.StructuredUsage = observed.StructuredUsage
 	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
 		t.Fatal(err)
 	}
@@ -585,7 +591,7 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	}
 	if strings.Contains(string(payload), "server_is_overloaded") || strings.Contains(string(payload), "fail_body") ||
 		strings.Contains(string(payload), "response_headers") || strings.Contains(string(payload), "access_provider") ||
-		strings.Contains(string(payload), "is_native_key") {
+		strings.Contains(string(payload), "is_native_key") || strings.Contains(string(payload), "structured_usage") {
 		t.Fatalf("list leaked the upstream error body: %s", payload)
 	}
 	response, payload = getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, list.Items[0].ID))
@@ -594,15 +600,19 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	}
 	var detail struct {
 		Event struct {
-			FailStatusCode  int                    `json:"fail_status_code"`
-			FailBody        string                 `json:"fail_body"`
-			ResponseHeaders []usage.ResponseHeader `json:"response_headers"`
-			AccessProvider  string                 `json:"access_provider"`
-			IsNativeKey     bool                   `json:"is_native_key"`
+			FailStatusCode  int                           `json:"fail_status_code"`
+			FailBody        string                        `json:"fail_body"`
+			ResponseHeaders []usage.ResponseHeader        `json:"response_headers"`
+			AccessProvider  string                        `json:"access_provider"`
+			IsNativeKey     bool                          `json:"is_native_key"`
+			StructuredUsage *usage.StructuredUsageDetails `json:"structured_usage"`
 		} `json:"event"`
 	}
 	if err := json.Unmarshal(payload, &detail); err != nil {
 		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(detail.Event.StructuredUsage, event.StructuredUsage) || strings.Contains(string(payload), "fixture-private-evidence") {
+		t.Fatalf("unsafe or incomplete structured projection: %s", payload)
 	}
 	if detail.Event.AccessProvider != "config-inline" || !detail.Event.IsNativeKey {
 		t.Fatalf("detail access = (%q, %v), want (config-inline, true)", detail.Event.AccessProvider, detail.Event.IsNativeKey)
