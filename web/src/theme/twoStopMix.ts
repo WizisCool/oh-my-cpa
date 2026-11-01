@@ -7,9 +7,11 @@
  * `color-mix(in oklch, ...)`, so the stops stay tokens instead of hex values baked
  * into a component, and the hue sweep is perceptually even.
  *
- * OKLCH also keeps the two ramps legible in the same way: a mix of two text-safe
- * stops is not automatically text-safe, so each ramp's stops are solved against
- * the sweep they produce rather than against themselves (`palette.ts`).
+ * OKLCH also keeps a ramp legible: a mix of two text-safe stops is not automatically
+ * text-safe, so a ramp that promises legibility anywhere between its ends has to solve its
+ * stops against the sweep they produce rather than against themselves (`palette.ts`).
+ * Only the duration ramp makes that promise - the cache-rate ramp holds its two stops on
+ * their own and says nothing about the blends between them.
  *
  * Leaf on purpose: it imports nothing, so the test harness can load it on its own.
  */
