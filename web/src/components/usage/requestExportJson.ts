@@ -31,6 +31,8 @@ export interface RequestExportInput {
   credentials: CredentialIndex;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos?: PluginOAuthLogos;
+  /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
+  isProviderCatalogUnknown?: boolean;
 }
 
 /**
@@ -60,6 +62,7 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       undefined,
       input.configuredProviders,
       input.pluginLogos,
+      input.isProviderCatalogUnknown,
     );
     const record: Record<string, unknown> = { id: event.id };
     const put = (key: string, value: unknown) => {

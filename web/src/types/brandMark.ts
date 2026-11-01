@@ -48,10 +48,10 @@ export function resolveProviderMark(provider: ProviderBrandIdentity, sources: Pr
   const canonical = provider.id ? sources.providersByID?.get(provider.id) : undefined;
   const hasCanonicalIdentity = !sources.isProviderCatalogUnknown && canonical && canonical.family === provider.family && canonical.name === provider.name;
   if (hasCanonicalIdentity) provider = { ...canonical, ...provider, base_url: provider.base_url ?? canonical.base_url };
-  const logoKeys = [provider.family, provider.upstream_name, provider.name, provider.id, ...(provider.aliases ?? [])]
-    .filter((key): key is string => Boolean(key));
   // A protocol family names how a connection speaks, not who owns its artwork. Only an
-  // OAuth channel's family is a provider identity; an API-key family is not.
+  // OAuth channel's family is a provider identity; an API-key family is not. The plugin-logo
+  // lookup and the ownership proof answer the same question, so one key list serves both: a
+  // `codex` API-key connection must not inherit the mark of a plugin that registers `codex`.
   const providerKeys = [
     provider.upstream_name,
     provider.id,
@@ -63,9 +63,10 @@ export function resolveProviderMark(provider: ProviderBrandIdentity, sources: Pr
   const icons = sources.providerIcons ?? {};
   const selected = resolveProviderIcon(icons, provider, provider.icon_id ?? '')
     || provider.aliases?.map((key) => icons[key]).find(Boolean);
+
   return {
     iconId: selected || fallbackIconId,
-    logo: resolveLogo(logoKeys, sources.pluginLogos),
+    logo: resolveLogo(providerKeys, sources.pluginLogos),
     fallbackIconId,
     providerKeys,
     isIdentityUnknown: Boolean(provider.id && (sources.isProviderCatalogUnknown || (sources.providersByID && provider.family === 'openai-compatibility' && !hasCanonicalIdentity))),
@@ -87,6 +88,7 @@ export function resolveRecordedProviderMark(providerKey: string, displayName: st
     fallbackIconId,
     logo: resolveLogo(providerKeys, sources.pluginLogos),
     providerKeys,
+    isIdentityUnknown: false,
   };
 }
 

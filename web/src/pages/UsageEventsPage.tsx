@@ -324,19 +324,18 @@ export const UsageEventsPage: React.FC = () => {
     () => indexCredentialFiles(authFiles.data?.files || []),
     [authFiles.data],
   );
-  const { providerIcons, pluginLogos } = useProviderBranding();
   // A plugin that registers an OAuth provider also publishes its logo, which the
-  // request row shows in place of the console's catalog mark.
-  const providersQuery = useQuery({
-    // Distinct cache key: this page must never read (or populate) the cache
-    // entry that carries plaintext key material for the providers page.
-    queryKey: ['management-providers-sanitized'],
-    queryFn: () => api.getManagementProviders(false),
-    staleTime: 60_000,
-  });
-  const configuredProviders = providersQuery.isFetching || providersQuery.isError
-    ? undefined
-    : providersQuery.data?.providers;
+  // request row shows in place of the console's catalog mark. The catalog itself
+  // comes from the shared hook: a page-local copy of this query drifted from the
+  // freshness rule the other surfaces apply to the same data.
+  const {
+    providerIcons,
+    pluginLogos,
+    configuredProviders,
+    isProviderCatalogUnknown,
+    isProviderCatalogUnproven,
+    refetchProviders,
+  } = useProviderBranding();
   // Resolves CPA's stored provider key to the name the operator configured, so
   // the filter names a line the same way the providers page does.
   const providerName = React.useMemo(
@@ -344,8 +343,8 @@ export const UsageEventsPage: React.FC = () => {
     [configuredProviders],
   );
   const renderFacetMark = React.useMemo(
-    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos }),
-    [credentials, providerIcons, configuredProviders, pluginLogos],
+    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown],
   );
 
   /**
@@ -716,6 +715,7 @@ export const UsageEventsPage: React.FC = () => {
                     providerIcons={providerIcons}
                     configuredProviders={configuredProviders}
                     pluginLogos={pluginLogos}
+                    isProviderCatalogUnknown={isProviderCatalogUnknown}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
                     isChecked={selection.has(event.id)}
@@ -766,6 +766,8 @@ export const UsageEventsPage: React.FC = () => {
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
         pluginLogos={pluginLogos}
+        isProviderUnproven={isProviderCatalogUnproven}
+        onRetryProviders={() => void refetchProviders()}
       />
     </div>
   );

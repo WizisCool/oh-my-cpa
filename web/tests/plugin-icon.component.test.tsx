@@ -83,7 +83,7 @@ describe('provider artwork', () => {
 
   it('falls back after a failed plugin image and recovers on a new source', () => {
     installOmcApi();
-    const provider = { id: 'codex-0', family: 'codex', name: 'Relay' };
+    const provider = { id: 'codex-0', family: 'codex', name: 'Relay', is_oauth: true };
     const view = (logo: string) => <ProviderMark provider={provider} sources={{ pluginLogos: { codex: logo } }} size={20} />;
     const { container, rerender } = renderWithOmc(view(SVG));
     fireEvent.error(container.querySelector('img')!);

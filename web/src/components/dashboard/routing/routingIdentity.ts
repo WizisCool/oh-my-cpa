@@ -13,6 +13,8 @@ export interface IdentitySources {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  /** The provider catalog could not be read, so a recorded name is a placeholder, not a verdict. */
+  isProviderCatalogUnknown?: boolean;
 }
 
 export interface TargetIdentity extends BrandMark {
@@ -36,11 +38,12 @@ export function targetIdentity(event: UsageEvent, sources: IdentitySources): Tar
     sources.providerIcons,
     sources.configuredProviders,
     sources.pluginLogos,
+    sources.isProviderCatalogUnknown,
   );
   const credential = info.isOAuth
     ? info.credential ?? ''
     : maskKeyText(event.provider_key_mask) || event.auth_index?.trim() || '';
-  return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo, fallbackIconId: info.fallbackIconId, providerKeys: info.providerKeys };
+  return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo, fallbackIconId: info.fallbackIconId, providerKeys: info.providerKeys, isIdentityUnknown: info.isIdentityUnknown };
 }
 
 /** The CSS colour of a model's lane slot: an identity hue, never a status hue. */

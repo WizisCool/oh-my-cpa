@@ -238,6 +238,24 @@ test('a connection keeps its selected mark across surfaces without relabelling O
     ['plugin-relay', 'compat-0'],
     'a plugin upstream name is proof of plugin ownership',
   );
+  // An API-key connection speaks a protocol family that several unrelated connections share, so
+  // the family may not hand it the artwork of a plugin that happens to register the same key: the
+  // selected custom icon would otherwise be overwritten by a stranger's mark.
+  assert.equal(
+    resolveProviderMark({ id: 'codex-0', family: 'codex', name: 'Opencode Go' }, { pluginLogos: { codex: INLINE_LOGO } }).logo,
+    undefined,
+    'an API-key family does not adopt a plugin logo keyed by it',
+  );
+  assert.equal(
+    resolveProviderMark({ id: 'codex-0', family: 'codex', name: 'Codex', is_oauth: true }, { pluginLogos: { codex: INLINE_LOGO } }).logo,
+    INLINE_LOGO,
+    'an OAuth channel publishes its own brand, so its family is a provider identity',
+  );
+  assert.equal(
+    resolveProviderMark({ id: 'compat-0', family: 'openai-compatibility', name: 'Relay' }, { pluginLogos: { 'openai-compatibility': INLINE_LOGO } }).logo,
+    undefined,
+    'the compatibility adapter is a protocol too, never a plugin identity',
+  );
 });
 
 test('DOM and exported marks share ownership, revision, missing-resource and colour rules', () => {

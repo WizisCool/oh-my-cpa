@@ -240,6 +240,8 @@ export function resolveProviderInfo(
   providerIcons: Record<string, string> = {},
   configuredProviders: ProviderLookupEntry[] = [],
   pluginLogos: PluginOAuthLogos = {},
+  /** The provider catalog could not be read, so a recorded label is not yet proven either way. */
+  isProviderCatalogUnknown = false,
 ): ResolvedProviderInfo {
   const file = matchingCredential(event, credentials);
   const isOAuth =
@@ -283,14 +285,27 @@ export function resolveProviderInfo(
   const fileName = credIdentity.name || event.source || '';
   const providerName = matched?.name.trim() || event.resource_name?.trim() || event.provider?.trim() || 'Unknown';
 
-  const sources = { providerIcons, pluginLogos };
-  const mark = matched
-    ? resolveProviderMark({ ...matched, family: matched.family || event.provider || '', name: providerName, aliases: [event.provider] }, sources)
-    : resolveRecordedProviderMark(event.provider || '', providerName, sources);
+  const sources = { providerIcons, pluginLogos, isProviderCatalogUnknown };
+  if (matched) {
+    return {
+      isOAuth: false,
+      ...resolveProviderMark({ ...matched, family: matched.family || event.provider || '', name: providerName, aliases: [event.provider] }, sources),
+      title: providerName,
+      authFile: fileName,
+    };
+  }
+
+  // A record left without a configured provider is ambiguous in two different ways, and a
+  // reader has to be able to tell them apart. Its own label is the truth when the catalog was
+  // read and does not claim the record - a provider someone deleted, or a request the console
+  // never configured. It is only unproven when the catalog could not be read at all: then the
+  // name printed is a placeholder until the read settles, and an export must not save it.
+  const recorded = resolveRecordedProviderMark(event.provider || '', providerName, sources);
 
   return {
     isOAuth: false,
-    ...mark,
+    ...recorded,
+    isIdentityUnknown: isProviderCatalogUnknown || recorded.isIdentityUnknown,
     title: providerName,
     authFile: fileName,
   };

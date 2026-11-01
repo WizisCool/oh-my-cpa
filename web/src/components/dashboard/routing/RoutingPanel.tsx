@@ -181,25 +181,21 @@ export function RoutingPanel() {
     queryFn: () => api.getManagementAuthFiles(),
     staleTime: 60_000,
   });
-  const providersQuery = useQuery({
-    // The sanitized entry, never the providers page's plaintext one.
-    queryKey: ['management-providers-sanitized'],
-    queryFn: () => api.getManagementProviders(false),
-    staleTime: 60_000,
-  });
   const configQuery = useQuery<ConfigScalarsResponse>({
     queryKey: ['management-config'],
     queryFn: () => api.getConfigScalars(),
     staleTime: 60_000,
   });
-  const { providerIcons, pluginLogos } = useProviderBranding();
+  const {
+    providerIcons,
+    pluginLogos,
+    configuredProviders,
+    isProviderCatalogUnknown,
+  } = useProviderBranding();
   const credentials = React.useMemo(() => indexCredentialFiles(authFiles.data?.files || []), [authFiles.data]);
-  const configuredProviders = providersQuery.isFetching || providersQuery.isError
-    ? undefined
-    : providersQuery.data?.providers;
   const sources = React.useMemo<IdentitySources>(
-    () => ({ credentials, providerIcons, configuredProviders, pluginLogos }),
-    [credentials, providerIcons, configuredProviders, pluginLogos],
+    () => ({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown],
   );
 
   const strategyValue = configQuery.data?.scalars?.routing_strategy;

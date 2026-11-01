@@ -53,6 +53,14 @@ missing or a registry read fails. Render plugin SVGs only as isolated images, ne
 host markup or direct remote asset requests. Operations/status glyphs remain in the
 static icon module, separate from brand identity.
 
+A protocol family is not a provider identity. Only an OAuth channel's family names the
+provider a connection belongs to, so only that family may resolve a plugin's artwork or
+prove plugin ownership; an API-key family such as `codex` is a dialect several unrelated
+connections speak, and lending it one plugin's mark would overwrite the operator's own
+choice. A name resolved from the provider catalog is likewise provisional until that read
+succeeds: a surface may show the withheld rows, but anything durable — an export above
+all — has to say the name is unconfirmed instead of saving it.
+
 ## Composition and shared controls
 
 Use the shared page, panel, toolbar, field, empty-state, drawer and confirmation

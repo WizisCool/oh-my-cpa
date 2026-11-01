@@ -202,17 +202,21 @@ it('uses each provider’s saved brand and plugin artwork without changing crede
     preferences: { provider_icons: { 'codex-0': 'OpenCode', 'codex-1': `custom:${customID}`, 'relay-0': 'OpenAI', 'primary.json': 'OpenCode' } },
     plugins: [{ id: 'relay', oauth_provider: 'relay', supports_oauth: true, enabled: false, logo: pluginLogo }],
   });
-  api.on('GET', '/management/providers', () => ({ providers: [{ id: 'openai-compat-0', family: 'openai-compatibility', name: 'Renamed plugin relay', upstream_name: 'relay' }] }));
+  api.on('GET', '/management/providers', () => ({ providers: [
+    { id: 'openai-compat-0', family: 'openai-compatibility', name: 'Plugin relay', upstream_name: 'relay' },
+    { id: 'openai-compat-1', family: 'openai-compatibility', name: 'Renamed plugin relay', upstream_name: 'relay' },
+  ] }));
   api.on('GET', '/custom-icons', () => ({ icons: [{ id: customID, name: 'My relay', mime_type: 'image/png', revision: 3 }] }));
   api.on('GET', '/management/routing', () => ({ ...board, members: [
     member('provider:codex-0', 'Opencode Go', 10, 'provider'),
     member('provider:codex-1', 'Custom relay', 10, 'provider'),
-    { ...member('provider:relay-0', 'Plugin relay', 0, 'provider'), family: 'relay' },
-    { ...member('provider:openai-compat-0', 'Renamed plugin relay', 0, 'provider'), family: 'openai-compatibility' },
+    // A provider member names the protocol family it speaks, never the plugin that owns its
+    // artwork; the plugin identity arrives through the configured connection's upstream name.
+    { ...member('provider:openai-compat-0', 'Plugin relay', 0, 'provider'), family: 'openai-compatibility' },
+    { ...member('provider:openai-compat-1', 'Renamed plugin relay', 0, 'provider'), family: 'openai-compatibility' },
     member('credential:primary.json', 'Primary seat', 0),
   ] }));
   const client = createTestQueryClient();
-  client.setQueryData(['management-providers-sanitized'], { providers: [], total: 0 });
   renderRoutingPage(client);
 
   const card = await screen.findByRole('listitem', { name: 'Opencode Go' });

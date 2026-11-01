@@ -360,6 +360,19 @@
   flex-shrink: 0;
   line-height: 1.4;
 }
+/* The provider name beside this badge is the record's own label standing in for a
+   catalog read that has not settled. Status-shaped rather than brand-shaped: it
+   qualifies the name, so it takes the warning ink instead of the neutral chip. */
+.req-badge-unresolved {
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning, #b26b00) 14%, transparent);
+  color: var(--warning, #b26b00);
+  flex-shrink: 0;
+  line-height: 1.4;
+}
 /* The credential that answered the request - an OAuth account, or an API key
    masked the way the key list masks a caller key. One style for both, so the
    line means the same thing on every row, in the muted ink so it reads as an

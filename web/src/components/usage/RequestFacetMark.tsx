@@ -19,6 +19,8 @@ export interface FacetMarkSources {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  /** An option's mark is only a placeholder until the provider catalog read settles. */
+  isProviderCatalogUnknown?: boolean;
 }
 
 export type FacetMarkRenderer = (key: EventFilterKey, value: string) => React.ReactNode;
@@ -41,6 +43,7 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
       sources.providerIcons,
       sources.configuredProviders,
       sources.pluginLogos,
+      sources.isProviderCatalogUnknown,
     );
     return <ProviderBrandIcon mark={provider} size={MARK_SIZE} />;
   };

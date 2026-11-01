@@ -171,6 +171,8 @@ export interface RequestSheetInput {
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos?: PluginOAuthLogos;
+  /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
+  isProviderCatalogUnknown?: boolean;
 }
 
 const MASK_LINE: SheetLine = [{ kind: 'mask' }];
@@ -197,6 +199,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       input.providerIcons,
       input.configuredProviders,
       input.pluginLogos,
+      input.isProviderCatalogUnknown,
     );
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);

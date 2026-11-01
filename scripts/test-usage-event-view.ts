@@ -1254,6 +1254,29 @@ test('usage event view', () => {
   assert.equal(historicalLabel.iconId, 'Codex', 'the recorded provider key precedes an unbound display label');
   assert.equal(historicalLabel.logo, undefined, 'a resource display label cannot claim a plugin identity');
   assert.deepEqual(historicalLabel.providerKeys, ['recorded-adapter']);
+  assert.equal(historicalLabel.isIdentityUnknown, false, 'a recorded label is the record\'s own truth once the catalog was read');
+
+  // A read that has not settled leaves the record unclaimed, so the name printed is a
+  // placeholder rather than a resolution. Saying so is what keeps an export from saving it.
+  const unprovenLabel = resolveProviderInfo(
+    { ...apiKeyEvent, provider: 'openai-compatible-relay', auth_index: 'relay-key' },
+    new Map(),
+    {},
+    [{ id: 'relay-0', name: 'Relay', upstream_name: 'relay', family: 'openai-compatibility', auth_indexes: ['relay-key'] }],
+    {},
+    true,
+  );
+  assert.equal(unprovenLabel.isIdentityUnknown, true, 'an unread catalog leaves a matched provider unproven');
+  assert.equal(
+    resolveProviderInfo(
+      { ...apiKeyEvent, provider: 'openai-compatible-relay', auth_index: 'relay-key' },
+      new Map(),
+      {},
+      [{ id: 'relay-0', name: 'Relay', upstream_name: 'relay', family: 'openai-compatibility', auth_indexes: ['relay-key'] }],
+    ).isIdentityUnknown,
+    false,
+    'the same record is proven once the catalog read settles',
+  );
 
   // Provider-key to configured-name resolution for the request filter.
   //

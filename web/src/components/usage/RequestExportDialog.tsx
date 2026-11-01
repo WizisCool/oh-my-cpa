@@ -43,6 +43,10 @@ export interface RequestExportDialogProps {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  /** The provider catalog read has not settled, so a provider name is a placeholder. */
+  isProviderUnproven?: boolean;
+  /** Re-reads the provider catalog the names come from. */
+  onRetryProviders?: () => void;
 }
 
 type ExportFormat = 'image' | 'json';
@@ -70,6 +74,8 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   providerIcons,
   configuredProviders,
   pluginLogos,
+  isProviderUnproven = false,
+  onRetryProviders,
 }) => {
   const t = useT();
   const toast = useToast();
@@ -109,11 +115,12 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             providerIcons,
             configuredProviders,
             pluginLogos,
+            isProviderCatalogUnknown: isProviderUnproven,
           })
         : null,
     [
       open, isImage, rows, masks, colWidths, t, tokenStyle, currency, tpsMode, modelView, showModelIcons,
-      credentials, providerIcons, configuredProviders, pluginLogos,
+      credentials, providerIcons, configuredProviders, pluginLogos, isProviderUnproven,
     ],
   );
   // A program has no use for the image's row cap, so the document holds the whole selection.
@@ -128,9 +135,10 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             credentials,
             configuredProviders,
             pluginLogos,
+            isProviderCatalogUnknown: isProviderUnproven,
           })
         : null,
-    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos],
+    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, isProviderUnproven],
   );
   const jsonPreview = React.useMemo(
     () =>
@@ -282,6 +290,22 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
         <Notice
           tone="info"
           title={t('events.export_truncated', { n: EXPORT_ROW_LIMIT, total: selection.size })}
+        />
+      )}
+      {/* The provider column is written from the catalog. While that read is unproven the
+          names are placeholders, and an export leaves the console, so say it here rather
+          than let a reader discover it in a file. */}
+      {isProviderUnproven && !masks.has('provider') && (
+        <Notice
+          tone="warning"
+          title={t('events.export_provider_unresolved')}
+          action={
+            onRetryProviders && (
+              <Button size="small" onClick={onRetryProviders}>
+                {t('common.retry')}
+              </Button>
+            )
+          }
         />
       )}
       {/* Focusable so a keyboard can scroll a preview taller than the dialog. */}
