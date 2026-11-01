@@ -1,3 +1,4 @@
+import { LANGUAGES } from '../../../web/src/i18n/language.ts';
 import { verifySIWCBinding } from './siwcBinding.mjs';
 import fs from 'node:fs/promises';
 import { createWarmupFixture } from '../warmup-fixture.mjs';
@@ -538,6 +539,28 @@ export async function oauthManagement({ base, page, check }) {
     if (!new URL(route.request().url()).pathname.endsWith('/auth-files')) return route.fallback();
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files: recoveryFiles, total: recoveryFiles.length }) });
   });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const { id: language, locale } of LANGUAGES) {
+    await page.evaluate(value => localStorage.setItem('omc-lang', value), language);
+    await page.goto(`${base}/oauth-management?provider=codex`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(expected => document.documentElement.lang === expected, locale);
+    const cell = page.locator('[data-auth-index="auth-01"]').getByTestId('oauth-credential-status');
+    await cell.waitFor();
+    await settleLayout(page);
+    const geometry = await cell.evaluate(element => {
+      const label = element.querySelector('[tabindex="0"]').getBoundingClientRect();
+      const action = element.querySelector('button').getBoundingClientRect();
+      const bounds = element.getBoundingClientRect();
+      return {
+        overflow: element.scrollWidth - element.clientWidth,
+        overlap: label.bottom > action.top + 1 && label.right > action.left + 1,
+        contained: label.right <= bounds.right + 1 && action.right <= bounds.right + 1,
+      };
+    });
+    check(`renewal status and recovery action remain distinct inside their column in ${language}`,
+      geometry.overflow <= 1 && !geometry.overlap && geometry.contained, JSON.stringify(geometry));
+  }
+  await page.evaluate(() => localStorage.setItem('omc-lang', 'en'));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${base}/oauth-management?provider=codex`, { waitUntil: 'domcontentloaded' });
   const recoveryRow = page.locator('[data-auth-index="auth-01"]');
@@ -545,7 +568,7 @@ export async function oauthManagement({ base, page, check }) {
   const verificationPosts = [];
   await page.route('**/management/auth-files/verify', (route) => {
     verificationPosts.push(route.request().postDataJSON());
-    return fulfillFixture(route, { json: { status: 'ok', verified: true } });
+    return fulfillFixture(route, { status: 502, json: { code: 'cpa_unavailable', error: 'fixture-verification-failure' } });
   });
   await recoveryRow.getByRole('button', { name: /^Details:/ }).click();
   await page.locator('.ant-drawer-open [data-credential-verify]').click();
@@ -555,6 +578,12 @@ export async function oauthManagement({ base, page, check }) {
   await verificationDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await verificationDialog.waitFor({ state: 'hidden' });
   check('cancelling inference verification sends no request', verificationPosts.length === 0);
+  await page.locator('.ant-drawer-open [data-credential-verify]').click();
+  await verificationDialog.waitFor();
+  await verificationDialog.getByRole('button', { name: 'Verify inference (uses tokens)', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'fixture-verification-failure' }).waitFor();
+  await verificationDialog.waitFor({ state: 'hidden' });
+  check('failed verification is reported once and requires a new confirmation', verificationPosts.length === 1);
   await page.locator('.ant-drawer-open .ant-drawer-close').click();
   await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
   await recoveryRow.getByRole('button', { name: 'Reauthenticate', exact: true }).click();

@@ -1,7 +1,10 @@
 package management
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -25,5 +28,15 @@ func TestCredentialRecoverySummaryBoundsEvidence(t *testing.T) {
 	raw, err = json.Marshal(CredentialRecoverySummary{}.SafeRecoverySummary())
 	if err != nil || string(raw) != "{}" {
 		t.Fatalf("missing evidence became healthy: %s %v", raw, err)
+	}
+}
+
+func TestCredentialErrorsPreserveCancellationWithoutRequestDetails(t *testing.T) {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		wrapped := &url.Error{Op: "POST", URL: "https://cpa.example.test/?state=PRIVATE-STATE", Err: cause}
+		safe := safeCredentialError(wrapped)
+		if !errors.Is(safe, cause) || safe != cause || strings.Contains(safe.Error(), "PRIVATE-STATE") {
+			t.Fatalf("lost safe cancellation identity for %v: %v", cause, safe)
+		}
 	}
 }

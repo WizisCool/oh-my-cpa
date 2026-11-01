@@ -47,7 +47,11 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
         title: t('recovery.verify'),
         content: t('recovery.verify_warning', { name: file.display_name || file.name }),
         okText: t('recovery.verify'), cancelText: t('common.cancel'),
-        onOk: () => verification.mutateAsync({ name: file.name, authIndex: file.auth_index }),
+        onOk: () => verification.mutateAsync({ name: file.name, authIndex: file.auth_index }).then(
+          () => undefined,
+          // Mutation callbacks report failure and refresh evidence; retire this confirmation either way.
+          () => undefined,
+        ),
       })}>{t('recovery.verify')}</Button>
     </Space>
   </section>;

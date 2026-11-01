@@ -100,5 +100,11 @@ func safeCredentialError(err error) error {
 	if errors.Is(err, ErrManagementV8Required) || errors.Is(err, ErrManagementDisabled) {
 		return err
 	}
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
 	return errors.New("CPA credential operation failed")
 }
