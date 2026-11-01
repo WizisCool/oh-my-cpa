@@ -492,6 +492,8 @@ export default {
   'cfg.f_claude_disable_cloak_desc': 'Disables Claude Code CLI cloaking and system prompt substitutions.',
   'cfg.f_claude_cloaking_model_list': 'Original IDs in Model List',
   'cfg.f_claude_cloaking_model_list_desc': 'Return original model IDs in Anthropic model-list responses instead of cloaked ones',
+  'cfg.f_claude_show_codex_commentary': 'Show Codex commentary',
+  'cfg.f_claude_show_codex_commentary_desc': 'Mirrors public Codex progress into visible Claude text instead of hiding it; private reasoning remains in thinking blocks. Compatible clients or TTS may display or speak additional text.',
   'cfg.f_claude_timezone': 'Timezone',
   'cfg.f_claude_timezone_desc': 'Fallback IANA timezone for the cloaked currentDate; a credential file\'s timezone takes priority',
   'cfg.f_ag_pool_enabled': 'Enable Connection Pool',
