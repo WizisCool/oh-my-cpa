@@ -55,6 +55,7 @@ export function filterInstalledPlugins(
     return matchesQuery(
       [
         plugin.id, plugin.metadata?.name, plugin.metadata?.author, plugin.oauth_provider, listing?.description,
+        ...(plugin.oauth_providers ?? []),
         ...(listing?.tags ?? []), ...(plugin.pages ?? []).map((page) => page.label),
       ],
       needle,

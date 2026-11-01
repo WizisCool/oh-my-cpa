@@ -10,6 +10,7 @@ import {
 } from '../web/src/components/dashboard/dashboardProvidersLogic';
 import type { ManagementOverviewProvider } from '../web/src/types/management';
 import type { ProviderItem } from '../web/src/types/providers';
+import { pluginOAuthProviderKeys } from '../web/src/types/pluginOAuthProviders';
 import { test } from 'vitest';
 
 test('dashboard providers', () => {
@@ -305,10 +306,13 @@ test('dashboard providers', () => {
   assert.equal(geminiFamily.length, 1);
   assert.equal(geminiFamily[0].disabled, true, 'A console family reads the credentials it owns');
 
-  // A plugin-driven OAuth channel owns the files its plugin id names.
+  // A secondary login identifier still belongs to its plugin's OAuth channel.
   const pluginChannel = aggregateProviders({
     authFilesByType: [{ type: 'acme', count: 1, disabled: 1 }],
-    pluginOAuthIds: new Set(['acme']),
+    pluginOAuthIds: new Set(pluginOAuthProviderKeys({
+      id: 'acme-auth', configured: true, registered: true, enabled: true, effective_enabled: true,
+      supports_oauth: true, oauth_provider: 'acme-primary', oauth_providers: ['acme-primary', 'acme'], config_fields: [],
+    })),
     configuredProviders: [
       {
         id: 'openai-compat-5',

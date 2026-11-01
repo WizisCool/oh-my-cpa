@@ -9,6 +9,7 @@ import {
   undeclaredPluginKeys,
 } from '../web/src/components/plugins/pluginConfigForm.ts';
 import {
+  filterInstalledPlugins,
   filterStorePlugins,
   normalizePluginSettingsDraft,
   STORE_INSTALL_WARNINGS,
@@ -18,7 +19,7 @@ import {
   storePluginOrigin,
   validatePluginSettingsDraft,
 } from '../web/src/components/plugins/pluginStoreLogic.ts';
-import type { PluginConfigField, StorePluginItem } from '../web/src/types/plugin.ts';
+import type { PluginConfigField, PluginItem, StorePluginItem } from '../web/src/types/plugin.ts';
 import { test } from 'vitest';
 
 test('plugin config', () => {
@@ -163,6 +164,12 @@ test('plugin config', () => {
   ];
   assert.deepEqual(storeFilterCounts(STORE), { all: 3, installed: 2, available: 1, updates: 1 });
   assert.deepEqual(filterStorePlugins(STORE, 'NETWORK', 'all').map((item) => item.store_id), ['official/limiter']);
+  const multiPortalPlugin: PluginItem = {
+    id: 'relay', configured: true, registered: true, enabled: true, effective_enabled: true,
+    supports_oauth: true, oauth_provider: 'relay-primary', oauth_providers: ['relay-primary', 'relay-secondary'], config_fields: [],
+  };
+  assert.deepEqual(filterInstalledPlugins([multiPortalPlugin], ' RELAY-SECONDARY ', new Map()), [multiPortalPlugin]);
+  assert.deepEqual(filterInstalledPlugins([multiPortalPlugin], 'other-portal', new Map()), []);
   assert.deepEqual(filterStorePlugins(STORE, '', 'updates').map((item) => item.store_id), ['official/logger']);
   // The listing an installed card borrows is the one it was installed from.
   assert.equal(storeListingsByPluginId(STORE).get('logger')?.store_id, 'official/logger');

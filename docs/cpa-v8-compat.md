@@ -13,6 +13,13 @@ undecided probe. A known unsupported gateway returns `cpa_v8_required`; disabled
 management returns `cpa_management_disabled`. Optional newer features are detected by
 their actual endpoint/response behavior, not by inventing data when a field is absent.
 
+Plugin login discovery follows the identifiers declared in the installed-plugin list,
+bounded by the [plugin DTO projection](../internal/api/management_plugin_projection.go).
+The [shared identity resolver](../web/src/types/pluginOAuthProviders.ts) distinguishes
+login entries from their owning plugin's credential identity and branding, while retaining
+older single-entry declarations. A plugin's installed page takes precedence over requesting
+an interactive login; CPA still owns login execution and account matching.
+
 The stored layout is read independently from the gateway's stored YAML before a
 configuration write. Reads do not migrate it. The first v8 write can make CPA convert
 a legacy file, including reformatting and handling unknown sections; preserve the exact

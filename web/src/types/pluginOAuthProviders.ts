@@ -1,5 +1,28 @@
 import type { PluginItem } from './plugin';
 
+export const OAUTH_PROVIDER_PATTERN = /^[a-z0-9-]+$/;
+
+function collectDeclaredPluginOAuthProviders(plugin: PluginItem): string[] {
+  return [...new Set([...(plugin.oauth_providers ?? []), plugin.oauth_provider ?? '']
+    .map((id) => id.trim().toLowerCase()).filter(Boolean))];
+}
+
+/** Login portals are declared identifiers, not aliases for the owning plugin. */
+export function pluginOAuthProviderIds(plugin: PluginItem): string[] {
+  const declared = collectDeclaredPluginOAuthProviders(plugin);
+  // Older capability-only responses used the plugin id as their sole login entry.
+  const hasDeclaration = Boolean(plugin.oauth_providers?.length || plugin.oauth_provider);
+  const ids = hasDeclaration ? declared : plugin.supports_oauth ? [plugin.id.trim().toLowerCase()] : [];
+  return ids.filter((id) => OAUTH_PROVIDER_PATTERN.test(id));
+}
+
+/** Credential identity includes the plugin id even when it is not a login portal. */
+export function pluginOAuthProviderKeys(plugin: PluginItem): string[] {
+  const declared = collectDeclaredPluginOAuthProviders(plugin);
+  if (!plugin.supports_oauth && !declared.length) return [];
+  return [...new Set([...declared, plugin.id.trim().toLowerCase()].filter(Boolean))];
+}
+
 /**
  * The brand artwork a plugin publishes for the OAuth provider it registers.
  *
@@ -10,7 +33,7 @@ import type { PluginItem } from './plugin';
  * mislabels the operator's own credential.
  *
  * The result is keyed by provider key, because that is what the credential, quota
- * and tab records carry. Both the declared OAuth provider key and the plugin id
+ * and tab records carry. All declared OAuth provider keys and the plugin id
  * are registered, since a plugin whose auths are typed by its own id (rather than
  * by `oauth_provider`) still has to resolve to the same logo.
  */
@@ -63,15 +86,12 @@ export function pluginLogoArtworks(logo?: string): { url: string; isMono: boolea
 export function pluginOAuthProviderLogos(plugins: PluginItem[] | undefined): PluginOAuthLogos {
   const logos = Object.create(null) as PluginOAuthLogos;
   for (const plugin of plugins ?? []) {
-    if (!plugin.supports_oauth && !plugin.oauth_provider) continue;
-
     const logo = (plugin.logo || plugin.metadata?.logo || '').trim();
     if (!isRenderableLogoURL(logo)) continue;
 
-    for (const key of [plugin.oauth_provider, plugin.id]) {
-      const normalized = (key || '').trim().toLowerCase();
-      if (normalized && !logos[normalized]) {
-        logos[normalized] = logo;
+    for (const key of pluginOAuthProviderKeys(plugin)) {
+      if (!logos[key]) {
+        logos[key] = logo;
       }
     }
   }
@@ -91,5 +111,5 @@ export function pluginOAuthLogoFor(
 /** Ownership survives a missing or unusable logo; artwork availability is not identity. */
 export function pluginOwnsProvider(plugins: PluginItem[] | undefined, providerKeys: readonly (string | undefined)[]): boolean {
   const keys = new Set(providerKeys.filter(Boolean).map((key) => key!.trim().toLowerCase()));
-  return (plugins ?? []).some((plugin) => (plugin.supports_oauth || plugin.oauth_provider) && [plugin.id, plugin.oauth_provider].some((key) => Boolean(key && keys.has(key.trim().toLowerCase()))));
+  return (plugins ?? []).some((plugin) => pluginOAuthProviderKeys(plugin).some((key) => keys.has(key)));
 }
