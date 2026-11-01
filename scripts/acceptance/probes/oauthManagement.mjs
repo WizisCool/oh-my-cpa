@@ -584,6 +584,7 @@ export async function oauthManagement({ base, page, check }) {
     return fulfillFixture(route, { status: 502, json: { code: 'cpa_unavailable', error: 'fixture-verification-failure' } });
   });
   await recoveryRow.getByRole('button', { name: /^Details:/ }).click();
+  await page.locator('.ant-drawer-open').getByRole('tab', { name: 'Renewal', exact: true }).click();
   await page.locator('.ant-drawer-open [data-credential-verify]').click();
   const verificationDialog = page.getByRole('dialog', { name: 'Verify inference (uses tokens)', exact: true });
   await verificationDialog.waitFor();
