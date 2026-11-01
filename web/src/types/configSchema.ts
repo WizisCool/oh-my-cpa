@@ -224,7 +224,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_claude_behavior',
     descKey: 'cfg.grp_claude_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeSessionDatePinDays', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList'],
+    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeSessionDatePinDays', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList', 'claudeShowCodexCommentary'],
   },
   {
     id: 'grp_claude_headers',
@@ -1323,6 +1323,16 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'switch',
     defaultValue: false,
     keywords: ['claude', 'claude-code', 'model list', 'cloak'],
+  },
+  {
+    id: 'claudeShowCodexCommentary',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_show_codex_commentary',
+    descKey: 'cfg.f_claude_show_codex_commentary_desc',
+    yamlPath: ['client', 'claude', 'show-codex-commentary'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['claude', 'codex', 'commentary', 'progress', 'reasoning', 'tts'],
   },
   {
     id: 'claudeHeaderTimezone',

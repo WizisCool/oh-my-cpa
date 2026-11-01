@@ -492,6 +492,8 @@ export default {
   "cfg.f_claude_disable_cloak_desc": "停用用戶端特徵偽裝與系統提示詞改寫。",
   "cfg.f_claude_cloaking_model_list": "模型清單回傳原始 ID",
   "cfg.f_claude_cloaking_model_list_desc": "Anthropic 模型清單回應回傳原始模型 ID，而非偽裝後的 ID",
+  "cfg.f_claude_show_codex_commentary": "顯示 Codex 旁注",
+  "cfg.f_claude_show_codex_commentary_desc": "將 Codex 公開進度旁注鏡像為可見的 Claude 文字；私有推理保留在思考區塊中，相容用戶端或語音朗讀可能產生額外文字。",
   "cfg.f_claude_timezone": "時區",
   "cfg.f_claude_timezone_desc": "偽裝請求中 currentDate 使用的後備 IANA 時區；憑證檔中的 timezone 優先",
   "cfg.f_ag_pool_enabled": "啟用連線池",
