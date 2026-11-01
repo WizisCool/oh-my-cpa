@@ -14,7 +14,6 @@ import { TablePlaceholder } from '../components/common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from '../utils/time';
 import { api } from '../api/client';
-import { usePreference } from '../hooks/usePreference';
 import { useT } from '../i18n';
 import {
   usageEventParams,
@@ -46,14 +45,9 @@ import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
 import { chipDisplayValue } from '../components/usage/chipDisplay';
-import {
-  PROVIDER_ICONS_PREFERENCE,
-  EMPTY_PROVIDER_ICONS,
-  parseProviderIcons,
-} from '../types/providerIcons';
 import { RequestRow } from '../components/usage/RequestRow';
 import { RequestTooltipLayer } from '../components/usage/RequestTooltip';
-import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
+import { useProviderBranding } from '../hooks/useProviderBranding';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
@@ -330,14 +324,9 @@ export const UsageEventsPage: React.FC = () => {
     () => indexCredentialFiles(authFiles.data?.files || []),
     [authFiles.data],
   );
-  const { value: providerIcons } = usePreference<Record<string, string>>(
-    PROVIDER_ICONS_PREFERENCE,
-    EMPTY_PROVIDER_ICONS,
-    parseProviderIcons,
-  );
+  const { providerIcons, pluginLogos } = useProviderBranding();
   // A plugin that registers an OAuth provider also publishes its logo, which the
   // request row shows in place of the console's catalog mark.
-  const pluginLogos = usePluginOAuthLogos();
   const providersQuery = useQuery({
     // Distinct cache key: this page must never read (or populate) the cache
     // entry that carries plaintext key material for the providers page.

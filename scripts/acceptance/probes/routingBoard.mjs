@@ -34,6 +34,8 @@ const MODELS = {
 
 export function routingBoardFixtures() {
   return [
+    [(url) => url.pathname.endsWith('/preferences'), () => ({ preferences: { provider_icons: { 'claude-0': 'OpenCode' } } })],
+    [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [{ id: 'claude-0', family: 'claude', name: 'Anthropic Claude' }], total: 1 })],
     [(url) => url.pathname.endsWith('/management/routing'), () => BOARD],
     [(url) => url.pathname.endsWith('/management/routing/models'), () => MODELS],
   ];
@@ -48,6 +50,7 @@ async function openBoard(page, base) {
   await page.goto(`${base}/routing`, { waitUntil: 'domcontentloaded' });
   const cards = page.locator('[data-testid="routing-page"] [data-member]');
   await until(async () => await cards.count() === BOARD.members.length, { label: 'routing cards' });
+  await page.locator('[data-member="provider:claude-0"] span[style*="opencode.svg"]').waitFor({ state: 'visible' });
   await settleLayout(page);
 }
 
@@ -57,6 +60,8 @@ export async function routingBoard({ base, page, check }) {
   // lifted card is positioned through, and reduced motion would remove it from the check.
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await openBoard(page, base);
+  const selectedMark = page.locator('[data-member="provider:claude-0"] span[style*="opencode.svg"]');
+  check('routing uses the saved connection mark instead of its protocol brand', await selectedMark.evaluate(node => getComputedStyle(node).maskImage.includes('/omc/lobe-icons/opencode.svg')));
   check('tiers follow stored priority, peers sharing a band', (await tierNames(page)).join(' > ') === 'Overflow seat+Primary seat > Anthropic Claude+Backup seat', (await tierNames(page)).join(' > '));
   // Before any model is chosen the route already says who carries traffic and who waits.
   check('the top tier says it serves and splits evenly', await tierText(page, 1).then((text) => text.includes('Serving requests') && text.includes('50%')), await tierText(page, 1));

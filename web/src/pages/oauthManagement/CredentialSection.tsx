@@ -21,8 +21,9 @@ import {
   SyncOutlined,
   WarningOutlined,
 } from '../../components/icons';
-import { credentialProviderIconId, getCredentialProviderMetadata } from '../../components/common/providerMetadata';
-import { ProviderBrandIcon } from '../../components/LobeIcon';
+import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { CredentialMark } from '../../components/LobeIcon';
 import { StatusLabel } from '../../components/common/StatusLabel';
 import { Meter } from '../../components/common/Meter';
 import { useT, type TFunc } from '../../i18n';
@@ -77,7 +78,7 @@ interface CredentialSectionProps {
   section: Section;
   /** The provider's display name, for plugin providers whose name the console does not know. */
   title?: string;
-  pluginLogo?: string;
+  pluginLogos?: PluginOAuthLogos;
   selectedKeys: Set<string>;
   nowMS: number;
   actions: CredentialRowActions;
@@ -107,7 +108,7 @@ function periodTitle(column: QuotaColumn, t: TFunc): string {
  * column's header sorts the section by that reading, which is how an operator with many accounts
  * finds the one with the most Claude quota left without opening anything.
  */
-export function CredentialSection({ section, title, pluginLogo, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
+export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
   const t = useT();
   const metadata = getCredentialProviderMetadata(section.provider);
   const columns = section.families.flatMap((family) => family.columns);
@@ -148,7 +149,7 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
     <section className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
       <header className={styles.head}>
         <span className={styles['head-icon']}>
-          <ProviderBrandIcon iconId={credentialProviderIconId(section.provider)} logo={pluginLogo} size={18} />
+          <CredentialMark provider={section.provider} pluginLogos={pluginLogos} size={18} />
         </span>
         <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
         <span className={styles['head-count']}>{t('omc.section_count', { n: section.records.length })}</span>

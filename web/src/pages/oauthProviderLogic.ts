@@ -1,8 +1,8 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
-import { credentialProviderIconId } from '../components/common/providerMetadata';
+import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
-import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
+import {  pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
 /**
  * The OAuth provider contract for the console: which authorizations exist, how
@@ -327,7 +327,7 @@ export function lookupOAuthProvider(id: string): OAuthProviderDefinition | undef
 }
 
 
-export interface OAuthProviderChoice {
+export interface OAuthProviderChoice extends BrandMark {
   id: string;
   flow: OAuthFlowKind;
   iconId: string;
@@ -336,7 +336,6 @@ export interface OAuthProviderChoice {
   loginLabel: string;
   /** Set only for CPA plugin providers. */
   pluginId?: string;
-  pluginLogo?: string;
   /** A plugin-owned page takes precedence over a speculative interactive login. */
   pluginPageRoute?: string;
   requiresExplicitCancel?: boolean;
@@ -348,6 +347,8 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
     id: provider.id,
     flow: provider.flow,
     iconId: provider.iconId,
+    fallbackIconId: provider.iconId,
+    providerKeys: [provider.id],
     title: t(OAUTH_COPY[provider.keyBase].title),
     description: t(OAUTH_COPY[provider.keyBase].hint),
     loginLabel: t(OAUTH_COPY[provider.keyBase].login),
@@ -384,12 +385,11 @@ export function pluginOAuthProviderChoices(
       id: providerId,
       flow: 'plugin',
       pluginPageRoute,
-      iconId: credentialProviderIconId(providerId, title),
+      ...resolveCredentialMark(providerId, title, logos),
       title: t('oauth.plugin_title', { name: title }),
       description: t(pluginPageRoute ? 'oauth.plugin_page_hint' : 'oauth.plugin_hint', { name: title }),
       loginLabel: t(pluginPageRoute ? 'oauth.plugin_open_page' : 'oauth.plugin_login', { name: title }),
       pluginId: plugin.id,
-      pluginLogo: pluginOAuthLogoFor(logos, providerId),
       callback: pluginPageRoute ? undefined : {
         // These rules become usable only after CPA actually starts a redirect session.
         errorKeys: {

@@ -6,7 +6,6 @@ import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
 import { NonStreamOutlined, WebsocketOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
-import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
@@ -105,7 +104,6 @@ export const RequestRow = React.memo<RequestRowProps>(
       credentials,
       providerIcons,
       configuredProviders,
-      getProviderDefaultIcon,
       pluginLogos,
     );
 
@@ -250,7 +248,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 3: provider (credential that answered) */}
         <div className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
           <div className="req-provider-icon-wrapper">
-            <ProviderBrandIcon iconId={providerInfo.iconId} providerKeys={[event.provider]} logo={providerInfo.logo} size={20} />
+            <ProviderBrandIcon mark={providerInfo} size={20} />
           </div>
           <div className="req-provider-content">
             <div className="req-provider-title-row">

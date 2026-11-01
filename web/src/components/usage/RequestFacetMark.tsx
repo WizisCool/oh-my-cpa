@@ -9,7 +9,7 @@ import {
 } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import type { UsageEvent } from '../../types/usageEvents';
-import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { ProviderBrandIcon } from '../LobeIcon';
 import './requestMarks.css';
 
 const MARK_SIZE = 16;
@@ -40,10 +40,9 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
       sources.credentials,
       sources.providerIcons,
       sources.configuredProviders,
-      getProviderDefaultIcon,
       sources.pluginLogos,
     );
-    return <ProviderBrandIcon iconId={provider.iconId} logo={provider.logo} size={MARK_SIZE} />;
+    return <ProviderBrandIcon mark={provider} size={MARK_SIZE} />;
   };
 
   return (key, value) => {

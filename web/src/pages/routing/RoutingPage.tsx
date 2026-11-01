@@ -15,6 +15,7 @@ import { ConfigDirtyBar } from '../../components/config/ConfigDirtyBar';
 import { ModelMark } from '../../components/ModelMark';
 import { renderFacetOption } from '../../components/usage/RequestFacetMark';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { useProviderBranding } from '../../hooks/useProviderBranding';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { isDemoMode } from '../../types/demoMode';
 import type { RoutingBoard, RoutingMember, RoutingOutcome, RoutingPlanRequest, RoutingSettingKey } from '../../types/routing';
@@ -82,6 +83,7 @@ function describeChange(t: TFunc, change: RoutingChange, members: ReadonlyMap<st
  * change.
  */
 export function RoutingPage() {
+  const branding = useProviderBranding();
   const t = useT();
   const toast = useToast();
   const { modal } = AntdApp.useApp();
@@ -298,7 +300,7 @@ export function RoutingPage() {
           <EmptyState title={t('orch.empty')} description={t('orch.empty_desc')} />
         ) : (
           <section className={styles['board']} aria-label={t('orch.board')}>
-            <TierLadder
+            <TierLadder branding={branding}
               tiers={draft.tiers}
               members={members}
               tierPriorities={diff.tierPriorities}

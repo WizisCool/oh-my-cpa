@@ -6,8 +6,7 @@ import { api, ApiError, apiErrorCode, isRetryableWriteFailure, describeError } f
 import { useT } from '../../i18n';
 import type { Toast } from '../feedback';
 import { useLastIntentQueue, LastIntentTimeoutError } from '../../hooks/useLastIntentQueue';
-import { getProviderDefaultIcon } from '../LobeIcon';
-import { resolveProviderIcon } from '../../types/providerIcons';
+import { resolveProviderPickerIcon } from '../../types/brandMark';
 import { isSafeExternalURL } from '../../utils/externalUrl';
 import { providerStatusPayload } from '../../types/providerId';
 import { lookupProviderFamily } from '../../types/providerFamilies';
@@ -642,11 +641,7 @@ export function useProviderManagement({
     setIsPolicyChecked(false);
 
     setFormTestModel('auto');
-    const existingIcon = resolveProviderIcon(
-      providerIcons,
-      provider,
-      getProviderDefaultIcon(provider.family, provider.name, provider.base_url),
-    );
+    const existingIcon = resolveProviderPickerIcon(provider, { providerIcons });
     setFormIcon(existingIcon);
     setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
     // Populate keys (plaintext — the tool mirrors the CPA config file as-is)

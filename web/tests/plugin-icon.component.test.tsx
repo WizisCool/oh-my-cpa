@@ -1,5 +1,10 @@
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { useProviderBranding } from '../src/hooks/useProviderBranding';
+import { ProviderMark } from '../src/components/LobeIcon';
+import { createTestQueryClient, renderWithOmc } from './support/render';
+import { installOmcApi, json } from './support/omcApi';
 import { PluginLogo } from '../src/components/plugins/PluginParts';
 import { buildNavGroups } from '../src/components/common/navigation';
 import type { PluginPageEntry } from '../src/components/plugins/pluginPages';
@@ -53,5 +58,65 @@ describe('plugin artwork', () => {
     const { container } = render(<PluginLogo logo={`data:image/svg+xml,${encodeURIComponent(markup)}`} />);
     expect(container.querySelector('[data-plugin-logo="svg"] img')).not.toBeNull();
     expect(container.querySelector('script, iframe, foreignObject, [onload]')).toBeNull();
+  });
+});
+
+describe('provider artwork', () => {
+  it('retains a verified provider identity during background metadata revalidation', async () => {
+    const api = installOmcApi();
+    const client = createTestQueryClient();
+    client.setQueryData(['management-providers-sanitized'], { providers: [{ id: 'compat-0', family: 'openai-compatibility', name: 'Relay', upstream_name: 'plugin-relay' }], total: 1 });
+    client.setQueryData(['management-plugins'], { plugins: [] });
+    client.setQueryData(['preferences'], {});
+    const pending = api.hold('GET', '/management/providers');
+    const view = renderHook(() => useProviderBranding(), { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+    try {
+      await pending.arrived;
+      expect(view.result.current.providersByID.get('compat-0')?.upstream_name).toBe('plugin-relay');
+      expect(view.result.current.isProviderCatalogUnknown).toBe(false);
+    } finally {
+      await act(async () => { pending.release(); });
+      view.unmount();
+    }
+  });
+
+  it('falls back after a failed plugin image and recovers on a new source', () => {
+    installOmcApi();
+    const provider = { id: 'codex-0', family: 'codex', name: 'Relay' };
+    const view = (logo: string) => <ProviderMark provider={provider} sources={{ pluginLogos: { codex: logo } }} size={20} />;
+    const { container, rerender } = renderWithOmc(view(SVG));
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex');
+    rerender(view(PNG));
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(PNG);
+  });
+
+  it('uses the identity fallback for missing custom artwork and refreshes a replaced resource', async () => {
+    const customID = '0123456789abcdef0123456789abcdef';
+    const api = installOmcApi();
+    api.on('GET', '/custom-icons', () => ({ icons: [{ id: customID, revision: 1 }] }));
+    const { client, container } = renderWithOmc(<ProviderMark provider={{ id: 'codex-0', family: 'codex', name: 'Relay' }} sources={{ providerIcons: { 'codex-0': `custom:${customID}` } }} size={20} />);
+    await waitFor(() => expect(container.querySelector('img')?.getAttribute('src')).toContain('revision=1'));
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex');
+    await act(async () => { client.setQueryData(['custom-icons'], [{ id: customID, revision: 2 }]); });
+    await waitFor(() => expect(container.querySelector('img')?.getAttribute('src')).toContain('revision=2'));
+    await act(async () => { client.setQueryData(['custom-icons'], []); });
+    await waitFor(() => expect(container.querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex'));
+  });
+
+  it('never flashes a deployment custom icon while plugin ownership is pending or unavailable', async () => {
+    const customID = '0123456789abcdef0123456789abcdef';
+    const api = installOmcApi();
+    const held = api.hold('GET', '/management/plugins');
+    api.on('GET', '/custom-icons', () => ({ icons: [{ id: customID, revision: 1 }] }));
+    const { client, container } = renderWithOmc(<ProviderMark provider={{ id: 'codex-0', family: 'codex' }} sources={{ providerIcons: { 'codex-0': `custom:${customID}` } }} size={20} />);
+    await held.arrived;
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex');
+    await act(async () => { held.release(json({ error: 'unavailable' }, 503)); });
+    await waitFor(() => expect(client.getQueryState(['management-plugins'])?.status).toBe('error'));
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex');
+    await act(async () => { client.setQueryData(['management-plugins'], { plugins: [{ id: 'codex', supports_oauth: true, enabled: false }] }); });
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex');
   });
 });

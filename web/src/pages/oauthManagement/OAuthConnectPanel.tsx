@@ -110,7 +110,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     title: candidate.title,
     label: (
       <Space size={8}>
-        <ProviderBrandIcon iconId={candidate.iconId} logo={candidate.pluginLogo} size={18} />
+        <ProviderBrandIcon mark={candidate} size={18} />
         <span>{candidate.title}</span>
         {candidate.pluginId && <Tag className={styles['plugin-tag']}>{t('oauth.plugin_tag')}</Tag>}
       </Space>
@@ -166,7 +166,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                     onClick={() => onSelectProvider(candidate.id)}
                   >
                     <div className={styles['tile-icon']}>
-                      <ProviderBrandIcon iconId={candidate.iconId} logo={candidate.pluginLogo} size={22} />
+                      <ProviderBrandIcon mark={candidate} size={22} />
                     </div>
                     <div className={styles['tile-copy']}>
                       <div className={styles['tile-title-row']}>
@@ -220,7 +220,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
 
             <div className={styles['connect-identity']}>
               <div className={styles['connect-icon']}>
-                <ProviderBrandIcon iconId={choice.iconId} logo={choice.pluginLogo} size={28} />
+                <ProviderBrandIcon mark={choice} size={28} />
               </div>
               <div className={styles['connect-copy']}>
                 <div className={styles['connect-title-row']}>

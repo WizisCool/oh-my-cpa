@@ -1,5 +1,5 @@
 import { matchesStatusFilter, providerOf, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
-import { getCredentialProviderMetadata } from '../../components/common/providerMetadata';
+import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import type { PluginItem } from '../../types/plugin';
 import { OAUTH_PROVIDER_PATTERN, type OAuthProviderChoice } from '../oauthProviderLogic';

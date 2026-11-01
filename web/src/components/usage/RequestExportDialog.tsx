@@ -14,7 +14,10 @@ import { copyText } from '../../utils/clipboard';
 import dayjs from '../../utils/time';
 import { Notice, useToast } from '../feedback';
 import { CodeOutlined, CopyOutlined, DownloadOutlined, PictureOutlined } from '../icons';
-import { getProviderDefaultIcon, resolveMarkArtwork } from '../LobeIcon';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../../api/client';
+import { resolveMarkArtworks } from '../../types/brandMark';
+import { pluginOwnsProvider } from '../../types/pluginOAuthProviders';
 import { REQUEST_COLUMNS, type RequestColumnId, type RequestColumnWidths } from './requestColumns';
 import { canCopyImage, copyImage, downloadBlob } from './requestExportImage';
 import { buildRequestExport } from './requestExportJson';
@@ -74,6 +77,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   const { currency } = useDisplayCurrency();
   const { style: tokenStyle, tpsMode, modelView, showModelIcons } = useTokenDisplayStyle();
   const customIcons = useCustomIcons(open).data;
+  const plugins = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30_000, enabled: open });
 
   const [canvas, setCanvas] = React.useState<HTMLCanvasElement | null>(null);
   const imagesRef = React.useRef<SheetImageCache>(new Map());
@@ -105,7 +109,6 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             providerIcons,
             configuredProviders,
             pluginLogos,
-            resolveDefaultIcon: getProviderDefaultIcon,
           })
         : null,
     [
@@ -154,7 +157,11 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
         fontSans: computed.fontFamily,
         fontMono: computed.getPropertyValue('--font-mono').trim() || 'monospace',
       },
-      (mark) => resolveMarkArtwork(mark.iconId, mark.logo, customIcons),
+      (mark) => resolveMarkArtworks(mark, {
+        baseURL: import.meta.env.BASE_URL, customIconURL: api.customIconURL, customIcons,
+        isPluginOwned: pluginOwnsProvider(plugins.data?.plugins, mark.providerKeys ?? []),
+        isOwnershipUnknown: Boolean(mark.providerKeys?.length) && !plugins.data,
+      }),
       imagesRef.current,
       () => paintRef.current === paint,
     ).then(() => {
@@ -163,7 +170,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
     return () => {
       paintRef.current += 1;
     };
-  }, [canvas, sheet, theme.palette, customIcons]);
+  }, [canvas, sheet, theme.palette, customIcons, plugins.data]);
 
   const fileStem = () => `requests-${dayjs().format('YYYYMMDD-HHmmss')}`;
 

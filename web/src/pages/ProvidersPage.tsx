@@ -12,10 +12,10 @@ import { StatTiles } from '../components/common/StatTiles';
 import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 
 import { useT } from '../i18n';
-import { getProviderDefaultIcon } from '../components/LobeIcon';
+import { getProviderDefaultIcon } from '../types/providerIconIds';
 import { DeferredMount } from '../components/common/DeferredMount';
 import { createRouteLoader } from '../utils/routeLoader';
-import { resolveProviderIcon } from '../types/providerIcons';
+import { resolveProviderPickerIcon } from '../types/brandMark';
 import { lookupProviderFamily, PROVIDER_FAMILIES } from '../types/providerFamilies';
 import { SUCCESS_RATE_HEALTHY_PERCENT, successRateTone } from '../types/usageEventMetrics';
 import { useProviderIconOverrides } from '../components/providers/useProviderIconOverrides';
@@ -448,15 +448,7 @@ export const ProvidersPage: React.FC = () => {
           open={iconPickerOpen}
           currentIcon={
             targetProviderForIcon
-              ? resolveProviderIcon(
-                  providerIcons,
-                  targetProviderForIcon,
-                  getProviderDefaultIcon(
-                    targetProviderForIcon.family,
-                    targetProviderForIcon.name,
-                    targetProviderForIcon.base_url,
-                  ),
-                )
+              ? resolveProviderPickerIcon(targetProviderForIcon, { providerIcons, pluginLogos })
               : formIcon
           }
           onSelect={handleSelectIcon}

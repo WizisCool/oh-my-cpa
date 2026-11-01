@@ -37,6 +37,12 @@ export function isRenderableLogoURL(raw: string | null | undefined): boolean {
   return /^data:image\//i.test(trimmed) && trimmed.includes(',');
 }
 
+/** Inline artwork remains inert inside an image, never interpreted as host markup. */
+export function pluginLogoArtworks(logo?: string): { url: string; isMono: boolean }[] {
+  const source = (logo ?? '').trim();
+  return isRenderableLogoURL(source) ? [{ url: source, isMono: false }] : [];
+}
+
 /**
  * pluginOAuthProviderLogos maps each plugin-registered OAuth provider to the logo
  * that plugin publishes.
@@ -83,7 +89,7 @@ export function pluginOAuthLogoFor(
 }
 
 /** Ownership survives a missing or unusable logo; artwork availability is not identity. */
-export function pluginOwnsProvider(plugins: PluginItem[] | undefined, providerKeys: (string | undefined)[]): boolean {
+export function pluginOwnsProvider(plugins: PluginItem[] | undefined, providerKeys: readonly (string | undefined)[]): boolean {
   const keys = new Set(providerKeys.filter(Boolean).map((key) => key!.trim().toLowerCase()));
   return (plugins ?? []).some((plugin) => (plugin.supports_oauth || plugin.oauth_provider) && [plugin.id, plugin.oauth_provider].some((key) => Boolean(key && keys.has(key.trim().toLowerCase()))));
 }

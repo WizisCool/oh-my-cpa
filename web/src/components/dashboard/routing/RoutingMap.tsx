@@ -553,7 +553,7 @@ function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, sou
         <span ref={ringRef} className={styles['ring']} />
       </span>
       <span className={styles['node-mark']} aria-hidden="true">
-        <ProviderBrandIcon iconId={identity.iconId} logo={identity.logo} size={18} />
+        <ProviderBrandIcon mark={identity} size={18} />
       </span>
       <span className={styles['row-text']}>
         <span className={styles['row-name']}>{identity.title}</span>

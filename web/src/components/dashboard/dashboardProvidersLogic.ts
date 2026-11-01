@@ -1,13 +1,12 @@
 import type { ManagementOverviewProvider, ManagementOverviewTypeCount } from '../../types/management';
+import { resolveProviderMark, type BrandMark } from '../../types/brandMark';
 import type { ProviderItem } from '../../types/providers';
 import type { TrafficBucket, WindowCredentialTraffic, WindowProviderTraffic } from '../../types/dashboard';
-import { getProviderDefaultIcon } from '../../types/providerIconIds';
-import { resolveProviderIcon } from '../../types/providerIcons';
-import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 
 export type ProviderKind = 'oauth' | 'ai_provider';
 
-export interface AggregatedProvider {
+export interface AggregatedProvider extends BrandMark {
   /** Stable unique key for React lists, e.g. "oauth:codex" or "configured:openai-compat-0" */
   key: string;
   /** Raw id from overview or provider item, e.g. "codex", "cline", "antigravity" */
@@ -64,19 +63,19 @@ export interface ProviderSummaryStats {
 const OPENAI_COMPATIBILITY_FAMILY = 'openai-compatibility';
 
 /**
- * Built-in and known OAuth channels and their display channel names, brand icon IDs, and protocols.
+ * Built-in and known OAuth channels and their display names and protocols.
  * As requested, Codex, Meta, Devin, Codebuddy, etc. use their official channel titles rather than raw IDs.
  */
-export const OAUTH_CHANNEL_META: Record<string, { name: string; iconId: string; protocol: string }> = {
-  codex: { name: 'Codex', iconId: 'Codex', protocol: 'OpenAI Responses (OAuth)' },
-  meta: { name: 'Meta', iconId: 'Meta', protocol: 'Meta Muse (OAuth)' },
-  devin: { name: 'Devin', iconId: 'Devin', protocol: 'Cognition Devin (OAuth)' },
-  antigravity: { name: 'Antigravity', iconId: 'Antigravity', protocol: 'Antigravity (OAuth)' },
-  kimi: { name: 'Kimi', iconId: 'Kimi', protocol: 'Moonshot Kimi (OAuth)' },
-  anthropic: { name: 'Anthropic', iconId: 'Claude', protocol: 'Anthropic Claude (OAuth)' },
-  claude: { name: 'Claude', iconId: 'Claude', protocol: 'Anthropic Claude (OAuth)' },
-  xai: { name: 'xAI', iconId: 'XAI', protocol: 'xAI Grok (OAuth)' },
-  codebuddy: { name: 'Codebuddy', iconId: 'CodeBuddy', protocol: 'Codebuddy (OAuth)' },
+export const OAUTH_CHANNEL_META: Record<string, { name: string; protocol: string }> = {
+  codex: { name: 'Codex', protocol: 'OpenAI Responses (OAuth)' },
+  meta: { name: 'Meta', protocol: 'Meta Muse (OAuth)' },
+  devin: { name: 'Devin', protocol: 'Cognition Devin (OAuth)' },
+  antigravity: { name: 'Antigravity', protocol: 'Antigravity (OAuth)' },
+  kimi: { name: 'Kimi', protocol: 'Moonshot Kimi (OAuth)' },
+  anthropic: { name: 'Anthropic', protocol: 'Anthropic Claude (OAuth)' },
+  claude: { name: 'Claude', protocol: 'Anthropic Claude (OAuth)' },
+  xai: { name: 'xAI', protocol: 'xAI Grok (OAuth)' },
+  codebuddy: { name: 'Codebuddy', protocol: 'Codebuddy (OAuth)' },
 };
 
 /** Capitalize first letter of a string safely. */
@@ -239,16 +238,6 @@ export function aggregateProviders({
   const hasCredentialTally = authFilesTally !== undefined;
   const authFilesByType = authFilesTally ?? [];
   const claimedKeys = new Set<string>();
-
-  // The plugin that registers a provider is the authority on its artwork, so its
-  // logo is found by every key the row carries before the console uses its own mark.
-  const resolvePluginLogo = (...keys: (string | undefined)[]): string | undefined => {
-    for (const key of keys) {
-      const logo = pluginOAuthLogoFor(pluginLogos, key);
-      if (logo) return logo;
-    }
-    return undefined;
-  };
 
   // 1. Build unified traffic lookup map (windowProviders overrides overviewProviders for the window).
   //
@@ -544,10 +533,7 @@ export function aggregateProviders({
     const meta = isOAuth ? OAUTH_CHANNEL_META[normIdentity] : undefined;
     const name = isOAuth && meta ? meta.name : (cp.name || cp.upstream_name || cp.id);
 
-    const defaultIcon = isOAuth && meta
-      ? meta.iconId
-      : getProviderDefaultIcon(cp.family, cp.name, cp.base_url);
-    const iconId = resolveProviderIcon(customIcons, { id: cp.id, name: cp.name }, defaultIcon);
+    const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth, aliases: [cp.family] }, { providerIcons: customIcons, pluginLogos });
 
     let configuredCreds = 0;
     if (cp.key_entries && cp.key_entries.length > 0) {
@@ -586,8 +572,8 @@ export function aggregateProviders({
       name,
       kind: isOAuth ? 'oauth' : 'ai_provider',
       family: cp.family,
-      iconId,
-      logo: resolvePluginLogo(cp.family, cp.upstream_name, cp.name, cp.id),
+      ...mark,
+      iconId: mark.iconId ?? '',
       credentials,
       total: traffic.total,
       success: traffic.success,
@@ -617,8 +603,7 @@ export function aggregateProviders({
 
     const meta = OAUTH_CHANNEL_META[normType];
     const name = meta ? meta.name : capitalize(item.type);
-    const defaultIcon = meta ? meta.iconId : getProviderDefaultIcon(item.type, item.type);
-    const iconId = resolveProviderIcon(customIcons, { id: item.type, name: item.type }, defaultIcon);
+    const mark = resolveProviderMark({ id: item.type, family: item.type, name: item.type, is_oauth: true }, { providerIcons: customIcons, pluginLogos });
 
     const traffic = resolveTraffic([item.type]);
 
@@ -630,8 +615,8 @@ export function aggregateProviders({
       name,
       kind: 'oauth',
       family: item.type,
-      iconId,
-      logo: resolvePluginLogo(item.type, normType),
+      ...mark,
+      iconId: mark.iconId ?? '',
       credentials: channelFiles.count,
       total: traffic.total,
       success: traffic.success,
@@ -659,8 +644,7 @@ export function aggregateProviders({
     if (isOAuth && hasCredentialTally) continue;
     const meta = isOAuth ? OAUTH_CHANNEL_META[normId] : undefined;
     const name = isOAuth && meta ? meta.name : capitalize(op.id);
-    const defaultIcon = isOAuth && meta ? meta.iconId : getProviderDefaultIcon(normId, op.id);
-    const iconId = resolveProviderIcon(customIcons, { id: op.id, name: op.id }, defaultIcon);
+    const mark = resolveProviderMark({ id: op.id, family: normId, name: op.id, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
 
     const traffic = resolveTraffic([op.id]);
 
@@ -672,8 +656,8 @@ export function aggregateProviders({
       name,
       kind: isOAuth ? 'oauth' : 'ai_provider',
       family: normId,
-      iconId,
-      logo: resolvePluginLogo(op.id, normId),
+      ...mark,
+      iconId: mark.iconId ?? '',
       credentials: op.credentials,
       total: traffic.total,
       success: traffic.success,

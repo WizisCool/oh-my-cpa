@@ -6,7 +6,7 @@ import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { ResponsiveList } from '../../components/common/ResponsiveList';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
-import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import type { ProviderBrandSources } from '../../types/brandMark';
 import type { PricingChannel, PricingProvider } from '../../types/pricing';
 import { channelIdentity } from '../../components/pricing/pricingIdentity';
 import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
@@ -26,20 +26,20 @@ import { Tooltip } from '../../components/common/Tooltip';
 export const ChannelMultipliersPanel: React.FC<{
   channels: PricingChannel[];
   providers: PricingProvider[];
-  pluginLogos: PluginOAuthLogos;
+  branding: ProviderBrandSources;
   isLoading: boolean;
   isBlocked: boolean;
-}> = ({ channels, providers, pluginLogos, isLoading, isBlocked }) => {
+}> = ({ channels, providers, branding, isLoading, isBlocked }) => {
   const t = useT();
   const columns = [
     {
       title: t('pricing.channels.col.channel'),
       key: 'channel',
       render: (_: unknown, channel: PricingChannel) => {
-        const identity = channelIdentity(channel.channel, providers);
+        const identity = channelIdentity(channel.channel, providers, branding);
         return (
           <div className={styles['model-cell']}>
-            <ProviderBrandIcon iconId={identity.iconId} providerKeys={[channel.channel]} logo={pluginOAuthLogoFor(pluginLogos, channel.channel)} size={18} />
+            <ProviderBrandIcon mark={identity} size={18} />
             <div className={styles['model-text']}>
               <span className={styles['model-name']}>{identity.label}</span>
               {identity.label !== channel.channel && <span className={styles['model-sub']}>{channel.channel}</span>}

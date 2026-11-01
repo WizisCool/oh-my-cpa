@@ -1231,7 +1231,6 @@ test('usage event view', () => {
     pluginCredFiles,
     {},
     [],
-    undefined,
     { codebuddy: pluginLogoURL },
   );
   assert.equal(pluginResolved.isOAuth, true);
@@ -1244,6 +1243,17 @@ test('usage event view', () => {
   assert.equal(oauthResolved.logo, undefined, 'a built-in provider carries no plugin logo');
 
 
+
+  const historicalLabel = resolveProviderInfo(
+    { ...apiKeyEvent, provider: 'recorded-adapter', resource_name: 'Historical seat' },
+    new Map(),
+    { 'recorded-adapter': 'Codex', 'Historical seat': 'Gemini' },
+    [],
+    { 'Historical seat': 'data:image/svg+xml,%3Csvg/%3E' },
+  );
+  assert.equal(historicalLabel.iconId, 'Codex', 'the recorded provider key precedes an unbound display label');
+  assert.equal(historicalLabel.logo, undefined, 'a resource display label cannot claim a plugin identity');
+  assert.deepEqual(historicalLabel.providerKeys, ['recorded-adapter']);
 
   // Provider-key to configured-name resolution for the request filter.
   //

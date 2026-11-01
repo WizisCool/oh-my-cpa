@@ -27,7 +27,7 @@ import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
 import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
-import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
+import { pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
 import { providerFilterTabs } from '../../types/credentialProviders';
 import type { AuthFileSortKey, AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import {
@@ -898,7 +898,7 @@ export const OAuthManagementPage: React.FC = () => {
                 key={section.provider}
                 section={section}
                 title={choices.find((choice) => choice.pluginId && choice.id === section.provider)?.title}
-                pluginLogo={pluginOAuthLogoFor(pluginLogos, section.provider)}
+                pluginLogos={pluginLogos}
                 selectedKeys={selectedKeySet}
                 nowMS={visibleNow}
                 actions={rowActions}

@@ -59,7 +59,6 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       input.credentials,
       undefined,
       input.configuredProviders,
-      undefined,
       input.pluginLogos,
     );
     const record: Record<string, unknown> = { id: event.id };
