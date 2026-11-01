@@ -50,7 +50,7 @@ for (const scenario of [
   { name: 'repeated SIGTERM', signal: 'SIGTERM' },
   { name: 'terminal Ctrl+C through pnpm', signal: 'SIGINT', pnpm: true },
 ]) {
-  test(`dev joins Air cleanup after ${scenario.name}`, { timeout: 15000 }, async () => {
+  test(`dev joins Air cleanup after ${scenario.name}`, { timeout: 15000 }, async t => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-dev-shutdown-'));
     const air = path.join(directory, 'air.cjs');
     // A readiness/finish handshake holds Air's cleanup open without relying on
@@ -80,19 +80,8 @@ server.listen(0, '127.0.0.1', () => emit({type:'ready', pid:process.pid, parent:
     const closed = once(child, 'close');
     const observed = watchOutput(child);
     let ready;
-    try {
-      ready = await observed.wait('ready');
-      const stopping = observed.wait('stopping');
-      process.kill(scenario.pnpm ? -child.pid : child.pid, scenario.signal);
-      await stopping;
-      if (!scenario.pnpm) process.kill(child.pid, scenario.signal);
-      await finishFixture(ready.port);
-      const [code, signal] = await withinBudget(closed, 5000, 'development shutdown');
-      assert.equal(signal, null, observed.output());
-      assert.equal(code, 0, observed.output());
-      assert.equal(isProcessAlive(ready.pid), false, 'Air survived development shutdown');
-      if (scenario.pnpm) assert.equal(isProcessAlive(ready.parent), false, 'dev script survived pnpm');
-    } finally {
+    // Test hooks report cleanup failures without replacing the original assertion.
+    t.after(async () => {
       for (const pid of [ready?.pid, ready?.parent, child.pid]) {
         if (!pid) continue;
         try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
@@ -101,6 +90,23 @@ server.listen(0, '127.0.0.1', () => emit({type:'ready', pid:process.pid, parent:
       await withinBudget(closed, 5000, 'fixture cleanup');
       observed.close();
       fs.rmSync(directory, { recursive: true, force: true });
+    });
+    ready = await observed.wait('ready');
+    const stopping = observed.wait('stopping');
+    process.kill(scenario.pnpm ? -child.pid : child.pid, scenario.signal);
+    await stopping;
+    if (!scenario.pnpm) process.kill(child.pid, scenario.signal);
+    await finishFixture(ready.port);
+    const [code, signal] = await withinBudget(closed, 5000, 'development shutdown');
+    if (scenario.pnpm) {
+      // pnpm launchers may propagate Ctrl+C as a signal or shell exit status.
+      // Child cleanup, not the wrapper's successful exit, is the contract.
+      assert.ok(signal === 'SIGINT' || (signal === null && (code === 0 || code === 130)), observed.output());
+    } else {
+      assert.equal(signal, null, observed.output());
+      assert.equal(code, 0, observed.output());
     }
+    assert.equal(isProcessAlive(ready.pid), false, 'Air survived development shutdown');
+    if (scenario.pnpm) assert.equal(isProcessAlive(ready.parent), false, 'dev script survived pnpm');
   });
 }
