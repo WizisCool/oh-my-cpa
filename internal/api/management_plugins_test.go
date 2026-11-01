@@ -15,6 +15,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -146,7 +147,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			state.routeCalls = append(state.routeCalls, pluginRouteCall{method: request.Method, path: path})
 			_, _ = writer.Write([]byte(`{"secret":"raw-core-document"}`))
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
-			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level","default":"info"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
+			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","oauth_providers":["logger-oauth"," Logger-Secondary ","logger-oauth","bad/path"],"supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level","default":"info"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
 			if state.hasBareInstall {
 				list = strings.Replace(list, `"plugins":[`, `"plugins":[{"id":"installed","path":"/srv/cpa/plugins/installed.so","registered":true},`, 1)
 			}
@@ -301,6 +302,10 @@ func TestPluginsLifecycle(t *testing.T) {
 	if plugin["supports_oauth"] != true || plugin["oauth_provider"] != "logger-oauth" {
 		t.Fatalf("expected supports_oauth and oauth_provider preserved, got: %#v", plugin)
 	}
+	providers, _ := plugin["oauth_providers"].([]any)
+	if len(providers) != 2 || providers[0] != "logger-oauth" || providers[1] != "logger-secondary" {
+		t.Fatalf("oauth_providers = %#v, want distinct valid declared login identifiers", plugin["oauth_providers"])
+	}
 	// The plugin declares its logo on an external host, and the console must not send
 	// the browser there: the field carries inline artwork instead. Its absence here
 	// would mean the tab, the cards and the request rows fall back to a catalog mark
@@ -329,7 +334,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	// decoding CPA's document cannot reach a caller without a decision here.
 	assertDeclaredKeys(t, "plugin", plugin, []string{
 		"id", "path", "configured", "registered", "enabled", "effective_enabled", "supports_oauth",
-		"oauth_provider", "supports_quota", "quota_provider", "pages", "logo", "repository_url", "config_fields", "metadata",
+		"oauth_provider", "oauth_providers", "supports_quota", "quota_provider", "pages", "logo", "repository_url", "config_fields", "metadata",
 	})
 	// Of the menus the plugin registers, only a resource under its own prefix is a
 	// page: the host serves nothing else, so nothing else may be listed as openable.
@@ -636,6 +641,31 @@ func TestPluginWritesRefuseAnUnknownPlugin(t *testing.T) {
 	defer state.mu.Unlock()
 	if _, created := state.configs["ghost"]; created || len(state.enabledCalls) != 0 {
 		t.Fatalf("settings were created for an unknown plugin: %v %v", state.enabledCalls, state.configs)
+	}
+}
+
+func TestPluginOAuthProviderProjectionIsBounded(t *testing.T) {
+	providers := []string{"bad/path", strings.Repeat("p", pluginTextLimit+1), " portal-0 ", "PORTAL-0"}
+	for index := 1; index <= pluginListLimit; index++ {
+		providers = append(providers, fmt.Sprintf("portal-%d", index))
+	}
+	projected := projectPluginItem(management.PluginItem{
+		ID: "portals", OAuthProvider: "legacy-login", OAuthProviders: providers,
+	})
+	if len(projected.OAuthProviders) != pluginListLimit {
+		t.Fatalf("login identifiers = %d, want the bounded list", len(projected.OAuthProviders))
+	}
+	for index, provider := range projected.OAuthProviders {
+		if want := fmt.Sprintf("portal-%d", index); provider != want {
+			t.Fatalf("login identifier %d = %q, want %q", index, provider, want)
+		}
+	}
+	if projected.OAuthProvider != "legacy-login" {
+		t.Fatalf("legacy login = %q, want preserved primary", projected.OAuthProvider)
+	}
+	legacy := projectPluginItem(management.PluginItem{ID: "old-plugin", OAuthProvider: "legacy-login"})
+	if legacy.OAuthProvider != "legacy-login" || len(legacy.OAuthProviders) != 0 {
+		t.Fatalf("legacy plugin = %#v, want no inferred login identifiers", legacy)
 	}
 }
 

@@ -91,6 +91,7 @@ test('pluginOAuthProviderLogos: a plugin logo is keyed by both the provider key 
       effective_enabled: true,
       supports_oauth: true,
       oauth_provider: 'CodeBuddy',
+      oauth_providers: ['CodeBuddy', ' CodeBuddy-Secondary ', 'CodeBuddy-Secondary'],
       logo: INLINE_LOGO,
     },
     {
@@ -107,6 +108,7 @@ test('pluginOAuthProviderLogos: a plugin logo is keyed by both the provider key 
   // plugins), which is behaviour this suite pins separately.
   assert.deepEqual({ ...logos }, {
     codebuddy: INLINE_LOGO,
+    'codebuddy-secondary': INLINE_LOGO,
     second: 'data:image/svg+xml,%3Csvg/%3E',
     'store-plugin-2': 'data:image/svg+xml,%3Csvg/%3E',
   });

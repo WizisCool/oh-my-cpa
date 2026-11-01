@@ -43,6 +43,7 @@ type PluginItem struct {
 	EffectiveEnabled bool                `json:"effective_enabled,omitempty"`
 	SupportsOAuth    bool                `json:"supports_oauth,omitempty"`
 	OAuthProvider    string              `json:"oauth_provider,omitempty"`
+	OAuthProviders   []string            `json:"oauth_providers,omitempty"`
 	SupportsQuota    bool                `json:"supports_quota,omitempty"`
 	QuotaProvider    string              `json:"quota_provider,omitempty"`
 	Logo             string              `json:"logo,omitempty"`

@@ -1,8 +1,8 @@
 import { matchesStatusFilter, providerOf, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
-import type { PluginItem } from '../../types/plugin';
-import { OAUTH_PROVIDER_PATTERN, type OAuthProviderChoice } from '../oauthProviderLogic';
+import { OAUTH_PROVIDER_PATTERN } from '../../types/pluginOAuthProviders';
+import type { OAuthProviderChoice } from '../oauthProviderLogic';
 import type { QuotaItem } from '../../types/quota';
 
 export type OAuthWorkspaceDensity = 'compact' | 'expanded';
@@ -178,17 +178,6 @@ export function resolveAuthorizationProviderId(
   if (directBuiltin) return directBuiltin;
   const choice = choices.find((candidate) => normalizedKey(candidate.id) === normalized);
   return choice?.id;
-}
-
-export function pluginConnectableProviderIds(plugins: PluginItem[] | undefined): Set<string> {
-  const ids = new Set<string>();
-  for (const plugin of plugins ?? []) {
-    if (!plugin.supports_oauth) continue;
-    const providerId = normalizedKey(plugin.oauth_provider || plugin.id);
-    if (!providerId || !OAUTH_PROVIDER_PATTERN.test(providerId)) continue;
-    ids.add(providerId);
-  }
-  return ids;
 }
 
 function hasMeaningfulObservation(item: QuotaItem): boolean {

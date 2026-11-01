@@ -3,7 +3,6 @@ import { test } from 'vitest';
 import {
   BUILTIN_OAUTH_IDS,
   BUILTIN_OAUTH_PROVIDERS,
-  OAUTH_PROVIDER_PATTERN,
   XAI_CALLBACK_URL,
   builtinOAuthProviderChoices,
   lookupOAuthProvider,
@@ -14,6 +13,7 @@ import {
   resolveXaiCallback,
   validateDevinCallback,
 } from '../web/src/pages/oauthProviderLogic.ts';
+import { OAUTH_PROVIDER_PATTERN } from '../web/src/types/pluginOAuthProviders.ts';
 
 test('Registry: provider ids are unique, routable and consistent with the lookup', () => {
   assert.ok(BUILTIN_OAUTH_PROVIDERS.length > 0, 'registry must not be empty');
@@ -166,12 +166,16 @@ test('resolveXaiCallback: a partial callback keeps the state it arrived with', (
 
 
 test('provider choices keep built-ins, plugin ids and disabled discovery separate', () => {
-  const t = ((key: string) => key) as Parameters<typeof builtinOAuthProviderChoices>[0];
+  const t = ((key: string, args?: { name?: string }) => args?.name || key) as Parameters<typeof builtinOAuthProviderChoices>[0];
   const builtins = builtinOAuthProviderChoices(t);
   assert.equal(builtins.find((provider) => provider.id === 'anthropic')?.title, 'oauth.anthropic_title');
   assert.equal(builtins.some((provider) => provider.id === 'codex'), true);
 
   const choices = pluginOAuthProviderChoices([
+    {
+      id: 'disabled-shadow', enabled: false, effective_enabled: false, supports_oauth: true,
+      oauth_providers: ['iflow-international'], logo: 'data:image/svg+xml,disabled-shadow',
+    },
     {
       id: 'iflow-auth',
       name: 'iFlow Alliance Auth',
@@ -183,6 +187,8 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
       registered: true,
       supports_oauth: true,
       oauth_provider: 'iflow',
+      oauth_providers: [' IFLOW ', 'iflow-international', 'iflow-international', 'bad/path', 'codex'],
+      metadata: { name: 'iFlow Alliance Auth' },
       logo: 'data:image/svg+xml,fixture',
       permissions: [],
     },
@@ -197,6 +203,7 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
       registered: true,
       supports_oauth: true,
       oauth_provider: 'disabled',
+      oauth_providers: ['disabled', 'disabled-secondary'],
       permissions: [],
     },
     {
@@ -212,12 +219,32 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
       oauth_provider: 'codex',
       permissions: [],
     },
+    {
+      id: 'duplicate-auth', enabled: true, effective_enabled: true, supports_oauth: true,
+      oauth_providers: ['iflow-international'],
+    },
+    {
+      id: 'stopped-auth', enabled: true, effective_enabled: false, supports_oauth: true,
+      oauth_providers: ['stopped-secondary'],
+    },
+    { id: 'not-auth', enabled: true, effective_enabled: true, oauth_providers: ['not-auth-secondary'] },
+    { id: 'legacy-auth', enabled: true, supports_oauth: true, oauth_provider: 'legacy-login' },
+    { id: 'legacy-id', enabled: true, supports_oauth: true },
+    { id: 'plural-only', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['portal-one', 'portal-two'] },
+    { id: 'invalid-portals', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: [' ', 'bad/path', 'bad?query'] },
   ], t);
 
-  assert.deepEqual(choices.map((choice) => choice.id), ['iflow']);
+  assert.deepEqual(choices.map((choice) => choice.id), ['iflow', 'iflow-international', 'legacy-login', 'legacy-id', 'portal-one', 'portal-two']);
   assert.equal(choices[0].pluginId, 'iflow-auth');
   assert.equal(choices[0].logo, 'data:image/svg+xml,fixture');
   assert.equal(choices[0].callback?.errorKeys.missingState, 'oauth.missing_state');
+  assert.equal(choices[1].pluginId, 'iflow-auth');
+  assert.equal(choices[1].logo, choices[0].logo);
+  assert.notEqual(choices[0].title, choices[1].title);
+  assert.equal(choices[0].title.includes('iflow'), true);
+  assert.equal(choices[1].title.includes('iflow-international'), true);
+  assert.equal(choices[4].pluginId, 'plural-only');
+  assert.equal(choices[5].pluginId, 'plural-only');
 });
 
 
@@ -226,6 +253,7 @@ test('auth-provider metadata does not declare a redirect flow, and plugin pages 
   const plugins = [{
     id: 'key-bridge', configured: true, registered: true, enabled: true,
     effective_enabled: true, supports_oauth: true, oauth_provider: 'key-service',
+    oauth_providers: ['key-service', 'key-service-secondary'],
     config_fields: [], pages: [{ path: '/v0/resource/plugins/key-bridge/console', label: 'Credentials' }],
   }];
   const [choice] = pluginOAuthProviderChoices(plugins, t);
@@ -233,6 +261,10 @@ test('auth-provider metadata does not declare a redirect flow, and plugin pages 
   assert.equal(choice.pluginPageRoute, '/plugin-pages/key-bridge/0');
   assert.equal(choice.description, 'oauth.plugin_page_hint');
   assert.equal(choice.callback, undefined, 'a plugin-managed connection must not expose callback submission');
+  const secondary = pluginOAuthProviderChoices(plugins, t)[1];
+  assert.equal(secondary.id, 'key-service-secondary');
+  assert.equal(secondary.pluginPageRoute, choice.pluginPageRoute);
+  assert.equal(secondary.callback, undefined);
   const [pageless] = pluginOAuthProviderChoices([{ ...plugins[0], pages: [] }], t);
   assert.equal(pageless.flow, 'plugin', 'pageless auth providers have no declared login flow either');
   assert.equal(pageless.pluginPageRoute, undefined);

@@ -36,6 +36,8 @@ export interface PluginItem {
   /** CPA's legacy name for an auth-provider capability, not proof of interactive OAuth login. */
   supports_oauth?: boolean;
   oauth_provider?: string;
+  /** Every login identifier declared by this plugin; older CPA responses only name the primary. */
+  oauth_providers?: string[];
   supports_quota?: boolean;
   quota_provider?: string;
   /** Present only while the plugin is running: a stopped plugin serves nothing. */
