@@ -287,6 +287,19 @@ it('does not offer an ordinary login as a fallback for unsupported targeted reco
   } finally { surface.unmount(); }
 });
 
+it('states an active quota block even when inference was already confirmed', () => {
+  const file: ManagementAuthFile = {
+    name: 'blocked.json', auth_index: 'blocked', provider: 'codex', disabled: false, unavailable: false, runtime_only: false,
+    success: 0, failed: 0, recovery_supported: true, requires_sign_in: false, renewal_state: 'renewal_verified',
+    recovery_stage: 'quota_blocked', adopted: true, inference_verified: true, renewal_verified: true,
+  };
+  const surface = renderWithOmc(<CredentialRecoveryPanel file={file} canEdit onChanged={() => {}} />);
+  try {
+    // CPA ranks an active quota block above verified inference, so the panel must not hide it.
+    expect(surface.getByText('Quota blocked')).toBeTruthy();
+  } finally { surface.unmount(); }
+});
+
 it('offers no token-consuming verification once inference is confirmed', () => {
   const file: ManagementAuthFile = {
     name: 'verified.json', auth_index: 'verified', provider: 'codex', disabled: false, unavailable: false, runtime_only: false,

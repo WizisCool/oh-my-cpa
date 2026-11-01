@@ -3,7 +3,6 @@ import { useMutation } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import type { MessageKey } from '../../i18n/catalog';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { isDemoMode } from '../../types/demoMode';
 import { formatGatewayTimestamp } from '../../utils/time';
@@ -17,10 +16,9 @@ import styles from './CredentialRecoveryPanel.module.css';
 const { Text } = Typography;
 
 /** One piece of evidence: confirmed, refuted, or not yet observed at all. */
-function EvidenceStep({ title, value, state, hint, action }: {
+function EvidenceStep({ title, value, hint, action }: {
   title: string;
   value: boolean | undefined;
-  state?: MessageKey;
   hint?: string;
   action?: React.ReactNode;
 }) {
@@ -30,7 +28,7 @@ function EvidenceStep({ title, value, state, hint, action }: {
     <span className={styles['step-marker']} aria-hidden="true">{value && <CheckOutlined />}</span>
     <div className={styles['step-body']}>
       <span className={styles['step-title']}>{title}</span>
-      <span className={styles['step-state']}>{t(state ?? `recovery.${evidence}`)}</span>
+      <span className={styles['step-state']}>{t(`recovery.${evidence}`)}</span>
       {hint && <Text type="secondary" className={styles['hint']}>{hint}</Text>}
     </div>
     {action}
@@ -84,6 +82,10 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
       </dl>
     </div>
 
+    {/* Quota blocking is CPA's current stage, not evidence: it outranks confirmed inference,
+        so it is stated beside the status instead of overwriting a verified step. */}
+    {file.recovery_stage === 'quota_blocked' && <Notice tone="warning" title={t('recovery.quota_blocked')} description={t('recovery.quota_blocked_hint')} />}
+
     <div className={styles['block']}>
       <SectionHeading level="label" as="h4" title={t('recovery.progress')} />
       {/* Once inference is confirmed, verifying again would spend tokens to relearn a known fact. */}
@@ -92,17 +94,12 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
         <EvidenceStep
           title={t('recovery.inference')}
           value={file.inference_verified}
-          state={!file.inference_verified && file.recovery_stage === 'quota_blocked' ? 'recovery.quota_blocked' : undefined}
           hint={file.inference_verified ? undefined : t('recovery.inference_hint')}
           action={file.inference_verified ? undefined : <Button size="small" disabled={isBlocked} loading={verification.isPending} data-credential-verify onClick={verify}>
             {t('recovery.verify_now')}
           </Button>}
         />
-        <EvidenceStep
-          title={t('recovery.renewal')}
-          value={file.renewal_verified}
-          hint={file.renewal_verified ? t('recovery.renewal_hint') : undefined}
-        />
+        <EvidenceStep title={t('recovery.renewal')} value={file.renewal_verified} />
       </ol>
     </div>
 
