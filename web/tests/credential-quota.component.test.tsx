@@ -489,20 +489,20 @@ describe("a credential row's auto-renewal badge", () => {
     expect(container.querySelector('.renewal-status')).toBeNull();
   });
 
-  it('reflects warning state and accessible label when re-authentication is required', () => {
+  it('reflects warning state and accessible label when retry is scheduled', () => {
     const onOpen = vi.fn();
-    const { container } = renderCredentialRow(quota('codex-reauth', []), {
+    const { container } = renderCredentialRow(quota('codex-retry', []), {
       onOpen,
-      fileOverrides: { requires_sign_in: true, renewal_state: 'sign_in_required' },
+      fileOverrides: { renewal_state: 'retry_scheduled' },
     });
     const badge = container.querySelector('[data-testid="oauth-credential-renewal-badge"]');
     expect(badge).toBeTruthy();
-    expect(badge?.getAttribute('data-renewal-state')).toBe('sign_in_required');
-    expect(badge?.getAttribute('aria-label')).toBe('Automatic renewal: Sign-in required');
-    expect(badge?.getAttribute('data-renewal-tone')).toBe('danger');
+    expect(badge?.getAttribute('data-renewal-state')).toBe('retry_scheduled');
+    expect(badge?.getAttribute('aria-label')).toBe('Automatic renewal: Retry scheduled');
+    expect(badge?.getAttribute('data-renewal-tone')).toBe('warn');
 
     fireEvent.click(badge!);
-    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'codex-reauth' }), 'renewal');
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'codex-retry' }), 'renewal');
   });
 });
 

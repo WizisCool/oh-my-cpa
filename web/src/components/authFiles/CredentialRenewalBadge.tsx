@@ -41,10 +41,12 @@ export function CredentialRenewalBadge({ file, onOpen, className }: CredentialRe
   const kind = renewalKind(file);
 
   // Management by exception (例外管理模式):
-  // When renewal is healthy (verified, awaiting, or unsupported), remain completely silent
-  // to preserve clean visual hierarchy, eliminate visual noise and avoid pseudo-action affordance confusion.
-  // Full details are available in the StatusLabel tooltip and the details drawer.
-  if (kind !== 'retry' && kind !== 'reauth') {
+  // When renewal is healthy (verified, awaiting), remain completely silent.
+  // When sign-in is required, the primary StatusLabel itself already states "Sign-in required"
+  // with an action button "Reauthenticate" beneath it; adding an icon beside it is redundant and crowds the cell.
+  // The alert badge is specifically for background retry attention (retry_scheduled) where the primary status
+  // is healthy/normal but CPA needs operator awareness of the scheduled retry.
+  if (kind !== 'retry') {
     return null;
   }
 
@@ -111,7 +113,6 @@ export function CredentialRenewalBadge({ file, onOpen, className }: CredentialRe
     'data-renewal-state': renewalStateValue,
     'data-renewal-kind': kind,
     'data-renewal-tone': tone,
-    'data-credential-renewal': 'true',
   };
 
   const badgeElement = onOpen ? (

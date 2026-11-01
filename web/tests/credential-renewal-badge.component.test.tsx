@@ -81,18 +81,14 @@ describe('CredentialRenewalBadge', () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it('renders danger alert icon when sign-in is required', () => {
+  it('remains silent when sign-in is required because the status label already states it', () => {
     const file = makeFile({
       requires_sign_in: true,
       renewal_state: 'sign_in_required',
     });
-    renderBadge(file);
-
-    const badge = screen.getByTestId('oauth-credential-renewal-badge');
-    expect(badge.getAttribute('aria-label')).toBe('Automatic renewal: Sign-in required');
-    expect(badge.getAttribute('data-renewal-state')).toBe('sign_in_required');
-    expect(badge.getAttribute('data-renewal-kind')).toBe('reauth');
-    expect(badge.getAttribute('data-renewal-tone')).toBe('danger');
+    const { container } = renderBadge(file);
+    expect(screen.queryByTestId('oauth-credential-renewal-badge')).toBeNull();
+    expect(container.firstChild).toBeNull();
   });
 
   it('renders static span element when onOpen is omitted on an alert state', () => {
