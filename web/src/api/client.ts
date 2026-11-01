@@ -730,6 +730,26 @@ export const api = {
     });
   },
 
+  /**
+   * Names a provider row, or clears its name with an empty string. The name is the console's own
+   * overlay and never reaches CPA's configuration. The expected identity is the row as the operator
+   * saw it, so a position another session shifted answers 409 rather than renaming a neighbour.
+   */
+  async setManagementProviderName(
+    id: string,
+    name: string,
+    options: { expectedAuthIndex?: string; expectedName?: string },
+  ): Promise<{ status: string; id: string; name: string }> {
+    return request<{ status: string; id: string; name: string }>(`/management/providers/${encodeURIComponent(id)}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name,
+        ...(options.expectedAuthIndex ? { expected_auth_index: options.expectedAuthIndex } : {}),
+        ...(options.expectedName ? { expected_name: options.expectedName } : {}),
+      }),
+    });
+  },
+
   async deleteManagementProvider(id: string): Promise<{ status: string }> {
     return request<{ status: string }>(`/management/providers/${encodeURIComponent(id)}`, {
       method: 'DELETE',

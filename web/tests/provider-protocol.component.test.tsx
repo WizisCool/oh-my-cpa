@@ -155,7 +155,7 @@ function ProviderRows({ onEdit }: { onEdit: (provider: ProviderItem) => void }) 
     shiftCachedProviderIcons: () => {}, settleProviderRow: () => {},
   });
   return <ProviderTable {...editor} providers={[PROVIDER]} providersLoading={false}
-    emptyText="Empty" traffic={new Map()} providerIcons={{}} handleOpenEdit={onEdit} />;
+    emptyText="Empty" traffic={new Map()} providerIcons={{}} handleOpenEdit={onEdit} onRename={editor.renameProvider} />;
 }
 
 it('offers a single editor action for each provider and passes its identity', () => {
@@ -168,5 +168,26 @@ it('offers a single editor action for each provider and passes its identity', ()
     fireEvent.click(editorActions[0]);
     expect(onEdit.mock.calls).toEqual([[PROVIDER]]);
     expect(screen.getByRole('button', { name: 'Delete: Relay' })).toBeTruthy();
+  } finally { view.unmount(); }
+});
+
+it('renames a provider in place through the name overlay, citing the row it read', async () => {
+  const api = installOmcApi();
+  api.on('PUT', '/management/providers/openai-compat-0/name', () => ({ status: 'ok', id: 'openai-compat-0', name: 'Team relay' }));
+  const view = renderWithOmc(<ProviderRows onEdit={vi.fn()} />);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Rename: Relay' }));
+    fireEvent.keyDown(screen.getByTestId('provider-name-input'), { key: 'Escape' });
+    expect(screen.queryByTestId('provider-name-input')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename: Relay' }));
+    const input = screen.getByTestId('provider-name-input');
+    fireEvent.change(input, { target: { value: 'Team relay' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    await waitFor(() => expect(screen.queryByTestId('provider-name-input')).toBeNull());
+    expect(api.writes()).toEqual([expect.objectContaining({
+      path: expect.stringMatching(/\/management\/providers\/openai-compat-0\/name$/),
+      body: { name: 'Team relay', expected_name: 'relay' },
+    })]);
   } finally { view.unmount(); }
 });

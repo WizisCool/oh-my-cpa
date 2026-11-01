@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 import clsx from 'clsx';
 import { Button } from 'antd';
 import { Switch } from '../common/Switch';
@@ -28,6 +28,7 @@ import { Tag } from '../common/Tag';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Meter } from '../common/Meter';
 import { Tooltip } from '../common/Tooltip';
+import { InlineNameEditor, inlineNameEditableClass, inlineNamePersistentClass, RenameButton } from '../common/InlineName';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -50,7 +51,8 @@ interface ProviderTableProps {
   /** Opens the brand-mark picker for a row, rather than for the form. */
   setIconPickerOpen: ProviderManagement['setIconPickerOpen'];
   setTargetProviderForIcon: ProviderManagement['setTargetProviderForIcon'];
-
+  /** Names a row in place; resolves whether the name was saved. */
+  onRename: ProviderManagement['renameProvider'];
 }
 
 /**
@@ -76,8 +78,13 @@ export function ProviderTable({
   handleOpenEdit,
   setIconPickerOpen,
   setTargetProviderForIcon,
+  onRename,
 }: ProviderTableProps) {
   const t = useT();
+  // One row's name is edited at a time, like a credential's on the OAuth page. The editor's name
+  // field is a full save that also rewrites CPA's entry; the glyph is the only overlay-only rename,
+  // so it stays painted on touch screens and phones.
+  const [renamingID, setRenamingID] = React.useState<string | null>(null);
   // Provider definitions live in the gateway's configuration, so creating, editing,
   // enabling and deleting one are all refused by the demonstration.
   const isDemo = isDemoMode();
@@ -153,9 +160,25 @@ export function ProviderTable({
             >
               <ProviderBrandIcon iconId={iconId} logo={pluginLogo} providerKeys={[record.family, record.upstream_name, record.name, record.id]} fallbackIconId={getProviderDefaultIcon(record.family, record.name, record.base_url)} size={22} />
             </div>
-            <div className={styles['provider-text']}>
+            <div className={clsx(styles['provider-text'], inlineNameEditableClass, inlineNamePersistentClass)}>
+              {renamingID !== record.id && (
+                <RenameButton label={record.name} onClick={() => setRenamingID(record.id)} data-testid="provider-rename" />
+              )}
               <div className={styles['provider-name']}>
-                {website ? (
+                {renamingID === record.id ? (
+                  <InlineNameEditor
+                    initial={record.name}
+                    label={`${t('pro.field_name')}: ${record.name}`}
+                    placeholder={record.upstream_name || t('pro.field_name_ph')}
+                    onCommit={async (next) => {
+                      const isSaved = await onRename(record, next);
+                      if (isSaved) setRenamingID(null);
+                      return isSaved;
+                    }}
+                    onCancel={() => setRenamingID(null)}
+                    data-testid="provider-name-input"
+                  />
+                ) : website ? (
                   // The name is the link when a website is known: the operator's own label is what
                   // they look for on the row, so making it the target avoids a column for one URL.
                   // rel/target keep the destination from reaching back through window.opener.

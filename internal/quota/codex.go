@@ -296,6 +296,8 @@ func ParseCodexSubscription(raw []byte) (untilMS int64, shouldRenew *bool, ok bo
 func resolveCodexPlanTier(planType string) (tier string, label string) {
 	norm := strings.ToLower(strings.TrimSpace(planType))
 	switch norm {
+	case "promax", "pro-max", "pro_max":
+		return "elite", "Pro 500"
 	case "pro":
 		return "elite", "Pro 200"
 	case "prolite", "pro-lite", "pro_lite", "premium":

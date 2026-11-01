@@ -131,6 +131,8 @@ export default {
   "audit.action.provider.update": "修改供應商",
   "audit.action.provider.delete": "刪除供應商",
   "audit.action.provider.toggle_status": "切換供應商啟用狀態",
+  "audit.action.provider.name_set": "設定供應商名稱",
+  "audit.action.provider.name_clear": "清除供應商名稱",
   "audit.action.provider.reveal_keys": "檢視供應商金鑰明文",
   "audit.action.provider.probe": "測試供應商連通性",
   "audit.action.auth_file.delete": "刪除憑證檔案",

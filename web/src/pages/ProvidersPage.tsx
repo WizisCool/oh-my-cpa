@@ -121,6 +121,7 @@ export const ProvidersPage: React.FC = () => {
     setIconPickerOpen,
     targetProviderForIcon,
     setTargetProviderForIcon,
+    renameProvider,
     keysSectionOpen,
     setKeysSectionOpen,
     headersSectionOpen,
@@ -361,6 +362,7 @@ export const ProvidersPage: React.FC = () => {
         handleOpenEdit={handleOpenEdit}
         setIconPickerOpen={setIconPickerOpen}
         setTargetProviderForIcon={setTargetProviderForIcon}
+        onRename={renameProvider}
       />
 
       {/* Provider Rich Drawer */}

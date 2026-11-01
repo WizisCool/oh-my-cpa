@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Checkbox, Dropdown, Input, type InputRef } from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown } from 'antd';
 import { Switch } from '../../components/common/Switch';
 import {
   AppstoreOutlined,
@@ -52,6 +52,7 @@ import {
 import { maskAccount } from '../../utils/maskAccount';
 import styles from './CredentialSection.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
+import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../../components/common/InlineName';
 
 export interface CredentialRowActions {
   isBusy: (record: OAuthWorkspaceRecord) => boolean;
@@ -298,27 +299,18 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
               aria-label={t('af.select_one', { name: file.name })}
             />
           ) : <span className={styles['checkbox-space']} />}
-          <div className={clsx(styles['identity-copy'], canRename && styles['identity-editable'])}>
+          <div className={clsx(styles['identity-copy'], canRename && inlineNameEditableClass)}>
               {canRename && !isRenaming && (
-                <Tooltip title={t('af.rename')}>
-                  <button
-                    type="button"
-                    className={styles.rename}
-                    disabled={isBusy}
-                    onClick={() => setIsRenaming(true)}
-                    aria-label={`${t('af.rename')}: ${file.name}`}
-                    data-testid="oauth-credential-rename"
-                  >
-                    <RenameOutlined />
-                  </button>
-                </Tooltip>
+                <RenameButton label={file.name} disabled={isBusy} onClick={() => setIsRenaming(true)} data-testid="oauth-credential-rename" />
               )}
             <div className={styles['identity-line']}>
               <div className={styles['name-group']}>
                 {isRenaming ? (
-                  <CredentialNameEditor
+                  <InlineNameEditor
                     initial={displayName}
                     label={`${t('af.field_display_name')}: ${file.name}`}
+                    placeholder={t('af.display_name_placeholder')}
+                    data-testid="oauth-credential-name-input"
                     onCommit={async (next) => {
                       const isSaved = await actions.onRename(record, next);
                       if (isSaved) setIsRenaming(false);
@@ -500,66 +492,6 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
         </Dropdown>
       </td>
     </tr>
-  );
-}
-
-interface CredentialNameEditorProps {
-  initial: string;
-  label: string;
-  onCommit: (displayName: string) => Promise<boolean>;
-  onCancel: () => void;
-}
-
-/**
- * The row's name, edited where it stands. Enter or leaving the field saves, Escape abandons; an
- * unchanged or failed save leaves the field as it was, and a failure keeps it open with what the
- * operator typed.
- */
-function CredentialNameEditor({ initial, label, onCommit, onCancel }: CredentialNameEditorProps) {
-  const t = useT();
-  const inputRef = React.useRef<InputRef>(null);
-  const [draft, setDraft] = React.useState(initial);
-  const [isSaving, setIsSaving] = React.useState(false);
-  // Enter saves and then the field unmounts, which blurs it; Escape unmounts it too. Either way the
-  // blur that follows must not save a second time, and neither may a blur during the save.
-  const isSettledRef = React.useRef(false);
-  const isSavingRef = React.useRef(false);
-  const commit = async () => {
-    if (isSettledRef.current || isSavingRef.current) return;
-    if (draft.trim() === initial) {
-      isSettledRef.current = true;
-      onCancel();
-      return;
-    }
-    isSavingRef.current = true;
-    setIsSaving(true);
-    const isSaved = await onCommit(draft);
-    isSavingRef.current = false;
-    setIsSaving(false);
-    if (isSaved) isSettledRef.current = true;
-  };
-  return (
-    <Input
-      ref={inputRef}
-      size="small"
-      autoFocus
-      className={styles['name-input']}
-      value={draft}
-      placeholder={t('af.display_name_placeholder')}
-      aria-label={label}
-      readOnly={isSaving}
-      onChange={(event) => setDraft(event.target.value)}
-      onPressEnter={() => void commit()}
-      onBlur={() => void commit()}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape' || isSavingRef.current) return;
-        event.preventDefault();
-        event.stopPropagation();
-        isSettledRef.current = true;
-        onCancel();
-      }}
-      data-testid="oauth-credential-name-input"
-    />
   );
 }
 
