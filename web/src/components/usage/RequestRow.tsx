@@ -25,9 +25,11 @@ import {
   eventTokensPerSecond,
   tpsCalculationHintKey,
   formatEventDuration,
-  hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
+  latencyTone,
+  timingBandLabel,
+  ttftTone,
   requestTransport,
 } from '../../types/usageEventMetrics';
 import {
@@ -135,6 +137,10 @@ export const RequestRow = React.memo<RequestRowProps>(
       : undefined;
 
     const tpsInfo = eventTokensPerSecond(event, tpsMode);
+    const latencyBand = latencyTone(event.latency_ms);
+    const latencyLabel = timingBandLabel(t, 'latency', latencyBand);
+    const ttftBand = ttftTone(event);
+    const ttftLabel = timingBandLabel(t, 'ttft', ttftBand);
     // The level's place on the effort scale, as a token reference; absent for
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
@@ -401,13 +407,32 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 7: total latency */}
         <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
-          <strong className="req-latency-val">
-            {formatEventDuration(event.latency_ms)}
-          </strong>
-          {hasMeasurableTTFT(event) && (
-            <span className="req-ttft-val">
-              TTFT {formatEventDuration(event.ttft_ms)}
-            </span>
+          {latencyLabel !== null ? (
+            <RequestTooltip title={latencyLabel}>
+              <strong
+                className="req-latency-val req-timing-value"
+                data-timing-band={latencyBand}
+                tabIndex={0}
+                aria-label={`${t('events.duration')}: ${formatEventDuration(event.latency_ms)}. ${latencyLabel}`}
+              >
+                {formatEventDuration(event.latency_ms)}
+              </strong>
+            </RequestTooltip>
+          ) : (
+            <strong className="req-latency-val">
+              {formatEventDuration(event.latency_ms)}
+            </strong>
+          )}
+          {ttftLabel !== null && (
+            <RequestTooltip title={ttftLabel}>
+              <span
+                className="req-ttft-val"
+                tabIndex={0}
+                aria-label={`${t('events.ttft')}: ${formatEventDuration(event.ttft_ms)}. ${ttftLabel}`}
+              >
+                TTFT <span className="req-timing-value" data-timing-band={ttftBand}>{formatEventDuration(event.ttft_ms)}</span>
+              </span>
+            </RequestTooltip>
           )}
         </div>
 

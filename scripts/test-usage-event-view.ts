@@ -41,6 +41,8 @@ import {
   successRateTone,
   SUCCESS_RATE_DEGRADED_PERCENT,
   SUCCESS_RATE_HEALTHY_PERCENT,
+  latencyTone,
+  ttftTone,
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
@@ -1515,4 +1517,29 @@ test('usage event view', () => {
       SUCCESS_RATE_DEGRADED_PERCENT > 0,
     'the healthy band sits above the degraded band',
   );
+
+  for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1]) {
+    assert.equal(latencyTone(value), 'neutral', `${value} is not a duration reading`);
+  }
+  for (const [value, expected] of [
+    [0, 'green'], [14_999, 'green'], [15_000, 'amber'], [29_999, 'amber'],
+    [30_000, 'orange'], [60_000, 'orange'], [300_000, 'orange'],
+  ] as const) {
+    assert.equal(latencyTone(value), expected, `total duration ${value} ms`);
+  }
+  for (const [value, expected] of [
+    [1, 'green'], [2_999, 'green'], [3_000, 'green'], [3_001, 'amber'],
+    [9_999, 'amber'], [10_000, 'orange'], [60_000, 'orange'], [300_000, 'orange'],
+  ] as const) {
+    assert.equal(ttftTone({ latency_ms: 600_000, ttft_ms: value }), expected, `TTFT ${value} ms`);
+  }
+  for (const value of [null, undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 600_000, 600_001]) {
+    assert.equal(ttftTone({ latency_ms: 600_000, ttft_ms: value }), 'neutral', `${value} is not an observed TTFT interval`);
+  }
+  for (const value of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(ttftTone({ latency_ms: value, ttft_ms: 100 }), 'neutral', 'TTFT needs a valid total duration');
+  }
+  assert.equal(ttftTone(), 'neutral');
+  assert.equal(ttftTone({ latency_ms: 1_000, ttft_ms: 1 }), 'green');
+  assert.notEqual(latencyTone(0), latencyTone(null), 'a measured instant is distinct from no reading');
 });

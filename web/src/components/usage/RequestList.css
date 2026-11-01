@@ -476,15 +476,15 @@
   font-size: var(--text-md);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--fg);
 }
-/* Latency carries no verdict colour. An agent request that thinks for minutes
-   is working as intended, so an amber threshold would flag normal traffic as a
-   problem; semantic hues are reserved for actual request state. */
+/* The TTFT label stays secondary while its value uses the shared timing scale. */
 .req-ttft-val {
   font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 /* Column 6: TPS (Output Token Rate) */
 .req-col-tps {
@@ -847,11 +847,8 @@
     display: none;
   }
 
-  /* Colour is for the exception. Side by side in a table, each mark's tint has a column to
-     itself; folded into a few lines they all land in one glance and none of them reads as a
-     signal. So a stacked record is drawn in the text colours, and what keeps a hue is what an
-     operator scans a list for: the verdict's pip, a failure in full, and the reasoning effort's
-     badge, which is the one mark that explains a record's cost and latency at a glance. */
+  /* Compact records retain the status pip, effort badge and timing scale;
+     the remaining metadata uses the text colours. */
   .req-result-pill.is-success,
   .req-result-pill.is-failed {
     padding: 0;

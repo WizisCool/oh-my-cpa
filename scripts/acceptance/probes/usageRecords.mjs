@@ -407,8 +407,8 @@ export const interactionRecords = (() => {
     failed: index % 7 === 0,
     ...(index % 7 === 0 ? { fail_status_code: 502 } : {}),
     generate: true,
-    latency_ms: 1830 + index * 3,
-    ttft_ms: 284,
+    latency_ms: [65_000, 14_999, 15_000, 29_999, 30_000, 300_000][index] ?? 1830 + index * 3,
+    ttft_ms: [3_000, 2_999, 3_001, 9_999, 10_000, 100_000][index] ?? 284,
     endpoint: '/v1/responses',
     tokens: { input: 2150, output: 485, reasoning: 120, cached: 400, cache_read: 400, cache_creation: 0, total: 2635 },
     has_request_log: true,
@@ -480,6 +480,52 @@ export async function requestListInteractions({ base, page, check }) {
 
   await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  // Keep the rounded boundary readings and independent timing hues readable in both themes.
+  for (const mode of ['light', 'dark']) {
+    await page.evaluate((mode) => localStorage.setItem('omc-theme', JSON.stringify({ mode })), mode);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.request-row').first().waitFor();
+    await until(async () => await page.locator('html').getAttribute('data-theme-mode') === mode,
+      { label: `${mode} timing palette applied` });
+    const samples = [
+      ['65.00 s', '3.00 s', 'orange', 'green'],
+      ['15.00 s', '3.00 s', 'green', 'green'],
+      ['15.00 s', '3.00 s', 'amber', 'amber'],
+      ['30.00 s', '10.00 s', 'amber', 'amber'],
+      ['30.00 s', '10.00 s', 'orange', 'orange'],
+      ['300.00 s', '100.00 s', 'orange', 'orange'],
+    ];
+    for (const [index, [duration, ttft, totalBand, firstBand]] of samples.entries()) {
+      const reading = await page.locator('.request-row').nth(index).evaluate((row, bands) => {
+        const total = row.querySelector('.req-latency-val');
+        const first = row.querySelector('.req-ttft-val .req-timing-value');
+        const firstLabel = row.querySelector('.req-ttft-val');
+        const token = document.createElement('i');
+        row.appendChild(token);
+        const colors = bands.map((band) => {
+          token.style.color = `var(--timing-${band})`;
+          return getComputedStyle(token).color;
+        });
+        token.style.color = 'var(--muted)';
+        const muted = getComputedStyle(token).color;
+        token.style.color = 'var(--danger)';
+        const danger = getComputedStyle(token).color;
+        token.remove();
+        return {
+          values: [total.textContent, first.textContent],
+          colors: [getComputedStyle(total).color, getComputedStyle(first).color],
+          labels: [total.getAttribute('aria-label'), firstLabel.getAttribute('aria-label')],
+          labelColor: getComputedStyle(firstLabel).color,
+          expected: colors, muted, danger,
+        };
+      }, [totalBand, firstBand]);
+      check(`${mode}: request ${index} paints each timing value in its independent band`,
+        reading.values[0] === duration && reading.values[1] === ttft &&
+        reading.colors.every((color, index) => color === reading.expected[index] && color !== reading.danger) &&
+        reading.labels.every(Boolean) && reading.labelColor === reading.muted, JSON.stringify(reading));
+    }
+  }
 
   const mountWindow = await page.evaluate(() => {
     const holder = document.querySelector('.request-list [class*="-holder"]');
@@ -872,6 +918,26 @@ export async function requestListInteractions({ base, page, check }) {
   await rows.first().click();
   await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
   check('clicking a row opens the request detail', await page.locator('.request-detail').isVisible());
+  const readDrawerTiming = () => page.locator('.request-detail').evaluate((drawer) => {
+    const token = document.createElement('i');
+    drawer.appendChild(token);
+    const colors = {};
+    for (const band of ['green', 'orange']) {
+      token.style.color = `var(--timing-${band})`;
+      colors[band] = getComputedStyle(token).color;
+    }
+    token.remove();
+    return [...drawer.querySelectorAll('.req-timing-value')].filter((value) => value.getClientRects().length > 0).map((value) => ({
+      text: value.textContent,
+      label: value.getAttribute('aria-label'),
+      color: getComputedStyle(value).color,
+      expected: value.textContent === '65.00 s' ? colors.orange : colors.green,
+    }));
+  });
+  const heroTiming = await readDrawerTiming();
+  check('request details paint total duration and TTFT with their independent bands',
+    heroTiming.length === 2 && heroTiming.every((value) => value.color === value.expected && Boolean(value.label)),
+    JSON.stringify(heroTiming));
   // The first record rode the inline access path: the routing facts name it.
   // The value is CPA's vocabulary, so the assertion holds in every language.
   check('the detail names the access path that served the request',
@@ -880,6 +946,10 @@ export async function requestListInteractions({ base, page, check }) {
   await page.locator('.request-detail .ant-tabs-tab[data-node-key="usage"]').click();
   const upstreamUsage = page.getByRole('region', { name: 'Upstream usage details', exact: true });
   await expect(upstreamUsage).toBeVisible();
+  const performanceTiming = await readDrawerTiming();
+  check('the performance breakdown retains the same total and TTFT hues',
+    performanceTiming.length === 4 && performanceTiming.every((value) => value.color === value.expected && Boolean(value.label)),
+    JSON.stringify(performanceTiming));
   const detailViewport = page.viewportSize();
   await page.setViewportSize({ width: 390, height: detailViewport.height });
   await settleLayout(page);

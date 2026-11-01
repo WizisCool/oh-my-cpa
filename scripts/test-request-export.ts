@@ -158,6 +158,32 @@ test('request export', () => {
     [[{ kind: 'text', text: '—', tone: 'muted', size: 12, weight: 400, isMono: false }]],
     'a request with nothing to mark draws a dash, not an empty cell',
   );
+
+  // Each timing reading retains its own band; the TTFT label stays secondary.
+  const latencySheet = (event: UsageEvent) =>
+    buildRequestSheet({ rows: [event], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials })
+      .rows[0].cells.latency.lines;
+  assert.deepEqual(latencySheet(events[0]), [
+    [{ kind: 'text', text: '1.25 s', tone: 'timing-green', size: 13, weight: 500, isMono: false }],
+    [
+      { kind: 'text', text: 'TTFT', tone: 'muted', size: 11, weight: 400, isMono: false },
+      { kind: 'text', text: '300 ms', tone: 'timing-green', size: 11, weight: 400, isMono: false },
+    ],
+  ], 'a short request has independently green timing values');
+  for (const [latency, ttft, totalTone, firstTone] of [
+    [65_000, 3_000, 'timing-orange', 'timing-green'],
+    [15_000, 3_001, 'timing-amber', 'timing-amber'],
+    [30_000, 10_000, 'timing-orange', 'timing-orange'],
+    [300_000, 100_000, 'timing-orange', 'timing-orange'],
+  ] as const) {
+    const lines = latencySheet({ ...events[0], latency_ms: latency, ttft_ms: ttft });
+    assert.ok(lines[0][0].kind === 'text' && lines[0][0].tone === totalTone);
+    assert.ok(lines[1][1].kind === 'text' && lines[1][1].tone === firstTone);
+  }
+  for (const ttft of [undefined, null, 0, -1, 65_000, 65_001, Number.NaN]) {
+    assert.equal(latencySheet({ ...events[0], latency_ms: 65_000, ttft_ms: ttft }).length, 1,
+      'image export omits unavailable TTFT rather than assigning it a band');
+  }
   const fastSheet = buildRequestSheet({
     rows: [{ ...events[1], provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority', resolved_service_tier_source: 'request' }] as UsageEvent[],
     masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,

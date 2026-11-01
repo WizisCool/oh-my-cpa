@@ -104,6 +104,9 @@ const toneColor = (palette: ThemePalette, tone: SheetTone): string =>
     success: palette.success,
     danger: palette.danger,
     warn: palette.warn,
+    'timing-green': palette.timingGreen,
+    'timing-amber': palette.timingAmber,
+    'timing-orange': palette.timingOrange,
   })[tone];
 
 /**

@@ -36,6 +36,11 @@ chart colors identify series and must remain distinguishable in both modes. Do n
 encode success, failure or selection in color alone. An unavailable reading is not
 zero, and an unpriced request is not free.
 
+Timing readouts use a shared green–amber–orange duration scale, with separate bands
+for total duration and TTFT. Their descriptions name the interval; request outcome
+is shown separately. Derive text-safe timing colours in the palette so small values
+remain readable on row, hover, selection and drawer fills.
+
 ## Brand marks
 
 Connection branding, credential-provider identity and model manufacturer identity answer

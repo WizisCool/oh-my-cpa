@@ -1,3 +1,8 @@
+/* Numeric timing readouts keep one text-safe scale across rows and drawers. */
+.req-timing-value[data-timing-band='green'] { color: var(--timing-green); }
+.req-timing-value[data-timing-band='amber'] { color: var(--timing-amber); }
+.req-timing-value[data-timing-band='orange'] { color: var(--timing-orange); }
+
 /* A filter option led by the mark its rows carry. The label keeps the truncation; the mark never
    shrinks, so a long model name cannot squeeze the picture that identifies it. */
 .req-facet-option {

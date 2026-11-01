@@ -1,4 +1,4 @@
-import type { MessageKey } from '../i18n/catalog';
+import type { MessageKey, TFunc } from '../i18n/catalog';
 import { DEFAULT_TPS_CALCULATION_MODE, type TpsCalculationMode } from './tpsCalculation';
 import type {
   UsageEvent,
@@ -49,6 +49,55 @@ export function successRateTone(successRate: number | null | undefined): Verdict
   if (successRate >= SUCCESS_RATE_HEALTHY_PERCENT) return 'success';
   if (successRate >= SUCCESS_RATE_DEGRADED_PERCENT) return 'warn';
   return 'danger';
+}
+
+/** Timing bands describe observed duration; request outcome is rendered separately. */
+export type TimingTone = 'green' | 'amber' | 'orange' | 'neutral';
+
+export const LATENCY_AMBER_MS = 15_000;
+export const LATENCY_ORANGE_MS = 30_000;
+export const TTFT_GREEN_MAX_MS = 3_000;
+export const TTFT_ORANGE_MS = 10_000;
+
+/** Shared by the request list, details and image export. Measured zero remains a reading. */
+export function latencyTone(latencyMs: number | null | undefined): TimingTone {
+  if (latencyMs == null || !Number.isFinite(latencyMs) || latencyMs < 0) return 'neutral';
+  if (latencyMs >= LATENCY_ORANGE_MS) return 'orange';
+  if (latencyMs >= LATENCY_AMBER_MS) return 'amber';
+  return 'green';
+}
+
+/** CPA's zero TTFT means unmeasured; only an observed interval receives a band. */
+export function ttftTone(event?: Partial<Pick<UsageEvent, 'latency_ms' | 'ttft_ms'>>): TimingTone {
+  const ttft = event?.ttft_ms;
+  if (!hasMeasurableTTFT(event) || ttft == null) return 'neutral';
+  if (ttft >= TTFT_ORANGE_MS) return 'orange';
+  if (ttft > TTFT_GREEN_MAX_MS) return 'amber';
+  return 'green';
+}
+
+const TIMING_BAND_LABEL_KEYS = {
+  latency: {
+    green: 'events.latency_band_green',
+    amber: 'events.latency_band_amber',
+    orange: 'events.latency_band_orange',
+  },
+  ttft: {
+    green: 'events.ttft_band_green',
+    amber: 'events.ttft_band_amber',
+    orange: 'events.ttft_band_orange',
+  },
+} as const;
+
+/** Name the exact interval even when formatting rounds two boundary-adjacent readings alike. */
+export function timingBandLabel(t: TFunc, metric: 'latency' | 'ttft', tone: TimingTone): string | null {
+  if (tone === 'neutral') return null;
+  const first = metric === 'latency' ? LATENCY_AMBER_MS : TTFT_GREEN_MAX_MS;
+  const second = metric === 'latency' ? LATENCY_ORANGE_MS : TTFT_ORANGE_MS;
+  return t(TIMING_BAND_LABEL_KEYS[metric][tone], {
+    min: formatEventDuration(tone === 'orange' ? second : first),
+    max: formatEventDuration(tone === 'green' ? first : second),
+  });
 }
 
 export function formatEventDuration(ms: number | null | undefined): string {
