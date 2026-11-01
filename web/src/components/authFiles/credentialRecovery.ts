@@ -15,6 +15,18 @@ const RENEWAL_DETAILS = {
   renewal_verified: 'recovery.detail_verified',
 } as const satisfies Record<string, MessageKey>;
 
+export type RenewalKind = 'verified' | 'awaiting' | 'retry' | 'reauth' | 'unknown';
+
+export function renewalKind(file: ManagementAuthFile): RenewalKind {
+  if (file.requires_sign_in || file.renewal_state === 'sign_in_required' || file.renewal_state === 'expired_sign_in_required') {
+    return 'reauth';
+  }
+  if (file.renewal_state === 'renewal_verified') return 'verified';
+  if (file.renewal_state === 'retry_scheduled') return 'retry';
+  if (file.renewal_state === 'awaiting_first_renewal') return 'awaiting';
+  return 'unknown';
+}
+
 export function renewalLabel(file: ManagementAuthFile): MessageKey {
   if (file.requires_sign_in) return file.renewal_state === 'expired_sign_in_required'
     ? 'recovery.expired_sign_in_required' : 'recovery.sign_in_required';

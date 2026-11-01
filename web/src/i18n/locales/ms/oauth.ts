@@ -16,6 +16,7 @@ export default {
   "recovery.sign_in": "Log masuk semula",
   "recovery.recover_hint": "Jika pembaharuan tidak dapat diteruskan, log masuk ke akaun asal kelayakan ini pada instans ini.",
   "recovery.renewal": "Pembaharuan automatik",
+  "recovery.view_details": "Klik untuk melihat butiran pembaharuan automatik",
   "recovery.unknown": "Belum ada bukti",
   "recovery.confirmed": "Disahkan",
   "recovery.unconfirmed": "Belum disahkan",

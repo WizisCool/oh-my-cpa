@@ -16,6 +16,7 @@ export default {
   "recovery.sign_in": "重新登入",
   "recovery.recover_hint": "無法自動續期時，在本實例登入此憑證原有帳戶。",
   "recovery.renewal": "自動續期",
+  "recovery.view_details": "點擊檢視自動續期詳細資訊",
   "recovery.unknown": "尚無證據",
   "recovery.confirmed": "已確認",
   "recovery.unconfirmed": "尚未確認",
