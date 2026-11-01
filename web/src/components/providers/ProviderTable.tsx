@@ -115,8 +115,9 @@ export function ProviderTable({
       title: t('pro.col_provider'),
       key: 'name',
       // The name is the row's identity: auto layout otherwise hands its width to the endpoint
-      // and breaks "Anthropic Claude" one syllable per line.
-      minWidth: 208,
+      // and breaks "Anthropic Claude" one syllable per line. The floor includes the 28px the
+      // rename glyph reserves, so the name keeps the width it had before the glyph existed.
+      minWidth: 236,
       render: (_, record) => {
         const iconId = resolveProviderIcon(
           providerIcons,

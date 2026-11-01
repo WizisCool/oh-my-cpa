@@ -58,6 +58,17 @@ const SURFACES = [
     tableSelector: '.providers-page .ant-table',
     rowSelector: '[data-testid="phone-row"]',
     routes: [],
+    /**
+     * The name column's floor is sized for the name plus the rename glyph's reserve. Measured on a
+     * name that broke onto two lines when the glyph's 28px came out of the name's width instead.
+     */
+    desktopClaim: async (page, check) => {
+      const lines = await page.getByText('CommandCode GOAT', { exact: true }).first().evaluate((node) => {
+        const lineHeight = parseFloat(getComputedStyle(node).lineHeight);
+        return Math.round(node.getBoundingClientRect().height / lineHeight);
+      });
+      check('ai providers: a desktop table keeps a provider name on one line', lines === 1, `lines=${lines}`);
+    },
   },
   {
     id: 'cost & usage',
@@ -201,5 +212,6 @@ export async function phoneListRendering({ base, page, check }) {
       (await page.locator(surface.rowSelector).count()) === 0,
       `tables=${await page.locator(surface.tableSelector).count()} rows=${await page.locator(surface.rowSelector).count()}`,
     );
+    await surface.desktopClaim?.(page, check);
   }
 }
