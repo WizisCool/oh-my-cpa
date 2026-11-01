@@ -7,10 +7,9 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
-import { getProviderDefaultIcon, LobeIcon, ProviderBrandIcon } from '../LobeIcon';
+import { LobeIcon, ProviderMark } from '../LobeIcon';
 import { safeExternalURL } from '../../utils/externalUrl';
-import { resolveProviderIcon } from '../../types/providerIcons';
-import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { ProviderItem } from '../../types/providers';
 import { matchProviderFamily } from '../../types/providerFamilies';
 import { successRateTone } from '../../types/usageEventMetrics';
@@ -119,18 +118,6 @@ export function ProviderTable({
       // rename glyph reserves, so the name keeps the width it had before the glyph existed.
       minWidth: 236,
       render: (_, record) => {
-        const iconId = resolveProviderIcon(
-          providerIcons,
-          record,
-          getProviderDefaultIcon(record.family, record.name, record.base_url),
-        );
-        // A plugin that registers this provider publishes the mark to use; a stored
-        // icon preference cannot outrank it, because the console does not own that
-        // provider's identity.
-        const pluginLogo = pluginOAuthLogoFor(pluginLogos, record.family)
-          ?? pluginOAuthLogoFor(pluginLogos, record.upstream_name)
-          ?? pluginOAuthLogoFor(pluginLogos, record.name)
-          ?? pluginOAuthLogoFor(pluginLogos, record.id);
         const website = safeExternalURL(record.website);
         // The routing facts under the name: the model prefix, the priority, and the gateway's own
         // name when the operator renamed the row (request records and CPA's logs carry that name,
@@ -159,7 +146,7 @@ export function ProviderTable({
                 }
               }}
             >
-              <ProviderBrandIcon iconId={iconId} logo={pluginLogo} providerKeys={[record.family, record.upstream_name, record.name, record.id]} fallbackIconId={getProviderDefaultIcon(record.family, record.name, record.base_url)} size={22} />
+              <ProviderMark provider={record} sources={{ providerIcons, pluginLogos }} size={22} />
             </div>
             <div className={clsx(styles['provider-text'], inlineNameEditableClass, inlineNamePersistentClass)}>
               {renamingID !== record.id && (

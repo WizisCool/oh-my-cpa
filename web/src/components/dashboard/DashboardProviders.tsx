@@ -5,7 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { ProviderBrandIcon } from '../LobeIcon';
-import { pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
+import { pluginOAuthProviderKeys, pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
 import { usePreference } from '../../hooks/usePreference';
 import { parseProviderIcons, PROVIDER_ICONS_PREFERENCE } from '../../types/providerIcons';
 import type { ManagementOverview, ManagementOverviewProvider } from '../../types/management';
@@ -114,11 +114,11 @@ export const DashboardProviders = React.memo(function DashboardProviders({
   const pluginOAuthIds = useMemo(() => {
     const ids = new Set<string>();
     if (!pluginsData?.plugins) return ids;
-    for (const p of pluginsData.plugins) {
-      if (p.supports_oauth || p.oauth_provider) {
-        if (p.id) ids.add(p.id.toLowerCase().trim());
-        if (p.oauth_provider) ids.add(p.oauth_provider.toLowerCase().trim());
-        if (p.metadata?.name) ids.add(p.metadata.name.toLowerCase().trim());
+    for (const plugin of pluginsData.plugins) {
+      const keys = pluginOAuthProviderKeys(plugin);
+      for (const key of keys) ids.add(key);
+      if (keys.length && plugin.metadata?.name) {
+        ids.add(plugin.metadata.name.toLowerCase().trim());
       }
     }
     return ids;
@@ -211,9 +211,7 @@ export const DashboardProviders = React.memo(function DashboardProviders({
                   <div className="provider-main-col">
                     <div className="provider-brand-badge">
                       <ProviderBrandIcon
-                        iconId={provider.iconId}
-                        providerKeys={[provider.key]}
-                        logo={provider.logo}
+                        mark={provider}
                         size={20}
                         className="provider-brand-icon"
                       />

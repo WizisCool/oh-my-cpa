@@ -56,3 +56,22 @@ it.each([undefined, 'gemini-3.8-flash-high'])('omits a redundant routed-model li
   renderRow({ model_alias });
   expect(screen.queryByTestId('request-routed-model')).toBeNull();
 });
+
+it('marks a provider name the catalog has not confirmed instead of printing it as a resolution', () => {
+  const resolved = renderRow({ provider: 'openai-compatible-relay' });
+  expect(resolved.container.querySelector('.req-badge-unresolved')).toBeNull();
+
+  installOmcApi({ preferences: { omc_models_view: 'call', omc_request_model_icons: false } });
+  const client = createTestQueryClient();
+  client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity, staleTime: Infinity } });
+  client.setQueryData(['preferences'], { omc_models_view: 'call', omc_request_model_icons: false });
+  const { container } = renderWithOmc(<TokenDisplayProvider><RequestRow
+    event={{ ...event, provider: 'openai-compatible-relay' }}
+    credentials={new Map()} providerIcons={{}} configuredProviders={[{ id: 'relay-0', name: 'Relay', upstream_name: 'relay', family: 'openai-compatibility' }]}
+    isProviderCatalogUnknown onOpen={() => undefined} onToggleSelect={() => undefined} />
+  </TokenDisplayProvider>, { client });
+  expect(container.querySelector('.req-provider-title')?.textContent).toBe('Relay');
+  expect(container.querySelector('.req-badge-unresolved')?.getAttribute('title')).toBe(
+    'The provider list could not be read, so this name is the label CPA recorded rather than the provider you configured.',
+  );
+});

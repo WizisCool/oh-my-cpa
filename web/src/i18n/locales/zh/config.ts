@@ -489,6 +489,8 @@ export default {
   'cfg.f_claude_disable_cloak_desc': '停用客户端特征伪装与系统提示词改写。',
   'cfg.f_claude_cloaking_model_list': '模型列表返回原始 ID',
   'cfg.f_claude_cloaking_model_list_desc': 'Anthropic 模型列表响应返回原始模型 ID，而不是伪装后的 ID',
+  'cfg.f_claude_show_codex_commentary': '显示 Codex 旁注',
+  'cfg.f_claude_show_codex_commentary_desc': '将 Codex 公开进度旁注镜像为可见的 Claude 文本；私有推理保留在思考块中，兼容客户端或语音朗读可能产生额外文本。',
   'cfg.f_claude_timezone': '时区',
   'cfg.f_claude_timezone_desc': '伪装请求中 currentDate 使用的后备 IANA 时区；凭据文件中的 timezone 优先',
   'cfg.f_ag_pool_enabled': '启用连接池',

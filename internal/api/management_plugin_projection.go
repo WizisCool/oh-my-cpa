@@ -75,6 +75,7 @@ type PluginItemDTO struct {
 	EffectiveEnabled bool                   `json:"effective_enabled"`
 	SupportsOAuth    bool                   `json:"supports_oauth,omitempty"`
 	OAuthProvider    string                 `json:"oauth_provider,omitempty"`
+	OAuthProviders   []string               `json:"oauth_providers,omitempty"`
 	SupportsQuota    bool                   `json:"supports_quota,omitempty"`
 	QuotaProvider    string                 `json:"quota_provider,omitempty"`
 	Pages            []PluginPageDTO        `json:"pages"`
@@ -161,6 +162,7 @@ func projectPluginItem(plugin management.PluginItem) PluginItemDTO {
 		EffectiveEnabled: plugin.EffectiveEnabled,
 		SupportsOAuth:    plugin.SupportsOAuth,
 		OAuthProvider:    boundedText(plugin.OAuthProvider, pluginTextLimit),
+		OAuthProviders:   projectPluginOAuthProviders(plugin.OAuthProviders),
 		SupportsQuota:    plugin.SupportsQuota,
 		QuotaProvider:    boundedText(plugin.QuotaProvider, pluginTextLimit),
 		Pages:            projectPluginPages(plugin),
@@ -169,6 +171,24 @@ func projectPluginItem(plugin management.PluginItem) PluginItemDTO {
 		ConfigFields:     projectPluginConfigFields(fields),
 		Metadata:         projectPluginMetadata(plugin.Metadata),
 	}
+}
+
+// Login identifiers must not be truncated into a different upstream identity.
+func projectPluginOAuthProviders(providers []string) []string {
+	result := make([]string, 0, min(len(providers), pluginListLimit))
+	seen := make(map[string]bool)
+	for _, provider := range providers {
+		if len(result) >= pluginListLimit {
+			break
+		}
+		id := strings.ToLower(strings.TrimSpace(provider))
+		if len(id) > pluginTextLimit || !oauthProviderPattern.MatchString(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+	}
+	return result
 }
 
 // projectPluginPages keeps the menus that are pages of this plugin: a resource path

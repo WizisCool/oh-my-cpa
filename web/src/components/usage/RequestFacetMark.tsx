@@ -9,7 +9,7 @@ import {
 } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import type { UsageEvent } from '../../types/usageEvents';
-import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { ProviderBrandIcon } from '../LobeIcon';
 import './requestMarks.css';
 
 const MARK_SIZE = 16;
@@ -19,6 +19,8 @@ export interface FacetMarkSources {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  /** An option's mark is only a placeholder until the provider catalog read settles. */
+  isProviderCatalogUnknown?: boolean;
 }
 
 export type FacetMarkRenderer = (key: EventFilterKey, value: string) => React.ReactNode;
@@ -40,10 +42,10 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
       sources.credentials,
       sources.providerIcons,
       sources.configuredProviders,
-      getProviderDefaultIcon,
       sources.pluginLogos,
+      sources.isProviderCatalogUnknown,
     );
-    return <ProviderBrandIcon iconId={provider.iconId} logo={provider.logo} size={MARK_SIZE} />;
+    return <ProviderBrandIcon mark={provider} size={MARK_SIZE} />;
   };
 
   return (key, value) => {

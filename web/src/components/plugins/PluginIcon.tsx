@@ -1,6 +1,6 @@
-import React from 'react';
 import { PuzzleOutlined } from '../icons';
-import { isRenderableLogoURL } from '../../types/pluginOAuthProviders';
+import { MarkArtwork } from '../common/MarkArtwork';
+import { pluginLogoArtworks } from '../../types/pluginOAuthProviders';
 import styles from './PluginIcon.module.css';
 
 interface PluginIconProps {
@@ -25,20 +25,11 @@ export function PluginIcon(props: PluginIconProps) {
 }
 
 function PluginArtwork({ logo, className, fallbackSize = '1em' }: PluginIconProps) {
-  const source = (logo ?? '').trim();
-  const [hasFailed, setHasFailed] = React.useState(false);
-  const isDrawable = isRenderableLogoURL(source) && !hasFailed;
-  const isSvg = isDrawable && /^data:image\/svg\+xml[;,]/i.test(source);
-  const kind = !isDrawable ? 'fallback' : isSvg ? 'svg' : 'image';
-  return (
-    <span
+  return <MarkArtwork artworks={pluginLogoArtworks(logo)} size="1em" fallback={<PuzzleOutlined size={fallbackSize} />}>
+    {(artwork, content) => <span
       className={[styles.icon, className].filter(Boolean).join(' ')}
       aria-hidden="true"
-      data-plugin-logo={kind}
-    >
-      {isDrawable
-        ? <img src={source} alt="" onError={() => setHasFailed(true)} />
-        : <PuzzleOutlined size={fallbackSize} />}
-    </span>
-  );
+      data-plugin-logo={!artwork ? 'fallback' : /^data:image\/svg\+xml[;,]/i.test(artwork.url) ? 'svg' : 'image'}
+    >{content}</span>}
+  </MarkArtwork>;
 }

@@ -85,7 +85,7 @@ interface AuthFileDetailDrawerProps {
   quotaContent?: React.ReactNode;
   warmupContent?: React.ReactNode;
   hasExternalDraft?: boolean;
-  initialSection?: 'overview' | 'warmup' | 'configuration' | 'models';
+  initialSection?: 'overview' | 'renewal' | 'warmup' | 'configuration' | 'models';
   /**
    * Whether the safe fields may be written. The write is keyed by file name, so a
    * credential whose name does not identify one entry cannot be edited safely: the
@@ -216,7 +216,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const [policyBaseline, setPolicyBaseline] = useState<CredentialPolicyDraft>(EMPTY_CREDENTIAL_POLICY_DRAFT);
   const [isPolicyChecked, setIsPolicyChecked] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
-  const [activeSection, setActiveSection] = useState<'overview' | 'warmup' | 'configuration' | 'models'>(initialSection);
+  const [activeSection, setActiveSection] = useState<'overview' | 'renewal' | 'warmup' | 'configuration' | 'models'>(initialSection);
 
   const resetPolicy = useCallback((next: CredentialPolicyDraft) => {
     setPolicy(next);
@@ -611,7 +611,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 disabled: saveMutation.isPending,
                 children: (
                   <div>
-                    <CredentialRecoveryPanel file={file} canEdit={canEdit} onRecover={onRecover ? () => confirmDiscardFor(onRecover) : undefined} onChanged={onSaved} />
                     {quotaContent}
                     <details className={styles['credential-metadata']}>
                       <summary>{t('common.details')}</summary>
@@ -678,6 +677,12 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                     </details>
                   </div>
                 ),
+              },
+              {
+                key: 'renewal',
+                label: t('recovery.tab'),
+                disabled: saveMutation.isPending,
+                children: <CredentialRecoveryPanel file={file} canEdit={canEdit} onRecover={onRecover ? () => confirmDiscardFor(onRecover) : undefined} onChanged={onSaved} />,
               },
               ...(warmupContent ? [{
                 key: 'warmup',

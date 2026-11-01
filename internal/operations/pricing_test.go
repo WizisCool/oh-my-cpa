@@ -13,6 +13,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
@@ -295,6 +296,41 @@ func TestRequestProjectionPreservesCanonicalEvidence(t *testing.T) {
 		want := RequestItem{ID: 305, Model: "fixture", CallPoint: "fixture", RequestID: "fixture-request", AccountingStatus: status, Accounting: accounting, InputTokens: 100, OutputTokens: 40, ReasoningTokens: 10, Tokens: 140}
 		if got := projectRequest(row); !reflect.DeepEqual(got, want) {
 			t.Fatalf("request accounting projection = %+v, want %+v", got, want)
+		}
+	}
+}
+
+func TestRequestDetailsExposeStructuredEvidenceOnlyOnSingleReads(t *testing.T) {
+	executor := pricingExecutor(t)
+	store := executor.Store
+	if err := store.Repo.UpsertInstance(context.Background(), domain.CPAInstance{ID: "default", Name: "Fixture", BaseURL: "http://127.0.0.1:8317", ManagementKeyCiphertext: []byte{0}, ManagementKeyNonce: []byte{0}, Status: "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	event, err := usage.DecodeEvent(`{"request_id":"structured-agent","tokens":{"input_tokens":3,"total_tokens":3,"audio_input_tokens":0},"tool_usage_details":{"web_search_calls":0},"iterations":[{"output_tokens":0}],"cost_details":{"cost":0,"is_byok":false},"image_details":{"size":"1024x1024"}}`, "default", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := store.Repo.ListUsageEvents(context.Background(), repository.UsageEventFilter{Limit: 1})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("list: %+v %v", page, err)
+	}
+	for _, adapter := range []string{"agent", "mcp"} {
+		principal := capability.Principal{ID: "administrator", Adapter: adapter, IsAdmin: true}
+		result, err := executor.Invoke(context.Background(), principal, "requests_get", json.RawMessage(fmt.Sprintf(`{"id":%d}`, page.Items[0].ID)), "")
+		if err != nil || result.Status != "success" {
+			t.Fatalf("%s detail: %+v %v", adapter, result, err)
+		}
+		var detail RequestDetail
+		if err := json.Unmarshal(result.Data, &detail); err != nil || !reflect.DeepEqual(detail.StructuredUsage, event.StructuredUsage) {
+			t.Fatalf("%s structured evidence: %s %v", adapter, result.Data, err)
+		}
+		result, err = executor.Invoke(context.Background(), principal, "requests_list", json.RawMessage(`{}`), "")
+		if err != nil || result.Status != "success" || strings.Contains(string(result.Data), "structured_usage") {
+			t.Fatalf("%s list expanded detail: %+v %v", adapter, result, err)
 		}
 	}
 }

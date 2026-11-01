@@ -7,13 +7,15 @@ import { Link } from 'react-router-dom';
 import { useViewSearchParams, type ViewChangeOptions } from '../hooks/useViewSearchParams';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { resolveProviderMark, type BrandMark, type ProviderBrandSources } from '../types/brandMark';
+import { useProviderBranding } from '../hooks/useProviderBranding';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
 import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, SyncOutlined, UpOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { ListLoading } from '../components/common/PageLoading';
 import { CopyButton } from '../components/common/CopyButton';
 import { StatusLabel } from '../components/common/StatusLabel';
-import { credentialProviderIconId, getCredentialProviderMetadata } from '../components/common/providerMetadata';
+import { getCredentialProviderMetadata } from '../types/providerMetadata';
 import { LoadFailure, Notice, useToast, type ToastItem } from '../components/feedback';
 import { useOpenPriceEditor } from '../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
@@ -85,11 +87,12 @@ const ManufacturerMark: React.FC<{ manufacturer: ModelManufacturer; size: number
 /** Marks drawn for a model served by several connections; the count beside them states the rest. */
 const MAX_SOURCE_MARKS = 3;
 
-function describeProvider(provider: ModelSquareProvider): { name: string; iconId: string } {
+function describeProvider(provider: ModelSquareProvider, branding: ProviderBrandSources): BrandMark & { id: string; name: string } {
   const hasOwnName = provider.name !== '' && provider.name.toLowerCase() !== provider.family.toLowerCase();
   return {
+    id: provider.id,
     name: hasOwnName ? provider.name : getCredentialProviderMetadata(provider.family).label,
-    iconId: provider.icon_id || credentialProviderIconId(provider.family, provider.name),
+    ...resolveProviderMark({ ...provider, base_url: provider.endpoint_host }, branding),
   };
 }
 
@@ -127,6 +130,7 @@ const CopyModelName: React.FC<{ identity: string }> = ({ identity }) => {
 };
 
 interface ModelRowProps {
+  branding: ProviderBrandSources;
   entry: ModelSquareEntry;
   ledger: ModelLedgerEntry;
   providers: ReadonlyMap<string, ModelSquareProvider>;
@@ -134,10 +138,10 @@ interface ModelRowProps {
   onSetPrice?: (identity: string) => void;
 }
 
-const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers, onOpen, onSetPrice }) => {
+const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers, branding, onOpen, onSetPrice }) => {
   const t = useT();
   const reference = resolveEntryReference(entry);
-  const connections = entryProviders(entry, providers).map(describeProvider);
+  const connections = entryProviders(entry, providers).map(provider => describeProvider(provider, branding));
   const upstream = entry.profiles[0].identity;
   let caption = '';
   // Several routes to one model repeat its name; the caption names each distinct model once.
@@ -162,10 +166,10 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
         {/* One connection is named. Several would wrap the card to a height its neighbours do not share,
             so they collapse to their marks and a count; the details list every one of them. */}
         {connections.length === 1
-          ? <span className={styles['model-source']}><ProviderBrandIcon iconId={connections[0].iconId} size={14} />{connections[0].name}</span>
+          ? <span className={styles['model-source']}><ProviderBrandIcon mark={connections[0]} size={14} />{connections[0].name}</span>
           : connections.length > 1 && <span className={styles['model-source']} title={connections.map(connection => connection.name).join(' · ')}>
             <span className={styles['source-marks']}>
-              {connections.slice(0, MAX_SOURCE_MARKS).map(connection => <ProviderBrandIcon key={connection.name} iconId={connection.iconId} size={14} />)}
+              {connections.slice(0, MAX_SOURCE_MARKS).map(connection => <ProviderBrandIcon key={connection.id} mark={connection} size={14} />)}
             </span>
             {t('models.source_count', { count: connections.length })}
           </span>}
@@ -362,6 +366,7 @@ const CatalogRefreshButton: React.FC<{ onReread: () => Promise<unknown> }> = ({ 
 };
 
 export const ModelSquarePage: React.FC = () => {
+  const branding = useProviderBranding();
   const t = useT();
   const [params, setParams] = useViewSearchParams();
   const search = params.get('q') ?? '';
@@ -475,7 +480,7 @@ export const ModelSquarePage: React.FC = () => {
             </div>
           </div>
           <ul className={styles['model-rows']}>
-            {group.entries.map(entry => <ModelRow key={entry.identity} entry={entry} ledger={ledger.entryFor(entry.identity)} providers={providers} onOpen={setSelectedIdentity} onSetPrice={openPriceEditor} />)}
+            {group.entries.map(entry => <ModelRow branding={branding} key={entry.identity} entry={entry} ledger={ledger.entryFor(entry.identity)} providers={providers} onOpen={setSelectedIdentity} onSetPrice={openPriceEditor} />)}
           </ul>
         </li>)}
       </ul>}
@@ -501,9 +506,9 @@ export const ModelSquarePage: React.FC = () => {
           <ul>
             {selectedRoutes.map(route => {
               const provider = providers.get(route.provider_id)!;
-              const connection = describeProvider(provider);
+              const connection = describeProvider(provider, branding);
               return <li key={`${route.provider_id}\n${route.upstream_model}`}>
-                <ProviderBrandIcon iconId={connection.iconId} size={16} />
+                <ProviderBrandIcon mark={connection} size={16} />
                 <span className={styles['served-name']}>{connection.name}</span>
                 <span className={styles['served-kind']}>{provider.is_oauth ? 'OAuth' : provider.endpoint_host}</span>
                 {route.upstream_model && route.upstream_model !== selected.identity && <code>{route.upstream_model}</code>}

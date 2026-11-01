@@ -5,7 +5,7 @@ import {
   CREDENTIAL_PROVIDERS,
   credentialProviderIconId,
   getCredentialProviderMetadata,
-} from '../web/src/components/common/providerMetadata.ts';
+} from '../web/src/types/providerMetadata.ts';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../web/src/types/lobeIconCatalog.ts';
 import { providerIconId, resolveProviderIcon } from '../web/src/types/providerIconIds.ts';
 import { BUILTIN_OAUTH_PROVIDERS } from '../web/src/pages/oauthProviderLogic.ts';
@@ -14,6 +14,9 @@ import {
   pluginOAuthLogoFor,
   pluginOAuthProviderLogos,
 } from '../web/src/types/pluginOAuthProviders.ts';
+import { resolveProviderMark, resolveProviderPickerIcon, resolveCredentialMark, resolveMarkArtworks } from '../web/src/types/brandMark';
+import { modelMarkIconId } from '../web/src/types/modelSquare';
+import type { CustomIcon } from '../web/src/types/customIcons';
 import type { PluginItem } from '../web/src/types/plugin.ts';
 
 /** Inline artwork, which is the only shape the console renders as a plugin logo. */
@@ -88,6 +91,7 @@ test('pluginOAuthProviderLogos: a plugin logo is keyed by both the provider key 
       effective_enabled: true,
       supports_oauth: true,
       oauth_provider: 'CodeBuddy',
+      oauth_providers: ['CodeBuddy', ' CodeBuddy-Secondary ', 'CodeBuddy-Secondary'],
       logo: INLINE_LOGO,
     },
     {
@@ -104,6 +108,7 @@ test('pluginOAuthProviderLogos: a plugin logo is keyed by both the provider key 
   // plugins), which is behaviour this suite pins separately.
   assert.deepEqual({ ...logos }, {
     codebuddy: INLINE_LOGO,
+    'codebuddy-secondary': INLINE_LOGO,
     second: 'data:image/svg+xml,%3Csvg/%3E',
     'store-plugin-2': 'data:image/svg+xml,%3Csvg/%3E',
   });
@@ -212,4 +217,81 @@ test('the named rows never point at a mark the vendored catalog does not carry',
       `${key} names ${meta.iconId}, which the vendored icon catalog does not carry`,
     );
   }
+});
+
+test('a connection keeps its selected mark across surfaces without relabelling OAuth credentials or models', () => {
+  const provider = { id: 'codex-0', family: 'codex', name: 'Opencode Go' };
+  const sources = { providerIcons: { 'codex-0': 'OpenCode', 'Opencode Go': 'DeepSeek' } };
+  assert.equal(resolveProviderMark(provider, sources).iconId, 'OpenCode');
+  assert.equal(resolveProviderMark({ ...provider, id: 'codex-1' }, sources).iconId, 'DeepSeek');
+  assert.equal(resolveProviderMark({ ...provider, name: 'Other connection' }, sources).iconId, 'OpenCode');
+  assert.equal(resolveCredentialMark('codex', 'Opencode Go').iconId, 'Codex');
+  const unknown = { family: 'openai-compatibility', name: 'zz-unidentified-relay' };
+  assert.equal(resolveProviderMark(unknown).iconId, '');
+  assert.equal(resolveProviderPickerIcon(unknown), 'OpenAI');
+  assert.equal(modelMarkIconId('gpt-5'), 'OpenAI');
+  assert.deepEqual(
+    resolveProviderMark({ id: 'codex-0', family: 'codex', name: 'Codex' }).providerKeys,
+    ['codex-0'],
+    'an API-key family is not proof of plugin ownership',
+  );
+  assert.deepEqual(
+    resolveProviderMark({ id: 'compat-0', family: 'openai-compatibility', name: 'Relay', upstream_name: 'plugin-relay' }).providerKeys,
+    ['plugin-relay', 'compat-0'],
+    'a plugin upstream name is proof of plugin ownership',
+  );
+  // An API-key connection speaks a protocol family that several unrelated connections share, so
+  // the family may not hand it the artwork of a plugin that happens to register the same key: the
+  // selected custom icon would otherwise be overwritten by a stranger's mark.
+  assert.equal(
+    resolveProviderMark({ id: 'codex-0', family: 'codex', name: 'Opencode Go' }, { pluginLogos: { codex: INLINE_LOGO } }).logo,
+    undefined,
+    'an API-key family does not adopt a plugin logo keyed by it',
+  );
+  assert.equal(
+    resolveProviderMark({ id: 'codex-0', family: 'codex', name: 'Codex', is_oauth: true }, { pluginLogos: { codex: INLINE_LOGO } }).logo,
+    INLINE_LOGO,
+    'an OAuth channel publishes its own brand, so its family is a provider identity',
+  );
+  assert.equal(
+    resolveProviderMark({ id: 'compat-0', family: 'openai-compatibility', name: 'Relay' }, { pluginLogos: { 'openai-compatibility': INLINE_LOGO } }).logo,
+    undefined,
+    'the compatibility adapter is a protocol too, never a plugin identity',
+  );
+});
+
+test('DOM and exported marks share ownership, revision, missing-resource and colour rules', () => {
+  const customID = '0123456789abcdef0123456789abcdef';
+  const icon = { id: customID, revision: 3 } as CustomIcon;
+  const provider = { id: 'codex-0', family: 'codex', name: 'Opencode Go' };
+  const mark = resolveProviderMark(provider, { providerIcons: { 'codex-0': `custom:${customID}` } });
+  const sources = { baseURL: '/omc/', customIconURL: (id: string, revision: number) => `/omc/api/v1/custom-icons/${id}/content?revision=${revision}`, customIcons: [icon] };
+  const candidates = resolveMarkArtworks(mark, sources);
+  assert.deepEqual(candidates, [
+    { url: `/omc/api/v1/custom-icons/${customID}/content?revision=3`, isMono: false },
+    { url: '/omc/lobe-icons/codex-color.svg', isMono: false },
+  ]);
+  assert.deepEqual(resolveMarkArtworks({ ...mark, isIdentityUnknown: true }, sources), candidates.slice(1));
+  const renamedPlugin = resolveProviderMark({ id: 'compat-0', family: 'openai-compatibility', name: 'Renamed connection' }, {
+    providersByID: new Map([['compat-0', { id: 'compat-0', family: 'openai-compatibility', name: 'Renamed connection', upstream_name: 'plugin-relay' }]]),
+    pluginLogos: { 'plugin-relay': INLINE_LOGO },
+  });
+  assert.equal(renamedPlugin.logo, INLINE_LOGO, 'projected rows recover the upstream identity only from the same current connection');
+  const reusedID = resolveProviderMark({ id: 'compat-0', family: 'openai-compatibility', name: 'Older connection' }, {
+    providersByID: new Map([['compat-0', { id: 'compat-0', family: 'openai-compatibility', name: 'New connection', upstream_name: 'plugin-relay' }]]),
+    pluginLogos: { 'plugin-relay': INLINE_LOGO },
+  });
+  assert.equal(reusedID.logo, undefined, 'a reused positional id cannot transfer plugin branding');
+  assert.equal(reusedID.isIdentityUnknown, true);
+  assert.deepEqual(resolveMarkArtworks(mark, { ...sources, customIcons: [] }), candidates.slice(1));
+  assert.deepEqual(resolveMarkArtworks(mark, { ...sources, isPluginOwned: true }), candidates.slice(1));
+  assert.deepEqual(resolveMarkArtworks(mark, { ...sources, isOwnershipUnknown: true }), candidates.slice(1));
+  assert.deepEqual(resolveMarkArtworks({ ...mark, logo: INLINE_LOGO }, sources), [
+    { url: INLINE_LOGO, isMono: false }, ...candidates.slice(1),
+  ]);
+  assert.deepEqual(resolveMarkArtworks({ ...mark, logo: 'https://cdn.example.test/logo.svg' }, sources), candidates.slice(1));
+  assert.equal(resolveMarkArtworks(mark, { ...sources, customIcons: [{ ...icon, revision: 4 }] })[0].url.endsWith('revision=4'), true);
+  assert.deepEqual(resolveMarkArtworks({ iconId: 'Kimi' }, sources), [{ url: '/omc/lobe-icons/kimi.svg', isMono: true }]);
+  assert.deepEqual(resolveMarkArtworks({ iconId: 'Codex' }, { ...sources, baseURL: '/', variant: 'mono' }), [{ url: '/lobe-icons/codex.svg', isMono: true }]);
+  assert.deepEqual(resolveMarkArtworks({ iconId: 'no-such-icon', logo: 'javascript:alert(1)' }, sources), []);
 });

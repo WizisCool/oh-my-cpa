@@ -584,6 +584,7 @@ export async function oauthManagement({ base, page, check }) {
     return fulfillFixture(route, { status: 502, json: { code: 'cpa_unavailable', error: 'fixture-verification-failure' } });
   });
   await recoveryRow.getByRole('button', { name: /^Details:/ }).click();
+  await page.locator('.ant-drawer-open').getByRole('tab', { name: 'Renewal', exact: true }).click();
   await page.locator('.ant-drawer-open [data-credential-verify]').click();
   const verificationDialog = page.getByRole('dialog', { name: 'Verify inference (uses tokens)', exact: true });
   await verificationDialog.waitFor();
@@ -726,12 +727,14 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
     {
       id: 'key-bridge', configured: true, registered: true, enabled: true,
       effective_enabled: true, supports_oauth: true, oauth_provider: 'key-service',
+      oauth_providers: ['key-service', 'key-service-secondary'],
       metadata: { name: 'Key Bridge' }, config_fields: [],
       pages: [{ path: '/v0/resource/plugins/key-bridge/console', label: 'Key credentials' }],
     },
     {
       id: 'interactive-auth', configured: true, registered: true, enabled: true,
       effective_enabled: true, supports_oauth: true, oauth_provider: 'interactive',
+      oauth_providers: ['interactive', 'interactive-secondary'],
       metadata: { name: 'Interactive Auth' }, config_fields: [], pages: [],
     },
   ];
@@ -740,9 +743,11 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
     contentType: 'text/html', body: '<!doctype html><title>Key credentials</title><h1>Import API key</h1>',
   }));
   let pluginFlow = 'device';
+  const requestedProviders = [];
   await page.route('**/management/oauth/start', (route) => {
     const provider = route.request().postDataJSON().provider;
-    if (provider !== 'interactive') return route.fallback();
+    if (provider !== 'interactive-secondary') return route.fallback();
+    requestedProviders.push(provider);
     return route.fulfill({ json: {
       url: 'https://auth.example.test/authorize', state: 'plugin-session',
       ...(pluginFlow === 'device' ? { flow: 'device', user_code: 'PLUGIN-CODE' } : {}),
@@ -756,25 +761,25 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
     await page.locator(`button[data-oauth-card="${provider}"]`).click();
     await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible' });
   };
-  await openPluginConnection('key-service');
+  await openPluginConnection('key-service-secondary');
   const pluginPanel = page.getByTestId('oauth-connect-panel');
   check('an API-key auth provider is plugin-managed rather than an OAuth redirect',
     (await pluginPanel.getByText('Plugin-managed', { exact: true }).count()) === 1
-      && (await pluginPanel.getByText('Key Bridge', { exact: true }).count()) > 0
+      && (await pluginPanel.getByText('Key Bridge · key-service-secondary', { exact: true }).count()) > 0
       && (await pluginPanel.getByText('Redirect callback', { exact: true }).count()) === 0
       && (await pluginPanel.locator('[data-oauth-start]').count()) === 0);
   const startsBeforePluginPage = oauthStarts.length;
-  await pluginPanel.locator('[data-plugin-connect="key-service"]').click();
+  await pluginPanel.locator('[data-plugin-connect="key-service-secondary"]').click();
   await page.waitForURL('**/plugin-pages/key-bridge/0');
   await page.locator('[data-plugin-page="key-bridge"]').waitFor({ state: 'visible' });
   check('opening plugin credentials sends no OAuth start request', oauthStarts.length === startsBeforePluginPage);
 
   for (const flow of ['device', 'redirect']) {
     pluginFlow = flow;
-    await openPluginConnection('interactive');
+    await openPluginConnection('interactive-secondary');
     check(`plugin ${flow} flow is not assumed before Start`,
       (await pluginPanel.getByText('Plugin-managed', { exact: true }).count()) === 1);
-    await pluginPanel.locator('[data-oauth-start="interactive"]').click();
+    await pluginPanel.locator('[data-oauth-start="interactive-secondary"]').click();
     if (flow === 'device') {
       await pluginPanel.locator('[data-oauth-user-code]').waitFor({ state: 'visible' });
       check('a real plugin device response exposes its code but no callback input',
@@ -786,6 +791,8 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
         (await pluginPanel.locator('[data-oauth-callback-input]').count()) === 1);
     }
   }
+  check('secondary plugin logins send the declared portal instead of the primary or plugin id',
+    requestedProviders.length === 2 && requestedProviders.every((provider) => provider === 'interactive-secondary'));
 }
 
 

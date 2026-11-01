@@ -1,4 +1,4 @@
-import { renewalLabel, recoveryStageLabel, renewalTone } from '../web/src/components/authFiles/credentialRecovery.ts';
+import { renewalDetail, renewalKind, renewalLabel, renewalTone } from '../web/src/components/authFiles/credentialRecovery.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ManagementAuthFile } from '../web/src/types/managementAuthFile.ts';
@@ -18,7 +18,7 @@ import {
   updateWorkspaceSearch,
   workspaceProviderOptions,
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
-import type { OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
+import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
 import { credentialStatusOf, compareSections, quotaCellsOf, quotaFamiliesOf, sortByQuotaColumn } from '../web/src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../web/src/types/quota.ts';
@@ -305,12 +305,20 @@ test('provider strip lists display families without duplicate or authorization-o
     [],
     choices,
   );
-  const options = workspaceProviderOptions(projection.records, choices);
+  const pluginChoices = pluginOAuthProviderChoices([{
+    id: 'relay', configured: true, registered: true, enabled: true, effective_enabled: true,
+    supports_oauth: true, oauth_provider: 'relay-primary', config_fields: [],
+    oauth_providers: ['relay-primary', ' RELAY-SECONDARY ', 'relay-secondary', 'bad/path'],
+  }], echoT);
+  const options = workspaceProviderOptions(projection.records, [...choices, ...pluginChoices]);
   assert.equal(options.includes('all'), false);
   assert.equal(options.includes('anthropic'), false);
   assert.equal(options.includes('claude'), true);
   assert.equal(options.includes('iflow'), true, 'plugin authorization ids are displayable when they are their own family');
   assert.equal(options.includes('mystery'), true, 'unknown observed providers remain filterable');
+  assert.equal(options.includes('relay-secondary'), true);
+  assert.equal(options.includes('relay'), false, 'the owning plugin id is not another login portal');
+  assert.equal(options.filter((provider) => provider === 'relay-secondary').length, 1);
 });
 
 test('auth-index joining is exact, so whitespace near-misses remain diagnostics', () => {
@@ -626,6 +634,13 @@ test('renewal evidence stays independent of healthy quota, SIWC and inference', 
   assert.equal(renewalTone(record.file), 'warn');
   assert.equal(renewalLabel(file({ inference_verified: true, adopted: true })), 'recovery.unknown');
   assert.equal(renewalTone(file({ inference_verified: true, adopted: true })), 'neutral');
-  assert.equal(recoveryStageLabel(file({ recovery_stage: 'loaded' })), 'recovery.loaded');
+  assert.equal(renewalDetail(file({ renewal_state: 'renewal_verified' })), 'recovery.detail_verified');
+  assert.equal(renewalDetail(file({ renewal_state: 'retry_scheduled' })), 'recovery.detail_retry');
   assert.equal(renewalLabel(file({ renewal_state: 'awaiting_first_renewal' })), 'recovery.awaiting_first_renewal');
+  assert.equal(renewalKind(file({ renewal_state: 'renewal_verified' })), 'verified');
+  assert.equal(renewalKind(file({ renewal_state: 'awaiting_first_renewal' })), 'awaiting');
+  assert.equal(renewalKind(file({ renewal_state: 'retry_scheduled' })), 'retry');
+  assert.equal(renewalKind(file({ requires_sign_in: true })), 'reauth');
+  assert.equal(renewalKind(file({ recovery_supported: false })), 'unknown');
+  assert.equal(renewalKind(file({ inference_verified: true, adopted: true })), 'unknown');
 });

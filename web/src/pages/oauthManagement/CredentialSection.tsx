@@ -1,3 +1,4 @@
+import { CredentialRenewalBadge } from '../../components/authFiles/CredentialRenewalBadge';
 import { renewalLabel } from '../../components/authFiles/credentialRecovery';
 import { formatGatewayTimestamp } from '../../utils/time';
 import type { MessageKey } from '../../i18n/catalog';
@@ -21,8 +22,9 @@ import {
   SyncOutlined,
   WarningOutlined,
 } from '../../components/icons';
-import { credentialProviderIconId, getCredentialProviderMetadata } from '../../components/common/providerMetadata';
-import { ProviderBrandIcon } from '../../components/LobeIcon';
+import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { CredentialMark } from '../../components/LobeIcon';
 import { StatusLabel } from '../../components/common/StatusLabel';
 import { Meter } from '../../components/common/Meter';
 import { useT, type TFunc } from '../../i18n';
@@ -64,7 +66,7 @@ export interface CredentialRowActions {
   onToggle: (record: OAuthWorkspaceRecord) => void;
   onDownload: (record: OAuthWorkspaceRecord) => void;
   onDelete: (record: OAuthWorkspaceRecord) => void;
-  onOpen: (record: OAuthWorkspaceRecord, section: 'overview' | 'configuration' | 'models') => void;
+  onOpen: (record: OAuthWorkspaceRecord, section: 'overview' | 'renewal' | 'configuration' | 'models') => void;
   /** Saves the credential's own name; resolves false when it was not saved. */
   onRename: (record: OAuthWorkspaceRecord, displayName: string) => Promise<boolean>;
   onRefreshQuota: (record: OAuthWorkspaceRecord) => void;
@@ -77,7 +79,7 @@ interface CredentialSectionProps {
   section: Section;
   /** The provider's display name, for plugin providers whose name the console does not know. */
   title?: string;
-  pluginLogo?: string;
+  pluginLogos?: PluginOAuthLogos;
   selectedKeys: Set<string>;
   nowMS: number;
   actions: CredentialRowActions;
@@ -107,7 +109,7 @@ function periodTitle(column: QuotaColumn, t: TFunc): string {
  * column's header sorts the section by that reading, which is how an operator with many accounts
  * finds the one with the most Claude quota left without opening anything.
  */
-export function CredentialSection({ section, title, pluginLogo, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
+export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
   const t = useT();
   const metadata = getCredentialProviderMetadata(section.provider);
   const columns = section.families.flatMap((family) => family.columns);
@@ -148,7 +150,7 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
     <section className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
       <header className={styles.head}>
         <span className={styles['head-icon']}>
-          <ProviderBrandIcon iconId={credentialProviderIconId(section.provider)} logo={pluginLogo} size={18} />
+          <CredentialMark provider={section.provider} pluginLogos={pluginLogos} size={18} />
         </span>
         <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
         <span className={styles['head-count']}>{t('omc.section_count', { n: section.records.length })}</span>
@@ -352,23 +354,31 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
         </div>
       </td>
       <td className={styles['td-status']} data-testid="oauth-credential-status" data-credential-renewal>
-        <Tooltip title={<>
-          {explanation && <div>{explanation}</div>}
-          <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
-          {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
-          {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
-        </>}>
-          <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
-        </Tooltip>
+        <div className={styles['status-main']}>
+          <Tooltip title={<>
+            {explanation && <div>{explanation}</div>}
+            <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
+            {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
+            {file.next_refresh_after && <div>{t('recovery.next_refresh')}: {formatGatewayTimestamp(file.next_refresh_after)}</div>}
+            {file.refresh_error && (
+              <div>
+                {t('recovery.refresh_error')}: {[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}
+              </div>
+            )}
+            {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
+          </>}>
+            <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
+          </Tooltip>
+          <CredentialRenewalBadge
+            file={file}
+            onOpen={() => actions.onOpen(record, 'renewal')}
+          />
+        </div>
         {status.needsReauth ? (
           <button type="button" className={styles['status-action']} onClick={() => actions.onReauthenticate(record)}>{t('omc.reauthenticate')}</button>
         ) : failure ? (
           <span className={clsx(styles['status-sub'], styles['status-failed'])} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
-        ) : (
-          <span className={clsx(styles['status-sub'], styles['renewal-status'])} aria-label={`${t('recovery.renewal')}: ${t(renewalLabel(file))}`} title={`${t('recovery.renewal')}: ${t(renewalLabel(file))}`}>
-            {t(renewalLabel(file))}
-          </span>
-        )}
+        ) : null}
       </td>
       <td className={styles['td-switch']}>
         <Switch

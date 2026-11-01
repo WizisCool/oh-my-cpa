@@ -168,8 +168,10 @@ function shutdown(exitCode, reason) {
   return shutdownPromise;
 }
 
-process.once('SIGINT', () => void shutdown(0, 'received SIGINT'));
-process.once('SIGTERM', () => void shutdown(0, 'received SIGTERM'));
+// pnpm can forward a terminal signal that already reached this process. Keep
+// handlers installed while shutdown joins Air/Vite so a duplicate cannot abort cleanup.
+process.on('SIGINT', () => void shutdown(0, 'received SIGINT'));
+process.on('SIGTERM', () => void shutdown(0, 'received SIGTERM'));
 
 try {
   const air = resolveAir();

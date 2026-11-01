@@ -3,6 +3,7 @@ import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { formatCacheRate } from '../../theme/cacheScale';
 import { effortBadgeName, effortStep } from '../../theme/effortScale';
 import { modelMarkIconId } from '../../types/modelSquare';
+import type { BrandMark } from '../../types/brandMark';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -74,12 +75,7 @@ export type SheetSegment =
 
 export type SheetLine = SheetSegment[];
 
-export interface SheetMark {
-  /** A catalog or custom icon reference, resolved to artwork by the painter. */
-  iconId: string;
-  /** A logo its plugin publishes, which outranks the catalog mark. */
-  logo?: string;
-}
+export type SheetMark = BrandMark;
 
 export interface SheetCell {
   /** The provider's mark, drawn on a tile before the cell's lines. */
@@ -176,7 +172,8 @@ export interface RequestSheetInput {
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos?: PluginOAuthLogos;
-  resolveDefaultIcon?: (family: string, name?: string, url?: string) => string;
+  /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
+  isProviderCatalogUnknown?: boolean;
 }
 
 const MASK_LINE: SheetLine = [{ kind: 'mask' }];
@@ -202,8 +199,8 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       input.credentials,
       input.providerIcons,
       input.configuredProviders,
-      input.resolveDefaultIcon,
       input.pluginLogos,
+      input.isProviderCatalogUnknown,
     );
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);
@@ -234,7 +231,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         ]],
       },
       provider: {
-        mark: { iconId: provider.iconId, logo: provider.logo },
+        mark: { iconId: provider.iconId, logo: provider.logo, fallbackIconId: provider.fallbackIconId, providerKeys: provider.providerKeys },
         lines: [
           [
             text(provider.title, 'fg', 13, 500),

@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 	"github.com/oh-my-cpa/oh-my-cpa/migrations"
 )
 
@@ -223,6 +225,112 @@ func TestMigration004SanitizesHistoricalData(t *testing.T) {
 		t.Fatalf("idempotent reopen failed: %v", err)
 	}
 	_ = db2.Close()
+}
+
+func TestStructuredUsageMigrationPreservesBothSchemaHistories(t *testing.T) {
+	for _, history := range []struct {
+		name    string
+		version int
+	}{
+		{"plugin development versions 53 to 55", 52},
+		{"structured usage version 53", 53},
+	} {
+		t.Run(history.name, func(t *testing.T) {
+			ctx := context.Background()
+			cipher, err := crypto.New("01234567890123456789012345678901")
+			if err != nil {
+				t.Fatal(err)
+			}
+			directory := t.TempDir()
+			databasePath := filepath.Join(directory, "upgrade.db")
+			backup := WithMigrationBackup(cipher, filepath.Join(directory, "backups"), 3)
+			db, err := Open(ctx, databasePath, backup, withMigrationsUntil(history.version))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if history.version == 52 {
+				// The plugin development branch recorded these versions without adding
+				// structured usage. Build that history without undoing any migration.
+				if _, err := db.SQL.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (53, 1000), (54, 1000), (55, 1000)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, created_at, updated_at)
+ VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 0, 0);
+ INSERT INTO usage_events(id, instance_id, event_key, api_group_key, timestamp_ms, created_at_ms, total_tokens, cost_nanos, pricing_status)
+ VALUES (41, 'default', 'historical', '', 1234, 2345, 100, 6000000, 'priced')`); err != nil {
+				t.Fatal(err)
+			}
+			var wantHistoricalDetails *string
+			if history.version == 53 {
+				details := `{"web_search_requests":0}`
+				wantHistoricalDetails = &details
+				if _, err := db.SQL.ExecContext(ctx, `INSERT INTO usage_events(id, instance_id, event_key, api_group_key, timestamp_ms, created_at_ms, structured_usage)
+ VALUES (42, 'default', 'structured-historical', '', 1234, 2345, ?)`, details); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var appliedAt int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 53`).Scan(&appliedAt); err != nil {
+				t.Fatal(err)
+			}
+			repo := New(db)
+			raw := `{"request_id":"pending-structured-usage","model":"fixture","tokens":{"total_tokens":5},"web_search_requests":0}`
+			if _, err := repo.AppendUsageInbox(ctx, "default", "http_pull", []string{raw}, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+
+			db.migrateUntil = 0
+			if err := db.Migrate(ctx); err != nil {
+				t.Fatal(err)
+			}
+			var historicalDetails *string
+			var tokens, cost, recordedAt int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT total_tokens, cost_nanos, structured_usage FROM usage_events WHERE id = 41`).Scan(&tokens, &cost, &historicalDetails); err != nil {
+				t.Fatal(err)
+			}
+			if tokens != 100 || cost != 6000000 || historicalDetails != nil {
+				t.Fatalf("historical usage changed: tokens=%d cost=%d details=%v", tokens, cost, historicalDetails)
+			}
+			if wantHistoricalDetails != nil {
+				var details string
+				if err := db.SQL.QueryRowContext(ctx, `SELECT structured_usage FROM usage_events WHERE id = 42`).Scan(&details); err != nil || details != *wantHistoricalDetails {
+					t.Fatalf("existing structured evidence changed: %q %v", details, err)
+				}
+			}
+			if err := db.SQL.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 53`).Scan(&recordedAt); err != nil || recordedAt != appliedAt {
+				t.Fatalf("migration history changed: %d -> %d, %v", appliedAt, recordedAt, err)
+			}
+
+			inbox, err := repo.ClaimUsageInboxBatch(ctx, 1)
+			if err != nil || len(inbox) != 1 || inbox[0].RawMessage != raw {
+				t.Fatalf("pending payload lost: count=%d error=%v", len(inbox), err)
+			}
+			event, err := usage.DecodeEvent(inbox[0].RawMessage, "default", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repo.CommitUsageDecoded(ctx, []UsageDecoded{{InboxID: inbox[0].ID, Event: event}}); err != nil {
+				t.Fatalf("decode pending usage after upgrade: %v", err)
+			}
+			var details string
+			if err := db.SQL.QueryRowContext(ctx, `SELECT structured_usage FROM usage_events WHERE request_id = 'pending-structured-usage'`).Scan(&details); err != nil || details != `{"web_search_requests":0}` {
+				t.Fatalf("structured evidence not retained: %q %v", details, err)
+			}
+			if _, err := db.SQL.ExecContext(ctx, `UPDATE usage_events SET structured_usage = NULL WHERE request_id = 'pending-structured-usage'`); err == nil || !strings.Contains(err.Error(), "immutable") {
+				t.Fatalf("structured evidence lost immutability: %v", err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := Open(ctx, databasePath, backup)
+			if err != nil {
+				t.Fatalf("idempotent reopen: %v", err)
+			}
+			defer reopened.Close()
+		})
+	}
 }
 
 func TestBackupRestoreSmokeAndFreeSpaceCheck(t *testing.T) {

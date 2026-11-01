@@ -16,9 +16,9 @@ import type { MessageKey } from '../../i18n/catalog';
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
 import { customIconID } from '../../types/customIcons';
-import { pluginOAuthLogoFor } from '../../types/pluginOAuthProviders';
 import { isDemoMode } from '../../types/demoMode';
-import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { ProviderMark } from '../LobeIcon';
+import { getProviderDefaultIcon } from '../../types/providerIconIds';
 import { maskKeyText } from '../../utils/maskKey';
 import { modelOptionsFor } from '../../utils/modelOptions';
 import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFamilies';
@@ -222,8 +222,6 @@ export function ProviderEditorDrawer({
   const selectedCustomID = customIconID(formIcon);
   const customIcons = useCustomIcons(providerDrawerOpen && Boolean(selectedCustomID));
   const pluginLogos = usePluginOAuthLogos();
-  const providerKeys = [formFamily, editingProvider?.upstream_name, formName, editingProvider?.id];
-  const pluginLogo = providerKeys.map((key) => pluginOAuthLogoFor(pluginLogos, key)).find(Boolean);
   const iconName = selectedCustomID
     ? customIcons.data?.find((icon) => icon.id === selectedCustomID)?.name ?? t('pro.field_icon')
     : formIcon;
@@ -287,7 +285,7 @@ export function ProviderEditorDrawer({
               }}
               title={t('pro.change_icon')}
             >
-              <ProviderBrandIcon iconId={formIcon} logo={pluginLogo} providerKeys={providerKeys} fallbackIconId={getProviderDefaultIcon(formFamily, formName, formBaseURL)} size={30} />
+              <ProviderMark provider={{ id: editingProvider?.id, family: formFamily, name: formName, upstream_name: editingProvider?.upstream_name, base_url: formBaseURL, icon_id: formIcon }} sources={{ pluginLogos }} size={30} />
             </div>
             <div className={styles['icon-meta']}>
               <div className={styles['icon-label']}>{t('pro.field_icon')}</div>

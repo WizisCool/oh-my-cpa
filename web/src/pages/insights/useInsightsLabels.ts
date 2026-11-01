@@ -2,12 +2,10 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
-import { usePreference } from '../../hooks/usePreference';
-import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
+import { useProviderBranding } from '../../hooks/useProviderBranding';
 import { resolveChannelName } from '../../components/dashboard/dashboardProvidersLogic';
 import { CREDENTIAL_FILES_QUERY_KEY } from '../../components/dashboard/CredentialQuota';
 import { createFacetMarkRenderer } from '../../components/usage/RequestFacetMark';
-import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../types/providerIcons';
 import { createProviderNameResolver, credentialFileName, credentialTitle, indexCredentialFiles } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import { FOLDED_ID, type InsightsCube, type InsightsDimension } from './insightsCube';
@@ -45,22 +43,19 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
     queryFn: () => api.getManagementAuthFiles(),
     staleTime: 60_000,
   });
-  const { data: providers } = useQuery({
-    // The request list's sanitized entry: this page never reads the one carrying key material.
-    queryKey: ['management-providers-sanitized'],
-    queryFn: () => api.getManagementProviders(false),
-    staleTime: 60_000,
-  });
-  const { value: providerIcons } = usePreference<Record<string, string>>(PROVIDER_ICONS_PREFERENCE, EMPTY_PROVIDER_ICONS, parseProviderIcons);
-  const pluginLogos = usePluginOAuthLogos();
+  const {
+    providerIcons,
+    pluginLogos,
+    configuredProviders,
+    isProviderCatalogUnknown,
+  } = useProviderBranding();
 
   const keys = React.useMemo(() => new Map((cube?.keys ?? []).map((key) => [key.id, key])), [cube?.keys]);
   const credentialFiles = React.useMemo(() => indexCredentialFiles(authFiles?.files ?? []), [authFiles]);
-  const configuredProviders = providers?.providers;
   const providerName = React.useMemo(() => createProviderNameResolver(configuredProviders), [configuredProviders]);
   const renderMark = React.useMemo(
-    () => createFacetMarkRenderer({ credentials: credentialFiles, providerIcons, configuredProviders, pluginLogos }),
-    [configuredProviders, credentialFiles, pluginLogos, providerIcons],
+    () => createFacetMarkRenderer({ credentials: credentialFiles, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
+    [configuredProviders, credentialFiles, pluginLogos, providerIcons, isProviderCatalogUnknown],
   );
   const credentials = React.useMemo(() => {
     const names = new Map<string, { name: string; provider?: string }>();

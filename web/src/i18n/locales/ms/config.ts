@@ -492,6 +492,8 @@ export default {
   "cfg.f_claude_disable_cloak_desc": "Melumpuhkan penyamaran CLI Claude Code dan penggantian prompt sistem.",
   "cfg.f_claude_cloaking_model_list": "ID Asal dalam Senarai Model",
   "cfg.f_claude_cloaking_model_list_desc": "Pulangkan ID model asal dalam respons senarai model Anthropic, bukan yang disamarkan",
+  "cfg.f_claude_show_codex_commentary": "Papar ulasan Codex",
+  "cfg.f_claude_show_codex_commentary_desc": "Mencerminkan kemajuan awam Codex ke dalam teks Claude yang boleh dilihat dan bukannya menyembunyikannya; penaakulan peribadi kekal dalam blok pemikiran. Klien yang serasi atau TTS mungkin memaparkan atau menyebut teks tambahan.",
   "cfg.f_claude_timezone": "Zon Waktu",
   "cfg.f_claude_timezone_desc": "Zon waktu IANA sandaran untuk currentDate yang disamarkan; zon waktu fail kelayakan diutamakan",
   "cfg.f_ag_pool_enabled": "Dayakan Kumpulan Sambungan",

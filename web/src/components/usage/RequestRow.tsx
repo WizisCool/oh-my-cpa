@@ -6,7 +6,6 @@ import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
 import { NonStreamOutlined, WebsocketOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
-import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
@@ -53,6 +52,8 @@ export interface RequestRowProps {
   configuredProviders?: ProviderLookupEntry[];
   /** Logos published by installed plugins, keyed by the OAuth provider they register. */
   pluginLogos?: PluginOAuthLogos;
+  /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
+  isProviderCatalogUnknown?: boolean;
   onOpen: (id: number) => void;
   isSelected?: boolean;
   /** Whether the row's checkbox is ticked. */
@@ -68,6 +69,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     providerIcons = {},
     configuredProviders = [],
     pluginLogos = {},
+    isProviderCatalogUnknown = false,
     onOpen,
     isSelected = false,
     isChecked = false,
@@ -107,8 +109,8 @@ export const RequestRow = React.memo<RequestRowProps>(
       credentials,
       providerIcons,
       configuredProviders,
-      getProviderDefaultIcon,
       pluginLogos,
+      isProviderCatalogUnknown,
     );
 
     // Which of the provider's keys answered this request. The server resolves it
@@ -256,7 +258,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 3: provider (credential that answered) */}
         <div className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
           <div className="req-provider-icon-wrapper">
-            <ProviderBrandIcon iconId={providerInfo.iconId} providerKeys={[event.provider]} logo={providerInfo.logo} size={20} />
+            <ProviderBrandIcon mark={providerInfo} size={20} />
           </div>
           <div className="req-provider-content">
             <div className="req-provider-title-row">
@@ -266,6 +268,13 @@ export const RequestRow = React.memo<RequestRowProps>(
               {providerInfo.isOAuth && (
                 <span className="req-badge-oauth" title={t('events.oauth_badge')}>
                   OAuth
+                </span>
+              )}
+              {/* The printed name is a placeholder while the provider catalog is unread, so the
+                  row says so rather than letting the label pass for a resolution. */}
+              {providerInfo.isIdentityUnknown && (
+                <span className="req-badge-unresolved" title={t('events.provider_unresolved')}>
+                  {t('events.provider_unresolved_badge')}
                 </span>
               )}
             </div>

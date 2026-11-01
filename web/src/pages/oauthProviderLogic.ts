@@ -1,8 +1,8 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
-import { credentialProviderIconId } from '../components/common/providerMetadata';
+import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
-import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
+import { pluginOAuthProviderIds, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
 /**
  * The OAuth provider contract for the console: which authorizations exist, how
@@ -87,8 +87,6 @@ export interface OAuthProviderDefinition {
  * callback URL is rebuilt from the fixed local address plus the live state.
  */
 export const XAI_CALLBACK_URL = 'http://127.0.0.1:56121/callback';
-
-export const OAUTH_PROVIDER_PATTERN = /^[a-z0-9-]+$/;
 
 // normalizeOAuthStatus maps CPA get-auth-status variants to one UI contract:
 // "ok" completed, "error" failed, "wait" still in flight. "success"/"pending"
@@ -327,7 +325,7 @@ export function lookupOAuthProvider(id: string): OAuthProviderDefinition | undef
 }
 
 
-export interface OAuthProviderChoice {
+export interface OAuthProviderChoice extends BrandMark {
   id: string;
   flow: OAuthFlowKind;
   iconId: string;
@@ -336,7 +334,6 @@ export interface OAuthProviderChoice {
   loginLabel: string;
   /** Set only for CPA plugin providers. */
   pluginId?: string;
-  pluginLogo?: string;
   /** A plugin-owned page takes precedence over a speculative interactive login. */
   pluginPageRoute?: string;
   requiresExplicitCancel?: boolean;
@@ -348,6 +345,8 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
     id: provider.id,
     flow: provider.flow,
     iconId: provider.iconId,
+    fallbackIconId: provider.iconId,
+    providerKeys: [provider.id],
     title: t(OAUTH_COPY[provider.keyBase].title),
     description: t(OAUTH_COPY[provider.keyBase].hint),
     loginLabel: t(OAUTH_COPY[provider.keyBase].login),
@@ -367,37 +366,37 @@ export function pluginOAuthProviderChoices(
   t: TFunc,
 ): OAuthProviderChoice[] {
   const seen = new Set<string>(BUILTIN_OAUTH_IDS);
-  const logos = pluginOAuthProviderLogos(plugins);
   const pages = collectPluginPages(plugins);
   const choices: OAuthProviderChoice[] = [];
   for (const plugin of plugins ?? []) {
-    const hasAuthProvider = Boolean(plugin.supports_oauth);
-    const providerId = (plugin.oauth_provider || (hasAuthProvider ? plugin.id : '')).trim().toLowerCase();
     const isEnabled = plugin.effective_enabled ?? plugin.enabled;
-    if (!hasAuthProvider || !isEnabled || !providerId || seen.has(providerId) || !OAUTH_PROVIDER_PATTERN.test(providerId)) {
-      continue;
-    }
-    seen.add(providerId);
-    const title = pluginDisplayName(plugin);
+    if (!plugin.supports_oauth || !isEnabled) continue;
+    const providerIds = pluginOAuthProviderIds(plugin);
+    const logos = pluginOAuthProviderLogos([plugin]);
+    const name = pluginDisplayName(plugin);
     const pluginPageRoute = pages.find((page) => page.pluginId === plugin.id)?.route;
-    choices.push({
-      id: providerId,
-      flow: 'plugin',
-      pluginPageRoute,
-      iconId: credentialProviderIconId(providerId, title),
-      title: t('oauth.plugin_title', { name: title }),
-      description: t(pluginPageRoute ? 'oauth.plugin_page_hint' : 'oauth.plugin_hint', { name: title }),
-      loginLabel: t(pluginPageRoute ? 'oauth.plugin_open_page' : 'oauth.plugin_login', { name: title }),
-      pluginId: plugin.id,
-      pluginLogo: pluginOAuthLogoFor(logos, providerId),
-      callback: pluginPageRoute ? undefined : {
-        // These rules become usable only after CPA actually starts a redirect session.
-        errorKeys: {
-          invalid: 'oauth.callback_invalid_url',
-          missingState: 'oauth.missing_state',
+    for (const providerId of providerIds) {
+      if (seen.has(providerId)) continue;
+      seen.add(providerId);
+      const title = providerIds.length > 1 ? `${name} · ${providerId}` : name;
+      choices.push({
+        id: providerId,
+        flow: 'plugin',
+        pluginPageRoute,
+        ...resolveCredentialMark(providerId, title, logos),
+        title: t('oauth.plugin_title', { name: title }),
+        description: t(pluginPageRoute ? 'oauth.plugin_page_hint' : 'oauth.plugin_hint', { name: title }),
+        loginLabel: t(pluginPageRoute ? 'oauth.plugin_open_page' : 'oauth.plugin_login', { name: title }),
+        pluginId: plugin.id,
+        callback: pluginPageRoute ? undefined : {
+          // These rules become usable only after CPA actually starts a redirect session.
+          errorKeys: {
+            invalid: 'oauth.callback_invalid_url',
+            missingState: 'oauth.missing_state',
+          },
         },
-      },
-    });
+      });
+    }
   }
   return choices;
 }

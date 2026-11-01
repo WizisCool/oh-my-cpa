@@ -6,8 +6,7 @@ import { api, ApiError, apiErrorCode, isRetryableWriteFailure, describeError } f
 import { useT } from '../../i18n';
 import type { Toast } from '../feedback';
 import { useLastIntentQueue, LastIntentTimeoutError } from '../../hooks/useLastIntentQueue';
-import { getProviderDefaultIcon } from '../LobeIcon';
-import { resolveProviderIcon } from '../../types/providerIcons';
+import { resolveProviderPickerIcon } from '../../types/brandMark';
 import { isSafeExternalURL } from '../../utils/externalUrl';
 import { providerStatusPayload } from '../../types/providerId';
 import { lookupProviderFamily } from '../../types/providerFamilies';
@@ -70,6 +69,13 @@ export function useProviderManagement({
   settleProviderRow: (id: string, isEnabled: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+
+  const invalidateProviderCatalogs = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['management-providers'] }),
+      queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] }),
+    ]);
+  };
 
   // Provider Drawer state
   const [providerDrawerOpen, setProviderDrawerOpen] = useState(false);
@@ -483,6 +489,7 @@ export function useProviderManagement({
       // the one the switch displays. Settled here, before the key is released, so
       // the row never renders a released key against a pre-write server value.
       settleProviderRow(id, isEnabled);
+      void queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] });
     },
     onError: (_id, err) => {
       // A timeout is reported differently from a refusal on purpose: abandoning a
@@ -496,7 +503,7 @@ export function useProviderManagement({
       // The write did not confirm, so the row's displayed state is unknown rather
       // than merely stale: the list is re-read so the switch shows what the
       // gateway actually holds instead of the value that was attempted.
-      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      void invalidateProviderCatalogs();
     },
   });
 
@@ -511,11 +518,11 @@ export function useProviderManagement({
     onSuccess: async (data, variables) => {
       for (const id of data.ids ?? [data.id]) {
         const result = await writeProviderIcon(id, variables.icon);
-        if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+        if (!result.ok) { handleCloseProviderDrawer(); void invalidateProviderCatalogs(); return; }
       }
       toast.success(t('pro.provider_created'));
       handleCloseProviderDrawer();
-      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      void invalidateProviderCatalogs();
     },
     onError: (err: unknown) => {
       toast.error(providerWriteMessage(err));
@@ -530,21 +537,21 @@ export function useProviderManagement({
         // Refresh the overlays moved by the server before merging an icon pick,
         // or the cached source ids would be written back over the new positions.
         handleCloseProviderDrawer();
-        void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+        void invalidateProviderCatalogs();
         await queryClient.fetchQuery({ queryKey: ['preferences'], queryFn: api.getPreferences, staleTime: 0 });
       }
       for (const id of data.ids ?? [data.id]) {
         const result = await writeProviderIcon(id, variables.icon);
-        if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+        if (!result.ok) { handleCloseProviderDrawer(); void invalidateProviderCatalogs(); return; }
       }
       toast.success(t('pro.provider_updated'));
       handleCloseProviderDrawer();
-      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      void invalidateProviderCatalogs();
     },
     onError: (err: unknown) => {
       if (apiErrorCode(err) === 'provider_commit_partial') {
         handleCloseProviderDrawer();
-        void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+        void invalidateProviderCatalogs();
         void queryClient.invalidateQueries({ queryKey: ['preferences'] });
       }
       toast.error(providerWriteMessage(err));
@@ -556,7 +563,7 @@ export function useProviderManagement({
       toast.success(t('pro.provider_deleted'));
       shiftCachedProviderIcons(id);
       void queryClient.invalidateQueries({ queryKey: ['custom-icons'] });
-      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      void invalidateProviderCatalogs();
     },
     onError: (err: unknown) => {
       toast.error(providerWriteMessage(err));
@@ -585,12 +592,12 @@ export function useProviderManagement({
         expectedName: provider.upstream_name,
       });
       toast.success(t(next ? 'af.renamed' : 'af.rename_cleared'));
-      await queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+      await invalidateProviderCatalogs();
       return true;
     } catch (err) {
       toast.error(providerWriteMessage(err));
       if (apiErrorCode(err) === 'provider_stale_identity') {
-        await queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+        await invalidateProviderCatalogs();
       }
       return false;
     }
@@ -642,11 +649,7 @@ export function useProviderManagement({
     setIsPolicyChecked(false);
 
     setFormTestModel('auto');
-    const existingIcon = resolveProviderIcon(
-      providerIcons,
-      provider,
-      getProviderDefaultIcon(provider.family, provider.name, provider.base_url),
-    );
+    const existingIcon = resolveProviderPickerIcon(provider, { providerIcons });
     setFormIcon(existingIcon);
     setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
     // Populate keys (plaintext — the tool mirrors the CPA config file as-is)

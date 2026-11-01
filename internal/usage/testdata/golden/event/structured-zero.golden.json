@@ -1,0 +1,41 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "EventKey": "structured-zero",
+  "Failed": true,
+  "Generate": true,
+  "InputTokens": 7,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "OutputTokens": 2,
+  "RequestID": "structured-zero",
+  "Stream": true,
+  "StructuredUsage": {
+    "tokens": {
+      "text_input_tokens": 0,
+      "image_output_tokens": 0
+    },
+    "cache_details": {
+      "ephemeral_5m_input_tokens": 0,
+      "by_ttl": {
+        "5m": 0
+      }
+    },
+    "tool_usage_details": {
+      "web_search_calls": 0
+    },
+    "web_search_requests": 0,
+    "image_count": 0,
+    "iterations": [
+      {
+        "output_tokens": 0
+      }
+    ],
+    "cost_details": {
+      "cost": 0,
+      "is_byok": false
+    }
+  },
+  "TimestampMS": 1800000000000,
+  "TotalTokens": 9
+}

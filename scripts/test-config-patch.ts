@@ -439,3 +439,62 @@ test('compression settings keep omitted defaults and send only canonical overrid
   for (const [id, defaultValue] of settings) updateFieldWithBaseline(draft, baseline, field(id), defaultValue);
   assert.deepEqual(draft.toJS(), baseline.toJS());
 });
+
+const CLAUDE_CLIENT_YAML = `client:
+    codex:
+        optimize-multi-agent-v2: true
+`;
+
+test('the Claude Codex commentary setting edits client.claude beside existing client settings', () => {
+  const commentaryField = field('claudeShowCodexCommentary');
+  const server = parseDocument(CLAUDE_CLIENT_YAML);
+  assert.equal(getFieldSemanticValue(server, commentaryField), false, 'an absent setting defaults to false');
+
+  const draft = parseDocument(CLAUDE_CLIENT_YAML);
+  updateFieldWithBaseline(draft, server, commentaryField, false);
+  assert.deepEqual(computeConfigChanges(server, draft), [], 'confirming the omitted false writes nothing');
+  assert.equal(draft.toString(), server.toString());
+
+  updateFieldWithBaseline(draft, server, commentaryField, true);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['client', 'claude'], value: { 'show-codex-commentary': true } },
+  ]);
+  assert.equal(draft.getIn(['client', 'codex', 'optimize-multi-agent-v2']), true, 'unrelated codex settings are preserved');
+
+  const reloaded = parseDocument(draft.toString());
+  assert.equal(getFieldSemanticValue(reloaded, commentaryField), true);
+  assert.equal(reloaded.getIn(['client', 'claude', 'show-codex-commentary']), true);
+
+  // Returning to baseline leaves document clean
+  updateFieldWithBaseline(draft, server, commentaryField, false);
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+  assert.equal(draft.toString(), server.toString());
+
+  // When client.claude already exists on the server, editing changes the leaf key
+  const serverWithClaude = parseDocument('client:\n    codex:\n        optimize-multi-agent-v2: true\n    claude:\n        show-codex-commentary: false\n');
+  const draftWithClaude = parseDocument(serverWithClaude.toString());
+  updateFieldWithBaseline(draftWithClaude, serverWithClaude, commentaryField, true);
+  assert.deepEqual(computeConfigChanges(serverWithClaude, draftWithClaude), [
+    { path: ['client', 'claude', 'show-codex-commentary'], value: true },
+  ]);
+});
+
+test('explicitly configured false for Claude Codex commentary is preserved against true', () => {
+  const commentaryField = field('claudeShowCodexCommentary');
+  const configuredYaml = `client:
+    claude:
+        show-codex-commentary: true
+`;
+  const server = parseDocument(configuredYaml);
+  assert.equal(getFieldSemanticValue(server, commentaryField), true);
+
+  const draft = parseDocument(configuredYaml);
+  updateFieldWithBaseline(draft, server, commentaryField, false);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['client', 'claude', 'show-codex-commentary'], value: false },
+  ]);
+  const reloaded = parseDocument(draft.toString());
+  assert.equal(getFieldSemanticValue(reloaded, commentaryField), false);
+  assert.equal(reloaded.getIn(['client', 'claude', 'show-codex-commentary']), false);
+});
+

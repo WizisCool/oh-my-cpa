@@ -1,3 +1,4 @@
+import type { MarkArtwork } from '../../types/brandMark';
 import { brandDataUri, brandDrawing } from '../../assets/brand/markup';
 import type { ThemePalette } from '../../theme/palette';
 import { exportPixelRatio } from './requestSelection';
@@ -90,8 +91,8 @@ export interface SheetStyle {
   fontMono: string;
 }
 
-/** Artwork for a provider mark, or null when there is none to draw. */
-export type MarkResolver = (mark: SheetMark) => { url: string; isMono: boolean } | null;
+/** Ordered artwork candidates; an empty list leaves the painter’s neutral placeholder. */
+export type MarkResolver = (mark: SheetMark) => readonly MarkArtwork[];
 
 const toneColor = (palette: ThemePalette, tone: SheetTone): string =>
   ({
@@ -193,14 +194,14 @@ export async function paintRequestSheet(
     for (const cell of Object.values(row.cells)) {
       const cellMarks = [cell.mark, ...cell.lines.flat().map((segment) => (segment.kind === 'mark' ? segment.mark : undefined))];
       for (const mark of cellMarks) {
-        const artwork = mark ? resolveMark(mark) : null;
-        if (artwork) marks.set(artwork.url, artwork);
+        for (const artwork of mark ? resolveMark(mark) : []) marks.set(artwork.url, artwork);
       }
     }
   }
-  const [brand] = await Promise.all([load(brandUrl), ...[...marks.keys()].map(load), document.fonts.ready]);
+  const pendingMarks = new Map([...marks.keys()].map((url) => [url, load(url)]));
+  const [brand] = await Promise.all([load(brandUrl), ...pendingMarks.values(), document.fonts.ready]);
   const loaded = new Map<string, HTMLImageElement | null>();
-  for (const url of marks.keys()) loaded.set(url, await load(url));
+  for (const [url, pending] of pendingMarks) loaded.set(url, await pending);
   if (!isCurrent()) return;
 
   const height = sheetHeight(sheet);
@@ -216,7 +217,7 @@ export async function paintRequestSheet(
   const tinted = new Map<string, HTMLCanvasElement>();
   /** The mark's artwork at a size, a silhouette filled with the ink; null when it could not be loaded. */
   const markSource = (mark: SheetMark, size: number): CanvasImageSource | null => {
-    const artwork = resolveMark(mark);
+    const artwork = resolveMark(mark).find((candidate) => loaded.get(candidate.url));
     const image = artwork ? loaded.get(artwork.url) : null;
     if (!artwork || !image) return null;
     if (!artwork.isMono) return image;

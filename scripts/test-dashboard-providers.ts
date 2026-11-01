@@ -10,6 +10,7 @@ import {
 } from '../web/src/components/dashboard/dashboardProvidersLogic';
 import type { ManagementOverviewProvider } from '../web/src/types/management';
 import type { ProviderItem } from '../web/src/types/providers';
+import { pluginOAuthProviderKeys } from '../web/src/types/pluginOAuthProviders';
 import { test } from 'vitest';
 
 test('dashboard providers', () => {
@@ -305,10 +306,13 @@ test('dashboard providers', () => {
   assert.equal(geminiFamily.length, 1);
   assert.equal(geminiFamily[0].disabled, true, 'A console family reads the credentials it owns');
 
-  // A plugin-driven OAuth channel owns the files its plugin id names.
+  // A secondary login identifier still belongs to its plugin's OAuth channel.
   const pluginChannel = aggregateProviders({
     authFilesByType: [{ type: 'acme', count: 1, disabled: 1 }],
-    pluginOAuthIds: new Set(['acme']),
+    pluginOAuthIds: new Set(pluginOAuthProviderKeys({
+      id: 'acme-auth', configured: true, registered: true, enabled: true, effective_enabled: true,
+      supports_oauth: true, oauth_provider: 'acme-primary', oauth_providers: ['acme-primary', 'acme'], config_fields: [],
+    })),
     configuredProviders: [
       {
         id: 'openai-compat-5',
@@ -339,6 +343,27 @@ test('dashboard providers', () => {
   assert.ok(brandedRow, 'the plugin OAuth channel must be aggregated');
   assert.equal(brandedRow.logo, pluginLogoURL, 'the plugin logo is carried on the row');
   assert.equal(brandedRow.iconId, 'DeepSeek', 'the stored icon override is still resolved as the fallback mark');
+
+  const normalizedPlugin = aggregateProviders({
+    authFilesByType: [{ type: 'CodeBuddy', count: 1, disabled: 0 }],
+    pluginOAuthIds: new Set(['codebuddy']),
+    customIcons: { codebuddy: 'DeepSeek' },
+  });
+  assert.equal(normalizedPlugin[0].iconId, 'DeepSeek', 'a normalized plugin key finds its stored icon');
+
+  const apiKeyFamily = aggregateProviders({
+    configuredProviders: [{
+      id: 'codex-0',
+      family: 'codex',
+      name: 'Codex',
+      protocol: 'OpenAI Responses',
+      auth_indexes: ['key-a'],
+      disabled: false,
+      key_configured: true,
+    }],
+    pluginOAuthIds: new Set(['codex']),
+  });
+  assert.deepEqual(apiKeyFamily[0].providerKeys, ['codex-0'], 'an API-key family does not become plugin ownership');
 
   // A channel no plugin owns carries no logo, so its row renders the console mark.
   const unbranded = aggregateProviders({ authFilesByType: [{ type: 'antigravity', count: 1, disabled: 0 }] });

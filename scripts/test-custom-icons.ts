@@ -44,6 +44,7 @@ test('plugin ownership is independent of logo availability or enablement', () =>
     {
       id: 'Relay',
       oauth_provider: 'relay-oauth',
+      oauth_providers: ['relay-oauth', ' Relay-Secondary '],
       supports_oauth: true,
       enabled: false,
       logo: '',
@@ -51,6 +52,8 @@ test('plugin ownership is independent of logo availability or enablement', () =>
   ] as PluginItem[];
   assert.equal(pluginOwnsProvider(plugins, [' RELAY-OAUTH ']), true);
   assert.equal(pluginOwnsProvider(plugins, ['relay']), true);
+  assert.equal(pluginOwnsProvider(plugins, ['RELAY-SECONDARY']), true);
+  assert.equal(pluginOwnsProvider([{ ...plugins[0], supports_oauth: false, oauth_provider: undefined }], ['relay-secondary']), true);
   assert.equal(pluginOwnsProvider(plugins, ['other']), false);
 });
 test('plugin identity cannot be overridden when a logo is missing, broken or still loading', () => {

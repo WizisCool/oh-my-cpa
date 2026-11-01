@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntdApp, Button, Segmented } from 'antd';
 import { DeleteOutlined, SaveOutlined } from '../icons';
-import { ProviderBrandIcon } from '../LobeIcon';
-import { credentialProviderIconId, getCredentialProviderMetadata } from '../common/providerMetadata';
-import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { CredentialMark } from '../LobeIcon';
+import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
@@ -70,9 +70,9 @@ function safeError(error: unknown, t: TFunc): string {
   return error instanceof Error ? error.message : t('af.request_failed');
 }
 
-const ProviderIdentity: React.FC<{ provider: string; logo?: string }> = ({ provider, logo }) => (
+const ProviderIdentity: React.FC<{ provider: string; pluginLogos?: PluginOAuthLogos }> = ({ provider, pluginLogos }) => (
   <span className={styles['provider-identity']} data-testid="oauth-model-rules-provider-identity" data-provider={provider}>
-    <ProviderBrandIcon iconId={credentialProviderIconId(provider)} logo={logo} size={18} />
+    <CredentialMark provider={provider} pluginLogos={pluginLogos} size={18} />
     <span className={styles['provider-option-name']}>{getCredentialProviderMetadata(provider).label}</span>
   </span>
 );
@@ -301,7 +301,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       searchText: `${value} ${getCredentialProviderMetadata(value).label}`.toLowerCase(),
       label: (
         <span className={styles['provider-option']}>
-          <ProviderIdentity provider={value} logo={pluginOAuthLogoFor(pluginLogos, value)} />
+          <ProviderIdentity provider={value} pluginLogos={pluginLogos} />
           <span className={styles['provider-option-meta']}>
             {t('af.rules_provider_counts', {
               aliases: savedAliases?.[value]?.length ?? 0,
@@ -319,7 +319,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         searchText: `${typedProvider} ${getCredentialProviderMetadata(typedProvider).label}`.toLowerCase(),
         label: (
           <span className={styles['provider-option']}>
-            <ProviderIdentity provider={typedProvider} logo={pluginOAuthLogoFor(pluginLogos, typedProvider)} />
+            <ProviderIdentity provider={typedProvider} pluginLogos={pluginLogos} />
             <span className={styles['provider-option-meta']}>{t('af.rules_provider_use', { provider: typedProvider })}</span>
           </span>
         ),
@@ -446,7 +446,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
                   placeholder={t('af.rules_provider_placeholder')}
                   options={providerSelectOptions}
                   // Counts belong to the options and tabs; the selected identity matches the page's provider tabs.
-                  labelRender={(option) => <ProviderIdentity provider={String(option.value ?? '')} logo={pluginOAuthLogoFor(pluginLogos, String(option.value ?? ''))} />}
+                  labelRender={(option) => <ProviderIdentity provider={String(option.value ?? '')} pluginLogos={pluginLogos} />}
                   showSearch={{
                     searchValue: providerSearch,
                     onSearch: setProviderSearch,

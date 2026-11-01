@@ -9,10 +9,8 @@ import { Panel } from '../../common/Panel';
 import { Placeholder } from '../../common/Placeholder';
 import { LoadFailure } from '../../feedback';
 import { useLiveRevision } from '../../../hooks/useLiveRevision';
-import { usePluginOAuthLogos } from '../../../hooks/usePluginOAuthLogos';
-import { usePreference } from '../../../hooks/usePreference';
+import { useProviderBranding } from '../../../hooks/useProviderBranding';
 import { useT } from '../../../i18n';
-import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../../types/providerIcons';
 import type { ConfigScalarsResponse } from '../../../types/configManagement';
 import { EVENT_AUTO_REFRESH_MS } from '../../../types/usageEventCadence';
 import { indexCredentialFiles } from '../../../types/usageEventIdentity';
@@ -183,28 +181,21 @@ export function RoutingPanel() {
     queryFn: () => api.getManagementAuthFiles(),
     staleTime: 60_000,
   });
-  const providersQuery = useQuery({
-    // The sanitized entry, never the providers page's plaintext one.
-    queryKey: ['management-providers-sanitized'],
-    queryFn: () => api.getManagementProviders(false),
-    staleTime: 60_000,
-  });
   const configQuery = useQuery<ConfigScalarsResponse>({
     queryKey: ['management-config'],
     queryFn: () => api.getConfigScalars(),
     staleTime: 60_000,
   });
-  const { value: providerIcons } = usePreference<Record<string, string>>(
-    PROVIDER_ICONS_PREFERENCE,
-    EMPTY_PROVIDER_ICONS,
-    parseProviderIcons,
-  );
-  const pluginLogos = usePluginOAuthLogos();
+  const {
+    providerIcons,
+    pluginLogos,
+    configuredProviders,
+    isProviderCatalogUnknown,
+  } = useProviderBranding();
   const credentials = React.useMemo(() => indexCredentialFiles(authFiles.data?.files || []), [authFiles.data]);
-  const configuredProviders = providersQuery.data?.providers;
   const sources = React.useMemo<IdentitySources>(
-    () => ({ credentials, providerIcons, configuredProviders, pluginLogos }),
-    [credentials, providerIcons, configuredProviders, pluginLogos],
+    () => ({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown],
   );
 
   const strategyValue = configQuery.data?.scalars?.routing_strategy;
