@@ -8,8 +8,9 @@ import { useT, type TFunc } from '../../i18n';
 import { LoadFailure, useToast } from '../feedback';
 import { LoadingRegion, Placeholder } from '../common/Placeholder';
 import { RefreshButton } from '../common/RefreshButton';
-import { credentialProviderIconId } from '../common/providerMetadata';
-import { ProviderBrandIcon } from '../LobeIcon';
+import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { CredentialMark } from '../LobeIcon';
 import {
   ClockCircleOutlined,
   CloseCircleOutlined,
@@ -109,7 +110,7 @@ const QuotaWindowMeter: React.FC<{ window: QuotaWindow }> = ({ window }) => {
   );
 };
 
-const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number }> = ({ row, nowMS }) => {
+const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number; pluginLogos?: PluginOAuthLogos }> = ({ row, nowMS, pluginLogos }) => {
   const t = useT();
   const status = STATUS_ROW_STATES[row.state];
   // A blocked row counts down to when it serves again; a serving one to when its tightest window
@@ -125,9 +126,8 @@ const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number 
       className={clsx('quota-row', `is-${row.state}`, isCredentialQuotaBlocked(row.state) && 'is-blocked')}
       data-quota-state={row.state}
     >
-      <ProviderBrandIcon
-        iconId={credentialProviderIconId(row.provider, row.fileName)}
-        providerKeys={[row.provider]}
+      <CredentialMark
+        provider={row.provider} hint={row.fileName} pluginLogos={pluginLogos}
         size={16}
         className="quota-row-icon"
       />
@@ -155,6 +155,7 @@ const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number 
 };
 
 export interface CredentialQuotaPanelProps {
+  pluginLogos?: PluginOAuthLogos;
   /** Absent until the credential list has been read once. */
   files?: ManagementAuthFile[];
   /** Absent when no quota reading is available; the rows then say so rather than vanish. */
@@ -192,6 +193,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
   files,
   quotas,
   nowMS,
+  pluginLogos,
   isLoading = false,
   isError = false,
   error,
@@ -273,7 +275,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
               // Every credential is listed and the list scrolls inside the panel, so a large fleet
               // is readable here without the panel outgrowing the row it shares.
               <ul className="quota-list">
-                {board.rows.map((row) => <CredentialQuotaRowView key={row.key} row={row} nowMS={nowMS} />)}
+                {board.rows.map((row) => <CredentialQuotaRowView key={row.key} row={row} nowMS={nowMS} pluginLogos={pluginLogos} />)}
               </ul>
             ) : (
               <p className="empty-copy quota-all-disabled">{t('dash.quota.all_disabled')}</p>
@@ -298,6 +300,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
  * workspace uses, and it reports under the same toast key so the two never stack reports.
  */
 export const CredentialQuota: React.FC = () => {
+  const pluginLogos = usePluginOAuthLogos();
   const filesQuery = useQuery({
     queryKey: [CREDENTIAL_FILES_QUERY_KEY],
     queryFn: () => api.getManagementAuthFiles(),
@@ -364,6 +367,7 @@ export const CredentialQuota: React.FC = () => {
 
   return (
     <CredentialQuotaPanel
+      pluginLogos={pluginLogos}
       onRefreshQuota={() => void refreshQuota()}
       isRefreshingQuota={isRefreshingQuota}
       files={filesQuery.data?.files}

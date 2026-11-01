@@ -22,14 +22,11 @@ export interface ProviderIconKeys {
 }
 
 /**
- * resolveProviderIcon is the single resolution order for a provider's mark.
+ * Resolve the persisted selection, before brand ownership and artwork fallback are applied.
  *
  * The row id is the row's identity and wins; the display name is read second so
  * an override stored before the id was known (or by an older build) still
- * applies. Every surface that draws a provider mark - the provider table, the
- * edit drawer, the picker's current selection and the request rows - goes
- * through here, because a second copy of this order is a surface that can
- * silently disagree with the rest.
+ * applies. The semantic resolver in brandMark.ts uses this order for every connection.
  */
 export function resolveProviderIcon(
   icons: Record<string, string>,

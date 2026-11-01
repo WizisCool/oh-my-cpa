@@ -1,4 +1,3 @@
-import { getProviderDefaultIcon } from '../../LobeIcon';
 import type { PluginOAuthLogos } from '../../../types/pluginOAuthProviders';
 import {
   resolveProviderInfo,
@@ -6,6 +5,7 @@ import {
   type ProviderLookupEntry,
 } from '../../../types/usageEventIdentity';
 import type { UsageEvent } from '../../../types/usageEvents';
+import type { BrandMark } from '../../../types/brandMark';
 import { maskKeyText } from '../../../utils/maskKey';
 
 export interface IdentitySources {
@@ -13,9 +13,11 @@ export interface IdentitySources {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  /** The provider catalog could not be read, so a recorded name is a placeholder, not a verdict. */
+  isProviderCatalogUnknown?: boolean;
 }
 
-export interface TargetIdentity {
+export interface TargetIdentity extends BrandMark {
   title: string;
   /** Which credential of the provider answered; empty when the record cannot say. */
   credential: string;
@@ -35,13 +37,13 @@ export function targetIdentity(event: UsageEvent, sources: IdentitySources): Tar
     sources.credentials,
     sources.providerIcons,
     sources.configuredProviders,
-    getProviderDefaultIcon,
     sources.pluginLogos,
+    sources.isProviderCatalogUnknown,
   );
   const credential = info.isOAuth
     ? info.credential ?? ''
     : maskKeyText(event.provider_key_mask) || event.auth_index?.trim() || '';
-  return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo };
+  return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo, fallbackIconId: info.fallbackIconId, providerKeys: info.providerKeys, isIdentityUnknown: info.isIdentityUnknown };
 }
 
 /** The CSS colour of a model's lane slot: an identity hue, never a status hue. */

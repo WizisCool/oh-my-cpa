@@ -22,7 +22,7 @@ import { useOpenPriceEditor } from '../../components/pricing/PricingEditorContex
 import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
 import { TierBadges } from '../../components/pricing/PricingParts';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
-import { pluginOAuthProviderLogos, pluginOAuthLogoFor } from '../../types/pluginOAuthProviders';
+import { useProviderBranding } from '../../hooks/useProviderBranding';
 import { groupPricingModels, pagePricingGroups } from '../../types/pricingGroups';
 import { pricingModelIdentity, pricingProviderIdentity } from '../../components/pricing/pricingIdentity';
 import { pricingErrorText } from '../../components/pricing/pricingErrors';
@@ -146,8 +146,7 @@ export const PricingPage: React.FC = () => {
   const [page, setPage] = React.useState(1);
   const isPhone = useIsPhoneViewport();
   const listRef = React.useRef<HTMLElement>(null);
-  const plugins = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30_000 });
-  const pluginLogos = React.useMemo(() => pluginOAuthProviderLogos(plugins.data?.plugins), [plugins.data?.plugins]);
+  const branding = useProviderBranding();
   React.useEffect(() => { setPage(1); }, [search, filter, providerFilter]);
 
   const result = useQuery({
@@ -536,7 +535,7 @@ export const PricingPage: React.FC = () => {
               aria-label={t('pricing.provider.filter')}
               options={[
                 { value: 'all', label: t('pricing.provider.all') },
-                ...allGroups.map((group) => ({ value: group.id, label: group.provider ? pricingProviderIdentity(group.provider).label : t('pricing.provider.unassigned') })),
+                ...allGroups.map((group) => ({ value: group.id, label: group.provider ? pricingProviderIdentity(group.provider, branding).label : t('pricing.provider.unassigned') })),
               ]}
             />
             <SearchInput
@@ -556,11 +555,11 @@ export const PricingPage: React.FC = () => {
             />
           )}
           {pageGroups.map((group, groupIndex) => {
-            const identity = group.provider ? pricingProviderIdentity(group.provider) : null;
+            const identity = group.provider ? pricingProviderIdentity(group.provider, branding) : null;
             return (
               <section key={group.id} className={styles['provider-group']} data-testid="pricing-provider-group" aria-label={identity?.label ?? t('pricing.provider.unassigned')}>
                 <header className={styles['provider-heading']}>
-                  {group.provider && <ProviderBrandIcon iconId={identity?.iconId} providerKeys={[group.provider.family, group.provider.name]} logo={pluginOAuthLogoFor(pluginLogos, group.provider.family) ?? pluginOAuthLogoFor(pluginLogos, group.provider.name)} size={20} />}
+                  {group.provider && <ProviderBrandIcon mark={identity!} size={20} />}
                   <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
                   {group.provider && <span className={styles.dimmed}>{group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')} · {t('omc.priority_value', { n: group.provider.priority })}</span>}
                 </header>
@@ -587,7 +586,7 @@ export const PricingPage: React.FC = () => {
           )}
         </section>
       ) : (
-        <ChannelMultipliersPanel providers={data?.providers ?? []} pluginLogos={pluginLogos} channels={data?.channels ?? []} isLoading={result.isLoading} isBlocked={result.isError && !data} />
+        <ChannelMultipliersPanel providers={data?.providers ?? []} branding={branding} channels={data?.channels ?? []} isLoading={result.isLoading} isBlocked={result.isError && !data} />
       )}
     </div>
   );

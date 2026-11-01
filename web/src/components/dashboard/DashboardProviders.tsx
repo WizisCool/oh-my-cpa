@@ -211,9 +211,7 @@ export const DashboardProviders = React.memo(function DashboardProviders({
                   <div className="provider-main-col">
                     <div className="provider-brand-badge">
                       <ProviderBrandIcon
-                        iconId={provider.iconId}
-                        providerKeys={[provider.key]}
-                        logo={provider.logo}
+                        mark={provider}
                         size={20}
                         className="provider-brand-icon"
                       />

@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -5,7 +6,7 @@ import { expect, it } from 'vitest';
 import { RoutingPage } from '../src/pages/routing/RoutingPage';
 import type { RoutingBoard, RoutingMember } from '../src/types/routing';
 import { installOmcApi, json } from './support/omcApi';
-import { renderWithOmc } from './support/render';
+import { createTestQueryClient, renderWithOmc } from './support/render';
 
 const member = (key: string, name: string, priority: number, kind: RoutingMember['kind'] = 'credential'): RoutingMember => ({
   key, kind, id: key.split(':')[1], family: 'codex', name, priority,
@@ -28,13 +29,13 @@ const board: RoutingBoard = {
   partial: [],
 };
 
-function renderRoutingPage() {
+function renderRoutingPage(client?: QueryClient) {
   const router = createMemoryRouter([
     { path: '/routing', element: <RoutingPage /> },
     { path: '/elsewhere', element: <h1>Other page</h1> },
   ], { initialEntries: ['/routing'] });
   // jsdom owns the blocker state; the browser probe owns dialog motion and focus.
-  return { ...renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><AntdApp><RouterProvider router={router} /></AntdApp></ConfigProvider>), router };
+  return { ...renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><AntdApp><RouterProvider router={router} /></AntdApp></ConfigProvider>, { client }), router };
 }
 
 async function arrangeAndApply(reply: Response | object) {
@@ -191,4 +192,38 @@ it('protects a draft from route departure and unload until it is explicitly disc
   const cleanUnload = new Event('beforeunload', {cancelable:true});
   window.dispatchEvent(cleanUnload);
   expect(cleanUnload.defaultPrevented).toBe(false);
+});
+
+
+it('uses each provider’s saved brand and plugin artwork without changing credential-family marks', async () => {
+  const customID = '0123456789abcdef0123456789abcdef';
+  const pluginLogo = 'data:image/svg+xml,%3Csvg%20xmlns="http://www.w3.org/2000/svg"/%3E';
+  const api = installOmcApi({
+    preferences: { provider_icons: { 'codex-0': 'OpenCode', 'codex-1': `custom:${customID}`, 'relay-0': 'OpenAI', 'primary.json': 'OpenCode' } },
+    plugins: [{ id: 'relay', oauth_provider: 'relay', supports_oauth: true, enabled: false, logo: pluginLogo }],
+  });
+  api.on('GET', '/management/providers', () => ({ providers: [
+    { id: 'openai-compat-0', family: 'openai-compatibility', name: 'Plugin relay', upstream_name: 'relay' },
+    { id: 'openai-compat-1', family: 'openai-compatibility', name: 'Renamed plugin relay', upstream_name: 'relay' },
+  ] }));
+  api.on('GET', '/custom-icons', () => ({ icons: [{ id: customID, name: 'My relay', mime_type: 'image/png', revision: 3 }] }));
+  api.on('GET', '/management/routing', () => ({ ...board, members: [
+    member('provider:codex-0', 'Opencode Go', 10, 'provider'),
+    member('provider:codex-1', 'Custom relay', 10, 'provider'),
+    // A provider member names the protocol family it speaks, never the plugin that owns its
+    // artwork; the plugin identity arrives through the configured connection's upstream name.
+    { ...member('provider:openai-compat-0', 'Plugin relay', 0, 'provider'), family: 'openai-compatibility' },
+    { ...member('provider:openai-compat-1', 'Renamed plugin relay', 0, 'provider'), family: 'openai-compatibility' },
+    member('credential:primary.json', 'Primary seat', 0),
+  ] }));
+  const client = createTestQueryClient();
+  renderRoutingPage(client);
+
+  const card = await screen.findByRole('listitem', { name: 'Opencode Go' });
+  await waitFor(() => expect(card.querySelector('[style*="opencode.svg"]')).not.toBeNull());
+  const custom = screen.getByRole('listitem', { name: 'Custom relay' });
+  await waitFor(() => expect(custom.querySelector('img')?.getAttribute('src')).toContain(`/custom-icons/${customID}/content?revision=3`));
+  expect(screen.getByRole('listitem', { name: 'Plugin relay' }).querySelector('img')?.getAttribute('src')).toBe(pluginLogo);
+  await waitFor(() => expect(screen.getByRole('listitem', { name: 'Renamed plugin relay' }).querySelector('img')?.getAttribute('src')).toBe(pluginLogo));
+  expect(screen.getByRole('listitem', { name: 'Primary seat' }).querySelector('img')?.getAttribute('src')).toContain('/lobe-icons/codex');
 });

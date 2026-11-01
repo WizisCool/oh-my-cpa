@@ -18,7 +18,8 @@ export default defineConfig(({ command }) => ({
     {
       name: 'sync-lobe-icons',
       enforce: 'pre',
-      buildStart() {
+      // Public files are indexed before buildStart on a cold development boot.
+      configResolved() {
         syncLobeIcons({ quiet: true });
       },
     },

@@ -1,4 +1,4 @@
-import { resolveProviderIcon } from '../../types/providerIconIds';
+import { providerIconId, resolveProviderIcon } from './providerIconIds';
 
 export interface ProviderMetadata {
   id: string;
@@ -12,36 +12,40 @@ export interface ProviderMetadata {
  * Antigravity, xAI, Kimi, Devin, Meta, Codebuddy, …) already states it as a literal. The
  * catalogue holds UI copy, which this table has none of.
  */
-export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = {
-  claude: { id: 'claude', label: 'Claude', iconId: 'Claude' },
-  antigravity: { id: 'antigravity', label: 'Antigravity', iconId: 'Antigravity' },
-  codex: { id: 'codex', label: 'Codex', iconId: 'Codex' },
-  xai: { id: 'xai', label: 'xAI', iconId: 'XAI' },
-  grok: { id: 'xai', label: 'xAI', iconId: 'XAI' },
-  kimi: { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
-  moonshot: { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
+const CREDENTIAL_PROVIDER_LABELS: Record<string, Omit<ProviderMetadata, 'iconId'>> = {
+  claude: { id: 'claude', label: 'Claude' },
+  antigravity: { id: 'antigravity', label: 'Antigravity' },
+  codex: { id: 'codex', label: 'Codex' },
+  xai: { id: 'xai', label: 'xAI' },
+  grok: { id: 'xai', label: 'xAI' },
+  kimi: { id: 'kimi', label: 'Kimi' },
+  moonshot: { id: 'kimi', label: 'Kimi' },
   // An international (kimi.ai) account is the same product on another host, so it shares
   // Kimi's tab and mark instead of standing as a provider of its own.
-  'kimi-ai': { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
-  devin: { id: 'devin', label: 'Devin', iconId: 'Devin' },
-  meta: { id: 'meta', label: 'Meta', iconId: 'Meta' },
+  'kimi-ai': { id: 'kimi', label: 'Kimi' },
+  devin: { id: 'devin', label: 'Devin' },
+  meta: { id: 'meta', label: 'Meta' },
   // The CodeBuddy plugin registers `codebuddy` as its provider key; a store build
   // that keeps the plugin's own id instead still has to reach the same mark.
-  codebuddy: { id: 'codebuddy', label: 'Codebuddy', iconId: 'CodeBuddy' },
-  workbuddy: { id: 'codebuddy', label: 'Codebuddy', iconId: 'CodeBuddy' },
-  gemini: { id: 'gemini', label: 'Gemini', iconId: 'Gemini' },
-  google: { id: 'gemini', label: 'Gemini', iconId: 'Gemini' },
-  vertex: { id: 'vertex', label: 'Vertex AI', iconId: 'Google' },
-  qwen: { id: 'qwen', label: 'Qwen', iconId: 'Qwen' },
-  deepseek: { id: 'deepseek', label: 'DeepSeek', iconId: 'DeepSeek' },
-  minimax: { id: 'minimax', label: 'MiniMax', iconId: 'Minimax' },
-  stepfun: { id: 'stepfun', label: 'Stepfun', iconId: 'Stepfun' },
-  baichuan: { id: 'baichuan', label: 'Baichuan', iconId: 'Baichuan' },
-  zhipu: { id: 'zhipu', label: 'Zhipu', iconId: 'Zhipu' },
-  doubao: { id: 'doubao', label: 'Doubao', iconId: 'Doubao' },
-  spark: { id: 'spark', label: 'Spark', iconId: 'Spark' },
-  openai: { id: 'openai', label: 'OpenAI', iconId: 'OpenAI' },
+  codebuddy: { id: 'codebuddy', label: 'Codebuddy' },
+  workbuddy: { id: 'codebuddy', label: 'Codebuddy' },
+  gemini: { id: 'gemini', label: 'Gemini' },
+  google: { id: 'gemini', label: 'Gemini' },
+  vertex: { id: 'vertex', label: 'Vertex AI' },
+  qwen: { id: 'qwen', label: 'Qwen' },
+  deepseek: { id: 'deepseek', label: 'DeepSeek' },
+  minimax: { id: 'minimax', label: 'MiniMax' },
+  stepfun: { id: 'stepfun', label: 'Stepfun' },
+  baichuan: { id: 'baichuan', label: 'Baichuan' },
+  zhipu: { id: 'zhipu', label: 'Zhipu' },
+  doubao: { id: 'doubao', label: 'Doubao' },
+  spark: { id: 'spark', label: 'Spark' },
+  openai: { id: 'openai', label: 'OpenAI' },
 };
+
+export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = Object.fromEntries(
+  Object.entries(CREDENTIAL_PROVIDER_LABELS).map(([key, metadata]) => [key, { ...metadata, iconId: providerIconId(metadata.id) ?? '' }]),
+);
 
 export function getCredentialProviderMetadata(providerKey: string): ProviderMetadata {
   const key = (providerKey || '').toLowerCase().trim();

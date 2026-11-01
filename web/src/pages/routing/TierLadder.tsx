@@ -15,8 +15,8 @@ import {
 } from '@dnd-kit/core';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
-import { ProviderBrandIcon } from '../../components/LobeIcon';
-import { credentialProviderIconId } from '../../components/common/providerMetadata';
+import { ProviderMark, CredentialMark } from '../../components/LobeIcon';
+import { type ProviderBrandSources } from '../../types/brandMark';
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { ToolButton } from '../../components/common/ToolButton';
 import { StatusLabel } from '../../components/common/StatusLabel';
@@ -38,6 +38,7 @@ const STATE_KEYS: Partial<Record<RouteMemberState, MessageKey>> = {
 };
 
 export interface TierLadderProps {
+  branding: ProviderBrandSources;
   tiers: RoutingTier[];
   members: ReadonlyMap<string, RoutingMember>;
   /** Priority each tier will be written with, in tier order. */
@@ -136,7 +137,7 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
         </div>
       </div>
       <DragOverlay dropAnimation={null}>
-        {dragged ? <CardFace member={dragged} className={styles['card-overlay']} /> : null}
+        {dragged ? <CardFace branding={props.branding} member={dragged} className={styles['card-overlay']} /> : null}
       </DragOverlay>
     </DndContext>
   );
@@ -203,12 +204,14 @@ const TierBand: React.FC<{
 };
 
 /** The card's own face, shared by the resting card and the one following the pointer. */
-const CardFace: React.FC<{ member: RoutingMember; className?: string; children?: React.ReactNode }> = ({ member, className, children }) => {
+const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember; className?: string; children?: React.ReactNode }> = ({ member, branding, className, children }) => {
   const t = useT();
   return (
     <div className={clsx(styles['card-face'], className)}>
       <HolderOutlined className={styles['card-grip']} aria-hidden="true" />
-      <ProviderBrandIcon iconId={credentialProviderIconId(member.family, member.name)} size={20} />
+      {member.kind === 'provider'
+        ? <ProviderMark provider={member} sources={branding} size={20} />
+        : <CredentialMark provider={member.family} hint={member.name} pluginLogos={branding.pluginLogos} size={20} />}
       <span className={styles['card-text']}>
         <span className={styles['card-name']}>{member.name}</span>
         <span className={styles['card-sub']}>
@@ -232,7 +235,7 @@ interface RoutingCardProps extends TierLadderProps {
 }
 
 const RoutingCard: React.FC<RoutingCardProps> = ({
-  member, tierIndex, tierCount, isAlone, isServingTier, canDrag, disabled = false, strategy, weights, preview, isLens, landedKey, onStep, onSplit, onWeights,
+  member, branding, tierIndex, tierCount, isAlone, isServingTier, canDrag, disabled = false, strategy, weights, preview, isLens, landedKey, onStep, onSplit, onWeights,
 }) => {
   const t = useT();
   const state = preview.states.get(member.key);
@@ -293,7 +296,7 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
       data-member={member.key}
       {...(canDrag && !isLocked ? listeners : {})}
     >
-      <CardFace member={member}>
+      <CardFace branding={branding} member={member}>
         {/* The card's own controls take their pointer for themselves rather than starting a drag. */}
         <span className={styles['card-end']} onPointerDown={(event) => event.stopPropagation()}>
           {member.is_disabled && <StatusLabel tone="neutral">{t('orch.state_disabled')}</StatusLabel>}

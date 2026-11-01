@@ -216,7 +216,7 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
 
   assert.deepEqual(choices.map((choice) => choice.id), ['iflow']);
   assert.equal(choices[0].pluginId, 'iflow-auth');
-  assert.equal(choices[0].pluginLogo, 'data:image/svg+xml,fixture');
+  assert.equal(choices[0].logo, 'data:image/svg+xml,fixture');
   assert.equal(choices[0].callback?.errorKeys.missingState, 'oauth.missing_state');
 });
 

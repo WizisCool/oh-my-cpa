@@ -1,9 +1,9 @@
 import React from 'react';
 import { Tabs, Space } from 'antd';
 import { AppstoreOutlined } from '../icons';
-import { credentialProviderIconId, getCredentialProviderMetadata } from './providerMetadata';
-import { ProviderBrandIcon } from '../LobeIcon';
-import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import { CredentialMark } from '../LobeIcon';
+import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useT } from '../../i18n';
 import styles from './ProviderFilterTabs.module.css';
 import { TAB_OVERFLOW } from './tabOverflow';
@@ -26,10 +26,6 @@ export interface ProviderFilterTabsProps {
  *   the vendored catalog otherwise (Codex, Claude, Antigravity, xAI, Kimi, Devin,
  *   Meta, and any plugin-registered provider)
  *
- * The mark is resolved through `credentialProviderIconId` rather than read off the
- * display table alone: a provider the table has not been taught yet must still
- * render the brand artwork the bundle already ships, instead of a neutral glyph
- * that hides which provider a tab belongs to.
  */
 export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
   providers,
@@ -45,8 +41,6 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
     const isActive = provider === active;
     const meta = isAll ? null : getCredentialProviderMetadata(provider);
     const label = isAll ? t('common.all') : meta?.label ?? provider;
-    const iconId = isAll ? '' : credentialProviderIconId(provider, label);
-    const logo = isAll ? undefined : pluginOAuthLogoFor(pluginLogos, provider);
     const count = counts[provider] ?? 0;
 
     return {
@@ -54,8 +48,8 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
       label: (
         <Space size={6} align="center">
           <span className={styles['tab-icon']}>
-            {iconId || logo ? (
-              <ProviderBrandIcon iconId={iconId} logo={logo} size={15} />
+            {!isAll ? (
+              <CredentialMark provider={provider} hint={label} pluginLogos={pluginLogos} size={15} />
             ) : (
               <AppstoreOutlined style={{ fontSize: 14, color: isActive ? 'var(--fg)' : 'var(--meta)' }} />
             )}

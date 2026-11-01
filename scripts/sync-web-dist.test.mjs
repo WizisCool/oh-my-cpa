@@ -1,5 +1,5 @@
 /**
- * Tests for the embedded-distribution sync.
+ * Tests for frontend asset staging and embedded-distribution sync.
  *
  * The property being protected is not "the files end up copied". It is that a
  * HTML reader sees assets before their entry document. Go embeds the whole
@@ -151,3 +151,28 @@ test('a missing target directory is created', () => {
   run();
   assert.ok(fs.existsSync(path.join(sandbox, 'internal/web/dist/index.html')));
 });
+
+for (const base of ['/', '/omc/']) {
+  test(`a generated icon exists when the first dev-server config resolves at ${base}`, async () => {
+    const { sandbox, write } = fixture();
+    try {
+      write('web/package.json', '{"type":"module"}');
+      write('web/index.html', '<!doctype html><title>Asset fixture</title>');
+      write('web/src/generated/lobeIconCatalog.json', '[{"id":"Codex","hasColor":true}]');
+      fs.copyFileSync(path.join(root, 'web/vite.config.ts'), path.join(sandbox, 'web/vite.config.ts'));
+      for (const file of ['api-target.mjs', 'sync-lobe-icons.mjs', 'bundle-graph.mjs', 'dev-base-redirect.mjs', 'compact-locales.mjs']) {
+        fs.copyFileSync(path.join(root, 'scripts', file), path.join(sandbox, 'scripts', file));
+      }
+      fs.symlinkSync(path.join(root, 'web/node_modules'), path.join(sandbox, 'web/node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+      fs.symlinkSync(path.join(root, 'node_modules'), path.join(sandbox, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+      assert.equal(fs.existsSync(path.join(sandbox, 'web/public/lobe-icons')), false);
+      const { resolveConfig } = await import('../web/node_modules/vite/dist/node/index.js');
+      await resolveConfig({ root: path.join(sandbox, 'web'), configFile: path.join(sandbox, 'web/vite.config.ts'), base, logLevel: 'silent' }, 'serve');
+      const icon = path.join(sandbox, 'web/public/lobe-icons/codex-color.svg');
+      assert.ok(fs.existsSync(icon), 'the icon is generated before Vite indexes public files');
+      assert.match(fs.readFileSync(icon, 'utf8'), /^<svg/);
+    } finally {
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+}

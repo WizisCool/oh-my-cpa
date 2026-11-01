@@ -1148,6 +1148,11 @@ export async function requestExport({ base, page, check }) {
   await page.getByTestId('req-export-open').click();
   const sheet = page.getByTestId('req-export-sheet');
   const painted = page.locator('[data-testid="req-export-sheet"][data-painted]');
+  // The provider column is written from the catalog, so an unread catalog is stated here rather
+  // than discovered in a downloaded file. The demo seeds the catalog, so this warning is absent.
+  check('a settled provider catalog leaves the export names unqualified',
+    (await page.locator('.ant-modal .omc-notice.is-warning').count()) === 0,
+    await page.locator('.ant-modal .omc-notice.is-warning').count());
   await painted.waitFor();
   // What the sheet may contain is a logic-suite claim about its data. What only a
   // browser can show is that the canvas was drawn at all, and redrawn on a change.

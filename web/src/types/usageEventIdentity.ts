@@ -1,14 +1,5 @@
-import {
-  NEUTRAL_PROVIDER_ICON_ID,
-  providerIconId,
-} from './providerIconIds';
-import {
-  resolveProviderIcon,
-} from './providerIcons';
-import {
-  pluginOAuthLogoFor,
-  type PluginOAuthLogos,
-} from './pluginOAuthProviders';
+import { resolveCredentialMark, resolveProviderMark, resolveRecordedProviderMark, type BrandMark } from './brandMark';
+import type { PluginOAuthLogos } from './pluginOAuthProviders';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -222,7 +213,7 @@ export function createProviderNameResolver(
   return (providerKey) => resolveProvider(providerKey)?.name.trim() || providerKey?.trim() || '';
 }
 
-export interface ResolvedProviderInfo {
+export interface ResolvedProviderInfo extends BrandMark {
   isOAuth: boolean;
   iconId: string;
   /** Logo the plugin owning this provider publishes, which outranks the catalog mark. */
@@ -248,8 +239,9 @@ export function resolveProviderInfo(
   credentials: CredentialIndex,
   providerIcons: Record<string, string> = {},
   configuredProviders: ProviderLookupEntry[] = [],
-  fallbackIconResolver?: (family: string, name?: string, url?: string) => string,
   pluginLogos: PluginOAuthLogos = {},
+  /** The provider catalog could not be read, so a recorded label is not yet proven either way. */
+  isProviderCatalogUnknown = false,
 ): ResolvedProviderInfo {
   const file = matchingCredential(event, credentials);
   const isOAuth =
@@ -257,29 +249,13 @@ export function resolveProviderInfo(
     file?.type?.toLowerCase() === 'oauth' ||
     Boolean(file?.email || file?.project_id);
 
-  const resolveIcon = (family: string, name?: string, url?: string): string => {
-    if (fallbackIconResolver) return fallbackIconResolver(family, name, url);
-    return providerIconId(family) || NEUTRAL_PROVIDER_ICON_ID;
-  };
-
-  // The plugin that registers a provider is the authority on its artwork, so its
-  // logo is looked up by every key the record carries for that provider before the
-  // row falls back to the console's own catalog mark.
-  const resolveLogo = (...keys: (string | undefined)[]): string | undefined => {
-    for (const key of keys) {
-      const logo = pluginOAuthLogoFor(pluginLogos, key);
-      if (logo) return logo;
-    }
-    return undefined;
-  };
-
   if (isOAuth) {
     // A credential file may say only that it is an OAuth file. That is how it
     // authenticates, not who it belongs to, so the record's own provider names
     // the cell before it does.
     const fileType = file?.type?.toLowerCase() === 'oauth' ? '' : file?.type;
     const providerFamily = (file?.provider || fileType || event.provider || file?.type || 'oauth').toLowerCase();
-    const iconId = resolveIcon(providerFamily, file?.name);
+    const mark = resolveCredentialMark(providerFamily, file?.name, pluginLogos, [file?.provider, file?.type, event.provider].filter((key): key is string => Boolean(key)));
     const account = file?.email || file?.project_id;
     const credIdentity = resolveCredential(event, credentials);
     const fileName = credIdentity.displayName || credIdentity.name || event.source || '';
@@ -296,8 +272,7 @@ export function resolveProviderInfo(
 
     return {
       isOAuth: true,
-      iconId,
-      logo: resolveLogo(file?.provider, file?.type, event.provider),
+      ...mark,
       title: providerLabel,
       credential,
       authFile: fileName,
@@ -310,21 +285,27 @@ export function resolveProviderInfo(
   const fileName = credIdentity.name || event.source || '';
   const providerName = matched?.name.trim() || event.resource_name?.trim() || event.provider?.trim() || 'Unknown';
 
-  const providerFamily = (matched?.family || event.provider || '').toLowerCase();
-  // The matched provider's own override resolves through the same order the
-  // provider table uses, so a mark stored for one surface cannot apply on another.
-  // The rest are the request record's own fallbacks: the provider label CPA wrote
-  // on the record, then the display name this page derived for it.
-  const iconId =
-    (matched && resolveProviderIcon(providerIcons, matched, '')) ||
-    providerIcons[event.provider] ||
-    providerIcons[providerName] ||
-    resolveIcon(providerFamily, providerName, matched?.base_url);
+  const sources = { providerIcons, pluginLogos, isProviderCatalogUnknown };
+  if (matched) {
+    return {
+      isOAuth: false,
+      ...resolveProviderMark({ ...matched, family: matched.family || event.provider || '', name: providerName, aliases: [event.provider] }, sources),
+      title: providerName,
+      authFile: fileName,
+    };
+  }
+
+  // A record left without a configured provider is ambiguous in two different ways, and a
+  // reader has to be able to tell them apart. Its own label is the truth when the catalog was
+  // read and does not claim the record - a provider someone deleted, or a request the console
+  // never configured. It is only unproven when the catalog could not be read at all: then the
+  // name printed is a placeholder until the read settles, and an export must not save it.
+  const recorded = resolveRecordedProviderMark(event.provider || '', providerName, sources);
 
   return {
     isOAuth: false,
-    iconId,
-    logo: resolveLogo(matched?.family, matched?.upstream_name, event.provider),
+    ...recorded,
+    isIdentityUnknown: isProviderCatalogUnknown || recorded.isIdentityUnknown,
     title: providerName,
     authFile: fileName,
   };
