@@ -53,7 +53,10 @@ export function CredentialRenewalBadge({ file, onOpen, className }: CredentialRe
   const tone = resolveBadgeTone(kind);
   const label = t(renewalLabel(file));
   const detail = t(renewalDetail(file));
-  const ariaLabel = `${t('recovery.renewal')}: ${label}`;
+  const credentialName = file.display_name?.trim() || file.name;
+  const ariaLabel = onOpen
+    ? `${t('recovery.view_details')}: ${credentialName} (${t('recovery.renewal')}: ${label})`
+    : `${t('recovery.renewal')}: ${credentialName} — ${label}`;
   const renewalStateValue = file.renewal_state ?? (file.requires_sign_in ? 'sign_in_required' : 'unknown');
 
   const tooltipContent = (

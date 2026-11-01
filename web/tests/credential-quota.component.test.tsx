@@ -498,7 +498,7 @@ describe("a credential row's auto-renewal badge", () => {
     const badge = container.querySelector('[data-testid="oauth-credential-renewal-badge"]');
     expect(badge).toBeTruthy();
     expect(badge?.getAttribute('data-renewal-state')).toBe('retry_scheduled');
-    expect(badge?.getAttribute('aria-label')).toBe('Automatic renewal: Retry scheduled');
+    expect(badge?.getAttribute('aria-label')).toBe('Click to view auto-renewal details: codex-retry (Automatic renewal: Retry scheduled)');
     expect(badge?.getAttribute('data-renewal-tone')).toBe('warn');
 
     fireEvent.click(badge!);

@@ -360,6 +360,11 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
             <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
             {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
             {file.next_refresh_after && <div>{t('recovery.next_refresh')}: {formatGatewayTimestamp(file.next_refresh_after)}</div>}
+            {file.refresh_error && (
+              <div>
+                {t('recovery.refresh_error')}: {[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}
+              </div>
+            )}
             {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
           </>}>
             <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>

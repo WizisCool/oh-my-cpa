@@ -72,7 +72,7 @@ describe('CredentialRenewalBadge', () => {
     const badge = screen.getByTestId('oauth-credential-renewal-badge');
     expect(badge).toBeTruthy();
     expect(badge.tagName).toBe('BUTTON');
-    expect(badge.getAttribute('aria-label')).toBe('Automatic renewal: Retry scheduled');
+    expect(badge.getAttribute('aria-label')).toBe('Click to view auto-renewal details: test-credential (Automatic renewal: Retry scheduled)');
     expect(badge.getAttribute('data-renewal-state')).toBe('retry_scheduled');
     expect(badge.getAttribute('data-renewal-kind')).toBe('retry');
     expect(badge.getAttribute('data-renewal-tone')).toBe('warn');
@@ -100,5 +100,6 @@ describe('CredentialRenewalBadge', () => {
     const badge = screen.getByTestId('oauth-credential-renewal-badge');
     expect(badge.tagName).toBe('SPAN');
     expect(badge.getAttribute('role')).toBe('img');
+    expect(badge.getAttribute('aria-label')).toBe('Automatic renewal: test-credential — Retry scheduled');
   });
 });
