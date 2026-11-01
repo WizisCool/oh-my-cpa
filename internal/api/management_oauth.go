@@ -54,8 +54,11 @@ func (h *Handler) listOAuthProviders(writer http.ResponseWriter, request *http.R
 }
 
 type startOAuthRequest struct {
-	Provider string `json:"provider"`
-	ProxyURL string `json:"proxy_url,omitempty"`
+	Provider  string `json:"provider"`
+	ProxyURL  string `json:"proxy_url,omitempty"`
+	Name      string `json:"name,omitempty"`
+	AuthIndex string `json:"auth_index,omitempty"`
+	Verify    bool   `json:"verify,omitempty"`
 }
 
 // normalizeOAuthStatus maps CPA get-auth-status variants to one facade
@@ -98,15 +101,40 @@ func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Reque
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	if err := h.recordAudit(request, "oauth.start", "oauth_provider", provider, "attempt", nil); err != nil {
+
+	options := management.OAuthStartOptions{ProxyURL: proxyURL, Name: req.Name, AuthIndex: req.AuthIndex, Verify: req.Verify}
+	if options.Name != "" {
+		name, err := validateAuthSelector(options.Name)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid credential target")
+			return
+		}
+		options.Name = name
+	}
+	options.AuthIndex = strings.TrimSpace(options.AuthIndex)
+	if len([]rune(options.AuthIndex)) > managementAuthFileNameLimit {
+		writeError(writer, http.StatusBadRequest, "invalid credential target")
+		return
+	}
+	auditType, auditTarget := "oauth_provider", provider
+	auditDetail := map[string]any{}
+	if options.Name != "" || options.AuthIndex != "" {
+		auditType, auditTarget = "auth_file", firstNonEmpty(options.Name, options.AuthIndex)
+		auditDetail["provider"], auditDetail["verify"] = provider, options.Verify
+	}
+	if err := h.recordAudit(request, "oauth.start", auditType, auditTarget, "attempt", auditDetail); err != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; authorization aborted")
 		return
 	}
-	authRes, err := h.operationsService().StartOAuth(request.Context(), provider, proxyURL)
+	authRes, err := h.operationsService().StartOAuth(request.Context(), provider, options)
 	if err != nil {
-		_ = h.recordAudit(request, "oauth.start", "oauth_provider", provider, "failure", nil)
+		_ = h.recordAudit(request, "oauth.start", auditType, auditTarget, "failure", nil)
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(writer, http.StatusServiceUnavailable, "default CPA instance is not configured")
+			return
+		}
+		if err.Error() == "resource_conflict" {
+			writeJSON(writer, http.StatusConflict, map[string]string{"code": "resource_conflict", "error": "credential identity changed"})
 			return
 		}
 		writeCPAFacadeError(writer, err)
@@ -114,11 +142,7 @@ func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Reque
 	}
 
 	sessionID := strings.TrimSpace(authRes.State)
-	auditSessionID := sessionID
-	if auditSessionID == "" {
-		auditSessionID = provider
-	}
-	_ = h.recordAudit(request, "oauth.start", "oauth_provider", provider, "success", map[string]any{"session_id": security.RedactText(auditSessionID)})
+	_ = h.recordAudit(request, "oauth.start", auditType, auditTarget, "success", nil)
 
 	response := map[string]any{
 		"url":        authRes.URL,
@@ -173,15 +197,9 @@ func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Reque
 	if status == "ok" && h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
-	message := strings.TrimSpace(resp.Message)
-	if message == "" {
-		message = strings.TrimSpace(resp.Error)
-	}
-
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":  status,
-		"message": message,
-	})
+	// Upstream failure text can quote callback codes or account details. The
+	// browser already owns translated status copy; no provider text is needed.
+	writeJSON(writer, http.StatusOK, map[string]any{"status": status})
 }
 
 type oauthCallbackRequest struct {
@@ -262,14 +280,17 @@ func (h *Handler) cancelOAuthSession(writer http.ResponseWriter, request *http.R
 		writeError(writer, http.StatusBadRequest, "use the credential-scoped SIWC cancellation endpoint")
 		return
 	}
-	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "attempt", nil)
+	if err := h.recordAudit(request, "oauth.cancel", "oauth_session", "session", "attempt", nil); err != nil {
+		writeError(writer, http.StatusInternalServerError, "audit failure; cancellation aborted")
+		return
+	}
 	result, err := client.CancelOAuthSession(request.Context(), sessionID)
 	if err != nil {
-		_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "failure", map[string]any{"error": err.Error()})
+		_ = h.recordAudit(request, "oauth.cancel", "oauth_session", "session", "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "success", map[string]any{"cancelled": result.Cancelled})
+	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", "session", "success", map[string]any{"cancelled": result.Cancelled})
 
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",

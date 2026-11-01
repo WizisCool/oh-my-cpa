@@ -135,7 +135,7 @@ func TestOAuthAuthURLSendsTheLoopbackFlagOnlyWhereItApplies(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, provider := range []string{"codex", "anthropic", "antigravity", "xai", "devin", "kimi", "kimi-ai", "meta", "some-plugin"} {
-				if _, err := client.OAuthAuthURL(context.Background(), provider, proxyURL); err != nil {
+				if _, err := client.OAuthAuthURL(context.Background(), provider, OAuthStartOptions{ProxyURL: proxyURL}); err != nil {
 					t.Fatalf("%s: %v", provider, err)
 				}
 			}
@@ -253,7 +253,7 @@ func TestOAuthProxyResponseBoundary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = client.OAuthAuthURL(context.Background(), "codex", proxyURL)
+			_, err = client.OAuthAuthURL(context.Background(), "codex", OAuthStartOptions{ProxyURL: proxyURL})
 			if (err != nil) != (scenario.name != "authorization") {
 				t.Fatalf("response boundary error = %v", err)
 			}

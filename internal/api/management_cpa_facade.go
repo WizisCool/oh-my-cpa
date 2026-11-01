@@ -43,6 +43,10 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 		code = "invalid_oauth_proxy"
 		message = "invalid OAuth proxy URL"
+	} else if errors.Is(err, management.ErrInvalidOAuthTarget) {
+		status, code, message = http.StatusBadRequest, "invalid_oauth_target", "OAuth recovery target or provider is invalid"
+	} else if errors.Is(err, management.ErrOAuthRecoveryUpgradeRequired) {
+		status, code, message = http.StatusNotImplemented, "oauth_recovery_upgrade_required", "targeted credential recovery requires a CPA upgrade"
 	} else if errors.Is(err, management.ErrOAuthProxyUpgradeRequired) {
 		status = http.StatusNotImplemented
 		code = "oauth_proxy_upgrade_required"

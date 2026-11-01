@@ -140,6 +140,7 @@ export default {
   "audit.action.auth_file.fields_read": "檢視憑證欄位",
   "audit.action.auth_file.fields_update": "修改憑證欄位",
   "audit.action.auth_file.refresh": "手動重新整理憑證",
+  "audit.action.auth_file.verify": "驗證憑證推理（消耗 token）",
   "audit.action.auth_file.vertex_import": "匯入 Vertex 服務帳號",
   "audit.action.auth_file.status_update": "切換憑證啟用狀態",
   "audit.action.oauth.siwc.bind": "發起 SIWC 綁定",

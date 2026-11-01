@@ -529,10 +529,12 @@ var demoExportShiftedMillisKeys = map[string]bool{
 
 // demoExportShiftedTextKeys are the fields carrying an RFC3339 instant.
 var demoExportShiftedTextKeys = map[string]bool{
-	"exported_at":     true,
-	"time":            true,
-	"last_capture_at": true,
-	"last_run_at":     true,
+	"exported_at":             true,
+	"time":                    true,
+	"last_capture_at":         true,
+	"last_run_at":             true,
+	"access_token_expires_at": true,
+	"next_refresh_after":      true,
 }
 
 // demoExportMeasuredKeys are values measured while the response was produced rather
@@ -1389,12 +1391,14 @@ func TestDemoExportRebaseIsIndependentOfTheExportClock(t *testing.T) {
 	reference := demoExportReference.UnixMilli()
 	export := func(exportedAt int64) map[string]any {
 		body := map[string]any{
-			"runtime":     map[string]any{"go_version": "go1.99.0", "os_arch": "plan9/mips"},
-			"exported_at": time.UnixMilli(exportedAt + 1800).UTC().Format(time.RFC3339),
-			"collector":   map[string]any{"last_capture_at": time.UnixMilli(exportedAt - 5000).UTC().Format(time.RFC3339)},
-			"maintenance": map[string]any{"last_run_at": time.UnixMilli(exportedAt - 10000).UTC().Format(time.RFC3339)},
-			"channels":    []any{map[string]any{"updated_at_ms": float64(0)}},
-			"icons":       []any{map[string]any{"created_at_ms": float64(reference - 5000), "updated_at_ms": float64(reference)}},
+			"runtime":                 map[string]any{"go_version": "go1.99.0", "os_arch": "plan9/mips"},
+			"exported_at":             time.UnixMilli(exportedAt + 1800).UTC().Format(time.RFC3339),
+			"access_token_expires_at": time.UnixMilli(exportedAt + 3600000).UTC().Format(time.RFC3339),
+			"next_refresh_after":      time.UnixMilli(exportedAt + 300000).UTC().Format(time.RFC3339),
+			"collector":               map[string]any{"last_capture_at": time.UnixMilli(exportedAt - 5000).UTC().Format(time.RFC3339)},
+			"maintenance":             map[string]any{"last_run_at": time.UnixMilli(exportedAt - 10000).UTC().Format(time.RFC3339)},
+			"channels":                []any{map[string]any{"updated_at_ms": float64(0)}},
+			"icons":                   []any{map[string]any{"created_at_ms": float64(reference - 5000), "updated_at_ms": float64(reference)}},
 			"versions": []any{
 				map[string]any{"effective_from_ms": float64(exportedAt + 3)},
 				map[string]any{"effective_from_ms": float64(reference - 86_400_000)},

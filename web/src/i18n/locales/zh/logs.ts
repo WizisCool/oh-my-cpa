@@ -137,6 +137,7 @@ export default {
   'audit.action.auth_file.fields_read': '查看凭证字段',
   'audit.action.auth_file.fields_update': '修改凭证字段',
   'audit.action.auth_file.refresh': '手动刷新凭证',
+  "audit.action.auth_file.verify": "验证凭证推理（消耗 token）",
   'audit.action.auth_file.vertex_import': '导入 Vertex 服务账号',
   'audit.action.auth_file.status_update': '切换凭证启用状态',
   'audit.action.oauth.siwc.bind': '发起 SIWC 绑定',

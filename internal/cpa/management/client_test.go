@@ -3,6 +3,7 @@ package management
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -196,12 +197,18 @@ func TestClientDoesNotLeakKeyInHTTPError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.AuthFiles(context.Background())
+	var response AuthFilesResponse
+	err = client.DoJSON(context.Background(), http.MethodGet, "/credentials", &response)
 	if err == nil {
 		t.Fatal("expected authorization error")
 	}
 	if strings.Contains(err.Error(), key) || !strings.Contains(err.Error(), "[redacted]") {
 		t.Fatalf("error leaked management key or failed to redact echo: %v", err)
+	}
+	_, err = client.AuthFiles(context.Background())
+	var credentialError *HTTPError
+	if !errors.As(err, &credentialError) || credentialError.StatusCode != http.StatusUnauthorized || credentialError.Body != "" || strings.Contains(err.Error(), key) {
+		t.Fatalf("credential error must preserve only the HTTP status: %v", err)
 	}
 }
 

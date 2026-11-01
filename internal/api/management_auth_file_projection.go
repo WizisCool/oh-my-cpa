@@ -9,8 +9,19 @@ import (
 )
 
 func projectManagementAuthFile(file management.AuthFile) managementAuthFileResponse {
+	recovery := file.SafeRecoverySummary()
 	result := managementAuthFileResponse{
-		SIWCStatus: file.SafeSIWCSummary().SIWCStatus, SIWCBindSupported: file.SIWCBindSupported, UseSIWC: file.UseSIWC, SIWCBound: file.SIWCBound, SIWCExpiresAt: file.SafeSIWCSummary().SIWCExpiresAt,
+		RecoverySupported:    file.RecoverySupported(),
+		RequiresSignIn:       recovery.RequiresSignIn,
+		RenewalState:         recovery.RenewalState,
+		RecoveryStage:        recovery.RecoveryStage,
+		AccessTokenExpiresAt: recovery.AccessTokenExpiresAt,
+		NextRefreshAfter:     recovery.NextRefreshAfter,
+		Adopted:              recovery.Adopted,
+		InferenceVerified:    recovery.InferenceVerified,
+		RenewalVerified:      recovery.RenewalVerified,
+		NextAction:           recovery.NextAction,
+		SIWCStatus:           file.SafeSIWCSummary().SIWCStatus, SIWCBindSupported: file.SIWCBindSupported, UseSIWC: file.UseSIWC, SIWCBound: file.SIWCBound, SIWCExpiresAt: file.SafeSIWCSummary().SIWCExpiresAt,
 		Name:          boundedText(firstNonEmpty(file.Name, file.ID), managementAuthFileNameLimit),
 		AuthIndex:     boundedText(file.AuthIndex, managementAuthFileNameLimit),
 		Type:          boundedText(firstNonEmpty(file.Type, file.Provider), managementAuthFileFieldLimit),
@@ -29,6 +40,9 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		Models:        projectAuthModels(file.Models),
 		Quota:         projectQuota(file.Quota),
 		ModelQuotas:   projectModelQuotas(file.ModelQuotas),
+	}
+	if recovery.RefreshError != nil {
+		result.RefreshError = &managementCredentialRefreshError{Code: recovery.RefreshError.Code, HTTPStatus: recovery.RefreshError.HTTPStatus}
 	}
 	if file.Weight != nil {
 		result.Weight = *file.Weight

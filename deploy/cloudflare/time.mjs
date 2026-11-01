@@ -60,6 +60,8 @@ const INSTANT_TEXT_NAMED = new Set([
   'time',
   'last_capture_at',
   'last_run_at',
+  'access_token_expires_at',
+  'next_refresh_after',
 ]);
 
 /**

@@ -18,6 +18,17 @@ export interface ManagementAuthFileModel {
 }
 
 export interface ManagementAuthFile {
+  recovery_supported?: boolean;
+  requires_sign_in?: boolean;
+  renewal_state?: 'sign_in_required' | 'expired_sign_in_required' | 'retry_scheduled' | 'awaiting_first_renewal' | 'renewal_verified';
+  recovery_stage?: 'sign_in_required' | 'quota_blocked' | 'loaded' | 'inference_verified' | 'renewal_verified';
+  access_token_expires_at?: string;
+  next_refresh_after?: string;
+  adopted?: boolean;
+  inference_verified?: boolean;
+  renewal_verified?: boolean;
+  refresh_error?: { code?: string; http_status?: number };
+  next_action?: 'sign_in';
  siwc_status?: 'off' | 'valid' | 'invalid';
   siwc_bind_supported?: boolean;
   use_siwc?: boolean;

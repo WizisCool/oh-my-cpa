@@ -1,3 +1,4 @@
+import { renewalLabel, recoveryStageLabel, renewalTone } from '../web/src/components/authFiles/credentialRecovery.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ManagementAuthFile } from '../web/src/types/managementAuthFile.ts';
@@ -19,7 +20,7 @@ import {
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import type { OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
-import { compareSections, quotaCellsOf, quotaFamiliesOf, sortByQuotaColumn } from '../web/src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaFamiliesOf, sortByQuotaColumn } from '../web/src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../web/src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../web/src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../web/src/components/authFiles/authFileLogic.ts';
@@ -614,4 +615,17 @@ test('section columns sort by reading, with missing readings last either way', (
 test('sections keep a fixed order: pinned providers, then the rest alphabetically', () => {
   const providers = ['zeta-plugin', 'codex', 'gemini', 'claude', 'acme-plugin', 'meta'];
   assert.deepEqual([...providers].sort(compareSections), ['claude', 'codex', 'meta', 'acme-plugin', 'gemini', 'zeta-plugin']);
+});
+
+test('renewal evidence stays independent of healthy quota, SIWC and inference', () => {
+  const [record] = buildOAuthWorkspaceProjection([file({ requires_sign_in: true, renewal_state: 'sign_in_required', siwc_status: 'valid' })], [quota()], choices).records;
+  assert.equal(record.quotaCondition, 'healthy');
+  assert.equal(record.isQuotaAttention, true);
+  assert.equal(credentialStatusOf(record, false, false).needsReauth, true);
+  assert.equal(renewalLabel(record.file), 'recovery.sign_in_required');
+  assert.equal(renewalTone(record.file), 'warn');
+  assert.equal(renewalLabel(file({ inference_verified: true, adopted: true })), 'recovery.unknown');
+  assert.equal(renewalTone(file({ inference_verified: true, adopted: true })), 'neutral');
+  assert.equal(recoveryStageLabel(file({ recovery_stage: 'loaded' })), 'recovery.loaded');
+  assert.equal(renewalLabel(file({ renewal_state: 'awaiting_first_renewal' })), 'recovery.awaiting_first_renewal');
 });
