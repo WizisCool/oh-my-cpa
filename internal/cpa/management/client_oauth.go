@@ -11,8 +11,9 @@ import (
 )
 
 type OAuthAuthURLResponse struct {
-	URL   string `json:"url"`
-	State string `json:"state,omitempty"`
+	TargetAuthID string `json:"target_auth_id,omitempty"`
+	URL          string `json:"url"`
+	State        string `json:"state,omitempty"`
 	// Flow is CPA's own label for the authorization shape: "device" for the
 	// RFC 8628 device-code providers (Kimi, Meta Muse), absent for flows the
 	// browser completes through a redirect. The console uses it to decide
@@ -37,9 +38,11 @@ func usesLoopbackCallback(provider string) bool {
 }
 
 var (
-	ErrInvalidOAuthProxy         = errors.New("invalid OAuth proxy URL")
-	ErrOAuthProxyUpgradeRequired = errors.New("session proxy selection requires a CPA upgrade")
-	ErrOAuthStartFailed          = errors.New("CPA OAuth start failed")
+	ErrInvalidOAuthProxy            = errors.New("invalid OAuth proxy URL")
+	ErrOAuthProxyUpgradeRequired    = errors.New("session proxy selection requires a CPA upgrade")
+	ErrOAuthRecoveryUpgradeRequired = errors.New("targeted credential recovery requires a CPA upgrade")
+	ErrInvalidOAuthTarget           = errors.New("invalid OAuth recovery target")
+	ErrOAuthStartFailed             = errors.New("CPA OAuth start failed")
 )
 
 // NormalizeOAuthProxyURL matches CPA's concrete session-proxy contract, not its
@@ -74,23 +77,44 @@ func NormalizeOAuthProxyURL(raw string) (string, error) {
 	return value, nil
 }
 
-func (c *Client) OAuthAuthURL(ctx context.Context, provider, proxyURL string) (OAuthAuthURLResponse, error) {
+type OAuthStartOptions struct {
+	ProxyURL  string `json:"proxy_url,omitempty"`
+	Name      string `json:"name,omitempty"`
+	AuthIndex string `json:"auth_index,omitempty"`
+	Verify    bool   `json:"verify"`
+}
+
+func (c *Client) OAuthAuthURL(ctx context.Context, provider string, options OAuthStartOptions) (OAuthAuthURLResponse, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	var response OAuthAuthURLResponse
-	proxyURL, err := NormalizeOAuthProxyURL(proxyURL)
+	proxyURL, err := NormalizeOAuthProxyURL(options.ProxyURL)
 	if err != nil {
 		return response, err
 	}
-	if proxyURL != "" {
+	isTargeted := options.Name != "" || options.AuthIndex != ""
+	if options.Verify && !isTargeted {
+		return response, ErrInvalidOAuthTarget
+	}
+	if proxyURL != "" || isTargeted {
+		var verify *bool
+		if isTargeted {
+			verify = &options.Verify
+		}
 		body := struct {
-			Provider string `json:"provider"`
-			ProxyURL string `json:"proxy_url"`
-			IsWebUI  bool   `json:"is_webui,omitempty"`
-		}{loginProviderFor(provider), proxyURL, usesLoopbackCallback(provider)}
+			Provider  string `json:"provider"`
+			ProxyURL  string `json:"proxy_url,omitempty"`
+			Name      string `json:"name,omitempty"`
+			AuthIndex string `json:"auth_index,omitempty"`
+			Verify    *bool  `json:"verify,omitempty"`
+			IsWebUI   bool   `json:"is_webui,omitempty"`
+		}{loginProviderFor(provider), proxyURL, options.Name, options.AuthIndex, verify, usesLoopbackCallback(provider)}
 		if err := c.doJSONBody(ctx, http.MethodPost, "/oauth/auth-url", body, &response); err != nil {
 			// CPA and transports can reflect secret-bearing input. Keep status classes,
 			// never their free-form bodies or causes, across the adapter boundary.
 			if IsMissingCapability(err) {
+				if isTargeted {
+					return OAuthAuthURLResponse{}, ErrOAuthRecoveryUpgradeRequired
+				}
 				return OAuthAuthURLResponse{}, ErrOAuthProxyUpgradeRequired
 			}
 			var upstream *HTTPError
@@ -102,8 +126,11 @@ func (c *Client) OAuthAuthURL(ctx context.Context, provider, proxyURL string) (O
 			}
 			return OAuthAuthURLResponse{}, ErrOAuthStartFailed
 		}
-		if reflectsOAuthProxy(response, proxyURL) {
+		if (isTargeted && strings.TrimSpace(response.State) == "") || (proxyURL != "" && reflectsOAuthProxy(response, proxyURL)) {
 			return OAuthAuthURLResponse{}, ErrOAuthStartFailed
+		}
+		if isTargeted && strings.TrimSpace(response.TargetAuthID) == "" {
+			return OAuthAuthURLResponse{}, ErrOAuthRecoveryUpgradeRequired
 		}
 		return response, nil
 	}
@@ -113,7 +140,7 @@ func (c *Client) OAuthAuthURL(ctx context.Context, provider, proxyURL string) (O
 	}
 	endpoint := "/oauth/auth-url?" + query.Encode()
 	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &response); err != nil {
-		return OAuthAuthURLResponse{}, err
+		return OAuthAuthURLResponse{}, safeCredentialError(err)
 	}
 	return response, nil
 }
@@ -166,7 +193,7 @@ func (c *Client) OAuthStatus(ctx context.Context, sessionID string) (OAuthStatus
 		endpoint += "?state=" + url.QueryEscape(token) + "&session_id=" + url.QueryEscape(token)
 	}
 	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &response); err != nil {
-		return OAuthStatusResponse{}, err
+		return OAuthStatusResponse{}, safeCredentialError(err)
 	}
 	return response, nil
 }
@@ -189,7 +216,7 @@ func (c *Client) CancelOAuthSession(ctx context.Context, sessionID string) (OAut
 	}
 	var response OAuthCancelResult
 	if err := c.DoJSON(ctx, http.MethodDelete, endpoint, &response); err != nil {
-		return OAuthCancelResult{}, err
+		return OAuthCancelResult{}, safeCredentialError(err)
 	}
 	return response, nil
 }
@@ -217,7 +244,7 @@ func (c *Client) OAuthCallbackRedirect(ctx context.Context, provider, redirectUR
 				}
 			}
 		}
-		return OAuthCallbackResult{}, err
+		return OAuthCallbackResult{}, safeCredentialError(err)
 	}
 	return OAuthCallbackResult{}, nil
 }

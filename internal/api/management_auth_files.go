@@ -31,6 +31,18 @@ var errManagementAuthFileNotFound = errors.New("auth file not found")
 // shape. Account, path, token, metadata, and other credential-bearing fields
 // are not part of this DTO; downloads are a separate, explicit admin action.
 type managementAuthFileResponse struct {
+	RecoverySupported    bool                              `json:"recovery_supported,omitempty"`
+	RequiresSignIn       *bool                             `json:"requires_sign_in,omitempty"`
+	RenewalState         string                            `json:"renewal_state,omitempty"`
+	RecoveryStage        string                            `json:"recovery_stage,omitempty"`
+	AccessTokenExpiresAt string                            `json:"access_token_expires_at,omitempty"`
+	NextRefreshAfter     string                            `json:"next_refresh_after,omitempty"`
+	Adopted              *bool                             `json:"adopted,omitempty"`
+	InferenceVerified    *bool                             `json:"inference_verified,omitempty"`
+	RenewalVerified      *bool                             `json:"renewal_verified,omitempty"`
+	RefreshError         *managementCredentialRefreshError `json:"refresh_error,omitempty"`
+	NextAction           string                            `json:"next_action,omitempty"`
+
 	SIWCStatus        string                                `json:"siwc_status,omitempty"`
 	SIWCBindSupported bool                                  `json:"siwc_bind_supported"`
 	UseSIWC           bool                                  `json:"use_siwc"`
@@ -60,6 +72,11 @@ type managementAuthFileResponse struct {
 	// CPA rather than CPA; DisplayNameVersion is what a rename must quote back.
 	DisplayName        string `json:"display_name,omitempty"`
 	DisplayNameVersion int64  `json:"display_name_version,omitempty"`
+}
+
+type managementCredentialRefreshError struct {
+	Code       string `json:"code,omitempty"`
+	HTTPStatus int    `json:"http_status,omitempty"`
 }
 
 type managementAuthFileRequestBucket struct {

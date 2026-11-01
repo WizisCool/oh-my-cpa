@@ -433,8 +433,12 @@ describe('re-basing onto the viewer’s clock', () => {
   });
 
   it('moves an instant written as text', () => {
-    const moved = rebase({ observed: 'x', time: '2026-01-01T00:00:00Z' }, 1000);
+    const moved = rebase({ observed: 'x', time: '2026-01-01T00:00:00Z', access_token_expires_at: '2026-01-01T01:00:00Z', next_refresh_after: '2026-01-01T00:05:00Z', inference_verified: true, renewal_verified: false }, 1000);
     assert.equal(moved.time, '2026-01-01T00:00:01.000Z');
+    assert.equal(moved.access_token_expires_at, '2026-01-01T01:00:01.000Z');
+    assert.equal(moved.next_refresh_after, '2026-01-01T00:05:01.000Z');
+    assert.equal(moved.inference_verified, true);
+    assert.equal(moved.renewal_verified, false);
   });
 
   it('never rewrites a value that merely looks like a date to a lenient parser', () => {

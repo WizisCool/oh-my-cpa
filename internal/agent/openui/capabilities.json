@@ -824,7 +824,7 @@
   },
   {
     "name": "oauth_credentials_list",
-    "description": "List OAuth credential identities and status without tokens, emails, account metadata or raw errors.",
+    "description": "List OAuth credential identities, status and sanitized renewal/recovery evidence without tokens, emails, account metadata or raw errors. Missing evidence is unknown, not healthy. Quota availability, SIWC, runtime adoption, inference verification and automatic renewal verification are separate; requires_sign_in can be true while quota remains readable. Recovery and token-consuming inference verification are operator-driven browser actions.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -841,6 +841,63 @@
           "items": {
             "type": "object",
             "properties": {
+              "requires_sign_in": {
+                "type": [
+                  "null",
+                  "boolean"
+                ]
+              },
+              "renewal_state": {
+                "type": "string"
+              },
+              "recovery_stage": {
+                "type": "string"
+              },
+              "access_token_expires_at": {
+                "type": "string"
+              },
+              "next_refresh_after": {
+                "type": "string"
+              },
+              "adopted": {
+                "type": [
+                  "null",
+                  "boolean"
+                ]
+              },
+              "inference_verified": {
+                "type": [
+                  "null",
+                  "boolean"
+                ]
+              },
+              "renewal_verified": {
+                "type": [
+                  "null",
+                  "boolean"
+                ]
+              },
+              "refresh_error": {
+                "type": [
+                  "null",
+                  "object"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "http_status": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "next_action": {
+                "type": "string"
+              },
+              "recovery_supported": {
+                "type": "boolean"
+              },
               "siwc_status": {
                 "type": "string"
               },

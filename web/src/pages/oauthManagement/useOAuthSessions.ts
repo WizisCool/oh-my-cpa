@@ -1,3 +1,4 @@
+import type { OAuthRecoveryTarget } from '../../types/oauth';
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
@@ -13,6 +14,7 @@ import { useToast } from '../../components/feedback';
 export type OAuthSessionStatus = 'idle' | 'starting' | 'waiting' | 'success' | 'error';
 
 export interface OAuthSessionState {
+  recoveryTarget?: OAuthRecoveryTarget;
   url?: string;
   state?: string;
   flow?: OAuthFlowKind;
@@ -35,8 +37,8 @@ export interface OAuthSessionState {
 export interface OAuthSessionsController {
   states: Record<string, OAuthSessionState>;
   activeProviders: string[];
-  start: (providerId: string, proxyUrl?: string) => Promise<void>;
-  startDefaultRoute: (providerId: string) => Promise<void>;
+  start: (providerId: string, proxyUrl?: string, recovery?: OAuthRecoveryTarget) => Promise<void>;
+  startDefaultRoute: (providerId: string, recovery?: OAuthRecoveryTarget) => Promise<void>;
   cancel: (providerId: string) => Promise<void>;
   submitCallback: (providerId: string) => Promise<void>;
   check: (providerId: string) => Promise<void>;
@@ -77,7 +79,7 @@ export function isOAuthSessionActive(state: OAuthSessionState | undefined): bool
  */
 export function useOAuthSessions(
   choices: OAuthProviderChoice[],
-  onCompleted?: (providerId: string) => void,
+  onCompleted?: (providerId: string, recovery?: OAuthRecoveryTarget) => void,
   { shouldNotifyCompletion = true }: { shouldNotifyCompletion?: boolean } = {},
 ): OAuthSessionsController {
   const t = useT();
@@ -85,6 +87,7 @@ export function useOAuthSessions(
   const queryClient = useQueryClient();
   const [states, setStates] = React.useState<Record<string, OAuthSessionState>>({});
   const choicesRef = React.useRef(choices);
+  const recoveryTargetsRef = React.useRef<Record<string, OAuthRecoveryTarget | undefined>>({});
   const generationRef = React.useRef<Record<string, number>>({});
   const startInFlightRef = React.useRef<Record<string, boolean>>({});
   const disposedRef = React.useRef(false);
@@ -146,6 +149,7 @@ export function useOAuthSessions(
     clearProviderTimers(providerId);
     delete statusReadFailuresRef.current[providerId];
     delete attemptUsesProxyRef.current[providerId];
+    delete recoveryTargetsRef.current[providerId];
     generationRef.current[providerId] = (generationRef.current[providerId] ?? 0) + 1;
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
@@ -174,7 +178,7 @@ export function useOAuthSessions(
     void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
     void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
-    completedRef.current?.(providerId);
+    completedRef.current?.(providerId, recoveryTargetsRef.current[providerId]);
     if (shouldNotifyCompletion) toast.success(t('oauth.status_success_badge'));
     successTimersRef.current[providerId] = window.setTimeout(() => {
       if (generationRef.current[providerId] === generation) reset(providerId);
@@ -267,12 +271,15 @@ export function useOAuthSessions(
     providerId: string,
     proxyUrl: string | undefined,
     isDefaultRouteConfirmed: boolean,
+    recovery?: OAuthRecoveryTarget,
   ) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
     if (!choice || choice.pluginPageRoute) return;
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
     if (current?.requiresProxyReentry && !proxyUrl?.trim() && !isDefaultRouteConfirmed) return;
+    const target = recovery ?? current?.recoveryTarget;
+    recoveryTargetsRef.current[providerId] = target;
     attemptUsesProxyRef.current[providerId] = Boolean(proxyUrl?.trim());
     startInFlightRef.current[providerId] = true;
 
@@ -282,13 +289,14 @@ export function useOAuthSessions(
     generationRef.current[providerId] = generation;
     updateProviderState(providerId, {
       ...emptySession(),
+      recoveryTarget: target,
       status: 'starting',
       starting: true,
       requiresProxyReentry: false,
     });
 
     try {
-      const response = await api.startOAuthFlow(providerId, proxyUrl);
+      const response = await api.startOAuthFlow(providerId, proxyUrl, target);
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       const token = (response.state || response.session_id || '').trim();
       const flow = resolveStartedOAuthFlow(choice.flow, response);
@@ -307,7 +315,7 @@ export function useOAuthSessions(
       if (generationRef.current[providerId] !== generation) return;
       delete attemptUsesProxyRef.current[providerId];
       const code = apiErrorCode(error);
-      const errorMessage = code === 'oauth_proxy_upgrade_required' ? t('oauth.proxy_upgrade_required')
+      const errorMessage = code === 'oauth_recovery_upgrade_required' ? t('recovery.upgrade_required') : code === 'invalid_oauth_target' ? t('recovery.target_changed') : code === 'resource_conflict' ? t('recovery.target_changed') : code === 'oauth_proxy_upgrade_required' ? t('oauth.proxy_upgrade_required')
         : code === 'invalid_oauth_proxy' ? t('oauth.proxy_invalid')
         : proxyUrl?.trim() && (code === 'cpa_unavailable' || code === 'cpa_rejected_request')
           ? t('oauth.proxy_start_failed') : describeError(error);
@@ -324,12 +332,12 @@ export function useOAuthSessions(
   }, [clearProviderTimers, toast, scheduleStatusPoll, states, t, updateProviderState]);
 
   const start = React.useCallback(
-    (providerId: string, proxyUrl?: string) => startAttempt(providerId, proxyUrl, false),
+    (providerId: string, proxyUrl?: string, recovery?: OAuthRecoveryTarget) => startAttempt(providerId, proxyUrl, false, recovery),
     [startAttempt],
   );
 
   const startDefaultRoute = React.useCallback(
-    (providerId: string) => startAttempt(providerId, undefined, true),
+    (providerId: string, recovery?: OAuthRecoveryTarget) => startAttempt(providerId, undefined, true, recovery),
     [startAttempt],
   );
 

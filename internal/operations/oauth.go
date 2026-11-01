@@ -3,20 +3,50 @@ package operations
 import (
 	"context"
 	"errors"
+
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 // StartOAuth leaves exchange, session routing, and credential persistence in CPA.
-func (s *Service) StartOAuth(ctx context.Context, provider, proxyURL string) (management.OAuthAuthURLResponse, error) {
+func (s *Service) StartOAuth(ctx context.Context, provider string, options management.OAuthStartOptions) (management.OAuthAuthURLResponse, error) {
 	client, err := s.Client(ctx)
 	if err != nil {
 		return management.OAuthAuthURLResponse{}, err
 	}
-	return client.OAuthAuthURL(ctx, provider, proxyURL)
+	expectedTargetID := ""
+	if options.Name != "" || options.AuthIndex != "" {
+		file, err := s.recoveryAuthFile(ctx, CredentialTarget{Name: options.Name, AuthIndex: options.AuthIndex})
+		if err != nil {
+			return management.OAuthAuthURLResponse{}, err
+		}
+		if !sameOAuthProvider(provider, file.Provider) {
+			return management.OAuthAuthURLResponse{}, management.ErrInvalidOAuthTarget
+		}
+		if !file.RecoverySupported() {
+			return management.OAuthAuthURLResponse{}, management.ErrOAuthRecoveryUpgradeRequired
+		}
+		options.Name, options.AuthIndex = file.Name, file.AuthIndex
+		expectedTargetID = file.ID
+		if expectedTargetID == "" {
+			expectedTargetID = file.Name
+		}
+	}
+	response, err := client.OAuthAuthURL(ctx, provider, options)
+	if err != nil {
+		return management.OAuthAuthURLResponse{}, err
+	}
+	// Lifecycle fields alone do not prove that this provider's auth-url handler
+	// honored account pinning. Never release a login URL for a different target.
+	if expectedTargetID != "" && response.TargetAuthID != expectedTargetID {
+		return management.OAuthAuthURLResponse{}, management.ErrInvalidOAuthTarget
+	}
+	return response, nil
 }
 
 type Credential struct {
+	management.CredentialRecoverySummary
+	RecoverySupported bool   `json:"recovery_supported,omitempty"`
 	SIWCStatus        string `json:"siwc_status,omitempty"`
 	SIWCBindSupported bool   `json:"siwc_bind_supported"`
 	UseSIWC           bool   `json:"use_siwc"`
@@ -169,7 +199,7 @@ func (s *Service) normalizeAgentCredentialFields(fields map[string]any) (map[str
 }
 
 func (s *Service) registerOAuth(registry *capability.Registry) error {
-	if err := read(registry, "oauth_credentials_list", "List OAuth credential identities and status without tokens, emails, account metadata or raw errors.", func(ctx context.Context, _ Empty) (Credentials, error) {
+	if err := read(registry, "oauth_credentials_list", "List OAuth credential identities, status and sanitized renewal/recovery evidence without tokens, emails, account metadata or raw errors. Missing evidence is unknown, not healthy. Quota availability, SIWC, runtime adoption, inference verification and automatic renewal verification are separate; requires_sign_in can be true while quota remains readable. Recovery and token-consuming inference verification are operator-driven browser actions.", func(ctx context.Context, _ Empty) (Credentials, error) {
 		client, err := s.Client(ctx)
 		if err != nil {
 			return Credentials{}, err
@@ -180,7 +210,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 			return output, errors.New("tool_result_too_large")
 		}
 		for _, file := range files.Files {
-			output.Items = append(output.Items, Credential{SIWCStatus: file.SafeSIWCSummary().SIWCStatus, SIWCBindSupported: file.SIWCBindSupported, UseSIWC: file.UseSIWC, SIWCBound: file.SIWCBound, SIWCExpiresAt: file.SafeSIWCSummary().SIWCExpiresAt, Name: safeLabel(file.Name), AuthIndex: file.AuthIndex, Provider: file.Provider, Status: file.Status, IsDisabled: file.Disabled, Revision: s.revision(file)})
+			output.Items = append(output.Items, Credential{CredentialRecoverySummary: file.SafeRecoverySummary(), RecoverySupported: file.RecoverySupported(), SIWCStatus: file.SafeSIWCSummary().SIWCStatus, SIWCBindSupported: file.SIWCBindSupported, UseSIWC: file.UseSIWC, SIWCBound: file.SIWCBound, SIWCExpiresAt: file.SafeSIWCSummary().SIWCExpiresAt, Name: safeLabel(file.Name), AuthIndex: file.AuthIndex, Provider: file.Provider, Status: file.Status, IsDisabled: file.Disabled, Revision: s.revision(file)})
 		}
 		return output, err
 	}); err != nil {

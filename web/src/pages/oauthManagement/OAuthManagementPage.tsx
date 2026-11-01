@@ -1,3 +1,4 @@
+import type { OAuthRecoveryTarget } from '../../types/oauth';
 import { ActionMenu } from '../../components/common/ActionMenu';
 import React from 'react';
 import { useBlocker } from 'react-router-dom';
@@ -216,6 +217,7 @@ export const OAuthManagementPage: React.FC = () => {
 
   const [isConnectOpen, setIsConnectOpen] = React.useState(false);
   const [connectProviderId, setConnectProviderId] = React.useState('');
+  const [connectRecoveryTarget, setConnectRecoveryTarget] = React.useState<OAuthRecoveryTarget>();
   React.useEffect(() => {
     if (!pendingIntent || searchParams.has('action') || searchParams.has('focus')) return;
     if (pendingIntent.connect) {
@@ -242,28 +244,41 @@ export const OAuthManagementPage: React.FC = () => {
   const [completionPending, setCompletionPending] = React.useState<Record<string, CompletionPending>>({});
   const preStartSnapshotRef = React.useRef<Record<string, Set<string>>>({});
   const announceCompletionRef = React.useRef<(result: CompletionResult) => void>(() => undefined);
-  const handleAuthorizationCompleted = React.useCallback((providerId: string) => {
+  const handleAuthorizationCompleted = React.useCallback((providerId: string, recovery?: OAuthRecoveryTarget) => {
+    if (recovery) {
+      void api.getManagementAuthFiles({ name: recovery.name, auth_index: recovery.auth_index }).then((result) => {
+        if (result.files.length !== 1) { toast.warning(t('recovery.read_failed')); return; }
+        toast.info(t('recovery.complete'));
+      }).catch(() => toast.warning(t('recovery.read_failed')));
+      return;
+    }
     const snapshot = preStartSnapshotRef.current[providerId]
       ?? new Set(recordsRef.current.map((record) => record.key));
     setCompletionPending((previous) => ({
       ...previous,
       [providerId]: { providerId, snapshot, startedAt: Date.now() },
     }));
-  }, []);
+  }, [t, toast]);
   const siwcBindings = useSIWCBindings();
   const [siwcRecordKey, setSIWCRecordKey] = React.useState<string>();
   const sessions = useOAuthSessions(choices, handleAuthorizationCompleted, { shouldNotifyCompletion: false });
   const rememberPreStartSnapshot = React.useCallback((providerId: string) => {
     preStartSnapshotRef.current[providerId] = new Set(recordsRef.current.map((record) => record.key));
   }, []);
-  const startSession = React.useCallback((providerId: string, proxyUrl?: string) => {
+  const startSession = React.useCallback((providerId: string, proxyUrl?: string, recovery?: OAuthRecoveryTarget) => {
     rememberPreStartSnapshot(providerId);
-    return sessions.start(providerId, proxyUrl);
+    return sessions.start(providerId, proxyUrl, recovery);
   }, [rememberPreStartSnapshot, sessions]);
-  const startDefaultRouteSession = React.useCallback((providerId: string) => {
+  const startDefaultRouteSession = React.useCallback((providerId: string, recovery?: OAuthRecoveryTarget) => {
     rememberPreStartSnapshot(providerId);
-    return sessions.startDefaultRoute(providerId);
+    return sessions.startDefaultRoute(providerId, recovery);
   }, [rememberPreStartSnapshot, sessions]);
+  const displayedRecoveryTarget = sessions.states[connectProviderId]?.recoveryTarget ?? connectRecoveryTarget;
+  const isRecoverySupported = Boolean(displayedRecoveryTarget && records.some((record) =>
+    record.fileName === displayedRecoveryTarget.name
+    && record.authIndex === displayedRecoveryTarget.auth_index
+    && record.file.recovery_supported,
+  ));
   const sessionController = React.useMemo(
     () => ({ ...sessions, start: startSession, startDefaultRoute: startDefaultRouteSession }),
     [sessions, startDefaultRouteSession, startSession],
@@ -414,6 +429,8 @@ export const OAuthManagementPage: React.FC = () => {
   ), [records]);
 
   const openConnect = () => {
+    setConnectRecoveryTarget(undefined);
+    for (const provider of Object.keys(sessions.states)) { if (!sessions.activeProviders.includes(provider)) sessions.reset(provider); }
     const selectedProvider = queryState.provider !== 'all'
       ? resolveAuthorizationProviderId(queryState.provider, choices)
       : undefined;
@@ -431,10 +448,22 @@ export const OAuthManagementPage: React.FC = () => {
 
   const openConnectForRecord = (record: OAuthWorkspaceRecord) => {
     const providerId = record.authorizationProviderId;
-    if (!providerId) {
+    if (!providerId || choices.find((choice) => choice.id === providerId)?.pluginPageRoute) {
       toast.warning(t('omc.reauth_unavailable', { provider: record.displayProvider }));
       return;
     }
+    if (!record.canEditFile) { toast.warning(t('recovery.target_changed')); return; }
+    if (sessions.activeProviders.includes(providerId)) {
+      const activeTarget = sessions.states[providerId]?.recoveryTarget;
+      if (activeTarget?.name !== record.fileName || activeTarget?.auth_index !== record.authIndex) {
+        toast.warning(t('recovery.session_conflict'));
+        return;
+      }
+    } else {
+      sessions.reset(providerId);
+    }
+    setConnectRecoveryTarget({ name: record.fileName, auth_index: record.authIndex });
+    setSelectedIdentity(undefined);
     setConnectProviderId(providerId);
     setIsConnectOpen(true);
   };
@@ -642,6 +671,7 @@ export const OAuthManagementPage: React.FC = () => {
                 type="link"
                 size="small"
                 onClick={() => {
+                  setConnectRecoveryTarget(state.recoveryTarget);
                   setConnectProviderId(providerId);
                   setIsConnectOpen(true);
                 }}
@@ -916,7 +946,9 @@ export const OAuthManagementPage: React.FC = () => {
           open={isConnectOpen}
           choices={choices}
           selectedProviderId={connectProviderId || undefined}
-          onSelectProvider={setConnectProviderId}
+          recoveryTarget={connectRecoveryTarget}
+          isRecoverySupported={isRecoverySupported}
+          onSelectProvider={(providerId) => { setConnectRecoveryTarget(undefined); setConnectProviderId(providerId); }}
           onClose={() => setIsConnectOpen(false)}
           onViewCredentials={(providerId) => {
             setSearch({ provider: displayProviderForAuthorization(providerId), page: null });
@@ -965,6 +997,7 @@ export const OAuthManagementPage: React.FC = () => {
               : undefined;
             if (latest) actions.download(latest);
           }}
+          onRecover={selectedRecord ? () => openConnectForRecord(selectedRecord) : undefined}
           initialSection={drawerSection}
           canEdit={Boolean(selectedRecord?.canEditFile)}
           hasExternalDraft={hasWarmupDraft}

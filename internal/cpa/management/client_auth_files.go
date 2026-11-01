@@ -22,7 +22,7 @@ func (c *Client) AuthFilesWithMeta(ctx context.Context) (AuthFilesResponse, Resp
 	var response AuthFilesResponse
 	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/credentials", &response)
 	if err != nil {
-		return AuthFilesResponse{}, meta, err
+		return AuthFilesResponse{}, meta, safeCredentialError(err)
 	}
 	return response, meta, nil
 }
@@ -169,6 +169,7 @@ func (s SIWCSummary) SafeSIWCSummary() SIWCSummary {
 }
 
 type AuthFile struct {
+	CredentialRecoverySummary
 	SIWCSummary
 	ID            string `json:"id"`
 	AuthIndex     string `json:"auth_index"`

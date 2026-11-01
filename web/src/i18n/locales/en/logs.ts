@@ -140,6 +140,7 @@ export default {
   'audit.action.auth_file.fields_read': 'Read credential fields',
   'audit.action.auth_file.fields_update': 'Updated credential fields',
   'audit.action.auth_file.refresh': 'Refreshed a credential',
+  "audit.action.auth_file.verify": "Verified credential inference (uses tokens)",
   'audit.action.auth_file.vertex_import': 'Imported a Vertex service account',
   'audit.action.auth_file.status_update': 'Switched a credential on or off',
   'audit.action.oauth.siwc.bind': 'Started a SIWC binding',

@@ -958,6 +958,11 @@ export const api = {
     });
   },
 
+  /** Explicit token-consuming inference; only the outcome crosses the facade. */
+  async verifyManagementAuthFile(name: string, authIndex?: string): Promise<{ status: string; verified: boolean }> {
+    return request('/management/auth-files/verify', { method: 'POST', body: JSON.stringify({ name, auth_index: authIndex }) });
+  },
+
   /** Renews one credential's tokens now. The answer is the outcome alone, never the credential. */
   async refreshManagementAuthFile(name: string, authIndex?: string): Promise<{ status: string }> {
     return request<{ status: string }>('/management/auth-files/refresh', {
@@ -1117,10 +1122,10 @@ export const api = {
     return request<OAuthCancelResponse>(`/management/oauth/siwc/session?state=${encodeURIComponent(state)}`, { method: 'DELETE' });
   },
 
-  async startOAuthFlow(provider: string, proxyUrl?: string): Promise<StartOAuthResponse> {
+  async startOAuthFlow(provider: string, proxyUrl?: string, recovery?: import('../types/oauth').OAuthRecoveryTarget): Promise<StartOAuthResponse> {
     return request<StartOAuthResponse>('/management/oauth/start', {
       method: 'POST',
-      body: JSON.stringify({ provider, ...(proxyUrl?.trim() ? { proxy_url: proxyUrl.trim() } : {}) }),
+      body: JSON.stringify({ provider, ...(proxyUrl?.trim() ? { proxy_url: proxyUrl.trim() } : {}), ...(recovery ? { name: recovery.name, auth_index: recovery.auth_index, verify: recovery.verify === true } : {}) }),
     });
   },
 
