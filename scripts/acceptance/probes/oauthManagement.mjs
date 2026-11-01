@@ -539,6 +539,8 @@ export async function oauthManagement({ base, page, check }) {
     if (!new URL(route.request().url()).pathname.endsWith('/auth-files')) return route.fallback();
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files: recoveryFiles, total: recoveryFiles.length }) });
   });
+  const recoveryQuotas = quota.map((item, index) => index === 4 ? { ...item, observed_at_ms: 0 } : item);
+  await page.route('**/api/v1/management/quota', route => route.fulfill({ json: { quotas: recoveryQuotas, total: recoveryQuotas.length } }));
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const { id: language, locale } of LANGUAGES) {
     await page.evaluate(value => localStorage.setItem('omc-lang', value), language);
@@ -561,6 +563,17 @@ export async function oauthManagement({ base, page, check }) {
       geometry.overflow <= 1 && !geometry.overlap && geometry.contained, JSON.stringify(geometry));
   }
   await page.evaluate(() => localStorage.setItem('omc-lang', 'en'));
+  await page.goto(`${base}/oauth-management?provider=codex`, { waitUntil: 'domcontentloaded' });
+  const unobservedStatus = page.locator('[data-auth-index="auth-05"]').getByTestId('oauth-credential-status').locator('[tabindex="0"]');
+  await unobservedStatus.hover();
+  const unobservedTooltip = page.getByRole('tooltip');
+  await unobservedTooltip.waitFor();
+  const hasIsolatedZero = await unobservedTooltip.evaluate(element => {
+    const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    while (text.nextNode()) if (text.currentNode.textContent.trim() === '0') return true;
+    return false;
+  });
+  check('an unobserved timestamp renders no isolated numeric observation', !hasIsolatedZero);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${base}/oauth-management?provider=codex`, { waitUntil: 'domcontentloaded' });
   const recoveryRow = page.locator('[data-auth-index="auth-01"]');

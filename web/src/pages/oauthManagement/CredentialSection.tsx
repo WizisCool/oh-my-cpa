@@ -356,7 +356,7 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
           {explanation && <div>{explanation}</div>}
           <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
           {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
-          {quota?.observed_at_ms && <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div>}
+          {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
         </>}>
           <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
         </Tooltip>

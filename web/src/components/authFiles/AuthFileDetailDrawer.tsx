@@ -367,7 +367,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
         cancelText: t('common.cancel'),
         okButtonProps: { danger: true },
         onOk: () => {
-          setIsDirty(false);
+          // Recovery may be refused; closing or switching the drawer resets the draft.
           action();
         },
       });

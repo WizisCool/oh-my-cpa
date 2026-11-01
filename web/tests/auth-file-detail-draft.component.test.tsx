@@ -150,3 +150,24 @@ it('requires explicit discard before leaving an external draft for credential re
     expect((await screen.findByLabelText('Warmup draft') as HTMLInputElement).value).toBe('Unsaved warmup policy');
   } finally { surface.unmount(); }
 });
+
+it('keeps field edits dirty when recovery leaves the drawer open', async () => {
+  const surface = mountDetail();
+  try {
+    fireEvent.click(screen.getByRole('tab', { name: 'Configuration' }));
+    const note = await screen.findByLabelText('Note') as HTMLTextAreaElement;
+    await waitFor(() => expect(note.value).toBe(FILE.note));
+    fireEvent.change(note, { target: { value: 'Field draft before refused recovery' } });
+    const save = screen.getByRole('button', { name: 'Save Fields' }) as HTMLButtonElement;
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(screen.getByRole('tab', { name: 'Quota' }));
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-recover]')!);
+    const confirm = await screen.findByRole('button', { name: 'Confirm' });
+    await act(async () => { fireEvent.click(confirm); });
+    expect(surface.onRecover).toHaveBeenCalledOnce();
+    expect(surface.onClose).not.toHaveBeenCalled();
+    expect(note.value).toBe('Field draft before refused recovery');
+    expect(save.disabled).toBe(false);
+    expect(surface.writes).toHaveLength(0);
+  } finally { surface.unmount(); }
+});
