@@ -223,9 +223,11 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('the card mark shows the artwork as drawn instead of repainting it in the card colour',
     cardMark.mask === 'none' && !cardMark.isPainted, JSON.stringify(cardMark));
   // A logo is drawn inside a chip the surface sizes; the artwork has to fill that chip rather
-  // than shrink to one text glyph, which is what a per-icon font size used to do.
+  // than shrink to one text glyph, which is what a per-icon font size used to do. The chip is
+  // named by the component, not by its CSS-module class, so a renamed class cannot turn this
+  // into a vacuous zero-size comparison.
   const cardArtworkBox = await cardArtwork.evaluate((image) => {
-    const chip = image.closest('[class*="logo"]')?.getBoundingClientRect();
+    const chip = image.closest('[data-plugin-logo-chip]')?.getBoundingClientRect();
     const box = image.getBoundingClientRect();
     return {
       width: Math.round(box.width),
@@ -235,7 +237,9 @@ export async function pluginManagement({ base, page, check, writes }) {
     };
   });
   check('a card draws the registry artwork at the size of the chip the card reserves for it',
-    cardArtworkBox.width >= cardArtworkBox.chipWidth - 2 && cardArtworkBox.height >= cardArtworkBox.chipHeight - 2,
+    cardArtworkBox.chipWidth > 0 && cardArtworkBox.chipHeight > 0
+      && cardArtworkBox.width >= cardArtworkBox.chipWidth - 2
+      && cardArtworkBox.height >= cardArtworkBox.chipHeight - 2,
     JSON.stringify(cardArtworkBox));
   check('a card without an icon draws the generic mark', (await limiter.locator('[data-plugin-logo="fallback"]').count()) === 1);
   check('an installed entry with a newer release offers the update', (await logger.getByRole('button', { name: /更新|Update/ }).count()) >= 1);
@@ -289,7 +293,7 @@ export async function pluginManagement({ base, page, check, writes }) {
 
   const loggerRow = page.locator('article[data-plugin-id="request-logger"]');
   const rowArtwork = await loggerRow.locator('[data-plugin-logo="svg"] img').evaluate((image) => {
-    const chip = image.closest('[class*="logo"]')?.getBoundingClientRect();
+    const chip = image.closest('[data-plugin-logo-chip]')?.getBoundingClientRect();
     const box = image.getBoundingClientRect();
     return {
       width: Math.round(box.width),
@@ -299,7 +303,9 @@ export async function pluginManagement({ base, page, check, writes }) {
     };
   });
   check('an installed row draws the plugin icon the plugin publishes at its row chip size',
-    rowArtwork.width >= rowArtwork.chipWidth - 2 && rowArtwork.height >= rowArtwork.chipHeight - 2,
+    rowArtwork.chipWidth > 0 && rowArtwork.chipHeight > 0
+      && rowArtwork.width >= rowArtwork.chipWidth - 2
+      && rowArtwork.height >= rowArtwork.chipHeight - 2,
     JSON.stringify(rowArtwork));
   check('the auth-provider capability does not claim an OAuth login method',
     (await loggerRow.getByText('Auth provider', { exact: true }).count()) === 1
