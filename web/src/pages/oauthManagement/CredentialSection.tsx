@@ -546,7 +546,7 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
 
 /**
  * One reading: the share left, its bar, and the reset time reported upstream. Explicitly unused,
- * full Codex five-hour readings omit the list countdown; rounded or unknown usage keeps it.
+ * full Codex five-hour readings show the window duration; rounded or unknown usage keeps a countdown.
  * The window's label, reset instant, accuracy and capacity estimate remain in its tooltip.
  */
 interface QuotaCellProps {
@@ -573,13 +573,15 @@ function QuotaCell({ columnKey, phoneLabel, provider, window, isPhoneWide, isFir
     );
   }
   const remaining = quotaRemainingPercent(window);
-  // Use the unrounded upstream reading. A displayed 100% alone does not prove zero usage,
-  // and hiding its countdown makes no claim about whether the upstream window has started.
+  // Use the unrounded upstream reading: a displayed 100% alone does not prove zero usage.
+  // Show the unused window's duration, independent of its moving reset estimate. The tooltip
+  // preserves that estimate; zero usage does not prove whether the upstream window has started.
   const isUnusedFullCodexWindow = provider === 'codex'
+    && window.scope === 'standard'
     && quotaWindowKindOf(window) === 'five_hour'
     && window.used_percent === 0
     && (window.remaining_percent ?? 100) === 100;
-  const reset = isUnusedFullCodexWindow ? '' : quotaResetCountdown(window, nowMS, t);
+  const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
   const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
   const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean).join('\n');
   return (

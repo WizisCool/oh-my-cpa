@@ -92,6 +92,7 @@ export default {
   "quota.btn_reset_quota": "Tetapkan semula kuota",
   "quota.btn_refresh_quota": "Muat semula kuota",
   "quota.in_minutes": "{n}m lagi",
+  "quota.duration_hours": "{n}j",
   "quota.in_hours": "{n}j lagi",
   "quota.in_hours_min": "{h}j {m}m lagi",
   "quota.in_days": "{n}h kiri",

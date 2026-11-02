@@ -646,13 +646,14 @@ async function verifyFullCodexCountdown({ base, page, check }) {
   const now = Date.now();
   let observedAt = now;
   let refreshes = 0;
+  let fullUsedPercent = 0;
   const readings = () => [0, 4].map((index) => ({
     ...quotaFor(index),
     observed_at_ms: observedAt,
     windows: [{
       id: 'five_hour', label: 'Five-hour limit', kind: 'five_hour', scope: 'standard',
-      used_percent: index === 0 ? 0 : 0.2,
-      remaining_percent: index === 0 ? 100 : 99.8,
+      used_percent: index === 0 ? fullUsedPercent : 0.2,
+      remaining_percent: index === 0 ? 100 - fullUsedPercent : 99.8,
       reset_at_ms: observedAt + 5 * 3_600_000 + 30_000,
       reset_accuracy: 'derived',
     }],
@@ -676,8 +677,9 @@ async function verifyFullCodexCountdown({ base, page, check }) {
     const used = page.locator('[data-auth-index="auth-05"] [data-quota-column="standard|five_hour"]');
     await used.getByText('~5h 1m left', { exact: true }).waitFor();
     const checkFull = async (stage) => {
-      check(`unused full Codex quota has no list countdown ${stage}`,
-        (await full.innerText()).includes('100%') && !/left|Recovered/.test(await full.innerText())
+      check(`unused full Codex quota shows its five-hour duration ${stage}`,
+        (await full.innerText()).includes('100%') && await full.getByText('5h', { exact: true }).isVisible()
+          && !/left|Recovered/.test(await full.innerText())
           && await full.getByRole('meter').getAttribute('aria-valuenow') === '100'
           && (await full.getAttribute('title')).includes('~'));
     };
@@ -685,6 +687,9 @@ async function verifyFullCodexCountdown({ base, page, check }) {
     await page.clock.fastForward(60_000);
     await used.getByText('~5h left', { exact: true }).waitFor();
     await checkFull('after a minute');
+    await page.clock.fastForward(4 * 60_000);
+    await used.getByText('~4h 56m left', { exact: true }).waitFor();
+    await checkFull('after five minutes');
     await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
     await until(() => refreshes === 1, { label: 'full Codex quota refresh' });
     await until(async () => (await full.getAttribute('title')).includes('5h 1m left'), { label: 'refreshed reset instant' });
@@ -705,6 +710,19 @@ async function verifyFullCodexCountdown({ base, page, check }) {
     await page.clock.fastForward(60_000);
     await used.getByText('~5h left', { exact: true }).waitFor();
     await checkFull('after another minute');
+    fullUsedPercent = 0.2;
+    await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
+    await until(() => refreshes === 2, { label: 'used Codex quota refresh' });
+    await full.getByText('~5h 1m left', { exact: true }).waitFor();
+    await page.clock.fastForward(60_000);
+    await full.getByText('~5h left', { exact: true }).waitFor();
+    check('Codex quota resumes counting down once positive usage is reported',
+      await full.getByText('100%', { exact: true }).isVisible());
+    fullUsedPercent = 0;
+    await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
+    await until(() => refreshes === 3, { label: 'recovered full Codex quota refresh' });
+    await full.getByText('5h', { exact: true }).waitFor();
+    await checkFull('when a refresh reports zero usage again');
   } finally {
     await page.unroute('**/management/quota', quotaHandler);
     await page.unroute('**/management/auth-files', filesHandler);

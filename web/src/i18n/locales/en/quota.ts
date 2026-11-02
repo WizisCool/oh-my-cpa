@@ -92,6 +92,7 @@ export default {
   'quota.btn_reset_quota': 'Reset quota',
   'quota.btn_refresh_quota': 'Refresh quota',
   'quota.in_minutes': '{n}m left',
+  'quota.duration_hours': '{n}h',
   'quota.in_hours': '{n}h left',
   'quota.in_hours_min': '{h}h {m}m left',
   'quota.in_days': '{n}d left',

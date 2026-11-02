@@ -403,6 +403,7 @@ describe("a credential row's reset time", () => {
     { provider: 'codex', windowOverrides: {} },
     { provider: 'codex', windowOverrides: { used_percent: 0.2, remaining_percent: 99.8 } },
     { provider: 'codex', windowOverrides: { used_percent: 0, remaining_percent: 99.8 } },
+    { provider: 'codex', windowOverrides: { used_percent: 0, scope: 'model', model: 'gpt-5' } },
     { provider: 'codex', windowOverrides: { used_percent: undefined, remaining_percent: undefined }, remainingText: '--' },
     { provider: 'claude', windowOverrides: { remaining_percent: undefined, used_percent: 0 } },
     { provider: 'gemini', windowOverrides: { remaining_percent: 99.8 } },
@@ -422,13 +423,14 @@ describe("a credential row's reset time", () => {
     expect(within(cells[1]).getByText('2d left')).toBeTruthy();
   });
 
-  it.each(['exact', 'derived', 'approximate'] as const)('hides the countdown only for explicitly unused full Codex five-hour readings (%s)', (accuracy) => {
+  it.each(['exact', 'derived', 'approximate'] as const)('shows the five-hour duration for explicitly unused full Codex readings (%s)', (accuracy) => {
     const window = { ...quotaWindow('five_hour', 100, 2), used_percent: 0, remaining_percent: accuracy === 'derived' ? undefined : 100, reset_accuracy: accuracy };
     const { container } = renderCredentialRow(quota('codex-full', [window, {
       ...quotaWindow('weekly', 100, 48), used_percent: 0,
     }]));
     const cells = container.querySelectorAll<HTMLElement>('[data-quota-window-label]');
     expect(within(cells[0]).getByText('100%')).toBeTruthy();
+    expect(within(cells[0]).getByText('5h', { exact: true })).toBeTruthy();
     expect(within(cells[0]).queryByText(/left|Recovered/)).toBeNull();
     expect(cells[0].querySelector('.meter')?.getAttribute('aria-valuenow')).toBe('100');
     expect(cells[0].title).toContain(accuracy === 'exact' ? '2h left' : '~');
@@ -451,6 +453,15 @@ describe("a credential row's reset time", () => {
     const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
     expect(within(cell).getByText('100%')).toBeTruthy();
     expect(within(cell).queryByText(/left|Recovered/)).toBeNull();
+  });
+
+  it('shows an unused window duration even without a reported reset instant', () => {
+    const { container } = renderCredentialRow(quota('codex-idle', [
+      { ...quotaWindow('five_hour', 100, 2), used_percent: 0, reset_at_ms: undefined },
+    ]));
+    const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
+    expect(within(cell).getByText('5h', { exact: true })).toBeTruthy();
+    expect(cell.title).toBe('five_hour');
   });
 });
 
