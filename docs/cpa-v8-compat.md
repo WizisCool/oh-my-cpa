@@ -61,6 +61,16 @@ identity. Provider moves, regrouping and removals must retain the intended crede
 and only its intended changes. Client access keys and upstream provider keys occupy
 different configuration trees.
 
+API-key connection reuse is credential-scoped, not a global or OAuth policy.
+The provider editor keeps the group's connection-pool default separate from each
+key's raw override, with inheritance resolved per field. A missing or null key
+field inherits the group; an empty block remains an opt-in, and explicit false
+and zero remain explicit. Removing a key block restores inheritance, not a forced
+off state. Unrelated edits keep the original block ownership, including an
+explicit override equal to the current group value: collapsing it would change
+what happens when the group default is edited later. Pool writes use the same
+provider write gate, configuration revision checks and encrypted pre-write backup.
+
 The trusted Plugin Host is a separate native-response boundary; its fixed origins,
 credential separation, audit and write-backup requirements are in
 [Architecture](architecture.md#trusted-plugin-pages). It is not permission to add

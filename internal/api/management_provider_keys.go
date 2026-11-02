@@ -36,6 +36,15 @@ func editedConfigProviderKeys(req SaveProviderRequest, original management.Confi
 		}
 		seen[apiKey] = true
 		entry := original
+		keyPool := item.ConnectionPool
+		if position > 0 || !isUpdate {
+			if len(keyPool) == 0 {
+				keyPool = []byte("null")
+			}
+		}
+		if err := applyConfigKeyPoolEdits(&entry, req.ConnectionPool, keyPool); err != nil {
+			return nil, err
+		}
 		entry.APIKey = apiKey
 		entry.BaseURL = original.SubmittedBaseURL(strings.TrimSpace(req.BaseURL))
 		entry.ProxyURL = strings.TrimSpace(item.ProxyURL)

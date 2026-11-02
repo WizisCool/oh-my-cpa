@@ -30,7 +30,22 @@ export interface ClientKeyUsageItem {
   last_used_ms: number;
 }
 
+/** A present empty block opts in; omitted/null subfields inherit group values. */
+export interface ProviderConnectionPoolSettings {
+  enabled?: boolean | null;
+  idle_conn_timeout?: string | null;
+  max_idle_conns_per_host?: number | null;
+}
+
+export interface ProviderConnectionPoolGroup {
+  group_name?: string;
+  group_size: number;
+  defaults: ProviderConnectionPoolSettings | null;
+}
+
 export interface ProviderKeyEntry {
+  connection_pool?: ProviderConnectionPoolSettings | null;
+  effective_connection_pool?: ProviderConnectionPoolSettings | null;
   index: number;
   api_key: string;
   proxy_url?: string;
@@ -121,6 +136,7 @@ export interface ProviderBehavior {
 export type ProviderBehaviorSwitch = keyof ProviderBehavior;
 
 export interface ProviderItem {
+  connection_pool?: ProviderConnectionPoolGroup;
   id: string;
   family: string;
   name: string;
@@ -155,8 +171,11 @@ export interface ProviderItem {
 }
 
 export interface SaveProviderKeyItem {
+  /** Omit to keep, null to remove, {} to opt in with inherited/default fields. */
+  connection_pool?: ProviderConnectionPoolSettings | null;
   api_key?: string;
   proxy_url?: string;
+  source_index?: number;
   weight?: number;
 }
 
@@ -169,6 +188,8 @@ export interface SaveProviderModelItem {
 }
 
 export interface SaveProviderPayload {
+  /** Edits the group default, independently of each key override. */
+  connection_pool?: ProviderConnectionPoolSettings | null;
   family: string;
   expected_auth_index?: string;
   expected_name?: string;

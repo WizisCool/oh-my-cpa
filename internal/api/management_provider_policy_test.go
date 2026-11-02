@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -238,5 +239,141 @@ func TestClaudeKeyStoresNativeToolSearch(t *testing.T) {
 	}
 	if listed := listedProvider(t, fixture, "claude-0"); listed.Behavior == nil || listed.Behavior.NativeToolSearch == nil || !*listed.Behavior.NativeToolSearch {
 		t.Fatalf("listed behaviour = %+v, want native tool search on", listed.Behavior)
+	}
+}
+
+func TestProviderConnectionPoolGroupAndKeyEdits(t *testing.T) {
+	for _, family := range []string{"codex", openAICompatibilityFamily} {
+		t.Run(family, func(t *testing.T) {
+			id := idPrefixForFamily(family) + "0"
+			fixture := newProviderTestFixture(t)
+			var groups []map[string]any
+			if err := json.Unmarshal([]byte(`[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":false,"idle-conn-timeout":"300s","max-idle-conns-per-host":2,"future-setting":"not-for-browser"},"keys":[{"api-key":"pool-one","connection-pool":{}},{"api-key":"pool-two","connection-pool":{"enabled":false,"max-idle-conns-per-host":0}},{"api-key":"pool-three"}]}]`), &groups); err != nil {
+				t.Fatal(err)
+			}
+			fixture.state.mu.Lock()
+			fixture.state.storedGroups = map[string][]map[string]any{family: groups}
+			*fixture.state.providerList(family) = flattenGroups(family, groups, []map[string]any{
+				{"api-key": "pool-one", "auth-index": "pool-index-1"}, {"api-key": "pool-two", "auth-index": "pool-index-2"}, {"api-key": "pool-three", "auth-index": "pool-index-3"},
+			})
+			fixture.state.mu.Unlock()
+			_, payload := getJSON(t, fixture.client, fixture.baseURL+providersEndpoint+"?include_keys=false")
+			if strings.Contains(string(payload), "pool-one") || strings.Contains(string(payload), "not-for-browser") {
+				t.Fatal("sanitized pool projection leaked a credential or an unmodelled field")
+			}
+			listed := listedProvider(t, fixture, id)
+			if listed.ConnectionPool == nil || listed.ConnectionPool.GroupName != "team" || listed.ConnectionPool.GroupSize != 3 || listed.ConnectionPool.Defaults.Enabled == nil || *listed.ConnectionPool.Defaults.Enabled {
+				t.Fatalf("wrong group context: %+v", listed.ConnectionPool)
+			}
+			_, payload = getJSON(t, fixture.client, fixture.baseURL+providersEndpoint+"?include_keys=true")
+			var revealed struct {
+				Providers []ProviderItemDTO `json:"providers"`
+			}
+			if err := json.Unmarshal(payload, &revealed); err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range revealed.Providers {
+				if item.ID == id {
+					if len(item.KeyEntries) == 0 || item.KeyEntries[0].ConnectionPool == nil || item.KeyEntries[0].ConnectionPool.Enabled != nil || item.KeyEntries[0].EffectiveConnectionPool.Enabled == nil || *item.KeyEntries[0].EffectiveConnectionPool.Enabled {
+						t.Fatalf("empty override did not inherit disabled group: %+v", item.KeyEntries)
+					}
+				}
+			}
+			for _, edit := range []struct {
+				pool string
+				key  string
+			}{
+				{"", ""},
+				{`"connection_pool":{"enabled":true,"idle_conn_timeout":"0s","max_idle_conns_per_host":0},`, ""},
+				{"", `,"connection_pool":{"enabled":false}`},
+				{"", `,"connection_pool":null`},
+			} {
+				keys := fmt.Sprintf(`[{"api_key":""%s}]`, edit.key)
+				if family == openAICompatibilityFamily {
+					keys = fmt.Sprintf(`[{"api_key":""%s},{"api_key":"pool-two"},{"api_key":"pool-three"}]`, edit.key)
+				}
+				body := fmt.Sprintf(`{"family":%q,"name":"team","base_url":"https://relay.test",%s"keys":%s}`, family, edit.pool, keys)
+				resp, raw := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/"+id, body)
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("pool edit failed: %d %s", resp.StatusCode, raw)
+				}
+				if edit.pool != "" {
+					groups[0]["connection-pool"] = map[string]any{"enabled": true, "idle-conn-timeout": "0s", "max-idle-conns-per-host": float64(0), "future-setting": "not-for-browser"}
+				}
+				key := groups[0]["keys"].([]any)[0].(map[string]any)
+				if edit.key == `,"connection_pool":{"enabled":false}` {
+					key["connection-pool"] = map[string]any{"enabled": false}
+				}
+				if edit.key == `,"connection_pool":null` {
+					delete(key, "connection-pool")
+				}
+				fixture.state.mu.Lock()
+				got, _ := json.Marshal(fixture.state.storedGroups[family])
+				fixture.state.mu.Unlock()
+				want, _ := json.Marshal(groups)
+				if string(got) != string(want) {
+					t.Fatalf("pool edit changed group ownership or sibling: got %s want %s", got, want)
+				}
+			}
+
+		})
+	}
+}
+
+func TestProviderConnectionPoolTrimsIdleTimeout(t *testing.T) {
+	pool, isSet, err := parseProviderPoolEdit(json.RawMessage(`{"idle_conn_timeout":" 60s "}`))
+	if err != nil || !isSet || pool == nil || pool.IdleConnTimeout == nil {
+		t.Fatalf("parse trimmed timeout = %#v, set=%v, err=%v", pool, isSet, err)
+	}
+	if *pool.IdleConnTimeout != "60s" {
+		t.Fatalf("stored timeout = %q, want 60s", *pool.IdleConnTimeout)
+	}
+}
+
+func TestProviderConnectionPoolRejectsInvalidEditsBeforeWriting(t *testing.T) {
+	for _, raw := range []string{`false`, `[]`, `{"unknown":true}`, `{"idle_conn_timeout":"forever"}`, `{"max_idle_conns_per_host":1.5}`} {
+		t.Run(raw, func(t *testing.T) {
+			fixture := newProviderTestFixture(t)
+			resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", `{"family":"codex","base_url":"https://relay.test","connection_pool":`+raw+`}`)
+			if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "provider_connection_pool_invalid") {
+				t.Fatalf("invalid pool accepted: %d %s", resp.StatusCode, payload)
+			}
+			fixture.state.mu.Lock()
+			defer fixture.state.mu.Unlock()
+			if fixture.state.putCount != 0 {
+				t.Fatal("invalid pool reached CPA")
+			}
+		})
+	}
+}
+
+func TestOpenAICompatibleKeyRotationPreservesStoredPool(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	var groups []map[string]any
+	if err := json.Unmarshal([]byte(`[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":true},"keys":[{"api-key":"pool-one","connection-pool":{"enabled":false}},{"api-key":"pool-two"}]}]`), &groups); err != nil {
+		t.Fatal(err)
+	}
+	fixture.state.mu.Lock()
+	fixture.state.storedGroups = map[string][]map[string]any{openAICompatibilityFamily: groups}
+	fixture.state.oaiProviders = flattenGroups(openAICompatibilityFamily, groups, nil)
+	fixture.state.mu.Unlock()
+
+	body := `{"family":"openai-compatibility","name":"team","base_url":"https://relay.test","keys":[{"api_key":"pool-rotated","source_index":0},{"api_key":"pool-two","source_index":1}]}`
+	resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/openai-compat-0", body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("key rotation failed: %d %s", resp.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	defer fixture.state.mu.Unlock()
+	group := fixture.state.storedGroups[openAICompatibilityFamily][0]
+	keys := group["keys"].([]any)
+	if !reflect.DeepEqual(keys[0].(map[string]any)["connection-pool"], map[string]any{"enabled": false}) {
+		t.Fatalf("rotated key lost its stored override: %#v", keys[0])
+	}
+	if keys[1].(map[string]any)["api-key"] != "pool-two" {
+		t.Fatalf("sibling key changed: %#v", keys[1])
+	}
+	if group["connection-pool"].(map[string]any)["enabled"] != true {
+		t.Fatal("group pool default changed")
 	}
 }

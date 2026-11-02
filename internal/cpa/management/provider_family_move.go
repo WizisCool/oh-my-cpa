@@ -217,6 +217,10 @@ func (c *Client) providerMoveSource(ctx context.Context, family string, index in
 						return entry, 0, 0, err
 					}
 					key.AuthIndex = live.AuthIndex
+					key.pool, err = storedConfigKeyPool(groups[stored[j].groupIndex], groups[stored[j].groupIndex]["keys"].([]any)[stored[j].keyIndex].(map[string]any))
+					if err != nil {
+						return entry, 0, 0, err
+					}
 					entry.Keys = []ConfigAPIKey{key}
 					return entry, stored[j].groupIndex, stored[j].keyIndex, nil
 				}

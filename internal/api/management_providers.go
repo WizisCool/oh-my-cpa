@@ -10,10 +10,12 @@ import (
 )
 
 type ProviderKeyEntryDTO struct {
-	Index    int    `json:"index"`
-	APIKey   string `json:"api_key"`
-	ProxyURL string `json:"proxy_url,omitempty"`
-	Weight   *int   `json:"weight,omitempty"`
+	ConnectionPool          *ProviderConnectionPoolSettingsDTO `json:"connection_pool"`
+	EffectiveConnectionPool *ProviderConnectionPoolSettingsDTO `json:"effective_connection_pool"`
+	Index                   int                                `json:"index"`
+	APIKey                  string                             `json:"api_key"`
+	ProxyURL                string                             `json:"proxy_url,omitempty"`
+	Weight                  *int                               `json:"weight,omitempty"`
 }
 
 type ThinkingDTO struct {
@@ -30,9 +32,10 @@ type ProviderModelDTO struct {
 }
 
 type ProviderItemDTO struct {
-	ID     string `json:"id"`
-	Family string `json:"family"`
-	Name   string `json:"name"`
+	ConnectionPool *ProviderConnectionPoolGroupDTO `json:"connection_pool,omitempty"`
+	ID             string                          `json:"id"`
+	Family         string                          `json:"family"`
+	Name           string                          `json:"name"`
 	// UpstreamName is the name the provider carries in CPA's own configuration,
 	// recorded before a local custom name replaces it.
 	//
@@ -129,6 +132,7 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 	items := make([]ProviderItemDTO, 0, len(entries))
 	capabilities := providerPolicyCapabilitiesFor(string(spec.Family))
 	for i, entry := range entries {
+		entry = entry.ProviderRuntimeView()
 		id := fmt.Sprintf("%s%d", spec.IDPrefix, i)
 		name := spec.DefaultName
 		if customNames != nil && customNames[id] != "" {
@@ -158,11 +162,14 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 
 		keyEntries := make([]ProviderKeyEntryDTO, 0)
 		if strings.TrimSpace(entry.APIKey) != "" {
+			pool := entry.ConnectionPoolContext()
 			keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-				Index:    0,
-				APIKey:   entry.APIKey,
-				ProxyURL: entry.ProxyURL,
-				Weight:   entry.Weight,
+				ConnectionPool:          providerPoolSettingsDTO(pool.Override),
+				EffectiveConnectionPool: providerPoolSettingsDTO(pool.Effective),
+				Index:                   0,
+				APIKey:                  entry.APIKey,
+				ProxyURL:                entry.ProxyURL,
+				Weight:                  entry.Weight,
 			})
 		}
 
@@ -173,7 +180,9 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 
 		// CPA disables config API-key credentials through the excluded-all marker
 		// in excluded-models; the UI state must follow that truth.
+		pool := entry.ConnectionPoolContext()
 		items = append(items, ProviderItemDTO{
+			ConnectionPool:  providerPoolGroupDTO(pool.GroupName, pool.GroupSize, pool.Group),
 			ID:              id,
 			Family:          string(spec.Family),
 			Name:            name,
@@ -272,15 +281,41 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 	// Config API-key families are walked from the registry rather than repeated
 	// per family; the declared order is what the provider list follows.
 	for _, spec := range providerConfigFamilies {
-		entries, err := client.ConfigAPIKeys(ctx, spec.Family)
+		entries, err := client.EditableConfigAPIKeys(ctx, spec.Family)
 		if err != nil {
-			continue
+			// Pool metadata is optional to this list. Keep the family visible from
+			// CPA's runtime view when only the stored-group read failed; provider
+			// writes still require the editable read and refuse to overwrite it.
+			if entries, err = client.ConfigAPIKeys(ctx, spec.Family); err != nil {
+				continue
+			}
+			// The runtime read carries effective pool values, not the stored
+			// group/key ownership. Omit them rather than presenting an inherited
+			// value as this key's override.
+			for index := range entries {
+				entries[index].ConnectionPool = nil
+			}
 		}
 		items = append(items, configKeyProviderItems(spec, entries, customNames)...)
 	}
 
-	if oaiResp, err := client.OpenAICompatibility(ctx); err == nil {
-		for i, entry := range oaiResp.Entries {
+	entries, err := client.EditableOpenAICompatibility(ctx)
+	if err != nil {
+		// The same runtime fallback applies to the OpenAI-compatible list, with
+		// the same rule: its pool values have no stored ownership information.
+		if runtime, runtimeErr := client.OpenAICompatibility(ctx); runtimeErr == nil {
+			for index := range runtime.Entries {
+				runtime.Entries[index].ConnectionPool = nil
+				for keyIndex := range runtime.Entries[index].APIKeyEntries {
+					runtime.Entries[index].APIKeyEntries[keyIndex].ConnectionPool = nil
+				}
+			}
+			entries, err = runtime.Entries, nil
+		}
+	}
+	if err == nil {
+		for i, entry := range entries {
+			entry = entry.ProviderRuntimeView()
 			id := fmt.Sprintf("%s%d", openAICompatIDPrefix, i)
 			name := firstNonEmpty(entry.Name, "OpenAI Compatible")
 			if customNames != nil && customNames[id] != "" {
@@ -318,10 +353,12 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 			for ki, k := range entry.APIKeyEntries {
 				authIndexes = append(authIndexes, nonEmptyStrings(k.AuthIndex)...)
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-					Index:    ki,
-					APIKey:   k.APIKey,
-					ProxyURL: k.ProxyURL,
-					Weight:   k.Weight,
+					ConnectionPool:          providerPoolSettingsDTO(k.ConnectionPool),
+					EffectiveConnectionPool: providerPoolSettingsDTO(management.MergeConnectionPools(entry.ConnectionPool, k.ConnectionPool)),
+					Index:                   ki,
+					APIKey:                  k.APIKey,
+					ProxyURL:                k.ProxyURL,
+					Weight:                  k.Weight,
 				})
 			}
 			for ki, k := range entry.LegacyAPIKeys {
@@ -334,6 +371,7 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 			isPromptCacheKeySupported := entry.SupportPromptCacheKey
 			compatCapabilities := providerPolicyCapabilitiesFor(openAICompatibilityFamily)
 			items = append(items, ProviderItemDTO{
+				ConnectionPool:  providerPoolGroupDTO(entry.Name, len(keyEntries), entry.ConnectionPool),
 				ID:              id,
 				Family:          openAICompatibilityFamily,
 				Name:            name,

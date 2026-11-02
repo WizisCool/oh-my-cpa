@@ -12,7 +12,7 @@ import (
 func TestAgentVertexProviderPolicyConfirmedEdit(t *testing.T) {
 	fixture := newProviderTestFixture(t)
 	fixture.state.mu.Lock()
-	*fixture.state.providerList("vertex") = []map[string]any{{"api-key": "SYNTHETIC-KEY", "auth-index": "vx-1", "openapi": true, "openapi-location": "global", "models": []any{map[string]any{"name": "partner/model", "alias": "one", "openapi": false, "display-name": "Preserved"}}}}
+	*fixture.state.providerList("vertex") = []map[string]any{{"api-key": "SYNTHETIC-KEY", "auth-index": "vx-1", "openapi": true, "openapi-location": "global", "connection-pool": map[string]any{"enabled": false, "idle-conn-timeout": "0s", "max-idle-conns-per-host": float64(0)}, "models": []any{map[string]any{"name": "partner/model", "alias": "one", "openapi": false, "display-name": "Preserved"}}}}
 	fixture.state.mu.Unlock()
 	service := fixture.handler.operationsService()
 	registry := capability.NewRegistry()
@@ -40,6 +40,10 @@ func TestAgentVertexProviderPolicyConfirmedEdit(t *testing.T) {
 	}
 	fixture.state.mu.Lock()
 	stored := (*fixture.state.providerList("vertex"))[0]
+	pool := stored["connection-pool"].(map[string]any)
+	if pool["enabled"] != false || pool["idle-conn-timeout"] != "0s" || pool["max-idle-conns-per-host"] != float64(0) {
+		t.Errorf("Agent edit changed non-exposed pool settings: %#v", pool)
+	}
 	model := anyList(stored["models"])[0].(map[string]any)
 	if _, exists := model["openapi"]; exists || model["display-name"] != "Preserved" || stored["api-key"] != "SYNTHETIC-KEY" {
 		t.Errorf("model policy patch changed siblings: %#v", stored)

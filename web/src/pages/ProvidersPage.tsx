@@ -99,6 +99,8 @@ export const ProvidersPage: React.FC = () => {
     setFormPriority,
     formDisabled,
     setFormDisabled,
+    formConnectionPool,
+    setFormConnectionPool,
     formPolicy,
     setFormPolicy,
     formBehavior,
@@ -387,6 +389,8 @@ export const ProvidersPage: React.FC = () => {
           setFormPriority={setFormPriority}
           formDisabled={formDisabled}
           setFormDisabled={setFormDisabled}
+          formConnectionPool={formConnectionPool}
+          setFormConnectionPool={setFormConnectionPool}
           formPolicy={formPolicy}
           setFormPolicy={setFormPolicy}
           formBehavior={formBehavior}

@@ -87,6 +87,9 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 			Headers: provider.Headers, Models: provider.Models, DisableCooling: provider.DisableCooling,
 			RequestRetry: provider.RequestRetry, RequestScopedErrors: provider.RequestScopedErrors,
 		}
+		if err := defaults.EditConnectionPool(true, provider.ConnectionPool); err != nil {
+			return management.ProviderFamilyEntry{}, err
+		}
 		for _, key := range provider.APIKeyEntries {
 			data, err := json.Marshal(key)
 			if err != nil {
@@ -99,6 +102,9 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 			overrides[key.APIKey] = fields
 			merged := defaults
 			merged.APIKey, merged.ProxyURL, merged.Weight = key.APIKey, key.ProxyURL, key.Weight
+			if err := merged.EditConnectionPool(false, key.ConnectionPool); err != nil {
+				return management.ProviderFamilyEntry{}, err
+			}
 			original = append(original, merged)
 		}
 		for _, key := range provider.LegacyAPIKeys {
@@ -124,6 +130,7 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 	}
 	converted := make([]management.ConfigAPIKey, 0, len(keys))
 	seen := map[string]bool{}
+	usedOriginal := map[int]bool{}
 	for position, submitted := range keys {
 		apiKey := strings.TrimSpace(submitted.APIKey)
 		if apiKey == "" && position < len(original) {
@@ -136,12 +143,29 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 			return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "duplicate API keys cannot be moved to another protocol", providerDuplicateKeyCode)
 		}
 		seen[apiKey] = true
-		old := defaults
-		for _, key := range original {
-			if key.APIKey == apiKey {
-				old = key
-				break
+		matchedOriginal := -1
+		if submitted.SourceIndex != nil {
+			index := *submitted.SourceIndex
+			if index < 0 || index >= len(original) {
+				return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusConflict, "the source key no longer exists", providerStaleIdentityCode)
 			}
+			matchedOriginal = index
+		} else {
+			for index, key := range original {
+				if key.APIKey == apiKey {
+					matchedOriginal = index
+					break
+				}
+			}
+		}
+		old := defaults
+		isExistingCredential := matchedOriginal >= 0
+		if isExistingCredential {
+			if usedOriginal[matchedOriginal] {
+				return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "duplicate source keys cannot be moved to another protocol", providerDuplicateKeyCode)
+			}
+			usedOriginal[matchedOriginal] = true
+			old = original[matchedOriginal]
 		}
 		movedModels, err := moveProviderModels(old.Models, models, family)
 		if err != nil {
@@ -163,7 +187,7 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 		if err := policy.applyToConfigKey(&key, req.DisableCooling); err != nil {
 			return management.ProviderFamilyEntry{}, err
 		}
-		if fields := overrides[apiKey]; fields != nil {
+		if fields := overrides[old.APIKey]; fields != nil {
 			// Apply the original key's overrides after editing the shared fields,
 			// as a same-family provider edit would. Credentials are set explicitly
 			// afterwards because a submitted key row owns those three fields.
@@ -176,6 +200,9 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 				return management.ProviderFamilyEntry{}, err
 			}
 			for field, value := range fields {
+				if field == "connection-pool" {
+					continue
+				}
 				merged[field] = value
 			}
 			data, err = json.Marshal(merged)
@@ -198,6 +225,15 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 			// the key's explicit retry/cooling/error overrides just replaced.
 			policy.applyBehaviorToConfigKey(&key)
 		}
+		old.CopyConnectionPoolTo(&key)
+		keyPool := submitted.ConnectionPool
+		if !isExistingCredential && len(keyPool) == 0 {
+			// New credentials inherit the group, not another credential's opt-out.
+			keyPool = json.RawMessage("null")
+		}
+		if err := applyConfigKeyPoolEdits(&key, req.ConnectionPool, keyPool); err != nil {
+			return management.ProviderFamilyEntry{}, err
+		}
 		converted = append(converted, key)
 	}
 	if len(converted) == 0 {
@@ -212,7 +248,8 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 		name = "Custom Provider"
 	}
 	provider := &management.OpenAICompatibility{
-		Name: name, BaseURL: first.BaseURL, Prefix: first.Prefix, Priority: first.Priority,
+		ConnectionPool: first.ConnectionPoolContext().Group,
+		Name:           name, BaseURL: first.BaseURL, Prefix: first.Prefix, Priority: first.Priority,
 		Headers: first.Headers, Models: first.Models, DisableCooling: first.DisableCooling,
 		RequestRetry: first.RequestRetry, RequestScopedErrors: first.RequestScopedErrors, Disabled: req.Disabled,
 	}
@@ -233,6 +270,7 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 		if err := json.Unmarshal(data, &entry); err != nil {
 			return management.ProviderFamilyEntry{}, err
 		}
+		entry.ConnectionPool = key.ConnectionPoolContext().Override
 		provider.APIKeyEntries = append(provider.APIKeyEntries, entry)
 	}
 	if err := policy.applyToOpenAICompatibility(provider, req.DisableCooling); err != nil {
@@ -243,7 +281,8 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 
 func commonProviderMoveKey(key management.ConfigAPIKey) management.ConfigAPIKey {
 	return management.ConfigAPIKey{
-		APIKey: key.APIKey, BaseURL: key.BaseURL, ProxyURL: key.ProxyURL, Weight: key.Weight,
+		ConnectionPool: key.ConnectionPool,
+		APIKey:         key.APIKey, BaseURL: key.BaseURL, ProxyURL: key.ProxyURL, Weight: key.Weight,
 		Prefix: key.Prefix, Priority: key.Priority, Headers: key.Headers, Models: key.Models,
 		ExcludedModels: key.ExcludedModels, DisableCooling: key.DisableCooling,
 		RequestRetry: key.RequestRetry, RequestScopedErrors: key.RequestScopedErrors,

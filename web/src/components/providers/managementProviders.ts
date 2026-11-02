@@ -1,3 +1,5 @@
+import type { ConnectionPoolDraft } from './connectionPool';
+import type { ProviderConnectionPoolSettings } from '../../types/providers';
 import type { ProviderItem } from '../../types/providers';
 import type { ModelOptionsDraft } from './modelOptions';
 
@@ -17,6 +19,10 @@ export interface ManagementProvidersData {
 
 /** One credential row in the editor's key list. */
 export interface FormKeyItem {
+  connectionPool?: ConnectionPoolDraft;
+  storedConnectionPool?: ProviderConnectionPoolSettings | null;
+  /** The key's index in the provider row this draft was opened from. */
+  storedIndex?: number;
   id: string;
   apiKey?: string;
   proxyUrl?: string;

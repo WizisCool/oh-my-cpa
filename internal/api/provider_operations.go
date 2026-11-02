@@ -65,14 +65,21 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 			_ = audit("provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
 			return nil, err
 		}
+		if err := applyProviderPoolEdit(&newEntry.ConnectionPool, req.ConnectionPool); err != nil {
+			return nil, err
+		}
 		if len(req.Keys) > 0 {
 			for _, k := range req.Keys {
 				if strings.TrimSpace(k.APIKey) != "" {
-					newEntry.APIKeyEntries = append(newEntry.APIKeyEntries, management.APIKeyEntry{
+					key := management.APIKeyEntry{
 						APIKey:   strings.TrimSpace(k.APIKey),
 						ProxyURL: strings.TrimSpace(k.ProxyURL),
 						Weight:   k.Weight,
-					})
+					}
+					if err := applyProviderPoolEdit(&key.ConnectionPool, k.ConnectionPool); err != nil {
+						return nil, err
+					}
+					newEntry.APIKeyEntries = append(newEntry.APIKeyEntries, key)
 				}
 			}
 		} else if apiKey != "" {
@@ -196,6 +203,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 				if err := policyEdit.applyToOpenAICompatibility(entry, req.DisableCooling); err != nil {
 					return err
 				}
+				if err := applyProviderPoolEdit(&entry.ConnectionPool, req.ConnectionPool); err != nil {
+					return err
+				}
 				entry.Disabled = req.Disabled
 				mergedModels, err := mergeModelEdits(entry.Models, models)
 				if err != nil {
@@ -219,15 +229,26 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 							// The key keeps the settings the form does not show
 							// (its own headers or models), matched by API key.
 							updated := management.APIKeyEntry{}
-							for _, old := range entry.APIKeyEntries {
-								if strings.TrimSpace(old.APIKey) == kVal {
-									updated = old
-									break
+							isMatched := false
+							if k.SourceIndex != nil {
+								updated, isMatched = openAICompatibilityKeyEntry(*entry, *k.SourceIndex)
+								if !isMatched {
+									return newProviderWriteErrorWithCode(http.StatusConflict, "the source key no longer exists", providerStaleIdentityCode)
+								}
+							} else {
+								for _, old := range entry.APIKeyEntries {
+									if strings.TrimSpace(old.APIKey) == kVal {
+										updated = old
+										break
+									}
 								}
 							}
 							updated.APIKey = kVal
 							updated.ProxyURL = strings.TrimSpace(k.ProxyURL)
 							updated.Weight = k.Weight
+							if err := applyProviderPoolEdit(&updated.ConnectionPool, k.ConnectionPool); err != nil {
+								return err
+							}
 							updatedKeys = append(updatedKeys, updated)
 						}
 					}
@@ -376,4 +397,18 @@ func withoutImageFlag(models []management.ModelAlias) []management.ModelAlias {
 		models[i].Image = false
 	}
 	return models
+}
+
+// openAICompatibilityKeyEntry returns one stored key by its position in the
+// provider list. APIKeyEntries come first and legacy API keys follow, matching
+// the indices the provider list exposes.
+func openAICompatibilityKeyEntry(entry management.OpenAICompatibility, index int) (management.APIKeyEntry, bool) {
+	if index >= 0 && index < len(entry.APIKeyEntries) {
+		return entry.APIKeyEntries[index], true
+	}
+	index -= len(entry.APIKeyEntries)
+	if index >= 0 && index < len(entry.LegacyAPIKeys) {
+		return management.APIKeyEntry{APIKey: entry.LegacyAPIKeys[index]}, true
+	}
+	return management.APIKeyEntry{}, false
 }
