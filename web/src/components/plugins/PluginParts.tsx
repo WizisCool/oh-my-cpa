@@ -14,7 +14,7 @@ interface PluginLogoProps {
 /** The framed plugin mark used by management cards and page headings. */
 export function PluginLogo({ logo }: PluginLogoProps) {
   return (
-    <span className={styles.logo} aria-hidden="true">
+    <span className={styles.logo} data-plugin-logo-chip aria-hidden="true">
       <PluginIcon logo={logo} fallbackSize="55%" />
     </span>
   );
