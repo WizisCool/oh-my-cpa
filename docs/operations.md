@@ -166,9 +166,11 @@ In **OMC Settings → Time zone**, the server zone is selected automatically and
 **Server time zone**. Every option includes its current UTC offset. A manual choice is
 persisted for the deployment; selecting the server zone restores the deployment default.
 Timestamp displays, calendar selections, daily totals and OMC service logs use this
-setting without rewriting stored instants. Keep CPA and OMC deployment timezones equal:
-CPA log lines without an offset are interpreted in that shared timezone. Raw log
-downloads and explicit UTC pricing-tier rules retain their source semantics.
+setting without rewriting stored instants. CPA log timestamps with `Z` or a numeric UTC
+offset are converted to the effective display timezone. Timestamps without an offset
+retain their original wall-clock text: CPA's log response does not identify their source
+timezone. Raw log downloads and explicit UTC pricing-tier rules retain their source
+semantics.
 
 ## Update checks
 

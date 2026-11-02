@@ -8,7 +8,6 @@ dayjs.extend(customParseFormat);
 dayjs.extend(utc);
 dayjs.extend(timezone);
 let effectiveTimezone = 'UTC';
-let serverTimezone = 'UTC';
 const LISTENERS = new Set<() => void>();
 export function getTimeZone(): string { return effectiveTimezone; }
 export function subscribeTimeZone(listener: () => void): () => void {
@@ -19,9 +18,8 @@ export function configureTimeZone(selected: string, server = 'UTC'): void {
   const next = selected || server;
   // Validate before replacing a working configuration.
   new Intl.DateTimeFormat('en', { timeZone: next }).format(0);
-  const hasChanged = next !== effectiveTimezone || server !== serverTimezone;
+  const hasChanged = next !== effectiveTimezone;
   effectiveTimezone = next;
-  serverTimezone = server;
   dayjs.tz.setDefault(next);
   if (hasChanged) LISTENERS.forEach((listener) => listener());
 }
@@ -42,8 +40,10 @@ export default zonedDate;
 export type { Dayjs } from 'dayjs';
 
 export function formatGatewayTimestamp(value: string): string {
+  // An offset-free gateway clock has no known source zone; preserve its text as evidence.
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value;
   try {
-    const instant = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? dayjs(value) : dayjs.tz(value, serverTimezone);
+    const instant = dayjs(value);
     return instant.isValid() ? instant.tz(effectiveTimezone).format('YYYY-MM-DD HH:mm:ss') : value;
   } catch { return value; }
 }
