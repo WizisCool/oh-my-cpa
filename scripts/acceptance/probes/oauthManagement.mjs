@@ -639,6 +639,77 @@ export async function oauthManagement({ base, page, check }) {
   check('reopening the active recovery retains its verification consent', await optIn.isChecked() && await optIn.isDisabled());
   await recoveryPanel.getByRole('button', { name: 'Cancel Authorization', exact: true }).click();
   await page.locator('.ant-drawer-open .ant-drawer-close').click();
+  await verifyFullCodexCountdown({ base, page, check });
+}
+
+async function verifyFullCodexCountdown({ base, page, check }) {
+  const now = Date.now();
+  let observedAt = now;
+  let refreshes = 0;
+  const readings = () => [0, 4].map((index) => ({
+    ...quotaFor(index),
+    observed_at_ms: observedAt,
+    windows: [{
+      id: 'five_hour', label: 'Five-hour limit', kind: 'five_hour', scope: 'standard',
+      used_percent: index === 0 ? 0 : 0.2,
+      remaining_percent: index === 0 ? 100 : 99.8,
+      reset_at_ms: observedAt + 5 * 3_600_000 + 30_000,
+      reset_accuracy: 'derived',
+    }],
+  }));
+  const quotaHandler = (route) => route.fulfill({ json: { quotas: readings(), total: 2 } });
+  const filesHandler = (route) => route.fulfill({ json: { files: [files[0], files[4]], total: 2 } });
+  const refreshHandler = async (route) => {
+    observedAt = await page.evaluate(() => Date.now());
+    refreshes += 1;
+    await route.fulfill({ json: { status: 'ok', quotas: readings() } });
+  };
+  await page.route('**/management/quota', quotaHandler);
+  await page.route('**/management/auth-files', filesHandler);
+  await page.route('**/management/quota/refresh', refreshHandler);
+  // Keep browser timers and paint running across navigation; advance the live clock to test ticks.
+  await page.clock.install({ time: new Date(now) });
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${base}/oauth-management?provider=codex`);
+    const full = page.locator('[data-auth-index="auth-01"] [data-quota-column="standard|five_hour"]');
+    const used = page.locator('[data-auth-index="auth-05"] [data-quota-column="standard|five_hour"]');
+    await used.getByText('~5h 1m left', { exact: true }).waitFor();
+    const checkFull = async (stage) => {
+      check(`unused full Codex quota has no list countdown ${stage}`,
+        (await full.innerText()).includes('100%') && !/left|Recovered/.test(await full.innerText())
+          && await full.getByRole('meter').getAttribute('aria-valuenow') === '100'
+          && (await full.getAttribute('title')).includes('~'));
+    };
+    await checkFull('on load');
+    await page.clock.fastForward(60_000);
+    await used.getByText('~5h left', { exact: true }).waitFor();
+    await checkFull('after a minute');
+    await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
+    await until(() => refreshes === 1, { label: 'full Codex quota refresh' });
+    await until(async () => (await full.getAttribute('title')).includes('5h 1m left'), { label: 'refreshed reset instant' });
+    await checkFull('after quota refresh');
+    await page.reload();
+    await full.getByText('100%', { exact: true }).waitFor();
+    await checkFull('after browser reload');
+    await page.screenshot({ path: 'tmp/oauth-full-codex-desktop.png' });
+    await page.getByRole('button', { name: 'Theme: Light', exact: true }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.themeMode === 'dark');
+    await checkFull('in dark mode');
+    await page.screenshot({ path: 'tmp/oauth-full-codex-desktop-dark.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settleLayout(page);
+    await checkFull('on a phone');
+    await full.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'tmp/oauth-full-codex-phone.png' });
+    await page.clock.fastForward(60_000);
+    await used.getByText('~5h left', { exact: true }).waitFor();
+    await checkFull('after another minute');
+  } finally {
+    await page.unroute('**/management/quota', quotaHandler);
+    await page.unroute('**/management/auth-files', filesHandler);
+    await page.unroute('**/management/quota/refresh', refreshHandler);
+  }
 }
 
 

@@ -348,6 +348,14 @@ test('a daily limit leads its own weekly limit', () => {
   );
 });
 
+test('a countdown rounds up to the next minute without clamping a five-hour window', () => {
+  const now = 1_700_000_000_000;
+  const fiveHours = 5 * 3_600_000;
+  assert.equal(quotaResetCountdown({ reset_at_ms: now + fiveHours }, now, echoT), 'quota.in_hours:5');
+  assert.equal(quotaResetCountdown({ reset_at_ms: now + fiveHours + 1 }, now, echoT), 'quota.in_hours_min:5/1');
+  assert.equal(quotaResetCountdown({ reset_at_ms: now + fiveHours + 60_000 }, now, echoT), 'quota.in_hours_min:5/1');
+});
+
 test('a countdown marks an instant the provider did not state exactly', () => {
   const now = 1_700_000_000_000;
   const inTwoHours = now + 2 * 3_600_000;

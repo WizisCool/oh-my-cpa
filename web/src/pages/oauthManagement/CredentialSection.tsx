@@ -40,6 +40,7 @@ import {
 import { SIWC_BADGE_LABEL_KEYS, SIWC_BADGE_TONES, type SIWCBadgeState } from '../../components/authFiles/siwcBadge';
 import { formatObservedAgo, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown, quotaResetText } from '../quota/quotaFormat';
 import { quotaRemainingStroke } from '../quota/quotaThresholds';
+import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
 import { describeCompactQuotaCapacity } from '../quota/quotaCapacity';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
 import { resolveQuotaCooldownTooltip } from '../quota/quotaCooldown';
@@ -422,6 +423,7 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
           key={column.key}
           columnKey={column.key}
           phoneLabel={phoneLabel}
+          provider={record.displayProvider}
           window={cells.get(column.key)}
           isPhoneWide={column.key === phoneWideKey}
           isFirstOfFamily={index === 0}
@@ -543,14 +545,15 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
 }
 
 /**
- * One reading: the share left, its bar, and the reset time reported upstream. A window can
- * already be counting down while its remaining share still rounds to 100%. The window's own
- * label, exact reset instant and capacity estimate are its tooltip.
+ * One reading: the share left, its bar, and the reset time reported upstream. Explicitly unused,
+ * full Codex five-hour readings omit the list countdown; rounded or unknown usage keeps it.
+ * The window's label, reset instant, accuracy and capacity estimate remain in its tooltip.
  */
 interface QuotaCellProps {
   columnKey: string;
   /** The column's name, printed over the reading only on a phone, where the header is not shown. */
   phoneLabel: string;
+  provider: string;
   window?: QuotaWindow;
   /** The reading left alone on a phone card's last line, which takes the line's full width. */
   isPhoneWide: boolean;
@@ -559,7 +562,7 @@ interface QuotaCellProps {
   nowMS: number;
 }
 
-function QuotaCell({ columnKey, phoneLabel, window, isPhoneWide, isFirstOfFamily, isStale, nowMS }: QuotaCellProps) {
+function QuotaCell({ columnKey, phoneLabel, provider, window, isPhoneWide, isFirstOfFamily, isStale, nowMS }: QuotaCellProps) {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   if (!window) {
@@ -570,7 +573,13 @@ function QuotaCell({ columnKey, phoneLabel, window, isPhoneWide, isFirstOfFamily
     );
   }
   const remaining = quotaRemainingPercent(window);
-  const reset = quotaResetCountdown(window, nowMS, t);
+  // Use the unrounded upstream reading. A displayed 100% alone does not prove zero usage,
+  // and hiding its countdown makes no claim about whether the upstream window has started.
+  const isUnusedFullCodexWindow = provider === 'codex'
+    && quotaWindowKindOf(window) === 'five_hour'
+    && window.used_percent === 0
+    && (window.remaining_percent ?? 100) === 100;
+  const reset = isUnusedFullCodexWindow ? '' : quotaResetCountdown(window, nowMS, t);
   const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
   const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean).join('\n');
   return (
