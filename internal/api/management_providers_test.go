@@ -32,6 +32,9 @@ type providerFakeServerState struct {
 	// putCount counts the provider writes CPA actually received, so a test can
 	// assert that a refused write never reached the gateway.
 	putCount int
+	// Keep persisted v8 groups independent of the normalized runtime lists;
+	// reconstructing storage from runtime hides inheritance regressions.
+	storedGroups map[string][]map[string]any
 	// hooksMu guards the hooks below, which a test installs before issuing any
 	// request and the serving goroutines read per request.
 	hooksMu sync.Mutex
@@ -194,7 +197,7 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 		}
 		state.mu.Lock()
 		defer state.mu.Unlock()
-		if serveProviderGroups(writer, request, state.providerList, func(string) { state.putCount++ }) {
+		if serveProviderGroups(writer, request, state.providerList, func(string) { state.putCount++ }, state.storedGroups) {
 			return
 		}
 		writer.Header().Set("Content-Type", "application/json")

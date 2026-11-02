@@ -65,14 +65,21 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 			_ = audit("provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
 			return nil, err
 		}
+		if err := applyProviderPoolEdit(&newEntry.ConnectionPool, req.ConnectionPool); err != nil {
+			return nil, err
+		}
 		if len(req.Keys) > 0 {
 			for _, k := range req.Keys {
 				if strings.TrimSpace(k.APIKey) != "" {
-					newEntry.APIKeyEntries = append(newEntry.APIKeyEntries, management.APIKeyEntry{
+					key := management.APIKeyEntry{
 						APIKey:   strings.TrimSpace(k.APIKey),
 						ProxyURL: strings.TrimSpace(k.ProxyURL),
 						Weight:   k.Weight,
-					})
+					}
+					if err := applyProviderPoolEdit(&key.ConnectionPool, k.ConnectionPool); err != nil {
+						return nil, err
+					}
+					newEntry.APIKeyEntries = append(newEntry.APIKeyEntries, key)
 				}
 			}
 		} else if apiKey != "" {
@@ -196,6 +203,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 				if err := policyEdit.applyToOpenAICompatibility(entry, req.DisableCooling); err != nil {
 					return err
 				}
+				if err := applyProviderPoolEdit(&entry.ConnectionPool, req.ConnectionPool); err != nil {
+					return err
+				}
 				entry.Disabled = req.Disabled
 				mergedModels, err := mergeModelEdits(entry.Models, models)
 				if err != nil {
@@ -228,6 +238,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 							updated.APIKey = kVal
 							updated.ProxyURL = strings.TrimSpace(k.ProxyURL)
 							updated.Weight = k.Weight
+							if err := applyProviderPoolEdit(&updated.ConnectionPool, k.ConnectionPool); err != nil {
+								return err
+							}
 							updatedKeys = append(updatedKeys, updated)
 						}
 					}

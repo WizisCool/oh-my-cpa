@@ -53,16 +53,18 @@ type OpenAICompatibilityResponse struct {
 }
 
 type OpenAICompatibility struct {
-	Name           string            `json:"name"`
-	Disabled       bool              `json:"disabled"`
-	Prefix         string            `json:"prefix,omitempty"`
-	Priority       *int              `json:"priority,omitempty"`
-	DisableCooling *bool             `json:"disable-cooling,omitempty"`
-	BaseURL        string            `json:"base-url"`
-	APIKeyEntries  []APIKeyEntry     `json:"api-key-entries,omitempty"`
-	LegacyAPIKeys  []string          `json:"api-keys,omitempty"`
-	Models         []ModelAlias      `json:"models,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty"`
+	runtimeView    *OpenAICompatibility
+	ConnectionPool *ConnectionPoolConfig `json:"connection-pool,omitempty"`
+	Name           string                `json:"name"`
+	Disabled       bool                  `json:"disabled"`
+	Prefix         string                `json:"prefix,omitempty"`
+	Priority       *int                  `json:"priority,omitempty"`
+	DisableCooling *bool                 `json:"disable-cooling,omitempty"`
+	BaseURL        string                `json:"base-url"`
+	APIKeyEntries  []APIKeyEntry         `json:"api-key-entries,omitempty"`
+	LegacyAPIKeys  []string              `json:"api-keys,omitempty"`
+	Models         []ModelAlias          `json:"models,omitempty"`
+	Headers        map[string]string     `json:"headers,omitempty"`
 	// RequestRetry overrides the global retry count. CPA reads nil or a negative
 	// value as "use the global setting" and 0 as "no additional retry rounds".
 	RequestRetry          *int                     `json:"request-retry,omitempty"`
@@ -144,10 +146,11 @@ func (o OpenAICompatibility) MarshalJSON() ([]byte, error) {
 const OpenAICompatibilityLabelPrefix = "openai-compatible-"
 
 type APIKeyEntry struct {
-	APIKey    string `json:"api-key"`
-	AuthIndex string `json:"auth-index,omitempty"`
-	ProxyURL  string `json:"proxy-url,omitempty"`
-	Weight    *int   `json:"weight,omitempty"`
+	ConnectionPool *ConnectionPoolConfig `json:"connection-pool,omitempty"`
+	APIKey         string                `json:"api-key"`
+	AuthIndex      string                `json:"auth-index,omitempty"`
+	ProxyURL       string                `json:"proxy-url,omitempty"`
+	Weight         *int                  `json:"weight,omitempty"`
 
 	extra wireExtras
 }

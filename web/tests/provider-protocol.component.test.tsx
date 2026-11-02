@@ -1,3 +1,4 @@
+import { ConfigProvider } from 'antd';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { useT } from '../src/i18n';
@@ -125,7 +126,8 @@ it('saves a changed protocol with the original identity and refreshes migrated i
   // A protocol change re-files the provider: one entry per key, under new ids.
   api.on('PUT', '/management/providers/openai-compat-0', () => ({ status: 'ok', id: 'codex-1', ids: ['codex-1', 'codex-2'] }));
   const writes = () => api.writes() as { path: string; body: Record<string, unknown> }[];
-  const view = renderWithOmc(<Editor />, { client });
+  // This contract owns payloads and icon migration, not drawer transition timers.
+  const view = renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><Editor /></ConfigProvider>, { client });
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
     const protocol = await screen.findByRole('combobox', { name: 'Driver / Protocol' });

@@ -88,7 +88,7 @@ func mergedEntry(t *testing.T, entry ConfigAPIKey, patch json.RawMessage) Config
 	if err := json.Unmarshal(merged, &edited); err != nil {
 		t.Fatal(err)
 	}
-	edited.origin, edited.runtimeBaseURL = entry.origin, entry.runtimeBaseURL
+	edited.origin, edited.runtimeBaseURL, edited.pool = entry.origin, entry.runtimeBaseURL, entry.pool
 	return edited
 }
 

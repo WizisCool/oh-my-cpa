@@ -187,6 +187,9 @@ type providerPolicyEdit struct {
 // save request against what the family supports. It runs before any CPA write,
 // for the same reason the website is validated first.
 func resolveProviderPolicyEdit(family string, req SaveProviderRequest) (providerPolicyEdit, error) {
+	if err := validateProviderPoolEdits(req); err != nil {
+		return providerPolicyEdit{}, err
+	}
 	edit := providerPolicyEdit{policy: req.RuntimePolicy, behavior: req.Behavior, capabilities: providerPolicyCapabilitiesFor(family)}
 	refuse := func(format string, args ...any) (providerPolicyEdit, error) {
 		return providerPolicyEdit{}, newProviderWriteError(http.StatusBadRequest, fmt.Sprintf(format, args...))

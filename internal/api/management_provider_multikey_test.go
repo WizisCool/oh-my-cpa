@@ -38,7 +38,7 @@ func TestConfigProviderSavesEveryKey(t *testing.T) {
 				if !isCreate {
 					method, path, ids = http.MethodPut, path+"/"+sourceID, []string{sourceID, spec.IDPrefix + "2"}
 				}
-				body := fmt.Sprintf(`{"family":%q,"expected_auth_index":"fixture-index","name":"Multi-key relay","website":"https://site.test","base_url":"https://relay.test/v1","prefix":"team","priority":4,"disabled":true,"runtime_policy":{"cooling":"enabled","request_retry":2},"headers":{"X-Team":"test"},"model_entries":[{"name":"model-one","alias":"one"}],"keys":[{"api_key":"fixture-first","proxy_url":"http://proxy-one.test","weight":3},{"api_key":"fixture-second","proxy_url":"http://proxy-two.test","weight":7}]}`, family)
+				body := fmt.Sprintf(`{"family":%q,"expected_auth_index":"fixture-index","name":"Multi-key relay","website":"https://site.test","base_url":"https://relay.test/v1","connection_pool":{"enabled":true,"idle_conn_timeout":"300s","max_idle_conns_per_host":2},"prefix":"team","priority":4,"disabled":true,"runtime_policy":{"cooling":"enabled","request_retry":2},"headers":{"X-Team":"test"},"model_entries":[{"name":"model-one","alias":"one"}],"keys":[{"api_key":"fixture-first","connection_pool":{"max_idle_conns_per_host":0},"proxy_url":"http://proxy-one.test","weight":3},{"api_key":"fixture-second","connection_pool":{"enabled":false},"proxy_url":"http://proxy-two.test","weight":7}]}`, family)
 				response, payload := doJSON(t, fixture.client, method, fixture.baseURL+path, body)
 				if response.StatusCode != http.StatusOK {
 					t.Fatalf("save status=%d", response.StatusCode)
@@ -107,6 +107,10 @@ func TestConfigProviderSavesEveryKey(t *testing.T) {
 					}
 					if !isCreate && row["websockets"] != true {
 						t.Errorf("key %d lost unmodelled settings", position)
+					}
+					pool := row["connection-pool"].(map[string]any)
+					if pool["idle-conn-timeout"] != "300s" || position == 0 && pool["max-idle-conns-per-host"] != float64(0) || position == 1 && pool["enabled"] != false {
+						t.Fatalf("key %d lost pool inheritance or explicit values: %#v", position, pool)
 					}
 					model := storedModel(t, row, "model-one")
 					if model["alias"] != "one" {

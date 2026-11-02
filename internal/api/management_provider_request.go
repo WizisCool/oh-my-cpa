@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -8,9 +9,10 @@ import (
 )
 
 type SaveProviderKeyEntry struct {
-	APIKey   string `json:"api_key,omitempty"`
-	ProxyURL string `json:"proxy_url,omitempty"`
-	Weight   *int   `json:"weight,omitempty"`
+	ConnectionPool json.RawMessage `json:"connection_pool,omitempty"`
+	APIKey         string          `json:"api_key,omitempty"`
+	ProxyURL       string          `json:"proxy_url,omitempty"`
+	Weight         *int            `json:"weight,omitempty"`
 }
 
 type SaveProviderModelEntry struct {
@@ -24,6 +26,7 @@ type SaveProviderModelEntry struct {
 }
 
 type SaveProviderRequest struct {
+	ConnectionPool    json.RawMessage          `json:"connection_pool,omitempty"`
 	Family            string                   `json:"family"`
 	ExpectedAuthIndex string                   `json:"expected_auth_index,omitempty"`
 	ExpectedName      string                   `json:"expected_name,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -116,10 +117,10 @@ func TestUpdateConfigAPIKeysRemovesAnEmptiedFamily(t *testing.T) {
 func TestUpdateOpenAICompatibilityKeepsUnmodelledSettings(t *testing.T) {
 	gateway := &groupsGateway{
 		family: "openai-compatibility",
-		stored: `[{"name":"relay","base-url":"https://r.test","request-retry":0,"support-prompt-cache-key":true,
-		  "models":[{"name":"m","alias":"a","input-modalities":["text","image"]}],"keys":[{"api-key":"o1"}]}]`,
-		runtime: `{"openai-compatibility":[{"name":"relay","base-url":"https://r.test","request-retry":0,"support-prompt-cache-key":true,
-		  "models":[{"name":"m","alias":"a","input-modalities":["text","image"]}],"api-key-entries":[{"api-key":"o1","auth-index":"x1"}]}]}`,
+		stored: `[{"name":"relay","base-url":"https://r.test","request-retry":0,"support-prompt-cache-key":true,"connection-pool":{"enabled":true,"idle-conn-timeout":"300s"},
+		  "models":[{"name":"m","alias":"a","input-modalities":["text","image"]}],"keys":[{"api-key":"o1","connection-pool":{}},{"api-key":"o2","connection-pool":{"enabled":null,"idle-conn-timeout":null,"max-idle-conns-per-host":null}}]}]`,
+		runtime: `{"openai-compatibility":[{"name":"relay","base-url":"https://r.test","request-retry":0,"support-prompt-cache-key":true,"connection-pool":{"enabled":true,"idle-conn-timeout":"300s"},
+		  "models":[{"name":"m","alias":"a","input-modalities":["text","image"]}],"api-key-entries":[{"api-key":"o1","auth-index":"x1"},{"api-key":"o2","auth-index":"x2"}]}]}`,
 	}
 	client := newGroupsClient(t, gateway)
 	entries, err := client.EditableOpenAICompatibility(context.Background())
@@ -133,8 +134,8 @@ func TestUpdateOpenAICompatibilityKeepsUnmodelledSettings(t *testing.T) {
 	if err := client.UpdateOpenAICompatibility(context.Background(), entries); err != nil {
 		t.Fatal(err)
 	}
-	want := decodeGroups(t, `[{"name":"relay","base-url":"https://r.test","request-retry":0,"support-prompt-cache-key":true,"disabled":true,
-	  "models":[{"name":"m","alias":"a","input-modalities":["text","image"]}],"keys":[{"api-key":"o1"}]}]`)
+	want := decodeGroups(t, `[{"name":"relay","base-url":"https://r.test","request-retry":0,"support-prompt-cache-key":true,"connection-pool":{"enabled":true,"idle-conn-timeout":"300s"},"disabled":true,
+	  "models":[{"name":"m","alias":"a","input-modalities":["text","image"]}],"keys":[{"api-key":"o1","connection-pool":{}},{"api-key":"o2","connection-pool":{"enabled":null,"idle-conn-timeout":null,"max-idle-conns-per-host":null}}]}]`)
 	if !reflect.DeepEqual(gateway.written, want) {
 		t.Fatalf("groups = %#v\nwant %#v", gateway.written, want)
 	}
@@ -261,6 +262,9 @@ func TestUpdateConfigAPIKeysKeepsAnImplicitDefaultBaseURLImplicit(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if view := entries[1].ProviderRuntimeView(); view.BaseURL != "https://api.default.test" || view.AuthIndex != "i2" {
+		t.Fatalf("provider read lost runtime-normalized identity or URL: %+v", view)
+	}
 	weight := 5
 	entries[1].BaseURL = entries[1].SubmittedBaseURL("https://api.default.test")
 	entries[1].Weight = &weight
@@ -311,6 +315,102 @@ func TestApplyConfigChangesScrubsSecretsFromARefusal(t *testing.T) {
 	for _, secret := range []string{"new-claude-secret", "stored-gemini-secret"} {
 		if strings.Contains(reason, secret) || strings.Contains(err.Error(), secret) {
 			t.Fatalf("refusal %q (%v) quotes %s", reason, err, secret)
+		}
+	}
+}
+
+func TestUpdateConfigAPIKeysPreservesConnectionPoolInheritance(t *testing.T) {
+	stored := `[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":false,"idle-conn-timeout":"300s","max-idle-conns-per-host":2},"keys":[{"api-key":"one","connection-pool":{"idle-conn-timeout":"60s"}},{"api-key":"two","connection-pool":{}},{"api-key":"three","connection-pool":{"enabled":false,"max-idle-conns-per-host":0}},{"api-key":"four","connection-pool":{"enabled":null}},{"api-key":"five"}]}]`
+	gateway := &groupsGateway{family: "codex", stored: stored, runtime: `{"codex-api-key":[{"api-key":"one","base-url":"https://relay.test"},{"api-key":"two","base-url":"https://relay.test"},{"api-key":"three","base-url":"https://relay.test"},{"api-key":"four","base-url":"https://relay.test"},{"api-key":"five","base-url":"https://relay.test"}]}`}
+	client := newGroupsClient(t, gateway)
+	entries, err := client.EditableConfigAPIKeys(context.Background(), ConfigFamilyCodex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, entry := range entries {
+		fields, err := wireObject(entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pool := fields["connection-pool"].(map[string]any)
+		if pool["enabled"] != false || pool["idle-conn-timeout"] == nil || pool["max-idle-conns-per-host"] == nil {
+			t.Fatalf("key %d lost inherited pool fields: %+v", index, pool)
+		}
+	}
+	entries[0].Headers = map[string]string{"X-Route": "edited"}
+	if err := client.UpdateConfigAPIKeys(context.Background(), ConfigFamilyCodex, entries); err != nil {
+		t.Fatal(err)
+	}
+	want := decodeGroups(t, stored)
+	groupKeys(want[0])[0]["headers"] = map[string]any{"X-Route": "edited"}
+	if !reflect.DeepEqual(gateway.written, want) {
+		t.Fatalf("unrelated edit changed pool ownership or sibling keys:\n got: %#v\nwant: %#v", gateway.written, want)
+	}
+}
+
+func TestUpdateConfigAPIKeysEditsOnlyRequestedPoolLayer(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		isGroup bool
+		value   string
+	}{
+		{"empty-key", false, `{}`},
+		{"explicit-enabled-key", false, `{"enabled":true}`},
+		{"explicit-disabled-key", false, `{"enabled":false,"idle-conn-timeout":"0s","max-idle-conns-per-host":0}`},
+		{"inherit-key", false, `null`},
+		{"group-default", true, `{"idle-conn-timeout":"30s"}`},
+		{"empty-group", true, `{}`},
+		{"remove-group", true, `null`},
+	} {
+		for _, isSingleKey := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/single=%t", test.name, isSingleKey), func(t *testing.T) {
+				stored := decodeGroups(t, `[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":true,"idle-conn-timeout":"300s","future-limit":7},"keys":[{"api-key":"one","connection-pool":{"idle-conn-timeout":"60s"}},{"api-key":"two","connection-pool":{}},{"api-key":"three","connection-pool":{"enabled":null}}]}]`)
+				if isSingleKey {
+					stored[0]["keys"] = stored[0]["keys"].([]any)[:1]
+				}
+				var runtime []map[string]any
+				for _, key := range groupKeys(stored[0]) {
+					runtime = append(runtime, map[string]any{"api-key": key["api-key"], "base-url": "https://relay.test"})
+				}
+				storedJSON, _ := json.Marshal(stored)
+				runtimeJSON, _ := json.Marshal(map[string]any{"codex-api-key": runtime})
+				gateway := &groupsGateway{family: "codex", stored: string(storedJSON), runtime: string(runtimeJSON)}
+				client := newGroupsClient(t, gateway)
+				entries, err := client.EditableConfigAPIKeys(context.Background(), ConfigFamilyCodex)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var value *ConnectionPoolConfig
+				if err := json.Unmarshal([]byte(test.value), &value); err != nil {
+					t.Fatal(err)
+				}
+				if err := entries[0].EditConnectionPool(test.isGroup, value); err != nil {
+					t.Fatal(err)
+				}
+				if err := client.UpdateConfigAPIKeys(context.Background(), ConfigFamilyCodex, entries); err != nil {
+					t.Fatal(err)
+				}
+				want := decodeGroups(t, string(storedJSON))
+				target := groupKeys(want[0])[0]
+				if test.isGroup {
+					target = want[0]
+				}
+				if test.value == "null" {
+					delete(target, "connection-pool")
+				} else {
+					var pool map[string]any
+					if err := json.Unmarshal([]byte(test.value), &pool); err != nil {
+						t.Fatal(err)
+					}
+					if test.isGroup {
+						pool["future-limit"] = float64(7)
+					}
+					target["connection-pool"] = pool
+				}
+				if !reflect.DeepEqual(gateway.written, want) {
+					t.Fatalf("pool edit changed an unowned setting:\n got: %#v\nwant: %#v", gateway.written, want)
+				}
+			})
 		}
 	}
 }

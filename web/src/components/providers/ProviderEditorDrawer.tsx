@@ -1,3 +1,5 @@
+import { ConnectionPoolEditor } from './ConnectionPoolEditor';
+import { EMPTY_CONNECTION_POOL_DRAFT, buildConnectionPool } from './connectionPool';
 import {
   AutoComplete,
   Button,
@@ -65,6 +67,8 @@ interface ProviderEditorDrawerProps extends Pick<
   | 'setFormPriority'
   | 'formDisabled'
   | 'setFormDisabled'
+  | 'formConnectionPool'
+  | 'setFormConnectionPool'
   | 'formPolicy'
   | 'setFormPolicy'
   | 'formBehavior'
@@ -166,6 +170,8 @@ export function ProviderEditorDrawer({
     setFormPriority,
     formDisabled,
     setFormDisabled,
+    formConnectionPool,
+    setFormConnectionPool,
     formPolicy,
     setFormPolicy,
     formBehavior,
@@ -235,7 +241,7 @@ export function ProviderEditorDrawer({
   const familyMeta = lookupProviderFamily(formFamily);
   const supportsModelImage = familyMeta?.supportsModelImage ?? false;
   const modelOptionFields = familyMeta?.modelOptionFields ?? [];
-  const policyOverrideCount = countPolicyOverrides(formPolicy, formBehavior, familyMeta?.behaviorSwitches);
+  const policyOverrideCount = countPolicyOverrides(formPolicy, formBehavior, familyMeta?.behaviorSwitches) + (formConnectionPool.isConfigured ? 1 : 0);
   const configuredModelNames = new Set(
     formModels.map((m) => m.name.trim()).filter((name) => name !== ''),
   );
@@ -251,9 +257,9 @@ export function ProviderEditorDrawer({
   return (
 
       <AppDrawer
-        title={editingProvider
-          ? `${t('common.edit')} · ${familyDisplayNames[formFamily] || formFamily}`
-          : `${t('pro.add_provider')} · ${familyDisplayNames[formFamily] || formFamily}`}
+        title={t(editingProvider ? 'pro.editor_edit_title' : 'pro.editor_add_title', {
+          family: familyDisplayNames[formFamily] || formFamily,
+        })}
         open={providerDrawerOpen}
         onClose={handleCloseProviderDrawer}
         width="wide"
@@ -666,6 +672,11 @@ export function ProviderEditorDrawer({
                               {t('pro.weight_desc')}
                             </div>
                           </div>
+                          <ConnectionPoolEditor
+                            draft={k.connectionPool ?? EMPTY_CONNECTION_POOL_DRAFT}
+                            defaults={buildConnectionPool(formConnectionPool)}
+                            onChange={connectionPool => setFormKeys(previous => previous.map(item => item.id === k.id ? { ...item, connectionPool } : item))}
+                          />
                         </Fold>
                       </div>
                     );
@@ -991,6 +1002,10 @@ export function ProviderEditorDrawer({
             onToggle={() => setPolicySectionOpen((prev) => !prev)}
           >
             <RuntimePolicySection
+              connectionPool={formConnectionPool}
+              onConnectionPoolChange={setFormConnectionPool}
+              poolGroupName={editingProvider?.family === formFamily ? editingProvider.connection_pool?.group_name : undefined}
+              poolGroupSize={editingProvider?.family === formFamily ? editingProvider.connection_pool?.group_size ?? formKeys.length : formKeys.length}
               policy={formPolicy}
               onPolicyChange={setFormPolicy}
               behavior={formBehavior}

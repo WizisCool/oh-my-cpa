@@ -14,7 +14,7 @@ import (
 var providerGroupSharedFields = map[string]bool{
 	"base-url": true, "priority": true, "prefix": true, "proxy-url": true, "headers": true,
 	"models": true, "excluded-models": true, "disable-cooling": true, "request-retry": true,
-	"request-scoped-errors": true,
+	"request-scoped-errors": true, "connection-pool": true,
 }
 
 // serveProviderGroups answers the v8 configuration routes a provider write
@@ -24,9 +24,15 @@ var providerGroupSharedFields = map[string]bool{
 // per key. An entry keeps the auth index of the key it replaces, since CPA
 // derives the index from the key's content. It reports whether it answered.
 //
+// If supplied, stored is the authoritative v8 group document, independent of
+// the flattened runtime list.
 // lists returns the family's list, or nil for a family the fake does not keep;
 // written is called after a write lands.
-func serveProviderGroups(writer http.ResponseWriter, request *http.Request, lists func(family string) *[]map[string]any, written func(family string)) bool {
+func serveProviderGroups(writer http.ResponseWriter, request *http.Request, lists func(family string) *[]map[string]any, written func(family string), stored ...map[string][]map[string]any) bool {
+	var storedGroups map[string][]map[string]any
+	if len(stored) > 0 {
+		storedGroups = stored[0]
+	}
 	const groupsPrefix = "/v8/management/config/api-keys/"
 	path := request.URL.Path
 	switch {
@@ -44,13 +50,18 @@ func serveProviderGroups(writer http.ResponseWriter, request *http.Request, list
 		}
 		if request.Method == http.MethodDelete {
 			*list = []map[string]any{}
+			delete(storedGroups, family)
 			if written != nil {
 				written(family)
 			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 			return true
 		}
-		_ = json.NewEncoder(writer).Encode(groupFlatList(family, genericEntries(*list)))
+		groups, hasStored := storedGroups[family]
+		if !hasStored {
+			groups = groupFlatList(family, genericEntries(*list))
+		}
+		_ = json.NewEncoder(writer).Encode(groups)
 		return true
 	case path == "/v8/management/config" && request.Method == http.MethodPatch:
 		data, _ := io.ReadAll(request.Body)
@@ -69,6 +80,9 @@ func serveProviderGroups(writer http.ResponseWriter, request *http.Request, list
 				return true
 			}
 			*list = flattenGroups(family, groups, genericEntries(*list))
+			if storedGroups != nil {
+				storedGroups[family] = groups
+			}
 			if written != nil {
 				written(family)
 			}
@@ -169,6 +183,25 @@ func flattenGroups(family string, groups []map[string]any, previous []map[string
 				}
 			}
 			for field, value := range key.(map[string]any) {
+				if value == nil {
+					continue
+				}
+				if field == "connection-pool" {
+					if groupPool, ok := group[field].(map[string]any); ok {
+						if override, ok := value.(map[string]any); ok {
+							merged := map[string]any{}
+							for name, setting := range groupPool {
+								merged[name] = setting
+							}
+							for name, setting := range override {
+								if setting != nil {
+									merged[name] = setting
+								}
+							}
+							value = merged
+						}
+					}
+				}
 				entry[field] = value
 			}
 			entry["auth-index"] = indexOf(entry["api-key"])

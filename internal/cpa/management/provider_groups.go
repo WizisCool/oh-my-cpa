@@ -23,8 +23,8 @@ type keyGroupOrigin struct {
 	group map[string]any
 }
 
-// groupSharedFields are the settings a group may carry for all of its keys
-// (CPA's sharedKeyFields plus base-url, which only a group may carry).
+// groupSharedFields use whole-value inheritance. Nested connection-pool blocks
+// keep their own provenance instead; base-url may live only on the group.
 var groupSharedFields = []string{
 	"base-url", "priority", "prefix", "proxy-url", "headers", "models",
 	"excluded-models", "disable-cooling", "request-retry", "request-scoped-errors",
@@ -113,6 +113,9 @@ func flattenKeyGroups(groups []map[string]any) []storedKey {
 			}
 			for name, value := range key {
 				if value != nil {
+					if name == "connection-pool" {
+						value = mergePoolValues(group[name], value)
+					}
 					fields[name] = value
 				}
 			}
@@ -163,7 +166,13 @@ func (c *Client) EditableConfigAPIKeys(ctx context.Context, family ConfigKeyFami
 			}
 			entry.AuthIndex = live.AuthIndex
 			entry.origin = stored[j].origin
+			keys := entry.origin.group["keys"].([]any)
+			entry.pool, err = storedConfigKeyPool(entry.origin.group, keys[stored[j].keyIndex].(map[string]any))
+			if err != nil {
+				return nil, fmt.Errorf("decode connection pool: %w", err)
+			}
 			entry.runtimeBaseURL = live.BaseURL
+			entry.runtimeView = &runtime[i]
 			entries[i] = entry
 			next = j + 1
 			break
@@ -231,6 +240,8 @@ func regroupConfigKeys(family string, entries []ConfigAPIKey) ([]map[string]any,
 		}
 		// A runtime field, never part of the configuration.
 		delete(entryFields, "auth-index")
+		// Pool ownership cannot be inferred from equal effective values.
+		delete(entryFields, "connection-pool")
 		fields[i] = entryFields
 		if entry.origin != nil {
 			members[entry.origin] = append(members[entry.origin], entryFields)
@@ -242,6 +253,16 @@ func regroupConfigKeys(family string, entries []ConfigAPIKey) ([]map[string]any,
 	settled := map[*keyGroupOrigin]map[string]any{}
 	for origin, groupMembers := range members {
 		settled[origin] = settleGroupFields(origin.group, groupMembers)
+	}
+
+	for _, entry := range entries {
+		if entry.origin != nil && entry.pool != nil && entry.pool.isGroupEdited {
+			if entry.pool.hasGroup {
+				settled[entry.origin]["connection-pool"] = entry.pool.rawGroup
+			} else {
+				delete(settled[entry.origin], "connection-pool")
+			}
+		}
 	}
 
 	uniqueName := func(base string, first int) string {
@@ -261,6 +282,9 @@ func regroupConfigKeys(family string, entries []ConfigAPIKey) ([]map[string]any,
 		origin := entries[i].origin
 		if origin != nil {
 			if key, fits := keyWithinGroup(entryFields, settled[origin]); fits {
+				if err := entries[i].writeKeyPool(key); err != nil {
+					return nil, err
+				}
 				if openOrigin != origin {
 					name, _ := origin.group["name"].(string)
 					if name == "" || namedOrigins[origin] {
@@ -281,7 +305,18 @@ func regroupConfigKeys(family string, entries []ConfigAPIKey) ([]map[string]any,
 			name, _ := origin.group["name"].(string)
 			base, first = fallbackGroupName(name, family), 2
 		}
-		out = append(out, standaloneKeyGroup(uniqueName(base, first), entryFields))
+		standalone := standaloneKeyGroup(uniqueName(base, first), entryFields)
+		if origin != nil {
+			if pool, hasPool := settled[origin]["connection-pool"]; hasPool {
+				standalone["connection-pool"] = pool
+			}
+		} else if entries[i].pool != nil && entries[i].pool.hasGroup {
+			standalone["connection-pool"] = entries[i].pool.rawGroup
+		}
+		if err := entries[i].writeKeyPool(standalone["keys"].([]any)[0].(map[string]any)); err != nil {
+			return nil, err
+		}
+		out = append(out, standalone)
 	}
 	return out, nil
 }
@@ -350,6 +385,10 @@ func settleGroupFields(group map[string]any, members []map[string]any) map[strin
 	// copied onto each key.
 	for field, value := range group {
 		if field == "name" || field == "keys" || isGroupSharedField(field) {
+			continue
+		}
+		if field == "connection-pool" {
+			settled[field] = value
 			continue
 		}
 		isAgreed := true
@@ -484,6 +523,7 @@ func (c *Client) EditableOpenAICompatibility(ctx context.Context) ([]OpenAICompa
 			for k := range entry.APIKeyEntries {
 				entry.APIKeyEntries[k].AuthIndex = runtimeKeyAuthIndex(live, entry.APIKeyEntries[k].APIKey)
 			}
+			entry.runtimeView = &runtime.Entries[i]
 			entries[i] = entry
 			next = j + 1
 			break

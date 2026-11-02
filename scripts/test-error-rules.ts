@@ -1,3 +1,4 @@
+import { buildConnectionPool, readConnectionPoolDraft, connectionPoolEdit, isConnectionPoolValid } from '../web/src/components/providers/connectionPool.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
@@ -143,4 +144,20 @@ test('Vertex policy counts only explicit routing overrides and a non-empty locat
   assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi_location: 'global' }), 1);
   assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi: 'enabled' }), 1);
   assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi: 'disabled', openapi_location: 'global', interactions: true }), 3);
+});
+
+test('connection pool drafts keep opt-in presence, inheritance and explicit false/zero distinct', () => {
+  assert.equal(buildConnectionPool(readConnectionPoolDraft(null)), null);
+  assert.deepEqual(buildConnectionPool(readConnectionPoolDraft({})), {});
+  const explicit = { enabled: false, idle_conn_timeout: '0s', max_idle_conns_per_host: 0 };
+  assert.deepEqual(buildConnectionPool(readConnectionPoolDraft(explicit)), explicit);
+  assert.equal(connectionPoolEdit(readConnectionPoolDraft(explicit), explicit), undefined);
+  assert.deepEqual(connectionPoolEdit(readConnectionPoolDraft({}), null), {});
+  assert.equal(connectionPoolEdit(readConnectionPoolDraft(null), {}), null);
+});
+
+test('connection pool numeric validation accepts signed integers and rejects fractional or unsafe numbers', () => {
+  const draft = { ...readConnectionPoolDraft({}), idleConnTimeout: '-1s' };
+  for (const maxIdleConnsPerHost of [null, 0, -1, 4]) assert.equal(isConnectionPoolValid({ ...draft, maxIdleConnsPerHost }), true);
+  for (const maxIdleConnsPerHost of [1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.equal(isConnectionPoolValid({ ...draft, maxIdleConnsPerHost }), false);
 });

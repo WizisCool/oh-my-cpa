@@ -1,3 +1,4 @@
+import { EMPTY_CONNECTION_POOL_DRAFT, readConnectionPoolDraft, connectionPoolEdit, isConnectionPoolValid, type ConnectionPoolDraft } from './connectionPool';
 import React, { useState, useRef } from 'react';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -92,6 +93,7 @@ export function useProviderManagement({
   const [formPrefix, setFormPrefix] = useState<string>('');
   const [formPriority, setFormPriority] = useState<number | null>(null);
   const [formDisabled, setFormDisabled] = useState<boolean>(false);
+  const [formConnectionPool, setFormConnectionPool] = useState<ConnectionPoolDraft>(EMPTY_CONNECTION_POOL_DRAFT);
   const [formPolicy, setFormPolicy] = useState<RuntimePolicyDraft>(EMPTY_RUNTIME_POLICY_DRAFT);
   const [formBehavior, setFormBehavior] = useState<BehaviorDraft>(EMPTY_BEHAVIOR_DRAFT);
   const [policySectionOpen, setPolicySectionOpen] = useState<boolean>(false);
@@ -449,6 +451,7 @@ export function useProviderManagement({
   const providerWriteMessage = (err: unknown): string => {
     switch (apiErrorCode(err)) {
       case 'provider_key_required': return t('pro.error_key_required');
+      case 'provider_connection_pool_invalid': return t('pool.invalid');
       case 'provider_duplicate_key': return t('pro.error_duplicate_key');
       case 'provider_credential_exists': return t('pro.error_credential_exists');
       case 'provider_stale_identity': return t('pro.error_stale_identity');
@@ -612,6 +615,7 @@ export function useProviderManagement({
     setFormPrefix('');
     setFormPriority(null);
     setFormDisabled(false);
+    setFormConnectionPool(EMPTY_CONNECTION_POOL_DRAFT);
     setFormPolicy(EMPTY_RUNTIME_POLICY_DRAFT);
     setFormBehavior(EMPTY_BEHAVIOR_DRAFT);
     setPolicySectionOpen(false);
@@ -643,6 +647,7 @@ export function useProviderManagement({
     setFormPrefix(provider.prefix || '');
     setFormPriority(provider.priority != null ? provider.priority : null);
     setFormDisabled(provider.disabled);
+    setFormConnectionPool(readConnectionPoolDraft(provider.connection_pool?.defaults));
     setFormPolicy(readRuntimePolicyDraft(provider));
     setFormBehavior(readBehaviorDraft(provider));
     setPolicySectionOpen(false);
@@ -657,6 +662,8 @@ export function useProviderManagement({
       setFormKeys(
         provider.key_entries.map((k, i) => ({
           id: `key-edit-${i}`,
+          connectionPool: readConnectionPoolDraft(k.connection_pool),
+          storedConnectionPool: k.connection_pool,
           apiKey: k.api_key || '',
           proxyUrl: k.proxy_url,
           weight: k.weight ?? 1,
@@ -737,6 +744,13 @@ export function useProviderManagement({
       return;
     }
 
+    const hasGroupPoolEdit = connectionPoolEdit(formConnectionPool, editingProvider?.connection_pool?.defaults) !== undefined;
+    if (hasGroupPoolEdit && !isConnectionPoolValid(formConnectionPool) || formKeys.some(key =>
+      key.connectionPool && connectionPoolEdit(key.connectionPool, key.storedConnectionPool) !== undefined && !isConnectionPoolValid(key.connectionPool))) {
+      setPolicySectionOpen(true);
+      toast.warning(t('pool.invalid'));
+      return;
+    }
     const family = lookupProviderFamily(formFamily);
     const supportsErrorRules = family?.supportsErrorRules ?? false;
     const policyProblem = runtimePolicyProblem(formPolicy, supportsErrorRules);
@@ -765,6 +779,7 @@ export function useProviderManagement({
 
     const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => ({
       api_key: k.apiKey || '',
+      connection_pool: k.connectionPool ? connectionPoolEdit(k.connectionPool, k.storedConnectionPool) : undefined,
       proxy_url: k.proxyUrl || '',
       weight: k.weight,
     }));
@@ -792,6 +807,7 @@ export function useProviderManagement({
 
     const payload: SaveProviderPayload = {
       family: formFamily,
+      connection_pool: connectionPoolEdit(formConnectionPool, editingProvider?.connection_pool?.defaults),
       expected_auth_index: editingProvider?.auth_index,
       expected_name: editingProvider?.upstream_name || editingProvider?.name,
       name: formName.trim() || 'Custom Provider',
@@ -839,6 +855,8 @@ export function useProviderManagement({
     setFormPriority,
     formDisabled,
     setFormDisabled,
+    formConnectionPool,
+    setFormConnectionPool,
     formPolicy,
     setFormPolicy,
     formBehavior,

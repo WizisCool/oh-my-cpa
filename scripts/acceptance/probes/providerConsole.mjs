@@ -349,6 +349,32 @@ export async function providerModelPicker({ base, page, check }) {
   check('a card folded shut is as tall as before it opened',
     foldedHeight !== undefined && refoldedHeight === foldedHeight,
     `before=${foldedHeight} after=${refoldedHeight}`);
+
+  // Pool payloads belong to component/Go contracts; the browser owns whether
+  // both scopes remain reachable without horizontal clipping on a phone.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await drawer.getByRole('button', { name: /Runtime policy|运行时策略/ }).click();
+  const groupPool = drawer.getByRole('group', { name: /Group connection reuse defaults|连接复用默认设置/ });
+  await groupPool.getByRole('checkbox').check();
+  const keyToggle = drawer.locator('[class*="item-card"] button[aria-expanded]').first();
+  if (await keyToggle.getAttribute('aria-expanded') !== 'true') await keyToggle.click();
+  const keyPool = drawer.getByRole('group', { name: /Key connection reuse|此密钥的连接复用/ }).first();
+  await keyPool.getByRole('checkbox').check();
+  for (const [scope, pool] of [['group', groupPool], ['key', keyPool]]) {
+    const limit = pool.getByRole('spinbutton');
+    await limit.scrollIntoViewIfNeeded();
+    await limit.click();
+    const bounds = await pool.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, width: window.innerWidth, overflow: node.scrollWidth - node.clientWidth };
+    });
+    check(`${scope} pool controls fit and can be focused on a phone`,
+      await limit.evaluate(node => node === document.activeElement)
+        && bounds.left >= 0 && bounds.right <= bounds.width && bounds.overflow <= 1,
+      JSON.stringify(bounds));
+  }
+  await groupPool.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'tmp/issue-436-pool-phone.png' });
 }
 
 export function customIconProbeRoutes() {

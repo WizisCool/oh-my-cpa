@@ -56,6 +56,10 @@ var ConfigKeyFamilies = []ConfigKeyFamily{
 // carried through in extra rather than modelled: an edit made here must not
 // silently strip a setting the operator configured in config.yaml.
 type ConfigAPIKey struct {
+	// ConnectionPool is effective on reads. EditConnectionPool keeps the raw
+	// group/key ownership when changing it.
+	ConnectionPool *ConnectionPoolConfig `json:"connection-pool,omitempty"`
+
 	OpenAPI         *bool             `json:"openapi,omitempty"`
 	OpenAPILocation string            `json:"openapi-location,omitempty"`
 	APIKey          string            `json:"api-key"`
@@ -94,7 +98,9 @@ type ConfigAPIKey struct {
 	// only while upstream.claude.tool-search is on.
 	NativeToolSearch bool `json:"native-tool-search,omitempty"`
 
-	extra wireExtras
+	extra       wireExtras
+	pool        *configKeyPool
+	runtimeView *ConfigAPIKey
 	// origin is the v8 group this entry was read from, set only by
 	// EditableConfigAPIKeys, so a write can return it to the group it came from.
 	origin *keyGroupOrigin

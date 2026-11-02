@@ -1,3 +1,5 @@
+import { ConnectionPoolEditor } from './ConnectionPoolEditor';
+import type { ConnectionPoolDraft } from './connectionPool';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { Checkbox, Input, InputNumber, Segmented } from 'antd';
@@ -9,6 +11,10 @@ import type { BehaviorDraft, RuntimePolicyDraft } from './runtimePolicy';
 import styles from './ProviderEditorDrawer.module.css';
 
 interface RuntimePolicySectionProps {
+  connectionPool?: ConnectionPoolDraft;
+  onConnectionPoolChange?: (draft: ConnectionPoolDraft) => void;
+  poolGroupName?: string;
+  poolGroupSize?: number;
   policy: RuntimePolicyDraft;
   onPolicyChange: React.Dispatch<React.SetStateAction<RuntimePolicyDraft>>;
   behavior: BehaviorDraft;
@@ -35,6 +41,7 @@ const BOOLEAN_SWITCHES: { name: Exclude<ProviderBehaviorSwitch, 'codex_cloaking'
  * that is what an untouched provider does; a setting only the provider has is a plain checkbox.
  */
 export function RuntimePolicySection({
+  connectionPool, onConnectionPoolChange, poolGroupName, poolGroupSize,
   policy,
   onPolicyChange,
   behavior,
@@ -54,6 +61,7 @@ export function RuntimePolicySection({
 
   return (
     <div className={styles['policy']}>
+      {connectionPool && onConnectionPoolChange && <ConnectionPoolEditor isGroup draft={connectionPool} onChange={onConnectionPoolChange} groupName={poolGroupName} groupSize={poolGroupSize} />}
       <div className={styles['policy-field']}>
         <div className={styles['item-field-label']} id="provider-policy-cooling">{t('policy.cooling')}</div>
         <Segmented
