@@ -25,7 +25,11 @@ export function PluginIcon(props: PluginIconProps) {
 }
 
 function PluginArtwork({ logo, className, fallbackSize = '1em' }: PluginIconProps) {
-  return <MarkArtwork artworks={pluginLogoArtworks(logo)} size="1em" fallback={<PuzzleOutlined size={fallbackSize} />}>
+  // `size="100%"` rather than a font size: each surface that draws the mark owns its box
+  // (the management chip, the rail's glyph slot), and the artwork fills it. A `1em` size here
+  // lands as an inline style on the image, which no surface rule could then override, so every
+  // published logo was drawn at one text glyph in the middle of a 44-48px chip.
+  return <MarkArtwork artworks={pluginLogoArtworks(logo)} size="100%" fallback={<PuzzleOutlined size={fallbackSize} />}>
     {(artwork, content) => <span
       className={[styles.icon, className].filter(Boolean).join(' ')}
       aria-hidden="true"
