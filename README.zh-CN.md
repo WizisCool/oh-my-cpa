@@ -284,9 +284,6 @@ Linux 和 FreeBSD 的 amd64、arm64 可执行文件。每个压缩包内嵌控�
 > [!IMPORTANT]
 > 备份 `.env`。`OMCPA_MASTER_KEY` 是数据库的加密密钥，丢失后数据无法读取。
 
-CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其他用量统计工具时，停用该工具，
-或在 `environment:` 下添加 `OMCPA_USAGE_INGEST_MODE: "off"`，仅将 OMC 用于管理。其他管理面板不冲突。
-
 `oh-my-cpa-updater` 挂载了 Docker socket，等同于拥有该主机上 Docker 的控制权。关闭控制台更新需从编排文件中删除该服务，
 并用 `docker rm -f oh-my-cpa-updater` 删除正在运行的容器（仅删除服务定义时，Compose 不会停止已运行的容器）。
 之后通过 `docker compose pull && docker compose up -d` 更新。
@@ -421,7 +418,7 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 | `OMCPA_BASE_PATH` | `/` | URL 前缀；默认在根路径提供控制台 |
 | `OMCPA_DATA_DIR` | `./data` | SQLite 数据库所在目录；编排文件中设为 `/data` |
 | `OMCPA_PUBLIC_URL` | 未设置 | 浏览器访问的地址；为 `https://` 时会话 Cookie 带 `Secure` 标记 |
-| `OMCPA_USAGE_INGEST_MODE` | `auto` | 已有其他服务采集该 CPA 的用量时设为 `off` |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | 用量采集模式，设为 `off` 时关闭用量采集 |
 | `OMCPA_USAGE_RETENTION_DAYS` | `90` | 请求记录保留天数，`0` 为全部保留；可在 OMC 设置 → 数据保留中修改。仪表盘统计永久保留 |
 | `OMCPA_USAGE_INBOX_RETENTION_DAYS` | `7` | 捕获载荷（供重新解码的原始上报）保留天数，`0` 为跟随请求记录 |
 | `TZ` | 系统时区 | 服务器日历，需与 CPA 一致；容器内默认为 UTC |

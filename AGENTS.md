@@ -43,8 +43,8 @@ values; documentation explains boundaries, rationale and operator procedures.
 - Ordinary CPA configuration writes serialize, check revisions, name changed paths and
   keep a restorable encrypted pre-write copy. Refuse if that copy cannot be saved.
   Adoption never overwrites or deletes configuration OMC does not own.
-- CPA's usage queue has one consumer. Availability probes authenticate; they never
-  pop a record. Preserve ingestion identity and historical cost/usage facts.
+- Availability probes authenticate; they never pop a record. Preserve ingestion
+  identity and historical cost/usage facts.
 - One replica per data directory. Serialize SQLite access rather than adding lock
   retries. Migrations are forward-only; never edit applied migrations or migration
   bookkeeping. Price versions and audit events are append-only.

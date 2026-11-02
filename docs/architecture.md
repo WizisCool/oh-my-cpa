@@ -13,7 +13,7 @@ Browser → embedded React SPA → OMC HTTP/session boundary
                                    ├─ repository → SQLite WAL
                                    ├─ Agent → capability executor → operations
                                    └─ updater client → isolated Docker updater
-CPA usage queue → one collector → sanitized inbox → usage/cost facts
+CPA usage stream/queue → collector → sanitized inbox → usage/cost facts
 External MCP clients → MCP adapter → the same capability executor
 ```
 
@@ -113,9 +113,8 @@ CPA writes use loaded revisions, explicit changed paths and an encrypted copy of
 stored file taken immediately before mutation. A failed copy blocks the write.
 [CPA integration](cpa-v8-compat.md) explains adoption and legacy-layout handling.
 
-The usage queue is destructive and has exactly one collector. Probe with AUTH, never
-with a pop. Persist and sanitize input before deriving facts; report ingestion gaps
-rather than inventing events. Request details and decoded inbox rows have retention;
+Probe availability with AUTH, never with a pop. Persist and sanitize input before
+deriving facts; report ingestion gaps rather than inventing events. Request details and decoded inbox rows have retention;
 dashboard usage facts are permanent. Late arrivals must count once, and unpriced
 usage must remain distinguishable from zero. [Pricing](pricing.md) owns cost semantics.
 

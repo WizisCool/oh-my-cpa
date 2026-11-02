@@ -144,12 +144,10 @@ requested by a caller are not evidence of the settings observed upstream.
 ## Adoption and coexistence
 
 Installing OMC must not rewrite or upgrade an existing CPA deployment implicitly.
-Keep its files, auth directory, network topology and other panels intact. Operators
-choose which process consumes usage: CPA's queue destructively distributes each
-record to one reader, so two collectors lose complementary pieces of history.
+Keep its files, auth directory, network topology and other panels intact.
 Authentication probes must never pop the queue.
 
-[Installation](install.md#other-panels-and-usage-trackers) covers coexistence choices.
+[Installation](install.md#other-management-panels) covers coexistence choices.
 [SQLite operations](ops/sqlite-operations.md) covers encrypted configuration copies
 and manual recovery of legacy layouts. [Operations](operations.md) covers current
 credential/quota controls and their limitations.

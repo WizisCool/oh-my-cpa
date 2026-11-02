@@ -10,9 +10,8 @@ reachability, OS/architecture, data directories and occupied ports. Inspect name
 image references and network metadata, not container environments or credential files
 in tool output. Ask only for facts that cannot be established safely.
 
-Find any other usage collector. CPA gives a queued record to one reader only; choose
-one collector before enabling OMC ingestion. Never test availability by consuming a
-record. OMC requires the v8 management API and the existing plaintext management key.
+Never test availability by consuming a record from the usage queue. OMC requires
+the v8 management API and the existing plaintext management key.
 
 ## Preserve the existing installation
 
@@ -39,13 +38,13 @@ record. OMC requires the v8 management API and the existing plaintext management
 
 Explain what the chosen path creates before executing it. The updater has host-level
 Docker authority; disclose that before starting its service. If declined, omit the
-updater and leave ordinary OMC operation intact. Follow
-[coexistence](install.md#other-panels-and-usage-trackers) for competing collectors.
+updater and leave ordinary OMC operation intact. See
+[coexistence](install.md#other-management-panels) for other running panels.
 
 ## Verify and hand off
 
 Follow [Verifying the install](install.md#verifying-the-install). Check the actual
-browser/API base path, health, CPA management reachability and usage-consumer choice.
+browser/API base path, health, CPA management reachability and usage ingestion status.
 Do not claim historical usage was imported or issue paid traffic just to populate a graph.
 
 Report the console URL, deployment and data locations, selected update method, how to

@@ -284,20 +284,11 @@ CPA's `config.yaml` (`remote-management.allow-remote` in older layouts). That se
 lets any host that can reach the port try the management key, so keep the port off the
 public internet.
 
-## Other panels and usage trackers
+## Other management panels
 
-**Another management panel** can keep running. It and OMC both edit the same CPA, so
+Another management panel can keep running. It and OMC both edit the same CPA, so
 a change made in one shows up in the other. OMC does not import the other panel's
 history or settings.
-
-**Another usage tracker** conflicts. CPA hands each usage record to one reader and then
-deletes it, so two trackers would each get part of the traffic. The options:
-
-- Stop the other tracker. OMC records every request from then on.
-- Keep the other tracker and set `OMCPA_USAGE_INGEST_MODE` to `off`: as
-  `OMCPA_USAGE_INGEST_MODE: "off"` under `environment:` in the Compose files above, or
-  as `OMCPA_USAGE_INGEST_MODE=off` in `deploy/.env` with the release Compose files. OMC
-  still manages CPA, but its dashboard and request records stay empty.
 
 ## Release Compose files
 
@@ -373,7 +364,7 @@ These are the variables the two release Compose files accept. Compose reads
 | `OMCPA_PUBLIC_URL` | `http://127.0.0.1:8080` | The address browsers use. `https://` only when they really use TLS |
 | `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root; set a sub-path only when the deployment needs one |
 | `TZ` | `UTC` | Calendar for daily totals; match CPA's |
-| `OMCPA_USAGE_INGEST_MODE` | `auto` | `off` when another tool collects this CPA's usage |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | `auto`, `subscribe`, `resp_pull`, `http_pull`, or `off` to disable collection |
 | `OMCPA_CPA_USAGE_ADDR` | derived from the CPA URL | Override for CPA's usage queue address, OMC only |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | empty | Addresses of the reverse proxy |
 | `OMCPA_DATA_PATH` | `../oh-my-cpa-data` | OMC's data directory |
@@ -524,8 +515,7 @@ management key and its reachable URL, and match CPA's `TZ`. Keep `OMCPA_VERSION`
 unset so the tagged build reports its embedded version. The included template binds
 `127.0.0.1:8080`, serves the site root and writes SQLite to `./data` under the working directory.
 When CPA is on the same host, its loopback URL works without changing CPA's remote
-management policy. Review [usage-reader ownership](#other-panels-and-usage-trackers)
-before keeping `OMCPA_USAGE_INGEST_MODE=auto`; use `off` if another reader continues.
+management policy.
 
 Run `./oh-my-cpa` on Unix or `.\oh-my-cpa.exe` on Windows from that directory. Verify
 [health and connectivity](#verifying-the-install), then open `http://127.0.0.1:8080/`
@@ -582,7 +572,7 @@ it cannot reach CPA.
 | `status` is `degraded` | Wrong CPA URL or management key, or CPA refuses remote management. See [reaching CPA](#reaching-cpa) |
 | Sign-in succeeds, then asks again | `OMCPA_PUBLIC_URL` says `https://` but the browser uses plain HTTP |
 | The console asks for a CPA upgrade | CPA is older than v8.0.0 |
-| Request records stay empty | Another tool is collecting usage, `OMCPA_USAGE_INGEST_MODE=off` is set, or usage statistics are disabled in CPA |
+| Request records stay empty | `OMCPA_USAGE_INGEST_MODE=off` is set, or usage statistics are disabled in CPA |
 | Port already in use | Change the host side of the `ports:` entry, or set `OMCPA_BIND` / `CPA_BIND` with the release Compose files |
 
 ## Upgrading
@@ -682,4 +672,3 @@ are published is in `docs/releasing.md`.
 
 - Keep `OMCPA_MASTER_KEY` safe and unchanged. Without it the stored data is unreadable.
 - One OMC per data directory, on a local disk.
-- One usage collector per CPA.

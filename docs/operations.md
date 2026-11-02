@@ -82,9 +82,6 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
 
 ## Deployment constraints
 
-- **Single collector**: The CPA usage queue is destructive. Only one collector may read
-  from a CPA instance. If another service collects usage, set
-  `OMCPA_USAGE_INGEST_MODE=off`.
 - **Single replica**: SQLite WAL requires exclusive single-process access. Run one
   replica mounting the data directory; do not mount over network filesystems
   (NFS/CIFS).

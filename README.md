@@ -305,10 +305,6 @@ for configuration, permissions and upgrades.
 > Back up `.env`. `OMCPA_MASTER_KEY` encrypts the database, and the data cannot be read
 > without it.
 
-CPA hands each usage record to a single reader. If another usage tracker reads the same
-CPA, stop it, or add `OMCPA_USAGE_INGEST_MODE: "off"` under `environment:` to use OMC
-for management only. Other management panels do not conflict.
-
 `oh-my-cpa-updater` mounts the Docker socket, which amounts to control of Docker on that
 host. Console updates are turned off by deleting the service from the Compose file and
 removing its running container with `docker rm -f oh-my-cpa-updater`; Compose leaves a
@@ -454,7 +450,7 @@ trusted agents and serve the console over HTTPS before connecting one remotely.
 | `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root |
 | `OMCPA_DATA_DIR` | `./data` | Directory of the SQLite database; the Compose files set `/data` |
 | `OMCPA_PUBLIC_URL` | unset | The address browsers use; `https://` marks the session cookie `Secure` |
-| `OMCPA_USAGE_INGEST_MODE` | `auto` | `off` when another service collects this CPA's usage |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | Ingest mode (`auto`, `subscribe`, `resp_pull`, `http_pull`, or `off`) |
 | `OMCPA_USAGE_RETENTION_DAYS` | `90` | Days request records are kept, `0` for all; OMC Settings → Data retention overrides it. Dashboard statistics are permanent |
 | `OMCPA_USAGE_INBOX_RETENTION_DAYS` | `7` | Days captured payloads (raw records kept for re-decoding) are kept, `0` to follow request records |
 | `TZ` | system zone | Server calendar; keep it equal to CPA's. Containers default to UTC |
