@@ -144,18 +144,19 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 		}
 		seen[apiKey] = true
 		matchedOriginal := -1
-		for index, key := range original {
-			if key.APIKey == apiKey {
-				matchedOriginal = index
-				break
-			}
-		}
-		if matchedOriginal < 0 && submitted.SourceIndex != nil {
+		if submitted.SourceIndex != nil {
 			index := *submitted.SourceIndex
 			if index < 0 || index >= len(original) {
 				return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusConflict, "the source key no longer exists", providerStaleIdentityCode)
 			}
 			matchedOriginal = index
+		} else {
+			for index, key := range original {
+				if key.APIKey == apiKey {
+					matchedOriginal = index
+					break
+				}
+			}
 		}
 		old := defaults
 		isExistingCredential := matchedOriginal >= 0

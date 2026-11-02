@@ -230,18 +230,17 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 							// (its own headers or models), matched by API key.
 							updated := management.APIKeyEntry{}
 							isMatched := false
-							for _, old := range entry.APIKeyEntries {
-								if strings.TrimSpace(old.APIKey) == kVal {
-									updated = old
-									isMatched = true
-									break
-								}
-							}
-							if !isMatched && k.SourceIndex != nil {
-								var isFound bool
-								updated, isFound = openAICompatibilityKeyEntry(*entry, *k.SourceIndex)
-								if !isFound {
+							if k.SourceIndex != nil {
+								updated, isMatched = openAICompatibilityKeyEntry(*entry, *k.SourceIndex)
+								if !isMatched {
 									return newProviderWriteErrorWithCode(http.StatusConflict, "the source key no longer exists", providerStaleIdentityCode)
+								}
+							} else {
+								for _, old := range entry.APIKeyEntries {
+									if strings.TrimSpace(old.APIKey) == kVal {
+										updated = old
+										break
+									}
 								}
 							}
 							updated.APIKey = kVal
