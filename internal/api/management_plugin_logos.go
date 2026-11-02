@@ -176,7 +176,9 @@ func isInternalAddressLiteral(host string) bool {
 }
 
 // inline replaces every plugin's declared logo with an inline `data:` URL, or clears
-// it when no usable logo could be produced.
+// it when no usable logo could be produced. Each login entry a plugin declares gets the
+// same treatment for the mark it publishes for that portal alone, so a multi-brand
+// plugin's cards can carry their own artwork instead of the plugin's.
 //
 // The plugin list itself is never failed by a logo: a plugin whose artwork cannot be
 // fetched is still a plugin the operator can manage, and the console falls back to the
@@ -185,18 +187,32 @@ func (f *pluginLogoFetcher) inline(ctx context.Context, plugins []management.Plu
 	if f == nil {
 		return
 	}
-	raws := make([]string, len(plugins))
+	// One slot per declared logo - the plugin's own first, then each entry's - so the
+	// per-response budget and the fetch ceiling cover the whole document rather than one
+	// field of it. An empty entry logo stays empty: that is how the console tells "this
+	// portal published no mark of its own" from "this portal's mark could not be used"
+	// and falls back to the plugin's.
+	var raws []string
+	var assign []func(string)
 	for index := range plugins {
-		raws[index] = pluginLogoURL(plugins[index])
-	}
-	inlined := f.inlineAll(ctx, raws)
-	for index := range plugins {
-		// Both places the list reports a logo carry the same resolved value, so a
-		// consumer reading either field cannot see a URL the browser may not load.
-		plugins[index].Logo = inlined[index]
-		if plugins[index].Metadata != nil {
-			plugins[index].Metadata.Logo = inlined[index]
+		plugin := &plugins[index]
+		raws = append(raws, pluginLogoURL(*plugin))
+		assign = append(assign, func(resolved string) {
+			// Both places the list reports a logo carry the same resolved value, so a
+			// consumer reading either field cannot see a URL the browser may not load.
+			plugin.Logo = resolved
+			if plugin.Metadata != nil {
+				plugin.Metadata.Logo = resolved
+			}
+		})
+		for entryIndex := range plugin.OAuthProviderEntries {
+			entry := &plugin.OAuthProviderEntries[entryIndex]
+			raws = append(raws, logoCandidate(entry.Logo))
+			assign = append(assign, func(resolved string) { entry.Logo = resolved })
 		}
+	}
+	for index, resolved := range f.inlineAll(ctx, raws) {
+		assign[index](resolved)
 	}
 }
 
@@ -426,14 +442,25 @@ func logoCandidate(candidate string) string {
 //
 // The payload is measured against the same ceiling a fetched logo is held to, or a
 // plugin could bypass the bound by publishing the artwork inline instead of at a URL:
-// this value is forwarded to the browser as it stands.
+// this value is forwarded to the browser as it stands. The ceiling bounds the image
+// itself, not its encoding, so a base64 payload is measured by what it decodes to:
+// the fetch path admits a body of `maxPluginLogoBytes` and then base64-encodes it, and
+// measuring the encoded text instead would refuse the largest third of what that same
+// ceiling allows - a logo this console had already fetched and inlined.
 func inlineImageMediaType(raw string) (string, bool) {
 	rest, found := strings.CutPrefix(raw, "data:")
 	if !found {
 		return "", false
 	}
 	header, payload, found := strings.Cut(rest, ",")
-	if !found || len(payload) == 0 || len(payload) > maxPluginLogoBytes {
+	if !found || len(payload) == 0 {
+		return "", false
+	}
+	isBase64 := strings.HasSuffix(strings.ToLower(strings.TrimSpace(header)), ";base64")
+	if !isBase64 && len(payload) > maxPluginLogoBytes {
+		return "", false
+	}
+	if isBase64 && base64DecodedLen(payload) > maxPluginLogoBytes {
 		return "", false
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(strings.SplitN(header, ";", 2)[0]))
@@ -441,4 +468,22 @@ func inlineImageMediaType(raw string) (string, bool) {
 		return "", false
 	}
 	return mediaType, true
+}
+
+// base64DecodedLen is the byte count a standard-base64 payload decodes to, without
+// decoding it. `base64.StdEncoding.DecodedLen` rounds up to whole groups and does not
+// subtract the padding, which reports one byte too many for exactly the sizes a ceiling
+// is compared against.
+func base64DecodedLen(payload string) int {
+	padding := 0
+	switch {
+	case strings.HasSuffix(payload, "=="):
+		padding = 2
+	case strings.HasSuffix(payload, "="):
+		padding = 1
+	}
+	// A valid payload is a whole number of four-character groups; anything else is
+	// measured by the groups it does have, which can only understate it, so a
+	// malformed payload is refused by the decode that follows rather than here.
+	return len(payload)/4*3 - padding
 }

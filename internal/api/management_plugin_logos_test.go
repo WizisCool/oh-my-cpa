@@ -457,17 +457,28 @@ func TestPluginLogoFetcherRefusesAnOversizedInlineLogo(t *testing.T) {
 		return nil, nil
 	})
 
-	oversized := "data:image/png;base64," + strings.Repeat("A", maxPluginLogoBytes+1)
-	plugins := []management.PluginItem{pluginWithLogo("acme", oversized)}
+	// The ceiling bounds the image, not its encoding: an inline payload is measured by
+	// what it decodes to, so the boundary sits at the same byte count a fetched body is
+	// held to. Without that, base64 expansion would refuse the largest third of what a
+	// fetch accepts - including artwork this console had already inlined itself.
+	atCeiling := "data:image/png;base64," + base64.StdEncoding.EncodeToString(make([]byte, maxPluginLogoBytes))
+	oversized := "data:image/png;base64," + base64.StdEncoding.EncodeToString(make([]byte, maxPluginLogoBytes+1))
+	plugins := []management.PluginItem{
+		pluginWithLogo("at-ceiling", atCeiling),
+		pluginWithLogo("acme", oversized),
+	}
 	fetcher.inline(context.Background(), plugins)
 
 	if calls.Load() != 0 {
 		t.Fatalf("fetch calls = %d, want 0", calls.Load())
 	}
+	if plugins[0].Logo != atCeiling {
+		t.Fatalf("logo = %d bytes, want artwork at the ceiling kept", len(plugins[0].Logo))
+	}
 	// The ceiling has to hold for both routes: a plugin that publishes the artwork
 	// inline must not be able to ship something larger than a fetched one.
-	if plugins[0].Logo != "" {
-		t.Fatalf("logo = %d bytes, want it cleared above the ceiling", len(plugins[0].Logo))
+	if plugins[1].Logo != "" {
+		t.Fatalf("logo = %d bytes, want it cleared above the ceiling", len(plugins[1].Logo))
 	}
 }
 

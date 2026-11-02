@@ -87,6 +87,18 @@ type PluginItemDTO struct {
 	RepositoryURL    string                 `json:"repository_url,omitempty"`
 	ConfigFields     []PluginConfigFieldDTO `json:"config_fields"`
 	Metadata         *PluginMetadataDTO     `json:"metadata,omitempty"`
+	// OAuthProviderEntries carries each portal's own name and logo, so a plugin that
+	// fronts several brands does not have to show one title and one mark for all.
+	OAuthProviderEntries []PluginOAuthProviderEntryDTO `json:"oauth_provider_entries,omitempty"`
+}
+
+// PluginOAuthProviderEntryDTO is one login portal's own display text. `identifier` is
+// the provider key the credential records carry; `name` and `logo` are what the login
+// card draws for that key alone.
+type PluginOAuthProviderEntryDTO struct {
+	Identifier string `json:"identifier"`
+	Name       string `json:"name,omitempty"`
+	Logo       string `json:"logo,omitempty"`
 }
 
 // PluginPageDTO is one page a running plugin registers. `path` is the plugin resource
@@ -168,22 +180,23 @@ func projectPluginItem(plugin management.PluginItem) PluginItemDTO {
 		repository = plugin.Metadata.GitHubRepository
 	}
 	return PluginItemDTO{
-		ID:               boundedText(plugin.ID, pluginTextLimit),
-		Path:             boundedText(plugin.Path, pluginTextLimit),
-		Configured:       plugin.Configured,
-		Registered:       plugin.Registered,
-		Enabled:          plugin.Enabled,
-		EffectiveEnabled: plugin.EffectiveEnabled,
-		SupportsOAuth:    plugin.SupportsOAuth,
-		OAuthProvider:    boundedText(plugin.OAuthProvider, pluginTextLimit),
-		OAuthProviders:   projectPluginOAuthProviders(plugin.OAuthProviders),
-		SupportsQuota:    plugin.SupportsQuota,
-		QuotaProvider:    boundedText(plugin.QuotaProvider, pluginTextLimit),
-		Pages:            projectPluginPages(plugin),
-		Logo:             plugin.Logo,
-		RepositoryURL:    pluginRepositoryURL(repository),
-		ConfigFields:     projectPluginConfigFields(fields),
-		Metadata:         projectPluginMetadata(plugin.Metadata),
+		ID:                   boundedText(plugin.ID, pluginTextLimit),
+		Path:                 boundedText(plugin.Path, pluginTextLimit),
+		Configured:           plugin.Configured,
+		Registered:           plugin.Registered,
+		Enabled:              plugin.Enabled,
+		EffectiveEnabled:     plugin.EffectiveEnabled,
+		SupportsOAuth:        plugin.SupportsOAuth,
+		OAuthProvider:        boundedText(plugin.OAuthProvider, pluginTextLimit),
+		OAuthProviders:       projectPluginOAuthProviders(plugin.OAuthProviders),
+		SupportsQuota:        plugin.SupportsQuota,
+		QuotaProvider:        boundedText(plugin.QuotaProvider, pluginTextLimit),
+		Pages:                projectPluginPages(plugin),
+		Logo:                 plugin.Logo,
+		RepositoryURL:        pluginRepositoryURL(repository),
+		ConfigFields:         projectPluginConfigFields(fields),
+		Metadata:             projectPluginMetadata(plugin.Metadata),
+		OAuthProviderEntries: projectPluginOAuthProviderEntries(plugin.OAuthProviderEntries),
 	}
 }
 
@@ -203,6 +216,65 @@ func projectPluginOAuthProviders(providers []string) []string {
 		result = append(result, id)
 	}
 	return result
+}
+
+// projectPluginOAuthProviderEntries bounds each portal's own display text under the
+// same rules the bare identifiers follow, because the identifier is the same kind of
+// value: it names an upstream identity, so it is not truncated into a different one.
+//
+// The name and the logo are presentation, and are handled the opposite way. A name is
+// either the text the plugin published or nothing - cutting it would show a label the
+// plugin never wrote, so an oversized one is dropped and the card falls back to the
+// plugin's name. The logo is already bounded by CPA's inline ceiling
+// (`maxPluginLogoBytes`) and sanitized there, and is additionally held to inline
+// artwork here, because this is the last place before it reaches a browser: an
+// inliner that could not run (the public demonstration fetches nothing a plugin names)
+// would otherwise leave an arbitrary plugin-chosen URL in the response.
+//
+// An entry whose identifier is unusable is dropped rather than kept as artwork nobody
+// can reach: the card is drawn per identifier, and ownership of a portal comes from
+// the identifier list. Nothing is inferred in the other direction either - a portal
+// the plugin declared only as an identifier keeps rendering exactly as it did before
+// entries existed.
+func projectPluginOAuthProviderEntries(entries []management.PluginOAuthProviderEntry) []PluginOAuthProviderEntryDTO {
+	result := make([]PluginOAuthProviderEntryDTO, 0, min(len(entries), pluginListLimit))
+	seen := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if len(result) >= pluginListLimit {
+			break
+		}
+		identifier := strings.ToLower(strings.TrimSpace(entry.Identifier))
+		if len(identifier) > pluginTextLimit || !oauthProviderPattern.MatchString(identifier) || seen[identifier] {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name)
+		if len([]rune(name)) > pluginTextLimit {
+			name = ""
+		}
+		seen[identifier] = true
+		result = append(result, PluginOAuthProviderEntryDTO{
+			Identifier: identifier,
+			Name:       name,
+			Logo:       projectPluginLogo(entry.Logo),
+		})
+	}
+	return result
+}
+
+// projectPluginLogo passes a declared logo through only as artwork the browser may
+// load by itself: an inline `data:image/*` URL the inliner accepted.
+//
+// The inliner already answers this, but it answers it by rewriting the field, and it is
+// deliberately absent in a deployment that fetches nothing a plugin names. Holding the
+// value here as well means the response carries no URL a browser would dereference
+// whichever of the two ran last, rather than depending on the ordering of a fetch this
+// projection cannot see.
+func projectPluginLogo(logo string) string {
+	logo = strings.TrimSpace(logo)
+	if _, ok := inlineImageMediaType(logo); !ok {
+		return ""
+	}
+	return logo
 }
 
 // projectPluginPages keeps the menus that are pages of this plugin: a resource path

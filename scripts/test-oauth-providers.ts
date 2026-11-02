@@ -248,6 +248,71 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
 });
 
 
+test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
+  const t = ((key: string, args?: { name?: string }) => args?.name || key) as Parameters<typeof builtinOAuthProviderChoices>[0];
+  const zaiLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22zai%22/%3E';
+  const bigmodelLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22bigmodel%22/%3E';
+  const [zai, bigmodel, plain] = pluginOAuthProviderChoices([
+    {
+      id: 'omc-zcode-oauth', enabled: true, effective_enabled: true, supports_oauth: true,
+      oauth_providers: ['zcode-zai', 'zcode-bigmodel', 'zcode-legacy'],
+      metadata: { name: 'OMC ZCode OAuth' },
+      logo: 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E',
+      oauth_provider_entries: [
+        { identifier: 'zcode-zai', name: 'Z.ai', logo: zaiLogo },
+        { identifier: 'zcode-bigmodel', name: 'BigModel', logo: bigmodelLogo },
+      ],
+    },
+  ], t);
+
+  // Two portals of one plugin answer with one account system each, so the card names the
+  // portal rather than the plugin, and draws that portal's own brand instead of the
+  // plugin's - a BigModel card wearing Z.ai's mark mislabels the operator's credential.
+  assert.equal(zai.id, 'zcode-zai');
+  assert.equal(zai.title, 'Z.ai');
+  assert.equal(zai.logo, zaiLogo);
+  assert.equal(bigmodel.id, 'zcode-bigmodel');
+  assert.equal(bigmodel.title, 'BigModel');
+  assert.equal(bigmodel.logo, bigmodelLogo);
+  // A portal that publishes no text of its own keeps v0.3.19's reading: the identifier
+  // in the title, the plugin's mark in the card.
+  assert.equal(plain.id, 'zcode-legacy');
+  assert.equal(plain.title, 'OMC ZCode OAuth · zcode-legacy');
+  assert.equal(plain.logo, 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E');
+  // The portal verdict does not change ownership: the card still belongs to the plugin.
+  assert.deepEqual([zai.pluginId, bigmodel.pluginId, plain.pluginId], ['omc-zcode-oauth', 'omc-zcode-oauth', 'omc-zcode-oauth']);
+
+  // CPA fills an entry's empty name from the plugin's metadata, so a portal that named
+  // nothing of its own arrives reading as the plugin does. That is the fallback arriving
+  // as text, not a portal label: the card keeps the identifier suffix it had before.
+  const [named, filled] = pluginOAuthProviderChoices([{
+    id: 'omc-zcode-oauth', enabled: true, effective_enabled: true, supports_oauth: true,
+    oauth_providers: ['zcode-zai', 'zcode-bigmodel'],
+    metadata: { name: 'OMC ZCode OAuth' },
+    oauth_provider_entries: [
+      { identifier: 'zcode-zai', name: 'Z.ai' },
+      { identifier: 'zcode-bigmodel', name: 'OMC ZCode OAuth' },
+    ],
+  }], t);
+  assert.equal(named.title, 'Z.ai');
+  assert.equal(filled.title, 'OMC ZCode OAuth · zcode-bigmodel');
+
+  // A portal logo that cannot be rendered falls back to the plugin's, then to the catalog.
+  const [unusable] = pluginOAuthProviderChoices([{
+    id: 'one-portal', enabled: true, effective_enabled: true, supports_oauth: true,
+    oauth_provider: 'one-portal-login', logo: 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E',
+    oauth_provider_entries: [{ identifier: 'one-portal-login', logo: 'https://cdn.example.test/one.svg' }],
+  }], t);
+  assert.equal(unusable.logo, 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E');
+  const [catalogOnly] = pluginOAuthProviderChoices([{
+    id: 'anon-portal', enabled: true, effective_enabled: true, supports_oauth: true,
+    oauth_provider: 'anon-portal-login',
+    oauth_provider_entries: [{ identifier: 'anon-portal-login', logo: 'icons/anon.svg' }],
+  }], t);
+  assert.equal(catalogOnly.logo, undefined, 'an unusable mark leaves the catalog mark, never a plugin logo');
+});
+
+
 test('auth-provider metadata does not declare a redirect flow, and plugin pages own connection', () => {
   const t = ((key: string) => key) as Parameters<typeof builtinOAuthProviderChoices>[0];
   const plugins = [{

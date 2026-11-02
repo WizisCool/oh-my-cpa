@@ -2,7 +2,7 @@ import { collectPluginPages } from '../components/plugins/pluginPages';
 import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
-import { pluginOAuthProviderIds, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
+import { pluginOAuthProviderEntryTexts, pluginOAuthProviderIds, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
 /**
  * The OAuth provider contract for the console: which authorizations exist, how
@@ -360,6 +360,19 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
  * page when one exists; otherwise request a flow only after an explicit action.
  * A disabled plugin keeps owning any credentials it previously created, but it cannot start a new
  * authorization until its effective-enabled state says it may.
+ *
+ * A plugin may front several brands through one credential shape, so the portal - not
+ * the plugin - is what a card names and draws. Each card prefers the name and logo that
+ * portal published for itself, which is why two portals of one plugin read as `Z.ai` and
+ * `BigModel` instead of two identical cards. A portal that publishes neither keeps the
+ * `${name} · ${id}` label and the plugin's mark, which is what makes the extra identifier
+ * in the title necessary at all.
+ *
+ * CPA fills an empty entry name from the plugin's own metadata, so a portal that
+ * published no name of its own arrives carrying the plugin's. A name that only repeats
+ * the plugin is that fallback arriving as text, and the card keeps the identifier suffix
+ * exactly as it did before entries existed; a name the plugin wrote for the portal is
+ * what the card shows instead of the machine key.
  */
 export function pluginOAuthProviderChoices(
   plugins: PluginItem[] | undefined,
@@ -373,12 +386,16 @@ export function pluginOAuthProviderChoices(
     if (!plugin.supports_oauth || !isEnabled) continue;
     const providerIds = pluginOAuthProviderIds(plugin);
     const logos = pluginOAuthProviderLogos([plugin]);
+    const entries = pluginOAuthProviderEntryTexts([plugin]);
     const name = pluginDisplayName(plugin);
     const pluginPageRoute = pages.find((page) => page.pluginId === plugin.id)?.route;
     for (const providerId of providerIds) {
       if (seen.has(providerId)) continue;
       seen.add(providerId);
-      const title = providerIds.length > 1 ? `${name} · ${providerId}` : name;
+      const entryName = entries[providerId]?.name;
+      const title = entryName && entryName !== name
+        ? entryName
+        : providerIds.length > 1 ? `${name} · ${providerId}` : name;
       choices.push({
         id: providerId,
         flow: 'plugin',

@@ -721,6 +721,7 @@ async function verifyFullTokenCapacity({ base, page, check }) {
 }
 
 async function verifyPluginConnections({ base, page, check, oauthStarts }) {
+  const portalLogo = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230EA5E9'/%3E%3C/svg%3E";
   // An auth-provider interface also serves API-key plugins. Their own page must
   // remain reachable without starting the interactive login method they reject.
   const plugins = [
@@ -735,6 +736,9 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
       id: 'interactive-auth', configured: true, registered: true, enabled: true,
       effective_enabled: true, supports_oauth: true, oauth_provider: 'interactive',
       oauth_providers: ['interactive', 'interactive-secondary'],
+      // The second portal publishes a name and a mark of its own; the first publishes
+      // neither, so its card has to keep naming the portal it starts.
+      oauth_provider_entries: [{ identifier: 'interactive-secondary', name: 'Second Portal', logo: portalLogo }],
       metadata: { name: 'Interactive Auth' }, config_fields: [], pages: [],
     },
   ];
@@ -768,7 +772,23 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
       && (await pluginPanel.getByText('Key Bridge · key-service-secondary', { exact: true }).count()) > 0
       && (await pluginPanel.getByText('Redirect callback', { exact: true }).count()) === 0
       && (await pluginPanel.locator('[data-oauth-start]').count()) === 0);
+  // Two portals of one plugin used to read the same and draw the same mark, so the
+  // operator could not tell which portal a card starts. The one that publishes a name
+  // and a logo of its own names and draws itself; the one that publishes neither still
+  // carries the identifier that distinguishes it.
+  for (const [provider, label] of [['interactive-secondary', 'Second Portal'], ['interactive', 'Interactive Auth · interactive']]) {
+    await openPluginConnection(provider);
+    const portalPanel = page.getByTestId('oauth-connect-panel');
+    const detail = await portalPanel.locator('h3').evaluateAll(nodes => nodes.map(node => node.textContent));
+    check(`a declared portal draws its own name: ${provider}`,
+      (await portalPanel.getByRole('heading', { name: label, exact: true }).count()) === 1, JSON.stringify(detail));
+    const artworks = await portalPanel.locator('img').evaluateAll(nodes => nodes.map(node => node.getAttribute('src')));
+    check(`a declared portal draws its own mark: ${provider}`,
+      artworks.some((src) => (src ?? '').includes('0EA5E9')) === (provider === 'interactive-secondary'), JSON.stringify(artworks));
+  }
+
   const startsBeforePluginPage = oauthStarts.length;
+  await openPluginConnection('key-service-secondary');
   await pluginPanel.locator('[data-plugin-connect="key-service-secondary"]').click();
   await page.waitForURL('**/plugin-pages/key-bridge/0');
   await page.locator('[data-plugin-page="key-bridge"]').waitFor({ state: 'visible' });

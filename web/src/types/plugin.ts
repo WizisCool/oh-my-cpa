@@ -17,6 +17,15 @@ export interface PluginMetadata {
   logo?: string;
 }
 
+/** One login portal's own display text, as the plugin declared it. */
+export interface PluginOAuthProviderEntry {
+  /** The provider key credential, quota and request records carry. */
+  identifier: string;
+  name?: string;
+  /** Inline artwork only, like a plugin's own logo: the server drops or inlines a URL. */
+  logo?: string;
+}
+
 /** A page a plugin serves itself, shown inside the console. */
 export interface PluginPage {
   /** CPA's own resource path, `/v0/resource/plugins/<id>/...`; the console reads it through its plugin host. */
@@ -38,6 +47,8 @@ export interface PluginItem {
   oauth_provider?: string;
   /** Every login identifier declared by this plugin; older CPA responses only name the primary. */
   oauth_providers?: string[];
+  /** The name and logo a plugin publishes for one login portal, beyond the bare identifier. */
+  oauth_provider_entries?: PluginOAuthProviderEntry[];
   supports_quota?: boolean;
   quota_provider?: string;
   /** Present only while the plugin is running: a stopped plugin serves nothing. */

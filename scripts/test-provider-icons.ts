@@ -12,6 +12,7 @@ import { BUILTIN_OAUTH_PROVIDERS } from '../web/src/pages/oauthProviderLogic.ts'
 import {
   isRenderableLogoURL,
   pluginOAuthLogoFor,
+  pluginOAuthProviderEntryTexts,
   pluginOAuthProviderLogos,
 } from '../web/src/types/pluginOAuthProviders.ts';
 import { resolveProviderMark, resolveProviderPickerIcon, resolveCredentialMark, resolveMarkArtworks } from '../web/src/types/brandMark';
@@ -198,6 +199,72 @@ test('pluginOAuthProviderLogos: OAuth capability and a provider key are each eno
 
   // Neither declaration means no provider of its own, so no logo either.
   assert.deepEqual({ ...pluginOAuthProviderLogos([{ id: 'plain', name: 'Plain', enabled: true, logo: INLINE_LOGO }]) }, {});
+});
+
+test('pluginOAuthProviderEntryTexts: display text is keyed by the declared portal, never guessed', () => {
+  const portalLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22bigmodel%22/%3E';
+  const entries = pluginOAuthProviderEntryTexts([
+    {
+      id: 'zcode', enabled: true, effective_enabled: true, supports_oauth: true,
+      oauth_providers: ['zcode-zai', ' ZCode-BigModel '],
+      oauth_provider_entries: [
+        { identifier: ' ZCode-Zai ', name: ' Z.ai ', logo: INLINE_LOGO },
+        { identifier: 'zcode-bigmodel', name: 'BigModel', logo: portalLogo },
+        // An entry for a portal the plugin never declared has no card to appear on.
+        { identifier: 'not-declared', name: 'Stray', logo: portalLogo },
+        // Neither a name nor usable artwork says nothing about the portal.
+        { identifier: 'zcode-zai', name: '   ', logo: 'https://cdn.example.test/zai.svg' },
+      ],
+    },
+  ]);
+  // The identifier is an upstream key and is normalized; the name keeps the case the
+  // plugin wrote. A duplicate declaration does not replace the first answer.
+  assert.deepEqual({ ...entries }, {
+    'zcode-zai': { name: 'Z.ai', logo: INLINE_LOGO },
+    'zcode-bigmodel': { name: 'BigModel', logo: portalLogo },
+  });
+  assert.deepEqual({ ...pluginOAuthProviderEntryTexts(undefined) }, {});
+  assert.deepEqual({ ...pluginOAuthProviderEntryTexts([{ id: 'legacy', supports_oauth: true, oauth_provider: 'legacy', oauth_provider_entries: [{ identifier: 'legacy', name: 'Legacy' }] }]) }, {
+    legacy: { name: 'Legacy' },
+  });
+});
+
+test('pluginOAuthProviderLogos: a portal mark wins for its own key, the plugin mark fills the rest', () => {
+  const portalLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22bigmodel%22/%3E';
+  const logos = pluginOAuthProviderLogos([
+    {
+      id: 'zcode', enabled: true, effective_enabled: true, supports_oauth: true,
+      oauth_providers: ['zcode-zai', 'zcode-bigmodel'],
+      logo: INLINE_LOGO,
+      oauth_provider_entries: [
+        { identifier: 'zcode-zai', name: 'Z.ai', logo: INLINE_LOGO },
+        { identifier: 'zcode-bigmodel', name: 'BigModel', logo: portalLogo },
+      ],
+    },
+  ]);
+  // Credential, quota and request rows name one of these keys and must land on the same
+  // artwork the login card drew for it - one credential with two marks would read as two.
+  assert.equal(pluginOAuthLogoFor(logos, 'zcode-bigmodel'), portalLogo);
+  assert.equal(pluginOAuthLogoFor(logos, 'zcode-zai'), INLINE_LOGO);
+  // The plugin id is credential identity, not a login portal, so it keeps the plugin mark.
+  assert.equal(pluginOAuthLogoFor(logos, 'zcode'), INLINE_LOGO);
+
+  // A portal whose own artwork cannot be rendered falls back to the plugin's, not to a gap.
+  const unusable = pluginOAuthProviderLogos([{
+    id: 'zcode', enabled: true, supports_oauth: true, oauth_providers: ['zcode-bigmodel'], logo: INLINE_LOGO,
+    oauth_provider_entries: [{ identifier: 'zcode-bigmodel', name: 'BigModel', logo: 'https://cdn.example.test/bigmodel.svg' }],
+  }]);
+  assert.equal(pluginOAuthLogoFor(unusable, 'zcode-bigmodel'), INLINE_LOGO);
+
+  // Entries alone do not invent a plugin-wide mark: a portal that publishes none and a
+  // plugin with no logo of its own still resolves to nothing, and the console draws its
+  // catalog mark.
+  const portalOnly = pluginOAuthProviderLogos([{
+    id: 'zcode', enabled: true, supports_oauth: true, oauth_providers: ['zcode-zai'],
+    oauth_provider_entries: [{ identifier: 'zcode-zai', name: 'Z.ai', logo: INLINE_LOGO }],
+  }]);
+  assert.equal(pluginOAuthLogoFor(portalOnly, 'zcode-zai'), INLINE_LOGO);
+  assert.equal(pluginOAuthLogoFor(portalOnly, 'zcode'), undefined);
 });
 
 test('pluginOAuthLogoFor: lookup is case and pad insensitive, and misses are empty', () => {
