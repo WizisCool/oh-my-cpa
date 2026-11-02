@@ -283,12 +283,24 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 	for _, spec := range providerConfigFamilies {
 		entries, err := client.EditableConfigAPIKeys(ctx, spec.Family)
 		if err != nil {
-			continue
+			// Pool metadata is optional to this list. Keep the family visible from
+			// CPA's runtime view when only the stored-group read failed; provider
+			// writes still require the editable read and refuse to overwrite it.
+			if entries, err = client.ConfigAPIKeys(ctx, spec.Family); err != nil {
+				continue
+			}
 		}
 		items = append(items, configKeyProviderItems(spec, entries, customNames)...)
 	}
 
-	if entries, err := client.EditableOpenAICompatibility(ctx); err == nil {
+	entries, err := client.EditableOpenAICompatibility(ctx)
+	if err != nil {
+		// The same runtime fallback applies to the OpenAI-compatible list.
+		if runtime, runtimeErr := client.OpenAICompatibility(ctx); runtimeErr == nil {
+			entries, err = runtime.Entries, nil
+		}
+	}
+	if err == nil {
 		for i, entry := range entries {
 			entry = entry.ProviderRuntimeView()
 			id := fmt.Sprintf("%s%d", openAICompatIDPrefix, i)

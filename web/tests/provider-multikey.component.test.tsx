@@ -67,6 +67,55 @@ it.each([true, false])('saves every Codex key and assigns the selected icon to e
   } finally { view.unmount(); }
 });
 
+const renderRotationEditor = () => {
+  const client = createTestQueryClient();
+  client.setQueryData(['management-plugins'], { plugins: [] });
+  return renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><RotationEditor /></ConfigProvider>, { client });
+};
+
+function RotationEditor() {
+  const t = useT();
+  const icons = useProviderIconOverrides();
+  const editor = useProviderManagement({ ...icons, t, toast, settleProviderRow: () => {} });
+  return <>
+    <button onClick={() => {
+      editor.handleOpenEdit({
+        id: 'codex-0', family: 'codex', name: 'Relay', protocol: 'OpenAI Responses',
+        base_url: 'https://relay.test', disabled: false, key_configured: true, auth_index: 'fixture-index',
+        connection_pool: { group_name: 'team', group_size: 2, defaults: { enabled: true } },
+        key_entries: [
+          { index: 0, api_key: 'fixture-key-one', connection_pool: { enabled: false, max_idle_conns_per_host: 0 }, proxy_url: '', weight: 1 },
+          { index: 1, api_key: 'fixture-key-two', proxy_url: '', weight: 1 },
+        ],
+      });
+      // Rotating the key while moving families is the case CPA cannot join back
+      // to the original row by key text.
+      editor.setFormFamily('claude');
+    }}>Load key rotation</button>
+    <ProviderEditorDrawer {...editor} familyDisplayNames={{}} />
+  </>;
+}
+
+it('keeps a key pool override when its key is rotated to another family', async () => {
+  const api = installOmcApi();
+  api.on('PUT', '/management/providers/codex-0', () => ({ status: 'ok', family: 'claude', id: 'claude-0', ids: ['claude-0'] }));
+  const view = renderRotationEditor();
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Load key rotation' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Key #1/ }));
+    fireEvent.change(screen.getByDisplayValue('fixture-key-one'), { target: { value: 'fixture-key-rotated' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.writes('/providers/codex-0')).toHaveLength(1));
+    const body = api.writes('/providers/codex-0')[0].body as Record<string, unknown>;
+    expect(body.family).toBe('claude');
+    expect((body.keys as Record<string, unknown>[])[0]).toMatchObject({
+      api_key: 'fixture-key-rotated',
+      connection_pool: { enabled: false, max_idle_conns_per_host: 0 },
+    });
+    expect((body.keys as Record<string, unknown>[])[1].connection_pool).toBeUndefined();
+  } finally { view.unmount(); }
+});
+
 it('names a coded refusal in the console language', async () => {
   vi.clearAllMocks();
   const api = installOmcApi();

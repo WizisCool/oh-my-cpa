@@ -362,3 +362,45 @@ func TestProviderProtocolChangeDoesNotCopyPoolOverrideToNewKey(t *testing.T) {
 		})
 	}
 }
+
+func TestProviderProtocolChangeKeepsSubmittedPoolWhenKeyRotates(t *testing.T) {
+	for _, target := range []string{"claude", openAICompatibilityFamily} {
+		t.Run(target, func(t *testing.T) {
+			fixture := newProviderTestFixture(t)
+			var groups []map[string]any
+			if err := json.Unmarshal([]byte(`[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":true,"idle-conn-timeout":"300s"},"keys":[{"api-key":"pool-existing","connection-pool":{"enabled":false}},{"api-key":"pool-sibling"}]}]`), &groups); err != nil {
+				t.Fatal(err)
+			}
+			fixture.state.mu.Lock()
+			fixture.state.storedGroups = map[string][]map[string]any{"codex": groups}
+			fixture.state.codexProviders = flattenGroups("codex", groups, nil)
+			fixture.state.mu.Unlock()
+			body := fmt.Sprintf(`{"family":%q,"name":"Moved","base_url":"https://relay.test","keys":[{"api_key":"pool-rotated","connection_pool":{"enabled":false,"max_idle_conns_per_host":0}}]}`, target)
+			resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", body)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("move failed: %d %s", resp.StatusCode, payload)
+			}
+			fixture.state.mu.Lock()
+			defer fixture.state.mu.Unlock()
+			isFound := false
+			for _, group := range fixture.state.storedGroups[target] {
+				for _, raw := range group["keys"].([]any) {
+					key := raw.(map[string]any)
+					if key["api-key"] != "pool-rotated" {
+						continue
+					}
+					isFound = true
+					if !reflect.DeepEqual(key["connection-pool"], map[string]any{"enabled": false, "max-idle-conns-per-host": float64(0)}) {
+						t.Fatalf("rotated key lost its submitted override: %#v", key["connection-pool"])
+					}
+					if group["connection-pool"].(map[string]any)["enabled"] != true {
+						t.Fatal("rotated key lost the source group default")
+					}
+				}
+			}
+			if !isFound {
+				t.Fatal("rotated key missing after move")
+			}
+		})
+	}
+}

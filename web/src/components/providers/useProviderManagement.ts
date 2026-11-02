@@ -664,6 +664,7 @@ export function useProviderManagement({
           id: `key-edit-${i}`,
           connectionPool: readConnectionPoolDraft(k.connection_pool),
           storedConnectionPool: k.connection_pool,
+          storedApiKey: k.api_key || '',
           apiKey: k.api_key || '',
           proxyUrl: k.proxy_url,
           weight: k.weight ?? 1,
@@ -777,12 +778,18 @@ export function useProviderManagement({
       return;
     }
 
-    const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => ({
-      api_key: k.apiKey || '',
-      connection_pool: k.connectionPool ? connectionPoolEdit(k.connectionPool, k.storedConnectionPool) : undefined,
-      proxy_url: k.proxyUrl || '',
-      weight: k.weight,
-    }));
+    const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => {
+      const poolEdit = k.connectionPool ? connectionPoolEdit(k.connectionPool, k.storedConnectionPool) : undefined;
+      const isRotated = k.storedApiKey !== undefined && (k.apiKey || '').trim() !== k.storedApiKey.trim();
+      return {
+        api_key: k.apiKey || '',
+        // A rotated key is a new credential to CPA. Replay the stored override
+        // when the pool was untouched so the new credential keeps the old row's opt-in.
+        connection_pool: poolEdit !== undefined ? poolEdit : isRotated ? (k.storedConnectionPool ?? null) : undefined,
+        proxy_url: k.proxyUrl || '',
+        weight: k.weight,
+      };
+    });
 
     const supportsModelImage = lookupProviderFamily(formFamily)?.supportsModelImage ?? false;
     const modelsPayload: SaveProviderModelItem[] = formModels

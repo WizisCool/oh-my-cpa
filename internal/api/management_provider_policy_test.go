@@ -319,6 +319,16 @@ func TestProviderConnectionPoolGroupAndKeyEdits(t *testing.T) {
 	}
 }
 
+func TestProviderConnectionPoolTrimsIdleTimeout(t *testing.T) {
+	pool, isSet, err := parseProviderPoolEdit(json.RawMessage(`{"idle_conn_timeout":" 60s "}`))
+	if err != nil || !isSet || pool == nil || pool.IdleConnTimeout == nil {
+		t.Fatalf("parse trimmed timeout = %#v, set=%v, err=%v", pool, isSet, err)
+	}
+	if *pool.IdleConnTimeout != "60s" {
+		t.Fatalf("stored timeout = %q, want 60s", *pool.IdleConnTimeout)
+	}
+}
+
 func TestProviderConnectionPoolRejectsInvalidEditsBeforeWriting(t *testing.T) {
 	for _, raw := range []string{`false`, `[]`, `{"unknown":true}`, `{"idle_conn_timeout":"forever"}`, `{"max_idle_conns_per_host":1.5}`} {
 		t.Run(raw, func(t *testing.T) {

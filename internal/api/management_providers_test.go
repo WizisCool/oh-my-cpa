@@ -35,6 +35,9 @@ type providerFakeServerState struct {
 	// Keep persisted v8 groups independent of the normalized runtime lists;
 	// reconstructing storage from runtime hides inheritance regressions.
 	storedGroups map[string][]map[string]any
+	// groupsReadErrors makes the stored v8 group read fail for a family while
+	// its v0 runtime endpoint stays available.
+	groupsReadErrors map[string]int
 	// hooksMu guards the hooks below, which a test installs before issuing any
 	// request and the serving goroutines read per request.
 	hooksMu sync.Mutex
@@ -197,6 +200,14 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 		}
 		state.mu.Lock()
 		defer state.mu.Unlock()
+		const groupsPrefix = "/v8/management/config/api-keys/"
+		if request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, groupsPrefix) {
+			if status := state.groupsReadErrors[strings.TrimPrefix(request.URL.Path, groupsPrefix)]; status != 0 {
+				writer.WriteHeader(status)
+				_, _ = writer.Write([]byte(`{"error":"stored groups unavailable"}`))
+				return
+			}
+		}
 		if serveProviderGroups(writer, request, state.providerList, func(string) { state.putCount++ }, state.storedGroups) {
 			return
 		}
@@ -321,6 +332,34 @@ func TestManagementProvidersEndpoints(t *testing.T) {
 	state.mu.Unlock()
 	if disabledVal != true {
 		t.Fatalf("expected provider disabled true on CPA, got %v", disabledVal)
+	}
+}
+
+func TestManagementProviderListFallsBackWhenStoredGroupsFail(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+	state.mu.Lock()
+	state.groupsReadErrors = map[string]int{
+		"codex":                   http.StatusBadGateway,
+		openAICompatibilityFamily: http.StatusServiceUnavailable,
+	}
+	state.mu.Unlock()
+
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get providers status = %d body %s", resp.StatusCode, payload)
+	}
+	var result struct {
+		Providers []ProviderItemDTO `json:"providers"`
+	}
+	if err := json.Unmarshal(payload, &result); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, provider := range result.Providers {
+		ids[provider.ID] = true
+	}
+	if !ids["codex-0"] || !ids["openai-compat-0"] {
+		t.Fatalf("runtime providers disappeared when stored groups were unavailable: %s", payload)
 	}
 }
 

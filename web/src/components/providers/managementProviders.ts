@@ -21,6 +21,8 @@ export interface ManagementProvidersData {
 export interface FormKeyItem {
   connectionPool?: ConnectionPoolDraft;
   storedConnectionPool?: ProviderConnectionPoolSettings | null;
+  /** The key this row was opened with, used to keep its pool override when the key is rotated. */
+  storedApiKey?: string;
   id: string;
   apiKey?: string;
   proxyUrl?: string;

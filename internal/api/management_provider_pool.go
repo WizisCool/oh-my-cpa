@@ -55,7 +55,9 @@ func parseProviderPoolEdit(raw json.RawMessage) (*management.ConnectionPoolConfi
 		if len(*timeout) > 128 {
 			return nil, false, newProviderWriteErrorWithCode(http.StatusBadRequest, "connection pool timeout is too long", "provider_connection_pool_invalid")
 		}
-		if value := strings.TrimSpace(*timeout); value != "" {
+		value := strings.TrimSpace(*timeout)
+		settings.IdleConnTimeout = &value
+		if value != "" {
 			if _, err := time.ParseDuration(value); err != nil {
 				return nil, false, newProviderWriteErrorWithCode(http.StatusBadRequest, "connection pool timeout must be a duration", "provider_connection_pool_invalid")
 			}
