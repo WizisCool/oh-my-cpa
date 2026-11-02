@@ -166,7 +166,6 @@ export default {
   "pro.none_text": "Tiada",
   "pro.status_disabled": "Dilumpuhkan",
   "pro.status_active": "Aktif",
-  "pro.summary": "{providers} penyedia · {models} model · {keys} kunci · {headers} pengepala",
   "pro.stat_all": "Semua penyedia",
   "pro.stat_attention": "Perlu perhatian",
   "pro.stat_attention_hint": "Penyedia didayakan tanpa kunci, atau dengan kadar kejayaan di bawah {n}% dalam 24 jam lepas",

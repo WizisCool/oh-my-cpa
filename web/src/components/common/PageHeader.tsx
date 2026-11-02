@@ -33,7 +33,11 @@ export function PageHeader({ title, subtitle, actions, mobileActions, children, 
       <div className="terminal-page-heading">
         <h1 className="terminal-title">{title}</h1>
         {subtitle !== undefined && subtitle !== null && subtitle !== '' && (
-          <p className="terminal-subtitle">{subtitle}</p>
+          typeof subtitle === 'string' || typeof subtitle === 'number' ? (
+            <p className="terminal-subtitle">{subtitle}</p>
+          ) : (
+            <div className="terminal-subtitle">{subtitle}</div>
+          )
         )}
         {children}
       </div>

@@ -163,7 +163,6 @@ export default {
   'pro.none_text': '无',
   'pro.status_disabled': '已停用',
   'pro.status_active': '正常',
-  'pro.summary': '{providers} 个提供商 · {models} 个模型 · {keys} 个密钥 · {headers} 个请求头',
   'pro.stat_all': '全部提供商',
   'pro.stat_attention': '需关注',
   'pro.stat_attention_hint': '已启用但未配置密钥，或近 24 小时成功率低于 {n}% 的提供商',

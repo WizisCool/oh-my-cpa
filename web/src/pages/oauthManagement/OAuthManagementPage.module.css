@@ -2,49 +2,6 @@
   padding-bottom: 64px;
 }
 
-.summary-strip {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: var(--text-sm);
-  line-height: 1.4;
-  color: var(--fg-2);
-}
-
-.summary-total {
-  color: var(--fg);
-  font-family: var(--font-mono);
-  font-weight: 550;
-}
-
-.summary-divider {
-  color: var(--meta);
-}
-
-.summary-healthy,
-.summary-disabled,
-.summary-attention {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-}
-
-.summary-healthy { color: var(--success); }
-.summary-disabled { color: var(--meta); }
-.summary-attention { color: var(--warn); }
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: currentColor;
-}
-
 .toolbar {
   margin: 14px 0;
 }

@@ -28,6 +28,7 @@ import type { ClientKeyUsageItem } from '../types/providers';
 import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { SecretInput } from '../components/common/SecretInput';
+import { SummaryStrip } from '../components/common/SummaryStrip';
 import styles from './ApiKeysPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
@@ -406,12 +407,12 @@ export const ApiKeysPage: React.FC = () => {
   const canWrite = !isDemo && Boolean(apiKeysField) && Boolean(serverDoc);
 
   const summary = keyCount > 0 ? (
-    <span className={styles['summary']}>
-      <span data-testid="keys-count">{t('cfg.api_keys_count', { n: keyCount })}</span>
+    <SummaryStrip>
+      <SummaryStrip.Total testId="keys-count">{t('cfg.api_keys_count', { n: keyCount })}</SummaryStrip.Total>
       {overview.counts && (
         <>
-          <span aria-hidden="true">·</span>
-          <span>{t('keys.summary_active', { n: overview.counts.active })}</span>
+          <SummaryStrip.Divider />
+          <SummaryStrip.Item tone="healthy">{t('keys.summary_active', { n: overview.counts.active })}</SummaryStrip.Item>
         </>
       )}
       {saveMutation.isPending && (
@@ -419,7 +420,7 @@ export const ApiKeysPage: React.FC = () => {
           <SyncOutlined spin /> {t('keys.applying')}
         </span>
       )}
-    </span>
+    </SummaryStrip>
   ) : undefined;
 
   const addButton = (
@@ -439,7 +440,6 @@ export const ApiKeysPage: React.FC = () => {
     <div className="terminal-page terminal-page-stack keys-page">
       <PageHeader
         title={t('keys.title')}
-        subtitle={summary}
         mobileActions={(
           <>
             <ActionMenu><RefreshButton isRefreshing={isRefreshing} onRefresh={refreshAll} /></ActionMenu>
@@ -452,7 +452,9 @@ export const ApiKeysPage: React.FC = () => {
             {addButton}
           </>
         )}
-      />
+      >
+        {summary}
+      </PageHeader>
 
       {isBlocked && (
         <LoadFailure

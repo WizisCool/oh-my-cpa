@@ -437,7 +437,7 @@ a { color: inherit; }
    as a group, so a long title in one language never pushes a button off the page. */
 .terminal-page-heading { min-width: 0; }
 .terminal-page-heading .terminal-title { margin: 0; line-height: 32px; }
-.terminal-page-heading .terminal-subtitle { margin-top: 2px; }
+.terminal-page-heading .terminal-subtitle { margin-top: 6px; }
 .terminal-page-actions {
   display: flex;
   align-items: center;
@@ -1252,7 +1252,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     padding: 8px 20px 56px;
   }
 }
-.terminal-subtitle { margin: 4px 0 0; color: var(--muted); font-size: var(--text-md); }
+.terminal-subtitle { margin: 6px 0 0; color: var(--fg-2); font-size: var(--text-sm); line-height: 1.4; font-variant-numeric: tabular-nums; }
 /* Status pips: 7×7, 2px radius. Both vocabularies are covered —
    the chart tone names and the status names — because a pip that
    matches no rule silently falls back to grey, which is how a failed
@@ -2461,7 +2461,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .terminal-page-head { position: relative; }
   .terminal-page-head > .terminal-page-actions { margin-inline-start: auto; }
   .terminal-page-heading:not(:has(> :not(.terminal-title))) { position: absolute; }
-  .terminal-page-head .terminal-subtitle { margin-top: 0; }
+  .terminal-page-head .terminal-subtitle,
+  .terminal-page-head [class*="summary-strip"] { margin-top: 0; }
   .terminal-page-head:not(:has(.terminal-page-actions, .request-actions, .terminal-page-heading > :not(.terminal-title))) { display: contents; }
   .terminal-page-stack { gap: 12px; }
   .terminal-page-stack > .terminal-page-head { margin-bottom: 0; }
