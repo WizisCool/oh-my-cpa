@@ -20,7 +20,7 @@ import {
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
-import { credentialStatusOf, compareSections, quotaCellsOf, quotaFamiliesOf, sortByQuotaColumn } from '../web/src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaFamiliesOf, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections } from '../web/src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../web/src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../web/src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../web/src/components/authFiles/authFileLogic.ts';
@@ -569,19 +569,19 @@ const quotaRecord = (name: string, windows: QuotaWindow[], provider = 'antigravi
 test('section columns: each family once, each period a column, in the order a reader compares', () => {
   const group = (name: string, bucket: string, hours: number): QuotaWindow => ({ id: `ag_${name}_${bucket}`, label: `${name} · ${hours === 5 ? '5小时限制 (5-Hour)' : '每周限制 (Weekly)'}`, scope: 'group', period_hours: hours });
   const cases: Array<[string, QuotaWindow[][], Array<[string | undefined, string[]]>]> = [
-    ['antigravity groups, weekly listed first, Argon weekly only', [[
+    ['antigravity groups, weekly listed first, Argon weekly only (Claude and GPT excluded from list)', [[
       group('Gemini models', 'week', 168), group('Gemini models', '5h', 5),
       group('Claude and GPT models', 'week', 168), group('Claude and GPT models', '5h', 5),
       group('Gemini 4 Argon', 'week', 168),
-    ]], [['Gemini', ['5h', 'weekly']], ['Claude and GPT', ['5h', 'weekly']], ['Gemini 4 Argon', ['weekly']]]],
+    ]], [['Gemini', ['5h', 'weekly']], ['Gemini 4 Argon', ['weekly']]]],
     ['a group only one credential reports still gets its column', [
       [group('Gemini models', '5h', 5)],
       [group('Gemini models', '5h', 5), group('Gemini 4 Argon', 'week', 168)],
     ], [['Gemini', ['5h']], ['Gemini 4 Argon', ['weekly']]]],
     ['a group no credential reports gets no column', [
-      [group('Gemini models', '5h', 5), group('Claude and GPT models', '5h', 5)],
-      [group('Gemini models', '5h', 5), group('Claude and GPT models', '5h', 5)],
-    ], [['Gemini', ['5h']], ['Claude and GPT', ['5h']]]],
+      [group('Gemini models', '5h', 5)],
+      [group('Gemini models', '5h', 5)],
+    ], [['Gemini', ['5h']]]],
     ['a second weekly limit in the plan is its own column, not an overwrite', [[
       { id: 'five_hour', label: '5小时滚动用量 (5-Hour)', scope: 'standard', period_hours: 5 },
       { id: 'seven_day', label: '每周总用量上限 (Weekly)', scope: 'standard', period_hours: 168 },
@@ -643,4 +643,34 @@ test('renewal evidence stays independent of healthy quota, SIWC and inference', 
   assert.equal(renewalKind(file({ requires_sign_in: true })), 'reauth');
   assert.equal(renewalKind(file({ recovery_supported: false })), 'unknown');
   assert.equal(renewalKind(file({ inference_verified: true, adopted: true })), 'unknown');
+});
+
+test('antigravity list excludes Claude and GPT while drawer preserves all windows', () => {
+  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT'), true);
+  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT models'), true);
+  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT-Next'), false);
+  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Gemini'), false);
+  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Gemini 4 Argon'), false);
+  assert.equal(isListQuotaFamilyExcluded('claude', 'Claude and GPT'), false);
+
+  const windows: QuotaWindow[] = [
+    { id: 'ag_gemini_5h', label: 'Gemini models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5 },
+    { id: 'ag_gemini_week', label: 'Gemini models · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
+    { id: 'ag_claude_5h', label: 'Claude and GPT models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5 },
+    { id: 'ag_claude_week', label: 'Claude and GPT models · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
+    { id: 'ag_argon_week', label: 'Gemini 4 Argon · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
+  ];
+  const rec = quotaRecord('ag-1', windows, 'antigravity');
+  const sections = buildCredentialSections([rec], [rec]);
+  assert.equal(sections.length, 1);
+  const agSection = sections[0];
+  const familyLabels = agSection.families.map((f) => f.label);
+  // In the list view: only Gemini and Gemini 4 Argon are present, Claude and GPT is excluded
+  assert.deepEqual(familyLabels, ['Gemini', 'Gemini 4 Argon']);
+
+  // In the drawer: orderQuotaWindows preserves all windows including Claude and GPT
+  const drawerWindows = orderQuotaWindows(windows);
+  assert.equal(drawerWindows.length, 5);
+  const drawerLabels = drawerWindows.map((w) => w.label);
+  assert.equal(drawerLabels.some((l) => l.includes('Claude and GPT')), true);
 });

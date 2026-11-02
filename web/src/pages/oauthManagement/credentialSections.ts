@@ -101,15 +101,33 @@ export function quotaCellsOf(windows: QuotaWindow[] | undefined): Map<string, Qu
   return cells;
 }
 
+/**
+ * Whether a quota family belongs in the credential list table.
+ * Antigravity's "Claude and GPT" group quota is excluded from the list view so that
+ * Gemini and Gemini 4 Argon can comfortably tile the available space without column squeeze;
+ * the full breakdown remains viewable in the credential drawer's Quota tab.
+ */
+export function isListQuotaFamilyExcluded(provider: string | undefined, label: string | undefined): boolean {
+  if (provider === 'antigravity' && label && /^claude and gpt(?:\s+models)?$/i.test(label.trim())) {
+    return true;
+  }
+  return false;
+}
+
 /** The section's families in the order its credentials report them, each with its columns. */
-export function quotaFamiliesOf(records: OAuthWorkspaceRecord[]): QuotaFamilyHeader[] {
+export function quotaFamiliesOf(records: OAuthWorkspaceRecord[], provider?: string): QuotaFamilyHeader[] {
+  const sectionProvider = provider ?? records[0]?.displayProvider ?? records[0]?.file?.provider;
   const families = new Map<string, QuotaFamilyHeader & { order: Map<string, number> }>();
   for (const record of records) {
     for (const [key, window] of quotaCellsOf(record.quota?.windows)) {
+      const label = familyLabel(window);
+      if (isListQuotaFamilyExcluded(sectionProvider ?? record.displayProvider, label)) {
+        continue;
+      }
       const familyKey = key.slice(0, key.lastIndexOf('|'));
       let family = families.get(familyKey);
       if (!family) {
-        family = { key: familyKey, scope: window.scope, label: familyLabel(window), columns: [], order: new Map() };
+        family = { key: familyKey, scope: window.scope, label, columns: [], order: new Map() };
         families.set(familyKey, family);
       }
       if (family.order.has(key)) continue;
@@ -172,7 +190,7 @@ export function buildCredentialSections(pageRecords: OAuthWorkspaceRecord[], vis
     .sort(([left], [right]) => compareSections(left, right))
     .map(([provider, records]) => {
       const providerRecords = visibleRecords.filter((record) => record.displayProvider === provider);
-      return { provider, records, visibleRecords: providerRecords, families: quotaFamiliesOf(providerRecords) };
+      return { provider, records, visibleRecords: providerRecords, families: quotaFamiliesOf(providerRecords, provider) };
     });
 }
 

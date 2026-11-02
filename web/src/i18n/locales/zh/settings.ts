@@ -179,6 +179,7 @@ export default {
   'omc.refresh_needed': '需要刷新',
   'omc.quota_family_plan': '套餐额度',
   'omc.quota_family_code_review': '代码审查',
+  'omc.quota_family_period': '{family} ({period})',
   'omc.section_count': '{n} 个凭据',
   'omc.section_select': '选择本页全部 {provider} 凭据',
   'omc.col_reset_credits': '可用重置',

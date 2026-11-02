@@ -126,20 +126,25 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
   // it: the period alone under a single plan family, the family and the period otherwise.
   const phoneColumns = section.families.map((family) => family.columns.map((column) => ({
     column,
-    phoneLabel: hasGroupedHeader ? `${familyTitle(family, t)} · ${periodTitle(column, t)}` : periodTitle(column, t),
+    phoneLabel: hasGroupedHeader
+      ? t('omc.quota_family_period', { family: familyTitle(family, t), period: periodTitle(column, t) })
+      : periodTitle(column, t),
   })));
 
-  const periodHeader = (column: QuotaColumn, isFirstOfFamily: boolean) => {
+  const periodHeader = (column: QuotaColumn, isFirstOfFamily: boolean, family?: QuotaFamilyHeader) => {
     const isSorted = columnSort?.key === column.key;
-    const label = periodTitle(column, t);
+    const periodLabel = periodTitle(column, t);
+    const fullTooltip = family && hasGroupedHeader
+      ? t('omc.quota_family_period', { family: familyTitle(family, t), period: periodLabel })
+      : periodLabel;
     return (
       <th
         key={column.key}
         className={clsx(styles['th-period'], isFirstOfFamily && styles['th-divided'])}
         aria-sort={isSorted ? (columnSort.direction === 'asc' ? 'ascending' : 'descending') : undefined}
       >
-        <button type="button" className={styles['sort-button']} onClick={() => onSort(column.key)} title={label}>
-          <span className={styles['sort-label']}>{label}</span>
+        <button type="button" className={styles['sort-button']} onClick={() => onSort(column.key)} title={fullTooltip}>
+          <span className={styles['sort-label']}>{periodLabel}</span>
           {isSorted && (columnSort.direction === 'asc' ? <ArrowUpOutlined /> : <ArrowDownOutlined />)}
         </button>
       </th>
@@ -149,12 +154,27 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
   return (
     <section className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
       <header className={styles.head}>
-        <span className={styles['head-icon']}>
-          <CredentialMark provider={section.provider} pluginLogos={pluginLogos} size={18} />
-        </span>
-        <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
-        <span className={styles['head-count']}>{t('omc.section_count', { n: section.records.length })}</span>
-
+        <div className={styles['head-info']}>
+          <span className={styles['head-icon']}>
+            <CredentialMark provider={section.provider} pluginLogos={pluginLogos} size={18} />
+          </span>
+          <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
+          <span className={styles['head-count']}>{t('omc.section_count', { n: section.records.length })}</span>
+        </div>
+        {selectable.length > 0 && (
+          <div className={styles['head-mobile-select']}>
+            <Checkbox
+              checked={selectable.length > 0 && selectedCount === selectable.length}
+              indeterminate={selectedCount > 0 && selectedCount < selectable.length}
+              onChange={(event) => actions.onSelect(selectable, event.target.checked)}
+              aria-label={t('omc.section_select', { provider: title ?? metadata.label })}
+            >
+              <span className={styles['head-mobile-select-label']}>
+                {selectedCount > 0 ? `${selectedCount}/${selectable.length}` : t('pro.select_all')}
+              </span>
+            </Checkbox>
+          </div>
+        )}
       </header>
       <div className={styles.scroll}>
         <table className={styles.table}>
@@ -186,8 +206,14 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
               <th rowSpan={headerRows}>{t('pro.col_switch')}</th>
               {hasGroupedHeader
                 ? section.families.map((family) => (
-                  <th key={family.key} colSpan={family.columns.length} className={styles['th-family']} scope="colgroup" title={familyTitle(family, t)}>
-                    {familyTitle(family, t)}
+                  <th
+                    key={family.key}
+                    colSpan={family.columns.length}
+                    className={clsx(styles['th-family'], styles['th-divided'])}
+                    scope="colgroup"
+                    title={familyTitle(family, t)}
+                  >
+                    <span className={styles['family-title']}>{familyTitle(family, t)}</span>
                   </th>
                 ))
                 : columns.map((column, index) => periodHeader(column, index === 0))}
@@ -198,7 +224,9 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
             </tr>
             {hasGroupedHeader && (
               <tr>
-                {section.families.map((family) => family.columns.map((column, index) => periodHeader(column, index === 0)))}
+                {section.families.map((family) =>
+                  family.columns.map((column, index) => periodHeader(column, index === 0, family))
+                )}
               </tr>
             )}
           </thead>
