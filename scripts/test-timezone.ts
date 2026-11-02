@@ -19,9 +19,6 @@ test('timezone', () => {
   assert.equal(dayjs.unix(instant / 1000).valueOf(), instant);
   configureTimeZone('America/New_York', 'Asia/Shanghai');
   assert.equal(dayjs(instant).format('HH:mm Z'), '13:45 -05:00');
-  assert.equal(formatGatewayTimestamp('2026-01-02 02:45:00'), '2026-01-01 13:45:00');
-  assert.equal(formatGatewayTimestamp('2026-01-01T18:45:00Z'), '2026-01-01 13:45:00');
-  assert.equal(formatGatewayTimestamp('not a timestamp'), 'not a timestamp');
   assert.equal(dayjs('2026-03-08').endOf('day').valueOf() - dayjs('2026-03-08').startOf('day').valueOf() + 1, 23 * 3600000);
   assert.equal(dayjs('2026-11-01').endOf('day').valueOf() - dayjs('2026-11-01').startOf('day').valueOf() + 1, 25 * 3600000);
   assert.equal(dayjs('15:30', 'HH:mm').format('HH:mm'), '15:30');
@@ -87,4 +84,47 @@ test('timezone', () => {
   assert.equal(parseLogLine(isoLog).raw, isoLog);
   const offsetLog = '[2026-01-02 02:45:00+08:00] [req] [INFO] [app] complete';
   assert.equal(parseLogLine(offsetLog).timestamp, '2026-01-02 02:45:00+08:00');
+});
+
+test('gateway log timestamps without offsets preserve their source wall clock', () => {
+  const raw = '[2026-11-02 14:12:18] [req-440] [warn ] [gin_logger.go:111] 401 | 0s | 192.0.2.1 | GET "/v1/responses"';
+  const parts = parseLogLine(raw);
+  assert.ok(parts.timestamp);
+
+  try {
+    for (const [selected, server] of [
+      ['Asia/Shanghai', 'UTC'],
+      ['America/New_York', 'Asia/Shanghai'],
+      ['', 'Asia/Kathmandu'],
+    ]) {
+      configureTimeZone(selected, server);
+      assert.equal(formatGatewayTimestamp(parts.timestamp), '2026-11-02 14:12:18');
+      assert.equal(formatGatewayTimestamp('2026-11-02T14:12:18.123'), '2026-11-02T14:12:18.123');
+      assert.equal(parts.raw, raw);
+    }
+  } finally {
+    configureTimeZone('', 'UTC');
+  }
+});
+
+test('gateway timestamps with explicit offsets convert to the display timezone', () => {
+  try {
+    configureTimeZone('Asia/Shanghai', 'UTC');
+    assert.equal(formatGatewayTimestamp('2026-11-02T14:12:18Z'), '2026-11-02 22:12:18');
+    assert.equal(formatGatewayTimestamp('2026-11-02T14:12:18+08:00'), '2026-11-02 14:12:18');
+    assert.equal(formatGatewayTimestamp('2026-11-02 14:12:18+0800'), '2026-11-02 14:12:18');
+    assert.equal(formatGatewayTimestamp('2026-11-02T14:12:18-05:00'), '2026-11-03 03:12:18');
+
+    configureTimeZone('America/New_York', 'Asia/Shanghai');
+    assert.equal(formatGatewayTimestamp('2026-01-01T18:45:00Z'), '2026-01-01 13:45:00');
+    assert.equal(formatGatewayTimestamp('2026-01-02 02:45:00+08:00'), '2026-01-01 13:45:00');
+
+    configureTimeZone('', 'Asia/Kathmandu');
+    assert.equal(formatGatewayTimestamp('2026-11-02T14:12:18Z'), '2026-11-02 19:57:18');
+    for (const invalid of ['not a timestamp', 'not a timestampZ', '2026-11-02T14:12:18+99:00']) {
+      assert.equal(formatGatewayTimestamp(invalid), invalid);
+    }
+  } finally {
+    configureTimeZone('', 'UTC');
+  }
 });
