@@ -439,5 +439,15 @@ describe('PageHeader', () => {
     expect(container.querySelector('[class*="summary-strip"]')).not.toBeNull();
     expect(screen.getByText('共 6 个')).toBeTruthy();
   });
+
+  it('renders a rich subtitle node in a div', () => {
+    const { container } = render(
+      <PageHeader title="OAuth 管理" subtitle={<SummaryStrip total="共 6 个" />} />,
+    );
+
+    const subtitle = container.querySelector('.terminal-subtitle');
+    expect(subtitle?.tagName.toLowerCase()).toBe('div');
+    expect(subtitle?.querySelector('[class*="summary-strip"]')).not.toBeNull();
+  });
 });
 

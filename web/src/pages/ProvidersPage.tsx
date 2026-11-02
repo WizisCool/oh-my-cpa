@@ -235,10 +235,7 @@ export const ProvidersPage: React.FC = () => {
 
   const totalProviders = providers.length;
   const isProviderEnabled = (p: typeof providers[number]) => statusQueue.targetFor(p.id) ?? !p.disabled;
-  const activeHealthyCount = providers.filter((p) => {
-    const enabled = isProviderEnabled(p);
-    return enabled && !needsAttention(p, enabled, traffic?.get(p.id));
-  }).length;
+  const activeCount = providers.filter((p) => isProviderEnabled(p)).length;
   const attentionCount = providers.filter((p) => {
     const enabled = isProviderEnabled(p);
     return needsAttention(p, enabled, traffic?.get(p.id));
@@ -252,7 +249,7 @@ export const ProvidersPage: React.FC = () => {
       </SummaryStrip.Total>
       <SummaryStrip.Divider />
       <SummaryStrip.Item tone="healthy">
-        {t('af.meta_active', { n: providersLoading ? '—' : activeHealthyCount })}
+        {t('af.meta_active', { n: providersLoading ? '—' : activeCount })}
       </SummaryStrip.Item>
       {(!providersLoading && attentionCount > 0) && (
         <>
