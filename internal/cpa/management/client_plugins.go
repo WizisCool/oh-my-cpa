@@ -50,6 +50,20 @@ type PluginItem struct {
 	ConfigFields     []PluginConfigField `json:"config_fields,omitempty"`
 	Menus            []PluginMenu        `json:"menus,omitempty"`
 	Metadata         *PluginMetadata     `json:"metadata,omitempty"`
+	// OAuthProviderEntries is what CPA v8.0.51+ publishes next to the bare
+	// identifiers: the name and logo each login portal declares for itself. A
+	// plugin leaves either empty and CPA fills it from its own metadata, so a
+	// declared entry always carries both.
+	OAuthProviderEntries []PluginOAuthProviderEntry `json:"oauth_provider_entries,omitempty"`
+}
+
+// PluginOAuthProviderEntry is one login portal a plugin declares, with the display
+// text it publishes for that portal alone. The identifier is an upstream identity and
+// is matched case-insensitively; name and logo are presentation.
+type PluginOAuthProviderEntry struct {
+	Identifier string `json:"identifier"`
+	Name       string `json:"name,omitempty"`
+	Logo       string `json:"logo,omitempty"`
 }
 
 // PluginMenu is one page a loaded plugin registers for a management console: a GET

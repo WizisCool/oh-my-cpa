@@ -17,8 +17,11 @@ Plugin login discovery follows the identifiers declared in the installed-plugin 
 bounded by the [plugin DTO projection](../internal/api/management_plugin_projection.go).
 The [shared identity resolver](../web/src/types/pluginOAuthProviders.ts) distinguishes
 login entries from their owning plugin's credential identity and branding, while retaining
-older single-entry declarations. A plugin's installed page takes precedence over requesting
-an interactive login; CPA still owns login execution and account matching.
+older single-entry declarations. A plugin that publishes `oauth_provider_entries` names
+and draws each login portal for itself; the plugin-wide logo remains the fallback, so a
+credential, quota or request row that only knows a provider key resolves the same artwork
+the login card did. A plugin's installed page takes precedence over requesting an
+interactive login; CPA still owns login execution and account matching.
 
 Plugin-store translations are optional publisher metadata, not a plugin page's
 language or installation identity. The [locale projection](../internal/api/management_plugin_projection.go)

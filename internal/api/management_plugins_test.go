@@ -147,7 +147,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			state.routeCalls = append(state.routeCalls, pluginRouteCall{method: request.Method, path: path})
 			_, _ = writer.Write([]byte(`{"secret":"raw-core-document"}`))
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
-			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","oauth_providers":["logger-oauth"," Logger-Secondary ","logger-oauth","bad/path"],"supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level","default":"info"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
+			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","oauth_providers":["logger-oauth"," Logger-Secondary ","logger-oauth","bad/path"],"oauth_provider_entries":[{"identifier":" LOGGER-Oauth ","name":"Logger Portal","logo":"https://example.com/portal.png"},{"identifier":"logger-secondary"},{"identifier":"logger-oauth","name":"Duplicate","logo":"https://example.com/other.png"},{"identifier":"bad/path","name":"Bad","logo":"https://example.com/bad.png"}],"supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level","default":"info"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
 			if state.hasBareInstall {
 				list = strings.Replace(list, `"plugins":[`, `"plugins":[{"id":"installed","path":"/srv/cpa/plugins/installed.so","registered":true},`, 1)
 			}
@@ -306,6 +306,24 @@ func TestPluginsLifecycle(t *testing.T) {
 	if len(providers) != 2 || providers[0] != "logger-oauth" || providers[1] != "logger-secondary" {
 		t.Fatalf("oauth_providers = %#v, want distinct valid declared login identifiers", plugin["oauth_providers"])
 	}
+	// Each login portal carries the display text the plugin published for it: the
+	// identifier is normalized and deduplicated the way the identifier list is, while the
+	// name is kept as declared and the logo is inlined rather than forwarded.
+	entries, _ := plugin["oauth_provider_entries"].([]any)
+	if len(entries) != 2 {
+		t.Fatalf("oauth_provider_entries = %#v, want one entry per usable declared identifier", plugin["oauth_provider_entries"])
+	}
+	first, _ := entries[0].(map[string]any)
+	if first["identifier"] != "logger-oauth" || first["name"] != "Logger Portal" {
+		t.Fatalf("entry = %#v, want the normalized identifier with the declared name", entries[0])
+	}
+	assertDeclaredKeys(t, "plugin oauth provider entry", first, []string{"identifier", "name", "logo"})
+	if entryLogo, _ := first["logo"].(string); !strings.HasPrefix(entryLogo, "data:image/png;base64,") {
+		t.Fatalf("entry logo = %q, want the portal's own mark inlined", first["logo"])
+	}
+	if second, _ := entries[1].(map[string]any); second["identifier"] != "logger-secondary" {
+		t.Fatalf("entry = %#v, want the portal that published no text of its own kept as its identifier", entries[1])
+	}
 	// The plugin declares its logo on an external host, and the console must not send
 	// the browser there: the field carries inline artwork instead. Its absence here
 	// would mean the tab, the cards and the request rows fall back to a catalog mark
@@ -334,7 +352,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	// decoding CPA's document cannot reach a caller without a decision here.
 	assertDeclaredKeys(t, "plugin", plugin, []string{
 		"id", "path", "configured", "registered", "enabled", "effective_enabled", "supports_oauth",
-		"oauth_provider", "oauth_providers", "supports_quota", "quota_provider", "pages", "logo", "repository_url", "config_fields", "metadata",
+		"oauth_provider", "oauth_providers", "oauth_provider_entries", "supports_quota", "quota_provider", "pages", "logo", "repository_url", "config_fields", "metadata",
 	})
 	// Of the menus the plugin registers, only a resource under its own prefix is a
 	// page: the host serves nothing else, so nothing else may be listed as openable.
@@ -682,6 +700,58 @@ func TestPluginOAuthProviderProjectionIsBounded(t *testing.T) {
 	legacy := projectPluginItem(management.PluginItem{ID: "old-plugin", OAuthProvider: "legacy-login"})
 	if legacy.OAuthProvider != "legacy-login" || len(legacy.OAuthProviders) != 0 {
 		t.Fatalf("legacy plugin = %#v, want no inferred login identifiers", legacy)
+	}
+}
+
+func TestPluginOAuthProviderEntriesKeepDisplayTextAsDeclared(t *testing.T) {
+	entries := []management.PluginOAuthProviderEntry{
+		{Identifier: " Bad/Path ", Name: "Dropped", Logo: "https://example.com/bad.png"},
+		{Identifier: strings.Repeat("p", pluginTextLimit+1), Name: "Dropped"},
+		{Identifier: " Portal-One ", Name: " Z.ai ", Logo: "data:image/svg+xml,one"},
+		{Identifier: "PORTAL-ONE", Name: "Duplicate", Logo: "data:image/svg+xml,duplicate"},
+		{Identifier: "portal-two", Name: strings.Repeat("n", pluginTextLimit+1), Logo: "data:image/svg+xml,two"},
+		{Identifier: "portal-three", Name: "BigModel"},
+	}
+	projected := projectPluginItem(management.PluginItem{ID: "portals", OAuthProviderEntries: entries})
+	if len(projected.OAuthProviderEntries) != 3 {
+		t.Fatalf("entries = %#v, want one entry per usable distinct identifier", projected.OAuthProviderEntries)
+	}
+	// A name is display text, not an identity: it keeps its case and its surrounding text
+	// is trimmed, and an oversized one is dropped rather than cut into a label the plugin
+	// never wrote.
+	first := projected.OAuthProviderEntries[0]
+	if first.Identifier != "portal-one" || first.Name != "Z.ai" || first.Logo != "data:image/svg+xml,one" {
+		t.Fatalf("entry = %#v, want the lowercased identifier and the declared name and logo", first)
+	}
+	if second := projected.OAuthProviderEntries[1]; second.Identifier != "portal-two" || second.Name != "" {
+		t.Fatalf("entry = %#v, want an oversized name dropped rather than truncated", second)
+	}
+	if third := projected.OAuthProviderEntries[2]; third.Name != "BigModel" || third.Logo != "" {
+		t.Fatalf("entry = %#v, want the name kept with no inferred logo", third)
+	}
+	// The browser loads whatever logo this field carries by itself, so a URL is not one:
+	// the inliner that normally rewrites it does not run in a deployment that fetches
+	// nothing a plugin names, and this projection is what remains between the two.
+	for _, logo := range []string{
+		"https://cdn.example.com/portal.png",
+		"//cdn.example.com/portal.png",
+		"/assets/portal.png",
+		"javascript:alert(1)",
+		"data:text/html,<script/>",
+	} {
+		refused := projectPluginItem(management.PluginItem{ID: "portals", OAuthProviderEntries: []management.PluginOAuthProviderEntry{
+			{Identifier: "portal-one", Logo: logo},
+		}})
+		if entry := refused.OAuthProviderEntries[0]; entry.Logo != "" {
+			t.Fatalf("entry logo = %q, want %q refused as unloadable artwork", entry.Logo, logo)
+		}
+	}
+	for index := 0; index < pluginListLimit+2; index++ {
+		entries = append(entries, management.PluginOAuthProviderEntry{Identifier: fmt.Sprintf("bulk-%d", index)})
+	}
+	bounded := projectPluginItem(management.PluginItem{ID: "portals", OAuthProviderEntries: entries})
+	if len(bounded.OAuthProviderEntries) != pluginListLimit {
+		t.Fatalf("entries = %d, want the bounded list", len(bounded.OAuthProviderEntries))
 	}
 }
 

@@ -7,6 +7,48 @@ function collectDeclaredPluginOAuthProviders(plugin: PluginItem): string[] {
     .map((id) => id.trim().toLowerCase()).filter(Boolean))];
 }
 
+/**
+ * The display text a plugin publishes for each login portal it declares, keyed by
+ * provider key.
+ *
+ * A multi-portal plugin fronts several brands with one credential shape, and the bare
+ * identifier is a machine key, not a label: `zcode-bigmodel` is where a card is sent,
+ * not what the operator calls the portal. CPA v8.0.51+ publishes that per portal, and
+ * the key is the normalized identifier because that is what a card or a credential row
+ * is built for.
+ *
+ * Only a usable name or an inline logo is kept, so "this portal declares nothing" and
+ * "this portal's artwork cannot be rendered" both leave the entry absent and the caller
+ * on the plugin-wide fallback. An entry naming a portal the plugin did not declare as an
+ * identifier is discarded: nothing is drawn per entry, so it would have nowhere to appear.
+ */
+export interface PluginOAuthProviderEntryText {
+  name?: string;
+  logo?: string;
+}
+
+export type PluginOAuthProviderEntries = Record<string, PluginOAuthProviderEntryText>;
+
+export function pluginOAuthProviderEntryTexts(plugins: PluginItem[] | undefined): PluginOAuthProviderEntries {
+  const entries = Object.create(null) as PluginOAuthProviderEntries;
+  for (const plugin of plugins ?? []) {
+    const declared = new Set(pluginOAuthProviderIds(plugin));
+    for (const entry of plugin.oauth_provider_entries ?? []) {
+      const key = (entry.identifier ?? '').trim().toLowerCase();
+      if (!declared.has(key) || entries[key]) continue;
+      const name = (entry.name ?? '').trim();
+      const logo = (entry.logo ?? '').trim();
+      const isLogoUsable = isRenderableLogoURL(logo);
+      if (!name && !isLogoUsable) continue;
+      entries[key] = {
+        ...(name ? { name } : {}),
+        ...(isLogoUsable ? { logo } : {}),
+      };
+    }
+  }
+  return entries;
+}
+
 /** Login portals are declared identifiers, not aliases for the owning plugin. */
 export function pluginOAuthProviderIds(plugin: PluginItem): string[] {
   const declared = collectDeclaredPluginOAuthProviders(plugin);
@@ -68,7 +110,14 @@ export function pluginLogoArtworks(logo?: string): { url: string; isMono: boolea
 
 /**
  * pluginOAuthProviderLogos maps each plugin-registered OAuth provider to the logo
- * that plugin publishes.
+ * that plugin publishes for it.
+ *
+ * A plugin may publish one mark for itself and, since CPA v8.0.51, a mark per login
+ * portal it declares. The portal's own mark is the more specific answer and wins for
+ * its key; the plugin-wide logo fills the plugin id and every other key it registers.
+ * One map serves every surface - the login card, the credential and quota rows, the
+ * request records - because they all name the same identity by provider key, and two
+ * marks for one credential would read as two credentials.
  *
  * A disabled plugin still contributes: switching a plugin off does not delete the
  * credentials it registered, and those credentials keep appearing on the credential,
@@ -86,11 +135,13 @@ export function pluginLogoArtworks(logo?: string): { url: string; isMono: boolea
 export function pluginOAuthProviderLogos(plugins: PluginItem[] | undefined): PluginOAuthLogos {
   const logos = Object.create(null) as PluginOAuthLogos;
   for (const plugin of plugins ?? []) {
-    const logo = (plugin.logo || plugin.metadata?.logo || '').trim();
-    if (!isRenderableLogoURL(logo)) continue;
+    const pluginLogo = (plugin.logo || plugin.metadata?.logo || '').trim();
+    const fallback = isRenderableLogoURL(pluginLogo) ? pluginLogo : '';
+    const entries = pluginOAuthProviderEntryTexts([plugin]);
 
     for (const key of pluginOAuthProviderKeys(plugin)) {
-      if (!logos[key]) {
+      const logo = entries[key]?.logo || fallback;
+      if (logo && !logos[key]) {
         logos[key] = logo;
       }
     }
