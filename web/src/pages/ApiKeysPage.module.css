@@ -2,14 +2,6 @@
    The tiles and the toolbar are the provider list's own (StatTiles, `.logs-toolbar`), so the
    Gateway pages that summarise their rows before listing them read as one console. */
 
-.summary {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-variant-numeric: tabular-nums;
-}
-
 .saving {
   display: inline-flex;
   align-items: center;

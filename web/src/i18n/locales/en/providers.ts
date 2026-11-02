@@ -166,7 +166,6 @@ export default {
   'pro.none_text': 'None',
   'pro.status_disabled': 'Disabled',
   'pro.status_active': 'Active',
-  'pro.summary': '{providers} providers · {models} models · {keys} keys · {headers} headers',
   'pro.stat_all': 'All providers',
   'pro.stat_attention': 'Needs attention',
   'pro.stat_attention_hint': 'Enabled providers with no key, or with a success rate below {n}% over the last 24 hours',

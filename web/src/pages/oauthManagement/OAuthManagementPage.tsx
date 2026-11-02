@@ -39,6 +39,7 @@ import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
 import { useCredentialRename } from '../../components/authFiles/useCredentialRename';
 import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
+import { SummaryStrip } from '../../components/common/SummaryStrip';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
 import { CredentialSection, type CredentialRowActions } from './CredentialSection';
@@ -614,43 +615,39 @@ export const OAuthManagementPage: React.FC = () => {
           </>
         )}
       >
-        <div className={styles['summary-strip']}>
-          <span className={styles['summary-total']}>
+        <SummaryStrip>
+          <SummaryStrip.Total>
             {t('af.meta_total', { n: knownTotal })}
-          </span>
-          <span className={styles['summary-divider']}>·</span>
-          <span className={styles['summary-healthy']}>
-            <span className={styles['status-dot']} />
+          </SummaryStrip.Total>
+          <SummaryStrip.Divider />
+          <SummaryStrip.Item tone="healthy">
             {t('af.meta_active', { n: filesQuery.isPending ? '—' : healthyCount })}
-          </span>
+          </SummaryStrip.Item>
           {(filesQuery.isPending || disabledCount > 0) && (
             <>
-              <span className={styles['summary-divider']}>·</span>
-              <span className={styles['summary-disabled']}>
-                <span className={styles['status-dot']} />
+              <SummaryStrip.Divider />
+              <SummaryStrip.Item tone="disabled">
                 {t('af.meta_disabled', { n: filesQuery.isPending ? '—' : disabledCount })}
-              </span>
+              </SummaryStrip.Item>
             </>
           )}
           {(filesQuery.isPending || attentionCount > 0) && (
             <>
-              <span className={styles['summary-divider']}>·</span>
-              <span className={styles['summary-attention']}>
-                <span className={styles['status-dot']} />
+              <SummaryStrip.Divider />
+              <SummaryStrip.Item tone="attention">
                 {t('omc.quota_filter_attention')} {filesQuery.isPending ? '—' : attentionCount}
-              </span>
+              </SummaryStrip.Item>
             </>
           )}
           {!filesQuery.isPending && staleCount > 0 && (
             <>
-              <span className={styles['summary-divider']}>·</span>
-              <span className={styles['summary-disabled']} data-testid="oauth-summary-stale">
-                <span className={styles['status-dot']} />
+              <SummaryStrip.Divider />
+              <SummaryStrip.Item tone="disabled" testId="oauth-summary-stale">
                 {t('omc.quota_stale_count', { n: staleCount })}
-              </span>
+              </SummaryStrip.Item>
             </>
           )}
-        </div>
+        </SummaryStrip>
       </PageHeader>
 
       {sessionEntries.length > 0 && (

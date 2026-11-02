@@ -14,6 +14,8 @@ import { SearchInput } from '../src/components/common/SearchInput';
 import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
+import { PageHeader } from '../src/components/common/PageHeader';
+import { SummaryStrip } from '../src/components/common/SummaryStrip';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { renderWithOmc } from './support/render';
 
@@ -367,5 +369,75 @@ describe('DeferredMount', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('Editor render failed');
     expect(screen.queryByTestId('optional-surface-failure')).toBeNull();
   });
-
 });
+
+describe('SummaryStrip', () => {
+  it('renders total and status items with status dots and dividers', () => {
+    const { container } = render(
+      <SummaryStrip
+        total="共 6 个"
+        totalTestId="summary-total"
+        items={[
+          { label: '正常 4 个', tone: 'healthy', testId: 'healthy-item' },
+          { label: '需要关注 2', tone: 'attention', testId: 'attention-item' },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('summary-total').textContent).toBe('共 6 个');
+    expect(screen.getByTestId('healthy-item').textContent).toBe('正常 4 个');
+    expect(screen.getByTestId('attention-item').textContent).toBe('需要关注 2');
+
+    // Dividers between total and items
+    const dividers = container.querySelectorAll('[class*="summary-divider"]');
+    expect(dividers.length).toBe(2);
+
+    // Status dots inside healthy and attention items
+    const healthyDot = screen.getByTestId('healthy-item').querySelector('[class*="status-dot"]');
+    const attentionDot = screen.getByTestId('attention-item').querySelector('[class*="status-dot"]');
+    expect(healthyDot).not.toBeNull();
+    expect(attentionDot).not.toBeNull();
+  });
+
+  it('renders subcomponents and preserves custom test IDs', () => {
+    render(
+      <SummaryStrip>
+        <SummaryStrip.Total testId="keys-count">共 1 个密钥</SummaryStrip.Total>
+        <SummaryStrip.Divider />
+        <SummaryStrip.Item tone="healthy" testId="active-key">
+          24 小时内 1 个在用
+        </SummaryStrip.Item>
+      </SummaryStrip>,
+    );
+
+    expect(screen.getByTestId('keys-count').textContent).toBe('共 1 个密钥');
+    expect(screen.getByTestId('active-key').textContent).toBe('24 小时内 1 个在用');
+    expect(screen.getByTestId('active-key').querySelector('[class*="status-dot"]')).not.toBeNull();
+  });
+});
+
+describe('PageHeader', () => {
+  it('renders a text subtitle in a paragraph element', () => {
+    render(<PageHeader title="AI 提供商" subtitle="5 个提供商 · 8 个模型" />);
+    const heading = screen.getByRole('heading', { level: 1, name: 'AI 提供商' });
+    expect(heading).toBeTruthy();
+
+    const subtitle = document.querySelector('.terminal-subtitle');
+    expect(subtitle?.tagName.toLowerCase()).toBe('p');
+    expect(subtitle?.textContent).toBe('5 个提供商 · 8 个模型');
+  });
+
+  it('renders a SummaryStrip child under the title without paragraph wrapping', () => {
+    const { container } = render(
+      <PageHeader title="OAuth 管理">
+        <SummaryStrip total="共 6 个" items={[{ label: '正常 4 个', tone: 'healthy' }]} />
+      </PageHeader>,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'OAuth 管理' })).toBeTruthy();
+    expect(container.querySelector('p.terminal-subtitle')).toBeNull();
+    expect(container.querySelector('[class*="summary-strip"]')).not.toBeNull();
+    expect(screen.getByText('共 6 个')).toBeTruthy();
+  });
+});
+

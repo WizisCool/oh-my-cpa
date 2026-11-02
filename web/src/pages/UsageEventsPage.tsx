@@ -532,7 +532,7 @@ export const UsageEventsPage: React.FC = () => {
           <header className="terminal-page-head">
             <div className="terminal-page-heading">
               <h1 className="terminal-title">{t('events.title')}</h1>
-              <p className="request-window">
+              <p className="terminal-subtitle request-window">
                 {dayjs(displayWindow.from).format('MM-DD HH:mm')} — {dayjs(displayWindow.to).format('MM-DD HH:mm')}
               </p>
             </div>

@@ -166,7 +166,6 @@ export default {
   "pro.none_text": "無",
   "pro.status_disabled": "已停用",
   "pro.status_active": "正常",
-  "pro.summary": "{providers} 個供應商 · {models} 個模型 · {keys} 個金鑰 · {headers} 個請求頭",
   "pro.stat_all": "全部供應商",
   "pro.stat_attention": "需關注",
   "pro.stat_attention_hint": "已啟用但未設定金鑰，或近 24 小時成功率低於 {n}% 的供應商",

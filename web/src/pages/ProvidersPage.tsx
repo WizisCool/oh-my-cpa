@@ -27,9 +27,7 @@ import { ProviderTable } from '../components/providers/ProviderTable';
 import styles from './ProvidersPage.module.css';
 import {
   DEFAULT_PROVIDER_FILTERS,
-  providerHeaderCount,
-  providerKeyCount,
-  providerModelCount,
+  needsAttention,
   providerTrafficById,
   summarizeProviders,
   totalProviderTraffic,
@@ -41,6 +39,7 @@ import { LoadFailure, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
 import { Toolbar } from '../components/common/Toolbar';
 import { Count } from '../components/common/Count';
+import { SummaryStrip } from '../components/common/SummaryStrip';
 
 const ProviderEditorDrawer = React.lazy(createRouteLoader(() =>
   import('../components/providers/ProviderEditorDrawer').then(module => ({ default: module.ProviderEditorDrawer }))));
@@ -234,12 +233,45 @@ export const ProvidersPage: React.FC = () => {
   );
   const hasList = !providersLoading && !(providersError && providers.length === 0);
 
-  const totalModels = providers.reduce((sum, provider) => sum + providerModelCount(provider), 0);
-  const totalKeys = providers.reduce((sum, provider) => sum + providerKeyCount(provider), 0);
-  const totalHeaders = providers.reduce((sum, provider) => sum + providerHeaderCount(provider), 0);
-  const subtitle = hasList && providers.length > 0
-    ? t('pro.summary', { providers: providers.length, models: totalModels, keys: totalKeys, headers: totalHeaders })
-    : undefined;
+  const totalProviders = providers.length;
+  const isProviderEnabled = (p: typeof providers[number]) => statusQueue.targetFor(p.id) ?? !p.disabled;
+  const activeHealthyCount = providers.filter((p) => {
+    const enabled = isProviderEnabled(p);
+    return enabled && !needsAttention(p, enabled, traffic?.get(p.id));
+  }).length;
+  const attentionCount = providers.filter((p) => {
+    const enabled = isProviderEnabled(p);
+    return needsAttention(p, enabled, traffic?.get(p.id));
+  }).length;
+  const disabledCount = providers.filter((p) => !isProviderEnabled(p)).length;
+
+  const summary = (hasList && totalProviders > 0) || providersLoading ? (
+    <SummaryStrip>
+      <SummaryStrip.Total>
+        {t('af.meta_total', { n: providersLoading ? '—' : totalProviders })}
+      </SummaryStrip.Total>
+      <SummaryStrip.Divider />
+      <SummaryStrip.Item tone="healthy">
+        {t('af.meta_active', { n: providersLoading ? '—' : activeHealthyCount })}
+      </SummaryStrip.Item>
+      {(!providersLoading && attentionCount > 0) && (
+        <>
+          <SummaryStrip.Divider />
+          <SummaryStrip.Item tone="attention">
+            {t('omc.quota_filter_attention')} {attentionCount}
+          </SummaryStrip.Item>
+        </>
+      )}
+      {(!providersLoading && disabledCount > 0) && (
+        <>
+          <SummaryStrip.Divider />
+          <SummaryStrip.Item tone="disabled">
+            {t('af.meta_disabled', { n: disabledCount })}
+          </SummaryStrip.Item>
+        </>
+      )}
+    </SummaryStrip>
+  ) : undefined;
 
   // Families present in the list, in the registry's order, then any the registry does not know.
   const familyOptions = [
@@ -253,7 +285,6 @@ export const ProvidersPage: React.FC = () => {
     <div className="terminal-page terminal-page-stack providers-page">
       <PageHeader
         title={t('pro.title')}
-        subtitle={subtitle}
         mobileActions={(
           <>
             <ActionMenu><RefreshButton onRefresh={() => { void refetchProviders(); void trafficQuery.refetch(); }} isRefreshing={providersFetching || trafficQuery.isFetching} /></ActionMenu>
@@ -276,7 +307,9 @@ export const ProvidersPage: React.FC = () => {
             </Button>
           </>
         )}
-      />
+      >
+        {summary}
+      </PageHeader>
 
       {providersError && (
         <LoadFailure title={t('common.load_failed_title')} error={providersErr} onRetry={() => void refetchProviders()} />
