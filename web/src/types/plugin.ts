@@ -82,6 +82,16 @@ export interface PluginStoreSourceError {
   message: string;
 }
 
+/** Publisher-owned catalog presentation; cannot override identity or installation fields. */
+export interface PluginStoreLocale {
+  name?: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  license?: string;
+  tags?: string[];
+}
+
 export interface StorePluginItem {
   /** Unique across registries: two registries may list the same plugin id. */
   store_id: string;
@@ -96,6 +106,7 @@ export interface StorePluginItem {
   homepage?: string;
   license?: string;
   tags: string[];
+  locales?: Record<string, PluginStoreLocale>;
   logo?: string;
   install_type?: string;
   platforms: string[];

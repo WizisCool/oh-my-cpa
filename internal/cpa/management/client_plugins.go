@@ -103,36 +103,47 @@ type PluginStorePlatform struct {
 	GOARCH string `json:"goarch"`
 }
 
+// PluginStoreLocale contains presentation metadata only, never installation identity.
+type PluginStoreLocale struct {
+	Name        string   `json:"name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Author      string   `json:"author,omitempty"`
+	Homepage    string   `json:"homepage,omitempty"`
+	License     string   `json:"license,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
 // StorePluginItem is one catalog entry of CPA's `GET /plugin-store`, joined by
 // CPA with the local install state of the plugin it describes.
 type StorePluginItem struct {
-	StoreID             string                `json:"store_id"`
-	SourceID            string                `json:"source_id"`
-	SourceName          string                `json:"source_name"`
-	SourceURL           string                `json:"source_url"`
-	ID                  string                `json:"id"`
-	Name                string                `json:"name"`
-	Description         string                `json:"description"`
-	Author              string                `json:"author"`
-	Version             string                `json:"version"`
-	Repository          string                `json:"repository"`
-	InstallType         string                `json:"install_type"`
-	AuthRequired        bool                  `json:"auth_required"`
-	AuthConfigured      bool                  `json:"auth_configured"`
-	Platforms           []PluginStorePlatform `json:"platforms,omitempty"`
-	Logo                string                `json:"logo,omitempty"`
-	Homepage            string                `json:"homepage,omitempty"`
-	License             string                `json:"license,omitempty"`
-	Tags                []string              `json:"tags,omitempty"`
-	Installed           bool                  `json:"installed"`
-	InstalledVersion    string                `json:"installed_version"`
-	InstalledSourceID   string                `json:"installed_source_id,omitempty"`
-	InstallSourceStatus string                `json:"install_source_status,omitempty"`
-	Configured          bool                  `json:"configured"`
-	Registered          bool                  `json:"registered"`
-	Enabled             bool                  `json:"enabled"`
-	EffectiveEnabled    bool                  `json:"effective_enabled"`
-	UpdateAvailable     bool                  `json:"update_available"`
+	StoreID             string                       `json:"store_id"`
+	SourceID            string                       `json:"source_id"`
+	SourceName          string                       `json:"source_name"`
+	SourceURL           string                       `json:"source_url"`
+	ID                  string                       `json:"id"`
+	Name                string                       `json:"name"`
+	Description         string                       `json:"description"`
+	Author              string                       `json:"author"`
+	Version             string                       `json:"version"`
+	Repository          string                       `json:"repository"`
+	InstallType         string                       `json:"install_type"`
+	AuthRequired        bool                         `json:"auth_required"`
+	AuthConfigured      bool                         `json:"auth_configured"`
+	Platforms           []PluginStorePlatform        `json:"platforms,omitempty"`
+	Logo                string                       `json:"logo,omitempty"`
+	Homepage            string                       `json:"homepage,omitempty"`
+	License             string                       `json:"license,omitempty"`
+	Tags                []string                     `json:"tags,omitempty"`
+	Locales             map[string]PluginStoreLocale `json:"locales,omitempty"`
+	Installed           bool                         `json:"installed"`
+	InstalledVersion    string                       `json:"installed_version"`
+	InstalledSourceID   string                       `json:"installed_source_id,omitempty"`
+	InstallSourceStatus string                       `json:"install_source_status,omitempty"`
+	Configured          bool                         `json:"configured"`
+	Registered          bool                         `json:"registered"`
+	Enabled             bool                         `json:"enabled"`
+	EffectiveEnabled    bool                         `json:"effective_enabled"`
+	UpdateAvailable     bool                         `json:"update_available"`
 }
 
 type PluginStore struct {

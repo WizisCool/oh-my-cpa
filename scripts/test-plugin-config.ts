@@ -21,6 +21,7 @@ import {
 } from '../web/src/components/plugins/pluginStoreLogic.ts';
 import type { PluginConfigField, PluginItem, StorePluginItem } from '../web/src/types/plugin.ts';
 import { test } from 'vitest';
+import { selectInstalledPluginMetadata, selectStorePluginMetadata } from '../web/src/types/pluginStoreMetadata.ts';
 
 test('plugin config', () => {
   assert.equal(parsePluginConfig('').error, 'object-required');
@@ -153,7 +154,7 @@ test('plugin config', () => {
   function entry(overrides: Partial<StorePluginItem>): StorePluginItem {
     return {
       store_id: 'official/x', source_id: 'official', source_name: 'official', id: 'x', name: 'X', tags: [], platforms: [],
-      is_official: true, is_official_repository: true, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
+      is_official: true, is_official_repository: true, is_omc: false, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
       update_available: false, ...overrides,
     };
   }
@@ -163,14 +164,80 @@ test('plugin config', () => {
     entry({ store_id: 'mirror/logger', source_id: 'mirror', id: 'logger', name: 'Logger', is_official: false, installed: true, install_source_status: 'different', description: 'mirror copy' }),
   ];
   assert.deepEqual(storeFilterCounts(STORE), { all: 3, installed: 2, available: 1, updates: 1 });
-  assert.deepEqual(filterStorePlugins(STORE, 'NETWORK', 'all').map((item) => item.store_id), ['official/limiter']);
+  assert.deepEqual(filterStorePlugins(STORE, 'NETWORK', 'all', 'en').map((item) => item.store_id), ['official/limiter']);
   const multiPortalPlugin: PluginItem = {
     id: 'relay', configured: true, registered: true, enabled: true, effective_enabled: true,
     supports_oauth: true, oauth_provider: 'relay-primary', oauth_providers: ['relay-primary', 'relay-secondary'], config_fields: [],
   };
-  assert.deepEqual(filterInstalledPlugins([multiPortalPlugin], ' RELAY-SECONDARY ', new Map()), [multiPortalPlugin]);
-  assert.deepEqual(filterInstalledPlugins([multiPortalPlugin], 'other-portal', new Map()), []);
-  assert.deepEqual(filterStorePlugins(STORE, '', 'updates').map((item) => item.store_id), ['official/logger']);
+  assert.deepEqual(filterInstalledPlugins([multiPortalPlugin], ' RELAY-SECONDARY ', new Map(), 'en'), [multiPortalPlugin]);
+  assert.deepEqual(filterInstalledPlugins([multiPortalPlugin], 'other-portal', new Map(), 'en'), []);
+  assert.deepEqual(filterStorePlugins(STORE, '', 'updates', 'en').map((item) => item.store_id), ['official/logger']);
+  const localizedEntry = entry({
+    id: 'localized', name: 'Base title', description: 'Base description', tags: ['base-tag'],
+    locales: {
+      'zh-CN': { name: '简体标题', description: '简体描述', tags: ['简体标签'] },
+      'zh-Hant': { name: '繁體標題', description: '繁體描述', tags: ['繁體標籤'] },
+    },
+  });
+  assert.deepEqual(filterStorePlugins([localizedEntry], '简体描述', 'all', 'zh'), [localizedEntry]);
+  assert.deepEqual(filterStorePlugins([localizedEntry], '繁體標籤', 'all', 'zh-Hant'), [localizedEntry]);
+  assert.deepEqual(filterStorePlugins([localizedEntry], '简体标题', 'all', 'zh-Hant'), []);
+  assert.deepEqual(filterStorePlugins([localizedEntry], 'base-tag', 'all', 'zh'), []);
+  assert.deepEqual(filterStorePlugins([localizedEntry], 'base description', 'all', 'en'), [localizedEntry]);
+  assert.deepEqual(filterStorePlugins([localizedEntry], 'localized', 'all', 'zh'), [localizedEntry]);
+  const localizedInstalled = { ...multiPortalPlugin, id: 'localized' };
+  const localizedCatalog = storeListingsByPluginId([localizedEntry]);
+  assert.deepEqual(filterInstalledPlugins([localizedInstalled], '繁體描述', localizedCatalog, 'zh-Hant'), [localizedInstalled]);
+  assert.deepEqual(filterInstalledPlugins([localizedInstalled], '简体标签', localizedCatalog, 'zh-Hant'), []);
+  const base = entry({
+    name: 'Base name', description: 'Base description', author: 'Base author',
+    homepage: 'https://publisher.example', license: 'Base license', tags: ['base-tag'],
+  });
+  const baseMetadata = selectStorePluginMetadata(base, 'en');
+  assert.deepEqual(baseMetadata, {
+    name: base.name, description: base.description, author: base.author,
+    homepage: base.homepage, license: base.license, tags: base.tags,
+  });
+  for (const [lang, locale] of [
+    ['zh', 'zh-CN'], ['zh', 'zh-Hans'], ['zh', 'zh'],
+    ['zh-Hant', 'zh-HK'], ['zh-Hant', 'zh-Hant'], ['zh-Hant', 'zh-TW'],
+    ['en', 'en'], ['ms', 'ms-MY'], ['ms', 'ms'],
+  ] as const) {
+    const translated = { ...baseMetadata, name: `Title ${locale}`, description: `Text ${locale}`, author: `Author ${locale}`, homepage: `https://publisher.example/${locale}`, license: `License ${locale}`, tags: [locale] };
+    assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { [locale]: translated } }, lang), translated);
+  }
+  assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { 'zh-CN': { name: '简体' }, zh: { name: '通用' } } }, 'zh-Hant'), baseMetadata);
+  assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { 'zh-Hant': { name: '繁體' }, 'zh-TW': { name: '臺灣' } } }, 'zh'), baseMetadata);
+  assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { en: { name: ' ', description: 'Localized', author: '', homepage: '', license: '', tags: [' '] } } }, 'en'), { ...baseMetadata, description: 'Localized' });
+  assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { 'zh-CN': { name: 'Regional' }, 'zh-Hans': { description: 'Other variant' } } }, 'zh'), { ...baseMetadata, name: 'Regional' });
+  assert.equal(selectStorePluginMetadata({ ...base, locales: { 'zh-HK': { name: 'Hong Kong' }, 'zh-Hant': { name: 'Traditional' }, 'zh-TW': { name: 'Taiwan' } } }, 'zh-Hant').name, 'Hong Kong');
+  const registeredPlugin = { ...localizedInstalled, metadata: { name: 'Runtime name', author: 'Runtime author', version: '1.0.0' } };
+  const confirmedListing = { ...localizedEntry, installed: true, install_source_status: 'matched' };
+  assert.equal(selectInstalledPluginMetadata(registeredPlugin, confirmedListing, 'zh').name, '简体标题');
+  assert.equal(selectInstalledPluginMetadata(registeredPlugin, confirmedListing, 'en').name, 'Runtime name');
+  assert.equal(selectInstalledPluginMetadata(registeredPlugin, confirmedListing, 'zh').author, 'Runtime author');
+  assert.equal(selectInstalledPluginMetadata(registeredPlugin, undefined, 'zh').name, 'Runtime name');
+  for (const listing of [
+    { ...confirmedListing, install_source_status: 'different' },
+    { ...confirmedListing, install_source_status: undefined },
+    { ...confirmedListing, installed: false },
+    { ...confirmedListing, id: 'different-plugin' },
+  ]) {
+    const foreignListing = { ...listing, author: 'Foreign author', locales: { 'zh-CN': { name: 'Foreign name', author: 'Foreign translated author' } } };
+    const metadata = selectInstalledPluginMetadata(registeredPlugin, foreignListing, 'zh');
+    assert.equal(metadata.name, 'Runtime name');
+    assert.equal(metadata.author, 'Runtime author');
+    const catalog = storeListingsByPluginId([foreignListing]);
+    assert.deepEqual(filterInstalledPlugins([registeredPlugin], 'Foreign', catalog, 'zh'), []);
+    assert.deepEqual(filterInstalledPlugins([registeredPlugin], 'Runtime name', catalog, 'zh'), [registeredPlugin]);
+    const withoutRuntimeMetadata = selectInstalledPluginMetadata({ ...registeredPlugin, metadata: undefined }, foreignListing, 'zh');
+    assert.equal(withoutRuntimeMetadata.name, registeredPlugin.id);
+    assert.equal(withoutRuntimeMetadata.author, undefined);
+  }
+
+  assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { en: Object.assign({ name: 'Translated' }, { id: 'evil', source_id: 'evil', is_official: true }) } }, 'en'), { ...baseMetadata, name: 'Translated' });
+  assert.equal(storeInstallConfirmToken(localizedEntry), 'localized');
+  assert.equal(storePluginOrigin(localizedEntry), storePluginOrigin({ ...localizedEntry, locales: undefined }));
   // The listing an installed card borrows is the one it was installed from.
   assert.equal(storeListingsByPluginId(STORE).get('logger')?.store_id, 'official/logger');
 
