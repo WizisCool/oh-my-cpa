@@ -175,6 +175,7 @@ export interface SaveProviderKeyItem {
   connection_pool?: ProviderConnectionPoolSettings | null;
   api_key?: string;
   proxy_url?: string;
+  source_index?: number;
   weight?: number;
 }
 

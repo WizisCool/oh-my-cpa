@@ -664,7 +664,7 @@ export function useProviderManagement({
           id: `key-edit-${i}`,
           connectionPool: readConnectionPoolDraft(k.connection_pool),
           storedConnectionPool: k.connection_pool,
-          storedApiKey: k.api_key || '',
+          storedIndex: k.index,
           apiKey: k.api_key || '',
           proxyUrl: k.proxy_url,
           weight: k.weight ?? 1,
@@ -746,9 +746,15 @@ export function useProviderManagement({
     }
 
     const hasGroupPoolEdit = connectionPoolEdit(formConnectionPool, editingProvider?.connection_pool?.defaults) !== undefined;
-    if (hasGroupPoolEdit && !isConnectionPoolValid(formConnectionPool) || formKeys.some(key =>
-      key.connectionPool && connectionPoolEdit(key.connectionPool, key.storedConnectionPool) !== undefined && !isConnectionPoolValid(key.connectionPool))) {
-      setPolicySectionOpen(true);
+    const isGroupPoolInvalid = hasGroupPoolEdit && !isConnectionPoolValid(formConnectionPool);
+    const invalidPoolKey = formKeys.find(key =>
+      key.connectionPool && connectionPoolEdit(key.connectionPool, key.storedConnectionPool) !== undefined && !isConnectionPoolValid(key.connectionPool));
+    if (isGroupPoolInvalid || invalidPoolKey) {
+      if (isGroupPoolInvalid) setPolicySectionOpen(true);
+      if (invalidPoolKey) {
+        setKeysSectionOpen(true);
+        setExpandedKeyIds(previous => new Set([...previous, invalidPoolKey.id]));
+      }
       toast.warning(t('pool.invalid'));
       return;
     }
@@ -778,18 +784,13 @@ export function useProviderManagement({
       return;
     }
 
-    const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => {
-      const poolEdit = k.connectionPool ? connectionPoolEdit(k.connectionPool, k.storedConnectionPool) : undefined;
-      const isRotated = k.storedApiKey !== undefined && (k.apiKey || '').trim() !== k.storedApiKey.trim();
-      return {
-        api_key: k.apiKey || '',
-        // A rotated key is a new credential to CPA. Replay the stored override
-        // when the pool was untouched so the new credential keeps the old row's opt-in.
-        connection_pool: poolEdit !== undefined ? poolEdit : isRotated ? (k.storedConnectionPool ?? null) : undefined,
-        proxy_url: k.proxyUrl || '',
-        weight: k.weight,
-      };
-    });
+    const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => ({
+      api_key: k.apiKey || '',
+      connection_pool: k.connectionPool ? connectionPoolEdit(k.connectionPool, k.storedConnectionPool) : undefined,
+      proxy_url: k.proxyUrl || '',
+      source_index: k.storedIndex,
+      weight: k.weight,
+    }));
 
     const supportsModelImage = lookupProviderFamily(formFamily)?.supportsModelImage ?? false;
     const modelsPayload: SaveProviderModelItem[] = formModels

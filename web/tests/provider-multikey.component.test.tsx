@@ -18,13 +18,13 @@ const toast: Toast = {
 // The panel's exit motion is a real timer under jsdom, so the drawer would close a second
 // after the click and an assertion would race the animation. The motion is not these
 // tests' claim, so the editor renders with it disabled.
-const renderEditor = (isCreate: boolean, withPool = false, hasLongPoolTimeout = false) => {
+const renderEditor = (isCreate: boolean, withPool = false, hasLongPoolTimeout = false, hasInvalidKeyPool = false) => {
   const client = createTestQueryClient();
   client.setQueryData(['management-plugins'], { plugins: [] });
-  return renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><Editor isCreate={isCreate} withPool={withPool} hasLongPoolTimeout={hasLongPoolTimeout} /></ConfigProvider>, { client });
+  return renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><Editor isCreate={isCreate} withPool={withPool} hasLongPoolTimeout={hasLongPoolTimeout} hasInvalidKeyPool={hasInvalidKeyPool} /></ConfigProvider>, { client });
 };
 
-function Editor({ isCreate, withPool, hasLongPoolTimeout }: { isCreate: boolean; withPool: boolean; hasLongPoolTimeout: boolean }) {
+function Editor({ isCreate, withPool, hasLongPoolTimeout, hasInvalidKeyPool }: { isCreate: boolean; withPool: boolean; hasLongPoolTimeout: boolean; hasInvalidKeyPool: boolean }) {
   const t = useT();
   const icons = useProviderIconOverrides();
   const editor = useProviderManagement({ ...icons, t, toast, settleProviderRow: () => {} });
@@ -37,7 +37,7 @@ function Editor({ isCreate, withPool, hasLongPoolTimeout }: { isCreate: boolean;
       editor.setFormBaseURL('https://relay.test');
       editor.setFormIcon('DeepSeek');
       editor.setFormKeys([
-        { connectionPool: withPool ? readConnectionPoolDraft({}) : undefined, storedConnectionPool: withPool ? {} : undefined, id: 'first', apiKey: 'fixture-key-one', proxyUrl: 'http://proxy-one.test', weight: 3, isChanging: true },
+        { connectionPool: withPool ? readConnectionPoolDraft(hasInvalidKeyPool ? { idle_conn_timeout: '1'.repeat(129) } : {}) : undefined, storedConnectionPool: withPool ? {} : undefined, id: 'first', apiKey: 'fixture-key-one', proxyUrl: 'http://proxy-one.test', weight: 3, isChanging: true },
         { id: 'second', apiKey: 'fixture-key-two', proxyUrl: 'http://proxy-two.test', weight: 7, isChanging: true },
       ]);
     }}>Load multi-key draft</button>
@@ -96,7 +96,7 @@ function RotationEditor() {
   </>;
 }
 
-it('keeps a key pool override when its key is rotated to another family', async () => {
+it('sends the stored row identity when a key is rotated to another family', async () => {
   const api = installOmcApi();
   api.on('PUT', '/management/providers/codex-0', () => ({ status: 'ok', family: 'claude', id: 'claude-0', ids: ['claude-0'] }));
   const view = renderRotationEditor();
@@ -110,9 +110,25 @@ it('keeps a key pool override when its key is rotated to another family', async 
     expect(body.family).toBe('claude');
     expect((body.keys as Record<string, unknown>[])[0]).toMatchObject({
       api_key: 'fixture-key-rotated',
-      connection_pool: { enabled: false, max_idle_conns_per_host: 0 },
+      source_index: 0,
     });
-    expect((body.keys as Record<string, unknown>[])[1].connection_pool).toBeUndefined();
+    expect((body.keys as Record<string, unknown>[])[0].connection_pool).toBeUndefined();
+    expect((body.keys as Record<string, unknown>[])[1]).toMatchObject({ source_index: 1 });
+  } finally { view.unmount(); }
+});
+
+it('opens the key holding an invalid connection pool edit', async () => {
+  vi.clearAllMocks();
+  const api = installOmcApi();
+  const view = renderEditor(false, true, false, true);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Load multi-key draft' }));
+    const key = await screen.findByRole('button', { name: /^Key #1/ });
+    expect(key.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(providerCopy['pool.invalid']));
+    expect(key.getAttribute('aria-expanded')).toBe('true');
+    expect(api.writes()).toHaveLength(0);
   } finally { view.unmount(); }
 });
 

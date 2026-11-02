@@ -130,6 +130,7 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 	}
 	converted := make([]management.ConfigAPIKey, 0, len(keys))
 	seen := map[string]bool{}
+	usedOriginal := map[int]bool{}
 	for position, submitted := range keys {
 		apiKey := strings.TrimSpace(submitted.APIKey)
 		if apiKey == "" && position < len(original) {
@@ -142,14 +143,28 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 			return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "duplicate API keys cannot be moved to another protocol", providerDuplicateKeyCode)
 		}
 		seen[apiKey] = true
-		old := defaults
-		isExistingCredential := false
-		for _, key := range original {
+		matchedOriginal := -1
+		for index, key := range original {
 			if key.APIKey == apiKey {
-				old = key
-				isExistingCredential = true
+				matchedOriginal = index
 				break
 			}
+		}
+		if matchedOriginal < 0 && submitted.SourceIndex != nil {
+			index := *submitted.SourceIndex
+			if index < 0 || index >= len(original) {
+				return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusConflict, "the source key no longer exists", providerStaleIdentityCode)
+			}
+			matchedOriginal = index
+		}
+		old := defaults
+		isExistingCredential := matchedOriginal >= 0
+		if isExistingCredential {
+			if usedOriginal[matchedOriginal] {
+				return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "duplicate source keys cannot be moved to another protocol", providerDuplicateKeyCode)
+			}
+			usedOriginal[matchedOriginal] = true
+			old = original[matchedOriginal]
 		}
 		movedModels, err := moveProviderModels(old.Models, models, family)
 		if err != nil {
@@ -171,7 +186,7 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 		if err := policy.applyToConfigKey(&key, req.DisableCooling); err != nil {
 			return management.ProviderFamilyEntry{}, err
 		}
-		if fields := overrides[apiKey]; fields != nil {
+		if fields := overrides[old.APIKey]; fields != nil {
 			// Apply the original key's overrides after editing the shared fields,
 			// as a same-family provider edit would. Credentials are set explicitly
 			// afterwards because a submitted key row owns those three fields.

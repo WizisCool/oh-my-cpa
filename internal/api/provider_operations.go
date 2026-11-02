@@ -229,10 +229,19 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 							// The key keeps the settings the form does not show
 							// (its own headers or models), matched by API key.
 							updated := management.APIKeyEntry{}
+							isMatched := false
 							for _, old := range entry.APIKeyEntries {
 								if strings.TrimSpace(old.APIKey) == kVal {
 									updated = old
+									isMatched = true
 									break
+								}
+							}
+							if !isMatched && k.SourceIndex != nil {
+								var isFound bool
+								updated, isFound = openAICompatibilityKeyEntry(*entry, *k.SourceIndex)
+								if !isFound {
+									return newProviderWriteErrorWithCode(http.StatusConflict, "the source key no longer exists", providerStaleIdentityCode)
 								}
 							}
 							updated.APIKey = kVal
@@ -389,4 +398,18 @@ func withoutImageFlag(models []management.ModelAlias) []management.ModelAlias {
 		models[i].Image = false
 	}
 	return models
+}
+
+// openAICompatibilityKeyEntry returns one stored key by its position in the
+// provider list. APIKeyEntries come first and legacy API keys follow, matching
+// the indices the provider list exposes.
+func openAICompatibilityKeyEntry(entry management.OpenAICompatibility, index int) (management.APIKeyEntry, bool) {
+	if index >= 0 && index < len(entry.APIKeyEntries) {
+		return entry.APIKeyEntries[index], true
+	}
+	index -= len(entry.APIKeyEntries)
+	if index >= 0 && index < len(entry.LegacyAPIKeys) {
+		return management.APIKeyEntry{APIKey: entry.LegacyAPIKeys[index]}, true
+	}
+	return management.APIKeyEntry{}, false
 }

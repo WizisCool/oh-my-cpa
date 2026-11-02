@@ -363,7 +363,7 @@ func TestProviderProtocolChangeDoesNotCopyPoolOverrideToNewKey(t *testing.T) {
 	}
 }
 
-func TestProviderProtocolChangeKeepsSubmittedPoolWhenKeyRotates(t *testing.T) {
+func TestProviderProtocolChangeKeepsStoredPoolWhenSourceKeyRotates(t *testing.T) {
 	for _, target := range []string{"claude", openAICompatibilityFamily} {
 		t.Run(target, func(t *testing.T) {
 			fixture := newProviderTestFixture(t)
@@ -375,7 +375,7 @@ func TestProviderProtocolChangeKeepsSubmittedPoolWhenKeyRotates(t *testing.T) {
 			fixture.state.storedGroups = map[string][]map[string]any{"codex": groups}
 			fixture.state.codexProviders = flattenGroups("codex", groups, nil)
 			fixture.state.mu.Unlock()
-			body := fmt.Sprintf(`{"family":%q,"name":"Moved","base_url":"https://relay.test","keys":[{"api_key":"pool-rotated","connection_pool":{"enabled":false,"max_idle_conns_per_host":0}}]}`, target)
+			body := fmt.Sprintf(`{"family":%q,"name":"Moved","base_url":"https://relay.test","keys":[{"api_key":"pool-rotated","source_index":0}]}`, target)
 			resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", body)
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("move failed: %d %s", resp.StatusCode, payload)
@@ -390,8 +390,8 @@ func TestProviderProtocolChangeKeepsSubmittedPoolWhenKeyRotates(t *testing.T) {
 						continue
 					}
 					isFound = true
-					if !reflect.DeepEqual(key["connection-pool"], map[string]any{"enabled": false, "max-idle-conns-per-host": float64(0)}) {
-						t.Fatalf("rotated key lost its submitted override: %#v", key["connection-pool"])
+					if !reflect.DeepEqual(key["connection-pool"], map[string]any{"enabled": false}) {
+						t.Fatalf("rotated key lost its stored override: %#v", key["connection-pool"])
 					}
 					if group["connection-pool"].(map[string]any)["enabled"] != true {
 						t.Fatal("rotated key lost the source group default")
@@ -403,4 +403,55 @@ func TestProviderProtocolChangeKeepsSubmittedPoolWhenKeyRotates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompatibilityMovePreservesRotatedKeyOverrides(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	var groups []map[string]any
+	if err := json.Unmarshal([]byte(`[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":true},"keys":[{"api-key":"pool-existing","connection-pool":{"enabled":false},"headers":{"X-Key":"one"},"models":[{"name":"key-model"}]},{"api-key":"pool-sibling"}]}]`), &groups); err != nil {
+		t.Fatal(err)
+	}
+	fixture.state.mu.Lock()
+	fixture.state.storedGroups = map[string][]map[string]any{openAICompatibilityFamily: groups}
+	fixture.state.oaiProviders = flattenGroups(openAICompatibilityFamily, groups, nil)
+	fixture.state.mu.Unlock()
+
+	body := `{"family":"claude","name":"Moved","base_url":"https://relay.test","keys":[{"api_key":"pool-rotated","source_index":0},{"api_key":"pool-sibling","source_index":1}]}`
+	resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/openai-compat-0", body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("move failed: %d %s", resp.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	defer fixture.state.mu.Unlock()
+	for _, group := range fixture.state.storedGroups["claude"] {
+		for _, raw := range group["keys"].([]any) {
+			key := raw.(map[string]any)
+			if key["api-key"] != "pool-rotated" {
+				continue
+			}
+			if !reflect.DeepEqual(key["connection-pool"], map[string]any{"enabled": false}) {
+				t.Fatalf("rotated key lost its pool override: %#v", key)
+			}
+			effective := map[string]any{}
+			for field, value := range group {
+				if field != "keys" {
+					effective[field] = value
+				}
+			}
+			for field, value := range key {
+				if field != "connection-pool" {
+					effective[field] = value
+				}
+			}
+			if !reflect.DeepEqual(effective["headers"], map[string]any{"X-Key": "one"}) {
+				t.Fatalf("rotated key lost its headers: %#v", effective)
+			}
+			models := effective["models"].([]any)
+			if len(models) != 1 || models[0].(map[string]any)["name"] != "key-model" {
+				t.Fatalf("rotated key lost its models: %#v", effective)
+			}
+			return
+		}
+	}
+	t.Fatal("rotated key missing after move")
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -343,5 +344,36 @@ func TestProviderConnectionPoolRejectsInvalidEditsBeforeWriting(t *testing.T) {
 				t.Fatal("invalid pool reached CPA")
 			}
 		})
+	}
+}
+
+func TestOpenAICompatibleKeyRotationPreservesStoredPool(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	var groups []map[string]any
+	if err := json.Unmarshal([]byte(`[{"name":"team","base-url":"https://relay.test","connection-pool":{"enabled":true},"keys":[{"api-key":"pool-one","connection-pool":{"enabled":false}},{"api-key":"pool-two"}]}]`), &groups); err != nil {
+		t.Fatal(err)
+	}
+	fixture.state.mu.Lock()
+	fixture.state.storedGroups = map[string][]map[string]any{openAICompatibilityFamily: groups}
+	fixture.state.oaiProviders = flattenGroups(openAICompatibilityFamily, groups, nil)
+	fixture.state.mu.Unlock()
+
+	body := `{"family":"openai-compatibility","name":"team","base_url":"https://relay.test","keys":[{"api_key":"pool-rotated","source_index":0},{"api_key":"pool-two","source_index":1}]}`
+	resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/openai-compat-0", body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("key rotation failed: %d %s", resp.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	defer fixture.state.mu.Unlock()
+	group := fixture.state.storedGroups[openAICompatibilityFamily][0]
+	keys := group["keys"].([]any)
+	if !reflect.DeepEqual(keys[0].(map[string]any)["connection-pool"], map[string]any{"enabled": false}) {
+		t.Fatalf("rotated key lost its stored override: %#v", keys[0])
+	}
+	if keys[1].(map[string]any)["api-key"] != "pool-two" {
+		t.Fatalf("sibling key changed: %#v", keys[1])
+	}
+	if group["connection-pool"].(map[string]any)["enabled"] != true {
+		t.Fatal("group pool default changed")
 	}
 }

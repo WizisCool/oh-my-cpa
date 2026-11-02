@@ -12,7 +12,10 @@ type SaveProviderKeyEntry struct {
 	ConnectionPool json.RawMessage `json:"connection_pool,omitempty"`
 	APIKey         string          `json:"api_key,omitempty"`
 	ProxyURL       string          `json:"proxy_url,omitempty"`
-	Weight         *int            `json:"weight,omitempty"`
+	// SourceIndex names the row this draft was opened from. It keeps a rotated
+	// key tied to its stored settings without sending the old credential back.
+	SourceIndex *int `json:"source_index,omitempty"`
+	Weight      *int `json:"weight,omitempty"`
 }
 
 type SaveProviderModelEntry struct {

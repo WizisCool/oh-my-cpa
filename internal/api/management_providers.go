@@ -289,14 +289,27 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 			if entries, err = client.ConfigAPIKeys(ctx, spec.Family); err != nil {
 				continue
 			}
+			// The runtime read carries effective pool values, not the stored
+			// group/key ownership. Omit them rather than presenting an inherited
+			// value as this key's override.
+			for index := range entries {
+				entries[index].ConnectionPool = nil
+			}
 		}
 		items = append(items, configKeyProviderItems(spec, entries, customNames)...)
 	}
 
 	entries, err := client.EditableOpenAICompatibility(ctx)
 	if err != nil {
-		// The same runtime fallback applies to the OpenAI-compatible list.
+		// The same runtime fallback applies to the OpenAI-compatible list, with
+		// the same rule: its pool values have no stored ownership information.
 		if runtime, runtimeErr := client.OpenAICompatibility(ctx); runtimeErr == nil {
+			for index := range runtime.Entries {
+				runtime.Entries[index].ConnectionPool = nil
+				for keyIndex := range runtime.Entries[index].APIKeyEntries {
+					runtime.Entries[index].APIKeyEntries[keyIndex].ConnectionPool = nil
+				}
+			}
 			entries, err = runtime.Entries, nil
 		}
 	}

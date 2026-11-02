@@ -342,9 +342,16 @@ func TestManagementProviderListFallsBackWhenStoredGroupsFail(t *testing.T) {
 		"codex":                   http.StatusBadGateway,
 		openAICompatibilityFamily: http.StatusServiceUnavailable,
 	}
+	state.codexProviders[0]["connection-pool"] = map[string]any{"enabled": true}
+	state.oaiProviders[0]["connection-pool"] = map[string]any{"enabled": true}
+	state.oaiProviders[0]["api-key-entries"] = []any{map[string]any{
+		"api-key":         "sk-provider-secret-key-1234",
+		"connection-pool": map[string]any{"enabled": true},
+	}}
+	delete(state.oaiProviders[0], "api-keys")
 	state.mu.Unlock()
 
-	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get providers status = %d body %s", resp.StatusCode, payload)
 	}
@@ -357,6 +364,17 @@ func TestManagementProviderListFallsBackWhenStoredGroupsFail(t *testing.T) {
 	ids := map[string]bool{}
 	for _, provider := range result.Providers {
 		ids[provider.ID] = true
+		if provider.ID != "codex-0" && provider.ID != "openai-compat-0" {
+			continue
+		}
+		if provider.ConnectionPool != nil && provider.ConnectionPool.Defaults != nil {
+			t.Fatalf("runtime fallback presented an unknown group pool for %s: %s", provider.ID, payload)
+		}
+		for _, key := range provider.KeyEntries {
+			if key.ConnectionPool != nil || key.EffectiveConnectionPool != nil {
+				t.Fatalf("runtime fallback presented effective pool values as key ownership for %s: %s", provider.ID, payload)
+			}
+		}
 	}
 	if !ids["codex-0"] || !ids["openai-compat-0"] {
 		t.Fatalf("runtime providers disappeared when stored groups were unavailable: %s", payload)
