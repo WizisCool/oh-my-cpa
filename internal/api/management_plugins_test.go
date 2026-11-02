@@ -199,7 +199,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			state.deleted = id
 			_, _ = writer.Write([]byte(`{"status":"deleted","id":"` + id + `","path":"/srv/cpa/plugins/logger.so","file_deleted":true,"configured_removed":true,"restart_required":false}`))
 		case path == "/v8/management/plugins/store" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"plugins","sources":[{"id":"official","name":"official","url":"https://registry.example/plugins.json"},{"id":"source-abc","name":"mirror.example","url":"https://mirror.example/registry.json"}],"source_errors":[{"source_id":"source-def","source_name":"down.example","source_url":"https://down.example/r.json","message":"fetch registry: 503"}],"plugins":[{"store_id":"official/limiter","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"limiter","name":"Rate Limiter","description":"Token buckets","author":"router-for-me","version":"1.2.0","repository":"router-for-me/limiter","install_type":"github_release","auth_required":false,"auth_configured":false,"platforms":[{"goos":"linux","goarch":"amd64"}],"logo":"https://cdn.example/limiter.png","homepage":"javascript:alert(1)","license":"MIT","tags":["network","limits"],"installed":false,"installed_version":"","path":"","configured":false,"registered":false,"enabled":false,"effective_enabled":false,"update_available":false},{"store_id":"official/deepseek-search","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"deepseek-search","name":"DeepSeek Search","author":"karuboniru","version":"0.1.0","repository":"karuboniru/deepseek-search","install_type":"github_release","installed":false},{"store_id":"source-abc/limiter","source_id":"source-abc","source_name":"mirror.example","source_url":"https://mirror.example/registry.json","id":"limiter","name":"Rate Limiter","author":"someone","version":"1.2.0","repository":"router-for-me/limiter","homepage":"https://limiter.example","installed":false}]}`))
+			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"plugins","sources":[{"id":"official","name":"official","url":"https://registry.example/plugins.json"},{"id":"source-abc","name":"mirror.example","url":"https://mirror.example/registry.json"}],"source_errors":[{"source_id":"source-def","source_name":"down.example","source_url":"https://down.example/r.json","message":"fetch registry: 503"}],"plugins":[{"store_id":"official/limiter","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"limiter","name":"Rate Limiter","description":"Token buckets","author":"router-for-me","version":"1.2.0","repository":"router-for-me/limiter","install_type":"github_release","auth_required":false,"auth_configured":false,"platforms":[{"goos":"linux","goarch":"amd64"}],"logo":"https://cdn.example/limiter.png","homepage":"javascript:alert(1)","license":"MIT","tags":["network","limits"],"locales":{"zh-CN":{"name":"限流器 &amp; 保护","description":"&lt;b&gt;限制请求&lt;/b&gt;","author":"发布者 &#39;名字&#39;","homepage":"https://limiter.example/zh?a=1&amp;b=2","license":"许可 &quot;MIT&quot;","tags":["网络 &amp; 限流","&amp;lt;tag&amp;gt;"],"repository":"https://evil.example/repo","source_id":"evil","auth_configured":true,"token":"must-not-leak"},"zh-Hant":{"description":"限制請求","homepage":"java&#115;cript:alert(1)"}},"installed":false,"installed_version":"","path":"","configured":false,"registered":false,"enabled":false,"effective_enabled":false,"update_available":false},{"store_id":"official/deepseek-search","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"deepseek-search","name":"DeepSeek Search","author":"karuboniru","version":"0.1.0","repository":"karuboniru/deepseek-search","install_type":"github_release","installed":false},{"store_id":"source-abc/limiter","source_id":"source-abc","source_name":"mirror.example","source_url":"https://mirror.example/registry.json","id":"limiter","name":"Rate Limiter","author":"someone","version":"1.2.0","repository":"router-for-me/limiter","homepage":"https://limiter.example","installed":false}]}`))
 		case strings.HasPrefix(path, "/v8/management/plugins/store/") && strings.HasSuffix(path, "/install"):
 			parts := strings.Split(path, "/")
 			id := parts[len(parts)-2]
@@ -416,10 +416,26 @@ func TestPluginsLifecycle(t *testing.T) {
 	official, community, mirror := storeData.Plugins[0], storeData.Plugins[1], storeData.Plugins[2]
 	assertDeclaredKeys(t, "store plugin", official, []string{
 		"store_id", "source_id", "source_name", "id", "name", "description", "author", "version",
-		"repository_url", "homepage", "license", "tags", "logo", "install_type", "platforms",
+		"repository_url", "homepage", "license", "tags", "locales", "logo", "install_type", "platforms",
 		"is_official", "is_official_repository", "is_omc", "auth_required", "auth_configured", "installed", "installed_version",
 		"install_source_status", "effective_enabled", "update_available",
 	})
+	locales, _ := official["locales"].(map[string]any)
+	localized, _ := locales["zh-CN"].(map[string]any)
+	assertDeclaredKeys(t, "store plugin locale", localized, []string{"name", "description", "author", "homepage", "license", "tags"})
+	if localized["name"] != "限流器 & 保护" || localized["description"] != "<b>限制请求</b>" || localized["author"] != "发布者 '名字'" || localized["homepage"] != "https://limiter.example/zh?a=1&b=2" || localized["license"] != `许可 "MIT"` {
+		t.Fatalf("localized metadata lost in facade: %#v", localized)
+	}
+	if tags, _ := localized["tags"].([]any); len(tags) != 2 || tags[0] != "网络 & 限流" || tags[1] != "&lt;tag&gt;" {
+		t.Fatalf("localized tags = %#v", localized["tags"])
+	}
+	traditional, _ := locales["zh-Hant"].(map[string]any)
+	if traditional["description"] != "限制請求" || traditional["homepage"] != nil {
+		t.Fatalf("localized URL allowlist = %#v", traditional)
+	}
+	if _, hasLocales := community["locales"]; hasLocales {
+		t.Fatal("a legacy store response must not invent locales")
+	}
 	if storeLogo, _ := official["logo"].(string); !strings.HasPrefix(storeLogo, "data:image/png;base64,") {
 		t.Fatalf("store logo = %q, want the registry's mark inlined", storeLogo)
 	}
@@ -724,5 +740,46 @@ func TestOfficialPluginRepositoryIsReadFromTheParsedPath(t *testing.T) {
 		if got := isOfficialPluginRepository(scenario.repository); got != scenario.want {
 			t.Errorf("isOfficialPluginRepository(%q) = %v, want %v", scenario.repository, got, scenario.want)
 		}
+	}
+}
+
+func TestProjectStorePluginLocalesAreBounded(t *testing.T) {
+	oversized := strings.Repeat("&amp;", pluginTextLimit+1)
+	item := management.PluginStoreLocale{
+		Name: oversized, Description: oversized, Author: oversized, License: oversized,
+		Homepage: "https://publisher.example/" + oversized,
+		Tags:     append([]string{"&#32;"}, strings.Split(strings.Repeat(oversized+",", pluginListLimit+1), ",")...),
+	}
+	locales := map[string]management.PluginStoreLocale{
+		"zh-CN":                                item,
+		"zh-Hant":                              {Homepage: "data&#58;text/html,unsafe"},
+		"en":                                   {Homepage: "  https&#58;//publisher.example/en?a=1&amp;b=2  "},
+		"bad key":                              item,
+		strings.Repeat("a", pluginListLimit+1): item,
+	}
+	projected := projectStorePlugin(management.StorePluginItem{Locales: locales}).Locales
+	if len(projected) != 2 || projected["en"].Homepage != "https://publisher.example/en?a=1&b=2" {
+		t.Fatalf("locale tag/URL allowlist: count=%d, homepage=%q", len(projected), projected["en"].Homepage)
+	}
+	bounded := projected["zh-CN"]
+	for _, value := range []string{bounded.Name, bounded.Description, bounded.Author, bounded.License} {
+		if value != strings.Repeat("&", pluginTextLimit) {
+			t.Fatalf("locale text must be decoded before bounding: length = %d", len(value))
+		}
+	}
+	if bounded.Homepage != "" || len(bounded.Tags) != pluginListLimit {
+		t.Fatalf("locale bounds: homepage=%q, tags=%d", bounded.Homepage, len(bounded.Tags))
+	}
+	for _, tag := range bounded.Tags {
+		if tag != strings.Repeat("&", pluginTextLimit) {
+			t.Fatalf("locale tag must be decoded before bounding: length = %d", len(tag))
+		}
+	}
+	for index := 0; index < pluginListLimit+1; index++ {
+		locales[fmt.Sprintf("en-x-%03d", index)] = management.PluginStoreLocale{Name: "Name"}
+	}
+	projected = projectStorePlugin(management.StorePluginItem{Locales: locales}).Locales
+	if len(projected) != pluginListLimit || projected["en-x-000"].Name != "Name" || projected["en-x-064"].Name != "" {
+		t.Fatalf("locale map is not deterministically bounded: %#v", projected)
 	}
 }

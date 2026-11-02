@@ -1,3 +1,5 @@
+import type { Lang } from '../../i18n/language';
+import { selectInstalledPluginMetadata, selectStorePluginMetadata } from '../../types/pluginStoreMetadata';
 import type { MessageKey } from '../../i18n/catalog';
 import type {
   PluginItem,
@@ -21,14 +23,16 @@ export function filterStorePlugins(
   entries: readonly StorePluginItem[],
   query: string,
   filter: PluginStoreFilter,
+  lang: Lang,
 ): StorePluginItem[] {
   const needle = query.trim().toLowerCase();
   return entries.filter((entry) => {
     if (filter === 'installed' && !entry.installed) return false;
     if (filter === 'available' && entry.installed) return false;
     if (filter === 'updates' && !(entry.installed && entry.update_available)) return false;
+    const metadata = selectStorePluginMetadata(entry, lang);
     return matchesQuery(
-      [entry.id, entry.name, entry.description, entry.author, entry.source_name, ...entry.tags],
+      [entry.id, metadata.name, metadata.description, metadata.author, entry.source_name, ...metadata.tags],
       needle,
     );
   });
@@ -48,15 +52,16 @@ export function filterInstalledPlugins(
   plugins: readonly PluginItem[],
   query: string,
   catalog: ReadonlyMap<string, StorePluginItem>,
+  lang: Lang,
 ): PluginItem[] {
   const needle = query.trim().toLowerCase();
   return plugins.filter((plugin) => {
-    const listing = catalog.get(plugin.id);
+    const metadata = selectInstalledPluginMetadata(plugin, catalog.get(plugin.id), lang);
     return matchesQuery(
       [
-        plugin.id, plugin.metadata?.name, plugin.metadata?.author, plugin.oauth_provider, listing?.description,
+        plugin.id, metadata.name, metadata.author, plugin.oauth_provider, metadata.description,
         ...(plugin.oauth_providers ?? []),
-        ...(listing?.tags ?? []), ...(plugin.pages ?? []).map((page) => page.label),
+        ...metadata.tags, ...(plugin.pages ?? []).map((page) => page.label),
       ],
       needle,
     );

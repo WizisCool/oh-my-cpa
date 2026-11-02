@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"html"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
@@ -44,6 +46,8 @@ const (
 	officialPluginOwner          = "router-for-me"
 	officialPluginRepositoryHost = "github.com"
 )
+
+var pluginLocaleKey = regexp.MustCompile(`^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$`)
 
 var githubRepositorySlug = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$`)
 
@@ -107,32 +111,42 @@ type PluginStoreSourceErrorDTO struct {
 	Message    string `json:"message"`
 }
 
+type PluginStoreLocaleDTO struct {
+	Name        string   `json:"name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Author      string   `json:"author,omitempty"`
+	Homepage    string   `json:"homepage,omitempty"`
+	License     string   `json:"license,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
 type StorePluginItemDTO struct {
-	StoreID              string   `json:"store_id"`
-	SourceID             string   `json:"source_id"`
-	SourceName           string   `json:"source_name"`
-	ID                   string   `json:"id"`
-	Name                 string   `json:"name"`
-	Description          string   `json:"description,omitempty"`
-	Author               string   `json:"author,omitempty"`
-	Version              string   `json:"version,omitempty"`
-	RepositoryURL        string   `json:"repository_url,omitempty"`
-	Homepage             string   `json:"homepage,omitempty"`
-	License              string   `json:"license,omitempty"`
-	Tags                 []string `json:"tags"`
-	Logo                 string   `json:"logo,omitempty"`
-	InstallType          string   `json:"install_type,omitempty"`
-	Platforms            []string `json:"platforms"`
-	IsOfficial           bool     `json:"is_official"`
-	IsOfficialRepository bool     `json:"is_official_repository"`
-	IsOMC                bool     `json:"is_omc"`
-	AuthRequired         bool     `json:"auth_required"`
-	AuthConfigured       bool     `json:"auth_configured"`
-	Installed            bool     `json:"installed"`
-	InstalledVersion     string   `json:"installed_version,omitempty"`
-	InstallSourceStatus  string   `json:"install_source_status,omitempty"`
-	EffectiveEnabled     bool     `json:"effective_enabled"`
-	UpdateAvailable      bool     `json:"update_available"`
+	StoreID              string                          `json:"store_id"`
+	SourceID             string                          `json:"source_id"`
+	SourceName           string                          `json:"source_name"`
+	ID                   string                          `json:"id"`
+	Name                 string                          `json:"name"`
+	Description          string                          `json:"description,omitempty"`
+	Author               string                          `json:"author,omitempty"`
+	Version              string                          `json:"version,omitempty"`
+	RepositoryURL        string                          `json:"repository_url,omitempty"`
+	Homepage             string                          `json:"homepage,omitempty"`
+	License              string                          `json:"license,omitempty"`
+	Tags                 []string                        `json:"tags"`
+	Locales              map[string]PluginStoreLocaleDTO `json:"locales,omitempty"`
+	Logo                 string                          `json:"logo,omitempty"`
+	InstallType          string                          `json:"install_type,omitempty"`
+	Platforms            []string                        `json:"platforms"`
+	IsOfficial           bool                            `json:"is_official"`
+	IsOfficialRepository bool                            `json:"is_official_repository"`
+	IsOMC                bool                            `json:"is_omc"`
+	AuthRequired         bool                            `json:"auth_required"`
+	AuthConfigured       bool                            `json:"auth_configured"`
+	Installed            bool                            `json:"installed"`
+	InstalledVersion     string                          `json:"installed_version,omitempty"`
+	InstallSourceStatus  string                          `json:"install_source_status,omitempty"`
+	EffectiveEnabled     bool                            `json:"effective_enabled"`
+	UpdateAvailable      bool                            `json:"update_available"`
 }
 
 // projectPluginItems projects the installed plugin list, preserving CPA's order.
@@ -347,6 +361,7 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		Homepage:             httpURLOrEmpty(plugin.Homepage),
 		License:              boundedText(plugin.License, pluginTextLimit),
 		Tags:                 boundedPluginList(plugin.Tags),
+		Locales:              projectPluginStoreLocales(plugin.Locales),
 		Logo:                 plugin.Logo,
 		InstallType:          boundedText(plugin.InstallType, 64),
 		Platforms:            platforms,
@@ -361,6 +376,52 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		EffectiveEnabled:     plugin.EffectiveEnabled,
 		UpdateAvailable:      plugin.UpdateAvailable,
 	}
+}
+
+// CPA supplies normalized locale tags. Keep their identity intact rather than
+// truncating a tag into a different language; cap the map in a deterministic order.
+func projectPluginStoreLocales(locales map[string]management.PluginStoreLocale) map[string]PluginStoreLocaleDTO {
+	keys := make([]string, 0, len(locales))
+	for key := range locales {
+		if len(key) <= pluginListLimit && pluginLocaleKey.MatchString(key) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	var result map[string]PluginStoreLocaleDTO
+	for _, key := range keys {
+		if len(result) >= pluginListLimit {
+			break
+		}
+		item := locales[key]
+		// CPA HTML-escapes these fields for its native console. Decode once before
+		// bounding or URL validation; OMC consumers still render the result as text.
+		tags := make([]string, 0, min(len(item.Tags), pluginListLimit))
+		for _, tag := range item.Tags {
+			if len(tags) >= pluginListLimit {
+				break
+			}
+			if decoded := boundedText(html.UnescapeString(tag), pluginTextLimit); decoded != "" {
+				tags = append(tags, decoded)
+			}
+		}
+		projected := PluginStoreLocaleDTO{
+			Name:        boundedText(html.UnescapeString(item.Name), pluginTextLimit),
+			Description: boundedText(html.UnescapeString(item.Description), pluginTextLimit),
+			Author:      boundedText(html.UnescapeString(item.Author), pluginTextLimit),
+			Homepage:    httpURLOrEmpty(html.UnescapeString(item.Homepage)),
+			License:     boundedText(html.UnescapeString(item.License), pluginTextLimit),
+			Tags:        tags,
+		}
+		if projected.Name == "" && projected.Description == "" && projected.Author == "" && projected.Homepage == "" && projected.License == "" && len(projected.Tags) == 0 {
+			continue
+		}
+		if result == nil {
+			result = make(map[string]PluginStoreLocaleDTO)
+		}
+		result[key] = projected
+	}
+	return result
 }
 
 // isOfficialStoreSource reports whether CPA's built-in registry listed the entry. Only

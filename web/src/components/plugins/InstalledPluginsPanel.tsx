@@ -5,8 +5,9 @@ import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, SettingOutlined, ShopOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
-import { useT } from '../../i18n';
-import { pluginDisplayName, type PluginItem, type StorePluginItem } from '../../types/plugin';
+import { useI18n, useT } from '../../i18n';
+import { selectInstalledPluginMetadata } from '../../types/pluginStoreMetadata';
+import type { PluginItem, StorePluginItem } from '../../types/plugin';
 import { safeExternalURL } from '../../utils/externalUrl';
 import { StatusLabel } from '../common/StatusLabel';
 import { filterInstalledPlugins } from './pluginStoreLogic';
@@ -49,6 +50,7 @@ export function InstalledPluginsPanel({
   onBrowseStore,
 }: InstalledPluginsPanelProps) {
   const t = useT();
+  const { lang } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [query, setQuery] = React.useState('');
@@ -63,7 +65,7 @@ export function InstalledPluginsPanel({
     if (previousDeleteId && !pendingDeleteId) moreButtonRefs.current.get(previousDeleteId)?.focus();
   }, [pendingDeleteId]);
 
-  const visible = React.useMemo(() => filterInstalledPlugins(plugins, query, catalog), [plugins, query, catalog]);
+  const visible = React.useMemo(() => filterInstalledPlugins(plugins, query, catalog, lang), [plugins, query, catalog, lang]);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
@@ -144,13 +146,14 @@ export function InstalledPluginsPanel({
         <div className={styles['installed-list']}>
           {visible.map((plugin) => {
             const listing = catalog.get(plugin.id);
-            const name = pluginDisplayName({ id: plugin.id, metadata: { name: plugin.metadata?.name || listing?.name } });
+            const metadata = selectInstalledPluginMetadata(plugin, listing, lang);
+            const name = metadata.name;
             const logo = plugin.logo || plugin.metadata?.logo || listing?.logo;
             const version = formatPluginVersion(plugin.metadata?.version || listing?.installed_version);
             const isUpdating = enabledMutation.isPending && enabledMutation.variables?.id === plugin.id;
             const isDeleting = deleteMutation.isPending && deleteMutation.variables === plugin.id;
             const repositoryURL = safeExternalURL(plugin.repository_url || listing?.repository_url);
-            const homepageURL = safeExternalURL(listing?.homepage);
+            const homepageURL = safeExternalURL(metadata.homepage);
             const hasHomepage = homepageURL !== undefined && homepageURL !== repositoryURL;
             const moreButton = (
               <Button
@@ -198,12 +201,12 @@ export function InstalledPluginsPanel({
                   <PluginMeta
                     items={[
                       version && <span className={styles['meta-strong']}>{version}</span>,
-                      plugin.metadata?.author,
+                      metadata.author,
                       plugin.config_fields.length > 0 && t('plugin.config_field_count', { n: plugin.config_fields.length }),
                       !plugin.configured && t('plugin.not_configured'),
                     ]}
                   />
-                  {listing?.description && <p className={styles.description}>{listing.description}</p>}
+                  {metadata.description && <p className={styles.description}>{metadata.description}</p>}
                 </div>
                 <div className={styles['installed-actions']}>
                   <span className={styles['switch-cell']}>

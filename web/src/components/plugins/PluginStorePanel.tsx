@@ -13,7 +13,8 @@ import {
   WarningOutlined,
 } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
-import { useT } from '../../i18n';
+import { useI18n, useT } from '../../i18n';
+import { selectStorePluginMetadata } from '../../types/pluginStoreMetadata';
 import type { PluginStoreResponse, StorePluginItem } from '../../types/plugin';
 import {
   filterStorePlugins,
@@ -76,6 +77,7 @@ interface PluginStorePanelProps {
  */
 export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSettings }: PluginStorePanelProps) {
   const t = useT();
+  const { lang } = useI18n();
   const [query, setQuery] = React.useState('');
   const [filter, setFilter] = React.useState<PluginStoreFilter>('all');
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set());
@@ -83,7 +85,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
 
   const entries = React.useMemo(() => store?.plugins ?? [], [store]);
   const counts = React.useMemo(() => storeFilterCounts(entries), [entries]);
-  const visible = React.useMemo(() => filterStorePlugins(entries, query, filter), [entries, query, filter]);
+  const visible = React.useMemo(() => filterStorePlugins(entries, query, filter, lang), [entries, query, filter, lang]);
 
   const toggleDescription = (storeId: string) => {
     setExpanded((current) => {
@@ -190,13 +192,15 @@ interface StoreCardProps {
 
 function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, onManage }: StoreCardProps) {
   const t = useT();
+  const { lang } = useI18n();
+  const metadata = selectStorePluginMetadata(entry, lang);
   const blocked = isStoreInstallBlocked(entry);
   const isFromOtherSource = entry.installed && entry.install_source_status === 'different';
   const isUpdate = entry.installed && entry.update_available;
   const version = isUpdate && entry.installed_version
     ? t('plugin.version_arrow', { from: formatPluginVersion(entry.installed_version), to: formatPluginVersion(entry.version) })
     : formatPluginVersion(entry.installed ? entry.installed_version || entry.version : entry.version);
-  const description = entry.description?.trim() ?? '';
+  const description = metadata.description?.trim() ?? '';
   const isLong = description.length > DESCRIPTION_CLAMP_CHARS;
   const actionTitle = isDemo ? t('demo.blocked') : blocked === 'auth' ? t('plugin.auth_required_hint') : undefined;
 
@@ -205,7 +209,7 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
       <div className={styles['card-head']}>
         <PluginLogo logo={entry.logo} />
         <div className={styles['card-title']}>
-          <span className={styles['card-name']} title={entry.name || entry.id}>{entry.name || entry.id}</span>
+          <span className={styles['card-name']} title={metadata.name || entry.id}>{metadata.name || entry.id}</span>
           <span className={styles['plugin-id']}>{entry.id}</span>
         </div>
       </div>
@@ -240,8 +244,8 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
       <PluginMeta
         items={[
           version && <span className={styles['meta-strong']}>{version}</span>,
-          entry.author && t('plugin.by_author', { author: entry.author }),
-          entry.license,
+          metadata.author && t('plugin.by_author', { author: metadata.author }),
+          metadata.license,
           entry.source_name && t('plugin.from_source', {
             source: entry.is_omc
               ? t('plugin.source_omc')
@@ -250,9 +254,9 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
         ]}
       />
 
-      {entry.tags.length > 0 && (
+      {metadata.tags.length > 0 && (
         <div className={styles.tags}>
-          {entry.tags.map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
+          {metadata.tags.map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
         </div>
       )}
 
@@ -278,7 +282,7 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
             </Button>
           )}
         </span>
-        <PluginLinks repositoryURL={entry.repository_url} homepage={entry.homepage} />
+        <PluginLinks repositoryURL={entry.repository_url} homepage={metadata.homepage} />
       </div>
     </article>
   );
@@ -298,6 +302,7 @@ interface PluginInstallModalProps {
  */
 function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSettings }: PluginInstallModalProps) {
   const t = useT();
+  const { lang } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [versionMode, setVersionMode] = React.useState<'latest' | 'pinned'>('latest');
@@ -318,9 +323,10 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
       }),
     onSuccess: (result, target) => {
       const isUpdate = target.installed;
+      const name = selectStorePluginMetadata(target, lang).name || target.id;
       const outcome = isUpdate
-        ? t('plugin.update_success', { name: target.name || target.id, version: formatPluginVersion(result.version) })
-        : t('plugin.install_success', { name: target.name || target.id, version: formatPluginVersion(result.version) });
+        ? t('plugin.update_success', { name, version: formatPluginVersion(result.version) })
+        : t('plugin.install_success', { name, version: formatPluginVersion(result.version) });
       // Installed while the plugin system is off is still a success, but one that will not take
       // effect: one toast says both and offers the switch, rather than a success and a dialog.
       if (result.plugins_enabled) {
@@ -361,7 +367,7 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
   const isVersionValid = versionMode === 'latest' || /^v?[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/.test(version.trim());
   // The warning block carries the only confirmation input, so its presence is the gate.
   const isConfirmed = !warning || confirmation.trim() === token;
-  const name = entry.name || entry.id;
+  const name = selectStorePluginMetadata(entry, lang).name || entry.id;
 
   return (
     <Modal
