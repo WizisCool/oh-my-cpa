@@ -182,6 +182,7 @@ export default {
   "omc.refresh_needed": "Perlu dimuat semula",
   "omc.quota_family_plan": "Pelan",
   "omc.quota_family_code_review": "Semakan kod",
+  "omc.quota_family_period": "{family} ({period})",
   "omc.section_count": "{n} kelayakan",
   "omc.section_select": "Pilih setiap kelayakan {provider} pada halaman ini",
   "omc.col_reset_credits": "Kredit set semula",

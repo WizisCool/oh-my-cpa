@@ -648,6 +648,7 @@ test('renewal evidence stays independent of healthy quota, SIWC and inference', 
 test('antigravity list excludes Claude and GPT while drawer preserves all windows', () => {
   assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT'), true);
   assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT models'), true);
+  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT-Next'), false);
   assert.equal(isListQuotaFamilyExcluded('antigravity', 'Gemini'), false);
   assert.equal(isListQuotaFamilyExcluded('antigravity', 'Gemini 4 Argon'), false);
   assert.equal(isListQuotaFamilyExcluded('claude', 'Claude and GPT'), false);

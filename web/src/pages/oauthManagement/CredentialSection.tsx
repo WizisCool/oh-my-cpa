@@ -126,14 +126,16 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
   // it: the period alone under a single plan family, the family and the period otherwise.
   const phoneColumns = section.families.map((family) => family.columns.map((column) => ({
     column,
-    phoneLabel: hasGroupedHeader ? `${familyTitle(family, t)} (${periodTitle(column, t)})` : periodTitle(column, t),
+    phoneLabel: hasGroupedHeader
+      ? t('omc.quota_family_period', { family: familyTitle(family, t), period: periodTitle(column, t) })
+      : periodTitle(column, t),
   })));
 
   const periodHeader = (column: QuotaColumn, isFirstOfFamily: boolean, family?: QuotaFamilyHeader) => {
     const isSorted = columnSort?.key === column.key;
     const periodLabel = periodTitle(column, t);
     const fullTooltip = family && hasGroupedHeader
-      ? `${familyTitle(family, t)} (${periodLabel})`
+      ? t('omc.quota_family_period', { family: familyTitle(family, t), period: periodLabel })
       : periodLabel;
     return (
       <th

@@ -182,6 +182,7 @@ export default {
   "omc.refresh_needed": "需要重新整理",
   "omc.quota_family_plan": "方案額度",
   "omc.quota_family_code_review": "程式碼審查",
+  "omc.quota_family_period": "{family} ({period})",
   "omc.section_count": "{n} 個憑證",
   "omc.section_select": "選擇本頁全部 {provider} 憑證",
   "omc.col_reset_credits": "可用重置",

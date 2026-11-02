@@ -182,6 +182,7 @@ export default {
   'omc.refresh_needed': 'Needs refresh',
   'omc.quota_family_plan': 'Plan',
   'omc.quota_family_code_review': 'Code review',
+  'omc.quota_family_period': '{family} ({period})',
   'omc.section_count': '{n} credentials',
   'omc.section_select': 'Select every {provider} credential on this page',
   'omc.col_reset_credits': 'Reset credits',

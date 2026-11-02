@@ -108,7 +108,7 @@ export function quotaCellsOf(windows: QuotaWindow[] | undefined): Map<string, Qu
  * the full breakdown remains viewable in the credential drawer's Quota tab.
  */
 export function isListQuotaFamilyExcluded(provider: string | undefined, label: string | undefined): boolean {
-  if (provider === 'antigravity' && label && /^claude and gpt/i.test(label.trim())) {
+  if (provider === 'antigravity' && label && /^claude and gpt(?:\s+models)?$/i.test(label.trim())) {
     return true;
   }
   return false;
