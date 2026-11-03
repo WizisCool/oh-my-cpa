@@ -59,7 +59,7 @@ export default {
   "pro.provider_updated": "Penyedia berjaya dikemas kini",
   "pro.provider_deleted": "Penyedia dipadamkan",
   "pro.delete_provider_confirm": "Padamkan penyedia ini? CPA akan berhenti mengirim semula permintaan ke titik akhir ini.",
-  "pro.field_base_url_desc": "URL perkhidmatan penyedia. HTTPS diperlukan, kecuali untuk alamat setempat atau rangkaian peribadi, termasuk nama hos bekas.",
+  "pro.field_base_url_desc": "URL perkhidmatan penyedia. HTTPS diperlukan, kecuali untuk alamat setempat atau rangkaian peribadi, termasuk nama hos kontena.",
   "pro.opencode_session_title": "Titik akhir OpenCode ini memerlukan pengepala sesi",
   "pro.opencode_session_desc": "OpenCode mengenal pasti perbualan melalui {header}. Gerbang mengembangkan {value} menjadi pengenalpasti sesi untuk menyokong caching prompt.",
   "pro.opencode_session_add": "Tambah {header}",
