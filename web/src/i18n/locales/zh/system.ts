@@ -356,4 +356,7 @@ export default {
   "sys.backup_oauth_step_return": "回到 OMC 完成连接",
   "sys.backup_oauth_step_return_hint": "登录后浏览器会跳回这里。",
   "sys.backup_oauth_signed_in": "授权页面已打开，请在浏览器中完成登录",
+  "sys.backup_local_needs_cloud": "已关闭，仅在云盘上传失败时保留一份",
+  "sys.backup_local_switch_locked": "先添加一个云盘",
+  "sys.backup_started": "已开始备份，完成后会更新状态",
 };

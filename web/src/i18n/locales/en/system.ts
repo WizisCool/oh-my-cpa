@@ -359,4 +359,7 @@ export default {
   "sys.backup_oauth_step_return": "Return to OMC to finish",
   "sys.backup_oauth_step_return_hint": "After signing in, the browser comes back here.",
   "sys.backup_oauth_signed_in": "The sign-in page is open; finish there",
+  "sys.backup_local_needs_cloud": "Off; kept only while a cloud upload fails",
+  "sys.backup_local_switch_locked": "Add a cloud location first",
+  "sys.backup_started": "Backup started; the status updates when it finishes",
 } satisfies Translation<typeof source>;

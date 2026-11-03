@@ -236,10 +236,23 @@
   color: var(--fg-2);
 }
 
+.mark-image {
+  display: block;
+  object-fit: contain;
+}
+
+.mark-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .mark[data-provider='local'] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-.mark[data-provider='onedrive'] { background: color-mix(in srgb, #0f6cbd 14%, transparent); color: #2f8fe0; }
-.mark[data-provider='drive'] { background: color-mix(in srgb, #f4b400 14%, transparent); color: var(--fg-2); }
-.mark[data-provider='s3'] { background: color-mix(in srgb, #e25444 12%, transparent); color: #e07a3f; }
+.mark[data-provider='onedrive'] { background: transparent; }
+.mark[data-provider='drive'] { background: transparent; }
+/* This mark is its own green tile, so the wrapper must not tint it a second time. */
+.mark[data-provider='s3'] { background: transparent; }
 .mark[data-provider='webdav'] { background: color-mix(in srgb, #06b6d4 12%, transparent); color: #22a5bd; }
 .mark[data-provider='sftp'] { background: color-mix(in srgb, #8b5cf6 12%, transparent); color: #8b5cf6; }
 .mark[data-provider='smb'] { background: color-mix(in srgb, #10b981 12%, transparent); color: #10b981; }
@@ -284,6 +297,23 @@
 }
 
 .location-error { color: var(--danger) !important; }
+
+.location-switch {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+/* Why a switch cannot be turned off, said at the switch rather than only in disconnected prose. */
+.location-switch-note {
+  max-width: 150px;
+  text-align: end;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+}
 
 .location-actions {
   display: flex;
@@ -377,6 +407,19 @@
   border: 0;
   cursor: pointer;
 }
+
+.more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.more-chevron {
+  font-size: 12px;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.more-chevron[data-open] { transform: rotate(180deg); }
 
 .more-toggle:hover { color: var(--fg); }
 .more-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
@@ -546,5 +589,9 @@
   .card > :global(.settings-toggle-row) { grid-template-columns: minmax(0, 1fr) auto; }
   .card > :global(.settings-toggle-row) :global(.settings-toggle-control) { width: auto; }
   .location { padding-inline-start: 10px; }
+  /* Two providers per row on a phone: one per row turned the picker into a long column that
+     pushed the rest of the panel out of sight. */
+  .choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .choice { min-height: 68px; padding: 10px 8px; flex-direction: column; align-items: flex-start; gap: 6px; }
   .location-actions :global(.ant-btn) { min-width: 36px; min-height: 36px; }
 }

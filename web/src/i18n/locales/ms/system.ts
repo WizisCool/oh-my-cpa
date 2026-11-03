@@ -359,4 +359,7 @@ export default {
   "sys.backup_oauth_step_return": "Kembali ke OMC untuk selesai",
   "sys.backup_oauth_step_return_hint": "Selepas log masuk, pelayar kembali ke sini.",
   "sys.backup_oauth_signed_in": "Halaman log masuk dibuka; selesaikan di sana",
+  "sys.backup_local_needs_cloud": "Dimatikan; disimpan hanya semasa muat naik awan gagal",
+  "sys.backup_local_switch_locked": "Tambah lokasi awan dahulu",
+  "sys.backup_started": "Sandaran dimulakan; status dikemas kini selepas selesai",
 } satisfies Translation<typeof source>;

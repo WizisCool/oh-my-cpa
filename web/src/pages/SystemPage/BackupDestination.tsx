@@ -14,7 +14,7 @@ import styles from './DatabaseBackups.module.css';
 export const BACKUP_PROVIDERS: { value: BackupProvider; label: string }[] = [
   { value: 'onedrive', label: 'OneDrive' },
   { value: 'drive', label: 'Google Drive' },
-  { value: 's3', label: 'S3 / Cloudflare R2' },
+  { value: 's3', label: 'S3 / R2' },
   { value: 'webdav', label: 'WebDAV' },
   { value: 'sftp', label: 'SFTP' },
   { value: 'smb', label: 'SMB' },

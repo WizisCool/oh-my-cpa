@@ -109,6 +109,18 @@ it('opens on the passphrase, turns the schedule on with it and then folds the fo
   expect((screen.getByRole('switch', { name: 'Automatic backups' }) as HTMLButtonElement).getAttribute('aria-checked')).toBe('true');
 });
 
+it('says why the local disk cannot be switched off while it is the only location', async () => {
+  const server = installOmcApi();
+  open(server, { ...configured, destinations: [] });
+  const local = (await screen.findByRole('switch', { name: 'Local disk' })) as HTMLButtonElement;
+  expect(local.disabled).toBe(true);
+  const reason = document.getElementById(local.getAttribute('aria-describedby') ?? '');
+  expect(reason?.textContent).toBe('Add a cloud location first');
+  fireEvent.click(screen.getByRole('button', { name: 'Add cloud storage' }));
+  expect(screen.getByRole('button', { name: 'OneDrive' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Google Drive' })).toBeTruthy();
+});
+
 it('adds a typed connection, then lets the local disk go, without resending saved secrets', async () => {
   const server = installOmcApi();
   let saved = configured;

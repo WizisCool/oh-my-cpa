@@ -359,4 +359,7 @@ export default {
   "sys.backup_oauth_step_return": "回到 OMC 完成連線",
   "sys.backup_oauth_step_return_hint": "登入後瀏覽器會跳回這裡。",
   "sys.backup_oauth_signed_in": "授權頁面已開啟，請在瀏覽器中完成登入",
+  "sys.backup_local_needs_cloud": "已關閉，僅在雲端硬碟上傳失敗時保留一份",
+  "sys.backup_local_switch_locked": "先新增一個雲端硬碟",
+  "sys.backup_started": "已開始備份，完成後會更新狀態",
 } satisfies Translation<typeof source>;

@@ -74,17 +74,26 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
       queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
     ]);
   };
+  /**
+   * A setting written the moment it changes. The switch, select or row that called this moves
+   * first and is put back if the server refuses, and the refusal comes as a toast: a notice at the
+   * top of the panel would sit out of sight under a scroll.
+   */
   const save = async (patch: Partial<BackupAutomationInput>, current = value) => {
     if (!current) return false;
+    const previous = current;
+    const next = { ...automationInput(current), ...patch };
     setIsSaving(true);
     setErrorKey(null);
+    queryClient.setQueryData(AUTOMATION_KEY, { ...current, ...patch });
     try {
-      const saved = await api.saveDatabaseBackupAutomation({ ...automationInput(current), ...patch });
+      const saved = await api.saveDatabaseBackupAutomation(next);
       queryClient.setQueryData(AUTOMATION_KEY, saved);
       await queryClient.invalidateQueries({ queryKey: AUTOMATION_KEY });
       return true;
     } catch (error) {
-      setErrorKey(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_auto_error'));
+      queryClient.setQueryData(AUTOMATION_KEY, previous);
+      toast.error(t(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_auto_error')));
       return false;
     } finally {
       setIsSaving(false);
@@ -99,7 +108,7 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
       toast.success(t(action === 'restore' ? 'sys.backup_scheduled' : 'sys.backup_removed'));
       if (action === 'restore') setView({ kind: 'plan' });
     } catch (error) {
-      setErrorKey(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_error_failed'));
+      toast.error(t(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_error_failed')));
     }
   };
   const go = (next: View) => {
@@ -195,8 +204,9 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
                 try {
                   await api.runDatabaseBackupAutomation();
                   await refresh();
+                  toast.info(t('sys.backup_started'));
                 } catch (error) {
-                  setErrorKey(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_auto_error'));
+                  toast.error(t(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_auto_error')));
                 }
               }}
               onCancelRestore={(job) => act(job, 'delete')}

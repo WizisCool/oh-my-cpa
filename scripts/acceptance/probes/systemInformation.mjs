@@ -1287,7 +1287,7 @@ export async function systemInformationNarrow({ base, page, check }) {
   check('the folded settings and the recovery profile action fit a phone', await dialogFits() && fits(await recoveryProfile.boundingBox()));
   await backups.getByRole('button', { name: 'Tambah storan awan', exact: true }).click();
   await backups.getByText('Perkhidmatan storan lain', { exact: true }).click();
-  await backups.getByRole('button', { name: 'S3 / Cloudflare R2', exact: true }).click();
+  await backups.getByRole('button', { name: 'S3 / R2', exact: true }).click();
   await backups.getByLabel('ID kunci akses', { exact: true }).fill('fixture-id');
   await backups.getByLabel('Kunci akses rahsia', { exact: true }).fill('synthetic-cloud-secret');
   await backups.getByLabel('Bucket / folder', { exact: true }).fill('synthetic-bucket/oh-my-cpa/backups');

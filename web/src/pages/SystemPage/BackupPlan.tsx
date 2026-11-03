@@ -3,6 +3,7 @@ import { Button, Select } from 'antd';
 import clsx from 'clsx';
 import {
   CheckCircleOutlined,
+  DownOutlined,
   CloudUploadOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -148,6 +149,7 @@ export function BackupPlan(props: Props) {
               onClick={() => setIsMoreOpen(!isMoreOpen)}
             >
               {isMoreOpen ? t('sys.backup_less_settings') : t('sys.backup_more_settings')}
+              <DownOutlined className={styles['more-chevron']} data-open={isMoreOpen || undefined} aria-hidden />
             </button>
             {isMoreOpen && <MoreSettings value={value} isBusy={isBusy} onSave={props.onSave} />}
           </section>
@@ -435,14 +437,28 @@ function LocationsSection(props: Props & { value: BackupAutomation }) {
             <span className={styles['location-name']}>
               <strong>{t('sys.backup_local')}</strong>
             </span>
-            <span>{isLocalOn ? t('sys.backup_local_on') : t('sys.backup_local_off')}</span>
+            <span>
+              {isLocalOn
+                ? t('sys.backup_local_on')
+                : hasCloud
+                  ? t('sys.backup_local_off')
+                  : t('sys.backup_local_needs_cloud')}
+            </span>
           </div>
-          <Switch
-            checked={isLocalOn}
-            aria-label={t('sys.backup_local')}
-            disabled={isBusy || (isLocalOn && !hasCloud)}
-            onChange={(checked) => void props.onSave({ keep_local: checked ? DEFAULT_KEEP_LOCAL : 0 })}
-          />
+          <span className={styles['location-switch']}>
+            <Switch
+              checked={isLocalOn}
+              aria-label={t('sys.backup_local')}
+              aria-describedby={isLocalOn && !hasCloud ? 'backup-local-reason' : undefined}
+              disabled={isBusy || (isLocalOn && !hasCloud)}
+              onChange={(checked) => void props.onSave({ keep_local: checked ? DEFAULT_KEEP_LOCAL : 0 })}
+            />
+            {isLocalOn && !hasCloud && (
+              <span id="backup-local-reason" className={styles['location-switch-note']}>
+                {t('sys.backup_local_switch_locked')}
+              </span>
+            )}
+          </span>
         </li>
         {value.destinations.map((destination, index) => (
           <li className={styles['location']} key={destination.id}>
