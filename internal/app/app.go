@@ -15,6 +15,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/api"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/backup"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/discovery"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
@@ -52,13 +53,50 @@ type App struct {
 	// where nothing may leave the process at all.
 	release *release.Service
 	// maintenance owns its own database connection, so it is closed with the app.
-	maintenance *repository.MaintenanceService
+	maintenance     *repository.MaintenanceService
+	databaseBackups *backup.Manager
+	dataLock        *backup.DataLock
 	// upstream is the in-process CPA fixture. It is non-nil only in demo mode, and
 	// it is the reason a demo deployment can boot with no gateway at all.
 	upstream *demo.Upstream
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, error) {
+	if cfg.IsDemoMode {
+		return newResolvedApp(ctx, cfg, logger)
+	}
+	if cfg.MasterKey == "" {
+		return nil, errors.New("OMCPA_MASTER_KEY is required")
+	}
+	if cfg.DatabasePath == "" {
+		return nil, errors.New("database path is required")
+	}
+	if err := os.MkdirAll(filepath.Dir(cfg.DatabasePath), 0o700); err != nil {
+		return nil, err
+	}
+	lock, err := backup.LockDatabase(cfg.DatabasePath)
+	if err != nil {
+		return nil, err
+	}
+	cipher, err := crypto.New(cfg.MasterKey)
+	if err != nil {
+		lock.Close()
+		return nil, err
+	}
+	if err := backup.ApplyPendingRestore(ctx, cfg.DatabasePath, cipher, cfg.Version); err != nil {
+		lock.Close()
+		return nil, fmt.Errorf("apply pending database restore: %w", err)
+	}
+	application, err := newResolvedApp(ctx, cfg, logger)
+	if err != nil {
+		lock.Close()
+		return nil, err
+	}
+	application.dataLock = lock
+	return application, nil
+}
+
+func newResolvedApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -102,6 +140,13 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 	cipher, err := crypto.New(cfg.MasterKey)
 	if err != nil {
 		return nil, fmt.Errorf("initialize secret cipher: %w", err)
+	}
+	wrappingCipher := cipher
+	if !cfg.IsDemoMode {
+		cipher, err = backup.ResolveCipher(cfg.DatabasePath, wrappingCipher)
+		if err != nil {
+			return nil, fmt.Errorf("initialize database cipher: %w", err)
+		}
 	}
 	// Oh My CPA has no separate administrator password: the CPA management key
 	// is the only login credential. The app still boots without one so the UI
@@ -251,6 +296,20 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		}
 	}
 
+	var databaseBackups *backup.Manager
+	if !cfg.IsDemoMode {
+		databaseBackups, err = backup.NewManager(ctx, backup.Options{Database: db, DatabasePath: cfg.DatabasePath, Cipher: cipher, WrappingCipher: wrappingCipher, Version: cfg.Version, Logger: logger})
+		if err != nil {
+			if maintenanceService != nil {
+				maintenanceService.Close()
+			}
+			db.Close()
+			return nil, err
+		}
+		handler.SetDatabaseBackups(databaseBackups)
+		databaseBackups.StartAutomation()
+	}
+
 	return &App{
 		cfg:     cfg,
 		db:      db,
@@ -262,10 +321,11 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		pipeline:         pipeline,
 		usageMaintenance: usageMaintenance,
 
-		pricing:       pricingService,
-		exchangeRates: exchangeRateService,
-		release:       releaseService,
-		maintenance:   maintenanceService,
+		pricing:         pricingService,
+		exchangeRates:   exchangeRateService,
+		release:         releaseService,
+		maintenance:     maintenanceService,
+		databaseBackups: databaseBackups,
 	}, nil
 }
 
@@ -578,6 +638,9 @@ func (a *App) Close() error {
 	if a.upstream != nil {
 		_ = a.upstream.Close()
 	}
+	if a.databaseBackups != nil {
+		_ = a.databaseBackups.Close()
+	}
 	// The maintenance service holds a connection of its own; closing the main pool
 	// first would leave it open on a database nothing else is using.
 	if a.maintenance != nil {
@@ -586,7 +649,12 @@ func (a *App) Close() error {
 	if a.db == nil {
 		return nil
 	}
-	return a.db.Close()
+	err := a.db.Close()
+	if a.dataLock != nil {
+		err = errors.Join(err, a.dataLock.Close())
+		a.dataLock = nil
+	}
+	return err
 }
 
 // seedDemoResources fills the resource list consumed by the overview.

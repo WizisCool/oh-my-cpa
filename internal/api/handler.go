@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/backup"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/discovery"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
@@ -67,7 +68,8 @@ type Handler struct {
 	release ReleaseManager
 	// maintenance runs the database-wide maintenance actions; nil until
 	// SetMaintenance, and nil in a deployment that does not offer them.
-	maintenance MaintenanceManager
+	maintenance     MaintenanceManager
+	databaseBackups *backup.Manager
 	// updater is the sidecar that applies updates; nil until SetUpdater, and nil in a
 	// demonstration. manifests downloads the signed manifest a console update needs.
 	updater         UpdateManager
@@ -207,6 +209,7 @@ func (h *Handler) routes() chi.Router {
 			apiRouter.Route("/auth", func(authRouter chi.Router) {
 				authRouter.Post("/login", h.login)
 				authRouter.Get("/session", h.session)
+				authRouter.Get("/database-backup/callback", h.databaseBackupOAuthCallback)
 				authRouter.Post("/logout", h.logout)
 				authRouter.NotFound(h.notFound)
 				authRouter.MethodNotAllowed(h.methodNotAllowed)
@@ -358,6 +361,26 @@ func (h *Handler) routes() chi.Router {
 				v1.Put("/management/quota/warmup/credentials/{authIndex}", h.putWarmupCredential)
 				v1.Post("/management/quota/warmup/credentials/{authIndex}/run", h.postWarmupRun)
 				v1.Get("/management/quota/{authIndex}", h.getCredentialQuotaDetail)
+
+				v1.Post("/management/system/database-backup-authorization", h.startDatabaseBackupOAuth)
+				v1.Get("/management/system/database-backup-authorization/{id}", h.getDatabaseBackupOAuth)
+				v1.Post("/management/system/database-backup-authorization/{id}/complete", h.completeDatabaseBackupOAuth)
+				v1.Delete("/management/system/database-backup-authorization/{id}", h.cancelDatabaseBackupOAuth)
+				v1.Get("/management/system/database-backup-automation", h.getDatabaseAutomation)
+				v1.Put("/management/system/database-backup-automation", h.putDatabaseAutomation)
+				v1.Post("/management/system/database-backup-automation/run", h.runDatabaseAutomation)
+				v1.Post("/management/system/database-backup-destinations/{id}/probe", h.probeDatabaseDestination)
+				v1.Get("/management/system/database-backup-recovery-profile", h.downloadDatabaseRecoveryProfile)
+				v1.Get("/management/system/database-backup-archives", h.listDatabaseArchives)
+				v1.Get("/management/system/database-backup-archives/{key}/download", h.downloadDatabaseArchive)
+				v1.Post("/management/system/database-backup-archives/inspect", h.inspectDatabaseArchive)
+				v1.Get("/management/system/database-backups", h.listDatabaseBackups)
+				v1.Post("/management/system/database-backups", h.createDatabaseBackup)
+				v1.Get("/management/system/database-backups/{id}/download", h.downloadDatabaseBackup)
+				v1.Get("/management/system/database-backup-jobs/{id}", h.getDatabaseBackupJob)
+				v1.Delete("/management/system/database-backup-jobs/{id}", h.deleteDatabaseBackup)
+				v1.Post("/management/system/database-restores", h.uploadDatabaseRestore)
+				v1.Post("/management/system/database-restores/{id}/apply", h.applyDatabaseRestore)
 				v1.Get("/management/system", h.getSystemInfo)
 				v1.Get("/management/system/diagnostics", h.getSystemDiagnostics)
 				v1.Get("/management/system/releases", h.getSystemReleases)
