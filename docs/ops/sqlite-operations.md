@@ -152,15 +152,13 @@ the encrypted backup.
 
 ### 2.4 Automatic backups and cloud recovery
 
-System → storage card → **Manage backups** opens the backup panel. A first visit
-asks only for the backup passphrase; saving it starts daily backups to the local
-disk. Afterwards the panel shows the last success with **Back up now**, the
-storage locations, and the schedule switch with its frequency. The local disk and
-each cloud account are peer locations: every backup goes to all that are on, and
-the disk can be switched off once a cloud location exists. Retention, the
-passphrase and the recovery profile are under **More settings**; restore, file
-export and recent operations open from the panel footer. The interval is elapsed hours, not a wall-clock
-cron expression. A persisted due time coalesces downtime into one overdue run on
+System → storage card → **Manage backups** opens the backup panel: a dialog for
+the daily time, passphrase and locations, then nothing else. The passphrase is set
+once through a guided form and is required before scheduling or any backup can run.
+Storage locations are checkboxes - the local disk, one or more cloud accounts, or cloud
+only - and each cloud account's connection is edited in its own dialog rather than a
+deeper page in the panel. The daily run starts at a wall-clock time of day (`daily_at_minute`,
+minute precision) in the server's location, not after an elapsed interval. A persisted due time coalesces downtime into one overdue run on
 startup. The existing single backup worker prevents overlap with exports or
 restores; a due run waits for the worker to become available. A pending restore
 continues to block backup work until restart or cancellation.

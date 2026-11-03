@@ -93,6 +93,9 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
     <div className={styles['connect']}>
       {errorKey && <Notice tone="error" title={t(errorKey)} />}
       {status.error && <Notice tone="error" title={t('sys.backup_oauth_error')} />}
+      {connected ? (
+        <Notice tone="success" icon={<CheckCircleOutlined />} title={t('sys.backup_oauth_connected')} />
+      ) : (
       <ol className={styles['steps']}>
         <li className={styles['step']} data-state={step === 'idle' ? 'active' : 'done'}>
           <span className={styles['step-index']} aria-hidden>
@@ -105,7 +108,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
                 <span className={styles['hint']}>{t('sys.backup_oauth_intro')}</span>
                 <div className={styles['actions']}>
                   <Button type="primary" loading={isWorking} onClick={() => void start()}>
-                    {t(connected ? 'sys.backup_oauth_reconnect' : 'sys.backup_oauth_connect')}
+                    {t('sys.backup_oauth_connect')}
                   </Button>
                 </div>
               </>
@@ -148,15 +151,14 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
             </details>
           </div>
         </li>
-        <li className={styles['step']} data-state={connected ? 'done' : step === 'idle' ? 'muted' : 'active'}>
+        <li className={styles['step']} data-state={step === 'idle' ? 'muted' : 'active'}>
           <span className={styles['step-index']} aria-hidden>
-            {connected ? <CheckCircleOutlined /> : 2}
+            2
           </span>
           <div className={styles['step-body']}>
             <strong>{t('sys.backup_oauth_step_return')}</strong>
-            {connected && <span className={styles['step-value']}>{t('sys.backup_oauth_connected')}</span>}
-            {step === 'idle' && !connected && <span className={styles['hint']}>{t('sys.backup_oauth_step_return_hint')}</span>}
-            {step === 'authorizing' && !connected && (
+            {step === 'idle' && <span className={styles['hint']}>{t('sys.backup_oauth_step_return_hint')}</span>}
+            {step === 'authorizing' && (
               <>
                 {/* A link the operator clicks, rather than a window opened for them: the browser
                     treats a window opened after the request returns as a pop-up and blocks it. */}
@@ -224,6 +226,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
           </div>
         </li>
       </ol>
+      )}
     </div>
   );
 }

@@ -36,7 +36,8 @@ export interface BackupDestination {
 }
 export interface BackupAutomation {
   enabled: boolean;
-  interval_hours: number;
+  /** The local time of day the daily run starts, in minutes from midnight. */
+  daily_at_minute: number;
   keep_local: number;
   keep_remote: number;
   has_passphrase: boolean;
@@ -48,7 +49,8 @@ export interface BackupAutomation {
 }
 export interface BackupAutomationInput {
   enabled: boolean;
-  interval_hours: number;
+  /** The local time of day the daily run starts, in minutes from midnight. */
+  daily_at_minute: number;
   keep_local: number;
   keep_remote: number;
   passphrase?: string;

@@ -24,19 +24,28 @@
   margin-inline-start: -6px;
 }
 
-/* The panel's page: sections stacked with room between them, not boxed - the headings and the
-   lists' own hairlines do the grouping. */
+/* The panel is one form: its parts are separated by space and a quiet heading, not by nested
+   boxes. */
 .content {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 26px;
 }
 
-.section {
+.section,
+.setup {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+/* A part's name is a quiet line above its controls, at the weight the settings page uses. */
+.setup > :global(.section-head) { padding: 0 2px 2px; }
+.setup > :global(.section-head) :global(.section-head-title) {
+  color: var(--fg-2);
+  font-size: var(--text-md);
+  font-weight: 500;
 }
 
 .hint {
@@ -64,6 +73,18 @@
   min-width: 0;
   font-size: var(--text-sm);
   color: var(--fg-2);
+}
+
+.field > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: var(--text-xs);
 }
 
 .field-pair {
@@ -101,48 +122,48 @@
 .advanced > summary:hover { color: var(--fg); }
 .advanced[open] > summary { margin-bottom: 14px; }
 
-/* ── status: one verdict, how long ago, and the two things to do about it ── */
+/* ── status: a verdict line, its next run, and the two acts - no frame, so it reads as the page's
+   opening rather than as a card among cards ── */
 .status {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--thread-field);
+  padding: 2px 0 22px;
+  border-bottom: 1px solid var(--border);
 }
-
-.status[data-tone='ok'] { border-color: color-mix(in srgb, var(--success) 38%, var(--border)); }
-.status[data-tone='warn'] { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
 
 .status-head {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .status-icon {
   display: inline-flex;
   flex: none;
-  margin-top: 1px;
-  font-size: 22px;
-  line-height: 1;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  border-radius: 50%;
   color: var(--muted);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
 }
 
-.status[data-tone='ok'] .status-icon { color: var(--success); }
-.status[data-tone='warn'] .status-icon { color: var(--warn); }
+.status[data-tone='ok'] .status-icon { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.status[data-tone='warn'] .status-icon { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
 
 .status-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
 .status-label {
-  color: var(--fg-2);
+  color: var(--muted);
   font-size: var(--text-sm);
 }
 
@@ -154,7 +175,7 @@
   font-size: var(--text-xl);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--fg);
 }
 
@@ -177,6 +198,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  padding-inline-start: 46px;
 }
 
 /* ── passphrase: the whole page on first visit, a row under More settings after ── */
@@ -194,35 +216,40 @@
 }
 
 /* ── locations: the disk and each cloud account as cards of one list ── */
+/* One card holds the locations, the way a settings group holds its rows: the enclosure is the
+   section's, and each location is a row separated by the same dashed hairline. */
 .locations,
 .archives,
 .jobs {
   margin: 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  overflow: hidden;
 }
 
 .location,
 .archive-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 10px 10px 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px 14px;
 }
 
-.archives, .jobs { gap: 10px; }
-.archive, .job {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+.location + .location,
+.archive + .archive,
+.job + .job {
+  border-top: 1px dashed var(--border);
 }
+
+/* The section's own action is a row of the same card, at its foot. */
+.locations + .add-location { margin-top: 8px; }
+
+.archives, .jobs { display: flex; flex-direction: column; }
+.archive, .job { padding: 14px 14px; background: transparent; }
 
 /* The mark: a tinted tile that carries each service's own hue, so a list of locations reads by
    shape and colour before it reads by name. */
@@ -298,21 +325,11 @@
 
 .location-error { color: var(--danger) !important; }
 
-.location-switch {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-/* Why a switch cannot be turned off, said at the switch rather than only in disconnected prose. */
-.location-switch-note {
-  max-width: 150px;
-  text-align: end;
+/* Why the disk cannot be cleared yet, said beside the location that needs it. */
+.location-note {
   color: var(--muted);
-  font-size: var(--text-2xs);
-  line-height: 1.4;
+  font-size: var(--text-xs);
+  font-weight: 400;
 }
 
 .location-actions {
@@ -372,7 +389,7 @@
   text-align: start;
   color: var(--fg);
   background: var(--bg);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
   overflow-wrap: anywhere;
@@ -387,44 +404,79 @@
 
 .select { width: 160px; }
 
-/* ── schedule and the folded settings ── */
-.card {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  overflow: hidden;
+/* ── schedule ── */
+.schedule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.card > :global(.settings-toggle-row) { padding-inline: 14px; }
+.schedule-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
 
-.more-toggle {
+.time-picker { width: 128px; }
+
+.retention {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.retention .field { flex: 0 1 140px; }
+
+/* A native select keeps the form to one control style: a setting that is a short list of counts
+   does not need the search behaviour of the console's remote selects. */
+.select-native {
+  height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.select-native:disabled { opacity: 0.5; cursor: not-allowed; }
+.select-native:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.link-action {
   align-self: flex-start;
   padding: 0;
   font: inherit;
   font-size: var(--text-sm);
-  color: var(--fg-2);
+  color: var(--accent);
   background: none;
   border: 0;
   cursor: pointer;
 }
 
-.more-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.link-action:hover { text-decoration: underline; }
+.link-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
+
+.passphrase-change {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
 }
 
-.more-chevron {
-  font-size: 12px;
-  transition: transform var(--motion-fast) var(--ease-standard);
-}
-
-.more-chevron[data-open] { transform: rotate(180deg); }
-
+/* ── the folded, seldom-changed settings ── */
+/* The disclosure is the card's last row while closed, so it sits where the settings it opens
+   will appear. */
 .more-toggle:hover { color: var(--fg); }
 .more-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
-
-.more-body { padding: 12px 14px; border-top: 1px solid var(--border-soft); }
 
 /* ── connecting an account: numbered steps on one page ── */
 .connect {

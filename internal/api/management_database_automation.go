@@ -21,7 +21,7 @@ type DatabaseBackupDestinationDTO struct {
 }
 type DatabaseBackupAutomationDTO struct {
 	Enabled         bool                           `json:"enabled"`
-	IntervalHours   int                            `json:"interval_hours"`
+	DailyAtMinute   int                            `json:"daily_at_minute"`
 	KeepLocal       int                            `json:"keep_local"`
 	KeepRemote      int                            `json:"keep_remote"`
 	HasPassphrase   bool                           `json:"has_passphrase"`
@@ -33,7 +33,7 @@ type DatabaseBackupAutomationDTO struct {
 }
 
 func automationDTO(value backup.Automation) DatabaseBackupAutomationDTO {
-	dto := DatabaseBackupAutomationDTO{Enabled: value.Enabled, IntervalHours: value.IntervalHours, KeepLocal: value.KeepLocal, KeepRemote: value.KeepRemote, HasPassphrase: value.Passphrase != "", NextRunAtMS: value.NextRunAtMS, LastRunAtMS: value.LastRunAtMS, LastSuccessAtMS: value.LastSuccessAtMS, LastError: value.LastError, Destinations: []DatabaseBackupDestinationDTO{}}
+	dto := DatabaseBackupAutomationDTO{Enabled: value.Enabled, DailyAtMinute: value.DailyAtMinute, KeepLocal: value.KeepLocal, KeepRemote: value.KeepRemote, HasPassphrase: value.Passphrase != "", NextRunAtMS: value.NextRunAtMS, LastRunAtMS: value.LastRunAtMS, LastSuccessAtMS: value.LastSuccessAtMS, LastError: value.LastError, Destinations: []DatabaseBackupDestinationDTO{}}
 	for _, c := range value.Destinations {
 		dto.Destinations = append(dto.Destinations, DatabaseBackupDestinationDTO{c.ID, c.Name, c.Provider, c.Root, len(c.Options) > 0})
 	}
@@ -56,7 +56,7 @@ func (h *Handler) putDatabaseAutomation(w http.ResponseWriter, r *http.Request) 
 	}
 	var input struct {
 		Enabled       bool                       `json:"enabled"`
-		IntervalHours int                        `json:"interval_hours"`
+		DailyAtMinute int                        `json:"daily_at_minute"`
 		KeepLocal     int                        `json:"keep_local"`
 		KeepRemote    int                        `json:"keep_remote"`
 		Passphrase    string                     `json:"passphrase"`
@@ -65,7 +65,7 @@ func (h *Handler) putDatabaseAutomation(w http.ResponseWriter, r *http.Request) 
 	if !readAgentInput(w, r, &input) {
 		return
 	}
-	if err := h.databaseBackups.ConfigureAutomation(r.Context(), backup.Automation{Enabled: input.Enabled, IntervalHours: input.IntervalHours, KeepLocal: input.KeepLocal, KeepRemote: input.KeepRemote, Passphrase: input.Passphrase, Destinations: input.Destinations}); err != nil {
+	if err := h.databaseBackups.ConfigureAutomation(r.Context(), backup.Automation{Enabled: input.Enabled, DailyAtMinute: input.DailyAtMinute, KeepLocal: input.KeepLocal, KeepRemote: input.KeepRemote, Passphrase: input.Passphrase, Destinations: input.Destinations}); err != nil {
 		h.databaseBackupError(w, err)
 		return
 	}

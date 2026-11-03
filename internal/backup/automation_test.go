@@ -44,7 +44,7 @@ func testWebDAV(t *testing.T) (string, string) {
 	return server.URL, directory
 }
 func testAutomation(destination DestinationConfig) Automation {
-	return Automation{Enabled: true, IntervalHours: 24, KeepLocal: 1, KeepRemote: 1, Passphrase: "automatic backup test passphrase", Destinations: []DestinationConfig{destination}}
+	return Automation{Enabled: true, DailyAtMinute: 180, KeepLocal: 1, KeepRemote: 1, Passphrase: "automatic backup test passphrase", Destinations: []DestinationConfig{destination}}
 }
 func TestAutomaticBackupVerifiesRetentionAndDisasterRecoveryWithoutDatabase(t *testing.T) {
 	ctx := context.Background()
@@ -296,7 +296,7 @@ func TestCloudOnlyBackupKeepsLocalCopyOnlyWhileDeliveryFails(t *testing.T) {
 	}
 	settings := testAutomation(DestinationConfig{ID: newID(), Name: "Cloud", Provider: "drive", Root: "backups", Options: map[string]string{"token": "{}"}})
 	settings.KeepLocal = 0
-	if err := manager.ConfigureAutomation(ctx, Automation{IntervalHours: 24, KeepRemote: 1, Passphrase: settings.Passphrase}); !errors.Is(err, ErrAutomationConfig) {
+	if err := manager.ConfigureAutomation(ctx, Automation{DailyAtMinute: 180, KeepRemote: 1, Passphrase: settings.Passphrase}); !errors.Is(err, ErrAutomationConfig) {
 		t.Fatalf("backup with nowhere to keep it: %v", err)
 	}
 	if err := manager.ConfigureAutomation(ctx, settings); err != nil {
@@ -347,8 +347,8 @@ func TestAutomaticBackupCoalescesOverdueRunAfterRestart(t *testing.T) {
 	}
 	restarted.workers.Wait()
 	state, _ = restarted.Automation(ctx)
-	if state.NextRunAtMS != now.Add(24*time.Hour).UnixMilli() {
-		t.Fatal("next due time was not persisted")
+	if want := nextDailyRun(now.Add(time.Minute), settings.DailyAtMinute); state.NextRunAtMS != want {
+		t.Fatalf("next due time %d drew, want the next %02d:%02d (%d)", state.NextRunAtMS, settings.DailyAtMinute/60, settings.DailyAtMinute%60, want)
 	}
 }
 

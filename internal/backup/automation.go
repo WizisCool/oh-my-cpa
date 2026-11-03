@@ -23,9 +23,10 @@ import (
 var ErrAutomationConfig = errors.New("automatic backup settings are invalid")
 
 type Automation struct {
-	ID              string              `json:"id"`
-	Enabled         bool                `json:"enabled"`
-	IntervalHours   int                 `json:"interval_hours"`
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled"`
+	// DailyAtMinute is the local time of day the daily run starts, counted from midnight.
+	DailyAtMinute   int                 `json:"daily_at_minute"`
 	KeepLocal       int                 `json:"keep_local"`
 	KeepRemote      int                 `json:"keep_remote"`
 	Passphrase      string              `json:"passphrase"`
@@ -47,7 +48,7 @@ func (m *Manager) saveAutomation(ctx context.Context, value Automation) error {
 	return writeAutomation(ctx, m.options.Database, m.options.Cipher, value)
 }
 func readAutomation(ctx context.Context, database *repository.DB, cipher *appcrypto.Cipher) (Automation, error) {
-	value := Automation{IntervalHours: 24, KeepLocal: 7, KeepRemote: 30, Destinations: []DestinationConfig{}}
+	value := Automation{DailyAtMinute: 3 * 60, KeepLocal: 7, KeepRemote: 30, Destinations: []DestinationConfig{}}
 	var ciphertext, nonce []byte
 	err := database.SQL.QueryRowContext(ctx, `SELECT ciphertext,nonce FROM database_backup_automation WHERE id=1`).Scan(&ciphertext, &nonce)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -102,7 +103,7 @@ func (m *Manager) ConfigureAutomation(ctx context.Context, input Automation) err
 	if err != nil {
 		return err
 	}
-	if input.IntervalHours < 1 || input.IntervalHours > 720 || input.KeepLocal < 0 || input.KeepLocal > 100 || input.KeepRemote < 1 || input.KeepRemote > 100 || len(input.Destinations) > 8 {
+	if input.DailyAtMinute < 0 || input.DailyAtMinute > 1439 || input.KeepLocal < 0 || input.KeepLocal > 100 || input.KeepRemote < 1 || input.KeepRemote > 100 || len(input.Destinations) > 8 {
 		return ErrAutomationConfig
 	}
 	// Cloud-only retention still needs somewhere to put a backup.
@@ -163,8 +164,8 @@ func (m *Manager) ConfigureAutomation(ctx context.Context, input Automation) err
 	}
 	input.LastRunAtMS, input.LastSuccessAtMS, input.LastError = previous.LastRunAtMS, previous.LastSuccessAtMS, previous.LastError
 	input.NextRunAtMS = previous.NextRunAtMS
-	if input.Enabled && (!previous.Enabled || previous.IntervalHours != input.IntervalHours) {
-		input.NextRunAtMS = time.Now().Add(time.Duration(input.IntervalHours) * time.Hour).UnixMilli()
+	if input.Enabled && (!previous.Enabled || previous.DailyAtMinute != input.DailyAtMinute) {
+		input.NextRunAtMS = nextDailyRun(time.Now(), input.DailyAtMinute)
 	}
 	if !input.Enabled {
 		input.NextRunAtMS = 0
@@ -247,6 +248,19 @@ func (m *Manager) startAutomation() {
 		}
 	}()
 }
+
+// nextDailyRun is the next instant, at or after `from`, whose local time of day is minuteOfDay.
+// A due time already passed (the process was down over the slot) runs at the next tick, which is
+// what coalesces downtime into one run.
+func nextDailyRun(from time.Time, minuteOfDay int) int64 {
+	year, month, day := from.Date()
+	slot := time.Date(year, month, day, minuteOfDay/60, minuteOfDay%60, 0, 0, from.Location())
+	if slot.Before(from) {
+		slot = slot.AddDate(0, 0, 1)
+	}
+	return slot.UnixMilli()
+}
+
 func (m *Manager) automationTick(now time.Time) {
 	if _, err := m.runAutomatic(now, true); err != nil && !errors.Is(err, ErrBusy) {
 		m.options.Logger.Error("automatic database backup could not start", "error", publicError(err))
@@ -277,7 +291,8 @@ func (m *Manager) runAutomatic(now time.Time, onlyDue bool) (Job, error) {
 	}
 	value.LastRunAtMS = now.UnixMilli()
 	if value.Enabled {
-		value.NextRunAtMS = now.Add(time.Duration(value.IntervalHours) * time.Hour).UnixMilli()
+		// The day after: the start time is a wall-clock time of day, not an elapsed interval.
+		value.NextRunAtMS = nextDailyRun(now.Add(time.Minute), value.DailyAtMinute)
 	}
 	if err := m.saveAutomation(m.lifecycle, value); err != nil {
 		m.failed(job, err)

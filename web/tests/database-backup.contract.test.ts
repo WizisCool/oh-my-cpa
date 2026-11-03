@@ -41,7 +41,7 @@ it.each(['', '/', '/omc'])('keeps backup transfer and confirmation mount-aware a
   expect(api.databaseBackupOAuthCallbackUrl()).toBe(`https://omc.example${mount}/api/auth/database-backup/callback`);
   await api.getDatabaseBackupAutomation();
   expect(calls.at(-1)?.path).toBe(`${mount}/api/v1/management/system/database-backup-automation`);
-  await api.saveDatabaseBackupAutomation({ enabled: true, interval_hours: 24, keep_local: 7, keep_remote: 30, passphrase: 'automatic test passphrase', destinations: [] });
+  await api.saveDatabaseBackupAutomation({ enabled: true, daily_at_minute: 180, keep_local: 7, keep_remote: 30, passphrase: 'automatic test passphrase', destinations: [] });
   expect(calls.at(-1)?.options.method).toBe('PUT');
   await api.runDatabaseBackupAutomation();
   expect(calls.at(-1)?.path).toBe(`${mount}/api/v1/management/system/database-backup-automation/run`);

@@ -12,7 +12,7 @@ const preview: DatabaseBackupJob = {
   source_version: 'v1.0.0', source_schema_version: 50, backup_created_at_ms: 1_799_999_900_000, has_audit_error: false,
 };
 const automatic: BackupAutomation = {
-  enabled: false, interval_hours: 24, keep_local: 7, keep_remote: 30, has_passphrase: false,
+  enabled: false, daily_at_minute: 180, keep_local: 7, keep_remote: 30, has_passphrase: false,
   destinations: [], next_run_at_ms: 0, last_run_at_ms: 0, last_success_at_ms: 0, last_error: '',
 };
 const configured: BackupAutomation = { ...automatic, enabled: true, has_passphrase: true };
@@ -84,7 +84,7 @@ it('exposes the completed restore ID and requires confirmation before removing i
   await waitFor(() => expect(screen.queryByText(completed.id)).toBeNull());
 });
 
-it('opens on the passphrase, turns the schedule on with it and then folds the form away', async () => {
+it('opens on the passphrase, turns the schedule on with it and then shows the form', async () => {
   const server = installOmcApi();
   let saved = automatic;
   server.on('PUT', '/management/system/database-backup-automation', (request) => {
@@ -95,30 +95,43 @@ it('opens on the passphrase, turns the schedule on with it and then folds the fo
   server.on('GET', '/management/system/database-backups', () => ({ items: [] }));
   renderWithOmc(<DatabaseBackups isDemo={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'Manage backups' }));
-  expect(screen.queryByRole('button', { name: 'Back up now' })).toBeNull();
+  // The schedule and the locations are not offered before the passphrase that protects them.
+  expect(screen.queryByLabelText('Daily backup time')).toBeNull();
+  expect(screen.queryByRole('checkbox', { name: 'Automatic backups' })).toBeNull();
   const save = (await screen.findByRole('button', { name: 'Save and turn on' })) as HTMLButtonElement;
-  expect(screen.queryByRole('switch', { name: 'Automatic backups' })).toBeNull();
   fireEvent.change(screen.getByLabelText('Backup passphrase'), { target: { value: 'scheduled independent passphrase' } });
   fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'scheduled independent passphras' } });
   expect(save.disabled).toBe(true);
   fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'scheduled independent passphrase' } });
   fireEvent.click(save);
-  await screen.findByRole('button', { name: 'Back up now' });
-  expect(puts(server)).toEqual([{ enabled: true, interval_hours: 24, keep_local: 7, keep_remote: 30, destinations: [], passphrase: 'scheduled independent passphrase' }]);
+  await screen.findByLabelText('Daily backup time');
+  expect(puts(server)).toEqual([{ enabled: true, daily_at_minute: 180, keep_local: 7, keep_remote: 30, destinations: [], passphrase: 'scheduled independent passphrase' }]);
   expect(screen.queryByLabelText('Backup passphrase')).toBeNull();
-  expect((screen.getByRole('switch', { name: 'Automatic backups' }) as HTMLButtonElement).getAttribute('aria-checked')).toBe('true');
+  expect((screen.getByRole('checkbox', { name: 'Automatic backups' }) as HTMLInputElement).checked).toBe(true);
 });
 
-it('says why the local disk cannot be switched off while it is the only location', async () => {
+it('says why the local disk cannot be cleared while it is the only location', async () => {
   const server = installOmcApi();
   open(server, { ...configured, destinations: [] });
-  const local = (await screen.findByRole('switch', { name: 'Local disk' })) as HTMLButtonElement;
+  const local = (await screen.findByRole('checkbox', { name: 'Local disk' })) as HTMLInputElement;
+  expect(local.checked).toBe(true);
   expect(local.disabled).toBe(true);
-  const reason = document.getElementById(local.getAttribute('aria-describedby') ?? '');
-  expect(reason?.textContent).toBe('Add a cloud location first');
+  expect(screen.getByText('Add a cloud location first')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Add cloud storage' }));
   expect(screen.getByRole('button', { name: 'OneDrive' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Google Drive' })).toBeTruthy();
+});
+
+it('saves the daily time to the minute', async () => {
+  const server = installOmcApi();
+  server.on('PUT', '/management/system/database-backup-automation', (request) => ({ ...configured, ...(request.body as BackupAutomationInput) }));
+  open(server, configured);
+  fireEvent.click(await screen.findByLabelText('Daily backup time'));
+  const input = await screen.findByRole('textbox', { name: 'Daily backup time' });
+  fireEvent.change(input, { target: { value: '05:37' } });
+  fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+  await waitFor(() => expect(puts(server).length).toBeGreaterThan(0));
+  expect(puts(server).at(-1)?.daily_at_minute).toBe(5 * 60 + 37);
 });
 
 it('adds a typed connection, then lets the local disk go, without resending saved secrets', async () => {
@@ -134,7 +147,7 @@ it('adds a typed connection, then lets the local disk go, without resending save
   renderWithOmc(<DatabaseBackups isDemo={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'Manage backups' }));
   // With nowhere else to keep backups, the local disk cannot be switched off.
-  expect(((await screen.findByRole('switch', { name: 'Local disk' })) as HTMLButtonElement).disabled).toBe(true);
+  expect(((await screen.findByRole('checkbox', { name: 'Local disk' })) as HTMLInputElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Add cloud storage' }));
   fireEvent.click(screen.getByRole('button', { name: 'WebDAV' }));
   fireEvent.change(screen.getByLabelText('WebDAV URL'), { target: { value: 'https://fixture.invalid/dav' } });
@@ -149,7 +162,7 @@ it('adds a typed connection, then lets the local disk go, without resending save
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await screen.findByRole('button', { name: 'Edit connection' });
   expect(puts(server).at(-1)?.destinations[0].options).toBeUndefined();
-  const local = screen.getByRole('switch', { name: 'Local disk' }) as HTMLButtonElement;
+  const local = screen.getByRole('checkbox', { name: 'Local disk' }) as HTMLInputElement;
   expect(local.disabled).toBe(false);
   fireEvent.click(local);
   await waitFor(() => expect(puts(server)).toHaveLength(3));
@@ -165,8 +178,6 @@ it('validates a retained cloud archive before exposing the restore confirmation'
   server.on('POST', '/management/system/database-backup-archives/inspect', () => { hasPreview = true; return preview; });
   server.on('POST', `/management/system/database-restores/${preview.id}/apply`, () => ({ requires_restart: true }));
   open(server, { ...configured, destinations: [cloud] }, () => (hasPreview ? [previousRestore, preview] : [previousRestore]));
-  fireEvent.click(await screen.findByRole('button', { name: 'More settings' }));
-  expect((await screen.findByRole('link', { name: /Download/ })).getAttribute('target')).toBe('_blank');
   fireEvent.click(await screen.findByRole('button', { name: /Restore from a backup/ }));
   fireEvent.click(await screen.findByText('Cloud fixture'));
   fireEvent.click(await screen.findByRole('button', { name: 'Restore this' }));

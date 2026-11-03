@@ -52,7 +52,7 @@ func TestDatabaseAutomationHTTPHidesSecretsAndPreservesBlankInputs(t *testing.T)
 				t.Fatal("automation settings allowed an unauthenticated read")
 			}
 			secrets := []string{"automatic backup secret passphrase", "webdav-secret-password", "oauth-test-refresh-value"}
-			input := map[string]any{"enabled": true, "interval_hours": 24, "keep_local": 7, "keep_remote": 30, "passphrase": secrets[0], "destinations": []any{map[string]any{"id": "", "name": "Offsite", "provider": "webdav", "root": "backups", "options": map[string]string{"url": "https://example.invalid/dav", "user": "fixture", "pass": secrets[1], "bearer_token": secrets[2]}}}}
+			input := map[string]any{"enabled": true, "daily_at_minute": 180, "keep_local": 7, "keep_remote": 30, "passphrase": secrets[0], "destinations": []any{map[string]any{"id": "", "name": "Offsite", "provider": "webdav", "root": "backups", "options": map[string]string{"url": "https://example.invalid/dav", "user": "fixture", "pass": secrets[1], "bearer_token": secrets[2]}}}}
 			request := func(method string, input any) (int, []byte) {
 				t.Helper()
 				var content bytes.Buffer

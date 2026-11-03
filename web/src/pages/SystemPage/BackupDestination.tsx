@@ -8,7 +8,6 @@ import type { MessageKey } from '../../i18n/catalog';
 import type { BackupAutomationInput, BackupProvider } from '../../types/databaseBackup';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
 import { BackupOAuth } from './BackupOAuth';
-import { BackupProviderMark } from './BackupProviderMark';
 import styles from './DatabaseBackups.module.css';
 
 export const BACKUP_PROVIDERS: { value: BackupProvider; label: string }[] = [
@@ -57,14 +56,19 @@ interface Props {
   hasConnection?: boolean;
   isBusy: boolean;
   onApply: (value: DestinationInput) => Promise<void>;
-  onBack: () => void;
+  onCancel: () => void;
 }
+/**
+ * One cloud account's connection, as a dialog of its own: entering it from the panel opens this,
+ * and saving or cancelling returns to the panel with the location toggled on. Nothing about a
+ * connection is a page inside the panel.
+ */
 export function BackupDestination({
   value,
   hasConnection = false,
   isBusy,
   onApply,
-  onBack,
+  onCancel,
 }: Props) {
   const t = useT();
   const [draft, setDraft] = useState(value);
@@ -96,12 +100,6 @@ export function BackupDestination({
   };
   return (
     <section className={styles['form']}>
-      <div className={styles['connect-head']}>
-        <BackupProviderMark provider={draft.provider} size={40} />
-        <span className={styles['hint']}>
-          {t(isOAuth ? 'sys.backup_destination_kind_account' : 'sys.backup_destination_kind_server')}
-        </span>
-      </div>
       {errorKey && <Notice tone="error" title={t(errorKey)} />}
       {isOAuth ? (
         <BackupOAuth
@@ -249,7 +247,7 @@ export function BackupDestination({
         </>
       )}
       <div className={styles['actions']}>
-        <Button onClick={onBack} disabled={blocked}>
+        <Button onClick={onCancel} disabled={blocked}>
           {t('common.cancel')}
         </Button>
         <Button

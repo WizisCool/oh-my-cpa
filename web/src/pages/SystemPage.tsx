@@ -52,7 +52,7 @@ import type { UpdateOffer } from './SystemPage/versionPresentation';
 import { UPDATER_QUERY_KEY, useConsoleUpdate } from './SystemPage/useConsoleUpdate';
 import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
-import { DataRetention, DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
+import { DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
 import { StorageFootprint } from './SystemPage/StorageFootprint';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
@@ -792,7 +792,6 @@ export const SystemPage: React.FC = () => {
             {sysInfo && (
               <>
                 <StorageFootprint database={sysInfo.database} />
-                <DataRetention />
                 <DatabaseBackups isDemo={isDemo} />
               </>
             )}
