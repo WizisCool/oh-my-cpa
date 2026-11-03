@@ -152,11 +152,14 @@ the encrypted backup.
 
 ### 2.4 Automatic backups and cloud recovery
 
-The backup overview guides first-time setup through a storage location, account
-connection and backup protection. Daily backups are the initial schedule; retention
-and other less common settings are under **Advanced settings**. The everyday
-overview shows the last success, next run and saved locations. Recovery, manual
-exports, history and connection management are separate tasks. The interval is elapsed hours, not a wall-clock
+System → storage card → **Manage backups** opens the backup panel. A first visit
+asks only for the backup passphrase; saving it starts daily backups to the local
+disk. Afterwards the panel shows the last success with **Back up now**, the
+storage locations, and the schedule switch with its frequency. The local disk and
+each cloud account are peer locations: every backup goes to all that are on, and
+the disk can be switched off once a cloud location exists. Retention, the
+passphrase and the recovery profile are under **More settings**; restore, file
+export and recent operations open from the panel footer. The interval is elapsed hours, not a wall-clock
 cron expression. A persisted due time coalesces downtime into one overdue run on
 startup. The existing single backup worker prevents overlap with exports or
 restores; a due run waits for the worker to become available. A pending restore

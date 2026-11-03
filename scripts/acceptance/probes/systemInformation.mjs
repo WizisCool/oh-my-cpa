@@ -1255,21 +1255,22 @@ export async function systemInformationNarrow({ base, page, check }) {
     `boxes: ${JSON.stringify(mobileStacking.boxes)}`,
   );
 
-  // Each task keeps a phone-sized form and its next action inside the drawer.
+  // Each backup task keeps a phone-sized form and its next action inside the panel.
   await page.getByRole('button', { name: 'Urus sandaran' }).click();
-  const backups = page.getByRole('dialog', { name: 'Sandaran dan pemulihan pangkalan data' });
-  await backups.waitFor({ state: 'visible' });
-  check('the backup overview does not expose setup credentials', await backups.getByLabel('Frasa laluan sandaran automatik', { exact: true }).count() === 0);
-  await backups.getByRole('button', { name: /Muat turun sandaran/ }).click();
-  await backups.getByLabel('Frasa laluan sandaran', { exact: true }).fill('synthetic backup passphrase');
-  await backups.getByLabel('Sahkan frasa laluan', { exact: true }).fill('synthetic backup passphrase');
-  const createBackup = backups.getByRole('button', { name: 'Cipta sandaran', exact: true });
+  await page.getByRole('dialog', { name: /^Sandaran pangkalan data/ }).waitFor({ state: 'visible' });
+  // Each sub-page renames the panel after its task, so later steps hold the panel itself.
+  const backups = page.locator('.app-drawer');
+  const fits = (box) => box !== null && box.x >= 0 && box.x + box.width <= 321;
+  const dialogFits = () => backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+  check('the backup overview does not expose setup credentials', await backups.getByLabel(/^Frasa laluan sandaran/).count() === 0);
+  await backups.getByRole('button', { name: 'Eksport fail sandaran', exact: true }).click();
+  await backups.getByLabel(/^Frasa laluan sandaran/).fill('synthetic backup passphrase');
+  await backups.getByLabel(/^Sahkan frasa laluan/).fill('synthetic backup passphrase');
+  const createBackup = backups.getByRole('button', { name: 'Cipta fail sandaran', exact: true });
   await createBackup.scrollIntoViewIfNeeded();
-  const drawerFits = await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
-  const createBox = await createBackup.boundingBox();
-  check('database backup drawer fits a phone and keeps its submit action reachable', drawerFits && createBox !== null && createBox.x >= 0 && createBox.x + createBox.width <= 321);
-  await backups.getByRole('button', { name: 'Kembali ke sandaran', exact: true }).click();
-  await backups.getByRole('button', { name: /Operasi terkini/ }).click();
+  check('the database backup panel fits a phone and keeps its submit action reachable', await dialogFits() && fits(await createBackup.boundingBox()));
+  await backups.getByRole('button', { name: 'Kembali', exact: true }).click();
+  await backups.getByRole('button', { name: 'Operasi terkini', exact: true }).click();
   const restoreID = backups.getByText(completedRestoreID, { exact: true });
   await restoreID.scrollIntoViewIfNeeded();
   const restoreIDFits = await restoreID.evaluate((element) => { const bounds = element.getBoundingClientRect(); return bounds.width > 0 && bounds.x >= 0 && bounds.right <= 321; });
@@ -1279,26 +1280,22 @@ export async function systemInformationNarrow({ base, page, check }) {
   const confirmationFits = await confirmation.evaluate((element) => { const bounds = element.getBoundingClientRect(); return element.scrollWidth <= element.clientWidth + 1 && bounds.x >= 0 && bounds.right <= 321; });
   check('the completed restore ID and removal confirmation fit a phone', restoreIDFits && confirmationFits);
   await confirmation.getByRole('button', { name: 'Batal', exact: true }).click();
-  await backups.getByRole('button', { name: 'Kembali ke sandaran', exact: true }).click();
-  await backups.getByRole('button', { name: /Pemulihan bencana/ }).click();
-  const recoveryProfile = backups.getByRole('link', { name: 'Muat turun profil pemulihan', exact: true });
+  await backups.getByRole('button', { name: 'Kembali', exact: true }).click();
+  await backups.getByRole('button', { name: 'Tetapan lain', exact: true }).click();
+  const recoveryProfile = backups.getByRole('link', { name: 'Muat turun', exact: true });
   await recoveryProfile.scrollIntoViewIfNeeded();
-  const profileBox = await recoveryProfile.boundingBox();
-  check('the recovery profile action fits its own focused screen', await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1) && profileBox !== null && profileBox.x >= 0 && profileBox.x + profileBox.width <= 321);
-  await backups.getByRole('button', { name: 'Kembali ke sandaran', exact: true }).click();
-  await backups.getByRole('button', { name: /Destinasi awan/ }).click();
-  await backups.getByText('Perkhidmatan storan lain', { exact: true }).click();
+  check('the folded settings and the recovery profile action fit a phone', await dialogFits() && fits(await recoveryProfile.boundingBox()));
+  await backups.getByRole('button', { name: 'Tambah storan awan', exact: true }).click();
   await backups.getByRole('button', { name: 'S3 / Cloudflare R2', exact: true }).click();
   await backups.getByLabel('ID kunci akses', { exact: true }).fill('fixture-id');
   await backups.getByLabel('Kunci akses rahsia', { exact: true }).fill('synthetic-cloud-secret');
   await backups.getByLabel('Bucket / folder', { exact: true }).fill('synthetic-bucket/oh-my-cpa/backups');
-  const continueConnection = backups.getByRole('button', { name: 'Teruskan', exact: true });
-  await continueConnection.scrollIntoViewIfNeeded();
-  const connectionFits = await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
-  const applyBox = await continueConnection.boundingBox();
-  check('typed storage fields and their continue action fit a phone', connectionFits && applyBox !== null && applyBox.x >= 0 && applyBox.x + applyBox.width <= 321);
+  const saveConnection = backups.getByRole('button', { name: 'Simpan', exact: true });
+  await saveConnection.scrollIntoViewIfNeeded();
+  check('typed storage fields and their save action fit a phone', await dialogFits() && fits(await saveConnection.boundingBox()));
   await backups.getByRole('button', { name: 'Kembali', exact: true }).click();
-  await backups.getByRole('button', { name: /Google Drive/ }).click();
+  await backups.getByRole('button', { name: 'Tambah storan awan', exact: true }).click();
+  await backups.getByRole('button', { name: 'Google Drive', exact: true }).click();
   await backups.getByRole('button', { name: 'Sambungkan akaun', exact: true }).click();
   const authorize = backups.getByRole('link', { name: 'Buka halaman kebenaran', exact: true });
   await authorize.waitFor();
@@ -1306,8 +1303,7 @@ export async function systemInformationNarrow({ base, page, check }) {
   await callback.fill('http://127.0.0.1:53682/?code=fixture-code&state=fixture-state');
   const completeConnection = backups.getByRole('button', { name: 'Selesaikan sambungan', exact: true });
   await completeConnection.scrollIntoViewIfNeeded();
-  const oauthBox = await completeConnection.boundingBox();
-  check('headless OAuth guidance and its completion action fit a phone', await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1) && oauthBox !== null && oauthBox.x >= 0 && oauthBox.x + oauthBox.width <= 321);
+  check('headless OAuth guidance and its completion action fit a phone', await dialogFits() && fits(await completeConnection.boundingBox()));
   await completeConnection.click();
   await backups.getByText('Akaun disambungkan. Anda boleh teruskan.', { exact: true }).waitFor();
   check('completing authorization clears its response field', await callback.count() === 0);

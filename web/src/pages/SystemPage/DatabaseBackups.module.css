@@ -1,3 +1,4 @@
+/* The storage card's backup entry: the name and a one-line status, the button at the trailing edge. */
 .entry {
   display: flex;
   align-items: center;
@@ -8,130 +9,350 @@
   border-top: 1px solid var(--border-soft);
 }
 
+.entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* A sub-page's title carries the step back to the backup page. */
+.drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: -6px;
+}
+
+/* The panel's page: sections stacked with room between them, not boxed - the headings and the
+   lists' own hairlines do the grouping. */
 .content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hint {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
 }
 
-.hint {
+.field-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* A connection form: fields close together, the less common ones folded under Advanced. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.advanced {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.advanced > summary {
+  cursor: pointer;
+  width: fit-content;
   color: var(--fg-2);
   font-size: var(--text-sm);
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 
-.history {
+.advanced > summary:hover { color: var(--fg); }
+.advanced[open] > summary { margin-bottom: 14px; }
+
+/* ── status: the one reading that matters, beside the one action that changes it ── */
+.status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--thread-field);
+}
+
+.status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.status-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.status-value {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  color: var(--fg);
+}
+
+.status-notice { grid-column: 1 / -1; }
+
+/* ── passphrase: the whole page on first visit, a row under More settings after ── */
+.is-first {
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.passphrase {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.job {
+.rows :global(.settings-toggle-row),
+.content > :global(.settings-toggle-row) {
+  padding-inline: 0;
+}
+
+/* ── locations: the disk and each cloud account as rows of one list ── */
+.locations,
+.archives,
+.jobs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.location,
+.archive-row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-block: 14px;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 12px 10px 16px;
+}
+
+.location + .location,
+.archive + .archive,
+.job + .job {
   border-top: 1px solid var(--border-soft);
 }
 
-.job-head {
+.location-icon {
+  flex: none;
+  font-size: 18px;
+  color: var(--fg-2);
+}
+
+.location-text {
   display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.location-text strong {
+  font-weight: 500;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.location-text span {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.location-error { color: var(--danger) !important; }
+
+.is-off .location-icon,
+.is-off .location-text strong { color: var(--muted); }
+
+.location-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.choices-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 14px;
+  font: inherit;
+  text-align: start;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.choice:hover { background: var(--thread-field-hover); border-color: var(--muted); }
+.choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.select { width: 160px; }
+
+/* ── schedule and the folded settings ── */
+.schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  margin-top: -12px;
+}
+
+.more-toggle {
+  align-self: flex-start;
+  margin-inline-start: -8px;
+  color: var(--fg-2);
+}
+
+/* ── restore ── */
+.restore {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sources { max-width: 100%; overflow-x: auto; }
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.archive[data-selected] { background: var(--thread-field); }
+
+.unlock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding: 0 16px 14px;
+}
+
+.restore > .unlock { padding: 0; }
+.unlock .field { flex: 1 1 240px; }
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.preview-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
 }
 
 .facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 12px;
-  font-size: var(--text-sm);
+  gap: 8px 20px;
   margin: 0;
+  font-size: var(--text-sm);
 }
 
 .facts dt { color: var(--fg-2); }
-.facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+/* ── jobs ── */
+.job {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.job-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
 }
 
+.job .actions { justify-content: flex-start; }
 
-.welcome,
-.summary {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 18px;
-  padding: 20px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+@media (max-width: 640px) {
+  .status { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .status > :global(.ant-btn) { width: 100%; min-height: 40px; }
+  .is-first { padding: 16px; }
+  .select { width: 120px; }
+  /* The schedule's controls are a short select and a switch; they stay beside their label. */
+  .content > :global(.settings-toggle-row),
+  .rows :global(.settings-toggle-row) { grid-template-columns: minmax(0, 1fr) auto; }
+  .content > :global(.settings-toggle-row) :global(.settings-toggle-control),
+  .rows :global(.settings-toggle-row) :global(.settings-toggle-control) { width: auto; }
+  .location { padding-inline-start: 12px; }
 }
-
-.welcome h3,
-.summary h3,
-.content h3 { margin: 0; }
-
-.back { align-self: flex-start; }
-
-.eyebrow {
-  margin: 0;
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.task-list { display: flex; flex-direction: column; }
-
-.task,
-.choice {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: start;
-  gap: 6px;
-  padding: 16px;
-  font: inherit;
-  color: var(--fg);
-  background: transparent;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-.task { position: relative; padding-inline-end: 40px; width: 100%; border: 0; border-top: 1px solid var(--border-soft); }
-.task span,
-.choice span { font-size: var(--text-sm); color: var(--fg-2); }
-.task:hover,
-.choice:hover { background: var(--selected-inset); }
-
-.task:focus-visible,
-.choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; }
-.choice { min-width: 0; border: 1px solid var(--border-soft); border-radius: var(--radius-md); }
-.choice[aria-pressed='true'] { border-color: var(--accent); background: var(--selected-inset); }
-
-.advanced { padding-block: 10px; border-top: 1px solid var(--border-soft); }
-.advanced summary { cursor: pointer; color: var(--fg-2); font-size: var(--text-sm); }
-.advanced > div,
-.advanced > p { margin-top: 14px; }
-
-.task-arrow {
-  position: absolute;
-  inset-inline-end: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--fg-2);
-}
-
-.choice-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }

@@ -55,7 +55,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
   };
   const connected = hasConnection || session?.status === 'connected';
   return (
-    <div className={styles['content']}>
+    <div className={styles['form']}>
       {connected && (
         <Notice
           tone="success"
@@ -69,7 +69,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
           <p className={styles['hint']}>{t('sys.backup_oauth_intro')}</p>
           <details className={styles['advanced']}>
             <summary>{t('sys.backup_oauth_own_app')}</summary>
-            <div className={styles['content']}>
+            <div className={styles['form']}>
               <label className={styles['field']}>
                 <span>{t('sys.backup_oauth_client_id')}</span>
                 <Input

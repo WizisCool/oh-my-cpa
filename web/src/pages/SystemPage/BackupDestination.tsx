@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Input, Select, Space } from 'antd';
+import { Button, Input, Select } from 'antd';
 import { apiErrorCode } from '../../api/client';
 import { SecretInput } from '../../components/common/SecretInput';
 import { Notice } from '../../components/feedback';
@@ -94,8 +94,7 @@ export function BackupDestination({
     }
   };
   return (
-    <section className={styles['content']}>
-      <h3>{BACKUP_PROVIDERS.find((provider) => provider.value === draft.provider)?.label}</h3>
+    <section className={styles['form']}>
       {errorKey && <Notice tone="error" title={t(errorKey)} />}
       {isOAuth ? (
         <BackupOAuth
@@ -148,7 +147,7 @@ export function BackupDestination({
           </label>
           <details className={styles['advanced']}>
             <summary>{t('sys.backup_advanced')}</summary>
-            <div className={styles['content']}>
+            <div className={styles['form']}>
               <label className={styles['field']}>
                 <span>{t('sys.backup_destination_name')}</span>
                 <Input
@@ -242,9 +241,9 @@ export function BackupDestination({
           </details>
         </>
       )}
-      <Space wrap>
+      <div className={styles['actions']}>
         <Button onClick={onBack} disabled={blocked}>
-          {t('sys.backup_back')}
+          {t('common.cancel')}
         </Button>
         <Button
           type="primary"
@@ -252,17 +251,20 @@ export function BackupDestination({
           disabled={blocked || !canSave}
           onClick={() => void apply()}
         >
-          {t('sys.backup_continue')}
+          {t('sys.backup_destination_save')}
         </Button>
-      </Space>
+      </div>
     </section>
   );
+}
+export function providerLabel(provider: BackupProvider): string {
+  return BACKUP_PROVIDERS.find((entry) => entry.value === provider)?.label ?? provider;
 }
 export function newBackupDestination(provider: BackupProvider): DestinationInput {
   return {
     id: '',
     provider,
-    name: BACKUP_PROVIDERS.find((entry) => entry.value === provider)?.label ?? provider,
+    name: providerLabel(provider),
     root: provider === 's3' || provider === 'smb' ? '' : 'OMC Backups',
     options:
       provider === 'ftp'
