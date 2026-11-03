@@ -78,6 +78,23 @@ do not promise the console's revision-checked editing contract for those calls.
 These rules live in `management_plugin_host.go` and
 `internal/cpa/management/client_plugin_host.go`; they do not widen ordinary DTOs.
 
+### Operator-entered provider endpoints
+
+Model-list pulls and connectivity probes may send provider credentials over HTTP
+only to localhost, loopback/private IPs, or hostnames whose resolved addresses are
+all loopback/private. This supports Docker service names without allowing a name
+that resolves to public or mixed public/private addresses. A failed or empty DNS
+answer is refused. Direct connections to these hostnames use the checked IPs,
+while preserving the configured HTTP Host and same-origin redirect checks, so a
+later DNS change cannot move the credential elsewhere.
+
+HTTP hostname requests cannot use a proxy, because proxy-side DNS would bypass
+that pinning. Add the hostname to `NO_PROXY` for environment proxies, or configure
+a private IP endpoint when the proxy is required. OMC never silently bypasses an
+operator-selected proxy. HTTPS and allowed IP-literal endpoints keep their existing
+proxy behavior. Plugin-declared fetches retain their separate, stricter policy in
+[`outbound_fetch.go`](../internal/api/outbound_fetch.go).
+
 ### Agent and MCP
 
 The [capability executor](agent-capabilities.md) owns authorization, approval and audit

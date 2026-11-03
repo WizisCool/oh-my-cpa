@@ -369,9 +369,12 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusBadRequest, security.RedactText(err.Error(), secrets...))
 		return
 	}
+	ctx, cancel := context.WithTimeout(request.Context(), probeTimeout)
+	defer cancel()
 	parsed, err := url.Parse(spec.target)
-	if err != nil || !isModelPullURLAllowed(parsed) {
-		writeError(writer, http.StatusBadRequest, "probe URL must use HTTPS unless it targets localhost, a loopback address, or a private IP address")
+	addresses, isAllowed := resolveProviderURLAddresses(ctx, parsed)
+	if err != nil || !isAllowed {
+		writeError(writer, http.StatusBadRequest, "probe URL must use HTTPS unless it targets localhost, a loopback/private IP address, or a hostname resolving only to those addresses")
 		return
 	}
 	if apiKey == "" && probeBearerToken(headerFromMap(headers)) == "" && !hasProbeAuthHeader(headers, family) {
@@ -404,8 +407,6 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusBadRequest, "failed to encode probe request")
 		return
 	}
-	ctx, cancel := context.WithTimeout(request.Context(), probeTimeout)
-	defer cancel()
 	outgoing, err := http.NewRequestWithContext(ctx, http.MethodPost, spec.target, bytes.NewReader(payload))
 	if err != nil {
 		writeJSON(writer, http.StatusOK, map[string]any{"ok": false, "error": security.RedactText(err.Error(), secrets...)})
@@ -428,9 +429,10 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 		}
 		transport.Proxy = http.ProxyURL(parsedProxy)
 	}
+	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Timeout:       probeTimeout,
-		Transport:     transport,
+		Transport:     pinProviderHostname(transport, parsed, addresses),
 		CheckRedirect: sameOriginRedirectGuard(errProbeRedirectRefused, MAX_MODEL_PULL_REDIRECTS),
 	}
 	resp, err := client.Do(outgoing)

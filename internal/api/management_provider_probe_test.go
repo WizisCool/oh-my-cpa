@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -170,6 +171,7 @@ func TestProbeProviderSendsEachFamilyDialect(t *testing.T) {
 }
 
 func TestProbeProviderRefusesBadRequests(t *testing.T) {
+	useProviderDNS(t, map[string][]net.IP{"example.test.": {net.ParseIP("93.184.216.34")}})
 	fixture := newProviderTestFixture(t)
 	upstream, _ := startProbeUpstream(t, http.StatusOK, `{}`)
 	for _, testCase := range []struct {
@@ -180,6 +182,8 @@ func TestProbeProviderRefusesBadRequests(t *testing.T) {
 		{name: "missing model", body: `{"family":"codex","base_url":"` + upstream.URL + `","api_key":"sk-probe-1"}`},
 		{name: "missing key", body: `{"family":"codex","base_url":"` + upstream.URL + `","model":"m"}`},
 		{name: "missing base url", body: `{"family":"codex","api_key":"sk-probe-1","model":"m"}`},
+		{name: "public HTTP", body: `{"family":"codex","base_url":"http://example.test","api_key":"sk-probe-1","model":"m"}`},
+		{name: "unresolved HTTP hostname", body: `{"family":"codex","base_url":"http://missing-relay","api_key":"sk-probe-1","model":"m"}`},
 		{name: "bad scheme", body: `{"family":"codex","base_url":"ftp://example.test","api_key":"sk-probe-1","model":"m"}`},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
