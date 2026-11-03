@@ -1,3 +1,4 @@
+import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -792,6 +793,7 @@ export const SystemPage: React.FC = () => {
               <>
                 <StorageFootprint database={sysInfo.database} />
                 <DataRetention />
+                <DatabaseBackups isDemo={isDemo} />
               </>
             )}
           </Panel>

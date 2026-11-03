@@ -20,6 +20,8 @@ import { settleLayout, until } from '../harness.mjs';
  * is rendered at all.
  */
 
+const completedRestoreID = '11223344-5566-4788-99aa-bbccddeeff00';
+
 /** A release body that exercises every way a renderer could escape its sandbox. */
 const hostileBody = [
   '## Changelog',
@@ -178,6 +180,23 @@ export function systemFixtures() {
         ],
       }),
     ],
+    [(url, method) => method === 'POST' && url.pathname.endsWith('/management/system/database-backup-authorization'), () => ({ id: 'fixture-authorization', status: 'waiting', authorization_url: 'https://provider.example/authorize?state=fixture-state', expires_at_ms: 1900000000000 })],
+    [(url, method) => method === 'POST' && url.pathname.endsWith('/management/system/database-backup-authorization/fixture-authorization/complete'), () => ({ id: 'fixture-authorization', status: 'connected', expires_at_ms: 1900000000000 })],
+    [(url) => url.pathname.endsWith('/management/system/database-backup-automation'), () => ({
+      enabled: false, interval_hours: 24, keep_local: 7, keep_remote: 30, has_passphrase: true,
+      destinations: [{ id: completedRestoreID, name: 'Salinan pemulihan awan', provider: 'webdav', root: 'oh-my-cpa/backups', has_config: true }],
+      next_run_at_ms: 0, last_run_at_ms: 0, last_success_at_ms: 1790016000000, last_error: '',
+    })],
+    [(url) => url.pathname.endsWith('/management/system/database-backup-archives'), () => ({ items: [{
+      key: `omc-${completedRestoreID}-1790016000000-${completedRestoreID}.omcbackup`,
+      size_bytes: 4096, created_at_ms: 1790016000000,
+    }] })],
+    [(url) => url.pathname.endsWith('/management/system/database-backups'), () => ({ items: [{
+      id: completedRestoreID, kind: 'import', state: 'completed', created_at_ms: 1790017000000,
+      expires_at_ms: 1790103400000, size_bytes: 4096, digest: 'fixture-restore-digest',
+      source_version: 'v0.1.0', source_schema_version: 24, backup_created_at_ms: 1790016000000,
+      has_audit_error: false,
+    }] })],
   ];
 }
 
@@ -1235,6 +1254,65 @@ export async function systemInformationNarrow({ base, page, check }) {
     mobileStacking.correctlyStacked,
     `boxes: ${JSON.stringify(mobileStacking.boxes)}`,
   );
+
+  // Each task keeps a phone-sized form and its next action inside the drawer.
+  await page.getByRole('button', { name: 'Urus sandaran' }).click();
+  const backups = page.getByRole('dialog', { name: 'Sandaran dan pemulihan pangkalan data' });
+  await backups.waitFor({ state: 'visible' });
+  check('the backup overview does not expose setup credentials', await backups.getByLabel('Frasa laluan sandaran automatik', { exact: true }).count() === 0);
+  await backups.getByRole('button', { name: /Muat turun sandaran/ }).click();
+  await backups.getByLabel('Frasa laluan sandaran', { exact: true }).fill('synthetic backup passphrase');
+  await backups.getByLabel('Sahkan frasa laluan', { exact: true }).fill('synthetic backup passphrase');
+  const createBackup = backups.getByRole('button', { name: 'Cipta sandaran', exact: true });
+  await createBackup.scrollIntoViewIfNeeded();
+  const drawerFits = await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+  const createBox = await createBackup.boundingBox();
+  check('database backup drawer fits a phone and keeps its submit action reachable', drawerFits && createBox !== null && createBox.x >= 0 && createBox.x + createBox.width <= 321);
+  await backups.getByRole('button', { name: 'Kembali ke sandaran', exact: true }).click();
+  await backups.getByRole('button', { name: /Operasi terkini/ }).click();
+  const restoreID = backups.getByText(completedRestoreID, { exact: true });
+  await restoreID.scrollIntoViewIfNeeded();
+  const restoreIDFits = await restoreID.evaluate((element) => { const bounds = element.getBoundingClientRect(); return bounds.width > 0 && bounds.x >= 0 && bounds.right <= 321; });
+  await backups.getByRole('button', { name: 'Alih keluar', exact: true }).click();
+  const confirmation = page.locator('.ant-popconfirm').filter({ has: page.getByRole('button', { name: 'Batal', exact: true }) });
+  await confirmation.waitFor({ state: 'visible' });
+  const confirmationFits = await confirmation.evaluate((element) => { const bounds = element.getBoundingClientRect(); return element.scrollWidth <= element.clientWidth + 1 && bounds.x >= 0 && bounds.right <= 321; });
+  check('the completed restore ID and removal confirmation fit a phone', restoreIDFits && confirmationFits);
+  await confirmation.getByRole('button', { name: 'Batal', exact: true }).click();
+  await backups.getByRole('button', { name: 'Kembali ke sandaran', exact: true }).click();
+  await backups.getByRole('button', { name: /Pemulihan bencana/ }).click();
+  const recoveryProfile = backups.getByRole('link', { name: 'Muat turun profil pemulihan', exact: true });
+  await recoveryProfile.scrollIntoViewIfNeeded();
+  const profileBox = await recoveryProfile.boundingBox();
+  check('the recovery profile action fits its own focused screen', await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1) && profileBox !== null && profileBox.x >= 0 && profileBox.x + profileBox.width <= 321);
+  await backups.getByRole('button', { name: 'Kembali ke sandaran', exact: true }).click();
+  await backups.getByRole('button', { name: /Destinasi awan/ }).click();
+  await backups.getByText('Perkhidmatan storan lain', { exact: true }).click();
+  await backups.getByRole('button', { name: 'S3 / Cloudflare R2', exact: true }).click();
+  await backups.getByLabel('ID kunci akses', { exact: true }).fill('fixture-id');
+  await backups.getByLabel('Kunci akses rahsia', { exact: true }).fill('synthetic-cloud-secret');
+  await backups.getByLabel('Bucket / folder', { exact: true }).fill('synthetic-bucket/oh-my-cpa/backups');
+  const continueConnection = backups.getByRole('button', { name: 'Teruskan', exact: true });
+  await continueConnection.scrollIntoViewIfNeeded();
+  const connectionFits = await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+  const applyBox = await continueConnection.boundingBox();
+  check('typed storage fields and their continue action fit a phone', connectionFits && applyBox !== null && applyBox.x >= 0 && applyBox.x + applyBox.width <= 321);
+  await backups.getByRole('button', { name: 'Kembali', exact: true }).click();
+  await backups.getByRole('button', { name: /Google Drive/ }).click();
+  await backups.getByRole('button', { name: 'Sambungkan akaun', exact: true }).click();
+  const authorize = backups.getByRole('link', { name: 'Buka halaman kebenaran', exact: true });
+  await authorize.waitFor();
+  const callback = backups.getByLabel('Alamat pelayar selepas kebenaran', { exact: true });
+  await callback.fill('http://127.0.0.1:53682/?code=fixture-code&state=fixture-state');
+  const completeConnection = backups.getByRole('button', { name: 'Selesaikan sambungan', exact: true });
+  await completeConnection.scrollIntoViewIfNeeded();
+  const oauthBox = await completeConnection.boundingBox();
+  check('headless OAuth guidance and its completion action fit a phone', await backups.evaluate((element) => element.scrollWidth <= element.clientWidth + 1) && oauthBox !== null && oauthBox.x >= 0 && oauthBox.x + oauthBox.width <= 321);
+  await completeConnection.click();
+  await backups.getByText('Akaun disambungkan. Anda boleh teruskan.', { exact: true }).waitFor();
+  check('completing authorization clears its response field', await callback.count() === 0);
+  await backups.getByRole('button', { name: 'Tutup', exact: true }).click();
+  await backups.waitFor({ state: 'hidden' });
 
   // ── Intermediate viewport (800px): below 900px breakpoint, single column ──
   await page.setViewportSize({ width: 800, height: 1000 });

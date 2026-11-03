@@ -1,3 +1,4 @@
+import type { BackupAuthorization, BackupArchive, BackupAutomation, BackupAutomationInput, DatabaseBackupJob, DatabaseBackupsResponse } from '../types/databaseBackup';
 import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } from '../types/routing';
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
@@ -1198,6 +1199,84 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  },
+
+
+  async startBackupAuthorization(input: { provider: 'drive' | 'onedrive'; client_id?: string; client_secret?: string; automatic_callback?: boolean }): Promise<BackupAuthorization> {
+    return request('/management/system/database-backup-authorization', { method: 'POST', body: JSON.stringify(input) });
+  },
+  async getBackupAuthorization(id: string): Promise<BackupAuthorization> {
+    return request(`/management/system/database-backup-authorization/${encodeURIComponent(id)}`);
+  },
+  async completeBackupAuthorization(id: string, callbackUrl: string): Promise<BackupAuthorization> {
+    return request(`/management/system/database-backup-authorization/${encodeURIComponent(id)}/complete`, { method: 'POST', body: JSON.stringify({ callback_url: callbackUrl }) });
+  },
+  async cancelBackupAuthorization(id: string): Promise<void> {
+    await requestResponse(`/management/system/database-backup-authorization/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  databaseBackupOAuthCallbackUrl(): string {
+    return new URL(authUrl('/database-backup/callback'), window.location.origin).href;
+  },
+
+  async getDatabaseBackupAutomation(): Promise<BackupAutomation> {
+    return request('/management/system/database-backup-automation');
+  },
+
+  async saveDatabaseBackupAutomation(input: BackupAutomationInput): Promise<BackupAutomation> {
+    return request('/management/system/database-backup-automation', { method: 'PUT', body: JSON.stringify(input) });
+  },
+
+  async runDatabaseBackupAutomation(): Promise<DatabaseBackupJob> {
+    return request('/management/system/database-backup-automation/run', { method: 'POST', body: '{}' });
+  },
+
+  async probeDatabaseBackupDestination(id: string): Promise<{ ok: boolean }> {
+    return request(`/management/system/database-backup-destinations/${encodeURIComponent(id)}/probe`, { method: 'POST', body: '{}' });
+  },
+
+  async getDatabaseBackupArchives(destinationId: string): Promise<{ items: BackupArchive[] }> {
+    return request(`/management/system/database-backup-archives?destination_id=${encodeURIComponent(destinationId)}`);
+  },
+
+  async inspectDatabaseBackupArchive(destinationId: string, key: string, passphrase: string): Promise<DatabaseBackupJob> {
+    return request('/management/system/database-backup-archives/inspect', { method: 'POST', body: JSON.stringify({ destination_id: destinationId, key, passphrase }) });
+  },
+
+  databaseBackupArchiveDownloadUrl(key: string): string {
+    return `${getAppConfig().apiBaseUrl}/management/system/database-backup-archives/${encodeURIComponent(key)}/download`;
+  },
+
+  databaseBackupRecoveryProfileUrl(): string {
+    return `${getAppConfig().apiBaseUrl}/management/system/database-backup-recovery-profile`;
+  },
+
+  async getDatabaseBackups(): Promise<DatabaseBackupsResponse> {
+    return request('/management/system/database-backups');
+  },
+
+  async createDatabaseBackup(passphrase: string): Promise<DatabaseBackupJob> {
+    return request('/management/system/database-backups', { method: 'POST', body: JSON.stringify({ passphrase }) });
+  },
+
+  databaseBackupDownloadUrl(id: string): string {
+    return `${getAppConfig().apiBaseUrl}/management/system/database-backups/${encodeURIComponent(id)}/download`;
+  },
+
+  async inspectDatabaseBackup(file: File, passphrase: string): Promise<DatabaseBackupJob> {
+    const body = new FormData();
+    body.append('passphrase', passphrase);
+    body.append('file', file);
+    return request('/management/system/database-restores', { method: 'POST', body });
+  },
+
+  async scheduleDatabaseRestore(id: string, digest: string): Promise<{ requires_restart: boolean }> {
+    return request(`/management/system/database-restores/${encodeURIComponent(id)}/apply`, {
+      method: 'POST', body: JSON.stringify({ digest }),
+    });
+  },
+
+  async deleteDatabaseBackupJob(id: string): Promise<void> {
+    await requestResponse(`/management/system/database-backup-jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
   // System
