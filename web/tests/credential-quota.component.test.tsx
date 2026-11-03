@@ -423,7 +423,7 @@ describe("a credential row's reset time", () => {
     expect(within(cells[1]).getByText('2d left')).toBeTruthy();
   });
 
-  it.each(['exact', 'derived', 'approximate'] as const)('shows the five-hour duration for explicitly unused full Codex readings (%s)', (accuracy) => {
+  it.each(['exact', 'derived', 'approximate'] as const)('shows the five-hour duration and reset details for unused full Codex readings (%s)', async (accuracy) => {
     const window = { ...quotaWindow('five_hour', 100, 2), used_percent: 0, remaining_percent: accuracy === 'derived' ? undefined : 100, reset_accuracy: accuracy };
     const { container } = renderCredentialRow(quota('codex-full', [window, {
       ...quotaWindow('weekly', 100, 48), used_percent: 0,
@@ -433,8 +433,12 @@ describe("a credential row's reset time", () => {
     expect(within(cells[0]).getByText('5h', { exact: true })).toBeTruthy();
     expect(within(cells[0]).queryByText(/left|Recovered/)).toBeNull();
     expect(cells[0].querySelector('.meter')?.getAttribute('aria-valuenow')).toBe('100');
-    expect(cells[0].title).toContain(accuracy === 'exact' ? '2h left' : '~');
-    expect(cells[0].title).toContain('10/10 10:00');
+    const reading = within(cells[0]).getByRole('group', { name: 'five_hour' });
+    fireEvent.pointerMove(reading, { pointerType: 'mouse' });
+    const resetDetails = await screen.findByRole('tooltip');
+    expect(resetDetails.textContent).toContain(accuracy === 'exact' ? '2h left' : '~');
+    expect(resetDetails.textContent).toContain('10/10 10:00');
+    expect(reading.getAttribute('aria-describedby')?.split(' ')).toContain(resetDetails.id);
     expect(within(cells[1]).getByText('2d left')).toBeTruthy();
   });
 
@@ -461,7 +465,7 @@ describe("a credential row's reset time", () => {
     ]));
     const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
     expect(within(cell).getByText('5h', { exact: true })).toBeTruthy();
-    expect(cell.title).toBe('five_hour');
+    expect(within(cell).getByRole('group', { name: 'five_hour' })).toBeTruthy();
   });
 });
 

@@ -589,16 +589,19 @@ function QuotaCell({ columnKey, phoneLabel, provider, window, isPhoneWide, isFir
       className={clsx(styles['td-quota'], isFirstOfFamily && styles['td-divided'], isStale && styles['quota-stale'], isPhoneWide && styles['phone-wide'])}
       data-quota-column={columnKey}
       data-quota-window-label={window.label}
-      title={detail}
     >
-      <div className={styles['quota-reading']}>
-        <span className={styles['phone-label']}>{phoneLabel}</span>
-        <span className={styles['quota-value']} style={remaining != null && remaining < 70 ? { color: quotaRemainingStroke(remaining) } : undefined}>
-          {quotaRemainingText(window)}
-        </span>
-        {reset && <span className={styles['quota-reset']}>{reset}</span>}
-        <Meter className={styles['quota-meter']} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
-      </div>
+      {/* A reading is plain text, so the shared hint answers touch and keyboard focus without
+          turning quota inspection into an action or relying on a hover-only native title. */}
+      <Tooltip title={detail}>
+        <div className={styles['quota-reading']} role="group" aria-label={window.label} tabIndex={0}>
+          <span className={styles['phone-label']}>{phoneLabel}</span>
+          <span className={styles['quota-value']} style={remaining != null && remaining < 70 ? { color: quotaRemainingStroke(remaining) } : undefined}>
+            {quotaRemainingText(window)}
+          </span>
+          {reset && <span className={styles['quota-reset']}>{reset}</span>}
+          <Meter className={styles['quota-meter']} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
+        </div>
+      </Tooltip>
     </td>
   );
 }

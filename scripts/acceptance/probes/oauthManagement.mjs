@@ -2,8 +2,9 @@ import { LANGUAGES } from '../../../web/src/i18n/language.ts';
 import { verifySIWCBinding } from './siwcBinding.mjs';
 import fs from 'node:fs/promises';
 import { createWarmupFixture } from '../warmup-fixture.mjs';
-import { fulfillFixture } from '../browser-guard.mjs';
+import { fulfillFixture, guardBrowserContext } from '../browser-guard.mjs';
 import { settleLayout, until } from '../harness.mjs';
+import { installRoutes } from '../probe.mjs';
 
 const KNOWN_COOLDOWN_REASON = JSON.stringify({ error: { code: 'credential_quota', message: 'Fixture quota exhausted' } });
 
@@ -90,7 +91,7 @@ function quotaFor(index) {
 
 const quota = Array.from({ length: files.length }, (_, index) => quotaFor(index));
 
-export async function oauthManagement({ base, page, check }) {
+export async function oauthManagement({ base, page, check, ledger }) {
   const oauthStarts = [];
   const redeemPosts = [];
   page.on('request', (request) => {
@@ -153,13 +154,19 @@ export async function oauthManagement({ base, page, check }) {
       && (await twoWindowRow.locator('[data-quota-column="standard|weekly"] .meter').count()) === 1,
     (await twoWindowRow.innerText()).replace(/\n/g, ' | '),
   );
-  const estimates = await twoWindowRow.locator('[data-quota-window-label]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('title') ?? ''));
-  const plainTitles = await page.locator('[data-auth-index="auth-05"] [data-quota-window-label]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('title') ?? ''));
+  const estimates = [];
+  for (const cell of await twoWindowRow.locator('[data-quota-window-label]').all()) {
+    estimates.push(await readQuotaDetails(page, cell));
+  }
+  const plainDetails = [];
+  for (const cell of await page.locator('[data-auth-index="auth-05"] [data-quota-window-label]').all()) {
+    plainDetails.push(await readQuotaDetails(page, cell));
+  }
   check(
     'each reading carries its estimated capacity in its detail, and a record without one carries none',
     estimates.length === 2 && estimates[0].includes('Est. capacity ≈$1,230') && estimates[1].includes('Previous cycle estimate ≈$1,230')
-      && plainTitles.length === 2 && plainTitles.every((title) => !title.includes('≈')),
-    JSON.stringify({ estimates, plainTitles }),
+      && plainDetails.length === 2 && plainDetails.every((detail) => !detail.includes('≈')),
+    JSON.stringify({ estimates, plainDetails }),
   );
   check(
     'a record reaches the full reading through its own Details action',
@@ -639,10 +646,28 @@ export async function oauthManagement({ base, page, check }) {
   check('reopening the active recovery retains its verification consent', await optIn.isChecked() && await optIn.isDisabled());
   await recoveryPanel.getByRole('button', { name: 'Cancel Authorization', exact: true }).click();
   await page.locator('.ant-drawer-open .ant-drawer-close').click();
-  await verifyFullCodexCountdown({ base, page, check });
+  await verifyFullCodexCountdown({ base, page, check, ledger });
 }
 
-async function verifyFullCodexCountdown({ base, page, check }) {
+// Inspect the popup through the keyboard path rather than reading hidden native title attributes.
+async function readQuotaDetails(page, cell) {
+  const reading = cell.getByRole('group');
+  await reading.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const tooltip = page.getByRole('tooltip');
+  await tooltip.waitFor({ state: 'visible' });
+  const id = await tooltip.getAttribute('id');
+  if (!(await reading.getAttribute('aria-describedby') ?? '').split(' ').includes(id)) {
+    throw new Error('Quota reset details are not associated with the focused reading');
+  }
+  const detail = await tooltip.innerText();
+  await page.keyboard.press('Escape');
+  await tooltip.waitFor({ state: 'hidden' });
+  return detail;
+}
+
+async function verifyFullCodexCountdown({ base, page, check, ledger }) {
   const now = Date.now();
   let observedAt = now;
   let refreshes = 0;
@@ -680,10 +705,13 @@ async function verifyFullCodexCountdown({ base, page, check }) {
       check(`unused full Codex quota shows its five-hour duration ${stage}`,
         (await full.innerText()).includes('100%') && await full.getByText('5h', { exact: true }).isVisible()
           && !/left|Recovered/.test(await full.innerText())
-          && await full.getByRole('meter').getAttribute('aria-valuenow') === '100'
-          && (await full.getAttribute('title')).includes('~'));
+          && await full.getByRole('meter').getAttribute('aria-valuenow') === '100');
     };
     await checkFull('on load');
+    const keyboardDetails = await readQuotaDetails(page, full);
+    check('Tab exposes the upstream reset instant and accuracy while the unused duration stays visible',
+      keyboardDetails.includes('~') && /\d{2}\/\d{2} \d{2}:\d{2}/.test(keyboardDetails)
+        && keyboardDetails.includes('5h 1m left') && await full.getByText('5h', { exact: true }).isVisible(), keyboardDetails);
     await page.clock.fastForward(60_000);
     await used.getByText('~5h left', { exact: true }).waitFor();
     await checkFull('after a minute');
@@ -692,7 +720,8 @@ async function verifyFullCodexCountdown({ base, page, check }) {
     await checkFull('after five minutes');
     await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
     await until(() => refreshes === 1, { label: 'full Codex quota refresh' });
-    await until(async () => (await full.getAttribute('title')).includes('5h 1m left'), { label: 'refreshed reset instant' });
+    const refreshedDetails = await readQuotaDetails(page, full);
+    check('the keyboard-readable reset detail follows a quota refresh', refreshedDetails.includes('5h 1m left'), refreshedDetails);
     await checkFull('after quota refresh');
     await page.reload();
     await full.getByText('100%', { exact: true }).waitFor();
@@ -723,6 +752,40 @@ async function verifyFullCodexCountdown({ base, page, check }) {
     await until(() => refreshes === 3, { label: 'recovered full Codex quota refresh' });
     await full.getByText('5h', { exact: true }).waitFor();
     await checkFull('when a refresh reports zero usage again');
+
+    // A narrow viewport alone does not generate touch input. Use an isolated touch context,
+    // sharing the fault ledger and fixture policy so its requests remain audited by the probe.
+    const touchContext = await page.context().browser().newContext({ hasTouch: true, viewport: { width: 390, height: 844 } });
+    try {
+      await guardBrowserContext(touchContext, [base], { ledger });
+      await touchContext.addInitScript(() => {
+        if (!/^https?:$/.test(location.protocol)) return;
+        localStorage.setItem('omc-lang', 'en');
+        localStorage.setItem('omc-theme', 'omc-light');
+      });
+      await installRoutes(touchContext, oauthManagementProbeRoutes(), ledger);
+      const touchPage = await touchContext.newPage();
+      observedAt = Date.now();
+      await touchPage.route('**/management/quota', quotaHandler);
+      await touchPage.route('**/management/auth-files', filesHandler);
+      await touchPage.goto(`${base}/oauth-management?provider=codex`);
+      const touchReading = touchPage.locator('[data-auth-index="auth-01"] [data-quota-column="standard|five_hour"]').getByRole('group');
+      const duration = touchReading.getByText('5h', { exact: true });
+      await duration.tap();
+      const touchTooltip = touchPage.getByRole('tooltip');
+      await touchTooltip.waitFor({ state: 'visible' });
+      const touchDetails = await touchTooltip.innerText();
+      check('tapping the unused duration exposes its upstream reset instant and accuracy',
+        touchDetails.includes('~') && /\d{2}\/\d{2} \d{2}:\d{2}/.test(touchDetails)
+          && (await touchReading.getAttribute('aria-describedby') ?? '').split(' ').includes(await touchTooltip.getAttribute('id')),
+        touchDetails);
+      await touchPage.screenshot({ path: 'tmp/oauth-full-codex-touch-tooltip.png' });
+      await duration.tap();
+      await touchTooltip.waitFor({ state: 'hidden' });
+      check('a second tap dismisses the details without changing the five-hour duration', await duration.isVisible());
+    } finally {
+      await touchContext.close();
+    }
   } finally {
     await page.unroute('**/management/quota', quotaHandler);
     await page.unroute('**/management/auth-files', filesHandler);
@@ -757,15 +820,18 @@ async function verifyFullTokenCapacity({ base, page, check }) {
     await page.goto(`${base}/oauth-management?density=compact`, { waitUntil: 'domcontentloaded' });
     const weeklyCell = page.locator('[data-auth-index="auth-01"] [data-quota-column="standard|weekly"]');
     await weeklyCell.waitFor({ state: 'visible', timeout: 20_000 });
-    const weeklyTitle = () => weeklyCell.getAttribute('title').then((title) => title ?? '');
-    await until(async () => (await weeklyTitle()).includes(FULL_DIGITS), {
+    let weeklyDetails;
+    await until(async () => {
+      weeklyDetails = await readQuotaDetails(page, weeklyCell);
+      return weeklyDetails.includes(FULL_DIGITS);
+    }, {
       label: 'the previous-cycle token estimate in full-digit style',
     });
     check(
       'a row states its previous-cycle estimate in full digits and never calls it this cycle',
-      (await weeklyTitle()).includes(`Previous cycle estimate ≈${FULL_DIGITS}`)
-        && !(await weeklyTitle()).includes('Est. capacity Prev'),
-      await weeklyTitle(),
+      weeklyDetails.includes(`Previous cycle estimate ≈${FULL_DIGITS}`)
+        && !weeklyDetails.includes('Est. capacity Prev'),
+      weeklyDetails,
     );
     // A phone row has no reading of its own, so the same figure is checked where a phone reads it:
     // the Drawer's capacity line, which must hold the longest one without leaving the panel.
