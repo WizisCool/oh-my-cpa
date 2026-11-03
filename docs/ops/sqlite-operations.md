@@ -165,7 +165,10 @@ continues to block backup work until restart or cancellation.
 Automatic copies live beside the database in `<database-path>.backups`, independently
 of temporary export jobs. Only this schedule's named artifacts count toward its
 retention. Local retention applies after a successful local copy, even during a
-cloud outage. Each successful cloud upload is downloaded and SHA-256 checked before
+cloud outage. Local retention can be switched off (`keep_local: 0`) when at least one
+cloud destination is configured: the local file is then only the upload source and is
+removed once every destination holds it. If any destination fails, the newest local
+copy stays as the recovery copy until a later run reaches every destination. Each successful cloud upload is downloaded and SHA-256 checked before
 that destination's older copies are removed. This deliberately costs a full
 read-back transfer; account for provider traffic charges. Failed uploads do not
 prune existing remote copies. The console shows the last complete success and a

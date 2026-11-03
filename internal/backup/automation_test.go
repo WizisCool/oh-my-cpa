@@ -287,6 +287,37 @@ func TestAutomaticBackupFailureKeepsLocalAndDoesNotPruneCloud(t *testing.T) {
 	}
 }
 
+func TestCloudOnlyBackupKeepsLocalCopyOnlyWhileDeliveryFails(t *testing.T) {
+	manager, _ := backupTestManager(t)
+	ctx := context.Background()
+	destination := &failingDestination{}
+	manager.options.DestinationFactory = func(context.Context, DestinationConfig, func(map[string]string) error) (Destination, error) {
+		return destination, nil
+	}
+	settings := testAutomation(DestinationConfig{ID: newID(), Name: "Cloud", Provider: "drive", Root: "backups", Options: map[string]string{"token": "{}"}})
+	settings.KeepLocal = 0
+	if err := manager.ConfigureAutomation(ctx, Automation{IntervalHours: 24, KeepRemote: 1, Passphrase: settings.Passphrase}); !errors.Is(err, ErrAutomationConfig) {
+		t.Fatalf("backup with nowhere to keep it: %v", err)
+	}
+	if err := manager.ConfigureAutomation(ctx, settings); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		fail  bool
+		local int
+	}{{false, 0}, {true, 1}, {false, 0}} {
+		destination.fail = step.fail
+		if _, err := manager.RunAutomatic(); err != nil {
+			t.Fatal(err)
+		}
+		manager.workers.Wait()
+		local, err := manager.ListArchives(ctx, "")
+		if err != nil || len(local) != step.local {
+			t.Fatalf("cloud-only local copies after fail=%v: %d %v", step.fail, len(local), err)
+		}
+	}
+}
+
 func TestAutomaticBackupCoalescesOverdueRunAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	manager, _ := backupTestManager(t)

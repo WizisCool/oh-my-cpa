@@ -102,7 +102,11 @@ func (m *Manager) ConfigureAutomation(ctx context.Context, input Automation) err
 	if err != nil {
 		return err
 	}
-	if input.IntervalHours < 1 || input.IntervalHours > 720 || input.KeepLocal < 1 || input.KeepLocal > 100 || input.KeepRemote < 1 || input.KeepRemote > 100 || len(input.Destinations) > 8 {
+	if input.IntervalHours < 1 || input.IntervalHours > 720 || input.KeepLocal < 0 || input.KeepLocal > 100 || input.KeepRemote < 1 || input.KeepRemote > 100 || len(input.Destinations) > 8 {
+		return ErrAutomationConfig
+	}
+	// Cloud-only retention still needs somewhere to put a backup.
+	if input.KeepLocal == 0 && len(input.Destinations) == 0 {
 		return ErrAutomationConfig
 	}
 	if input.Passphrase == "" {
@@ -331,9 +335,12 @@ func (m *Manager) automaticBackup(job Job, value Automation) error {
 	if err != nil {
 		return err
 	}
+	removeLocal := func(ref ObjectRef) error { return os.Remove(filepath.Join(m.archiveDirectory(), ref.Key)) }
 	// A successful local snapshot bounds local disk use even during a cloud outage.
-	if err := pruneArchives(refs, value.ID, value.KeepLocal, func(ref ObjectRef) error { return os.Remove(filepath.Join(m.archiveDirectory(), ref.Key)) }); err != nil {
-		return err
+	if value.KeepLocal > 0 {
+		if err := pruneArchives(refs, value.ID, value.KeepLocal, removeLocal); err != nil {
+			return err
+		}
 	}
 	var failures []error
 	for _, config := range value.Destinations {
@@ -354,6 +361,19 @@ func (m *Manager) automaticBackup(job Job, value Automation) error {
 			failures = append(failures, err)
 			m.options.Logger.Error("database backup destination failed", "job_id", job.ID, "destination_id", config.ID, "error", publicError(err))
 		}
+	}
+	// With local retention off the local file is only the upload source. It stays as the one
+	// recovery copy while any destination missed this backup, and goes once every one has it.
+	if value.KeepLocal == 0 {
+		keep := 0
+		if len(failures) > 0 {
+			keep = 1
+		}
+		refs, err := m.ListArchives(m.lifecycle, "")
+		if err == nil {
+			err = pruneArchives(refs, value.ID, keep, removeLocal)
+		}
+		failures = append(failures, err)
 	}
 	if err := errors.Join(failures...); err != nil {
 		return err
