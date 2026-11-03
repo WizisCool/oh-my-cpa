@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../../api/client';
 import { AppDrawer } from '../../components/common/AppDrawer';
 import { ToolButton } from '../../components/common/ToolButton';
-import { DownloadOutlined, HistoryOutlined, LeftOutlined, RollbackOutlined } from '../../components/icons';
+import { DownloadOutlined, HistoryOutlined, LeftOutlined } from '../../components/icons';
 import { Notice, useToast } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
@@ -19,6 +19,7 @@ import { BackupDestination, providerLabel, type DestinationInput } from './Backu
 import { BackupExport, BackupHistory } from './BackupJobs';
 import { BackupPlan } from './BackupPlan';
 import { BackupRestore } from './BackupRestore';
+import { newBackupDestination } from './BackupDestination';
 import { RUNNING_STATES, automationInput, intervalLabel } from './backupModel';
 import styles from './DatabaseBackups.module.css';
 
@@ -167,9 +168,6 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
         footerStart={
           view.kind === 'plan' && (
             <>
-              <Button type="text" size="small" icon={<RollbackOutlined />} onClick={() => go({ kind: 'restore' })}>
-                {t('sys.backup_restore_task')}
-              </Button>
               <Button type="text" size="small" icon={<DownloadOutlined />} onClick={() => go({ kind: 'export' })}>
                 {t('sys.backup_export_task')}
               </Button>
@@ -202,8 +200,11 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
                 }
               }}
               onCancelRestore={(job) => act(job, 'delete')}
-              onAddDestination={(draft) => go({ kind: 'destination', index: null, draft })}
+              onAddDestination={(provider) =>
+                go({ kind: 'destination', index: null, draft: newBackupDestination(provider) })
+              }
               onEditDestination={(index, draft) => go({ kind: 'destination', index, draft })}
+              onRestore={() => go({ kind: 'restore' })}
             />
           )}
           {view.kind === 'destination' && value && (

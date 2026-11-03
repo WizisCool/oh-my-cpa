@@ -192,11 +192,12 @@ it('guides first account authorization and saves only its server-side handle', a
   fireEvent.click(await screen.findByRole('button', { name: 'Add cloud storage' }));
   fireEvent.click(screen.getByRole('button', { name: 'Google Drive' }));
   fireEvent.click(screen.getByRole('button', { name: 'Connect account' }));
-  const link = await screen.findByRole('link', { name: 'Open authorization page' });
+  const link = await screen.findByRole('link', { name: 'Open sign-in page' });
   expect(link.getAttribute('href')).toBe(authorization.authorization_url);
   fireEvent.change(await screen.findByLabelText('Browser address after authorization'), { target: { value: 'http://127.0.0.1:53682/?state=fixture-state&code=fixture-code' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Finish connecting' }));
+  fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Finish connecting/ })));
   await screen.findByText('Account connected. You can continue.');
+  expect(server.requests.find((request) => request.method === 'POST' && request.path.endsWith('/complete'))?.body).toEqual({ callback_url: 'http://127.0.0.1:53682/?state=fixture-state&code=fixture-code' });
   expect(screen.queryByLabelText('Browser address after authorization')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(puts(server)).toHaveLength(1));

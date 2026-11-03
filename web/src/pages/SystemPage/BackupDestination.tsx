@@ -8,6 +8,7 @@ import type { MessageKey } from '../../i18n/catalog';
 import type { BackupAutomationInput, BackupProvider } from '../../types/databaseBackup';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
 import { BackupOAuth } from './BackupOAuth';
+import { BackupProviderMark } from './BackupProviderMark';
 import styles from './DatabaseBackups.module.css';
 
 export const BACKUP_PROVIDERS: { value: BackupProvider; label: string }[] = [
@@ -95,6 +96,12 @@ export function BackupDestination({
   };
   return (
     <section className={styles['form']}>
+      <div className={styles['connect-head']}>
+        <BackupProviderMark provider={draft.provider} size={40} />
+        <span className={styles['hint']}>
+          {t(isOAuth ? 'sys.backup_destination_kind_account' : 'sys.backup_destination_kind_server')}
+        </span>
+      </div>
       {errorKey && <Notice tone="error" title={t(errorKey)} />}
       {isOAuth ? (
         <BackupOAuth

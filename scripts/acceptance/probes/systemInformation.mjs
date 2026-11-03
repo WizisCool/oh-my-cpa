@@ -1286,6 +1286,7 @@ export async function systemInformationNarrow({ base, page, check }) {
   await recoveryProfile.scrollIntoViewIfNeeded();
   check('the folded settings and the recovery profile action fit a phone', await dialogFits() && fits(await recoveryProfile.boundingBox()));
   await backups.getByRole('button', { name: 'Tambah storan awan', exact: true }).click();
+  await backups.getByText('Perkhidmatan storan lain', { exact: true }).click();
   await backups.getByRole('button', { name: 'S3 / Cloudflare R2', exact: true }).click();
   await backups.getByLabel('ID kunci akses', { exact: true }).fill('fixture-id');
   await backups.getByLabel('Kunci akses rahsia', { exact: true }).fill('synthetic-cloud-secret');
@@ -1297,7 +1298,7 @@ export async function systemInformationNarrow({ base, page, check }) {
   await backups.getByRole('button', { name: 'Tambah storan awan', exact: true }).click();
   await backups.getByRole('button', { name: 'Google Drive', exact: true }).click();
   await backups.getByRole('button', { name: 'Sambungkan akaun', exact: true }).click();
-  const authorize = backups.getByRole('link', { name: 'Buka halaman kebenaran', exact: true });
+  const authorize = backups.getByRole('link', { name: 'Buka halaman log masuk', exact: true });
   await authorize.waitFor();
   const callback = backups.getByLabel('Alamat pelayar selepas kebenaran', { exact: true });
   await callback.fill('http://127.0.0.1:53682/?code=fixture-code&state=fixture-state');

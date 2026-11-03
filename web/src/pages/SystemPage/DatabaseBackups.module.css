@@ -101,31 +101,56 @@
 .advanced > summary:hover { color: var(--fg); }
 .advanced[open] > summary { margin-bottom: 14px; }
 
-/* ── status: the one reading that matters, beside the one action that changes it ── */
+/* ── status: one verdict, how long ago, and the two things to do about it ── */
 .status {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 18px 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--thread-field);
 }
 
+.status[data-tone='ok'] { border-color: color-mix(in srgb, var(--success) 38%, var(--border)); }
+.status[data-tone='warn'] { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+
+.status-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.status-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.status[data-tone='ok'] .status-icon { color: var(--success); }
+.status[data-tone='warn'] .status-icon { color: var(--warn); }
+
 .status-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .status-label {
-  color: var(--muted);
+  color: var(--fg-2);
   font-size: var(--text-sm);
 }
 
 .status-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
   font-size: var(--text-xl);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -133,7 +158,26 @@
   color: var(--fg);
 }
 
-.status-notice { grid-column: 1 / -1; }
+.status-exact {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.status-next {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.status-notice { width: 100%; }
+
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 
 /* ── passphrase: the whole page on first visit, a row under More settings after ── */
 .is-first {
@@ -149,21 +193,16 @@
   gap: 12px;
 }
 
-.rows :global(.settings-toggle-row),
-.content > :global(.settings-toggle-row) {
-  padding-inline: 0;
-}
-
-/* ── locations: the disk and each cloud account as rows of one list ── */
+/* ── locations: the disk and each cloud account as cards of one list ── */
 .locations,
 .archives,
 .jobs {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .location,
@@ -171,21 +210,40 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
-  padding: 10px 12px 10px 16px;
+  min-height: 64px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
-.location + .location,
-.archive + .archive,
-.job + .job {
-  border-top: 1px solid var(--border-soft);
+.archives, .jobs { gap: 10px; }
+.archive, .job {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
-.location-icon {
+/* The mark: a tinted tile that carries each service's own hue, so a list of locations reads by
+   shape and colour before it reads by name. */
+.mark {
+  display: inline-flex;
   flex: none;
-  font-size: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--fg-2);
 }
+
+.mark[data-provider='local'] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.mark[data-provider='onedrive'] { background: color-mix(in srgb, #0f6cbd 14%, transparent); color: #2f8fe0; }
+.mark[data-provider='drive'] { background: color-mix(in srgb, #f4b400 14%, transparent); color: var(--fg-2); }
+.mark[data-provider='s3'] { background: color-mix(in srgb, #e25444 12%, transparent); color: #e07a3f; }
+.mark[data-provider='webdav'] { background: color-mix(in srgb, #06b6d4 12%, transparent); color: #22a5bd; }
+.mark[data-provider='sftp'] { background: color-mix(in srgb, #8b5cf6 12%, transparent); color: #8b5cf6; }
+.mark[data-provider='smb'] { background: color-mix(in srgb, #10b981 12%, transparent); color: #10b981; }
+.mark[data-provider='ftp'] { background: color-mix(in srgb, #f59e0b 12%, transparent); color: #f59e0b; }
 
 .location-text {
   display: flex;
@@ -195,22 +253,37 @@
   min-width: 0;
 }
 
+.location-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .location-text strong {
   font-weight: 500;
   color: var(--fg);
   overflow-wrap: anywhere;
 }
 
-.location-text span {
+.location-text span:not(.location-name) {
   color: var(--fg-2);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
-.location-error { color: var(--danger) !important; }
+.location-name > :global(.status-label) {
+  font-family: var(--font-ui);
+}
 
-.is-off .location-icon,
-.is-off .location-text strong { color: var(--muted); }
+.location-path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs) !important;
+  color: var(--muted) !important;
+}
+
+.location-error { color: var(--danger) !important; }
 
 .location-actions {
   display: flex;
@@ -218,16 +291,42 @@
   gap: 2px;
 }
 
+/* Adding a location is the section's own action, drawn as the slot it will fill. */
+.add-location {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.add-location:hover:not(:disabled) { color: var(--fg); border-color: var(--muted); background: var(--thread-field); }
+.add-location:disabled { opacity: 0.5; cursor: default; }
+.add-location:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .choices-panel {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 .choices {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
   gap: 8px;
   width: 100%;
 }
@@ -235,43 +334,137 @@
 .choice {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  min-height: 44px;
-  padding: 10px 14px;
+  min-height: 56px;
+  padding: 8px 12px 8px 8px;
   font: inherit;
   text-align: start;
   color: var(--fg);
-  background: transparent;
-  border: 1px solid var(--border);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   cursor: pointer;
   overflow-wrap: anywhere;
-  transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+  transition: border-color var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
 }
 
-.choice:hover { background: var(--thread-field-hover); border-color: var(--muted); }
+.choice:hover { border-color: var(--muted); }
+.choice:active { transform: scale(0.985); }
 .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.choice-label { font-size: var(--text-sm); font-weight: 500; }
 
 .select { width: 160px; }
 
 /* ── schedule and the folded settings ── */
-.schedule {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
+.card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
 }
 
-.more {
-  display: flex;
-  flex-direction: column;
-  margin-top: -12px;
-}
+.card > :global(.settings-toggle-row) { padding-inline: 14px; }
 
 .more-toggle {
   align-self: flex-start;
-  margin-inline-start: -8px;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
   color: var(--fg-2);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.more-toggle:hover { color: var(--fg); }
+.more-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
+
+.more-body { padding: 12px 14px; border-top: 1px solid var(--border-soft); }
+
+/* ── connecting an account: numbered steps on one page ── */
+.connect {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.connect-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.step[data-state='muted'] { opacity: 0.6; }
+.step[data-state='active'] { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+.step-index {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.step[data-state='active'] .step-index { color: var(--accent-on); background: var(--accent); border-color: var(--accent); }
+.step[data-state='done'] .step-index { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+
+.step-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.step-value { color: var(--fg); font-size: var(--text-sm); }
+.step .actions { justify-content: flex-start; }
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+}
+
+.callback-url {
+  display: block;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
 }
 
 /* ── restore ── */
@@ -345,14 +538,13 @@
 .job .actions { justify-content: flex-start; }
 
 @media (max-width: 640px) {
-  .status { grid-template-columns: minmax(0, 1fr); padding: 16px; }
-  .status > :global(.ant-btn) { width: 100%; min-height: 40px; }
+  .status { padding: 16px; }
+  .status-actions > :global(.ant-btn) { flex: 1 1 auto; min-height: 40px; }
   .is-first { padding: 16px; }
   .select { width: 120px; }
-  /* The schedule's controls are a short select and a switch; they stay beside their label. */
-  .content > :global(.settings-toggle-row),
-  .rows :global(.settings-toggle-row) { grid-template-columns: minmax(0, 1fr) auto; }
-  .content > :global(.settings-toggle-row) :global(.settings-toggle-control),
-  .rows :global(.settings-toggle-row) :global(.settings-toggle-control) { width: auto; }
-  .location { padding-inline-start: 12px; }
+  /* A short select and a switch stay beside their label; the row does not need two lines. */
+  .card > :global(.settings-toggle-row) { grid-template-columns: minmax(0, 1fr) auto; }
+  .card > :global(.settings-toggle-row) :global(.settings-toggle-control) { width: auto; }
+  .location { padding-inline-start: 10px; }
+  .location-actions :global(.ant-btn) { min-width: 36px; min-height: 36px; }
 }
