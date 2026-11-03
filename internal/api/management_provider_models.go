@@ -154,8 +154,9 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidModelPullURL, err)
 	}
-	if !isModelPullURLAllowed(parsed) {
-		return nil, fmt.Errorf("%w: base URL must use HTTPS unless it targets localhost, a loopback address, or a private IP address", errInvalidModelPullURL)
+	addresses, isAllowed := resolveProviderURLAddresses(ctx, parsed)
+	if !isAllowed {
+		return nil, fmt.Errorf("%w: base URL must use HTTPS unless it targets localhost, a loopback/private IP address, or a hostname resolving only to those addresses", errInvalidModelPullURL)
 	}
 
 	transport := &http.Transport{
@@ -170,9 +171,10 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 		}
 		transport.Proxy = http.ProxyURL(pURL)
 	}
+	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Timeout:       15 * time.Second,
-		Transport:     transport,
+		Transport:     pinProviderHostname(transport, parsed, addresses),
 		CheckRedirect: sameOriginRedirectGuard(errModelPullRedirectRefused, MAX_MODEL_PULL_REDIRECTS),
 	}
 
@@ -315,21 +317,4 @@ func modelDirectoryEntries(data []byte) ([]json.RawMessage, error) {
 		return nil, errModelDirectoryUnrecognized
 	}
 	return entries, nil
-}
-
-// isModelPullURLAllowed keeps the operator's upstream key off public plaintext links
-// while still allowing self-hosted relays reached over loopback or private addresses:
-// the operator typed this URL for a provider they run.
-func isModelPullURLAllowed(parsed *url.URL) bool {
-	if parsed == nil {
-		return false
-	}
-	switch strings.ToLower(parsed.Scheme) {
-	case "https":
-		return true
-	case "http":
-		return isPlaintextOutboundHostAllowed(parsed.Hostname())
-	default:
-		return false
-	}
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -64,7 +66,86 @@ func TestPullProviderModels(t *testing.T) {
 	}
 }
 
+func TestProviderHTTPHostname(t *testing.T) {
+	useProviderDNS(t, map[string][]net.IP{"ai-manager.": {net.ParseIP("127.0.0.1")}})
+	var requests atomic.Int32
+	var containerHost string
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests.Add(1)
+		if request.Host != containerHost {
+			t.Errorf("provider Host = %q, want %q", request.Host, containerHost)
+		}
+		if request.Header.Get("Authorization") != "Bearer sk-container-test" {
+			http.Error(writer, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch request.URL.Path {
+		case "/v1/models":
+			_, _ = writer.Write([]byte(`{"data":[{"id":"container-model"}]}`))
+		case "/v1/chat/completions":
+			_, _ = writer.Write([]byte(`{}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	containerURL := strings.Replace(upstream.URL, "127.0.0.1", "ai-manager", 1) + "/v1"
+	parsed, err := url.Parse(containerURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	containerHost = parsed.Host
+	fixture := newProviderTestFixture(t)
+	for _, testCase := range []struct {
+		name     string
+		proxyURL string
+	}{
+		{name: "direct"},
+		{name: "proxy", proxyURL: upstream.URL},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Run("pull models", func(t *testing.T) {
+				before := requests.Load()
+				body := fmt.Sprintf(`{"base_url":%q,"api_key":"sk-container-test","proxy_url":%q}`, containerURL, testCase.proxyURL)
+				resp, payload := doJSON(t, fixture.client, http.MethodPost, fixture.baseURL+"/omc/api/v1/management/providers/pull-models", body)
+				if testCase.proxyURL != "" {
+					if resp.StatusCode != http.StatusBadGateway || requests.Load() != before {
+						t.Fatalf("proxied container model pull = %d, requests = %d, %s", resp.StatusCode, requests.Load()-before, payload)
+					}
+					return
+				}
+				if resp.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"container-model"`) {
+					t.Fatalf("container model pull = %d, %s", resp.StatusCode, payload)
+				}
+			})
+			t.Run("probe", func(t *testing.T) {
+				before := requests.Load()
+				body := fmt.Sprintf(`{"family":"openai-compatibility","base_url":%q,"api_key":"sk-container-test","proxy_url":%q,"model":"container-model"}`, containerURL, testCase.proxyURL)
+				status, result := postProbe(t, fixture, body)
+				if testCase.proxyURL != "" {
+					if status != http.StatusOK || result["ok"] != false || requests.Load() != before {
+						t.Fatalf("proxied container probe = %d, requests = %d, %#v", status, requests.Load()-before, result)
+					}
+					return
+				}
+				if status != http.StatusOK || result["ok"] != true {
+					t.Fatalf("container probe = %d, %#v", status, result)
+				}
+			})
+		})
+	}
+}
+
 func TestModelPullBaseURLPolicy(t *testing.T) {
+	useProviderDNS(t, map[string][]net.IP{
+		"ai-manager.":         {net.ParseIP("172.20.0.3")},
+		"lan-relay.internal.": {net.ParseIP("10.20.30.40"), net.ParseIP("fd00::1")},
+		"loopback-relay.":     {net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+		"api.example.com.":    {net.ParseIP("93.184.216.34")},
+		"mixed-relay.":        {net.ParseIP("172.20.0.3"), net.ParseIP("93.184.216.34")},
+		"mixed-ipv6-relay.":   {net.ParseIP("172.20.0.3"), net.ParseIP("2606:4700:4700::1111")},
+		"metadata-relay.":     {net.ParseIP("169.254.169.254")},
+	})
 	tests := []struct {
 		name      string
 		rawURL    string
@@ -72,6 +153,16 @@ func TestModelPullBaseURLPolicy(t *testing.T) {
 	}{
 		{name: "public https", rawURL: "https://api.example.com/v1", isAllowed: true},
 		{name: "public http", rawURL: "http://api.example.com/v1", isAllowed: false},
+		{name: "container hostname", rawURL: "http://ai-manager:7864/v1", isAllowed: true},
+		{name: "private DNS", rawURL: "http://lan-relay.internal:8080/v1", isAllowed: true},
+		{name: "loopback DNS", rawURL: "http://loopback-relay:8080/v1", isAllowed: true},
+		{name: "mixed public private DNS", rawURL: "http://mixed-relay/v1", isAllowed: false},
+		{name: "mixed public ipv6 DNS", rawURL: "http://mixed-ipv6-relay/v1", isAllowed: false},
+		{name: "metadata DNS", rawURL: "http://metadata-relay/v1", isAllowed: false},
+		{name: "unresolved hostname", rawURL: "http://missing-relay/v1", isAllowed: false},
+		{name: "missing host", rawURL: "https:///v1", isAllowed: false},
+		{name: "public ipv4", rawURL: "http://93.184.216.34/v1", isAllowed: false},
+		{name: "public ipv6", rawURL: "http://[2606:4700:4700::1111]/v1", isAllowed: false},
 		{name: "localhost", rawURL: "http://localhost:8080/v1", isAllowed: true},
 		{name: "loopback ipv4", rawURL: "http://127.0.0.1:8080/v1", isAllowed: true},
 		{name: "loopback ipv6", rawURL: "http://[::1]:8080/v1", isAllowed: true},
@@ -88,14 +179,15 @@ func TestModelPullBaseURLPolicy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := isModelPullURLAllowed(parsed); got != test.isAllowed {
-				t.Fatalf("isModelPullURLAllowed(%q) = %v, want %v", test.rawURL, got, test.isAllowed)
+			if _, got := resolveProviderURLAddresses(context.Background(), parsed); got != test.isAllowed {
+				t.Fatalf("resolveProviderURLAddresses(%q) allowed = %v, want %v", test.rawURL, got, test.isAllowed)
 			}
 		})
 	}
 }
 
 func TestFetchEndpointModelsRejectsPublicHTTP(t *testing.T) {
+	useProviderDNS(t, map[string][]net.IP{"example.com.": {net.ParseIP("93.184.216.34")}})
 	_, err := fetchEndpointModels(context.Background(), "http://example.com/v1", "sk-provider-secret-1234", "", "openai", nil)
 	if err == nil || !strings.Contains(err.Error(), "HTTPS") {
 		t.Fatalf("expected HTTPS policy error, got %v", err)
@@ -103,6 +195,7 @@ func TestFetchEndpointModelsRejectsPublicHTTP(t *testing.T) {
 }
 
 func TestPullProviderModelsReportsInvalidURL(t *testing.T) {
+	useProviderDNS(t, map[string][]net.IP{"example.com.": {net.ParseIP("93.184.216.34")}})
 	client, baseURL, _ := startProviderTestServer(t)
 
 	resp, payload := doJSON(

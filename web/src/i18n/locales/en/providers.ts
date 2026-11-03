@@ -59,7 +59,7 @@ export default {
   'pro.provider_updated': 'Provider updated successfully',
   'pro.provider_deleted': 'Provider deleted',
   'pro.delete_provider_confirm': 'Delete this provider? CPA will stop forwarding requests to this endpoint.',
-  'pro.field_base_url_desc': 'Provider service URL. Model fetching requires HTTPS, except for localhost or private IPs.',
+  'pro.field_base_url_desc': 'Provider service URL. HTTPS is required, except for local or private-network addresses, including container hostnames.',
   'pro.opencode_session_title': 'This OpenCode endpoint needs a session header',
   'pro.opencode_session_desc': 'OpenCode identifies a conversation by {header}. CPA expands {value} into the session identifier of this request to support prompt caching.',
   'pro.opencode_session_add': 'Add {header}',
