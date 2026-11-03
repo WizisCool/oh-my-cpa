@@ -1,7 +1,7 @@
 import { CustomIconLibrary } from './CustomIconLibrary';
 import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Segmented, theme } from 'antd';
+import { Segmented, theme } from 'antd';
 import {
   LOBE_ICON_CATALOG,
   type LobeIconCatalogEntry,
@@ -12,6 +12,7 @@ import { SearchInput } from './common/SearchInput';
 import { EmptyState } from './common/EmptyState';
 import { ToggleTag } from './common/Tag';
 import styles from './IconPickerModal.module.css';
+import { AppModal } from './common/AppModal';
 
 /**
  * ANTD_CONTAINER_ZINDEX_STEP is the step antd 6 reserves per container level
@@ -134,18 +135,14 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   }, []);
 
   return (
-    <Modal
+    <AppModal
       title={t('pro.icon_picker_title')}
       open={open}
       onCancel={() => {
         if (!isSelecting && !isLibraryBusy) onClose();
       }}
       footer={null}
-      width={720}
-      // antd's `styles` is the only route to the dialog body, which the module cannot name.
-      styles={{
-        body: { maxHeight: 'calc(100dvh - 180px)', overflowY: 'auto' },
-      }}
+      size="large"
       destroyOnHidden
       zIndex={zIndex}
     >
@@ -255,6 +252,6 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
           </div>
         </>
       )}
-    </Modal>
+    </AppModal>
   );
 };

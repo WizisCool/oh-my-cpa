@@ -81,6 +81,7 @@ export default {
   "common.refresh": "重新整理",
   "common.cancel": "取消",
   "common.close": "關閉",
+  "common.back": "返回",
   "common.confirm": "確定",
   "common.delete": "刪除",
   "common.load_failed_title": "載入失敗",

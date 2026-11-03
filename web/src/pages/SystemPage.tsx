@@ -5,7 +5,6 @@ import {
   Button,
   Typography,
   Spin,
-  Modal,
 } from 'antd';
 import {
   DownloadOutlined,
@@ -62,6 +61,7 @@ import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { AppDrawer } from '../components/common/AppDrawer';
 import { Panel } from '../components/common/Panel';
+import { AppModal } from '../components/common/AppModal';
 
 const { Text, Paragraph } = Typography;
 
@@ -983,7 +983,7 @@ export const SystemPage: React.FC = () => {
       </AppDrawer>
 
       {/* VACUUM Confirmation Modal */}
-      <Modal
+      <AppModal
         title={t('sys.vacuum_confirm_title')}
         open={isVacuumModalOpen}
         onCancel={() => setIsVacuumModalOpen(false)}
@@ -1012,7 +1012,7 @@ export const SystemPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </Modal>
+      </AppModal>
     </div>
   );
 };

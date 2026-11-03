@@ -1,6 +1,6 @@
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import React from 'react';
-import { Button, Checkbox, Modal, Segmented } from 'antd';
+import { Button, Checkbox, Segmented } from 'antd';
 
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { useT } from '../../i18n';
@@ -32,6 +32,7 @@ import {
 import { buildRequestSheet } from './requestSheetModel';
 import { canvasToPng, paintRequestSheet, type SheetImageCache } from './requestSheetPainter';
 import './RequestExportDialog.css';
+import { AppModal } from '../common/AppModal';
 
 export interface RequestExportDialogProps {
   open: boolean;
@@ -217,12 +218,12 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   };
 
   return (
-    <Modal
+    <AppModal
       className="req-export-dialog"
       title={t('events.export_title', { n: selection.size })}
       open={open}
       onCancel={onClose}
-      width="min(1120px, calc(100vw - 32px))"
+      size="wide"
       destroyOnHidden
       footer={
         <>
@@ -337,6 +338,6 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
           </pre>
         </>
       )}
-    </Modal>
+    </AppModal>
   );
 };

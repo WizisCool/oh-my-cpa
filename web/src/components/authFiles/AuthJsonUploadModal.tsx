@@ -1,5 +1,5 @@
 import React from 'react';
-import { Checkbox, Input, Modal, Segmented } from 'antd';
+import { Checkbox, Input, Segmented } from 'antd';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, describeError } from '../../api/client';
@@ -12,6 +12,7 @@ import {
   readPastedAuthJson,
 } from './pasteAuthJson';
 import styles from './AuthJsonUploadModal.module.css';
+import { AppModal } from '../common/AppModal';
 
 type UploadMode = 'files' | 'paste';
 
@@ -85,7 +86,7 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
   const canUpload = Boolean(reading?.summary) && isNameValid && (!isReplacing || canReplace);
 
   return (
-    <Modal
+    <AppModal
       open={open}
       title={t('af.upload_title')}
       okText={t('af.paste_submit')}
@@ -93,9 +94,7 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
       okButtonProps={{ disabled: !canUpload, loading: uploadMutation.isPending }}
       // The upload cannot be aborted once sent, so the dialog stays until its outcome is known.
       cancelButtonProps={{ disabled: uploadMutation.isPending }}
-      closable={!uploadMutation.isPending}
-      mask={{ closable: !uploadMutation.isPending }}
-      keyboard={!uploadMutation.isPending}
+      isDismissible={!uploadMutation.isPending}
       // Chosen files upload as soon as they are picked; only pasted text needs a submit.
       footer={(_, { OkBtn, CancelBtn }) => (
         <>
@@ -181,6 +180,6 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
           </>
         )}
       </div>
-    </Modal>
+    </AppModal>
   );
 };
