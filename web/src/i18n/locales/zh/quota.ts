@@ -89,6 +89,7 @@ export default {
   'quota.btn_reset_quota': '重置额度',
   'quota.btn_refresh_quota': '刷新额度',
   'quota.in_minutes': '{n}分钟后',
+  'quota.duration_hours': '{n}小时',
   'quota.in_hours': '{n}小时后',
   'quota.in_hours_min': '{h}小时{m}分后',
   'quota.in_days': '{n}天后',

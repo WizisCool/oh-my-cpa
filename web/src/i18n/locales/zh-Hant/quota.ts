@@ -92,6 +92,7 @@ export default {
   "quota.btn_reset_quota": "重置額度",
   "quota.btn_refresh_quota": "重新整理額度",
   "quota.in_minutes": "{n}分鐘後",
+  "quota.duration_hours": "{n}小時",
   "quota.in_hours": "{n}小時後",
   "quota.in_hours_min": "{h}小時{m}分後",
   "quota.in_days": "{n}天後",
