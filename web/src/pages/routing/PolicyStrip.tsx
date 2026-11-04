@@ -1,5 +1,6 @@
 import React from 'react';
-import { Input, InputNumber, Segmented } from 'antd';
+import { Input, Segmented } from 'antd';
+import { NumberInput } from '../../components/common/NumberInput';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import { Panel } from '../../components/common/Panel';
@@ -110,7 +111,7 @@ export const PolicyStrip: React.FC<PolicyStripProps> = ({ settings, onChange, di
         {isFailoverOpen ? <DownOutlined /> : <RightOutlined />}
         {t('orch.failover')}
         <span className={styles['policy-hint']}>
-          {t('orch.failover_summary', { rounds: settings.request_retry, credentials: settings.max_retry_credentials || '∞' })}
+          {t('orch.failover_summary', { rounds: settings.request_retry })}
         </span>
       </button>
       <Fold isOpen={isFailoverOpen} id="routing-failover">
@@ -118,22 +119,22 @@ export const PolicyStrip: React.FC<PolicyStripProps> = ({ settings, onChange, di
           <SettingRow
             label={t('cfg.request_retry')}
             description={t('cfg.request_retry_desc')}
-            control={<InputNumber size="small" min={0} precision={0} aria-label={t('cfg.request_retry')} value={settings.request_retry} disabled={disabled} onChange={(value) => set('request_retry', whole(value, 0))} />}
+            control={<NumberInput size="small" min={0} precision={0} aria-label={t('cfg.request_retry')} value={settings.request_retry} disabled={disabled} onChange={(value) => set('request_retry', whole(value, 0))} />}
           />
           <SettingRow
             label={t('cfg.max_retry_credentials')}
             description={t('cfg.max_retry_credentials_desc')}
-            control={<InputNumber size="small" min={0} precision={0} aria-label={t('cfg.max_retry_credentials')} value={settings.max_retry_credentials} disabled={disabled} onChange={(value) => set('max_retry_credentials', whole(value, 0))} />}
+            control={<NumberInput size="small" min={0} precision={0} aria-label={t('cfg.max_retry_credentials')} value={settings.max_retry_credentials} disabled={disabled} onChange={(value) => set('max_retry_credentials', whole(value, 0))} />}
           />
           <SettingRow
             label={t('cfg.max_retry_interval')}
             description={t('cfg.max_retry_interval_desc')}
-            control={<InputNumber size="small" min={0} precision={0} aria-label={t('cfg.max_retry_interval')} value={settings.max_retry_interval} disabled={disabled} onChange={(value) => set('max_retry_interval', whole(value, 0))} />}
+            control={<NumberInput size="small" min={0} precision={0} aria-label={t('cfg.max_retry_interval')} value={settings.max_retry_interval} disabled={disabled} onChange={(value) => set('max_retry_interval', whole(value, 0))} />}
           />
           <SettingRow
             label={t('cfg.f_transient_cooldown')}
             description={t('cfg.f_transient_cooldown_desc')}
-            control={<InputNumber size="small" min={-1} precision={0} aria-label={t('cfg.f_transient_cooldown')} value={settings.transient_error_cooldown_seconds} disabled={disabled} onChange={(value) => set('transient_error_cooldown_seconds', whole(value ?? 0, -1))} />}
+            control={<NumberInput size="small" min={-1} precision={0} aria-label={t('cfg.f_transient_cooldown')} value={settings.transient_error_cooldown_seconds} disabled={disabled} onChange={(value) => set('transient_error_cooldown_seconds', whole(value ?? 0, -1))} />}
           />
           <SettingRow
             label={t('cfg.f_disable_cooling')}
