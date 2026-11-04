@@ -31,7 +31,8 @@ values; documentation explains boundaries, rationale and operator procedures.
 ## Non-negotiable boundaries
 
 - Keep keys, OAuth tokens and auth files out of ordinary responses, logs, preferences
-  and browser storage. Fixtures, screenshots and Git contain no credentials or
+  and browser storage. A password manager saving the sign-in key from the standard
+  sign-in form is the operator's own choice, not console storage. Fixtures, screenshots and Git contain no credentials or
   production data. Caller keys use masks and keyed-HMAC identities, never masks as IDs.
 - Ordinary HTTP responses use handwritten DTO allowlists in `internal/api/`.
   Explicit credential editing/export requires its audited reveal path. The trusted

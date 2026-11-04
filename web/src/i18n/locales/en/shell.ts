@@ -164,7 +164,7 @@ export default {
   'auth.required': 'Management key is required',
   'auth.submit': 'Sign in',
   'auth.subtitle': 'Enter the CPA management key to open the console',
-  'auth.remember': 'Remember password',
+  'auth.keep_signed_in': 'Keep me signed in for 30 days',
   'auth.stage.title': 'One gateway for every model route',
   'auth.stage.body': 'Credentials, routing, usage and cost, all in one view.',
   'time_range.title': 'Time range',

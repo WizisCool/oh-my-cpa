@@ -17,7 +17,7 @@ func TestManagerIssuesAndValidatesScopedSession(t *testing.T) {
 		t.Fatal("management key matching failed")
 	}
 	response := httptest.NewRecorder()
-	if err := manager.Issue(response); err != nil {
+	if err := manager.Issue(response, SessionLifetime); err != nil {
 		t.Fatal(err)
 	}
 	setCookie := response.Header().Get("Set-Cookie")
@@ -49,7 +49,7 @@ func TestManagerAcceptsShortCpaKeys(t *testing.T) {
 		t.Fatal("short key matching failed")
 	}
 	response := httptest.NewRecorder()
-	if err := manager.Issue(response); err != nil {
+	if err := manager.Issue(response, SessionLifetime); err != nil {
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/omc/", nil)
@@ -76,7 +76,7 @@ func TestManagerExpiry(t *testing.T) {
 	current := time.Now().UTC()
 	manager.now = func() time.Time { return current }
 	response := httptest.NewRecorder()
-	if err := manager.Issue(response); err != nil {
+	if err := manager.Issue(response, SessionLifetime); err != nil {
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/omc/", nil)
@@ -88,6 +88,28 @@ func TestManagerExpiry(t *testing.T) {
 	if manager.Valid(request) {
 		t.Fatal("expired cookie was accepted")
 	}
+
+	// "Keep me signed in" outlives the working day and still ends: the expiry is in the signed
+	// payload, so a browser that ignores the cookie's own expiry gains nothing.
+	manager.now = func() time.Time { return current }
+	remembered := httptest.NewRecorder()
+	if err := manager.Issue(remembered, RememberedSessionLifetime); err != nil {
+		t.Fatal(err)
+	}
+	cookie := remembered.Result().Cookies()[0]
+	if !cookie.Expires.Equal(current.Add(RememberedSessionLifetime).Truncate(time.Second)) {
+		t.Fatalf("remembered cookie expires %v, want %v", cookie.Expires, current.Add(RememberedSessionLifetime))
+	}
+	request = httptest.NewRequest(http.MethodGet, "http://example.test/omc/", nil)
+	request.AddCookie(cookie)
+	manager.now = func() time.Time { return current.Add(29 * 24 * time.Hour) }
+	if !manager.Valid(request) {
+		t.Fatal("remembered session ended before its lifetime")
+	}
+	manager.now = func() time.Time { return current.Add(RememberedSessionLifetime + time.Second) }
+	if manager.Valid(request) {
+		t.Fatal("remembered session outlived its lifetime")
+	}
 }
 
 func TestManagerRotationInvalidatesSessions(t *testing.T) {
@@ -96,7 +118,7 @@ func TestManagerRotationInvalidatesSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := httptest.NewRecorder()
-	if err := old.Issue(response); err != nil {
+	if err := old.Issue(response, SessionLifetime); err != nil {
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/omc/", nil)

@@ -164,7 +164,7 @@ export default {
   "auth.required": "Kunci pengurusan diperlukan",
   "auth.submit": "Log masuk",
   "auth.subtitle": "Masukkan kunci pengurusan CPA untuk membuka konsol",
-  "auth.remember": "Ingat kata laluan",
+  "auth.keep_signed_in": "Kekal log masuk selama 30 hari",
   "auth.stage.title": "Satu gerbang untuk setiap laluan model",
   "auth.stage.body": "Kelayakan, penghalaan, penggunaan dan kos dalam satu paparan.",
   "time_range.title": "Julat masa",

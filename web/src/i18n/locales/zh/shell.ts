@@ -161,7 +161,7 @@ export default {
   'auth.required': '请输入 Management Key',
   'auth.submit': '登录',
   'auth.subtitle': '输入 CPA Management Key 进入控制台',
-  'auth.remember': '记住密码',
+  'auth.keep_signed_in': '30 天内保持登录',
   'auth.stage.title': '一个入口，接管全部模型流量',
   'auth.stage.body': '凭据、路由、用量与成本，在这里一目了然。',
   'time_range.title': '时间范围',

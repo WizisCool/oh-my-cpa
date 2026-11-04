@@ -17,9 +17,8 @@ import { ProgressBar } from './ProgressBar';
 import { Placeholder } from './Placeholder';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { isMotionReduced } from '../../utils/motionPreference';
-import { getAppConfig } from '../../types/config';
 import { SignInStage, type SignInStageState } from './SignInStage';
-import { PASSWORD_MANAGER_ACCOUNT, offerToPasswordManager, readRememberPassword, writeRememberPassword } from './rememberPassword';
+import { readKeepSignedIn, writeKeepSignedIn } from './keepSignedIn';
 import styles from './AuthGate.module.css';
 
 // The signed-out column's outline - title, subtitle, label, field, option, button - so
@@ -46,6 +45,9 @@ function enterConsole(update: () => void): void {
   transition.finished.then(clear, clear);
 }
 
+/** The account a password manager files the key under: one per origin, never localized. */
+const PASSWORD_MANAGER_ACCOUNT = 'management-key';
+
 const AUTH_PLACEHOLDERS = [
   { width: '78%', height: 28, className: styles['placeholder-title'] },
   { width: '64%', className: `placeholder-line ${styles['placeholder-subtitle']}` },
@@ -64,7 +66,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   useDocumentTitle(status === 'unauthenticated' ? t('auth.submit') : null);
   const [error, setError] = React.useState<string>();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [isRemembered, setIsRemembered] = React.useState(readRememberPassword);
+  const [isKeptSignedIn, setIsKeptSignedIn] = React.useState(readKeepSignedIn);
   // Counts refused attempts, so each one replays the field's shake and the gateway's flash.
   const [failures, setFailures] = React.useState(0);
   const fieldRef = React.useRef<HTMLDivElement>(null);
@@ -98,8 +100,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     setIsSubmitting(true);
     setError(undefined);
     try {
-      await api.login(values.password);
-      if (isRemembered) void offerToPasswordManager(values.password, getAppConfig().appName);
+      await api.login(values.password, isKeptSignedIn);
       await queryClient.invalidateQueries();
       enterConsole(() => setStatus('authenticated'));
       toast.success(t('auth.success'));
@@ -124,9 +125,9 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     );
   }, [failures]);
 
-  const changeRemembered = (next: boolean) => {
-    setIsRemembered(next);
-    writeRememberPassword(next);
+  const changeKeptSignedIn = (next: boolean) => {
+    setIsKeptSignedIn(next);
+    writeKeepSignedIn(next);
   };
 
   if (status === 'authenticated') return <>{children}</>;
@@ -173,10 +174,23 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                   className="auth-form"
                   initialValues={isDemo ? { password: 'omc-demo' } : undefined}
                 >
-                  {/* Password managers file a key under an account; this fixed one is how the
-                      key-only form reads to them as a sign-in. Present only when the operator
-                      asked for the key to be remembered (see rememberPassword.ts). */}
-                  {isRemembered && <input type="text" name="username" autoComplete="username" value={PASSWORD_MANAGER_ACCOUNT} readOnly hidden />}
+                  {/* Password managers - the browser's own, and extensions such as Bitwarden and
+                      1Password - recognise a sign-in form by an account field beside a
+                      current-password field, and file the saved key under that account. The key
+                      has no account, so this fixed one stands in. It is clipped rather than
+                      `display: none`, because some managers skip fields that are not rendered,
+                      and read-only so autofill cannot change it. Saving is the manager's own
+                      offer, accepted by the operator; the console itself never stores the key. */}
+                  <input
+                    type="text"
+                    name="username"
+                    autoComplete="username"
+                    value={PASSWORD_MANAGER_ACCOUNT}
+                    readOnly
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="sr-only"
+                  />
                   <div ref={fieldRef} className={styles['rise']} style={rise(2)}>
                     <Form.Item
                       label={t('auth.label')}
@@ -188,14 +202,14 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                         autoFocus
                         name="password"
                         prefix={<LockOutlined className="terminal-muted" />}
-                        autoComplete={isRemembered ? 'current-password' : 'off'}
+                        autoComplete="current-password"
                         spellCheck={false}
                       />
                     </Form.Item>
                   </div>
                   <div className={`${styles['options']} ${styles['rise']}`} style={rise(3)}>
-                    <Checkbox checked={isRemembered} onChange={(event) => changeRemembered(event.target.checked)}>
-                      {t('auth.remember')}
+                    <Checkbox checked={isKeptSignedIn} onChange={(event) => changeKeptSignedIn(event.target.checked)}>
+                      {t('auth.keep_signed_in')}
                     </Checkbox>
                   </div>
                   <div className={styles['rise']} style={rise(4)}>

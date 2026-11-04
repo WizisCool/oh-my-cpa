@@ -457,6 +457,8 @@ func (h *Handler) routes() chi.Router {
 
 type loginRequest struct {
 	Password string `json:"password"`
+	// Remember asks for the long session ("keep me signed in"). The key itself is never kept.
+	Remember bool `json:"remember"`
 }
 
 func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
@@ -487,7 +489,7 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		// A public demonstration has no secret to check: the same session is issued on
 		// first sight, so a visitor who lands on the sign-in card must not be able to
 		// get stuck behind a key they were never given.
-		if err := h.auth.Issue(writer); err != nil {
+		if err := h.auth.Issue(writer, auth.SessionLifetime); err != nil {
 			writeInternalError(writer, err)
 			return
 		}
@@ -505,8 +507,12 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 	if h.limiter != nil {
 		h.limiter.reset(ip)
 	}
-	_ = h.recordAudit(request, "auth.login", "auth", "operator", "success", map[string]any{"ip": security.MaskIP(ip)})
-	if err := h.auth.Issue(writer); err != nil {
+	lifetime := auth.SessionLifetime
+	if payload.Remember {
+		lifetime = auth.RememberedSessionLifetime
+	}
+	_ = h.recordAudit(request, "auth.login", "auth", "operator", "success", map[string]any{"ip": security.MaskIP(ip), "remembered": payload.Remember})
+	if err := h.auth.Issue(writer, lifetime); err != nil {
 		writeInternalError(writer, err)
 		return
 	}
@@ -521,7 +527,7 @@ func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 			// needs is issued on first sight rather than behind a credential a visitor
 			// would have to be told. Nothing is granted by it: the routes that would
 			// touch a real gateway are refused by demo_policy.go, not by this cookie.
-			if err := h.auth.Issue(writer); err != nil {
+			if err := h.auth.Issue(writer, auth.SessionLifetime); err != nil {
 				writeInternalError(writer, err)
 				return
 			}
@@ -562,7 +568,7 @@ func (h *Handler) requireAuthentication(next http.Handler) http.Handler {
 				// first reads of a page overlap the session check that would have replaced
 				// it, and a 401 among them turns the console back into a sign-in card that
 				// nothing was wrong with.
-				if err := h.auth.Issue(writer); err != nil {
+				if err := h.auth.Issue(writer, auth.SessionLifetime); err != nil {
 					writeInternalError(writer, err)
 					return
 				}
