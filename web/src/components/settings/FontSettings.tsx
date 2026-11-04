@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { AutoComplete, Button, Modal, Select, type SelectProps } from 'antd';
+import { AutoComplete, Button, Select, type SelectProps } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiErrorCode } from '../../api/client';
@@ -27,6 +27,7 @@ import { SettingRow } from '../common/SettingRow';
 import { useToast } from '../feedback';
 import { CloudDownloadOutlined, DeleteOutlined, ExternalLinkOutlined, UploadOutlined } from '../icons';
 import styles from './FontSettings.module.css';
+import { AppModal } from '../common/AppModal';
 
 const ROLE_LABEL_KEYS: Record<FontRole, { label: MessageKey; description: MessageKey }> = {
   ui: { label: 'omc.font_ui', description: 'omc.font_ui_desc' },
@@ -194,12 +195,12 @@ const FontLibraryDialog: React.FC<{ open: boolean; fonts: readonly InstalledFont
   };
 
   return (
-    <Modal
+    <AppModal
       open={open}
       title={t('omc.font_library')}
       onCancel={close}
       footer={null}
-      width={720}
+      size="large"
       destroyOnHidden
     >
       <div className={styles.dialog}>
@@ -256,7 +257,7 @@ const FontLibraryDialog: React.FC<{ open: boolean; fonts: readonly InstalledFont
             : !isLoading && <EmptyState size="compact" title={t('omc.font_library_empty')} description={t('omc.font_library_desc')} />}
         </section>
       </div>
-    </Modal>
+    </AppModal>
   );
 };
 

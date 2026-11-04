@@ -11,6 +11,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/app"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/backup"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
@@ -83,6 +84,18 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if len(os.Args) > 1 && os.Args[1] == "database" {
+		if cfg.IsDemoMode {
+			logger.Error("database commands are unavailable in demo mode")
+			os.Exit(2)
+		}
+		if err := backup.RunCommand(ctx, cfg.DatabasePath, cfg.MasterKey, cfg.Version, os.Args[2:], os.Stdout); err != nil {
+			logger.Error("database command failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	running, err := app.New(ctx, cfg, logger)
 	if err != nil {

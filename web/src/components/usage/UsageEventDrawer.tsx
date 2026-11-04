@@ -4,7 +4,7 @@ import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Modal, Tabs } from 'antd';
+import { Button, Tabs } from 'antd';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
@@ -56,6 +56,7 @@ import './UsageEventDrawer.css';
 import './requestMarks.css';
 import { Tooltip } from '../common/Tooltip';
 import { TAB_OVERFLOW } from '../common/tabOverflow';
+import { AppModal } from '../common/AppModal';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -723,7 +724,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
           />
         </>
       ) : null}
-      <Modal
+      <AppModal
         open={downloadModalOpen && eventId != null}
         title={t('events.download_log_confirm')}
         onOk={() => void download()}
@@ -734,7 +735,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       >
         <Notice tone="warning" description={t('events.download_log_desc')} />
         <p className="request-detail-id">Request ID: {event?.request_id}</p>
-      </Modal>
+      </AppModal>
     </AppDrawer>
   );
 };

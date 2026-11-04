@@ -1,7 +1,7 @@
 import { prefixedKey } from '../../i18n/catalog';
 import React from 'react';
 
-import { Button, InputNumber, Modal, Table, Typography } from 'antd';
+import { Button, InputNumber, Table, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
@@ -19,6 +19,7 @@ import { Tag } from '../common/Tag';
 import { ToolButton } from '../common/ToolButton';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Tooltip } from '../common/Tooltip';
+import { AppModal } from '../common/AppModal';
 
 const { Text } = Typography;
 
@@ -128,11 +129,11 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
   return (
     <>
       <ToolButton icon={<HistoryOutlined />} label={t('cfg.backups')} onClick={() => setIsOpen(true)} />
-      <Modal
+      <AppModal
         open={isOpen}
         title={t('cfg.backups_title')}
         footer={null}
-        width={760}
+        size="large"
         onCancel={() => setIsOpen(false)}
       >
         <Text type="secondary" className={styles['backups-desc']}>
@@ -259,7 +260,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
             },
           ]}
         />
-      </Modal>
+      </AppModal>
     </>
   );
 };

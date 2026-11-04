@@ -2,7 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
-  Modal,
   Segmented,
   Space,
   Typography,
@@ -57,6 +56,7 @@ import { Panel } from '../components/common/Panel';
 import { CopyButton } from '../components/common/CopyButton';
 import { ToolButton } from '../components/common/ToolButton';
 import '../components/config/config.css';
+import { AppModal } from '../components/common/AppModal';
 
 const { Text } = Typography;
 
@@ -578,7 +578,7 @@ export const ConfigPage: React.FC = () => {
       />
 
       {/* ── Conflict Modal ────────────────────────────────────────────── */}
-      <Modal
+      <AppModal
         open={Boolean(conflictState)}
         title={t('cfg.conflict_title')}
         footer={[
@@ -595,7 +595,7 @@ export const ConfigPage: React.FC = () => {
         onCancel={() => setConflictState(null)}
       >
         <Notice tone="error" title={t('cfg.conflict_desc')} className="config-notice" />
-      </Modal>
+      </AppModal>
 
     </div>
   );

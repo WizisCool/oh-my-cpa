@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Modal } from 'antd';
+import { Button } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../../api/client';
@@ -15,6 +15,7 @@ import { SettingRow } from '../common/SettingRow';
 import { Switch } from '../common/Switch';
 import styles from './SidebarNavSettings.module.css';
 import { Tooltip } from '../common/Tooltip';
+import { AppModal } from '../common/AppModal';
 
 /**
  * SidebarNavSettings is the rail's own layout setting - which entries it shows, and in what order -
@@ -153,7 +154,7 @@ const SidebarNavPanel: React.FC<{
   };
 
   return (
-    <Modal open={open} title={t('omc.section_sidebar')} onCancel={onClose} footer={null} width={560} destroyOnHidden>
+    <AppModal open={open} title={t('omc.section_sidebar')} onCancel={onClose} footer={null} destroyOnHidden>
       <div className={styles.dialog} data-testid="sidebar-nav-dialog">
         <SectionHeading
           level="label"
@@ -285,6 +286,6 @@ const SidebarNavPanel: React.FC<{
           </React.Fragment>
         ))}
       </div>
-    </Modal>
+    </AppModal>
   );
 };

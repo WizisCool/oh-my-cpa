@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Button, Input, Modal } from 'antd';
+import { Button, Input } from 'antd';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, describeError } from '../../api/client';
@@ -16,6 +16,7 @@ import {
   type VertexKeySummary,
 } from './vertexImport';
 import styles from './VertexImportModal.module.css';
+import { AppModal } from '../common/AppModal';
 
 const PROBLEM_KEYS: Record<VertexKeyProblem, MessageKey> = {
   too_large: 'af.vertex_problem_too_large',
@@ -108,7 +109,7 @@ export const VertexImportModal: React.FC<VertexImportModalProps> = ({ open, onCl
   const canImport = Boolean(chosenKey?.summary) && isLocationValid;
 
   return (
-    <Modal
+    <AppModal
       open={open}
       title={t('af.vertex_title')}
       okText={t('af.vertex_import')}
@@ -165,6 +166,6 @@ export const VertexImportModal: React.FC<VertexImportModalProps> = ({ open, onCl
             : <p className={styles.problem} role="alert">{t('af.vertex_location_invalid')}</p>}
         </div>
       </div>
-    </Modal>
+    </AppModal>
   );
 };

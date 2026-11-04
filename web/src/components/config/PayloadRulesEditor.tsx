@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Button, Collapse, Input, Modal, Select } from 'antd';
+import { Button, Collapse, Input, Select } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import type { Document } from 'yaml';
 
@@ -18,6 +18,7 @@ import {
 import { usePayloadRulesDraft } from './usePayloadRulesDraft';
 import { Tag } from '../common/Tag';
 import './config.css';
+import { AppModal } from '../common/AppModal';
 
 /** Re-exported for the page, which reports the issues back to the operator. */
 export type { PayloadValidationIssue };
@@ -222,7 +223,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
       />
 
       {/* Advanced Model Conditions Modal */}
-      <Modal
+      <AppModal
         title={`${t('cfg.payload_adv_title')} - ${advDraft?.name || t('cfg.payload_models_title')}`}
         open={Boolean(advModalState?.open)}
         onOk={handleSaveAdvanced}
@@ -230,7 +231,6 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
         destroyOnHidden
-        width={600}
       >
         {advDraft && (
           <div className="payload-adv-modal-body">
@@ -301,7 +301,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             </div>
           </div>
         )}
-      </Modal>
+      </AppModal>
     </div>
   );
 };

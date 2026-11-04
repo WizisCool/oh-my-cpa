@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, Modal, Radio, Segmented } from 'antd';
+import { Button, Input, Radio, Segmented } from 'antd';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -34,6 +34,7 @@ import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
+import { AppModal } from '../common/AppModal';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
@@ -370,7 +371,7 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
   const name = selectStorePluginMetadata(entry, lang).name || entry.id;
 
   return (
-    <Modal
+    <AppModal
       open
       title={entry.installed ? t('plugin.update_title', { name }) : t('plugin.install_title', { name })}
       onCancel={handleClose}
@@ -436,6 +437,6 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
           />
         )}
       </div>
-    </Modal>
+    </AppModal>
   );
 }

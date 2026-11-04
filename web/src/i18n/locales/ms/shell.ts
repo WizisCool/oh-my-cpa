@@ -81,6 +81,7 @@ export default {
   "common.refresh": "Muat semula",
   "common.cancel": "Batal",
   "common.close": "Tutup",
+  "common.back": "Kembali",
   "common.confirm": "Sahkan",
   "common.delete": "Padam",
   "common.load_failed_title": "Gagal dimuatkan",

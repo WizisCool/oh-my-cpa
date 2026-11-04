@@ -3,7 +3,6 @@ import { expect, it, vi } from 'vitest';
 import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup, UPDATER_INSTALL_COMMAND } from '../src/pages/SystemPage/UpdateControls';
-import { DataRetention } from '../src/pages/SystemPage/DataRetention';
 import { UPDATE_WATCH_LIMIT_MS, UPDATER_QUERY_KEY, useConsoleUpdate, type UpdateOutcome } from '../src/pages/SystemPage/useConsoleUpdate';
 import { deriveUpdateOffer } from '../src/pages/SystemPage/versionPresentation';
 import type { SystemProductVersion } from '../src/types/system';
@@ -238,16 +237,3 @@ it('offers the install command only to a deployment that can use it', async () =
   rejected.close();
 });
 
-it('shows retention without a storage notice when an older database holds free pages', async () => {
-  const omc = installOmcApi();
-  omc.on('GET', '/management/system/data-retention', () => ({
-    request_record_days: 90, payload_days: 7, source: 'environment',
-    scheduled: true, next_pass_at_ms: null, last_pass_at_ms: null,
-    oldest_request_record_ms: null, policies: [],
-    storage: { auto_vacuum: 'none', free_page_bytes: 4096 },
-  }));
-  const surface = renderWithOmc(<DataRetention />);
-  await screen.findByText('Oldest record');
-  expect(screen.queryByRole('alert')).toBeNull();
-  surface.unmount();
-});

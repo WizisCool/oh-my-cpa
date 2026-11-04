@@ -1,5 +1,4 @@
 import React from 'react';
-import { Modal } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { useI18n } from '../../i18n';
@@ -9,6 +8,7 @@ import { failureKey } from '../../components/workspace/conversationLabels';
 import { ApprovalCard } from './interrupts/ApprovalCard';
 import { decideOperation, failureCode, getCapabilities, getOperation, invokeCapability, readDataRows } from './api';
 import type { Capability, Operation } from './state';
+import { AppModal } from '../../components/common/AppModal';
 
 interface OpenApproval {
   operation: Operation | undefined;
@@ -87,8 +87,8 @@ export function useOpenUIToolHost(): React.ReactNode {
   };
 
   return (
-    <Modal open={!!approval} title={t('agent.openui.approval')} footer={null} onCancel={dismiss} destroyOnHidden>
+    <AppModal open={!!approval} title={t('agent.openui.approval')} footer={null} onCancel={dismiss} destroyOnHidden>
       {approval && <div data-testid="agent-openui-approval"><ApprovalCard operation={approval.operation} respond={respond} /></div>}
-    </Modal>
+    </AppModal>
   );
 }

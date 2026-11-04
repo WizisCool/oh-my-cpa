@@ -81,6 +81,7 @@ export default {
   'common.refresh': 'Refresh',
   'common.cancel': 'Cancel',
   'common.close': 'Close',
+  'common.back': 'Back',
   'common.confirm': 'Confirm',
   'common.delete': 'Delete',
   'common.load_failed_title': 'Could not load',

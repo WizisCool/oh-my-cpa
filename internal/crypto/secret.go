@@ -10,13 +10,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
 var ErrInvalidMasterKey = errors.New("master key must be at least 32 bytes or a 64-character hex key")
 
-// Cipher encrypts application secrets at rest. The key is normalized once and
-// never serialized or returned by the application.
+// Cipher encrypts application secrets at rest. Recovery key material may leave
+// this package only through the explicit encrypted-backup and wrapping paths.
 type Cipher struct {
 	key []byte
 }
@@ -107,4 +108,49 @@ func (c *Cipher) gcm() (cipher.AEAD, error) {
 		return nil, fmt.Errorf("create gcm: %w", err)
 	}
 	return gcm, nil
+}
+
+// WriteRecoveryKey writes the normalized key into an already encrypted backup
+// stream. It must never be used for ordinary HTTP responses or job metadata.
+func (c *Cipher) WriteRecoveryKey(destination io.Writer) error {
+	if c == nil || len(c.key) != 32 {
+		return ErrInvalidMasterKey
+	}
+	count, err := destination.Write(c.key)
+	if err == nil && count != len(c.key) {
+		return io.ErrShortWrite
+	}
+	return err
+}
+
+// ReadRecoveryKey reads the fixed-size key entry from a decrypted backup stream.
+func ReadRecoveryKey(source io.Reader) (*Cipher, error) {
+	key, err := io.ReadAll(io.LimitReader(source, 33))
+	if err != nil {
+		return nil, err
+	}
+	if len(key) != 32 {
+		return nil, ErrInvalidMasterKey
+	}
+	return &Cipher{key: key}, nil
+}
+
+// WrapRecoveryKey keeps the database's encryption and identity key portable
+// without persisting it in plaintext under the destination deployment.
+func (c *Cipher) WrapRecoveryKey(wrapping *Cipher) (ciphertext, nonce []byte, err error) {
+	if c == nil || len(c.key) != 32 {
+		return nil, nil, ErrInvalidMasterKey
+	}
+	return wrapping.Encrypt(c.key)
+}
+
+func UnwrapRecoveryKey(wrapping *Cipher, ciphertext, nonce []byte) (*Cipher, error) {
+	key, err := wrapping.Decrypt(ciphertext, nonce)
+	if err != nil {
+		return nil, err
+	}
+	if len(key) != 32 {
+		return nil, ErrInvalidMasterKey
+	}
+	return &Cipher{key: key}, nil
 }

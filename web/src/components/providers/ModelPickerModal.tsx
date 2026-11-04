@@ -1,9 +1,10 @@
 import React from 'react';
-import { Checkbox, Modal } from 'antd';
+import { Checkbox } from 'antd';
 import { useT } from '../../i18n';
 import { filterModelOptions } from '../../utils/modelOptions';
 import styles from './ModelPickerModal.module.css';
 import { SearchInput } from '../common/SearchInput';
+import { AppModal } from '../common/AppModal';
 
 interface ModelPickerModalProps {
   isOpen: boolean;
@@ -65,7 +66,7 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
   };
 
   return (
-    <Modal
+    <AppModal
       title={t('pro.pick_models')}
       open={isOpen}
       onCancel={onClose}
@@ -116,6 +117,6 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
           })
         )}
       </div>
-    </Modal>
+    </AppModal>
   );
 }

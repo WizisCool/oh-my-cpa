@@ -1005,46 +1005,9 @@
 
 /* Retention follows the footprint it governs: the share of the horizon the records fill, and the
    date the oldest of them was stored. */
-.retention-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-soft);
-}
 
-.retention-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-}
 
-.retention-heading {
-  font-size: var(--text-sm);
-  color: var(--fg-2);
-}
 
-.retention-span {
-  color: var(--fg);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--text-base);
-  font-weight: 600;
-}
 
-.retention-foot {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 0;
-  font-size: var(--text-sm);
-}
 
-.retention-foot dt { color: var(--meta); }
 
-.retention-foot dd {
-  margin: 0;
-  color: var(--fg-2);
-  font-family: var(--font-mono, monospace);
-  font-variant-numeric: tabular-nums;
-}

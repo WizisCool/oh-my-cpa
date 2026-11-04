@@ -78,6 +78,7 @@ export default {
   'common.refresh': '刷新',
   'common.cancel': '取消',
   'common.close': '关闭',
+  'common.back': '返回',
   'common.confirm': '确定',
   'common.delete': '删除',
   'common.load_failed_title': '加载失败',

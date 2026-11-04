@@ -65,6 +65,7 @@ export const BellOutlined = createIcon(Lucide.Bell, 'anticon-bell');
 export const BellOffOutlined = createIcon(Lucide.BellOff, 'anticon-bell-off');
 export const CloudDownloadOutlined = createIcon(Lucide.CloudDownload, 'anticon-cloud-download');
 export const CloudServerOutlined = createIcon(Lucide.Server, 'anticon-cloud-server');
+export const CloudOutlined = createIcon(Lucide.Cloud, 'anticon-cloud');
 export const CodeOutlined = createIcon(Lucide.Code, 'anticon-code');
 export const CodeSandboxOutlined = createIcon(Lucide.SquareTerminal, 'anticon-code-sandbox');
 export const CompassOutlined = createIcon(Lucide.Compass, 'anticon-compass');

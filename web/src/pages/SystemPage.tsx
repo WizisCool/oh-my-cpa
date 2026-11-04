@@ -1,10 +1,10 @@
+import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Button,
   Typography,
   Spin,
-  Modal,
 } from 'antd';
 import {
   DownloadOutlined,
@@ -52,7 +52,7 @@ import type { UpdateOffer } from './SystemPage/versionPresentation';
 import { UPDATER_QUERY_KEY, useConsoleUpdate } from './SystemPage/useConsoleUpdate';
 import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
-import { DataRetention, DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
+import { DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
 import { StorageFootprint } from './SystemPage/StorageFootprint';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
@@ -61,6 +61,7 @@ import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { AppDrawer } from '../components/common/AppDrawer';
 import { Panel } from '../components/common/Panel';
+import { AppModal } from '../components/common/AppModal';
 
 const { Text, Paragraph } = Typography;
 
@@ -791,7 +792,7 @@ export const SystemPage: React.FC = () => {
             {sysInfo && (
               <>
                 <StorageFootprint database={sysInfo.database} />
-                <DataRetention />
+                <DatabaseBackups isDemo={isDemo} />
               </>
             )}
           </Panel>
@@ -981,7 +982,7 @@ export const SystemPage: React.FC = () => {
       </AppDrawer>
 
       {/* VACUUM Confirmation Modal */}
-      <Modal
+      <AppModal
         title={t('sys.vacuum_confirm_title')}
         open={isVacuumModalOpen}
         onCancel={() => setIsVacuumModalOpen(false)}
@@ -1010,7 +1011,7 @@ export const SystemPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </Modal>
+      </AppModal>
     </div>
   );
 };

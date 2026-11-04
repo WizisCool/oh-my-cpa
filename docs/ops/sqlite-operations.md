@@ -41,7 +41,7 @@ sqlite3 /path/to/data/oh-my-cpa.db "VACUUM INTO '${BACKUP_DIR}/oh-my-cpa-backup-
 chmod 600 "${BACKUP_DIR}/oh-my-cpa-backup-${TIMESTAMP}.db"
 ```
 
-**Semantics**: `VACUUM INTO` reads committed pages from the main database and WAL, producing a single, self-contained, transactionally consistent snapshot file once the operation finishes successfully. It does not include uncommitted transactions, nor does it checkpoint or truncate the active source `-wal` file.
+**Semantics**: `VACUUM INTO` reads committed pages from the main database and WAL, producing a single, self-contained, transactionally consistent SQLite snapshot once the operation finishes successfully. It does not include uncommitted transactions, nor does it checkpoint or truncate the active source `-wal` file. If `<database-path>.key` exists, keep a private copy beside the raw snapshot; it is needed with the deployment master key to decrypt the snapshot's protected fields. Console exports below package this recovery material automatically.
 
 ### 2.2 Cold Backup Procedure (Scheduled Maintenance)
 
@@ -62,6 +62,207 @@ When performing scheduled maintenance during an offline window:
    sha256sum "${BACKUP_DIR}/omc-data-${TIMESTAMP}.tar.gz" > "${BACKUP_DIR}/omc-data-${TIMESTAMP}.sha256"
    chmod 600 "${BACKUP_DIR}/omc-data-${TIMESTAMP}.tar.gz" "${BACKUP_DIR}/omc-data-${TIMESTAMP}.sha256"
    ```
+
+
+### 2.3 Console backups and whole-database restore
+
+Open **System Information → Database → Manage backups** to create an encrypted
+`.omcbackup` file or upload one for validation. The file contains a consistent
+snapshot of the complete OMC SQLite database, including retained usage, locked
+cost history, audit records and database-backed assets. It does not include CPA's
+configuration or authentication directory, or deployment environment.
+
+Backup validation requires the shipped migrations through the snapshot's schema
+version and rejects schemas newer than the running binary. It preserves retained
+historical migration records, including development-branch records handled by
+forward repairs; their presence does not make an otherwise supported backup
+incompatible.
+
+Keep the backup passphrase safe and separate from the backup. The passphrase
+protects both the database and its encryption/HMAC key inside the authenticated
+file; no source master key or CPA management key is needed for recovery. Treat
+possession of the backup and its passphrase as access to all database secrets.
+
+On restore, OMC wraps the recovered database key with the target deployment's
+configured `OMCPA_MASTER_KEY` and stores it privately at `<database-path>.key`.
+Subsequent starts automatically use that key for database secrets and historical
+identities. Keep this file with the database when copying raw SQLite files; the
+target deployment master key is still required to open those local files. A
+normal encrypted export includes everything needed for another passphrase-only
+recovery. Deployment configuration, console sign-in and updater authentication
+remain those of the target environment.
+
+An uploaded file is decrypted, checked and, where supported, migrated in a private
+staging directory. Confirming it **schedules replacement on the next normal OMC
+startup**; it does not modify the running database. Restart OMC through your normal
+service manager after confirmation. The console can cancel the pending restore
+before restart. Target deployment environment variables still take precedence
+when the restored application starts.
+
+Before replacement, startup creates and verifies an encrypted rollback backup of
+the stopped database and preserves its closed main/WAL/SHM files and local key
+envelope. A small restore journal allows an interrupted, uncommitted replacement to restore that previous
+file set on the next startup. The restored database must accept the completion
+audit before it is committed. If preparation fails, startup stops without replacing
+the current database; cancel the pending task with the command below to resume it.
+
+**Recovery rolls back the OMC data timeline.** Data recorded after the selected
+snapshot is absent from the restored database. CPA is not rewound with it, and
+already-consumed usage records cannot be assumed to be available for replay.
+The pre-restore rollback backup retains the previous history; the restored
+database records the restore event rather than merging audit timelines.
+
+Exports are temporary downloads. Expired exports and unconfirmed uploads are
+cleaned at startup or when another operation is created. Completed restore jobs
+and their rollback files remain until explicitly removed. Files live beside the
+database under `<database-path>.recovery/`, with private directory/file permissions.
+The console's recent-operations list owns removal and pending-restore cancellation.
+
+#### Offline command
+
+The same binary supports recovery without a working console or CPA connection.
+Inspection needs only the file and passphrase; export and restore use the target
+deployment's normal environment for local storage protection.
+Stop OMC first; the server and this command share an exclusive database lock.
+Supply a private passphrase file rather than putting the secret in shell arguments:
+
+```bash
+# Use the deployment's normal environment, including OMCPA_DATA_DIR and OMCPA_MASTER_KEY.
+oh-my-cpa database export --output /backup/omc.omcbackup --passphrase-file /secure/backup-passphrase
+oh-my-cpa database inspect --file /backup/omc.omcbackup --passphrase-file /secure/backup-passphrase
+oh-my-cpa database restore --file /backup/omc.omcbackup --passphrase-file /secure/backup-passphrase --confirm
+
+# Cancel a restore that could not be prepared, then start OMC normally.
+oh-my-cpa database cancel
+
+# Restore the encrypted pre-restore copy, using a restore job ID from the console.
+# This local copy is protected with the target deployment master key.
+oh-my-cpa database restore --rollback-id <restore-job-id> --confirm
+```
+
+For Docker Compose installations, stop the OMC service and run the same command
+through its existing service definition, preserving its environment and data mount:
+`docker compose --env-file deploy/.env -f deploy/compose.full.yml run --rm --no-deps oh-my-cpa database cancel`, for example.
+
+A restore into an existing database refuses to proceed if its rollback snapshot
+cannot be created. For a damaged database that cannot be read, preserve the stopped
+main/WAL/SHM set in a separate directory first, as in the recovery procedures below,
+then restore into a clean database path. The command can initialize that path from
+the encrypted backup.
+
+### 2.4 Automatic backups and cloud recovery
+
+System → storage card → **Manage backups** opens the backup panel: a dialog for
+the daily time, passphrase and locations, then nothing else. The passphrase is set
+once through a guided form and is required before scheduling or any backup can run.
+Storage locations are checkboxes - the local disk, one or more cloud accounts, or cloud
+only - and each cloud account's connection is edited in its own dialog rather than a
+deeper page in the panel. The daily run starts at a wall-clock time of day (`daily_at_minute`,
+minute precision) in the server's location, not after an elapsed interval. A persisted due time coalesces downtime into one overdue run on
+startup. The existing single backup worker prevents overlap with exports or
+restores; a due run waits for the worker to become available. A pending restore
+continues to block backup work until restart or cancellation.
+
+Automatic copies live beside the database in `<database-path>.backups`, independently
+of temporary export jobs. Only this schedule's named artifacts count toward its
+retention. Local retention applies after a successful local copy, even during a
+cloud outage. Local retention can be switched off (`keep_local: 0`) when at least one
+cloud destination is configured: the local file is then only the upload source and is
+removed once every destination holds it. If any destination fails, the newest local
+copy stays as the recovery copy until a later run reaches every destination. Each successful cloud upload is downloaded and SHA-256 checked before
+that destination's older copies are removed. This deliberately costs a full
+read-back transfer; account for provider traffic charges. Failed uploads do not
+prune existing remote copies. The console shows the last complete success and a
+failed-run notice rather than treating a partial delivery as full success.
+
+Cloud transport embeds the pinned rclone Go module and only the backends imported
+by [`rclone_destination.go`](../../internal/backup/rclone_destination.go). The
+[`Destination`](../../internal/backup/destination.go) boundary receives completed
+encrypted artifacts, never a database handle. This keeps Docker and native
+installations self-contained, with no additional Compose service, executable,
+mount capability or port. Rclone does not promise a stable Go API: dependency
+updates must exercise the adapter and no-CGO target builds. Its module constraints
+also raise the SQLite driver version; migration and repository tests cover that
+integration rather than assuming the change affects only networking.
+
+Add a destination using the fields for that storage service. Root paths are
+provider-specific: S3/R2 uses `bucket/prefix`, SMB uses `share/path`, and WebDAV
+uses a directory below its configured URL. Connection credentials, the backup
+passphrase and refreshed OAuth tokens are encrypted in a dedicated database record.
+Ordinary responses return summaries only, and read-only SQL cannot query that
+record. Blank connection fields preserve their saved values. Changing the backup
+passphrase affects only future files; retain earlier passphrases for older copies.
+The accepted transport options are restricted in the adapter source.
+
+Google Drive and OneDrive use the **Connect account** wizard. The default uses the
+application identity registered by the embedded rclone backend; the cloud consent
+page therefore names rclone. Google Drive requests access to files created or opened
+with that application; OneDrive requests file read/write and offline access. The
+server exchanges the authorization code, discovers the user's default OneDrive and
+keeps tokens out of browser responses. Refreshed tokens are saved in the encrypted
+record, and persistence failure is reported.
+
+For a remote OMC server, the shared application's registered callback is a loopback
+address on the browser's computer. After consent, copy the resulting address from
+the browser address bar into the wizard, even when that page cannot connect. OMC
+validates its callback address, one-time state and PKCE verifier before exchanging
+the code; it never fetches the pasted URL. This flow needs the existing OMC port
+only. Authorization sessions expire after fifteen minutes and remain in server
+memory until the connection is saved or cancelled.
+
+Operators with their own OAuth application can expand the optional application
+settings and register the callback URL shown there. With automatic return enabled,
+the provider calls that OMC URL and the original wizard observes completion. The
+[callback](../../internal/api/management_database_oauth.go) deliberately requires no
+console session cookie: a cross-site provider redirect must instead match an
+unexpired authorization state and complete its PKCE-protected exchange. Tokens stay
+on the server. Success returns a 303 redirect to the system page without the provider
+response parameters. The callback works under the configured base path; a server
+restart requires starting authorization again.
+
+SFTP requires an independently verified server public key. FTP without TLS exposes
+transport credentials; use FTPS or SFTP when available. Connection testing is
+non-mutating and does not prove write permissions.
+
+#### Recover after losing the server and database
+
+Download the **recovery profile** and keep it away from the data directory, together
+with an independently stored backup passphrase. The `.omcrecovery` profile contains
+cloud connection settings encrypted with that passphrase, but no deployment key or
+plaintext passphrase. Re-export after changing credentials or reauthorizing an
+account. OAuth providers can revoke or rotate refresh tokens, so retain independent
+access to the cloud account as well; an old profile is not a guarantee of perpetual
+cloud access.
+
+On a clean machine, the OMC binary can list and retrieve cloud artifacts without
+opening or creating the target database and without its original master key:
+
+```bash
+# First list destination IDs in the encrypted profile.
+oh-my-cpa database remote-list --profile /secure/omc.omcrecovery --passphrase-file /secure/backup-passphrase
+# Then list backups at one destination and fetch a selected object.
+oh-my-cpa database remote-list --profile /secure/omc.omcrecovery --passphrase-file /secure/backup-passphrase --destination <destination-id>
+oh-my-cpa database fetch --profile /secure/omc.omcrecovery --passphrase-file /secure/backup-passphrase --destination <destination-id> --object <backup-object-name> --output /backup/recovered.omcbackup
+# Inspect, then restore using the new deployment's normal environment.
+oh-my-cpa database inspect --file /backup/recovered.omcbackup --passphrase-file /secure/backup-passphrase
+oh-my-cpa database restore --file /backup/recovered.omcbackup --passphrase-file /secure/backup-passphrase --confirm
+```
+
+Keep the profile file writable during remote recovery: refreshed cloud tokens are
+saved back to its encrypted envelope. Fetch refuses to overwrite an existing output.
+Local export, inspect and restore still require stopping OMC; remote-list and fetch
+do not need its database lock. On Windows, protect the passphrase file using the
+account's filesystem ACL; Unix deployments also enforce private mode bits.
+
+In a working console, select local or cloud retained backups and validate one with
+its own passphrase. This creates the same restore preview as an uploaded file; the
+existing explicit confirmation, startup-only application, required audit and
+pre-restore rollback copy still apply. Cloud delivery never automatically restores
+the live database. Every completed restore keeps saved destinations and the
+passphrase, but disables automatic scheduling and assigns a new retention
+namespace. Review the cloud targets and re-enable the schedule explicitly. This
+also applies to restores from rollback files; a recovery drill cannot prune the
+source installation's backup family.
 
 ---
 
@@ -92,6 +293,9 @@ When recovering from host failures or database corruption, choose the procedure 
      ```bash
      cp /path/to/backups/oh-my-cpa-backup-YYYYMMDD_HHMMSS.db /path/to/data/oh-my-cpa.db
      ```
+   - If the raw snapshot came from a restored installation with a `.key` envelope,
+     copy that matching envelope to `/path/to/data/oh-my-cpa.db.key` as well and
+     retain the deployment master key that protects it.
    - Set ownership to the container user (`10001:10001` per Dockerfile) and restrict permissions:
      ```bash
      chown -R 10001:10001 /path/to/data
@@ -127,7 +331,7 @@ When recovering from host failures or database corruption, choose the procedure 
 
 ### 3.3 Understanding Encrypted Migration Backups (`backups/*.db`)
 
-Files under `OMCPA_DATA_DIR/backups/` generated by Oh My CPA before migrations are AES-GCM encrypted backups accompanied by `.sha256` checksums. They are managed internally by the application; they cannot be inspected directly by `sqlite3` without decryption using the configured `OMCPA_MASTER_KEY`.
+Files under `OMCPA_DATA_DIR/backups/` generated by Oh My CPA before migrations are AES-GCM encrypted backups accompanied by `.sha256` checksums. They are managed internally by the application; they cannot be inspected directly by `sqlite3` without decryption using the application's active database cipher (see section 4).
 
 ### 3.4 Verify Service Readiness After Restoration
 
@@ -161,9 +365,15 @@ Confirm the JSON response reports `"database_status": "ok"` and `"status": "ok"`
 ## 4. `OMCPA_MASTER_KEY` Governance & Disaster Prevention
 
 - **Role of the Master Key**:
-  `OMCPA_MASTER_KEY` is a 32-byte high-entropy key (e.g. 64 hexadecimal characters), used to encrypt the CPA Management Key and raw usage inbox payloads at rest via AES-GCM.
+  `OMCPA_MASTER_KEY` is a high-entropy deployment key (e.g. 64 hexadecimal characters).
+  Initially it directly protects database secrets and identity HMACs. After a
+  portable database restore, it protects the local `.key` envelope instead, while
+  the recovered database cipher preserves the source secrets and identities.
 - **Consequences of Loss**:
-  If the master key is lost or corrupted, all encrypted fields in the database become **permanently unrecoverable**. The server will fail to decrypt existing credentials and payloads.
+  Losing the deployment key, or a restored database's matching `.key` envelope,
+  prevents local decryption. Recovery remains possible from a complete
+  `.omcbackup` file and its passphrase. Without either usable local key material
+  or that encrypted recovery package, protected fields are unrecoverable.
 - **Operational Requirements**:
   1. Never commit plaintext keys to code repositories or Dockerfiles;
   2. Inject keys via secure environment variables, secret managers, or orchestration vaults;
@@ -210,12 +420,12 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
    - Migration 031 adds `pricing_match_reviews`, the OpenRouter model an operator last answered for each custom or linked price. It is additive, holds no price and locks no cost; restoring an older copy (or losing the table's rows) only means the book announces existing matches once more.
    - `pricing_upstream_catalog` holds the last complete OpenRouter download and is replaced whole on every successful sync; restoring an older copy only means the model picker shows an older list until the next sync.
 3. **Agent Documents (`agent_documents`, migrations 026 and 036)**:
-   - The encrypted latest Agent session and its capability operations live here; the session ciphertext is written with the same `OMCPA_MASTER_KEY` envelope as other protected payloads, so the key must exist to resume a conversation or read a pending operation;
+   - The encrypted latest Agent session and its capability operations live here; the session ciphertext is written with the same active database cipher as other protected payloads, so the key must exist to resume a conversation or read a pending operation;
    - Sessions retain their history until reset or explicit turn replacement and are exempt from the repository's 8 MiB document bound; long conversations increase database and backup size. A terminal operation is retained for 7 days. Purging is lazy - it happens during Agent requests under a one-minute throttle - so the Agent adds no background loop and there is no separate maintenance job to schedule;
    - Migration 036 rebuilds the table to admit the `image` kind, copying every row verbatim; the normal pre-migration backup covers it. An image attached to a message is one encrypted row, at most 5 MiB of content, retained while the conversation references it and deleted on reset. Replacing a turn reuses its images. Failed admission attempts to delete only newly written image rows; this best-effort cleanup can fail if the database is unavailable. Image storage grows with the retained conversation;
    - Restoring this table from a backup restores conversation and operation history, but approval requires a new decision: an operation that was `executing` when the process stopped is reported as `uncertain` rather than replayed.
 4. **CPA Configuration Backups (`cpa_config_backups`, migration 030; `cpa_config_backup_settings`, migration 033)**:
-   - Before every configuration write, Oh My CPA stores CPA's `config.yaml` as it was, encrypted with the same `OMCPA_MASTER_KEY` envelope; without the key a copy cannot be read or restored. A write whose copy cannot be stored is refused, so a missing key or an unwritable database blocks configuration writes instead of making them unrecoverable;
+   - Before every configuration write, Oh My CPA stores CPA's `config.yaml` as it was, encrypted with the same active database cipher; without the key a copy cannot be read or restored. A write whose copy cannot be stored is refused, so a missing key or an unwritable database blocks configuration writes instead of making them unrecoverable;
    - Migration 033 adds each copy's `layout` (`v8` or `legacy`) and `reason` (the kind of write it preceded); copies from before it are marked `legacy` / `legacy_conversion`. The upgrade is additive and covered by the normal pre-migration backup;
    - v8 copies are kept to the retention chosen on the configuration page (default 20, between 5 and 100, the single row of `cpa_config_backup_settings`); pre-v8 copies are kept apart, the ten most recent (`CONFIG_LEGACY_BACKUP_RETENTION`). A copy identical to the gateway's newest one reuses it instead of adding one, so refused attempts cannot push older copies out. Older copies are deleted in the same transaction as the insert, and lowering the retention deletes them at once, so the table needs no maintenance job. A copy is at most 2 MiB, the largest file CPA's management API accepts;
    - The configuration page lists the copies, takes one on demand, restores a v8 copy onto the gateway (the replaced file is kept first), downloads one and deletes one; restore, download and deletion are audited fail-closed (`config.restore_backup`, `config.reveal_backup`, `config.delete_backup`). `cpa_config_backups` is hidden from the Agent's `database_query`;

@@ -72,8 +72,10 @@ all — has to say the name is unconfirmed instead of saving it.
 
 ## Composition and shared controls
 
-Use the shared page, panel, toolbar, field, empty-state, drawer and confirmation
-primitives before creating another page-local version. Keep semantic HTML, labels,
+Use the shared page, panel, toolbar, field, empty-state, drawer, dialog and
+confirmation primitives before creating another page-local version. A dialog
+(`AppModal`) holds one task that ends where the reader started; on a phone it is a
+bottom sheet. A drawer shows or edits one record beside the page. Keep semantic HTML, labels,
 focus management and accessible names when adapting a library component.
 
 Put the primary action where the task finishes. Destructive actions need an explicit
