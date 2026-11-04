@@ -1,0 +1,290 @@
+/* The sign-in showcase. Like the dashboard's routing map it is allowed depth - a raised, glowing
+   gateway, glowing strokes and a faint dot grid - and like it, every glow is an opacity-animated
+   overlay or a moving stroke rather than an animated shadow. One period drives every lane. */
+
+.stage {
+  --flow-period: 4.8s;
+  --lean-x: 0;
+  --lean-y: 0;
+  /* The light used on the stage. Dark pages take the accent as it is; light pages darken the
+     accent for legible text, and a glow of that navy only greys the page, so the light theme
+     lifts it back to a vivid step of the same hue. Nothing on the stage is text it must carry. */
+  --stage-accent: var(--accent);
+  --stage-violet: var(--series-3);
+  --stage-glow: color-mix(in srgb, var(--stage-accent) 22%, transparent);
+  --stage-track: color-mix(in srgb, var(--fg) 13%, transparent);
+  position: relative;
+  min-width: 0;
+  margin: 12px 12px 12px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  overflow: hidden;
+  isolation: isolate;
+  animation: stage-enter 420ms var(--ease-out) backwards;
+}
+
+:root[data-theme-mode='light'] .stage {
+  --stage-accent: oklch(from var(--accent) calc(l + 0.2) calc(c + 0.06) h);
+  --stage-violet: oklch(from var(--series-3) calc(l + 0.12) c h);
+  --stage-glow: color-mix(in srgb, var(--stage-accent) 30%, transparent);
+  --stage-track: color-mix(in srgb, var(--fg) 17%, transparent);
+  border-color: var(--border);
+  /* A white stage lit from above rather than the grey canvas, so the washes read as colour. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--stage-accent) 7%, var(--bg)) 0%, var(--bg) 60%),
+    var(--bg);
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(var(--stage-track) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  background-position: center;
+  mask-image: radial-gradient(ellipse 70% 62% at 50% 44%, #000 30%, transparent 100%);
+  transform: translate3d(calc(var(--lean-x) * -6px), calc(var(--lean-y) * -6px), 0);
+  transition: transform 900ms var(--ease-out);
+}
+
+/* Two slow washes of colour behind the scene. They drift on their own clock and lean against
+   the pointer, which is what separates the layers into depth. */
+.aurora {
+  position: absolute;
+  z-index: -1;
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(64px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.aurora-a {
+  top: -14%;
+  left: -12%;
+  background: radial-gradient(circle, var(--stage-accent), transparent 68%);
+  animation: aurora-drift-a 18s ease-in-out infinite alternate;
+}
+.aurora-b {
+  right: -16%;
+  bottom: -22%;
+  background: radial-gradient(circle, var(--stage-violet), transparent 68%);
+  opacity: 0.4;
+  animation: aurora-drift-b 22s ease-in-out infinite alternate;
+}
+:root[data-theme-mode='light'] .aurora { opacity: 0.3; }
+:root[data-theme-mode='light'] .aurora-b { opacity: 0.22; }
+
+.content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(24px, 5vh, 48px);
+  padding: 48px clamp(24px, 5vw, 64px);
+}
+
+.scene {
+  position: relative;
+  width: min(100%, 600px);
+  /* Nodes scale with the drawing, so a narrower panel shrinks the whole scene instead of
+     crowding fixed-size tiles onto shorter wires. */
+  container-type: inline-size;
+  transform: translate3d(calc(var(--lean-x) * 10px), calc(var(--lean-y) * 8px), 0);
+  transition: transform 600ms var(--ease-out);
+}
+/* Following the hand eases after it; letting go settles back with the console's spring. */
+.stage:not([data-leaning]) .scene,
+.stage:not([data-leaning]) .grid {
+  transition: transform var(--motion-spring) var(--ease-spring);
+}
+
+.wires {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.track {
+  fill: none;
+  stroke: var(--stage-track);
+  stroke-width: 1.25;
+}
+
+.orbits * {
+  fill: none;
+  transform-box: view-box;
+  transform-origin: 320px 200px;
+}
+.orbit-outer {
+  stroke: color-mix(in srgb, var(--fg) 7%, transparent);
+  stroke-width: 1;
+}
+.orbit-inner {
+  stroke: color-mix(in srgb, var(--stage-accent) 40%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 7;
+  animation: orbit-turn 40s linear infinite;
+}
+.orbit-boost {
+  stroke: var(--stage-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 18 7 4 7 12 52;
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--ease-standard);
+  animation: orbit-turn 1.6s linear infinite paused;
+}
+.stage[data-state='submitting'] .orbit-boost {
+  opacity: 0.9;
+  animation-play-state: running;
+}
+
+/* A pulse is one short dash on a path normalised to 100 units. Hidden at rest (offset 12), it
+   runs the length of its path in half a period; the inbound half and the outbound half of a
+   route share the delay, so the outbound dash leaves the gateway as the inbound one arrives. */
+.flows {
+  filter: drop-shadow(0 0 3px var(--stage-accent));
+}
+.flow {
+  fill: none;
+  stroke: var(--stage-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 12 200;
+  stroke-dashoffset: 12;
+  animation: var(--flow-period) linear infinite;
+  animation-delay: calc(var(--route) * var(--flow-period) / 5);
+}
+.flow-in { animation-name: flow-in; }
+.flow-out { animation-name: flow-out; }
+:root[data-theme-mode='light'] .flows { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--stage-accent) 70%, transparent)); }
+:root[data-theme-mode='light'] .node { box-shadow: var(--shadow-float); }
+
+.node {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: clamp(34px, 7.4cqi, 44px);
+  height: clamp(34px, 7.4cqi, 44px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--elevated);
+  color: var(--fg);
+  box-shadow: var(--shadow-raised);
+  transform: translate(-50%, -50%);
+  animation: node-enter 380ms var(--ease-out) backwards;
+  animation-delay: calc(80ms + var(--order) * 22ms);
+}
+
+.gateway {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: clamp(64px, 15.4cqi, 92px);
+  height: clamp(64px, 15.4cqi, 92px);
+  border: 1px solid color-mix(in srgb, var(--stage-accent) 40%, var(--border));
+  border-radius: 26%;
+  background: var(--elevated);
+  box-shadow: var(--shadow-float);
+  transform: translate(-50%, -50%);
+  animation: node-enter 400ms var(--ease-out) 40ms backwards;
+}
+
+.gateway > svg { width: 46%; height: auto; }
+
+/* The gateway breathes on the same period the requests arrive on. */
+.halo {
+  position: absolute;
+  width: clamp(116px, 28cqi, 168px);
+  height: clamp(116px, 28cqi, 168px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.halo-glow,
+.halo-alarm {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.halo-glow {
+  background: radial-gradient(circle, var(--stage-glow) 0%, transparent 68%);
+  animation: gateway-breathe calc(var(--flow-period) / 5) ease-in-out infinite;
+}
+/* Busier while a key is being checked: a second, stronger glow fades in over the first. */
+.halo-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--stage-accent) 40%, transparent) 0%, transparent 66%);
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--ease-standard);
+}
+.stage[data-state='submitting'] .halo-glow::after { opacity: 1; }
+.halo-alarm {
+  background: radial-gradient(circle, color-mix(in srgb, var(--danger) 42%, transparent) 0%, transparent 68%);
+  opacity: 0;
+  animation: gateway-alarm 1100ms var(--ease-out);
+}
+
+.caption {
+  max-width: 440px;
+  text-align: center;
+  animation: caption-enter 400ms var(--ease-out) 120ms backwards;
+}
+.headline {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.body {
+  margin: 10px 0 0;
+  color: var(--fg-2);
+  font-size: var(--text-md);
+  line-height: 1.6;
+}
+
+@keyframes stage-enter {
+  from { opacity: 0; }
+}
+@keyframes caption-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes node-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+}
+@keyframes orbit-turn {
+  to { transform: rotate(360deg); }
+}
+@keyframes flow-in {
+  0% { stroke-dashoffset: 12; }
+  50%, 100% { stroke-dashoffset: -100; }
+}
+@keyframes flow-out {
+  0%, 50% { stroke-dashoffset: 12; }
+  100% { stroke-dashoffset: -100; }
+}
+@keyframes gateway-breathe {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@keyframes gateway-alarm {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes aurora-drift-a {
+  to { transform: translate3d(14%, 10%, 0) scale(1.08); }
+}
+@keyframes aurora-drift-b {
+  to { transform: translate3d(-12%, -8%, 0) scale(1.12); }
+}

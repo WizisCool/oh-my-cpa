@@ -1239,9 +1239,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .auth-form .ant-form-item .ant-form-item-label { padding-bottom: 8px; }
 .auth-form .ant-form-item .ant-form-item-label > label { font-size: var(--text-sm); }
 .auth-submit { font-weight: 600; }
-.auth-placeholder-title { height: 20px; margin: 4px auto 52px; }
-.auth-placeholder-label { margin: 4px 0 25px; }
-.auth-placeholder-field + .auth-placeholder-field { margin-top: 20px; }
 
 @media (max-width: 640px) {
   .auth-header {
@@ -1430,6 +1427,21 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 ::view-transition-new(root) {
   animation-duration: var(--motion-slow);
   animation-timing-function: var(--ease-standard);
+}
+/* Signing in hands the page to the console (AuthGate's `enterConsole`): the sign-in screen
+   accelerates away, lifting toward the reader, while the console settles up from just below full
+   size. Opacity and scale only, so both snapshots stay on the compositor. */
+:root[data-signing-in]::view-transition-old(root) {
+  animation: sign-in-leave 260ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+:root[data-signing-in]::view-transition-new(root) {
+  animation: sign-in-arrive 420ms var(--ease-out) 40ms both;
+}
+@keyframes sign-in-leave {
+  to { opacity: 0; transform: scale(1.025); }
+}
+@keyframes sign-in-arrive {
+  from { opacity: 0; transform: scale(0.985); }
 }
 @keyframes route-enter {
   from { opacity: 0; transform: translateY(3px); }

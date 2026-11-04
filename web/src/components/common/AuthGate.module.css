@@ -1,0 +1,101 @@
+/* The sign-in page: the form on the page itself, and on a wide screen the showcase beside it in
+   an inset panel, the way the console's working page sits beside its rail. The shared `auth-*`
+   rules in index.css still own the column, the title and the agent consent screen. */
+
+.shell {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--bg);
+  overflow: hidden;
+}
+@media (min-width: 901px) {
+  .shell[data-staged] { grid-template-columns: minmax(420px, 0.92fr) minmax(0, 1.08fr); }
+}
+
+.pane {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 max(20px, env(safe-area-inset-right)) 0 max(28px, env(safe-area-inset-left));
+  animation: sign-in-fade 320ms var(--ease-out) backwards;
+}
+.menus { display: flex; align-items: center; gap: 6px; }
+
+.main {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  /* The bottom padding matches the header, so the column centres in the viewport. */
+  padding: 24px 28px 88px;
+}
+
+.card {
+  max-width: 380px;
+}
+
+/* The page's one title, left-aligned with the form under it. */
+.card :global(.auth-title) {
+  margin-bottom: 8px;
+  text-align: start;
+  font-size: 26px;
+  letter-spacing: -0.015em;
+}
+.subtitle {
+  margin: 0 0 28px;
+  color: var(--fg-2);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+
+.options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -6px 0 20px;
+}
+
+.submit :global(.anticon-arrow-right) {
+  transition: transform var(--motion-base) var(--ease-out);
+}
+.submit:hover :global(.anticon-arrow-right),
+.submit:focus-visible :global(.anticon-arrow-right) {
+  transform: translateX(3px);
+}
+
+/* Each outline row reserves the height of the part it stands for, margins included. */
+.placeholder-title { margin: 2px 0 14px; }
+.placeholder-subtitle { margin: 6px 0 38px; }
+.placeholder-label { margin: 4px 0 18px; }
+.placeholder-option { margin: 18px 0 30px; }
+
+/* The form's parts arrive top to bottom as one wave: a short travel, a short stagger, and the
+   last part settled about 0.4s after the first, so the form is ready before the eye looks for it.
+   Reduced motion places them at once. */
+.rise {
+  animation: sign-in-rise 340ms var(--ease-out) backwards;
+  animation-delay: calc(var(--rise, 0) * 28ms);
+}
+
+@keyframes sign-in-rise {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes sign-in-fade {
+  from { opacity: 0; }
+}
+
+@media (max-width: 640px) {
+  .header { padding: 0 16px 0 20px; }
+  .main { padding: 8px 20px 56px; }
+  .card :global(.auth-title) { font-size: 22px; }
+}
