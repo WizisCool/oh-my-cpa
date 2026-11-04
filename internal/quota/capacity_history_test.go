@@ -67,6 +67,18 @@ func TestCapacityReferenceAllowsIdleCyclesButKeepsScope(t *testing.T) {
 	if points = CapacityReferencePoints(current, []ObservedWindows{{ObservedAtMS: -31 * 24 * hourMS, Windows: []QuotaWindow{previous}}}, 7*hourMS); len(points) != 1 {
 		t.Fatalf("an idle month erased the dated reference: %+v", points)
 	}
+	// A derived reset instant drifts by a fraction of a second between refreshes; the
+	// readings of one cycle must not take every slot from the cycle before it.
+	var drifting []ObservedWindows
+	drifting = append(drifting, ObservedWindows{ObservedAtMS: -hourMS, Windows: []QuotaWindow{previous}})
+	for index := range 4 {
+		reading := capacityWindow(float64(10 + index))
+		reading.ResetAtMS = int64Ptr(8*hourMS + int64(index)*300)
+		drifting = append(drifting, ObservedWindows{ObservedAtMS: int64(index+1) * hourMS, Windows: []QuotaWindow{reading}})
+	}
+	if points = CapacityReferencePoints(current, drifting, 7*hourMS); len(points) != 2 || points[1].ObservedAtMS != -hourMS {
+		t.Fatalf("a drifting boundary crowded out the previous cycle: %+v", points)
+	}
 	changed := previous
 	changed.Scope, changed.Model = "model", "gpt-5"
 	history := []ObservedWindows{{ObservedAtMS: -2 * hourMS, Windows: []QuotaWindow{previous}}, {ObservedAtMS: -hourMS, Windows: []QuotaWindow{changed}}}

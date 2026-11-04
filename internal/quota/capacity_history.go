@@ -177,11 +177,22 @@ func CapacityBaseline(window QuotaWindow, history []ObservedWindows, observedAtM
 func CapacityReferencePoints(window QuotaWindow, history []ObservedWindows, observedAtMS int64) []CapacityPoint {
 	ordered := sortedCapacityHistory(history)
 	points := make([]CapacityPoint, 0, 3)
+	// A segment is a reset boundary and whether a mid-cycle reset split it. A
+	// derived boundary drifts between refreshes, so boundaries within a second
+	// are one, as in hasChangedCapacityBoundary.
 	type segment struct {
 		resetAtMS int64
 		hasReset  bool
 	}
-	seenSegments := make(map[segment]bool)
+	seenSegments := make([]segment, 0, 3)
+	isSeen := func(candidate segment) bool {
+		for _, seen := range seenSegments {
+			if seen.hasReset == candidate.hasReset && math.Abs(float64(seen.resetAtMS-candidate.resetAtMS)) <= 1000 {
+				return true
+			}
+		}
+		return false
+	}
 	for i := len(ordered) - 1; i >= 0 && len(points) < 3; i-- {
 		observation := ordered[i]
 		if observation.ObservedAtMS >= observedAtMS {
@@ -203,10 +214,10 @@ func CapacityReferencePoints(window QuotaWindow, history []ObservedWindows, obse
 				cycle = *candidate.ResetAtMS
 			}
 			key := segment{resetAtMS: cycle, hasReset: candidate.HasMidCycleReset}
-			if seenSegments[key] {
+			if isSeen(key) {
 				continue
 			}
-			seenSegments[key] = true
+			seenSegments = append(seenSegments, key)
 			points = append(points, CapacityPoint{Window: candidate, ObservedAtMS: observation.ObservedAtMS})
 		}
 	}
