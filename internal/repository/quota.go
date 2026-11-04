@@ -38,7 +38,8 @@ type ActiveCooldownRecord struct {
 	CorrelatedAtMS    *int64 `json:"correlated_at_ms,omitempty"`
 }
 
-// SaveQuotaSnapshot inserts a new snapshot record and trims older snapshots beyond retention limit.
+// SaveQuotaSnapshot inserts a snapshot and trims the credential's history to the
+// recent readings plus the cycle anchors capacity estimates are measured from.
 func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapshotRecord) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
@@ -96,16 +97,46 @@ func (r *Repository) trimQuotaSnapshots(ctx context.Context, authIndex string, k
 	if r == nil || r.SQL() == nil {
 		return nil
 	}
+	// Frequent refreshes must not evict the first reading or the preceding
+	// cycle's final reading. Retain at most 50 anchors from three cycles per
+	// window, beside the recent tail; malformed JSON is not an anchor. A derived
+	// reset instant is computed from a relative duration and drifts between
+	// refreshes, so instants within a second are one cycle, as in the capacity
+	// code's boundary comparison.
 	trimQuery := `
-		DELETE FROM quota_snapshots
-		WHERE auth_index = ? AND id NOT IN (
-			SELECT id FROM quota_snapshots
-			WHERE auth_index = ?
-			ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC
-			LIMIT ?
+		WITH records AS (
+			SELECT *, rowid AS sequence FROM quota_snapshots WHERE auth_index = ?
+		), recent AS (
+			SELECT id FROM records ORDER BY observed_at_ms DESC, created_at_ms DESC, sequence DESC LIMIT ?
+		), windows AS (
+			SELECT records.id, observed_at_ms, created_at_ms, sequence, provider, plan_type, plan_tier,
+			       json_extract(value, '$.id') AS window_id,
+			       json_extract(value, '$.reset_at_ms') AS reset_at_ms
+			FROM records, json_each(CASE WHEN json_valid(windows_json) THEN windows_json ELSE '[]' END)
+			WHERE json_extract(value, '$.reset_at_ms') IS NOT NULL
+		), boundaries AS (
+			SELECT *,
+			       CASE WHEN reset_at_ms - LAG(reset_at_ms) OVER (PARTITION BY provider, plan_type, plan_tier, window_id ORDER BY reset_at_ms) > 1000 THEN 1 ELSE 0 END AS starts_cycle
+			FROM windows
+		), cycles AS (
+			SELECT *,
+			       SUM(starts_cycle) OVER (PARTITION BY provider, plan_type, plan_tier, window_id ORDER BY reset_at_ms ROWS UNBOUNDED PRECEDING) AS cycle_id
+			FROM boundaries
+		), ranked AS (
+			SELECT *,
+			       DENSE_RANK() OVER (PARTITION BY provider, plan_type, plan_tier, window_id ORDER BY cycle_id DESC) AS cycle_rank,
+			       ROW_NUMBER() OVER (PARTITION BY provider, plan_type, plan_tier, window_id, cycle_id ORDER BY observed_at_ms, created_at_ms, sequence) AS first_reading,
+			       ROW_NUMBER() OVER (PARTITION BY provider, plan_type, plan_tier, window_id, cycle_id ORDER BY observed_at_ms DESC, created_at_ms DESC, sequence DESC) AS last_reading
+			FROM cycles
+		), anchors AS (
+			SELECT DISTINCT id, observed_at_ms FROM ranked
+			WHERE cycle_rank <= 3 AND (first_reading = 1 OR last_reading = 1)
+			ORDER BY observed_at_ms DESC LIMIT 50
 		)
+		DELETE FROM quota_snapshots WHERE auth_index = ?
+		AND id NOT IN (SELECT id FROM recent UNION SELECT id FROM anchors)
 	`
-	_, err := r.SQL().ExecContext(ctx, trimQuery, authIndex, authIndex, keepCount)
+	_, err := r.SQL().ExecContext(ctx, trimQuery, authIndex, keepCount, authIndex)
 	return err
 }
 

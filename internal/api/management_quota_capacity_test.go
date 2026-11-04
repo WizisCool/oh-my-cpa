@@ -96,6 +96,92 @@ func TestAttachWindowCapacity(t *testing.T) {
 	}
 }
 
+func TestWindowCapacityCalibratesFromObservedChange(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	nowMS := time.Now().UnixMilli()
+	baseline := capacityTestQuota(nowMS, nowMS-120000, 60)
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, baseline); err != nil {
+		t.Fatal(err)
+	}
+	// The 60% consumed before OMC observed this credential must not dilute the
+	// capacity inferred from the next 10 percentage points.
+	insertCapacityUsage(t, handler, "new-traffic", nowMS-90000, 100000, 100000000)
+	insertCapacityUsage(t, handler, "after-reading", nowMS-1000, 9000000, 9000000000)
+	current := capacityTestQuota(nowMS, nowMS-60000, 70)
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	capacity := current.Windows[0].Capacity
+	if capacity == nil || capacity.Tokens != 1000000 || capacity.Basis != "observed_delta" {
+		t.Fatalf("capacity=%+v, want usage / (70%% - 60%%)", capacity)
+	}
+}
+
+func TestWindowCapacityReferencesSurviveIdleRefreshes(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	nowMS := time.Now().UnixMilli()
+	previous := capacityTestQuota(nowMS, nowMS-4*3600000, 25)
+	previousResetAtMS := nowMS - 3*3600000
+	previous.Windows[0].ResetAtMS = &previousResetAtMS
+	insertCapacityUsage(t, handler, "previous", nowMS-5*3600000, 100000, 100000000)
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, previous); err != nil {
+		t.Fatal(err)
+	}
+	for index := range 55 {
+		current := capacityTestQuota(nowMS, nowMS-120000+int64(index)*1000, 0)
+		if err := handler.persistNormalizedQuotaSnapshot(ctx, current); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current := capacityTestQuota(nowMS, nowMS-60000, 0)
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	capacity := current.Windows[0].Capacity
+	if capacity == nil || capacity.Basis != "previous_cycle" || capacity.Tokens != 400000 || capacity.RemainingTokens == nil || *capacity.RemainingTokens != 400000 || capacity.ObservedAtMS != previous.ObservedAtMS {
+		t.Fatalf("idle refreshes lost historical evidence: %+v", capacity)
+	}
+	// Missing percentage readings retain the same total without inventing a
+	// remaining amount, and a plan change starts its own calibration.
+	current.Windows[0].UsedPercent = nil
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	if capacity := current.Windows[0].Capacity; capacity == nil || capacity.RemainingTokens != nil {
+		t.Fatalf("missing percentage: %+v", capacity)
+	}
+	current.Plan = &quota.QuotaPlan{PlanType: "pro", Tier: "elite"}
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	if current.Windows[0].Capacity != nil {
+		t.Fatal("old plan used to estimate a different plan")
+	}
+}
+
+func TestWindowCapacityObservedChangeWithoutCycleBoundary(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	nowMS := time.Now().UnixMilli()
+	baseline := capacityTestQuota(nowMS, nowMS-120000, 20)
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, baseline); err != nil {
+		t.Fatal(err)
+	}
+	insertCapacityUsage(t, handler, "delta", nowMS-90000, 100000, 100000000)
+	current := capacityTestQuota(nowMS, nowMS-60000, 30)
+	current.Windows[0].ResetAtMS, current.Windows[0].PeriodHours = nil, nil
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	capacity := current.Windows[0].Capacity
+	if capacity == nil || capacity.Basis != "observed_delta" || capacity.Tokens != 1000000 || capacity.FromMS != baseline.ObservedAtMS || capacity.RemainingTokens == nil || *capacity.RemainingTokens != 700000 {
+		t.Fatalf("observed change requires no cycle boundary: %+v", capacity)
+	}
+	if _, err := handler.repo.SQL().ExecContext(ctx, "DELETE FROM quota_snapshots WHERE auth_index='codex-1'"); err != nil {
+		t.Fatal(err)
+	}
+	baseline.Windows[0].ResetAtMS, baseline.Windows[0].PeriodHours = nil, nil
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, baseline); err != nil {
+		t.Fatal(err)
+	}
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	if capacity := current.Windows[0].Capacity; capacity == nil || capacity.Tokens != 1000000 {
+		t.Fatalf("both observations missing a boundary: %+v", capacity)
+	}
+}
+
 func TestAttachWindowCapacityDetectsMidCycleReset(t *testing.T) {
 	handler := capacityTestHandler(t)
 	ctx := context.Background()
@@ -134,7 +220,7 @@ func TestAttachWindowCapacityDetectsMidCycleReset(t *testing.T) {
 	}
 }
 
-func TestAttachWindowCapacityWithholdsForUnknownObservationTime(t *testing.T) {
+func TestAttachWindowCapacityRetainsDatedEstimateAfterRefreshFailure(t *testing.T) {
 	handler := capacityTestHandler(t)
 	ctx := context.Background()
 	nowMS := time.Now().UnixMilli()
@@ -143,15 +229,34 @@ func TestAttachWindowCapacityWithholdsForUnknownObservationTime(t *testing.T) {
 	stale := capacityTestQuota(nowMS, nowMS, 20)
 	stale.Status = "stale"
 	handler.attachWindowCapacity(ctx, stale, nowMS)
-	if stale.Windows[0].Usage != nil || stale.Windows[0].CapacityUnavailable != quota.CapacityReasonStale {
-		t.Fatalf("stale window = %+v, want no usage and the stale reason", stale.Windows[0])
+	if capacity := stale.Windows[0].Capacity; capacity == nil || capacity.RemainingTokens != nil || capacity.ObservedAtMS != stale.ObservedAtMS {
+		t.Fatalf("stale window = %+v, want dated capacity without a remaining reading", stale.Windows[0])
 	}
 
 	disabled := capacityTestQuota(nowMS, nowMS, 20)
 	disabled.Disabled = true
 	handler.attachWindowCapacity(ctx, disabled, nowMS)
-	if disabled.Windows[0].Usage != nil || disabled.Windows[0].CapacityUnavailable != quota.CapacityReasonStale {
-		t.Fatalf("disabled window = %+v, want no usage and the stale reason", disabled.Windows[0])
+	if capacity := disabled.Windows[0].Capacity; capacity == nil || capacity.RemainingTokens != nil {
+		t.Fatalf("disabled window = %+v, want dated capacity", disabled.Windows[0])
+	}
+}
+
+func TestWindowCapacityRetainsCalibrationImmediatelyAfterReset(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	nowMS := time.Now().UnixMilli()
+	insertCapacityUsage(t, handler, "before-reset", nowMS-180000, 100000, 100000000)
+	for index, percent := range []float64{20, 5} {
+		observation := capacityTestQuota(nowMS, nowMS-120000+int64(index)*1000, percent)
+		if err := handler.persistNormalizedQuotaSnapshot(ctx, observation); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current := capacityTestQuota(nowMS, nowMS-60000, 5)
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	capacity := current.Windows[0].Capacity
+	if capacity == nil || capacity.Basis != "previous_cycle" || capacity.Tokens != 500000 || capacity.ObservedAtMS != nowMS-120000 || capacity.RemainingTokens == nil || *capacity.RemainingTokens != 475000 {
+		t.Fatalf("reset erased the preceding calibration: %+v", current.Windows[0])
 	}
 }
 
@@ -171,8 +276,8 @@ func TestWindowCapacityResetAfterCounterRecovers(t *testing.T) {
 	}
 	current := capacityTestQuota(nowMS, observedAtMS, 25)
 	handler.attachWindowCapacity(context.Background(), current, nowMS)
-	if current.Windows[0].Capacity != nil {
-		t.Fatalf("reset 20%% -> 5%% -> 25%% was forgotten: capacity=%+v reason=%q", current.Windows[0].Capacity, current.Windows[0].CapacityUnavailable)
+	if capacity := current.Windows[0].Capacity; capacity == nil || capacity.Basis != "observed_delta" || capacity.Tokens != 500000 {
+		t.Fatalf("reset did not resume calibration from 5%% -> 25%%: %+v", capacity)
 	}
 }
 
@@ -187,12 +292,12 @@ func TestWindowCapacityStaleReadingWithCooldown(t *testing.T) {
 	current.ActiveCooldown = &quota.ActiveCooldown{IsActive: true, RecoverAtMS: &recoverAtMS}
 	quota.EvaluateStatusAndRecommendation(current, nowMS)
 	handler.attachWindowCapacity(context.Background(), current, nowMS)
-	if current.Windows[0].Capacity != nil {
-		t.Fatalf("failed refresh incorrectly estimated under status %q: capacity=%+v reason=%q", current.Status, current.Windows[0].Capacity, current.Windows[0].CapacityUnavailable)
+	if capacity := current.Windows[0].Capacity; capacity == nil || capacity.RemainingTokens != nil {
+		t.Fatalf("failed refresh lost the dated estimate under status %q: %+v", current.Status, capacity)
 	}
 }
 
-func TestWindowCapacityHistoryFailureWithholds(t *testing.T) {
+func TestWindowCapacityHistoryFailureKeepsInitialEstimate(t *testing.T) {
 	handler := capacityTestHandler(t)
 	nowMS := time.Now().UnixMilli()
 	insertCapacityUsage(t, handler, "in-cycle", nowMS-120000, 100000, 100000000)
@@ -201,8 +306,8 @@ func TestWindowCapacityHistoryFailureWithholds(t *testing.T) {
 	}
 	current := capacityTestQuota(nowMS, nowMS-60000, 20)
 	handler.attachWindowCapacity(context.Background(), current, nowMS)
-	if current.Windows[0].Capacity != nil {
-		t.Fatalf("history query failure treated as clean history: capacity=%+v reason=%q", current.Windows[0].Capacity, current.Windows[0].CapacityUnavailable)
+	if capacity := current.Windows[0].Capacity; capacity == nil || current.Windows[0].CapacityUnavailable != "" {
+		t.Fatalf("a history read failure withheld the current cycle's estimate: %+v", current.Windows[0])
 	}
 }
 
@@ -222,20 +327,20 @@ func TestWindowCapacityUsesPreviousCycleWithoutReplacingCurrentUsage(t *testing.
 	}
 	handler.attachWindowCapacity(ctx, current, nowMS)
 	window := current.Windows[0]
-	if window.Capacity == nil || window.Capacity.Basis != "previous_cycle" || window.Capacity.Tokens != 400000 || window.Capacity.ObservedAtMS != previous.ObservedAtMS || window.Capacity.ResetAtMS != resetAtMS {
+	if window.Capacity == nil || window.Capacity.Basis != "blended" || window.Capacity.Tokens != 280000 || window.Capacity.ObservedAtMS != current.ObservedAtMS {
 		t.Fatalf("fallback=%+v", window.Capacity)
 	}
-	if window.Usage == nil || window.Usage.Tokens != 2000 || window.CapacityUnavailable != quota.CapacityReasonLowUsage {
+	if window.Usage == nil || window.Usage.Tokens != 2000 || window.CapacityUnavailable != "" {
 		t.Fatalf("current reading lost: %+v", window)
 	}
 	insertCapacityUsage(t, handler, "previous-unpriced", nowMS-5*3600*1000, 100000, nil)
 	handler.attachWindowCapacity(ctx, current, nowMS)
-	if current.Windows[0].Capacity == nil || current.Windows[0].Capacity.CostNanos != nil {
-		t.Fatal("unpriced fallback was not tokens-only")
+	if capacity := current.Windows[0].Capacity; capacity == nil || capacity.CostNanos == nil || *capacity.CostNanos != 100000000 {
+		t.Fatalf("an unpriced reference replaced the current cost: %+v", capacity)
 	}
 }
 
-func TestWindowCapacityScopedUsagePrefersServedModelAndFailsClosed(t *testing.T) {
+func TestWindowCapacityScopedUsagePrefersServedModelAndKeepsMatchedUsage(t *testing.T) {
 	handler := capacityTestHandler(t)
 	ctx := context.Background()
 	nowMS := time.Now().UnixMilli()
@@ -264,8 +369,8 @@ func TestWindowCapacityScopedUsagePrefersServedModelAndFailsClosed(t *testing.T)
 		t.Fatal(err)
 	}
 	handler.attachWindowCapacity(ctx, current, nowMS)
-	if window := current.Windows[0]; window.Usage != nil || window.Capacity != nil || window.CapacityUnavailable != quota.CapacityReasonScopeUnknown {
-		t.Fatalf("partial scope accepted: %+v", window)
+	if window := current.Windows[0]; window.Usage == nil || window.Usage.UnmatchedRequests != 1 || window.Capacity == nil || window.Capacity.Tokens != 500 {
+		t.Fatalf("known scoped usage lost: %+v", window)
 	}
 }
 
@@ -290,14 +395,14 @@ func TestWindowCapacityResetEvidenceSurvivesSnapshotRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(history) != 50 {
+	if len(history) != 51 {
 		t.Fatalf("retained=%d", len(history))
 	}
 	current := capacityTestQuota(nowMS, nowMS-60000, 80)
 	insertCapacityUsage(t, handler, "traffic", nowMS-70000, 100, 1000)
 	handler.attachWindowCapacity(ctx, current, nowMS)
-	if current.Windows[0].CapacityUnavailable != quota.CapacityReasonResetMidCycle {
-		t.Fatalf("reset evidence lost: %+v", current.Windows[0])
+	if capacity := current.Windows[0].Capacity; capacity == nil || capacity.Basis != "observed_delta" || capacity.FromMS < nowMS-118000 {
+		t.Fatalf("post-reset calibration lost after retention: %+v", current.Windows[0])
 	}
 	// Read-time joins must never freeze into the stored observation.
 	if err := handler.persistNormalizedQuotaSnapshot(ctx, current); err != nil {
@@ -332,7 +437,7 @@ func TestWindowCapacityDoesNotPersistFailedCooldownObservation(t *testing.T) {
 	}
 }
 
-func TestWindowCapacityMalformedHistoryFailsClosed(t *testing.T) {
+func TestWindowCapacityMalformedHistoryKeepsInitialEstimate(t *testing.T) {
 	handler := capacityTestHandler(t)
 	ctx := context.Background()
 	nowMS := time.Now().UnixMilli()
@@ -341,8 +446,10 @@ func TestWindowCapacityMalformedHistoryFailsClosed(t *testing.T) {
 	}
 	current := capacityTestQuota(nowMS, nowMS-60000, 20)
 	handler.attachWindowCapacity(ctx, current, nowMS)
-	if current.Windows[0].CapacityUnavailable != quota.CapacityReasonHistoryUnavailable {
-		t.Fatalf("malformed history accepted: %+v", current.Windows[0])
+	insertCapacityUsage(t, handler, "traffic", nowMS-70000, 100, 1000)
+	handler.attachWindowCapacity(ctx, current, nowMS)
+	if capacity := current.Windows[0].Capacity; capacity == nil {
+		t.Fatalf("malformed history withheld the estimate: %+v", current.Windows[0])
 	}
 }
 
@@ -365,8 +472,8 @@ func TestWindowCapacityCorruptHistoryDoesNotBlockFreshObservations(t *testing.T)
 	if err := json.Unmarshal([]byte(latest["codex-1"].WindowsJSON), &stored); err != nil || !stored[0].HasIncompleteHistory {
 		t.Fatalf("missing incomplete-history evidence: %+v %v", stored, err)
 	}
-	// Model retention evicting the corrupt row: later clean reads cannot erase
-	// that this cycle lost the evidence needed to rule out a prior reset.
+	// Losing earlier evidence does not suppress the current cycle once the
+	// corrupt row is evicted.
 	if _, err := handler.repo.SQL().ExecContext(ctx, `DELETE FROM quota_snapshots WHERE windows_json='invalid'`); err != nil {
 		t.Fatal(err)
 	}
@@ -376,8 +483,8 @@ func TestWindowCapacityCorruptHistoryDoesNotBlockFreshObservations(t *testing.T)
 		t.Fatal(err)
 	}
 	handler.attachWindowCapacity(ctx, current, nowMS)
-	if current.Windows[0].Capacity != nil || current.Windows[0].CapacityUnavailable != quota.CapacityReasonHistoryUnavailable {
-		t.Fatalf("lost history became trusted after retention: %+v", current.Windows[0])
+	if capacity := current.Windows[0].Capacity; capacity == nil {
+		t.Fatalf("a history gap withheld the estimate: %+v", current.Windows[0])
 	}
 	current = capacityTestQuota(nowMS+5*3600000, nowMS+5*3600000, 25)
 	if err := handler.persistNormalizedQuotaSnapshot(ctx, current); err != nil {

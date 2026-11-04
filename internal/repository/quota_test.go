@@ -85,6 +85,35 @@ func TestRepositoryQuotaSnapshots(t *testing.T) {
 	if hist[0].ObservedAtMS != nowMS || hist[1].ObservedAtMS != nowMS-5000 {
 		t.Errorf("history order wrong: %+v", hist)
 	}
+
+	t.Run("refreshes retain raw cycle anchors", func(t *testing.T) {
+		for index := range 70 {
+			// A derived reset instant drifts by a fraction of a second between refreshes.
+			resetAtMS := nowMS + 3600000 + int64(index%7)*100
+			observedAtMS := nowMS + int64(index)
+			if index < 5 {
+				resetAtMS -= 32 * 24 * 3600000
+				observedAtMS -= 32 * 24 * 3600000
+			}
+			if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{
+				ID: fmt.Sprintf("anchor-%d", index), AuthIndex: "auth-anchors", Provider: "codex", Status: "healthy",
+				WindowsJSON: fmt.Sprintf(`[{"id":"five_hour","reset_at_ms":%d}]`, resetAtMS), ObservedAtMS: observedAtMS,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		records, err := repo.GetQuotaSnapshotHistory(ctx, "auth-anchors", 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := make(map[string]bool)
+		for _, record := range records {
+			seen[record.ID] = true
+		}
+		if !seen["anchor-0"] || !seen["anchor-4"] || !seen["anchor-5"] || !seen["anchor-69"] || seen["anchor-1"] || len(records) > 100 {
+			t.Fatalf("first/final cycle evidence was evicted or retention unbounded: %+v", seen)
+		}
+	})
 }
 
 func TestQuotaSnapshotsUseInsertionOrderForTimestampTies(t *testing.T) {

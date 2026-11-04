@@ -24,7 +24,7 @@ export interface QuotaWindow {
   reset_accuracy?: 'exact' | 'derived' | 'approximate';
   /** What this deployment recorded for the credential in the window's current cycle, up to the observation. */
   usage?: QuotaWindowUsage;
-  /** The estimated size of the whole window; absent when `capacity_unavailable` says why. */
+  /** The estimated size of the whole window and what is left of it; absent when `capacity_unavailable` says why. */
   capacity?: QuotaWindowCapacity;
   capacity_unavailable?: QuotaCapacityUnavailableReason;
 }
@@ -39,21 +39,23 @@ export interface QuotaWindowUsage {
 }
 
 export interface QuotaWindowCapacity {
-  basis?: 'current_cycle' | 'previous_cycle';
+  basis?: 'current_cycle' | 'observed_delta' | 'blended' | 'previous_cycle';
   observed_at_ms?: number;
   from_ms?: number;
   reset_at_ms?: number;
   tokens: number;
-  /** Absent when too much of the cycle's usage carries no price. */
+  /** Absent when too much of the sample carries no price. */
   cost_nanos?: number;
-  /** Relative uncertainty, in percent, from upstream reporting the used share in whole points. */
+  /** What is left of the window, given only with a live reading of the used share. */
+  remaining_tokens?: number;
+  remaining_cost_nanos?: number;
+  /** Relative effect, in percent, of upstream rounding the used share to whole points. */
   error_percent: number;
 }
 
 export type QuotaCapacityUnavailableReason =
   | 'boundary_unknown'
   | 'expired'
-  | 'stale'
   | 'no_reading'
   | 'low_usage'
   | 'no_traffic'

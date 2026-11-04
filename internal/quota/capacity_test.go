@@ -66,8 +66,8 @@ func TestWindowCycleRange(t *testing.T) {
 
 	approximate := window
 	approximate.ResetAccuracy = "approximate"
-	if _, _, reason = WindowCycleRange(approximate, 7*hourMS, 8*hourMS); reason != CapacityReasonBoundaryUnknown {
-		t.Fatalf("approximate reset: reason = %q, want boundary_unknown", reason)
+	if _, _, reason = WindowCycleRange(approximate, 7*hourMS, 8*hourMS); reason != "" {
+		t.Fatalf("approximate reset: reason = %q, want an initial estimate", reason)
 	}
 
 	noPeriod := window
@@ -105,6 +105,21 @@ func TestEstimateWindowCapacity(t *testing.T) {
 	if capacity.ErrorPercent != 2 {
 		t.Errorf("error = %v, want 2 (half a point of 25)", capacity.ErrorPercent)
 	}
+	remainingOnly := capacityWindow(0)
+	remainingOnly.UsedPercent, remainingOnly.RemainingPercent = nil, floatPtr(75)
+	if capacity, reason := EstimateWindowCapacity(remainingOnly, usage, nil); reason != "" || capacity == nil || capacity.Tokens != 8000000 {
+		t.Fatalf("remaining-only percentage lost: %+v %q", capacity, reason)
+	}
+}
+
+func TestEstimateWindowCapacityStartsWithPositiveUsage(t *testing.T) {
+	usage := WindowUsage{Requests: 2, PricedRequests: 2, Tokens: 1000, CostNanos: 1000}
+	for _, percent := range []float64{0.2, 1, 4.9} {
+		capacity, reason := EstimateWindowCapacity(capacityWindow(percent), usage, nil)
+		if capacity == nil || reason != "" || capacity.Tokens != int64(100000/percent+0.5) {
+			t.Fatalf("%g%%: capacity=%+v reason=%q", percent, capacity, reason)
+		}
+	}
 }
 
 func TestEstimateWindowCapacityWithholds(t *testing.T) {
@@ -121,7 +136,7 @@ func TestEstimateWindowCapacityWithholds(t *testing.T) {
 		want        string
 	}{
 		{"no used share", noReading, usage, nil, CapacityReasonNoReading},
-		{"below the threshold", capacityWindow(4.9), usage, nil, CapacityReasonLowUsage},
+		{"zero used share", capacityWindow(0), usage, nil, CapacityReasonLowUsage},
 		{"nothing recorded", capacityWindow(30), WindowUsage{}, nil, CapacityReasonNoTraffic},
 		{"earlier reading was higher", capacityWindow(30), usage, floatPtr(60), CapacityReasonResetMidCycle},
 		// A reset outranks missing traffic: after a reset the gateway may well
@@ -158,29 +173,31 @@ func TestEstimateWindowCapacityDropsCostWhenUnpriced(t *testing.T) {
 	}
 
 	usage.PricedRequests = 95
-	if capacity, _ = EstimateWindowCapacity(capacityWindow(50), usage, nil); capacity == nil || capacity.CostNanos == nil {
+	if capacity, _ = EstimateWindowCapacity(capacityWindow(50), usage, nil); capacity == nil || capacity.CostNanos == nil || *capacity.CostNanos != 10000 {
 		t.Errorf("95%% priced: want a cost estimate, got %v", capacity)
 	}
 }
 
-func TestPeakUsedPercent(t *testing.T) {
-	history := []ObservedWindows{
-		{ObservedAtMS: 4 * hourMS, Windows: []QuotaWindow{{ID: "five_hour", UsedPercent: floatPtr(95)}}},
-		{ObservedAtMS: 5 * hourMS, Windows: []QuotaWindow{{ID: "five_hour", UsedPercent: floatPtr(20)}}},
-		{ObservedAtMS: 6 * hourMS, Windows: []QuotaWindow{
-			{ID: "five_hour", UsedPercent: floatPtr(45)},
-			{ID: "weekly", UsedPercent: floatPtr(80)},
-		}},
-		{ObservedAtMS: 7 * hourMS, Windows: []QuotaWindow{{ID: "five_hour", UsedPercent: floatPtr(99)}}},
+func TestBlendWindowCapacityAndRemaining(t *testing.T) {
+	current := &WindowCapacity{Tokens: 100000, CostNanos: int64Ptr(1000000), SamplePercent: 1, ObservedAtMS: 7000}
+	reference := &WindowCapacity{Tokens: 400000, CostNanos: int64Ptr(4000000), ObservedAtMS: 3000}
+	blended := BlendWindowCapacity(current, reference)
+	if blended.Tokens != 340000 || blended.Basis != "blended" || blended.ObservedAtMS != 7000 || *blended.CostNanos != 3400000 {
+		t.Fatalf("blend=%+v", blended)
 	}
-
-	// The reading before the cycle, the one at its end and another window's
-	// are all outside what the current cycle's peak may consider.
-	peak := PeakUsedPercent(history, "five_hour", 5*hourMS, 7*hourMS)
-	if peak == nil || *peak != 45 {
-		t.Fatalf("peak = %v, want 45", peak)
+	AttachRemainingCapacity(blended, capacityWindow(25), true)
+	if blended.RemainingTokens == nil || *blended.RemainingTokens != 255000 || blended.RemainingCostNanos == nil || *blended.RemainingCostNanos != 2550000 {
+		t.Fatalf("remaining=%+v", blended)
 	}
-	if peak = PeakUsedPercent(history, "five_hour", 8*hourMS, 9*hourMS); peak != nil {
-		t.Fatalf("peak with no observation in range = %v, want none", *peak)
+	AttachRemainingCapacity(blended, capacityWindow(25), false)
+	if blended.RemainingTokens != nil || blended.RemainingCostNanos != nil {
+		t.Fatal("old percentage presented as current remaining capacity")
+	}
+	current.SamplePercent = 5
+	if BlendWindowCapacity(current, reference) != current {
+		t.Fatal("a calibrated sample still depends on a historical number")
+	}
+	if current.Tokens != 100000 || reference.Tokens != 400000 {
+		t.Fatal("blend mutated its evidence")
 	}
 }

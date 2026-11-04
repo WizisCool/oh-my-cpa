@@ -1,29 +1,25 @@
-/**
- * Locks how a quota window's recorded usage and estimated capacity are read out.
- *
- * The estimate is a division by a share upstream rounds to whole points, so the display has
- * two ways to mislead: printing more digits than the reading supports, and showing a figure
- * for a window the server withheld one from. Both are decisions of these pure functions.
- */
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { TFunc } from '../web/src/i18n/index.tsx';
+import type { QuotaWindowCapacity } from '../web/src/types/quota.ts';
 import {
   compactQuotaCapacity,
   describeCompactQuotaCapacity,
   describeQuotaCapacity,
-  formatCapacityError,
   formatEstimatedUsd,
 } from '../web/src/pages/quota/quotaCapacity.ts';
 
-// Keys render as themselves with their parameters, keeping the suite independent of the
-// dictionary's wording.
 const t = ((key: string, params?: Record<string, unknown>) =>
   params ? `${key}(${Object.values(params).join(',')})` : key) as TFunc;
 
 const usage = { from_ms: 0, to_ms: 1, requests: 40, priced_requests: 40, tokens: 480_000, cost_nanos: 1_200_000_000 };
+const capacity: QuotaWindowCapacity = {
+  tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10, basis: 'observed_delta',
+  remaining_tokens: 7_200_000, remaining_cost_nanos: 18_000_000_000,
+};
+const dated = { ...capacity, remaining_tokens: undefined, remaining_cost_nanos: undefined };
 
-test('an estimate prints only the digits its uncertainty supports', () => {
+test('estimate precision follows the sensitivity of the percentage reading', () => {
   assert.equal(formatEstimatedUsd(123.456, 10), '$120');
   assert.equal(formatEstimatedUsd(123.456, 2), '$123');
   assert.equal(formatEstimatedUsd(1234.5, 2), '$1,230');
@@ -33,95 +29,45 @@ test('an estimate prints only the digits its uncertainty supports', () => {
   assert.equal(formatEstimatedUsd(Number.NaN, 5), '—');
 });
 
-test('the uncertainty drops a trailing zero', () => {
-  assert.equal(formatCapacityError(10), '±10%');
-  assert.equal(formatCapacityError(2.5), '±2.5%');
-});
-
-test('an estimated window reads recorded usage and the estimate with its uncertainty', () => {
-  const reading = describeQuotaCapacity(
-    { usage, capacity: { tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10 } },
-    'en-compact',
-    t,
-  );
-  assert.deepEqual(reading, {
-    recorded: '$1.20 · quota.capacity_tokens(480K)',
-    estimate: '≈ $24.00 · quota.capacity_tokens(9.6M)',
-    error: '±10%',
+test('a live estimate reads as what is left of the window and its whole size', () => {
+  assert.deepEqual(describeQuotaCapacity({ usage, capacity }, 'en-compact', t), {
+    remaining: { value: '≈ $18.00', tokens: 'quota.capacity_tokens(7.2M)' },
+    capacity: { value: '≈ $24.00', tokens: 'quota.capacity_tokens(9.6M)' },
+    recorded: null,
     note: null,
-    basis: null,
   });
+  assert.equal(compactQuotaCapacity({ capacity }, 'en-compact', t), '≈$18.00');
+  assert.equal(describeCompactQuotaCapacity({ capacity }, 'en-compact', t), [
+    'quota.capacity_remaining quota.capacity_figure(≈ $18.00,quota.capacity_tokens(7.2M))',
+    'quota.capacity_estimate quota.capacity_figure(≈ $24.00,quota.capacity_tokens(9.6M))',
+  ].join('\n'));
 });
 
-test('a partly priced cycle states its priced share and estimates tokens only', () => {
-  const reading = describeQuotaCapacity(
-    { usage: { ...usage, priced_requests: 30 }, capacity: { tokens: 9_600_000, error_percent: 10 } },
-    'en-compact',
-    t,
-  );
-  assert.equal(reading?.recorded, '$1.20 · quota.capacity_tokens(480K) · quota.capacity_priced_share(75)');
-  assert.equal(reading?.estimate, '≈ quota.capacity_tokens(9.6M)');
+test('a dated reading keeps the size of the window and the usage recorded beside it', () => {
+  const reading = describeQuotaCapacity({ usage, capacity: dated }, 'en-compact', t);
+  assert.equal(reading?.remaining, null);
+  assert.deepEqual(reading?.recorded, { value: '$1.20', tokens: 'quota.capacity_tokens(480K)' });
+  assert.equal(compactQuotaCapacity({ capacity: dated }, 'en-compact', t), '≈$24.00');
+  assert.equal(describeCompactQuotaCapacity({ capacity: dated }, 'en-compact', t), 'quota.capacity_estimate quota.capacity_figure(≈ $24.00,quota.capacity_tokens(9.6M))');
 });
 
-test('a cycle with no priced request shows no dollar figure at all', () => {
-  const reading = describeQuotaCapacity({ usage: { ...usage, priced_requests: 0, cost_nanos: 0 } }, 'en-compact', t);
-  assert.equal(reading?.recorded, 'quota.capacity_tokens(480K)');
+test('without a stated cost the figures are tokens, and a mostly unpriced cycle states none', () => {
+  const unpriced = { ...dated, cost_nanos: undefined };
+  const reading = describeQuotaCapacity({ usage: { ...usage, priced_requests: 30 }, capacity: unpriced }, 'en-compact', t);
+  assert.deepEqual(reading?.recorded, { value: 'quota.capacity_tokens(480K)', tokens: null });
+  assert.deepEqual(reading?.capacity, { value: '≈ quota.capacity_tokens(9.6M)', tokens: null });
+  assert.equal(compactQuotaCapacity({ capacity: unpriced }, 'en-compact', t), '≈quota.capacity_tokens(9.6M)');
 });
 
-test('a withheld estimate keeps the recorded usage and says why', () => {
-  const reading = describeQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t);
-  assert.deepEqual(reading, {
-    recorded: '$1.20 · quota.capacity_tokens(480K)',
-    estimate: null,
-    error: null,
-    note: 'quota.capacity_reason_low_usage',
-    basis: null,
-  });
-});
-
-test('a window the estimate does not apply to renders no line', () => {
-  assert.equal(describeQuotaCapacity({}, 'en-compact', t), null);
-  // An empty bar already says there is no reading.
-  assert.equal(describeQuotaCapacity({ capacity_unavailable: 'no_reading' }, 'en-compact', t), null);
-});
-
-test('the list row carries the estimate alone, and nothing when it is withheld', () => {
-  assert.equal(
-    compactQuotaCapacity({ capacity: { tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10 } }, 'en-compact', t),
-    '≈$24.00',
-  );
-  assert.equal(
-    compactQuotaCapacity({ capacity: { tokens: 9_600_000, error_percent: 10 } }, 'en-compact', t),
-    '≈quota.capacity_tokens(9.6M)',
-  );
-  assert.equal(compactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
-});
-
-test('the row tooltip names the estimate once instead of reading "Est. capacity Prev"', () => {
-  assert.equal(
-    describeCompactQuotaCapacity({ capacity: { tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10 } }, 'en-compact', t),
-    'quota.capacity_estimate ≈$24.00',
-  );
-  assert.equal(
-    describeCompactQuotaCapacity({ capacity: { basis: 'previous_cycle', tokens: 9_600_000, error_percent: 10, observed_at_ms: 1 } }, 'en-compact', t),
-    'quota.capacity_previous ≈quota.capacity_tokens(9.6M)',
-  );
-  assert.equal(describeCompactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
-});
-
-test('a previous-cycle estimate labels its basis and preserves the current refusal', () => {
-  const window = { usage, capacity: { basis: 'previous_cycle' as const, tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 2, observed_at_ms: 1 }, capacity_unavailable: 'low_usage' as const };
-  const reading = describeQuotaCapacity(window, 'en-compact', t);
-  assert.equal(reading?.basis, 'quota.capacity_previous');
-  assert.equal(reading?.note, 'quota.capacity_reason_low_usage');
-  assert.equal(reading?.recorded, '$1.20 · quota.capacity_tokens(480K)');
-  assert.equal(compactQuotaCapacity(window, 'en-compact', t), 'quota.capacity_previous_short ≈$24.00');
-});
-
-test('scope and data failures explain why no estimate is shown', () => {
-  for (const reason of ['scope_unknown', 'history_unavailable', 'usage_unavailable'] as const) {
-    const reading = describeQuotaCapacity({ capacity_unavailable: reason }, 'en-compact', t);
+test('before an estimate the recorded usage stays beside the step that starts one', () => {
+  for (const reason of ['scope_unknown', 'history_unavailable', 'usage_unavailable', 'low_usage', 'no_traffic'] as const) {
+    const reading = describeQuotaCapacity({ usage, capacity_unavailable: reason }, 'en-compact', t);
     assert.equal(reading?.note, `quota.capacity_reason_${reason}`);
-    assert.equal(reading?.estimate, null);
+    assert.deepEqual(reading?.recorded, { value: '$1.20', tokens: 'quota.capacity_tokens(480K)' });
+    assert.equal(reading?.capacity, null);
   }
+  // An empty bar already says there is no reading; the row says nothing more.
+  assert.equal(describeQuotaCapacity({ capacity_unavailable: 'no_reading' }, 'en-compact', t), null);
+  assert.equal(describeQuotaCapacity({}, 'en-compact', t), null);
+  assert.equal(compactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
 });

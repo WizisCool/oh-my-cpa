@@ -1327,7 +1327,7 @@ func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExpo
 	}
 	expected := map[string]string{
 		"auth-codex-01/five_hour":                               "current_cycle",
-		"auth-codex-02/five_hour":                               "previous_cycle",
+		"auth-codex-02/five_hour":                               "blended",
 		"auth-claude-01/five_hour":                              "current_cycle",
 		"auth-claude-01/seven_day":                              "current_cycle",
 		"auth-antigravity-01/ag_Gemini Models_gemini-shared-5h": "current_cycle",
@@ -1342,8 +1342,11 @@ func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExpo
 			if window.Capacity == nil || window.Capacity.Basis != basis || window.Capacity.Tokens <= 0 || window.Usage == nil || window.Usage.ToMS != observation.ObservedAtMS || window.ResetAtMS == nil || *window.ResetAtMS <= referenceMS {
 				t.Fatalf("invalid exported capacity example %s: %+v", key, window)
 			}
-			if basis == "previous_cycle" && (window.Capacity.ObservedAtMS >= window.Usage.FromMS || window.CapacityUnavailable != quota.CapacityReasonLowUsage) {
-				t.Fatalf("previous-cycle reference lost provenance: %+v", window)
+			if window.CapacityUnavailable != "" || window.Capacity.RemainingTokens == nil {
+				t.Fatalf("capacity result should include remaining capacity without a refusal: %+v", window)
+			}
+			if basis == "blended" && window.Capacity.ObservedAtMS != observation.ObservedAtMS {
+				t.Fatalf("blended estimate is not dated by the current reading: %+v", window)
 			}
 			delete(expected, key)
 		}

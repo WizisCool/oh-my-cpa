@@ -72,8 +72,8 @@ func TestParseAntigravityUsageKeepsPersistedPreviousCycleReference(t *testing.T)
 	}
 	previousAtMS := observedAtMS - 2*hourMS
 	history := []ObservedWindows{{ObservedAtMS: previousAtMS, Windows: []QuotaWindow{previous}}}
-	actual, actualAtMS, hasPrevious := PreviousWindowObservation(windows[0], history, observedAtMS, observedAtMS)
-	if !hasPrevious || actual.ID != previous.ID || actualAtMS != previousAtMS || actual.UsedPercent == nil || *actual.UsedPercent != 40 {
-		t.Fatalf("persisted previous cycle lost: window=%+v at=%d found=%v", actual, actualAtMS, hasPrevious)
+	points := CapacityReferencePoints(windows[0], history, observedAtMS)
+	if len(points) != 1 || points[0].Window.ID != previous.ID || points[0].ObservedAtMS != previousAtMS || *points[0].Window.UsedPercent != 40 {
+		t.Fatalf("persisted previous cycle lost: %+v", points)
 	}
 }

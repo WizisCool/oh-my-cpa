@@ -95,9 +95,9 @@ func isKnownCapacityFamily(family string) bool {
 	return false
 }
 
-// SelectWindowUsage refuses the whole scoped numerator if any recorded model
-// cannot be classified. Counting only recognizable names would silently omit
-// an alias that may spend this very window's quota.
+// SelectWindowUsage counts identified models and records unclassified traffic
+// separately. A client alias must not erase useful evidence from served models,
+// nor be silently assigned to a metered family.
 func SelectWindowUsage(window QuotaWindow, groups []ModelWindowUsage) (WindowUsage, string) {
 	var total WindowUsage
 	families := windowModelFamilies(window)
@@ -126,7 +126,7 @@ func SelectWindowUsage(window QuotaWindow, groups []ModelWindowUsage) (WindowUsa
 			}
 		}
 		if !isMatch && family == "" {
-			return WindowUsage{}, CapacityReasonScopeUnknown
+			total.UnmatchedRequests += group.Usage.Requests
 		}
 		if isMatch {
 			total.Requests += group.Usage.Requests
