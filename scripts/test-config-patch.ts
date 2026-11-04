@@ -9,7 +9,7 @@ import { parseDocument } from 'yaml';
 import { getFieldSemanticValue, updateFieldWithBaseline } from '../web/src/components/config/configDirty.ts';
 import { computeConfigChanges, rebaseDraft } from '../web/src/components/config/configPatch.ts';
 import { writePayloadCategory } from '../web/src/components/config/payloadRules.ts';
-import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition } from '../web/src/types/configSchema.ts';
+import { ALL_CONFIG_FIELDS, CONFIG_GROUPS, type ConfigFieldDefinition } from '../web/src/types/configSchema.ts';
 
 // The top-level sections CPA v8 accepts. A name outside them is refused by CPA as
 // an unknown section or a legacy field, so an editor field placed there could
@@ -140,15 +140,71 @@ test('an OAuth provider switch is sent at the deepest path the server already ha
   ]);
 });
 
-test('a trusted-proxy list is replaced whole', () => {
-  const serverYaml = 'server:\n    trusted-proxies:\n        - 127.0.0.1\n';
-  const server = parseDocument(serverYaml);
-  const draft = parseDocument(serverYaml);
-  updateFieldWithBaseline(draft, server, field('trustedProxies'), ['127.0.0.1', '10.0.0.0/8']);
-  assert.deepEqual(computeConfigChanges(server, draft), [
-    { path: ['server', 'trusted-proxies'], value: ['127.0.0.1', '10.0.0.0/8'] },
-  ]);
-});
+for (const setting of [
+  {
+    id: 'trustedProxies',
+    groupId: 'grp_service',
+    path: ['server', 'trusted-proxies'],
+    yaml: 'server:\n    trusted-proxies: [127.0.0.1]\n',
+    initial: ['127.0.0.1'],
+    edited: ['127.0.0.1', '10.0.0.0/8'],
+  },
+  {
+    id: 'claudeHeaderNativeEntrypoints',
+    groupId: 'grp_claude_headers',
+    path: ['upstream', 'claude', 'header-defaults', 'native-entrypoints'],
+    yaml: `${SERVER_YAML}upstream:
+    claude:
+        tool-search: false
+        header-defaults:
+            user-agent: claude-cli/2.1.0
+            stabilize-device-profile: true
+            native-entrypoints: [custom-ide]
+            anthropic-beta-strip: [cache-diagnosis-2026-04-07]
+            anthropic-beta-append: [context-1m-2025-08-07]
+            inject-diagnostics: false
+            client-request-id: passthrough
+            operator-extra: retained # unmodeled sibling
+`,
+    initial: ['custom-ide'],
+    // CPA owns case folding and deduplication; the editor must transport free-form labels.
+    edited: ['custom-ide', 'T3-Code', 't3-code'],
+  },
+]) {
+  test(`${setting.id} reads, replaces and clears a list without changing sibling settings`, () => {
+    const listField = field(setting.id);
+    assert.equal(listField.type, 'string_list');
+    assert.ok(CONFIG_GROUPS.find((group) => group.id === setting.groupId)?.fieldIds.includes(listField.id));
+    const server = parseDocument(setting.yaml);
+    const draft = server.clone();
+    assert.deepEqual(getFieldSemanticValue(server, listField), setting.initial);
+    assert.deepEqual(computeConfigChanges(server, draft), []);
+
+    updateFieldWithBaseline(draft, server, listField, setting.edited);
+    assert.deepEqual(computeConfigChanges(server, draft), [{ path: setting.path, value: setting.edited }]);
+    const readback = parseDocument(draft.toString());
+    assert.deepEqual(getFieldSemanticValue(readback, listField), setting.edited);
+    const expected = server.clone();
+    expected.setIn(setting.path, setting.edited);
+    assert.deepEqual(readback.toJS(), expected.toJS());
+
+    const cleared = readback.clone();
+    updateFieldWithBaseline(cleared, readback, listField, []);
+    assert.deepEqual(computeConfigChanges(readback, cleared), [{ path: setting.path, remove: true }]);
+    expected.deleteIn(setting.path);
+    assert.deepEqual(parseDocument(cleared.toString()).toJS(), expected.toJS());
+
+    const absent = parseDocument(cleared.toString());
+    const empty = absent.clone();
+    updateFieldWithBaseline(empty, absent, listField, []);
+    assert.deepEqual(computeConfigChanges(absent, empty), [], 'an absent list stays unconfigured');
+    updateFieldWithBaseline(empty, absent, listField, setting.edited);
+    assert.deepEqual(computeConfigChanges(absent, empty), [{ path: setting.path, value: setting.edited }]);
+
+    updateFieldWithBaseline(draft, server, listField, setting.initial);
+    assert.equal(draft.toString(), server.toString(), 'reverting restores the original nodes and comments');
+  });
+}
 
 test('a draft is carried over onto a newer baseline without undoing what it did not see', () => {
   const base = parseDocument(SERVER_YAML);

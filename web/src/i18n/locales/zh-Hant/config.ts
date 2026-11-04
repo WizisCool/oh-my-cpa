@@ -412,6 +412,8 @@ export default {
   "cfg.f_claude_tool_search_desc": "在 Claude 的 Responses 路由上啟用 tool_search 工具。",
   "cfg.f_claude_session_date_pin": "Claude 工作階段日期錨定保留天數",
   "cfg.f_claude_session_date_pin_desc": "固定工作階段內 currentDate 錨定的保留天數以提高快取命中率。留空使用預設 7 天，0 表示閒置時重設。",
+  "cfg.f_claude_native_entrypoints": "原生用戶端入口",
+  "cfg.f_claude_native_entrypoints_desc": "擴展內置 Claude Code 原生入口標籤，仍須符合其他強請求訊號；留空僅用內置項。",
   "cfg.f_claude_beta_strip": "移除 Anthropic-Beta",
   "cfg.f_claude_beta_strip_desc": "從請求標頭 Anthropic-Beta 中移除指定的特性標籤。",
   "cfg.f_claude_beta_append": "追加 Anthropic-Beta",

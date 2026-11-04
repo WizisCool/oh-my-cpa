@@ -412,6 +412,8 @@ export default {
   "cfg.f_claude_tool_search_desc": "Mendayakan tool_search Codex pada laluan Claude Responses.",
   "cfg.f_claude_session_date_pin": "Pengekalan pin tarikh sesi Claude (hari)",
   "cfg.f_claude_session_date_pin_desc": "Bilangan hari untuk mengekalkan pin currentDate setiap sesi bagi mengoptimumkan caching. Lalai kepada 7 hari; 0 menetapkan semula semasa melahu.",
+  "cfg.f_claude_native_entrypoints": "Titik Masuk Klien Natif",
+  "cfg.f_claude_native_entrypoints_desc": "Tambah label titik masuk Claude Code natif di samping entri terbina dalam CPA; isyarat permintaan kukuh lain juga mesti sepadan. Biarkan kosong untuk entri terbina dalam sahaja.",
   "cfg.f_claude_beta_strip": "Buang Anthropic-Beta",
   "cfg.f_claude_beta_strip_desc": "Mengalih keluar bendera ciri yang sepadan daripada pengepala Anthropic-Beta.",
   "cfg.f_claude_beta_append": "Tambah Anthropic-Beta",
