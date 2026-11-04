@@ -303,15 +303,16 @@ export function buildCredentialSections(pageRecords: OAuthWorkspaceRecord[], vis
  * the one that stops it first. Credentials without a reading sort last whichever way it runs.
  */
 export function sortByQuotaColumn(records: OAuthWorkspaceRecord[], direction: 'asc' | 'desc'): OAuthWorkspaceRecord[] {
-  const valueOf = (record: OAuthWorkspaceRecord) => {
+  // Each record's line model is built once, not twice per comparison.
+  const values = new Map(records.map((record) => {
     const shares = quotaLinesOf(record).flatMap((line) => line.cells)
       .map(({ window }) => window.remaining_percent ?? (window.used_percent != null ? 100 - window.used_percent : undefined))
       .filter((share): share is number => share != null);
-    return shares.length > 0 ? Math.min(...shares) : undefined;
-  };
+    return [record, shares.length > 0 ? Math.min(...shares) : undefined] as const;
+  }));
   return [...records].sort((left, right) => {
-    const a = valueOf(left);
-    const b = valueOf(right);
+    const a = values.get(left);
+    const b = values.get(right);
     if (a == null || b == null) return a == null ? (b == null ? 0 : 1) : -1;
     return direction === 'asc' ? a - b : b - a;
   });

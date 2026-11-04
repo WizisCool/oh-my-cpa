@@ -15,7 +15,7 @@ export default {
   'orch.tier_wrr': 'Shared by weight',
   'orch.tier_ff': 'In turn',
   'orch.failover': 'Failover',
-  'orch.failover_summary': '{rounds} retry rounds',
+  'orch.failover_summary': '{rounds, plural, one {# retry round} other {# retry rounds}}',
   'orch.board': 'Request route',
   'orch.ladder': 'Tiers, highest first',
   'orch.tier': 'Tier {n}',

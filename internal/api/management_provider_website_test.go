@@ -132,7 +132,9 @@ func TestProviderWebsiteRemovedWithProvider(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("create status = %d body %s", resp.StatusCode, payload)
 	}
+	state.mu.Lock()
 	id := fmt.Sprintf("openai-compat-%d", len(state.oaiProviders)-1)
+	state.mu.Unlock()
 
 	resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/"+id, "")
 	if resp.StatusCode != http.StatusOK {

@@ -186,7 +186,7 @@ export default {
   'omc.section_count': '{n} credentials',
   'omc.section_select': 'Select every {provider} credential on this page',
   'omc.sort_custom': 'Custom order',
-  'omc.reset_credits_count': '{n} resets left',
+  'omc.reset_credits_count': '{n, plural, one {# reset left} other {# resets left}}',
   'omc.account_reveal': 'Show account',
   'omc.account_hide': 'Hide account',
   'omc.reauthenticate': 'Reauthenticate',

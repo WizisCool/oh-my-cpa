@@ -566,6 +566,9 @@ export function useProviderManagement({
       toast.success(t('pro.provider_deleted'));
       shiftCachedProviderIcons(id);
       void queryClient.invalidateQueries({ queryKey: ['custom-icons'] });
+      // The server re-keyed the positional overlays, among them the provider and routing-card
+      // orders, which the preference cache would otherwise keep under the pre-delete ids.
+      void queryClient.invalidateQueries({ queryKey: ['preferences'] });
       void invalidateProviderCatalogs();
     },
     onError: (err: unknown) => {
