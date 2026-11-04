@@ -38,7 +38,8 @@ import {
   type DragStartEvent,
   type Modifier,
 } from '@dnd-kit/core';
-import { SortableContext, arrayMove, useSortable, type AnimateLayoutChanges } from '@dnd-kit/sortable';
+import { SortableContext, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { glideWhileSorting, useSortableMotion } from '../../hooks/useSortableMotion';
 
 export interface DashboardBoardProps {
   layout: DashboardLayout;
@@ -60,8 +61,6 @@ const SPAN_LABEL_KEYS: Record<DashboardWidgetSpan, MessageKey> = {
 /** The board reflows itself as the order changes, so no cell is shifted by an offset of its own. */
 const REFLOW = () => null;
 const MEASURE = { droppable: { strategy: MeasuringStrategy.Always } };
-/** Widgets glide to the places the reflow gave them while the drag sorts; at the drop they are there. */
-const glideWhileSorting: AnimateLayoutChanges = ({ isSorting }) => isSorting;
 
 /**
  * The widget under the pointer, not the one whose centre is nearest: widgets of different sizes put
@@ -117,6 +116,15 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
   // A keyboard resize is announced from a region that stays mounted: a live region that appears
   // with its text, as the size badge does, is not reliably read, and the badge leaves on key up.
   const [sizeAnnouncement, setSizeAnnouncement] = React.useState('');
+  // A key that meets a limit leaves the text as it was, and an unchanged region is not read again,
+  // so each announcement clears the region and writes the text a frame later.
+  const announceFrame = React.useRef(0);
+  const announceSize = (text: string) => {
+    cancelAnimationFrame(announceFrame.current);
+    setSizeAnnouncement('');
+    announceFrame.current = requestAnimationFrame(() => setSizeAnnouncement(text));
+  };
+  React.useEffect(() => () => cancelAnimationFrame(announceFrame.current), []);
   const latestLayout = React.useRef(layout);
   latestLayout.current = layout;
 
@@ -190,7 +198,7 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
     }
     rows = Math.min(Math.max(rows, naturalRows(cell)), DASHBOARD_MAX_ROWS);
     setResizing({ id: item.id, span, rows });
-    if ('key' in input) setSizeAnnouncement(`${t(spec.labelKey)}: ${t('dash.layout.size', { width: spanLabel(span), rows })}`);
+    if ('key' in input) announceSize(`${t(spec.labelKey)}: ${t('dash.layout.size', { width: spanLabel(span), rows })}`);
     const next = resizeDashboardWidget(latestLayout.current, item.id, { span, rows });
     if (next !== latestLayout.current) onChange(next);
   };
@@ -412,7 +420,8 @@ function SortableCell({ id, rows, children, ...attributes }: Omit<React.HTMLAttr
   rows: number;
   children: (handle: CellHandle) => React.ReactNode;
 } & Record<`data-${string}`, string | number | undefined>) {
-  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition } = useSortable({ id, animateLayoutChanges: glideWhileSorting });
+  const motion = useSortableMotion();
+  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition } = useSortable({ id, animateLayoutChanges: glideWhileSorting, ...motion });
   // Only the glide's offset is drawn: a reflow that changed the widget's row also changes its size,
   // and scaling the widget to its old size would stretch its content for the length of the glide.
   const style = {

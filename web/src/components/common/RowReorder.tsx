@@ -10,6 +10,7 @@ import {
   type Modifier,
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useSortableMotion } from '../../hooks/useSortableMotion';
 import { HolderOutlined } from '../icons';
 import { Tooltip } from './Tooltip';
 import { useT } from '../../i18n';
@@ -117,7 +118,8 @@ export interface ReorderRow {
 /** One row's part in the reorder: the row's props and its handle's. */
 export function useReorderRow(key: string): ReorderRow {
   const { isEnabled, onStep } = React.useContext(ReorderContext);
-  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: key, disabled: !isEnabled });
+  const motion = useSortableMotion();
+  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: key, disabled: !isEnabled, ...motion });
   const style: React.CSSProperties | undefined = transform || transition
     ? { transform: transform ? `translate3d(0, ${Math.round(transform.y)}px, 0)` : undefined, transition }
     : undefined;

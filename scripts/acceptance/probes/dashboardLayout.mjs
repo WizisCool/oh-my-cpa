@@ -114,13 +114,33 @@ export async function dashboardLayout({ base, page, check }) {
   check('the corner grip widens the widget a column', half > quarter * 1.8, `rpm=${half} tpm=${quarter}`);
   check('the corner grip makes the widget taller by whole rows',
     rowsAfter === rowsBefore + 3 && (await cell('rpm').boundingBox()).height > heightBefore + 100, `${rowsBefore} -> ${rowsAfter}`);
-  // The corner grip also takes the arrow keys, and a screen reader hears the size each one reaches.
-  await cell('rpm').locator('[data-resize="xy"]').focus();
+  // The corner grip also takes the arrow keys, and a screen reader hears the size each one reaches,
+  // a limit included: the region is cleared and written again, so even unchanged text is re-read.
+  const announcement = page.getByTestId('dashboard-size-announcement');
+  const grip = cell('rpm').locator('[data-resize="xy"]');
+  await grip.focus();
   await page.keyboard.press('ArrowDown');
-  const announced = await page.getByTestId('dashboard-size-announcement').textContent();
+  await until(async () => (await announcement.textContent()) === `RPM: 1/2 · ${rowsAfter + 1} rows`, { label: 'the keyboard resize announcement' });
   await page.keyboard.press('ArrowUp');
-  check('a keyboard resize is announced in a region that stays mounted',
-    announced === `RPM: 1/2 · ${rowsAfter + 1} rows` && Number(await cell('rpm').getAttribute('data-rows')) === rowsAfter, announced);
+  await until(async () => (await announcement.textContent()) === `RPM: 1/2 · ${rowsAfter} rows`, { label: 'the size back where it was' });
+  await announcement.evaluate((node) => {
+    window.__announcements = [];
+    new MutationObserver(() => window.__announcements.push(node.textContent)).observe(node, { childList: true, characterData: true, subtree: true });
+  });
+  // Narrowed to the board's narrowest span and pressed past it, the text stays the same, so only
+  // the clear makes the second press heard.
+  const narrowest = /^RPM: 1\/4 · \d+ rows$/;
+  const narrowestCount = async () => (await page.evaluate(() => window.__announcements)).filter((text) => narrowest.test(text)).length;
+  await page.keyboard.press('ArrowLeft');
+  await until(async () => (await narrowestCount()) === 1, { label: 'the narrowest span announced' });
+  await page.keyboard.press('ArrowLeft');
+  await until(async () => (await narrowestCount()) === 2, { label: 'the narrowest span announced again at the limit' });
+  const sequence = await page.evaluate(() => window.__announcements);
+  check('a keyboard resize is announced in a region that stays mounted, again at a limit',
+    sequence.filter((text) => narrowest.test(text)).length >= 2 && sequence.filter((text) => text === '').length >= 2,
+    JSON.stringify(sequence));
+  await page.keyboard.press('ArrowRight');
+  await until(async () => (await cell('rpm').getAttribute('data-span')) === '2', { label: 'the RPM tile back at half width' });
   // Dragged far above its content, the bottom edge stops where the content still fits.
   const bottom = await cell('rpm').locator('[data-resize="y"]').boundingBox();
   await page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2);

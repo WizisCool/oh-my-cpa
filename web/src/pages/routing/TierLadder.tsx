@@ -17,7 +17,8 @@ import {
   type DragMoveEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { SortableContext, arrayMove, useSortable, type AnimateLayoutChanges, type SortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, arrayMove, useSortable, type SortingStrategy } from '@dnd-kit/sortable';
+import { glideWhileSorting, useSortableMotion } from '../../hooks/useSortableMotion';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import { ProviderMark, CredentialMark } from '../../components/LobeIcon';
@@ -95,8 +96,6 @@ function tierOf(tiers: readonly RoutingTier[], key: string): string | undefined 
  */
 const LAID_OUT: SortingStrategy = () => null;
 const MEASURE = { droppable: { strategy: MeasuringStrategy.Always } };
-/** Cards glide to their new places while the drag sorts them; at the drop they are already there. */
-const glideWhileSorting: AnimateLayoutChanges = ({ isSorting }) => isSorting;
 
 /**
  * A link takes the pointer before anything else, a card before the tier it sits in. A pointer in a
@@ -512,8 +511,9 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
   const state = preview.states.get(member.key);
   const isHidden = isLens && state === 'ineligible';
   const isLocked = member.is_runtime_only || disabled || isHidden;
+  const motion = useSortableMotion();
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
-    id: member.key, data: { kind: 'card' }, disabled: !canDrag || isLocked, animateLayoutChanges: glideWhileSorting,
+    id: member.key, data: { kind: 'card' }, disabled: !canDrag || isLocked, animateLayoutChanges: glideWhileSorting, ...motion,
   });
   const travel: React.CSSProperties | undefined = transform || transition
     ? { transform: transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined, transition }
