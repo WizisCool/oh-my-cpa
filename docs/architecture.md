@@ -40,7 +40,13 @@ executable definitions; prose does not maintain a parallel inventory.
 
 CPA's management key verifies sign-in on the server. Browser sessions use signed,
 HttpOnly, SameSite=Strict cookies; browser mutations require the origin check.
-Keep the management key out of browser persistence and ordinary DTOs.
+A session lasts a working day, or a month when the operator asks to stay signed in;
+the expiry is signed into the cookie, and rotating the key ends every session. Keep the
+management key out of browser persistence and ordinary DTOs. The sign-in form is a
+standard one (an account field and a `current-password` field), so the browser's
+password manager or an extension may offer to save the key; that is the operator's own
+manager, acting with their consent. The console never writes the key to page storage
+or hands it to a credential API.
 
 Facade responses are handwritten allowlists. Default credential reads return
 masks and keyed-HMAC identities. Dedicated editing/reveal/export paths can expose

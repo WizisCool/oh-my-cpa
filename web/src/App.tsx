@@ -94,10 +94,9 @@ export const App: React.FC = () => (
  * Sits below both the theme and locale providers, because Ant Design's tokens and locale are both
  * projections: the theme decides every colour, the language decides date and number formats.
  *
- * `ThemeServerSync` is rendered here rather than inside `ThemeProvider` for one reason - it reports
- * a refused save through a toast (`useToast`), and `App` is the first component that provides
- * one. The theme itself does not wait for it: the console is painted from the browser's own stored
- * preference in the first frame, and the deployment's copy is reconciled afterwards.
+ * The theme itself does not wait for the deployment: the console is painted from the browser's own
+ * stored preference in the first frame, and the deployment's copy is reconciled afterwards by
+ * `ThemeServerSync`, which `AppRoutes` mounts behind the sign-in gate.
  */
 /**
  * Toasts (`useToast`) open at the top centre, where the eye already is after a click in the page
@@ -141,7 +140,6 @@ const ThemedShell: React.FC = () => {
     >
       <MotionProvider>
         <AntdApp notification={TOAST_CONFIG}>
-          <ThemeServerSync />
           <MotionPreferenceSync />
           <ScrollSmoothingSync />
           <FontSync />
@@ -211,6 +209,10 @@ const AppRoutes: React.FC = () => {
 
   return (
     <AuthGate>
+      {/* The deployment's copy of the theme can only be read and written with a session. Signed
+          out, a theme change stays in this browser marked dirty, and this pushes it on sign-in;
+          mounted outside the gate it sent the write anyway and reported the refusal in a toast. */}
+      <ThemeServerSync />
       <TimeZoneProvider fallback={<ShellLoading />}><RouterProvider router={router} /></TimeZoneProvider>
     </AuthGate>
   );

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
@@ -110,6 +111,22 @@ func TestRouterSeparatesSPAFromAPIAndRedirectsBasePath(t *testing.T) {
 		t.Fatalf("login cache-control = %q", cache)
 	}
 	loginResponse.Body.Close()
+	if expires := loginResponse.Cookies()[0].Expires; expires.After(time.Now().Add(auth.SessionLifetime)) {
+		t.Fatalf("ordinary session cookie expires %v, beyond the %v session", expires, auth.SessionLifetime)
+	}
+
+	// Asking to stay signed in is the only thing that buys the long session.
+	remembered, err := http.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret","remember":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	remembered.Body.Close()
+	if remembered.StatusCode != http.StatusOK || len(remembered.Cookies()) != 1 {
+		t.Fatalf("remembered login = %d with %d cookies", remembered.StatusCode, len(remembered.Cookies()))
+	}
+	if expires := remembered.Cookies()[0].Expires; expires.Before(time.Now().Add(auth.RememberedSessionLifetime - time.Minute)) {
+		t.Fatalf("remembered session cookie expires %v, want about %v from now", expires, auth.RememberedSessionLifetime)
+	}
 
 	sessionResponse, err := authenticatedClient.Get(server.URL + "/omc/api/auth/session")
 	if err != nil {
@@ -261,7 +278,7 @@ func TestHTTPSSessionCookieIsSecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := httptest.NewRecorder()
-	if err := manager.Issue(response); err != nil {
+	if err := manager.Issue(response, auth.SessionLifetime); err != nil {
 		t.Fatal(err)
 	}
 	if cookie := response.Header().Get("Set-Cookie"); !strings.Contains(cookie, "Secure") {

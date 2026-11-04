@@ -202,6 +202,12 @@ func (h *Handler) routes() chi.Router {
 	if base == "" {
 		base = "/"
 	}
+	if base != "/" {
+		// Crawlers read robots.txt only at the origin's root, which a mounted console also
+		// answers when it is reached directly rather than through a path-forwarding proxy.
+		router.Get("/robots.txt", h.robots)
+		router.Head("/robots.txt", h.robots)
+	}
 	router.Route(base, func(r chi.Router) {
 		r.Route("/api", func(apiRouter chi.Router) {
 			apiRouter.Use(compressAPIResponses)
@@ -431,6 +437,8 @@ func (h *Handler) routes() chi.Router {
 		r.Head("/assets/*", h.asset)
 		r.Get("/lobe-icons/*", h.asset)
 		r.Head("/lobe-icons/*", h.asset)
+		r.Get("/robots.txt", h.robots)
+		r.Head("/robots.txt", h.robots)
 		r.Get("/favicon.svg", h.asset)
 		r.Head("/favicon.svg", h.asset)
 		// The installable-app surface. These do not go through asset(): their names are
@@ -449,6 +457,8 @@ func (h *Handler) routes() chi.Router {
 
 type loginRequest struct {
 	Password string `json:"password"`
+	// Remember asks for the long session ("keep me signed in"). The key itself is never kept.
+	Remember bool `json:"remember"`
 }
 
 func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
@@ -479,7 +489,7 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		// A public demonstration has no secret to check: the same session is issued on
 		// first sight, so a visitor who lands on the sign-in card must not be able to
 		// get stuck behind a key they were never given.
-		if err := h.auth.Issue(writer); err != nil {
+		if err := h.auth.Issue(writer, auth.SessionLifetime); err != nil {
 			writeInternalError(writer, err)
 			return
 		}
@@ -497,8 +507,12 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 	if h.limiter != nil {
 		h.limiter.reset(ip)
 	}
-	_ = h.recordAudit(request, "auth.login", "auth", "operator", "success", map[string]any{"ip": security.MaskIP(ip)})
-	if err := h.auth.Issue(writer); err != nil {
+	lifetime := auth.SessionLifetime
+	if payload.Remember {
+		lifetime = auth.RememberedSessionLifetime
+	}
+	_ = h.recordAudit(request, "auth.login", "auth", "operator", "success", map[string]any{"ip": security.MaskIP(ip), "remembered": payload.Remember})
+	if err := h.auth.Issue(writer, lifetime); err != nil {
 		writeInternalError(writer, err)
 		return
 	}
@@ -513,7 +527,7 @@ func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 			// needs is issued on first sight rather than behind a credential a visitor
 			// would have to be told. Nothing is granted by it: the routes that would
 			// touch a real gateway are refused by demo_policy.go, not by this cookie.
-			if err := h.auth.Issue(writer); err != nil {
+			if err := h.auth.Issue(writer, auth.SessionLifetime); err != nil {
 				writeInternalError(writer, err)
 				return
 			}
@@ -554,7 +568,7 @@ func (h *Handler) requireAuthentication(next http.Handler) http.Handler {
 				// first reads of a page overlap the session check that would have replaced
 				// it, and a 401 among them turns the console back into a sign-in card that
 				// nothing was wrong with.
-				if err := h.auth.Issue(writer); err != nil {
+				if err := h.auth.Issue(writer, auth.SessionLifetime); err != nil {
 					writeInternalError(writer, err)
 					return
 				}
@@ -1091,6 +1105,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("Referrer-Policy", "no-referrer")
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		writer.Header().Set("X-Robots-Tag", robotsTagValue)
 		writer.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=()")
 		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self';")
 		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {

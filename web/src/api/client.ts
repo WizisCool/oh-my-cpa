@@ -398,10 +398,10 @@ export const api = {
   customIconURL(id: string, revision: number): string {
     return `${getAppConfig().apiBaseUrl}/custom-icons/${encodeURIComponent(id)}/content?revision=${revision}`;
   },
-  async login(password: string): Promise<AuthSession> {
+  async login(password: string, remember = false): Promise<AuthSession> {
     return request<AuthSession>(authUrl('/login'), {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, remember }),
     });
   },
 

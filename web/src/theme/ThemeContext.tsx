@@ -395,11 +395,13 @@ export function useTheme(): ThemeContextValue {
  * `ConfigProvider`, since Ant Design's tokens are projected from the palette it resolves.
  */
 export const ThemeServerSync: React.FC = () => {
-  const { preferences, revision, setDirty, adoptServerPreferences } = useTheme();
-  // The preference as it stood before this session changed anything. It is both the value the
-  // request falls back to when the deployment has nothing stored, and the answer to "did this
-  // browser already have something newer than the deployment?" - which is the whole conflict rule.
-  const bootstrap = React.useMemo(bootstrapPreferences, []);
+  const { preferences, isDirty, revision, setDirty, adoptServerPreferences } = useTheme();
+  // The preference as it stood when this sync mounted. It is both the value the request falls back
+  // to when the deployment has nothing stored, and the answer to "does this browser already hold
+  // something newer than the deployment?" - which is the whole conflict rule. It is read from the
+  // provider rather than from storage: the sync mounts only after sign-in, and a change made on the
+  // sign-in screen is marked dirty in the provider even when browser storage refused to keep it.
+  const [bootstrap] = React.useState(() => ({ preferences, isDirty }));
   const { value: stored, ready, set } = usePreference<ThemePreferences>(
     THEME_PREFERENCE_KEY,
     bootstrap.preferences,

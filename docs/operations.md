@@ -114,6 +114,11 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   older minimal example that relied on the former implicit `/omc` default without
   setting the variable must add `OMCPA_BASE_PATH=/omc` before replacing the image if
   it must retain that URL.
+- **Search engines**: Every response carries `X-Robots-Tag: noindex, nofollow, …`, which
+  is what keeps a publicly proxied console out of search results. Crawlers read
+  `robots.txt` only at the origin root; OMC answers it there and under a configured base
+  path, so a proxy that forwards only the prefix and wants the advisory file too must
+  also route `/robots.txt` to OMC.
 - **Container image**: Compose pulls `wiziscool/oh-my-cpa:latest` from Docker Hub by
   default; the full-stack CPA image also defaults to `:latest`. Pin `OMCPA_IMAGE` to the desired version or digest; updates recreate only
   OMC with its existing data and master key. The image runs as uid/gid `10001:10001`,

@@ -20,7 +20,7 @@ export async function routePreloading({ base, page, context, check }) {
   // A fresh document on an unauthenticated route must not fetch a page's module.
   await context.route('**/api/auth/session', (route) => route.fulfill({ json: { authenticated: false } }));
   await page.goto(`${base}/system`);
-  await page.locator('.auth-card input').waitFor();
+  await page.locator('.auth-card input[type="password"]').waitFor();
   check('sign-in leaves lazy page modules unloaded', !scriptPaths.some((path) => /\/src\/pages\/.*\.tsx$/.test(path)), scriptPaths.join(' | '));
   await context.unroute('**/api/auth/session');
 

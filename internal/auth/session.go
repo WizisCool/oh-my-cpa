@@ -20,6 +20,15 @@ const (
 	sessionVersion = "v2"
 )
 
+// How long a session lasts. An ordinary sign-in ends after a working day; an operator who ticks
+// "keep me signed in" asked not to paste the key again for a month. The expiry is signed into the
+// cookie, so the browser's own expiry is a convenience rather than the check, and rotating the
+// management key still ends every session at once.
+const (
+	SessionLifetime           = 12 * time.Hour
+	RememberedSessionLifetime = 30 * 24 * time.Hour
+)
+
 // ErrKeyRequired is returned when no CPA management key is configured. The
 // application still starts so the UI can explain that CPA must be configured
 // before anybody can sign in.
@@ -71,7 +80,7 @@ func (m *Manager) KeyMatches(key string) bool {
 	return subtle.ConstantTimeCompare(provided.Sum(nil), m.secret) == 1
 }
 
-func (m *Manager) Issue(w http.ResponseWriter) error {
+func (m *Manager) Issue(w http.ResponseWriter, lifetime time.Duration) error {
 	if m == nil || len(m.secret) < 32 {
 		return ErrKeyRequired
 	}
@@ -82,7 +91,7 @@ func (m *Manager) Issue(w http.ResponseWriter) error {
 	}
 	payload := strings.Join([]string{
 		sessionVersion,
-		strconv.FormatInt(now.Add(12*time.Hour).Unix(), 10),
+		strconv.FormatInt(now.Add(lifetime).Unix(), 10),
 		base64.RawURLEncoding.EncodeToString(nonce),
 	}, ".")
 	signature := m.sign(payload)
@@ -94,7 +103,7 @@ func (m *Manager) Issue(w http.ResponseWriter) error {
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 		Secure:   m.isSecure,
-		Expires:  now.Add(12 * time.Hour),
+		Expires:  now.Add(lifetime),
 	})
 	w.Header().Add("Cache-Control", "no-store")
 	return nil
