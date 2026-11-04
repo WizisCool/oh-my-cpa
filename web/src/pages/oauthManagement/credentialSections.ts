@@ -5,47 +5,57 @@ import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../qu
 import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 
 /**
- * The credential list as one table per provider.
+ * The credential list as one table per provider, with two fixed quota columns.
  *
- * Credentials of one provider share one quota shape - every Antigravity account reports the same
- * model groups, every Codex account the same plan windows - while different providers share almost
- * nothing. So the shape belongs in a section's header, once, and each credential is one row whose
- * quota cells hold only a reading. Columns are derived from what the section's credentials
- * actually report rather than declared per provider, which is what keeps a new model group, an
- * upstream provider the console has never named, or a plugin's quota readable without a release.
+ * Whatever a provider calls its limits, nearly every one refills either within a day (the
+ * five-hour window) or over a week, and those two are what an operator scans a fleet by. So every
+ * section has the same two columns - the short limit and the long one - and each credential is one
+ * row. A credential with more limits than that - Antigravity's Gemini 4 Argon beside its Gemini
+ * group, Claude's per-model weekly limits beside its plan - gives each further family a line of its
+ * own inside the row, in the same two columns, and every reading carries its own name. A line with a single
+ * limit draws it across both columns, so a weekly-only plan reads as one long bar rather than an
+ * empty five-hour cell beside a short one.
+ *
+ * Lines are derived from what each credential reports rather than declared per provider, which is
+ * what keeps a new model group, an upstream provider the console has never named, or a plugin's
+ * quota readable without a release.
  */
-
 export type QuotaPeriod = 'five_hour' | 'daily' | 'weekly' | 'monthly';
 
-export interface QuotaColumn {
+/** Which of the two fixed columns a limit belongs in. */
+export type QuotaSlot = 'short' | 'long';
+
+export interface QuotaLineCell {
+  /** The reading's identity within the credential, "family|period" or "family|id:…". */
   key: string;
-  /** A named period, or undefined when the provider's own window label names the column. */
-  period?: QuotaPeriod;
-  /** The provider's label for a column whose period has no name. */
-  label?: string;
+  window: QuotaWindow;
+  /** Undefined for a limit whose period is unknown; such a limit has a line of its own. */
+  slot?: QuotaSlot;
+  /** The line's only limit, drawn across both columns. */
+  spans: boolean;
 }
 
-export interface QuotaFamilyHeader {
+/** One family of a credential's limits: its short limit and its long one, side by side. */
+export interface QuotaLine {
   key: string;
   scope: QuotaWindow['scope'];
-  /** The group's or model's own name; the plan and the code-review allowance are named by the console. */
+  /** The group's, model's or allowance's own name; the plan and the code-review allowance are named by the console. */
   label?: string;
-  columns: QuotaColumn[];
+  cells: QuotaLineCell[];
 }
 
 export interface CredentialSection {
   provider: string;
   records: OAuthWorkspaceRecord[];
   visibleRecords: OAuthWorkspaceRecord[];
-  families: QuotaFamilyHeader[];
+  /** Whether any credential has a reading; a section without one has no quota columns. */
+  hasQuota: boolean;
 }
 
 export interface QuotaColumnSort {
   key: string;
   direction: 'asc' | 'desc';
 }
-
-const PERIOD_RANK: Record<QuotaPeriod, number> = { five_hour: 0, daily: 1, weekly: 2, monthly: 3 };
 
 function periodOf(window: QuotaWindow): QuotaPeriod | undefined {
   const kind = quotaWindowKindOf(window);
@@ -74,6 +84,11 @@ function familyLabel(window: QuotaWindow): string | undefined {
 function columnLabel(window: QuotaWindow): string {
   const parts = window.label.split(' · ');
   return (parts.length > 1 ? parts.slice(1).join(' · ') : window.label).trim();
+}
+
+/** The family part of a cell key: "group:Gemini Models|five_hour" belongs to "group:Gemini Models". */
+function familyKeyOfCell(cellKey: string): string {
+  return cellKey.slice(0, cellKey.lastIndexOf('|'));
 }
 
 /**
@@ -114,35 +129,85 @@ export function isListQuotaFamilyExcluded(provider: string | undefined, label: s
   return false;
 }
 
-/** The section's families in the order its credentials report them, each with its columns. */
-export function quotaFamiliesOf(records: OAuthWorkspaceRecord[], provider?: string): QuotaFamilyHeader[] {
-  const sectionProvider = provider ?? records[0]?.displayProvider ?? records[0]?.file?.provider;
-  const families = new Map<string, QuotaFamilyHeader & { order: Map<string, number> }>();
-  for (const record of records) {
-    for (const [key, window] of quotaCellsOf(record.quota?.windows)) {
-      const label = familyLabel(window);
-      if (isListQuotaFamilyExcluded(sectionProvider ?? record.displayProvider, label)) {
-        continue;
-      }
-      const familyKey = key.slice(0, key.lastIndexOf('|'));
-      let family = families.get(familyKey);
-      if (!family) {
-        family = { key: familyKey, scope: window.scope, label, columns: [], order: new Map() };
-        families.set(familyKey, family);
-      }
-      if (family.order.has(key)) continue;
-      family.order.set(key, family.order.size);
-      const period = key.includes('|id:') ? undefined : periodOf(window);
-      family.columns.push(period ? { key, period } : { key, label: columnLabel(window) });
+/** The readings of one credential that the list table draws. */
+function listedCellsOf(record: OAuthWorkspaceRecord, provider = record.displayProvider): [string, QuotaWindow][] {
+  return [...quotaCellsOf(record.quota?.windows)].filter(([, window]) => !isListQuotaFamilyExcluded(provider, familyLabel(window)));
+}
+
+/** A limit that refills within a day is the short one; anything longer is the long one. */
+function slotOf(window: QuotaWindow): QuotaSlot | undefined {
+  const period = periodOf(window);
+  if (period === 'five_hour' || period === 'daily') return 'short';
+  if (period === 'weekly' || period === 'monthly') return 'long';
+  if (window.period_hours != null) return window.period_hours <= 24 ? 'short' : 'long';
+  return undefined;
+}
+
+/**
+ * A credential's limits as lines, the plan first and then each family in the order the provider
+ * reports them. A family's first short and first long limit share its line; a further limit in a
+ * column its family already filled - Claude's third-party-apps weekly limit beside the plan's
+ * weekly one - and a limit with no known period each get a line of their own, named by the limit.
+ */
+export function quotaLinesOf(record: OAuthWorkspaceRecord, provider = record.displayProvider): QuotaLine[] {
+  const families = new Map<string, { line: QuotaLine; short?: QuotaLineCell; long?: QuotaLineCell; extras: QuotaLine[] }>();
+  for (const [key, window] of listedCellsOf(record, provider)) {
+    const familyKey = familyKeyOfCell(key);
+    let family = families.get(familyKey);
+    if (!family) {
+      family = { line: { key: familyKey, scope: window.scope, label: familyLabel(window), cells: [] }, extras: [] };
+      families.set(familyKey, family);
+    }
+    const slot = slotOf(window);
+    if (slot && !family[slot]) {
+      family[slot] = { key, window, slot, spans: false };
+    } else {
+      const label = slot ? modelLabel(window) : columnLabel(window);
+      family.extras.push({ key, scope: window.scope, label, cells: [{ key, window, slot, spans: true }] });
     }
   }
-  return [...families.values()].map(({ order, ...family }) => ({
-    ...family,
-    columns: [...family.columns].sort((left, right) => (
-      (left.period ? PERIOD_RANK[left.period] : 9) - (right.period ? PERIOD_RANK[right.period] : 9)
-        || order.get(left.key)! - order.get(right.key)!
-    )),
-  }));
+  const lines: QuotaLine[] = [];
+  for (const { line, short, long, extras } of families.values()) {
+    const cells = [short, long].filter((cell): cell is QuotaLineCell => cell !== undefined);
+    if (cells.length === 1) cells[0] = { ...cells[0], spans: true };
+    if (cells.length > 0) lines.push({ ...line, cells });
+    lines.push(...extras);
+  }
+  // The plan leads: it is the credential's own limit and what the column headers name.
+  return lines.sort((left, right) => Number(right.scope === 'standard') - Number(left.scope === 'standard'));
+}
+
+/**
+ * The readings a row draws, in order, each placed in a column or across both. The first line keeps
+ * its columns - its short limit under "5 hours", its long one under "Weekly" - because that is the
+ * line the headers and the sort describe. Further lines name every reading, so their single limits
+ * are paired two to a line instead of each taking a full one; a family with two limits keeps its
+ * own line, and a single limit left over draws across both columns.
+ */
+export function packQuotaLines(lines: QuotaLine[]): { line: QuotaLine; cell: QuotaLineCell }[] {
+  const placed: { line: QuotaLine; cell: QuotaLineCell }[] = [];
+  let pending: { line: QuotaLine; cell: QuotaLineCell } | undefined;
+  const flush = () => {
+    if (pending) placed.push({ ...pending, cell: { ...pending.cell, spans: true } });
+    pending = undefined;
+  };
+  lines.forEach((line, index) => {
+    if (index === 0 || line.cells.length > 1) {
+      flush();
+      for (const cell of line.cells) placed.push({ line, cell });
+      return;
+    }
+    const [cell] = line.cells;
+    if (!pending) {
+      pending = { line, cell };
+      return;
+    }
+    placed.push({ ...pending, cell: { ...pending.cell, slot: 'short', spans: false } });
+    placed.push({ line, cell: { ...cell, slot: 'long', spans: false } });
+    pending = undefined;
+  });
+  flush();
+  return placed;
 }
 
 /**
@@ -159,7 +224,32 @@ export function compareSections(left: string, right: string): number {
   return sectionRank(left) - sectionRank(right) || left.localeCompare(right);
 }
 
-/** Section order stays fixed; an active quota sort orders the provider's full filtered records. */
+/** The lines a credential draws, as one comparable key; empty without a reading. */
+function listedFamiliesOf(record: OAuthWorkspaceRecord): string[] {
+  return quotaLinesOf(record).map((line) => line.key).sort();
+}
+
+/**
+ * A stable partition of one provider's credentials by plan shape: the credentials that report the
+ * most families first, the ones with no reading yet last, and the chosen order kept inside each.
+ * The richer plan leads because its row has no empty cell to explain.
+ */
+function clusterByShape(records: OAuthWorkspaceRecord[]): OAuthWorkspaceRecord[] {
+  const signatures = new Map(records.map((record) => {
+    const families = listedFamiliesOf(record);
+    return [record.key, { count: families.length, signature: families.join('\n') }];
+  }));
+  return [...records].sort((left, right) => {
+    const a = signatures.get(left.key)!;
+    const b = signatures.get(right.key)!;
+    return b.count - a.count || (a.signature < b.signature ? -1 : a.signature > b.signature ? 1 : 0);
+  });
+}
+
+/**
+ * Section order stays fixed. Inside a section an active quota sort orders the provider's full
+ * filtered records; otherwise its credentials are grouped by plan shape in the chosen order.
+ */
 export function orderBySection(records: OAuthWorkspaceRecord[], columnSorts: Readonly<Partial<Record<string, QuotaColumnSort>>> = {}): OAuthWorkspaceRecord[] {
   const sections = new Map<string, OAuthWorkspaceRecord[]>();
   for (const record of records) {
@@ -171,7 +261,7 @@ export function orderBySection(records: OAuthWorkspaceRecord[], columnSorts: Rea
     .sort(([left], [right]) => compareSections(left, right))
     .flatMap(([provider, rows]) => {
       const sort = columnSorts[provider];
-      return sort ? sortByQuotaColumn(rows, sort.key, sort.direction) : rows;
+      return sort ? sortByQuotaColumn(rows, sort.direction) : clusterByShape(rows);
     });
 }
 
@@ -190,13 +280,22 @@ export function buildCredentialSections(pageRecords: OAuthWorkspaceRecord[], vis
     .sort(([left], [right]) => compareSections(left, right))
     .map(([provider, records]) => {
       const providerRecords = visibleRecords.filter((record) => record.displayProvider === provider);
-      return { provider, records, visibleRecords: providerRecords, families: quotaFamiliesOf(providerRecords, provider) };
+      const hasQuota = providerRecords.some((record) => quotaLinesOf(record, provider).length > 0);
+      return { provider, records, visibleRecords: providerRecords, hasQuota };
     });
 }
 
-/** A column's reading for sorting: missing readings sort last whichever way the column is sorted. */
-export function sortByQuotaColumn(records: OAuthWorkspaceRecord[], columnKey: string, direction: 'asc' | 'desc'): OAuthWorkspaceRecord[] {
-  const valueOf = (record: OAuthWorkspaceRecord) => quotaCellsOf(record.quota?.windows).get(columnKey)?.remaining_percent;
+/**
+ * The quota header's sort: by the share left in each credential's tightest listed limit, which is
+ * the one that stops it first. Credentials without a reading sort last whichever way it runs.
+ */
+export function sortByQuotaColumn(records: OAuthWorkspaceRecord[], direction: 'asc' | 'desc'): OAuthWorkspaceRecord[] {
+  const valueOf = (record: OAuthWorkspaceRecord) => {
+    const shares = quotaLinesOf(record).flatMap((line) => line.cells)
+      .map(({ window }) => window.remaining_percent ?? (window.used_percent != null ? 100 - window.used_percent : undefined))
+      .filter((share): share is number => share != null);
+    return shares.length > 0 ? Math.min(...shares) : undefined;
+  };
   return [...records].sort((left, right) => {
     const a = valueOf(left);
     const b = valueOf(right);

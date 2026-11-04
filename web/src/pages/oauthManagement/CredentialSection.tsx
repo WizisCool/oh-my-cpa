@@ -18,6 +18,7 @@ import {
   NoteOutlined,
   ProfileOutlined,
   RenameOutlined,
+  RollbackOutlined,
   StopOutlined,
   SyncOutlined,
   WarningOutlined,
@@ -26,10 +27,10 @@ import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { CredentialMark } from '../../components/LobeIcon';
 import { StatusLabel } from '../../components/common/StatusLabel';
+import { Tag } from '../../components/common/Tag';
 import { Meter } from '../../components/common/Meter';
 import { useT, type TFunc } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
-import type { QuotaWindow } from '../../types/quota';
 import {
   deriveAuthFileIdentity,
   hasAuthFileStatusWarning,
@@ -41,18 +42,20 @@ import { SIWC_BADGE_LABEL_KEYS, SIWC_BADGE_TONES, type SIWCBadgeState } from '..
 import { formatObservedAgo, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown, quotaResetText } from '../quota/quotaFormat';
 import { quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
-import { describeCompactQuotaCapacity } from '../quota/quotaCapacity';
+import { compactQuotaCapacity, describeCompactQuotaCapacity } from '../quota/quotaCapacity';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
 import { resolveQuotaCooldownTooltip } from '../quota/quotaCooldown';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import {
   credentialStatusOf,
-  quotaCellsOf,
+  packQuotaLines,
+  quotaLinesOf,
   type CredentialSection as Section,
-  type QuotaColumn,
   type QuotaColumnSort,
-  type QuotaFamilyHeader,
+  type QuotaLine,
+  type QuotaLineCell,
+  type QuotaPeriod,
 } from './credentialSections';
 import { maskAccount } from '../../utils/maskAccount';
 import styles from './CredentialSection.module.css';
@@ -88,19 +91,26 @@ interface CredentialSectionProps {
   onSort: (key: string) => void;
 }
 
-const PERIOD_KEYS: Record<NonNullable<QuotaColumn['period']>, MessageKey> = {
+const PERIOD_KEYS: Record<QuotaPeriod, MessageKey> = {
   five_hour: 'quota.slot_five_hour', daily: 'quota.slot_daily', weekly: 'quota.slot_weekly', monthly: 'quota.slot_monthly',
 };
 
-function familyTitle(family: QuotaFamilyHeader, t: TFunc): string {
-  if (family.label) return family.label;
-  return t(family.scope === 'code_review' ? 'omc.quota_family_code_review' : 'omc.quota_family_plan');
+function lineTitle(line: QuotaLine, t: TFunc): string {
+  if (line.label) return line.label;
+  return t(line.scope === 'code_review' ? 'omc.quota_family_code_review' : 'omc.quota_family_plan');
 }
 
-function periodTitle(column: QuotaColumn, t: TFunc): string {
-  return column.period ? t(PERIOD_KEYS[column.period]) : column.label ?? '';
+function cellPeriodTitle(cell: QuotaLineCell, t: TFunc): string | undefined {
+  const kind = quotaWindowKindOf(cell.window);
+  return kind === 'five_hour' || kind === 'daily' || kind === 'weekly' || kind === 'monthly' ? t(PERIOD_KEYS[kind]) : undefined;
 }
 
+/** The plan's limits are named by their period; any other by its period and name, or its name alone. */
+function readingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
+  const period = cellPeriodTitle(cell, t);
+  if (line.scope === 'standard' && !line.label) return period ?? cell.window.label;
+  return period ? t('omc.quota_reading_name', { family: lineTitle(line, t), period }) : lineTitle(line, t);
+}
 
 /**
  * One provider's credentials as one table.
@@ -113,45 +123,12 @@ function periodTitle(column: QuotaColumn, t: TFunc): string {
 export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
   const t = useT();
   const metadata = getCredentialProviderMetadata(section.provider);
-  const columns = section.families.flatMap((family) => family.columns);
   const records = section.records;
-  const hasSIWC = section.visibleRecords.some((record) => actions.siwcBadge(record));
-  const hasCredits = section.visibleRecords.some((record) => record.quota?.reset_credits !== undefined);
   const selectable = section.records.filter((record) => record.canSelectForFileBatch);
   const selectedCount = selectable.filter((record) => selectedKeys.has(record.key)).length;
-  // A section whose only family is the plan names its periods directly: "Plan" above every column
-  // would say nothing the section header has not.
-  const hasGroupedHeader = section.families.length > 1 || section.families.some((family) => family.scope !== 'standard');
-  const headerRows = hasGroupedHeader ? 2 : 1;
-  // A phone hides the header, so each reading carries the name its column header would have given
-  // it: the period alone under a single plan family, the family and the period otherwise.
-  const phoneColumns = section.families.map((family) => family.columns.map((column) => ({
-    column,
-    phoneLabel: hasGroupedHeader
-      ? t('omc.quota_family_period', { family: familyTitle(family, t), period: periodTitle(column, t) })
-      : periodTitle(column, t),
-  })));
+  const { hasQuota } = section;
 
-  const periodHeader = (column: QuotaColumn, isFirstOfFamily: boolean, family?: QuotaFamilyHeader) => {
-    const isSorted = columnSort?.key === column.key;
-    const periodLabel = periodTitle(column, t);
-    const fullTooltip = family && hasGroupedHeader
-      ? t('omc.quota_family_period', { family: familyTitle(family, t), period: periodLabel })
-      : periodLabel;
-    return (
-      <th
-        key={column.key}
-        className={clsx(styles['th-period'], isFirstOfFamily && styles['th-divided'])}
-        aria-sort={isSorted ? (columnSort.direction === 'asc' ? 'ascending' : 'descending') : undefined}
-      >
-        <button type="button" className={styles['sort-button']} onClick={() => onSort(column.key)} title={fullTooltip}>
-          <span className={styles['sort-label']}>{periodLabel}</span>
-          {isSorted && (columnSort.direction === 'asc' ? <ArrowUpOutlined /> : <ArrowDownOutlined />)}
-        </button>
-      </th>
-    );
-  };
-
+  const isSorted = columnSort?.key === 'quota';
   return (
     <section className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
       <header className={styles.head}>
@@ -160,7 +137,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
             <CredentialMark provider={section.provider} pluginLogos={pluginLogos} size={18} />
           </span>
           <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
-          <span className={styles['head-count']}>{t('omc.section_count', { n: section.records.length })}</span>
+          <Tag size="small">{t('omc.section_count', { n: section.records.length })}</Tag>
         </div>
         {selectable.length > 0 && (
           <div className={styles['head-mobile-select']}>
@@ -183,15 +160,13 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
             <col className={styles['col-identity']} />
             <col className={styles['col-status']} />
             <col className={styles['col-switch']} />
-            {columns.map((column) => <col key={column.key} />)}
-            {hasSIWC && <col className={styles['col-extra']} />}
-            {hasCredits && <col className={styles['col-extra']} />}
-            {columns.length === 0 && <col />}
+            {hasQuota && <><col /><col /></>}
+            {!hasQuota && <col />}
             <col className={styles['col-actions']} />
           </colgroup>
           <thead>
             <tr>
-              <th rowSpan={headerRows} className={styles['th-identity']}>
+              <th className={styles['th-identity']}>
                 <span className={styles['identity-head']}>
                   <Checkbox
                     checked={selectable.length > 0 && selectedCount === selectable.length}
@@ -203,43 +178,29 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
                   {t('omc.col_credential')}
                 </span>
               </th>
-              <th rowSpan={headerRows}>{t('af.detail_status')}</th>
-              <th rowSpan={headerRows}>{t('pro.col_switch')}</th>
-              {hasGroupedHeader
-                ? section.families.map((family) => (
-                  <th
-                    key={family.key}
-                    colSpan={family.columns.length}
-                    className={clsx(styles['th-family'], styles['th-divided'])}
-                    scope="colgroup"
-                    title={familyTitle(family, t)}
-                  >
-                    <span className={styles['family-title']}>{familyTitle(family, t)}</span>
-                  </th>
-                ))
-                : columns.map((column, index) => periodHeader(column, index === 0))}
-              {hasSIWC && <th rowSpan={headerRows} className={styles['th-divided']}>SIWC</th>}
-              {hasCredits && <th rowSpan={headerRows} className={clsx(styles.num, !hasSIWC && styles['th-divided'])}>{t('omc.col_reset_credits')}</th>}
-              {columns.length === 0 && <th rowSpan={headerRows} aria-hidden="true" />}
-              <th rowSpan={headerRows} className={styles['th-actions']}><span className={styles['visually-hidden']}>{t('keys.col_actions')}</span></th>
+              <th>{t('af.detail_status')}</th>
+              <th>{t('pro.col_switch')}</th>
+              {hasQuota && (
+                // Every reading names itself, so the two columns share one header; it sorts by the
+                // share left in each credential's tightest limit.
+                <th colSpan={2} className={styles['th-period']} aria-sort={isSorted ? (columnSort.direction === 'asc' ? 'ascending' : 'descending') : undefined}>
+                  <button type="button" className={styles['sort-button']} onClick={() => onSort('quota')}>
+                    <span className={styles['sort-label']}>{t('omc.section_quota')}</span>
+                    {isSorted && (columnSort.direction === 'asc' ? <ArrowUpOutlined /> : <ArrowDownOutlined />)}
+                  </button>
+                </th>
+              )}
+              {!hasQuota && <th aria-hidden="true" />}
+              <th className={styles['th-actions']}><span className={styles['visually-hidden']}>{t('keys.col_actions')}</span></th>
             </tr>
-            {hasGroupedHeader && (
-              <tr>
-                {section.families.map((family) =>
-                  family.columns.map((column, index) => periodHeader(column, index === 0, family))
-                )}
-              </tr>
-            )}
           </thead>
           <tbody>
             {records.map((record) => (
               <CredentialRow
                 key={record.key}
                 record={record}
-                columns={phoneColumns}
-                hasQuotaColumns={columns.length > 0}
-                hasSIWC={hasSIWC}
-                hasCredits={hasCredits}
+                provider={section.provider}
+                hasQuota={hasQuota}
                 isSelected={selectedKeys.has(record.key)}
                 nowMS={nowMS}
                 actions={actions}
@@ -254,16 +215,15 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
 
 interface CredentialRowProps {
   record: OAuthWorkspaceRecord;
-  columns: { column: QuotaColumn; phoneLabel: string }[][];
-  hasQuotaColumns: boolean;
-  hasSIWC: boolean;
-  hasCredits: boolean;
+  provider: string;
+  /** Whether the section has quota columns at all. */
+  hasQuota: boolean;
   isSelected: boolean;
   nowMS: number;
   actions: CredentialRowActions;
 }
 
-function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, isSelected, nowMS, actions }: CredentialRowProps) {
+function CredentialRow({ record, provider, hasQuota, isSelected, nowMS, actions }: CredentialRowProps) {
   const t = useT();
   const { modal } = AntdApp.useApp();
   const isDemo = isDemoMode();
@@ -295,7 +255,7 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
   const status = credentialStatusOf(record, isDisabled, isAuthFileProblem(file));
   const isBusy = actions.isBusy(record);
   const isRefreshing = actions.isRefreshingQuota(record);
-  const cells = quotaCellsOf(quota?.windows);
+  const lines = quotaLinesOf(record, provider);
   const siwc = actions.siwcBadge(record);
   const isStale = record.quotaCondition === 'stale' || record.quotaCondition === 'error';
   const warning = hasAuthFileStatusWarning(file) && file.status_message ? file.status_message : undefined;
@@ -306,12 +266,7 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
     ?? (quota ? outlivedResetLine(quota, t) : null)
     ?? (record.quotaCondition === 'cooldown' ? resolveQuotaCooldownTooltip(quota?.active_cooldown?.reason, t('quota.cooldown_active_desc')) : null);
   const needsRefresh = (status.canRefreshFix || Boolean(failure)) && record.canRefreshQuota;
-  // A phone card has no columns to keep aligned, so it shows only the readings this credential
-  // reports, two to a line; when that leaves one alone on the last line, it takes the whole line.
-  const reportedKeys = columns.flat().map(({ column }) => column.key).filter((key) => cells.has(key));
-  const hasRowCredits = quota?.reset_credits !== undefined;
-  const hasOddPhoneItems = (reportedKeys.length + (hasRowCredits ? 1 : 0)) % 2 === 1;
-  const phoneWideKey = hasOddPhoneItems && !hasRowCredits ? reportedKeys[reportedKeys.length - 1] : undefined;
+  const credits = quota?.reset_credits?.available_count ?? 0;
 
   return (
     <tr
@@ -379,35 +334,70 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
                 {file.weight !== undefined && <span>{t('omc.weight_value', { n: file.weight })}</span>}
               </div>
             ) : null}
+            {/* What the upstream account carries beyond its limits: the SIWC partition and the banked
+                resets. They are tags under the name rather than columns, so a Codex section's quota
+                tracks start and end where every other provider's do. */}
+            {(siwc || credits > 0) && (
+              <div className={styles['identity-tags']}>
+                {siwc && (
+                  <button
+                    type="button"
+                    className={clsx(styles.tag, styles[`tag-${SIWC_BADGE_TONES[siwc]}`], siwc === 'bind' && styles['tag-offer'])}
+                    data-siwc-badge={siwc}
+                    onClick={() => actions.onOpenSIWC(record)}
+                    aria-label={t('siwc.badge_aria', { name: file.name })}
+                  >
+                    <span className={styles['tag-name']}>SIWC</span>
+                    {t(SIWC_BADGE_LABEL_KEYS[siwc])}
+                  </button>
+                )}
+                {credits > 0 && (
+                  <Tooltip title={t('omc.quota_credit_available_hint')}>
+                    <button
+                      type="button"
+                      className={styles.tag}
+                      data-quota-credits={credits}
+                      onClick={() => actions.onOpen(record, 'overview')}
+                      aria-label={`${t('omc.reset_credits_count', { n: credits })}: ${file.name}`}
+                    >
+                      <RollbackOutlined aria-hidden="true" />
+                      {t('omc.reset_credits_count', { n: credits })}
+                    </button>
+                  </Tooltip>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </td>
       <td className={styles['td-status']} data-testid="oauth-credential-status" data-credential-renewal>
-        <div className={styles['status-main']}>
-          <Tooltip title={<>
-            {explanation && <div>{explanation}</div>}
-            <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
-            {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
-            {file.next_refresh_after && <div>{t('recovery.next_refresh')}: {formatGatewayTimestamp(file.next_refresh_after)}</div>}
-            {file.refresh_error && (
-              <div>
-                {t('recovery.refresh_error')}: {[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}
-              </div>
-            )}
-            {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
-          </>}>
-            <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
-          </Tooltip>
-          <CredentialRenewalBadge
-            file={file}
-            onOpen={() => actions.onOpen(record, 'renewal')}
-          />
+        <div className={styles['status-cell']}>
+          <div className={styles['status-main']}>
+            <Tooltip title={<>
+              {explanation && <div>{explanation}</div>}
+              <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
+              {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
+              {file.next_refresh_after && <div>{t('recovery.next_refresh')}: {formatGatewayTimestamp(file.next_refresh_after)}</div>}
+              {file.refresh_error && (
+                <div>
+                  {t('recovery.refresh_error')}: {[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}
+                </div>
+              )}
+              {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
+            </>}>
+              <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
+            </Tooltip>
+            <CredentialRenewalBadge
+              file={file}
+              onOpen={() => actions.onOpen(record, 'renewal')}
+            />
+          </div>
+          {status.needsReauth ? (
+            <button type="button" className={styles['status-action']} onClick={() => actions.onReauthenticate(record)}>{t('omc.reauthenticate')}</button>
+          ) : failure ? (
+            <span className={clsx(styles['status-sub'], styles['status-failed'])} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
+          ) : null}
         </div>
-        {status.needsReauth ? (
-          <button type="button" className={styles['status-action']} onClick={() => actions.onReauthenticate(record)}>{t('omc.reauthenticate')}</button>
-        ) : failure ? (
-          <span className={clsx(styles['status-sub'], styles['status-failed'])} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
-        ) : null}
       </td>
       <td className={styles['td-switch']}>
         <Switch
@@ -418,48 +408,12 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
           aria-label={t('af.status_toggle_label', { name: file.name })}
         />
       </td>
-      {columns.map((family) => family.map(({ column, phoneLabel }, index) => (
-        <QuotaCell
-          key={column.key}
-          columnKey={column.key}
-          phoneLabel={phoneLabel}
-          provider={record.displayProvider}
-          window={cells.get(column.key)}
-          isPhoneWide={column.key === phoneWideKey}
-          isFirstOfFamily={index === 0}
-          isStale={isStale || isDisabled}
-          nowMS={nowMS}
-        />
-      )))}
-      {hasSIWC && (
-        <td className={clsx(styles['td-divided'], styles['td-siwc'])}>
-          {siwc && (
-            <button
-              type="button"
-              className={clsx(styles.siwc, styles[`siwc-${SIWC_BADGE_TONES[siwc]}`], siwc === 'bind' && styles['siwc-unbound'])}
-              data-siwc-badge={siwc}
-              onClick={() => actions.onOpenSIWC(record)}
-              aria-label={t('siwc.badge_aria', { name: file.name })}
-            >
-              {t(SIWC_BADGE_LABEL_KEYS[siwc])}
-            </button>
-          )}
+      {hasQuota && (
+        <td colSpan={2} className={styles['td-quota']}>
+          <QuotaLines lines={lines} provider={record.displayProvider} isStale={isStale || isDisabled} nowMS={nowMS} />
         </td>
       )}
-      {hasCredits && (
-        <td className={clsx(styles.num, styles['td-credits'], !hasSIWC && styles['td-divided'], !hasRowCredits && styles['td-credits-missing'], hasRowCredits && hasOddPhoneItems && styles['phone-wide'])}
-          data-quota-credits={quota?.reset_credits?.available_count}
-          data-quota-credits-missing={hasRowCredits ? undefined : 'true'}
-        >
-          <span className={styles['phone-label']}>{t('omc.col_reset_credits')}</span>
-          {quota?.reset_credits ? (
-            <span className={quota.reset_credits.available_count > 0 ? styles['credits-available'] : styles['credits-zero']} title={t('omc.quota_credit_available_hint')}>
-              {quota.reset_credits.available_count}
-            </span>
-          ) : <span className={styles.missing}>—</span>}
-        </td>
-      )}
-      {!hasQuotaColumns && <td className={styles['td-filler']} aria-hidden="true" />}
+      {!hasQuota && <td className={styles['td-filler']} aria-hidden="true" />}
       <td className={styles['td-actions']}>
         {/* Refreshing is what an operator does most to a row, so it stands beside Details rather
             than in the menu. A row the console cannot refresh keeps the glyph's width empty, so
@@ -545,33 +499,55 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
 }
 
 /**
- * One reading: the share left, its bar, and the reset time reported upstream. Explicitly unused,
- * full Codex five-hour readings show the window duration; rounded or unknown usage keeps a countdown.
- * The window's label, reset instant, accuracy and capacity estimate remain in its tooltip.
+ * A credential's limits across the section's two columns: the first line's short limit under
+ * "5 hours" and its long one under "Weekly", further limits two to a line, and a limit left alone
+ * across both. The readings share one grid whose tracks are the two columns the cell spans, so
+ * every reading stands under its header and under the reading above it.
  */
-interface QuotaCellProps {
-  columnKey: string;
-  /** The column's name, printed over the reading only on a phone, where the header is not shown. */
-  phoneLabel: string;
+function QuotaLines({ lines, provider, isStale, nowMS }: {
+  lines: QuotaLine[];
   provider: string;
-  window?: QuotaWindow;
-  /** The reading left alone on a phone card's last line, which takes the line's full width. */
-  isPhoneWide: boolean;
-  isFirstOfFamily: boolean;
   isStale: boolean;
   nowMS: number;
+}) {
+  const t = useT();
+  if (lines.length === 0) {
+    return <div className={styles['quota-lines']} data-quota-missing="true"><span className={styles.missing}>—</span></div>;
+  }
+  return (
+    <div className={styles['quota-lines']}>
+      {packQuotaLines(lines).map(({ line, cell }) => (
+        <QuotaReading
+          key={cell.key}
+          cell={cell}
+          // Every reading names itself, so "5 hours Gemini" and "Weekly Gemini 4 Argon" cannot be
+          // mistaken for each other without a header to read them by.
+          name={readingName(line, cell, t)}
+          provider={provider}
+          isStale={isStale}
+          nowMS={nowMS}
+        />
+      ))}
+    </div>
+  );
 }
 
-function QuotaCell({ columnKey, phoneLabel, provider, window, isPhoneWide, isFirstOfFamily, isStale, nowMS }: QuotaCellProps) {
+/**
+ * One reading: its name and the share left, the bar, then the window's estimated size and when it
+ * resets. Explicitly unused, full Codex five-hour readings show the window duration; rounded or
+ * unknown usage keeps a countdown. The window's label, reset instant, accuracy and the estimate's
+ * basis remain in its tooltip.
+ */
+function QuotaReading({ cell, name, provider, isStale, nowMS }: {
+  cell: QuotaLineCell;
+  name: string;
+  provider: string;
+  isStale: boolean;
+  nowMS: number;
+}) {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  if (!window) {
-    return (
-      <td className={clsx(styles['td-quota'], styles['td-quota-missing'], isFirstOfFamily && styles['td-divided'])} data-quota-column={columnKey} data-quota-missing="true">
-        <span className={styles.missing}>—</span>
-      </td>
-    );
-  }
+  const { window } = cell;
   const remaining = quotaRemainingPercent(window);
   // Use the unrounded upstream reading: a displayed 100% alone does not prove zero usage.
   // Show the unused window's duration, independent of its moving reset estimate. The tooltip
@@ -582,26 +558,34 @@ function QuotaCell({ columnKey, phoneLabel, provider, window, isPhoneWide, isFir
     && window.used_percent === 0
     && (window.remaining_percent ?? 100) === 100;
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
+  const estimate = compactQuotaCapacity(window, tokenStyle, t);
   const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
   const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean).join('\n');
   return (
-    <td
-      className={clsx(styles['td-quota'], isFirstOfFamily && styles['td-divided'], isStale && styles['quota-stale'], isPhoneWide && styles['phone-wide'])}
-      data-quota-column={columnKey}
+    <div
+      className={clsx(
+        styles['quota-cell'],
+        cell.spans ? styles['slot-span'] : cell.slot === 'long' ? styles['slot-long'] : styles['slot-short'],
+        isStale && styles['quota-stale'],
+      )}
+      data-quota-column={cell.key}
       data-quota-window-label={window.label}
+      data-quota-spans={cell.spans ? 'true' : undefined}
     >
       {/* A reading is plain text, so the shared hint answers touch and keyboard focus without
           turning quota inspection into an action or relying on a hover-only native title. */}
       <Tooltip title={detail}>
         <div className={styles['quota-reading']} role="group" aria-label={window.label} tabIndex={0}>
-          <span className={styles['phone-label']}>{phoneLabel}</span>
-          <span className={styles['quota-value']} style={remaining != null && remaining < 70 ? { color: quotaRemainingStroke(remaining) } : undefined}>
-            {quotaRemainingText(window)}
+          <Tag size="small" className={styles['quota-name']} title={name}>{name}</Tag>
+          <span className={styles['quota-value']}>
+            <span className={styles['quota-value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
+            <b style={remaining != null && remaining < 70 ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
           </span>
-          {reset && <span className={styles['quota-reset']}>{reset}</span>}
           <Meter className={styles['quota-meter']} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
+          {estimate && <span className={styles['quota-estimate']}>{estimate}</span>}
+          {reset && <span className={styles['quota-reset']}>{reset}</span>}
         </div>
       </Tooltip>
-    </td>
+    </div>
   );
 }
