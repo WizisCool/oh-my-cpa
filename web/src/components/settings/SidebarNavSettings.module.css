@@ -17,8 +17,8 @@
   padding: 16px 0 4px;
 }
 
-/* One rail entry, wrapped so the row itself can be a drag target and carry the insertion marker.
-   The wrapper is what the browser probe drags and drops; the shared row stays the row's layout. */
+/* One rail entry, wrapped so the row itself is the part that moves; the shared row stays the row's
+   layout. */
 .entry {
   position: relative;
   transition: opacity var(--motion-fast) ease;
@@ -41,31 +41,6 @@
   color: var(--muted);
 }
 
-.is-dragging {
-  opacity: 0.45;
-}
-
-/* The drop marker: a bar on the side the dragged entry will land. The list runs one way, so the
-   side is always above or below and the marker spans the row. */
-.entry[data-drop]::after {
-  content: '';
-  position: absolute;
-  inset-inline: 8px;
-  height: 2px;
-  background: var(--accent);
-  border-radius: var(--radius-xs);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.entry[data-drop='before']::after {
-  top: 0;
-}
-
-.entry[data-drop='after']::after {
-  bottom: 0;
-}
-
 /* The entry's own glyph, then its name: the rail identifies an entry by its icon at 58px, so the
    row that moves or hides it is recognized the same way. The icon is decorative here - the row's
    text already names the entry - and inherits the row title's size. */
@@ -80,23 +55,6 @@
   flex: none;
 }
 
-/* The drag handle. It is the only part of the row that starts a drag, so the label and the switch
-   stay ordinary targets. */
-.handle {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  color: var(--meta);
-  cursor: grab;
-}
-
-.handle:hover {
-  color: var(--fg-2);
-}
-
-.handle:active {
-  cursor: grabbing;
-}
 
 /* The row's trailing edge: the step pair, then the switch. The step pair is a separate group so
    the switch keeps the spacing it has in every other settings row. */
@@ -144,4 +102,15 @@
   .dialog :global(.settings-toggle-control) {
     width: auto;
   }
+}
+
+/* The drag handle's place in the row; the grip itself is the shared one. */
+.handle {
+  display: inline-flex;
+  flex: none;
+}
+
+/* One group's entries: the list an entry is dragged within, and no further. */
+.group {
+  position: relative;
 }

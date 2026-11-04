@@ -134,10 +134,16 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 		repository.PreferenceProviderNames,
 		repository.PreferenceProviderWebsites,
 		repository.PreferenceProviderIcons,
+		repository.PreferenceProviderOrder,
 	} {
 		if err := fixture.handler.repo.PutPreference(ctx, key, string(encoded)); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
 		}
+	}
+	// The routing board's order names providers by member key, beside credentials it must not touch.
+	routingOrder := `{"provider:codex-0":"0","provider:codex-2":"1","credential:codex-9.json":"2","provider:meta-0":"3"}`
+	if err := fixture.handler.repo.PutPreference(ctx, repository.PreferenceRoutingCardOrder, routingOrder); err != nil {
+		t.Fatalf("seed routing order: %v", err)
 	}
 
 	resp, payload := doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/codex-0", "")
@@ -154,6 +160,7 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 		repository.PreferenceProviderNames,
 		repository.PreferenceProviderWebsites,
 		repository.PreferenceProviderIcons,
+		repository.PreferenceProviderOrder,
 	} {
 		raw, found, err := fixture.handler.repo.GetPreference(ctx, key)
 		if err != nil || !found {
@@ -170,6 +177,23 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 			if stored[id] != value {
 				t.Fatalf("%s[%s] = %q after delete, want %q (whole map %v)", key, id, stored[id], value, stored)
 			}
+		}
+	}
+	raw, _, err := fixture.handler.repo.GetPreference(ctx, repository.PreferenceRoutingCardOrder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var routing map[string]string
+	if err := json.Unmarshal([]byte(raw), &routing); err != nil {
+		t.Fatalf("routing order is not a string map: %s", raw)
+	}
+	wantRouting := map[string]string{"provider:codex-1": "1", "credential:codex-9.json": "2", "provider:meta-0": "3"}
+	if len(routing) != len(wantRouting) {
+		t.Fatalf("routing order = %v after delete, want %v", routing, wantRouting)
+	}
+	for key, value := range wantRouting {
+		if routing[key] != value {
+			t.Fatalf("routing order = %v after delete, want %v", routing, wantRouting)
 		}
 	}
 }

@@ -88,9 +88,14 @@ describe('credential quota board', () => {
     ]);
     expect(board).toMatchObject({ servingCount: 3, blockedCount: 2, disabledCount: 1 });
     const low = board.rows.find((row) => row.fileName === 'low')!;
-    expect(low.windows.map((entry) => entry.kind)).toEqual(['five_hour', 'weekly']);
+    expect(low.slots.map((entry) => entry?.kind)).toEqual(['five_hour', 'weekly']);
     expect(low.bindingWindow?.kind).toBe('weekly');
     expect(low.remainingPercent).toBe(12);
+  });
+
+  it('keeps a credential without a five-hour limit from moving its weekly reading into that place', () => {
+    const board = buildCredentialQuotaBoard([file('weekly-only')], [quota('weekly-only', [quotaWindow('weekly', 60, 30)])]);
+    expect(board.rows[0].slots.map((entry) => entry?.kind)).toEqual([undefined, 'weekly']);
   });
 
   it('recovers an exhausted credential only when every spent window has reset', () => {
@@ -415,8 +420,12 @@ describe("a credential row's reset time", () => {
       { ...quotaWindow('five_hour', 100, 2), ...windowOverrides },
       quotaWindow('weekly', 100, 48),
     ], { type: provider, provider }), { fileOverrides: { type: provider, provider } });
-    const cells = container.querySelectorAll<HTMLElement>('[data-quota-window-label]');
-    expect(cells).toHaveLength(2);
+    expect(container.querySelectorAll('[data-quota-window-label]')).toHaveLength(2);
+    // A five-hour window of another family draws on a line of its own, after the plan's.
+    const cells = [
+      container.querySelector<HTMLElement>('[data-quota-column$="|five_hour"]')!,
+      container.querySelector<HTMLElement>('[data-quota-column$="|weekly"]')!,
+    ];
     expect(within(cells[0]).getByText(remainingText)).toBeTruthy();
     expect(within(cells[0]).getByText('2h left')).toBeTruthy();
     expect(within(cells[1]).getByText('100%')).toBeTruthy();
@@ -588,17 +597,19 @@ describe('provider sections across pages', () => {
   }
   const visibleIdentities = () => screen.getAllByTestId('oauth-credential-record').map(row => row.getAttribute('data-auth-index'));
 
-  it('keeps provider-wide SIWC and credit columns when the qualifying account is on another page', async () => {
+  it('names an account\'s SIWC partition and banked resets under it without adding columns', async () => {
     const view = mountPages();
     try {
       await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
-      await screen.findByRole('button', { name: 'Weekly' });
-      expect(screen.getByRole('columnheader', { name: 'SIWC' })).toBeTruthy();
-      expect(screen.getByRole('columnheader', { name: 'Reset credits' })).toBeTruthy();
+      await screen.findByRole('button', { name: 'Quota' });
       const headers = screen.getAllByRole('columnheader').map(header => header.textContent);
       fireEvent.click(screen.getByTitle('2'));
       await waitFor(() => expect(visibleIdentities()).toEqual(['account-13']));
       expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(headers);
+      const row = screen.getByTestId('oauth-credential-record');
+      expect(within(row).getByRole('button', { name: /^SIWC settings:/ }).getAttribute('data-siwc-badge')).toBe('active');
+      fireEvent.click(within(row).getByRole('button', { name: '2 resets left: account-13' }));
+      expect(await screen.findByRole('tab', { name: 'Quota' })).toBeTruthy();
     } finally { view.unmount(); }
   });
 
@@ -657,13 +668,13 @@ describe('provider sections across pages', () => {
     const view = mountPages();
     try {
       await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
-      fireEvent.click(await screen.findByRole('button', { name: 'Weekly' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Quota' }));
       await waitFor(() => expect(visibleIdentities()).toEqual(
         Array.from({ length: 12 }, (_, index) => `account-${String(13 - index).padStart(2, '0')}`),
       ));
       fireEvent.click(screen.getByTitle('2'));
       await waitFor(() => expect(visibleIdentities()).toEqual(['account-01']));
-      fireEvent.click(screen.getByRole('button', { name: /Weekly/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Quota/ }));
       await waitFor(() => expect(visibleIdentities()).toEqual(
         Array.from({ length: 12 }, (_, index) => `account-${String(index + 1).padStart(2, '0')}`),
       ));

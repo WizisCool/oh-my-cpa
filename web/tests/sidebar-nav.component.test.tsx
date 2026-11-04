@@ -62,17 +62,6 @@ async function readyButton(accessibilityName: string) {
 const rowOrder = (dialog: HTMLElement) =>
   [...dialog.querySelectorAll('.settings-toggle-title')].map((node) => node.textContent);
 
-/** A minimal DataTransfer: jsdom has the drag events but not the payload they carry. */
-function dataTransfer() {
-  const store = new Map<string, string>();
-  return {
-    effectAllowed: 'none',
-    dropEffect: 'none',
-    setData: (type: string, value: string) => { store.set(type, value); },
-    getData: (type: string) => store.get(type) ?? '',
-  };
-}
-
 beforeEach(() => {
   api = installOmcApi();
 });
@@ -168,20 +157,15 @@ describe('sidebar layout panel', () => {
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('reorders on a drag from the handle, and refuses a drag that was not armed or crosses a heading', async () => {
+  // The pointer drag needs layout, so the browser scenario owns it; here the handle's keyboard path
+  // proves the same move writes the group's order and stays inside the group.
+  it('moves an entry from its handle with the arrow keys, and never past its group', async () => {
     mount();
     const dialog = await openPanel();
     await readySwitch('Agent');
-    const drag = dataTransfer();
-    // jsdom has no layout, so every row's midpoint is 0: a drop at clientY 0 lands after the row.
-    const rowOf = (key: string) => dialog.querySelector(`[data-nav-row="${key}"]`)!;
-    const handleOf = (key: string) => dialog.querySelector(`[data-nav-handle="${key}"]`)!;
+    const handleOf = (key: string) => dialog.querySelector(`[data-nav-handle="${key}"] button`)!;
 
-    // A row is draggable only after its handle was pressed, exactly as the browser arms it.
-    fireEvent.pointerDown(handleOf('/dashboard'));
-    fireEvent.dragStart(rowOf('/dashboard'), { dataTransfer: drag });
-    fireEvent.dragOver(rowOf('/agent'), { dataTransfer: drag, clientY: 0 });
-    fireEvent.drop(rowOf('/agent'), { dataTransfer: drag, clientY: 0 });
+    fireEvent.keyDown(handleOf('/dashboard'), { key: 'ArrowDown' });
     await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
     expect(api.preferenceWrites()[0]).toEqual({
       key: 'omc_nav_order',
@@ -189,21 +173,10 @@ describe('sidebar layout panel', () => {
     });
     expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
 
-    // The groups say what an entry is, so a drop across a heading is not an ordering choice.
-    fireEvent.pointerDown(handleOf('/playground'));
-    fireEvent.dragStart(rowOf('/playground'), { dataTransfer: drag });
-    fireEvent.dragOver(rowOf('/logs'), { dataTransfer: drag, clientY: 0 });
-    fireEvent.drop(rowOf('/logs'), { dataTransfer: drag, clientY: 0 });
+    // The groups say what an entry is: the last entry of a group goes no further down.
+    fireEvent.keyDown(handleOf('/model-square'), { key: 'ArrowDown' });
     await act(async () => {});
-    expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
-
-    // A drag that did not start at the handle is refused: selecting label text and dragging it
-    // must not reorder the rail either.
-    fireEvent.dragStart(rowOf('/dashboard'), { dataTransfer: drag });
-    fireEvent.dragOver(rowOf('/playground'), { dataTransfer: drag, clientY: 0 });
-    fireEvent.drop(rowOf('/playground'), { dataTransfer: drag, clientY: 0 });
-    await act(async () => {});
-    expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
+    expect(api.preferenceWrites()).toHaveLength(1);
   });
 
   it('neither reset touches the other setting', async () => {

@@ -36,8 +36,8 @@ export interface NavLayout {
   orderedGroups: NavGroup[];
   /** The model the rail draws: ordered, then filtered by the hidden set. */
   visibleGroups: NavGroup[];
-  /** Move one entry beside another in the same group. */
-  move: (key: string, targetKey: string, side: NavDropSide) => void;
+  /** Move one entry beside another in the same group; resolves when the write settles. */
+  move: (key: string, targetKey: string, side: NavDropSide) => Promise<unknown> | undefined;
   /** Move one entry a place earlier or later inside its group. */
   step: (key: string, direction: -1 | 1) => void;
   /** Back to the model's own order. */
@@ -99,10 +99,10 @@ export function useNavLayout(navGroups: readonly NavGroup[]): NavLayout {
 
   const move = React.useCallback(
     (key: string, targetKey: string, side: NavDropSide) => {
-      if (!isOrderLoaded) return;
+      if (!isOrderLoaded) return undefined;
       const next = moveNavEntry(navGroups, order, key, targetKey, side);
       // A drop that changes nothing writes nothing: the stored document is not a draft.
-      if (next !== order) void setOrder(next);
+      return next === order ? undefined : setOrder(next);
     },
     [isOrderLoaded, navGroups, order, setOrder],
   );

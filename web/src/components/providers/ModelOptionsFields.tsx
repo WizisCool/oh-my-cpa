@@ -1,5 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
-import { Checkbox, Input, InputNumber } from 'antd';
+import { Checkbox, Input } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 
 import { VertexModelOpenAPI } from '../authFiles/VertexModelOpenAPI';
 import { useT } from '../../i18n';
@@ -77,7 +78,7 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
             <label className={styles['item-field-label']} htmlFor={`${idPrefix}-context-length`}>
               {t('pro.model_context_length')}
             </label>
-            <InputNumber
+            <NumberInput
               id={`${idPrefix}-context-length`}
               className={styles['option-number']}
               value={options.maxContextLength}
@@ -93,7 +94,7 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
           <label className={styles['item-field-label']} htmlFor={`${idPrefix}-thinking-min`}>
             {t('pro.model_thinking_min')}
           </label>
-          <InputNumber
+          <NumberInput
             id={`${idPrefix}-thinking-min`}
             className={styles['option-number']}
             value={options.thinkingMin}
@@ -108,7 +109,7 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
           <label className={styles['item-field-label']} htmlFor={`${idPrefix}-thinking-max`}>
             {t('pro.model_thinking_max')}
           </label>
-          <InputNumber
+          <NumberInput
             id={`${idPrefix}-thinking-max`}
             className={styles['option-number']}
             value={options.thinkingMax}

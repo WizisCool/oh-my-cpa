@@ -1,7 +1,8 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Input, InputNumber, Segmented, TimePicker } from 'antd';
+import { Button, Checkbox, Input, Segmented, TimePicker } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
@@ -379,7 +380,7 @@ const TierRateFields: React.FC<{
           return (
             <label key={key} className={styles['tier-field']}>
               <span>{t(RATE_LABEL_KEYS[key])}</span>
-              <InputNumber<string>
+              <NumberInput<string>
                 min="0"
                 stringMode
                 controls={false}

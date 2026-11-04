@@ -119,7 +119,12 @@ it('locks settings, weights and tier actions until the submitted plan has settle
   const card = await screen.findByRole('listitem', { name: 'Backup seat' });
   fireEvent.click(within(card).getByRole('button', { name: 'Weight of Backup seat' }));
   const weight = await screen.findByRole('spinbutton');
-  fireEvent.change(weight, { target: { value: '7' } });
+  // The wheel steps a weight under the pointer, from its chip and from its field, without a click.
+  fireEvent.wheel(within(card).getByRole('button', { name: 'Weight of Backup seat' }), { deltaY: -100 });
+  expect((weight as HTMLInputElement).value).toBe('2');
+  fireEvent.change(weight, { target: { value: '6' } });
+  fireEvent.wheel(weight, { deltaY: -100 });
+  expect((weight as HTMLInputElement).value).toBe('7');
   fireEvent.click(screen.getByRole('button', { name: /Save/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
   await held.arrived;

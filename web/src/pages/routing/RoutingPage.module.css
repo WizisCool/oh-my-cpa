@@ -13,7 +13,9 @@
 .policy-hint { color: var(--muted); font-size: var(--text-sm); }
 .policy-inline { display: inline-flex; align-items: center; gap: 10px; }
 .ttl-input { width: 72px; font-family: var(--font-mono); }
-.strategy-control :global(.ant-segmented-item-label) { text-align: left; }
+/* The option is a glyph beside a label rather than a line of text, so it is centred in the item as
+   a box: on the text's baseline it sat at the item's foot. */
+.strategy-control :global(.ant-segmented-item-label) { display: flex; align-items: center; min-height: 34px; text-align: left; }
 .strategy-option { display: inline-flex; align-items: center; gap: 10px; }
 /* Three requests over two peers: the option shows its own distribution before it is read. */
 .strategy-glyph { display: inline-flex; flex-direction: column; gap: 2px; }
@@ -27,7 +29,20 @@
 }
 .failover-toggle:hover { color: var(--fg); }
 .failover-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); box-shadow: none !important; }
-.failover { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.failover { display: flex; flex-direction: column; padding-top: 4px; }
+/* The policy is a side panel, too narrow for a settings page's two columns: a setting's name shares
+   its line with the control, and the description runs the panel's full width beneath both, so it
+   reads as a sentence instead of a column of three-word lines. */
+.policy :global(.settings-toggle-row) {
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title control' 'desc desc';
+  gap: 4px 12px; padding: 12px 0;
+}
+.policy :global(.settings-toggle-row + .settings-toggle-row::before) { inset-inline: 0; }
+.policy :global(.settings-toggle-info) { display: contents; }
+.policy :global(.settings-toggle-title) { grid-area: title; align-self: center; font-size: var(--text-sm); font-weight: 600; }
+.policy :global(.settings-toggle-desc) { grid-area: desc; margin-top: 0; font-size: var(--text-sm); }
+.policy :global(.settings-toggle-control) { grid-area: control; width: auto; }
+.policy :global(.settings-toggle-control .ant-input-number) { width: 88px; }
 
 /* ── Route ──────────────────────────────────────────────────────────────── */
 .board { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -57,14 +72,34 @@
 .link-active::after {
   content: ''; position: absolute; inset: 3px 0 3px 36px;
   border: 1px dashed var(--border); border-radius: var(--radius-md);
+  transform-origin: left center;
+  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+  animation: link-open var(--motion-base) var(--ease-standard) both;
 }
+/* The places for a new tier open as the card is lifted: the strip unrolls from the route's line and
+   its label follows a beat behind, both inside the link's own height. */
+.link-active .link-label { animation: link-label-in var(--motion-base) var(--ease-standard) 40ms both; }
 .link-over::after { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.link-over .link-label { color: var(--accent); }
+.link-over .link-label { color: var(--accent); transition: color var(--motion-fast) var(--ease-standard); }
+@keyframes link-open { from { opacity: 0; transform: scaleX(0.92); } }
+@keyframes link-label-in { from { opacity: 0; transform: translateX(-6px); } }
 
 .tier {
   position: relative; display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 12px; padding: 10px 12px;
   border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface);
   transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
+}
+/* A tier a move closed folds away where it stood, with its link: the outline fades as the space
+   closes, so the tiers below rise into place. */
+.tier-exit {
+  height: 0; margin: 0; padding: 0; overflow: hidden; list-style: none; pointer-events: none;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface);
+  animation: tier-fold var(--motion-slow) var(--ease-standard) forwards;
+}
+@keyframes tier-fold {
+  from { height: var(--exit-height); opacity: 0.6; }
+  60% { opacity: 0; }
+  to { height: 0; opacity: 0; border-width: 0; }
 }
 /* Only the band a card is about to land in lifts; the rest of the route stays flat. */
 .tier-over { border-color: var(--accent); box-shadow: var(--shadow-float); }
@@ -84,6 +119,9 @@
 .tier-role { color: var(--muted); font-size: var(--text-xs); }
 .tier-primary .tier-role { color: var(--accent); }
 .tier-cards { display: flex; flex-wrap: wrap; min-width: 0; margin: 0 -8px -8px 0; padding: 0; list-style: none; }
+/* A tier whose only card is in hand elsewhere keeps a card's height, so the route does not close up
+   under the pointer. */
+.tier-cards-vacant { min-height: 52px; }
 
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 .card {
@@ -108,7 +146,7 @@
   outline: none;
 }
 .card-face {
-  display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 6px 8px 6px 6px;
+  position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 6px 8px 6px 6px;
   border: 1px solid transparent; border-radius: var(--radius-md); background: var(--elevated);
   box-shadow: var(--shadow-raised);
   transition: border-color var(--motion-fast) var(--ease-standard),
@@ -129,8 +167,28 @@
 .card-share { color: var(--accent); font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 /* A standby tier's split is what it would take, not traffic it carries now. */
 .card-share-idle { color: var(--muted); }
-.card-dragging { opacity: 0.35; }
+/* A share arrives with the model that gives it meaning: the figure fades in and the bar along the
+   card's foot grows to it, and follows it when a weight changes. */
+.card-share { animation: share-in var(--motion-base) var(--ease-standard); }
+.card-share-bar {
+  position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; overflow: hidden;
+  border-radius: 999px; background: color-mix(in srgb, var(--fg) 8%, transparent); pointer-events: none;
+}
+.card-share-bar::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--accent);
+  transform: scaleX(var(--share)); transform-origin: left center;
+  transition: transform var(--motion-base) var(--ease-standard);
+  animation: share-grow var(--motion-slow, var(--motion-base)) var(--ease-standard);
+}
+@keyframes share-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes share-grow { from { transform: scaleX(0); } }
+/* The card in hand leaves an accent outline in the place it would land, which the other cards make
+   room for as it travels. */
+.card-placeholder .card-face { border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); box-shadow: none; }
+.card-placeholder .card-face > * { visibility: hidden; }
 .card-muted { opacity: 0.5; }
+/* Weighted to 0: the member recedes, but its weight chip stays at full strength, being the way back. */
+.card-excluded .card-face > :not(.card-end) { opacity: 0.5; }
 
 /* When narrowed by the model lens, members that do not serve this model recede and collapse smoothly. */
 .card-hidden {

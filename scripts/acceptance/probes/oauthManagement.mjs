@@ -134,6 +134,45 @@ export async function oauthManagement({ base, page, check, ledger }) {
     (await priorityRecord.innerText()).includes('Priority 0') && (await priorityRecord.innerText()).includes('Weight 1'));
   check('a row names no auth index', !(await page.locator('[data-testid="oauth-credential-section"]').first().innerText()).includes('auth-0'));
 
+  // A row moves only from its handle, which stays out of sight until the pointer reaches the row's
+  // edge: dragged below its neighbour the rows trade places as it goes, the drop keeps that order and
+  // saves it as a display preference, and dragged back it restores the first order.
+  const claudeRows = page.locator('[data-testid="oauth-credential-section"][data-provider="claude"] [data-testid="oauth-credential-record"]');
+  const claudeOrder = () => claudeRows.evaluateAll((rows) => rows.map((row) => row.getAttribute('data-auth-index')));
+  const dragRow = async (from, to, fraction) => {
+    const handle = await claudeRows.nth(from).locator('[data-reorder-handle]').boundingBox();
+    const target = await claudeRows.nth(to).boundingBox();
+    const saved = page.waitForResponse((response) => response.url().endsWith('/preferences/omc_credential_order') && response.request().method() === 'PUT');
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 6, { steps: 3 });
+    await page.mouse.move(handle.x + handle.width / 2, target.y + target.height * fraction, { steps: 10 });
+    const isShown = await claudeRows.nth(from).locator('[data-reorder-handle]').evaluate((element) => Number(getComputedStyle(element).opacity) > 0.9);
+    await page.mouse.up();
+    return { isShown, isSaved: (await saved).ok() };
+  };
+  const initialClaudeOrder = await claudeOrder();
+  const restingHandle = await claudeRows.nth(0).locator('[data-reorder-handle]').evaluate((element) => ({
+    opacity: Number(getComputedStyle(element).opacity),
+    width: element.getBoundingClientRect().width,
+  }));
+  check('a row\'s drag handle is out of sight and takes no room until the pointer reaches it',
+    restingHandle.opacity === 0 && restingHandle.width <= 12, JSON.stringify(restingHandle));
+  const pressedRow = await claudeRows.nth(0).boundingBox();
+  await page.mouse.move(pressedRow.x + pressedRow.width * 0.4, pressedRow.y + pressedRow.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(pressedRow.x + pressedRow.width * 0.4, pressedRow.y + pressedRow.height * 1.5, { steps: 8 });
+  await page.mouse.up();
+  check('pressing and moving a row away from its handle rearranges nothing', (await claudeOrder()).join() === initialClaudeOrder.join());
+  const down = await dragRow(0, 1, 0.75);
+  const movedOrder = await claudeOrder();
+  check('a credential dragged by its handle lands beside the marked row and the order is saved',
+    down.isShown && down.isSaved && movedOrder.join() === [initialClaudeOrder[1], initialClaudeOrder[0], ...initialClaudeOrder.slice(2)].join(),
+    JSON.stringify({ ...down, initialClaudeOrder, movedOrder }));
+  const back = await dragRow(1, 0, 0.25);
+  check('dragged back, the credential restores the first order', back.isSaved && (await claudeOrder()).join() === initialClaudeOrder.join(),
+    JSON.stringify({ ...back, order: await claudeOrder() }));
+
   // Each provider is one section, in the console's fixed provider order, whatever the records' order.
   const sectionProviders = await page.getByTestId('oauth-credential-section').evaluateAll((sections) => sections.map((section) => section.getAttribute('data-provider')));
   check('credentials are grouped into one section per provider in the pinned order',
@@ -173,20 +212,19 @@ export async function oauthManagement({ base, page, check, ledger }) {
     (await twoWindowRow.getByRole('button', { name: /^(Details|详情):/i }).count()) === 1,
   );
 
-  // The xAI section mixes a grouped credential with flat ones: each model group is a header of its
-  // own, the grouped credential fills its columns, and a flat credential leaves them empty.
-  const xaiSection = page.locator('[data-testid="oauth-credential-section"][data-provider="xai"]');
-  const familyHeads = await xaiSection.locator('thead th[colspan]').allInnerTexts();
+  // The xAI section mixes a grouped credential with flat ones: the grouped credential draws every
+  // model group as readings that name themselves, and a flat credential draws none of them.
   const groupRecord = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-04"]');
   const groupLabels = await groupRecord.locator('[data-quota-window-label]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-quota-window-label') ?? ''));
-  const flatGroupCells = await page.locator('[data-auth-index="auth-08"] [data-quota-column^="group:"]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-quota-window-label')));
+  const groupText = await groupRecord.innerText();
+  const flatGroupCells = await page.locator('[data-auth-index="auth-08"] [data-quota-column^="group:"]').count();
   check(
-    'every model group a section reports is a header, and a row fills only its own',
-    ['Model group 1', 'Model group 2', 'Model group 3'].every((label) => familyHeads.some((head) => head.includes(label)))
-      && groupLabels.length === 6
+    'every model group a credential reports is a named reading, and a row draws only its own',
+    groupLabels.length === 6
       && [1, 2, 3].every((group) => groupLabels.filter((label) => label.startsWith(`Model group ${group}`)).length === 2)
-      && flatGroupCells.length > 0 && flatGroupCells.every((label) => label == null),
-    JSON.stringify({ familyHeads, groupLabels, flatGroupCells }),
+      && [1, 2, 3].every((group) => groupText.includes(`Model group ${group}`))
+      && flatGroupCells === 0,
+    JSON.stringify({ groupLabels, flatGroupCells }),
   );
   check('an explicitly inactive subscription is visible in its row', await groupRecord.locator('[data-subscription-inactive]').isVisible());
   await groupRecord.getByRole('button', { name: /^(Details|详情):/i }).click();
@@ -458,22 +496,14 @@ export async function oauthManagement({ base, page, check, ledger }) {
       layout.overflow === 0 && layout.controls > 0 && layout.outside === 0,
       JSON.stringify(layout),
     );
-    // A phone card carries the readings its credential reports, each named, inside the viewport,
-    // and drops the placeholders that only keep a desktop column aligned.
+    // A phone card carries the readings its credential reports, each named, inside the viewport.
     const phoneReadings = await page.locator('[data-testid="oauth-credential-record"] [data-quota-column]').evaluateAll((cells) => cells.map((cell) => {
       const rect = cell.getBoundingClientRect();
-      if (cell.hasAttribute('data-quota-missing')) return rect.width === 0;
       return rect.width > 0 && rect.right <= window.innerWidth + 1 && Boolean(cell.innerText.trim());
     }));
-    check(`a phone card shows its reported readings and no placeholders at ${width}px`,
+    check(`a phone card shows its reported readings at ${width}px`,
       phoneReadings.length > 0 && phoneReadings.every(Boolean),
       `ok=${phoneReadings.filter(Boolean).length}/${phoneReadings.length}`);
-    // Reset credits are one credential's own figure: a card without them has no credits cell, even
-    // in a section where another credential has some.
-    const absentCredits = await page.locator('[data-quota-credits-missing]').evaluateAll((cells) => cells.map((cell) => cell.getBoundingClientRect().width));
-    check(`a phone card without reset credits shows no credits placeholder at ${width}px`,
-      absentCredits.length > 0 && absentCredits.every((cellWidth) => cellWidth === 0),
-      `widths=${absentCredits.join(',')}`);
     await page.screenshot({ path: `tmp/oauth-management-overview-${width}.png` });
     // The reading with an estimate is auth-01's; the sections order records by provider, so the
     // first row of the page is not the one whose cycle was estimated.

@@ -1,6 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Collapse, Input, InputNumber, Segmented } from 'antd';
+import { Button, Collapse, Input, Segmented } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
@@ -408,7 +409,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                         {t(labelKey)}
                         {isRequired && <span className={styles.required} aria-hidden="true">*</span>}
                       </span>
-                      <InputNumber<string>
+                      <NumberInput<string>
                         min="0"
                         stringMode
                         controls={false}
@@ -455,7 +456,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
           <section className={styles.section}>
             <label className={styles['multiplier-field']}>
               <span>{t('pricing.editor.multiplier')}</span>
-              <InputNumber
+              <NumberInput
                 min={0.01}
                 max={100}
                 step={0.05}

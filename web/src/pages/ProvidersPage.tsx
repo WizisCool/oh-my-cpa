@@ -24,6 +24,7 @@ import { useProviderList } from '../components/providers/useProviderList';
 import { useProviderManagement } from '../components/providers/useProviderManagement';
 
 import { ProviderTable } from '../components/providers/ProviderTable';
+import { useProviderOrder } from '../components/providers/useProviderOrder';
 import styles from './ProvidersPage.module.css';
 import {
   DEFAULT_PROVIDER_FILTERS,
@@ -225,8 +226,9 @@ export const ProvidersPage: React.FC = () => {
 
   // The same reading of "is this provider on?" the row's switch and label use, so a tile never
   // counts a row as enabled while the row itself shows the operator's newer intent.
+  const providerOrder = useProviderOrder(providers);
   const overview = summarizeProviders(
-    providers,
+    providerOrder.ordered,
     filters,
     (provider) => statusQueue.targetFor(provider.id) ?? !provider.disabled,
     traffic,
@@ -395,6 +397,7 @@ export const ProvidersPage: React.FC = () => {
         setIconPickerOpen={setIconPickerOpen}
         setTargetProviderForIcon={setTargetProviderForIcon}
         onRename={renameProvider}
+        onMove={providerOrder.loaded ? providerOrder.move : undefined}
       />
 
       {/* Provider Rich Drawer */}

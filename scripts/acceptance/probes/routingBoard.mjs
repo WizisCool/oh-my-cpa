@@ -54,7 +54,10 @@ async function openBoard(page, base) {
   await settleLayout(page);
 }
 
-/** A pointer drag opens a tier of its own above the top one, and the lens walks the new order. */
+/**
+ * A card dragged along its tier changes only where it is drawn; dragged onto a link it opens a tier
+ * of its own, and the lens walks the new order.
+ */
 export async function routingBoard({ base, page, check }) {
   // With motion on, as an operator has it: the page's entrance animation is part of what the
   // lifted card is positioned through, and reduced motion would remove it from the check.
@@ -63,9 +66,25 @@ export async function routingBoard({ base, page, check }) {
   const selectedMark = page.locator('[data-member="provider:claude-0"] span[style*="opencode.svg"]');
   check('routing uses the saved connection mark instead of its protocol brand', await selectedMark.evaluate(node => getComputedStyle(node).maskImage.includes('/omc/lobe-icons/opencode.svg')));
   check('tiers follow stored priority, peers sharing a band', (await tierNames(page)).join(' > ') === 'Overflow seat+Primary seat > Anthropic Claude+Backup seat', (await tierNames(page)).join(' > '));
-  // Before any model is chosen the route already says who carries traffic and who waits.
-  check('the top tier says it serves and splits evenly', await tierText(page, 1).then((text) => text.includes('Serving requests') && text.includes('50%')), await tierText(page, 1));
+  // Before a model is chosen no member is known to serve a request, so the route shows its order
+  // and strategy but no share of traffic.
+  check('without a model the top tier is tried first and shows no share',
+    await tierText(page, 1).then((text) => text.includes('Tried first') && text.includes('Shared in turn') && !text.includes('%')), await tierText(page, 1));
   check('the tier below stands by', await tierText(page, 2).then((text) => text.includes('Standby until every tier above is unavailable')), await tierText(page, 2));
+
+  // Along its tier a card trades places live and the drop keeps them, as the operator's own display
+  // order: it is stored as a preference and is no change to the plan.
+  const overflow = await page.locator('[data-member="credential:overflow.json"]').boundingBox();
+  const primary = await page.locator('[data-member="credential:primary.json"]').boundingBox();
+  const savedOrder = page.waitForResponse((response) => response.url().endsWith('/preferences/routing_card_order') && response.request().method() === 'PUT');
+  await page.mouse.move(overflow.x + 40, overflow.y + overflow.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(primary.x + primary.width * 0.8, primary.y + primary.height / 2, { steps: 12 });
+  await until(async () => (await tierNames(page))[0] === 'Primary seat+Overflow seat', { label: 'the tier to sort as the card passes' });
+  await page.mouse.up();
+  check('a card dragged along its tier keeps its new place', (await tierNames(page))[0] === 'Primary seat+Overflow seat', (await tierNames(page)).join(' > '));
+  check('the order along a tier is stored as a display preference', (await savedOrder).ok());
+  check('the order along a tier is no change to the plan', await page.getByText(/^\d+ changes?$/).count() === 0);
 
   const card = page.locator('[data-member="credential:backup.json"]');
   const from = await card.boundingBox();
@@ -77,6 +96,8 @@ export async function routingBoard({ base, page, check }) {
   const target = await gap.boundingBox();
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 });
   await until(async () => (await gap.getAttribute('class'))?.includes('link-over'), { label: 'gap highlighted under the pointer' });
+  const hovered = await gap.boundingBox();
+  check('a link under the card keeps its height', Math.abs(hovered.height - target.height) < 1, JSON.stringify({ before: target.height, over: hovered.height }));
   // The lifted card is drawn where the hand took it. A route that grew as the drag began left it
   // tens of pixels off; the slack here is only the lifted card's own slight scale.
   const lifted = await page.locator('[class*="card-overlay"]').boundingBox();
@@ -86,7 +107,7 @@ export async function routingBoard({ base, page, check }) {
     JSON.stringify({ lifted, pointer }));
   await page.mouse.up();
   await until(async () => (await tierNames(page))[0] === 'Backup seat', { label: 'card landed in a new top tier' });
-  check('dropping in the top gap opens a tier above the rest', (await tierNames(page)).join(' > ') === 'Backup seat > Overflow seat+Primary seat > Anthropic Claude', (await tierNames(page)).join(' > '));
+  check('dropping in the top gap opens a tier above the rest', (await tierNames(page)).join(' > ') === 'Backup seat > Primary seat+Overflow seat > Anthropic Claude', (await tierNames(page)).join(' > '));
   check('the move is one pending change', await page.getByText('1 change', { exact: true }).isVisible());
   check('the new tier is numbered above the old top', await page.locator('li[aria-label="Tier 1"]').innerText().then((text) => text.includes('Priority 20')), await page.locator('li[aria-label="Tier 1"]').innerText());
 

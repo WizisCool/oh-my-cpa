@@ -219,10 +219,10 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('the rail starts in the model order',
     await operateOrder() === '/dashboard,/agent,/playground,/model-square', await operateOrder());
 
-  // A drag is a drag: the handle arms its row, and the drop lands on the side the pointer is on.
-  // The target position is the row's lower half, so the entry lands after it.
+  // A drag from the handle sorts the group as it goes; let go past the next entry, the dragged one
+  // stays where it was moved.
   const agentBox = await navRow('/agent').boundingBox();
-  await page.locator('[data-nav-handle="/dashboard"]').dragTo(navRow('/agent'), { targetPosition: { x: 40, y: agentBox.height - 4 } });
+  await page.locator('[data-nav-handle="/dashboard"]').dragTo(navRow('/agent'), { targetPosition: { x: 40, y: agentBox.height - 4 }, steps: 12 });
   await until(async () => await operateOrder() === '/agent,/dashboard,/playground,/model-square',
     { label: 'the dashboard entry to be dragged after the agent' });
   check('a drag places the entry where it is dropped',
@@ -233,14 +233,20 @@ export async function sidebarNavCustomization({ base, page, check }) {
     bodyOf(orderWrites()[0]) === JSON.stringify({ operate: ['/agent', '/dashboard', '/playground', '/model-square'] }),
     JSON.stringify(draggedOrder));
 
-  // A drop across a group heading is not an ordering choice. It is proved by the next write: if the
-  // refused drop had stored anything, the step that follows would carry it, and it does not.
-  const orderWritesBeforeCrossGroup = orderWrites().length;
-  await page.locator('[data-nav-handle="/playground"]').dragTo(navRow('/ai-providers'), { targetPosition: { x: 40, y: 20 } });
-  await page.getByRole('button', { name: 'Move earlier · Playground' }).click();
-  await until(() => orderWrites().length > orderWritesBeforeCrossGroup, { label: 'the step write to arrive' });
-  check('a drop across a group heading writes nothing',
-    orderWrites().length === orderWritesBeforeCrossGroup + 1, orderWrites().length + ' order writes');
+  // A drag stays in its group: pulled across the heading towards another group's entry, the entry
+  // stops at its own group's end, and the other group is left as it was.
+  const otherRoutes = async () => (await railRoutes()).filter((route) => !operateRoutes.includes(route)).join(',');
+  const otherBefore = await otherRoutes();
+  await page.locator('[data-nav-handle="/playground"]').dragTo(navRow('/ai-providers'), { targetPosition: { x: 40, y: 20 }, steps: 12 });
+  await until(async () => await operateOrder() === '/agent,/dashboard,/model-square,/playground',
+    { label: 'the playground entry to stop at its group\'s end' });
+  check('a drag pulled across a group heading stays in its own group',
+    await operateOrder() === '/agent,/dashboard,/model-square,/playground' && await otherRoutes() === otherBefore,
+    await operateOrder());
+  for (const expected of ['/agent,/dashboard,/playground,/model-square', '/agent,/playground,/dashboard,/model-square']) {
+    await page.getByRole('button', { name: 'Move earlier · Playground' }).click();
+    await until(async () => await operateOrder() === expected, { label: `the stepped order ${expected}` });
+  }
   check('the step buttons write the same group order',
     bodyOf(orderWrites()[orderWrites().length - 1]).includes(JSON.stringify(['/agent', '/playground', '/dashboard', '/model-square'])),
     bodyOf(orderWrites()[orderWrites().length - 1]));

@@ -28,6 +28,9 @@ import { ConfirmAction } from '../common/ConfirmAction';
 import { Meter } from '../common/Meter';
 import { Tooltip } from '../common/Tooltip';
 import { InlineNameEditor, inlineNameEditableClass, inlineNamePersistentClass, RenameButton } from '../common/InlineName';
+import { RowContextHandle, RowHandleContext, RowReorder, useReorderList, useReorderRow } from '../common/RowReorder';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import type { DropSide } from '../../types/displayOrder';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -52,6 +55,8 @@ interface ProviderTableProps {
   setTargetProviderForIcon: ProviderManagement['setTargetProviderForIcon'];
   /** Names a row in place; resolves whether the name was saved. */
   onRename: ProviderManagement['renameProvider'];
+  /** Puts a dragged row beside another; absent until the stored order has been read. */
+  onMove?: (key: string, target: string, side: DropSide) => unknown;
 }
 
 /**
@@ -78,8 +83,11 @@ export function ProviderTable({
   setIconPickerOpen,
   setTargetProviderForIcon,
   onRename,
+  onMove,
 }: ProviderTableProps) {
   const t = useT();
+  const isPhone = useIsPhoneViewport();
+  const reorder = useReorderList(providers, providerKey, (key, target, side) => onMove?.(key, target, side));
   // One row's name is edited at a time, like a credential's on the OAuth page. The editor's name
   // field is a full save that also rewrites CPA's entry; the glyph is the only overlay-only rename,
   // so it stays painted on touch screens and phones.
@@ -113,6 +121,8 @@ export function ProviderTable({
     {
       title: t('pro.col_provider'),
       key: 'name',
+      // The cell holds the row's edge grip, which is laid over its leading padding.
+      className: styles['name-cell'],
       // The name is the row's identity: auto layout otherwise hands its width to the endpoint
       // and breaks "Anthropic Claude" one syllable per line. The floor includes the 28px the
       // rename glyph reserves, so the name keeps the width it had before the glyph existed.
@@ -132,6 +142,7 @@ export function ProviderTable({
         const hasMeta = Boolean(record.prefix) || meta.length > 0;
         return (
           <div className={styles['provider-identity']}>
+            {!isPhone && <RowContextHandle name={record.name} />}
             <div
               className={styles['provider-mark']}
               title={t('pro.change_icon')}
@@ -389,6 +400,7 @@ export function ProviderTable({
               aria-label={`${t('common.delete')}: ${record.name}`}
             />
           </ConfirmAction>
+          {isPhone && <RowContextHandle name={record.name} variant="inline" />}
         </div>
       ),
     },
@@ -399,15 +411,61 @@ export function ProviderTable({
   // the row read as if it had two states that could disagree.
   return (
     <div className={styles['provider-list']}>
-      <ResponsiveList
-        columns={providerColumns}
-        dataSource={providers}
-        rowKey="id"
-        isLoading={providersLoading}
-        isBlocked={isBlocked}
-        emptyText={emptyText}
-        phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
-      />
+      {/* The order is the operator's display order and nothing else: which provider serves a
+          request is the routing arrangement's business. */}
+      <RowReorder
+        items={reorder.ordered.map(providerKey)}
+        isEnabled={Boolean(onMove)}
+        onMove={reorder.move}
+        onStep={(key, direction) => {
+          // Past the neighbour on screen, not one a filter hides.
+          const index = reorder.ordered.findIndex((provider) => provider.id === key);
+          const neighbour = reorder.ordered[index + direction];
+          if (index >= 0 && neighbour) reorder.move(key, neighbour.id, direction < 0 ? 'before' : 'after');
+        }}
+      >
+        <ResponsiveList
+          columns={providerColumns}
+          dataSource={reorder.ordered}
+          rowKey="id"
+          isLoading={providersLoading}
+          isBlocked={isBlocked}
+          emptyText={emptyText}
+          phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
+          tableProps={{ components: REORDERABLE_BODY }}
+          phoneRowWrapper={ReorderablePhoneRow}
+        />
+      </RowReorder>
     </div>
+  );
+}
+
+const providerKey = (provider: ProviderItem) => provider.id;
+
+type BodyRowProps = React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: React.Key };
+
+/** A data row the operator can hold and move; the table's placeholder rows carry no key and stay put. */
+function BodyRow(props: BodyRowProps) {
+  const key = props['data-row-key'];
+  return key === undefined ? <tr {...props} /> : <ReorderableBodyRow {...props} rowKey={String(key)} />;
+}
+
+function ReorderableBodyRow({ rowKey, ...props }: BodyRowProps & { rowKey: string }) {
+  const { row, handle } = useReorderRow(rowKey);
+  return (
+    <RowHandleContext.Provider value={handle}>
+      <tr {...props} {...row} />
+    </RowHandleContext.Provider>
+  );
+}
+
+const REORDERABLE_BODY = { body: { row: BodyRow } };
+
+function ReorderablePhoneRow({ rowKey, children }: { rowKey: string; children: React.ReactNode }) {
+  const { row, handle } = useReorderRow(rowKey);
+  return (
+    <RowHandleContext.Provider value={handle}>
+      <div {...row}>{children}</div>
+    </RowHandleContext.Provider>
   );
 }

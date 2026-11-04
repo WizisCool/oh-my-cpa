@@ -36,8 +36,8 @@ func (h *Handler) applyProviderMetadata(ctx context.Context, id, name, website s
 // any neighbour. All overlays describe the same accepted CPA write and commit in
 // one local transaction, including inherited icons when a save expands a row.
 func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID string, ids []string, name, website string, isWebsiteProvided bool) error {
-	updates := make(map[string]map[string]string, 3)
-	for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons} {
+	updates := make(map[string]map[string]string, len(positionalProviderOverlays))
+	for _, preference := range positionalProviderOverlays {
 		if preference == repository.PreferenceProviderNames {
 			if name == "" && sourceID == "" {
 				continue
@@ -49,14 +49,17 @@ func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID stri
 		if preference == repository.PreferenceProviderWebsites && !isWebsiteProvided && sourceID == "" {
 			continue
 		}
-		if preference == repository.PreferenceProviderIcons && (sourceID == "" || len(ids) < 2) {
+		// The console-written overlays follow the edited row only when a save expands it into
+		// several rows; a plain edit keeps the row's own id, so they already describe it.
+		if isConsoleOverlay(preference) && (sourceID == "" || len(ids) < 2) {
 			continue
 		}
 		values, err := h.loadStringPreference(ctx, preference)
 		if err != nil {
 			return fmt.Errorf("read provider metadata: %w", err)
 		}
-		value := values[sourceID]
+		keyPrefix := overlayKeyPrefix[preference]
+		value := values[keyPrefix+sourceID]
 		if preference == repository.PreferenceProviderNames && name != "" {
 			value = name
 		}
@@ -64,14 +67,15 @@ func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID stri
 			value = website
 		}
 		for _, id := range ids {
-			previous, hasValue := values[id]
+			key := keyPrefix + id
+			previous, hasValue := values[key]
 			if value == "" {
 				if hasValue {
-					delete(values, id)
+					delete(values, key)
 					updates[preference] = values
 				}
 			} else if previous != value {
-				values[id] = value
+				values[key] = value
 				updates[preference] = values
 			}
 		}
@@ -82,40 +86,53 @@ func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID stri
 	return nil
 }
 
+// positionalProviderOverlays are the operator documents keyed by a provider's positional id.
+var positionalProviderOverlays = []string{
+	repository.PreferenceProviderNames,
+	repository.PreferenceProviderWebsites,
+	repository.PreferenceProviderIcons,
+	repository.PreferenceProviderOrder,
+	repository.PreferenceRoutingCardOrder,
+}
+
+// overlayKeyPrefix names the overlays that key a provider by more than its positional id: the
+// routing board orders providers and credentials in one document, so a provider's entry carries
+// its member kind in front of the id.
+var overlayKeyPrefix = map[string]string{
+	repository.PreferenceRoutingCardOrder: "provider:",
+}
+
+// isConsoleOverlay reports whether the console writes the overlay through the preferences API
+// rather than a provider save writing it with the row.
+func isConsoleOverlay(preference string) bool {
+	switch preference {
+	case repository.PreferenceProviderIcons, repository.PreferenceProviderOrder, repository.PreferenceRoutingCardOrder:
+		return true
+	}
+	return false
+}
+
 // shiftProviderMetadataAfterDelete re-keys the operator metadata of every entry
-// that moved down one position when an entry was deleted. The three overlay
-// documents are replaced in one transaction, so a delete cannot leave names,
-// websites, and icons describing different positions.
+// that moved down one position when an entry was deleted. The overlay documents
+// are replaced in one transaction, so a delete cannot leave names, websites,
+// icons and the display order describing different positions.
 func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix string, deletedIndex int) error {
 	if idPrefix == "" {
 		return nil
 	}
-	updates := make(map[string]map[string]string, 3)
-	names, err := h.loadProviderNamesStrict(ctx)
-	if err != nil {
-		return err
-	}
-	if len(names) > 0 {
-		updates[repository.PreferenceProviderNames] = shiftPositionalProviderIDs(names, idPrefix, deletedIndex)
-	}
-	websites, err := h.loadProviderWebsitesStrict(ctx)
-	if err != nil {
-		return err
-	}
-	if len(websites) > 0 {
-		updates[repository.PreferenceProviderWebsites] = shiftPositionalProviderIDs(websites, idPrefix, deletedIndex)
-	}
-	// The icon overlay is written by the console through the preferences API
-	// instead of by a provider save, but it is keyed by the same positional id,
-	// so a delete has to move it here too. Leaving it alone is what made a
-	// deleted provider's brand mark reappear on whichever credential inherited
-	// its index.
-	icons, err := h.loadProviderIconsStrict(ctx)
-	if err != nil {
-		return err
-	}
-	if len(icons) > 0 {
-		updates[repository.PreferenceProviderIcons] = shiftPositionalProviderIDs(icons, idPrefix, deletedIndex)
+	// The icon and order overlays are written by the console through the preferences API instead
+	// of by a provider save, but they are keyed by the same positional id, so a delete has to move
+	// them here too. Leaving the icons alone is what made a deleted provider's brand mark reappear
+	// on whichever credential inherited its index.
+	updates := make(map[string]map[string]string, len(positionalProviderOverlays))
+	for _, preference := range positionalProviderOverlays {
+		values, err := h.loadStringPreference(ctx, preference)
+		if err != nil {
+			return err
+		}
+		if len(values) > 0 {
+			updates[preference] = shiftPositionalProviderIDs(values, overlayKeyPrefix[preference]+idPrefix, deletedIndex)
+		}
 	}
 	encoded := make(map[string]string, len(updates))
 	for key, value := range updates {
@@ -136,24 +153,25 @@ func (h *Handler) moveProviderMetadata(ctx context.Context, oldID string, newIDs
 		return err
 	}
 	prefix := idPrefixForFamily(family)
-	encoded := make(map[string]string, 3)
-	for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons} {
+	encoded := make(map[string]string, len(positionalProviderOverlays))
+	for _, preference := range positionalProviderOverlays {
 		values, err := h.loadStringPreference(ctx, preference)
 		if err != nil {
 			return err
 		}
-		value := values[oldID]
+		keyPrefix := overlayKeyPrefix[preference]
+		value := values[keyPrefix+oldID]
 		if preference == repository.PreferenceProviderNames && name != "" {
 			value = name
 		}
 		if preference == repository.PreferenceProviderWebsites && isWebsiteProvided {
 			value = website
 		}
-		values = shiftPositionalProviderIDs(values, prefix, index)
+		values = shiftPositionalProviderIDs(values, keyPrefix+prefix, index)
 		for _, id := range newIDs {
-			delete(values, id)
+			delete(values, keyPrefix+id)
 			if value != "" {
-				values[id] = value
+				values[keyPrefix+id] = value
 			}
 		}
 		document, err := json.Marshal(values)

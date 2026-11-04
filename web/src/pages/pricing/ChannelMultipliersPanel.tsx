@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Input, InputNumber } from 'antd';
+import { Button, Input } from 'antd';
+import { NumberInput } from '../../components/common/NumberInput';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckOutlined, UndoOutlined } from '../../components/icons';
 import { api } from '../../api/client';
@@ -114,7 +115,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
   });
   return (
     <div className={styles['channel-editor']}>
-      <InputNumber
+      <NumberInput
         size="small"
         min={0.01}
         max={100}

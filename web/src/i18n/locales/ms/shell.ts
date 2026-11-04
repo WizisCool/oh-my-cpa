@@ -84,6 +84,7 @@ export default {
   "common.back": "Kembali",
   "common.confirm": "Sahkan",
   "common.delete": "Padam",
+  "common.reorder_handle": "Seret untuk menyusun semula",
   "common.load_failed_title": "Gagal dimuatkan",
   "toast.group_failed": "Gagal",
   "toast.group_unknown": "Tiada hasil",

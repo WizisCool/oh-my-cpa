@@ -11,6 +11,10 @@
   min-width: 0;
 }
 
+.name-cell {
+  position: relative;
+}
+
 /* The brand mark doubles as the icon picker's trigger, so it is drawn as a tile a pointer can
    aim at and a keyboard can reach. */
 .provider-mark {

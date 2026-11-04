@@ -132,7 +132,9 @@ func TestProviderWebsiteRemovedWithProvider(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("create status = %d body %s", resp.StatusCode, payload)
 	}
+	state.mu.Lock()
 	id := fmt.Sprintf("openai-compat-%d", len(state.oaiProviders)-1)
+	state.mu.Unlock()
 
 	resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/"+id, "")
 	if resp.StatusCode != http.StatusOK {
@@ -175,5 +177,33 @@ func TestProviderWebsitePreferenceKeyIsWritable(t *testing.T) {
 	}
 	if _, present := res.Preferences["provider_websites"]; !present {
 		t.Fatalf("provider_websites must be readable back through the preferences API: %s", payload)
+	}
+}
+
+// The positional overlays are re-keyed by every provider write, so a document that is not an object
+// of strings is refused at the door: stored, it would fail each later save, move and delete.
+func TestProviderOverlayPreferencesRefuseANonStringObject(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	for _, key := range positionalProviderOverlays {
+		for _, value := range []string{`[]`, `{"openai-compat-0":0}`, `"rank"`} {
+			resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/preferences/"+key, value)
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("writing %s = %s: status %d body %s, want 400", key, value, resp.StatusCode, payload)
+			}
+		}
+	}
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/preferences/provider_order", `{"openai-compat-0":"1"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("writing a well-formed provider_order status = %d body %s", resp.StatusCode, payload)
+	}
+
+	createBody := `{"family":"openai-compatibility","name":"Kept","base_url":"https://kept.example.test/v1"}`
+	if resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", createBody); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create status = %d body %s", resp.StatusCode, payload)
+	}
+	id := fmt.Sprintf("openai-compat-%d", len(state.oaiProviders)-1)
+	if resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/"+id, ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("a provider delete after the refused writes: status = %d body %s", resp.StatusCode, payload)
 	}
 }

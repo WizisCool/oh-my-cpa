@@ -76,7 +76,9 @@ Use the shared page, panel, toolbar, field, empty-state, drawer, dialog and
 confirmation primitives before creating another page-local version. A dialog
 (`AppModal`) holds one task that ends where the reader started; on a phone it is a
 bottom sheet. A drawer shows or edits one record beside the page. Keep semantic HTML, labels,
-focus management and accessible names when adapting a library component.
+focus management and accessible names when adapting a library component. Number fields
+use [`NumberInput`](../web/src/components/common/NumberInput.tsx): the wheel steps the
+field under the pointer by its own step and bounds, without a click.
 
 Put the primary action where the task finishes. Destructive actions need an explicit
 confirmation that names the affected resource. Preserve edits during background
@@ -86,6 +88,16 @@ A disabled or pending action should not move surrounding controls.
 A table is one dataset with one set of column semantics. On phones, use the shared
 labelled-row representation, not a separately maintained mobile dataset. Preserve
 ordering, values, action reachability and empty/loading states in either presentation.
+
+A list the operator arranges by hand uses
+[`RowReorder`](../web/src/components/common/RowReorder.tsx); the routing board uses the
+same drag library for its own layout. Only a handle starts a
+drag. On a wide screen it stays hidden along the row's leading edge until the pointer
+reaches that edge, so it takes no column. On a phone it sits inline with the row's
+controls. Rows sort live, without dimming, and travel only along the list. The drop
+keeps the order on screen until the stored preference arrives. A focused handle moves
+its row with the arrow keys. A display order is presentation only: routing priority and
+weight belong to the routing board.
 
 ## Feedback and loading
 

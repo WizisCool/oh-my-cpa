@@ -7,12 +7,12 @@ import {
   Button,
   Typography,
   Input,
-  InputNumber,
   Form,
   Table,
   Segmented,
   App as AntdApp,
 } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { Switch } from '../common/Switch';
 import {
   SaveOutlined,
@@ -734,7 +734,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               },
                             ]}
                           >
-                            <InputNumber
+                            <NumberInput
                               style={{ width: '100%' }}
                               min={-MAX_SAFE_INTEGER}
                               max={MAX_SAFE_INTEGER}
@@ -753,7 +753,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               },
                             ]}
                           >
-                            <InputNumber style={{ width: '100%' }} max={MAX_CREDENTIAL_WEIGHT} precision={0} />
+                            <NumberInput style={{ width: '100%' }} max={MAX_CREDENTIAL_WEIGHT} precision={0} />
                           </Form.Item>
 
                           <Form.Item name="prefix" label={t('af.field_prefix')}>
@@ -805,7 +805,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                             <label className={styles['policy-label']} htmlFor="credential-policy-retry">
                               {t('policy.retry')}
                             </label>
-                            <InputNumber
+                            <NumberInput
                               id="credential-policy-retry"
                               className={styles['policy-number']}
                               value={policy.requestRetry}

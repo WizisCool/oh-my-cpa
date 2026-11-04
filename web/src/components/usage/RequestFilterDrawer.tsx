@@ -1,7 +1,8 @@
 import type { MessageKey } from '../../i18n/catalog';
 import clsx from 'clsx';
 import React from 'react';
-import { Button, Input, InputNumber, Segmented, Select, Space } from 'antd';
+import { Button, Input, Segmented, Select, Space } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import type {
   UsageCostFilter,
   UsageFacetValue,
@@ -371,7 +372,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             onChange={(event) => setBound('min', event.target.value)}
           />
         ) : (
-          <InputNumber
+          <NumberInput
             id={`req-range-${key}-min`}
             className={styles['range-input']}
             aria-label={`${t(labelKey)} · ${t('events.range_min')}`}
@@ -397,7 +398,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             onChange={(event) => setBound('max', event.target.value)}
           />
         ) : (
-          <InputNumber
+          <NumberInput
             id={`req-range-${key}-max`}
             className={styles['range-input']}
             aria-label={`${t(labelKey)} · ${t('events.range_max')}`}

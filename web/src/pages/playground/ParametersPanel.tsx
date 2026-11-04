@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Input, InputNumber, Slider } from 'antd';
+import { Button, Input, Slider } from 'antd';
+import { NumberInput } from '../../components/common/NumberInput';
 import { clsx } from 'clsx';
 import { UndoOutlined } from '../../components/icons';
 import workspace from '../../components/workspace/Workspace.module.css';
@@ -52,7 +53,7 @@ function NumberParameter({ id, label, value, min, max, step, restingValue, onCha
           tooltip={{ open: false }}
           onChange={next => onChange(next)}
         />
-        <InputNumber
+        <NumberInput
           id={id}
           className={styles['number-input']}
           min={min}
@@ -119,7 +120,7 @@ export const ParametersPanel = React.memo(function ParametersPanel({ parameters,
         />
         <div className={workspace['field']}>
           <label className={workspace['field-label']} htmlFor="playground-max-tokens">{t('pg.max_tokens')}</label>
-          <InputNumber
+          <NumberInput
             id="playground-max-tokens"
             min={1}
             max={2147483647}
