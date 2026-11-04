@@ -1,7 +1,8 @@
 /* ── dashboard arrangement mode ──────────────────────────────────────────────
    The editing chrome is drawn only while the operator arranges the board. Each cell becomes a
-   dashed frame holding a toolbar above a non-interactive picture of its widget, so the board keeps
-   its proportions and the operator arranges what they will actually read. */
+   dashed frame over a non-interactive picture of its widget, with its toolbar floating across the
+   widget's head and its resize grips in the gaps around it. Nothing is added to the cell's own
+   box, so the board keeps the proportions it is read at and the operator sizes what they will read. */
 
 .tray {
   display: flex;
@@ -28,43 +29,135 @@
 
 .tray-hidden-label { color: var(--meta); }
 
-.cell {
-  position: relative;
-  gap: 8px;
-  padding: 8px;
+.cell { position: relative; }
+
+.cell::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: 1;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
-  transition: border-color var(--motion-fast) ease, opacity var(--motion-fast) ease;
+  border-radius: calc(var(--radius-lg) + 4px);
+  pointer-events: none;
+  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
 }
 
-.cell:hover { border-color: var(--fg-2); }
+.cell:hover::after { border-color: var(--fg-2); }
+.is-resizing::after { border-style: solid; border-color: var(--accent); }
 
-.is-dragging { opacity: 0.45; }
+/* The widget in hand leaves its place open as an outline, so the board shows where it will land. */
+.is-placeholder::after { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.is-placeholder > * { visibility: hidden; }
 
-/* The drop marker: a bar on the side the dragged widget will land. A cell that spans the whole row
-   takes a drop above or below it, which is the only side that means anything there. */
-.cell[data-drop]::after {
-  content: "";
+/* Resize grips: the right edge takes the width, the bottom edge the height, the corner both. They
+   sit in the board's gaps, so they cover none of the widget, and show only near the pointer. */
+.grip {
   position: absolute;
-  background: var(--accent);
-  border-radius: var(--radius-xs);
+  z-index: 3;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+}
+
+.grip::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: var(--fg-2);
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+
+.grip-x { top: 16px; right: -10px; bottom: 16px; width: 12px; cursor: ew-resize; }
+.grip-x::after { top: 50%; left: 5px; width: 3px; height: 28px; transform: translateY(-50%); }
+.grip-y { right: 16px; bottom: -10px; left: 16px; height: 12px; cursor: ns-resize; }
+.grip-y::after { top: 5px; left: 50%; width: 28px; height: 3px; transform: translateX(-50%); }
+.grip-xy { right: -10px; bottom: -10px; width: 18px; height: 18px; cursor: nwse-resize; }
+.grip-xy::after {
+  inset: 3px;
+  border-radius: 0 0 var(--radius-sm) 0;
+  background: transparent;
+  border-right: 3px solid var(--fg-2);
+  border-bottom: 3px solid var(--fg-2);
+}
+
+.cell:hover .grip::after,
+.grip:focus-visible::after,
+.is-resizing .grip::after { opacity: 0.55; }
+.grip:hover::after,
+.is-resizing .grip::after { opacity: 1; background-color: var(--accent); border-color: var(--accent); }
+.grip-xy:hover::after, .is-resizing .grip-xy::after { background: transparent; }
+.grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-xs); }
+
+/* The size a resize has reached, read out where the hand is. */
+.size-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--elevated);
+  box-shadow: var(--shadow-float);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 
-.cell[data-drop-axis="x"][data-drop]::after { top: 4px; bottom: 4px; width: 3px; }
-.cell[data-drop-axis="x"][data-drop="before"]::after { left: -10px; }
-.cell[data-drop-axis="x"][data-drop="after"]::after { right: -10px; }
-.cell[data-drop-axis="y"][data-drop]::after { left: 4px; right: 4px; height: 3px; }
-.cell[data-drop-axis="y"][data-drop="before"]::after { top: -10px; }
-.cell[data-drop-axis="y"][data-drop="after"]::after { bottom: -10px; }
+:global(body.is-board-resizing) * { user-select: none; }
+:global(body.is-resizing-x) * { cursor: ew-resize !important; }
+:global(body.is-resizing-y) * { cursor: ns-resize !important; }
+:global(body.is-resizing-xy) * { cursor: nwse-resize !important; }
+
+/* What follows the pointer: the widget itself on the floating surface, at its own size, so the
+   operator sees what is being moved rather than its name standing in for it. */
+.lifted {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--elevated);
+  box-shadow: var(--shadow-overlay);
+  color: var(--fg);
+  cursor: grabbing;
+  transform: scale(1.01);
+}
+
+.lifted-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding-left: 4px;
+}
+
+.lifted-head :global(.anticon) { color: var(--muted); }
 
 .toolbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 6px 8px;
   min-width: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: color-mix(in srgb, var(--elevated) 94%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .toolbar-row {
@@ -104,8 +197,6 @@
   white-space: nowrap;
 }
 
-.spans { flex: none; }
-
 .content {
   display: flex;
   flex: 1 1 auto;
@@ -137,5 +228,4 @@
 
 @media (max-width: 640px) {
   .tray { margin-bottom: 12px; padding: 8px 10px; }
-  .cell { padding: 6px; }
 }

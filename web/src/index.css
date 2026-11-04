@@ -1314,8 +1314,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .ant-btn.tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
 .dashboard-tile .ant-card-body { padding: 20px; height: 100%; display: flex; flex-direction: column; }
-.dashboard-tile .tile-caption { flex: 1; }
-.dashboard-tile .chart-slot, .dashboard-tile .chart-placeholder { flex: none; }
+/* A tile given more rows than its reading needs spends them on its sparkline. */
+.dashboard-tile .tile-caption { flex: none; }
+.dashboard-tile .chart-slot { display: flex; flex: 1 1 auto; flex-direction: column; }
+.dashboard-tile .chart-slot > div { flex: 1 1 0; min-height: 0; }
+.dashboard-tile .chart-placeholder { flex: none; margin-top: auto; }
 .tile-caption {
   display: flex;
   align-items: baseline;
@@ -1351,7 +1354,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* `min-width: 0` is load-bearing: these are grid children holding a canvas that sizes to its
    container, and without it a long model name in the legend would push the card wider than its
    track instead of truncating. */
-.model-trend { position: relative; min-width: 0; margin-top: 4px; }
+/* The plot fills the panel's spare height and is never less than 240px. It is a flex child with a
+   zero basis because a percentage height against an auto-height box resolves to nothing, and the
+   chart library then draws at its own default size. */
+.model-trend { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 240px; margin-top: 4px; }
+.model-trend > * { flex: 1 1 0; min-height: 0; }
 /* The ring yields width to the list down to a floor: the list's numeric columns cannot be abbreviated,
    so the name column loses that race whenever the ring insists on its full size, and a model name
    truncated to a few characters tells the reader nothing. `min-width` stops the yield at the point

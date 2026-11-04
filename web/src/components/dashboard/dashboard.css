@@ -183,16 +183,28 @@
   letter-spacing: .02em;
 }
 .tile-help { color: var(--meta); font-size: var(--text-sm); }
+/* The figure's line is always the large figure's line, and only the figure inside it shrinks: the
+   line's own strut sets the baseline, the figure sits on that baseline at whatever size it is drawn,
+   so tiles of different widths on one row read their figures on one baseline and start their
+   captions on one line. The line is as tall as the large rolling number, which draws 1em of digits
+   plus its roll mask. */
 .tile-value {
   margin-top: 8px;
   font-size: 34px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.47em;
   letter-spacing: -.03em;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
-.tile-value.is-small { font-size: 26px; letter-spacing: -.02em; }
+/* A KPI's figure is sized by the width its tile has, not by which KPI it is: the operator chooses
+   the widths, and two tiles of one width side by side must read their figures on one line. A
+   quarter of the board takes the compact size, anything wider the large one. */
+.kpi-tile { container: kpi-tile / inline-size; }
+.tile-value > * { font-size: var(--kpi-figure-size, 1em); line-height: 1; vertical-align: baseline; }
+@container kpi-tile (max-width: 360px) {
+  .tile-value { --kpi-figure-size: 26px; letter-spacing: -.02em; }
+}
 /* One pip, on the verdict. What sits beside it is the evidence for that number,
    so a hairline separates the two and the failure count carries the colour the
    pip would otherwise repeat. */
@@ -219,10 +231,13 @@
   letter-spacing: .04em;
 }
 .dashboard-empty { margin-bottom: 16px; padding: 40px 24px; }
+/* The head is the label's height on every tile: a drill-down link is a line of the label's size,
+   so the tile that carries one starts its figure on the same line as the tiles that do not. */
 .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-head .ant-btn.tile-link { line-height: 1; }
 /* A phone tile is half the row (`dashboardGrid.css`), so its figure and caption shrink to fit. */
 @media (max-width: 640px) {
-  .tile-value, .tile-value.is-small { margin-top: 4px; font-size: 24px; }
+  .tile-value { --kpi-figure-size: 1em; margin-top: 4px; font-size: 24px; }
   .tile-label { font-size: var(--text-sm); }
   .tile-split { gap: 10px; padding-left: 10px; }
 }
@@ -385,8 +400,9 @@
   /* Vertical only: `overflow-y: auto` alone computes the other axis to `auto` as well, and a list
      that can be nudged sideways under a finger reads as a broken page. */
   overflow: hidden auto;
-  /* The page takes over once the list reaches either end, as it does everywhere else. */
-  overscroll-behavior-y: auto;
+  /* The list keeps the wheel at either end: a reader scrolling to the last credential would
+     otherwise carry on into the page and lose the list they were reading. */
+  overscroll-behavior-y: contain;
 }
 .quota-row + .quota-row { border-top: 1px solid var(--border-soft); }
 .quota-row {

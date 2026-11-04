@@ -9,7 +9,8 @@ import type { MessageKey } from '../i18n/catalog';
  * The model lives here rather than in the page so every rule about a stored arrangement is a pure
  * function the logic suite can pin without a browser.
  *
- * The stored document lists every widget it knows with its width and whether it is hidden. A widget
+ * The stored document lists every widget it knows with its width, its height and whether it is
+ * hidden. A widget
  * a later release adds is not in an older document, and it is placed where the default arrangement
  * puts it - after the widget that precedes it there - and shown, so a new panel never arrives
  * switched off.
@@ -17,6 +18,27 @@ import type { MessageKey } from '../i18n/catalog';
 
 /** Columns of the dashboard board on a wide viewport. Narrower viewports collapse spans in CSS. */
 export const DASHBOARD_COLUMNS = 4;
+
+/**
+ * The board's rows: a widget is a whole number of them tall. A row is a short track and the gap
+ * between rows is the board's gap, so one step of height is `ROW + GAP` and a widget `n` rows tall
+ * is `n * ROW + (n - 1) * GAP`. Short rows make a fine step, so a height can follow the content.
+ *
+ * A height is the box the widget fills, and it always holds the widget's content: a widget is never
+ * given fewer rows than its content needs, so every row stays `ROW` tall and widgets side by side
+ * end on the same line. A row still grows if content outgrows its box at a narrower window than the
+ * one it was sized at, so nothing is cut off. The phone ignores heights and lets each widget take its
+ * content's.
+ */
+export const DASHBOARD_ROW_PX = 24;
+export const DASHBOARD_GAP_PX = 16;
+export const DASHBOARD_MAX_ROWS = 24;
+
+/** The fewest rows whose box holds `height` pixels of content. */
+export function rowsForHeight(height: number): number {
+  // A sub-pixel overshoot from layout rounding is not another row.
+  return Math.max(1, Math.ceil((height + DASHBOARD_GAP_PX) / (DASHBOARD_ROW_PX + DASHBOARD_GAP_PX) - 0.02));
+}
 
 export type DashboardWidgetSpan = 1 | 2 | 3 | 4;
 
@@ -39,6 +61,8 @@ export interface DashboardWidgetSpec {
   /** The translation key the editor names the widget by. */
   labelKey: MessageKey;
   defaultSpan: DashboardWidgetSpan;
+  /** The default height in board rows: the fewest that hold the widget's content on a wide board. */
+  defaultRows: number;
   /**
    * The widths the widget reads at, narrowest first. A map that needs its three columns, or a list
    * whose rows carry four readings, is not offered a quarter of the board it cannot use.
@@ -55,18 +79,18 @@ const HALF_OR_WIDER: readonly DashboardWidgetSpan[] = [2, 3, 4];
 
 /** The catalog, in the default reading order. */
 export const DASHBOARD_WIDGETS: readonly DashboardWidgetSpec[] = Object.freeze([
-  { id: 'requests', labelKey: 'dash.total_requests', defaultSpan: 2, spans: ANY_SPAN, isMetric: true },
-  { id: 'tokens', labelKey: 'dash.total_tokens', defaultSpan: 2, spans: ANY_SPAN, isMetric: true },
-  { id: 'rpm', labelKey: 'dash.rpm', defaultSpan: 1, spans: ANY_SPAN, isMetric: true },
-  { id: 'tpm', labelKey: 'dash.tpm', defaultSpan: 1, spans: ANY_SPAN, isMetric: true },
-  { id: 'cache_rate', labelKey: 'dash.cache_rate', defaultSpan: 1, spans: ANY_SPAN, isMetric: true },
-  { id: 'cost', labelKey: 'dash.total_cost', defaultSpan: 1, spans: ANY_SPAN, isMetric: true },
-  { id: 'model_trend', labelKey: 'dash.models.trend_title', defaultSpan: 2, spans: HALF_OR_WIDER },
-  { id: 'model_usage', labelKey: 'dash.models.usage_title', defaultSpan: 2, spans: HALF_OR_WIDER },
-  { id: 'routing', labelKey: 'routing.title', defaultSpan: 4, spans: [3, 4], isPhoneOmitted: true },
-  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, spans: HALF_OR_WIDER },
-  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, spans: HALF_OR_WIDER },
-  { id: 'providers', labelKey: 'dash.providers', defaultSpan: 4, spans: HALF_OR_WIDER },
+  { id: 'requests', labelKey: 'dash.total_requests', defaultSpan: 2, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
+  { id: 'tokens', labelKey: 'dash.total_tokens', defaultSpan: 2, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
+  { id: 'rpm', labelKey: 'dash.rpm', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
+  { id: 'tpm', labelKey: 'dash.tpm', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
+  { id: 'cache_rate', labelKey: 'dash.cache_rate', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
+  { id: 'cost', labelKey: 'dash.total_cost', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
+  { id: 'model_trend', labelKey: 'dash.models.trend_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
+  { id: 'model_usage', labelKey: 'dash.models.usage_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
+  { id: 'routing', labelKey: 'routing.title', defaultSpan: 4, defaultRows: 8, spans: [3, 4], isPhoneOmitted: true },
+  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 8, spans: HALF_OR_WIDER },
+  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 8, spans: HALF_OR_WIDER },
+  { id: 'providers', labelKey: 'dash.providers', defaultSpan: 4, defaultRows: 3, spans: HALF_OR_WIDER },
 ] satisfies DashboardWidgetSpec[]);
 
 const SPEC_BY_ID: ReadonlyMap<string, DashboardWidgetSpec> = new Map(DASHBOARD_WIDGETS.map((spec) => [spec.id, spec]));
@@ -82,6 +106,8 @@ export function isDashboardWidgetId(value: unknown): value is DashboardWidgetId 
 export interface DashboardLayoutItem {
   id: DashboardWidgetId;
   span: DashboardWidgetSpan;
+  /** Height in board rows, `1..DASHBOARD_MAX_ROWS`. */
+  rows: number;
   hidden: boolean;
 }
 
@@ -93,7 +119,7 @@ export const DASHBOARD_LAYOUT_PREFERENCE = 'omc_dashboard_layout';
 
 /** Module-scope so `usePreference` sees one stable fallback reference. */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = Object.freeze(
-  DASHBOARD_WIDGETS.map((spec) => Object.freeze({ id: spec.id, span: spec.defaultSpan, hidden: false })),
+  DASHBOARD_WIDGETS.map((spec) => Object.freeze({ id: spec.id, span: spec.defaultSpan, rows: spec.defaultRows, hidden: false })),
 );
 
 /** The nearest width the widget offers, so a stored width a release narrowed still lands somewhere sane. */
@@ -105,6 +131,12 @@ function fitSpan(spec: DashboardWidgetSpec, span: unknown): DashboardWidgetSpan 
     if (Math.abs(candidate - span) < Math.abs(nearest - span)) nearest = candidate;
   }
   return nearest;
+}
+
+/** A stored height as a whole number of rows; a document written before heights reads the default. */
+function fitRows(spec: DashboardWidgetSpec, rows: unknown): number {
+  if (typeof rows !== 'number' || !Number.isInteger(rows)) return spec.defaultRows;
+  return Math.min(Math.max(rows, 1), DASHBOARD_MAX_ROWS);
 }
 
 /**
@@ -125,7 +157,7 @@ function completeDashboardLayout(items: DashboardLayoutItem[]): DashboardLayout 
         break;
       }
     }
-    result.splice(insertAt, 0, { id: spec.id, span: spec.defaultSpan, hidden: false });
+    result.splice(insertAt, 0, { id: spec.id, span: spec.defaultSpan, rows: spec.defaultRows, hidden: false });
     present.add(spec.id);
   });
   return result;
@@ -136,7 +168,7 @@ function completeDashboardLayout(items: DashboardLayoutItem[]): DashboardLayout 
  *
  * The value is JSON the browser wrote, so it is input rather than state: an entry naming no catalog
  * widget is dropped, a repeated one keeps its first position, an unusable width falls back to the
- * nearest one the widget offers, and anything that is not an array of entries is no arrangement at
+ * nearest one the widget offers, a missing or unusable height reads the widget's default, and anything that is not an array of entries is no arrangement at
  * all - the page then reads the default.
  */
 export function parseDashboardLayout(raw: unknown): DashboardLayout | undefined {
@@ -145,10 +177,11 @@ export function parseDashboardLayout(raw: unknown): DashboardLayout | undefined 
   const seen = new Set<string>();
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue;
-    const { id, span, hidden } = entry as Record<string, unknown>;
+    const { id, span, rows, hidden } = entry as Record<string, unknown>;
     if (!isDashboardWidgetId(id) || seen.has(id)) continue;
     seen.add(id);
-    items.push({ id, span: fitSpan(dashboardWidgetSpec(id), span), hidden: hidden === true });
+    const spec = dashboardWidgetSpec(id);
+    items.push({ id, span: fitSpan(spec, span), rows: fitRows(spec, rows), hidden: hidden === true });
   }
   return completeDashboardLayout(items);
 }
@@ -186,9 +219,24 @@ export function stepDashboardWidget(
   return moveDashboardWidget(layout, id, neighbour.id, direction < 0 ? 'before' : 'after');
 }
 
-export function resizeDashboardWidget(layout: DashboardLayout, id: DashboardWidgetId, span: DashboardWidgetSpan): DashboardLayout {
-  if (!dashboardWidgetSpec(id).spans.includes(span)) return layout;
-  return layout.map((item) => (item.id === id && item.span !== span ? { ...item, span } : item));
+export function resizeDashboardWidget(
+  layout: DashboardLayout,
+  id: DashboardWidgetId,
+  size: { span?: DashboardWidgetSpan; rows?: number },
+): DashboardLayout {
+  const spec = dashboardWidgetSpec(id);
+  if (size.span !== undefined && !spec.spans.includes(size.span)) return layout;
+  if (size.rows !== undefined && (!Number.isInteger(size.rows) || size.rows < 1 || size.rows > DASHBOARD_MAX_ROWS)) return layout;
+  let isChanged = false;
+  const next = layout.map((item) => {
+    if (item.id !== id) return item;
+    const span = size.span ?? item.span;
+    const rows = size.rows ?? item.rows;
+    if (span === item.span && rows === item.rows) return item;
+    isChanged = true;
+    return { ...item, span, rows };
+  });
+  return isChanged ? next : layout;
 }
 
 export function setDashboardWidgetHidden(layout: DashboardLayout, id: DashboardWidgetId, hidden: boolean): DashboardLayout {
@@ -197,5 +245,6 @@ export function setDashboardWidgetHidden(layout: DashboardLayout, id: DashboardW
 
 export function sameDashboardLayout(left: DashboardLayout, right: DashboardLayout): boolean {
   return left.length === right.length
-    && left.every((item, index) => item.id === right[index].id && item.span === right[index].span && item.hidden === right[index].hidden);
+    && left.every((item, index) => item.id === right[index].id && item.span === right[index].span
+      && item.rows === right[index].rows && item.hidden === right[index].hidden);
 }

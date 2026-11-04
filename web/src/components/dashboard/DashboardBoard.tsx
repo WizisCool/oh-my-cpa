@@ -1,24 +1,44 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Segmented } from 'antd';
+import { Button } from 'antd';
 import { EyeInvisibleOutlined, HolderOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../icons';
 import { useT } from '../../i18n';
 import {
+  DASHBOARD_GAP_PX,
+  DASHBOARD_MAX_ROWS,
+  DASHBOARD_ROW_PX,
   dashboardWidgetSpec,
   moveDashboardWidget,
   resizeDashboardWidget,
+  rowsForHeight,
   setDashboardWidgetHidden,
   stepDashboardWidget,
   type DashboardLayout,
   type DashboardLayoutItem,
   type DashboardWidgetId,
   type DashboardWidgetSpan,
-  type DropSide,
 } from '../../types/dashboardLayout';
 import styles from './DashboardBoard.module.css';
 import './dashboardGrid.css';
 import { Tooltip } from '../common/Tooltip';
+import { useSortGuard } from '../common/sortGuard';
+import {
+  DndContext,
+  DragOverlay,
+  MeasuringStrategy,
+  PointerSensor,
+  closestCenter,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+  type Modifier,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, type AnimateLayoutChanges } from '@dnd-kit/sortable';
 
 export interface DashboardBoardProps {
   layout: DashboardLayout;
@@ -37,12 +57,33 @@ const SPAN_LABEL_KEYS: Record<DashboardWidgetSpan, MessageKey> = {
   4: 'dash.layout.span_4',
 };
 
-interface DropTarget {
-  id: DashboardWidgetId;
-  side: DropSide;
-  /** A cell spanning the board's whole row takes a drop above or below it rather than beside it. */
-  axis: 'x' | 'y';
-}
+/** The board reflows itself as the order changes, so no cell is shifted by an offset of its own. */
+const REFLOW = () => null;
+const MEASURE = { droppable: { strategy: MeasuringStrategy.Always } };
+/** Widgets glide to the places the reflow gave them while the drag sorts; at the drop they are there. */
+const glideWhileSorting: AnimateLayoutChanges = ({ isSorting }) => isSorting;
+
+/**
+ * The widget under the pointer, not the one whose centre is nearest: widgets of different sizes put
+ * a small one's centre closer to the pointer than the large one it is over, and the board would swap
+ * them back and forth. Between widgets the nearest centre still decides.
+ */
+const underThePointer: CollisionDetection = (args) => {
+  const hits = pointerWithin(args);
+  return hits.length > 0 ? hits : closestCenter(args);
+};
+
+/** The widget in hand stays over the board it is being arranged on. */
+const withinTheBoard: Modifier = ({ transform, draggingNodeRect, containerNodeRect }) => {
+  if (!draggingNodeRect || !containerNodeRect) return transform;
+  const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), Math.max(low, high));
+  return {
+    ...transform,
+    x: clamp(transform.x, containerNodeRect.left - draggingNodeRect.left, containerNodeRect.right - draggingNodeRect.right),
+    y: clamp(transform.y, containerNodeRect.top - draggingNodeRect.top, containerNodeRect.bottom - draggingNodeRect.bottom),
+  };
+};
+const OVERLAY_MODIFIERS = [withinTheBoard];
 
 /**
  * DashboardBoard lays the dashboard's widgets on one four-column grid, in the operator's order and
@@ -52,14 +93,32 @@ interface DropTarget {
  * arranged, so the handles, width controls and hide buttons appear only while the operator is
  * arranging it, and the widgets underneath stop taking input so a drag cannot open a drill-down.
  * Reordering is a drag on the handle and, for keyboard and touch, a step earlier or later; both write
- * the same arrangement.
+ * the same arrangement. A widget is resized from its edges on the board's grid: the right edge snaps
+ * to the widths the widget offers, the bottom edge to whole rows, the corner to both, and the board
+ * reflows at every step so the operator sees the arrangement the size makes. A widget is never made
+ * shorter than its content: a box that small would only be stretched back by the row.
+ *
+ * A drag rearranges the board as it goes: the widgets are of different widths, so rather than sliding
+ * cells by offsets that would overlap, the grid reflows in the order the hand proposes and every
+ * widget the reflow moved glides there from where it was. The widget itself follows the pointer,
+ * whole and at its own size, and the place it will land stays open as an outline. The drop commits
+ * the order already on screen, so nothing moves when the hand lets go.
  */
 export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditing, isPhone, renderWidget, onChange }) => {
   const t = useT();
   const [dragId, setDragId] = React.useState<DashboardWidgetId | null>(null);
-  const [armedId, setArmedId] = React.useState<DashboardWidgetId | null>(null);
-  const [dropTarget, setDropTarget] = React.useState<DropTarget | null>(null);
-  const boardRef = React.useRef<HTMLDivElement>(null);
+  // The order the hand is proposing; the arrangement is written only when the widget is let go.
+  const [preview, setPreview] = React.useState<DashboardWidgetId[] | null>(null);
+  // A widget is a large target, so a press that wanders a little is still a press, not a move.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const guard = useSortGuard();
+  // The widget being resized and the size it has reached, for the badge that reads it out.
+  const [resizing, setResizing] = React.useState<{ id: DashboardWidgetId; span: DashboardWidgetSpan; rows: number } | null>(null);
+  // A keyboard resize is announced from a region that stays mounted: a live region that appears
+  // with its text, as the size badge does, is not reliably read, and the badge leaves on key up.
+  const [sizeAnnouncement, setSizeAnnouncement] = React.useState('');
+  const latestLayout = React.useRef(layout);
+  latestLayout.current = layout;
 
   const isMounted = React.useCallback(
     (item: DashboardLayoutItem) => !(isPhone && dashboardWidgetSpec(item.id).isPhoneOmitted),
@@ -69,21 +128,111 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
   const shown = layout.filter(isShown);
   const hidden = layout.filter((item) => item.hidden && isMounted(item));
 
+  const shownIds = shown.map((item) => item.id);
+  const ordered = preview
+    ? preview.map((id) => shown.find((item) => item.id === id)).filter((item): item is DashboardLayoutItem => Boolean(item))
+    : shown;
+
   const endDrag = () => {
     setDragId(null);
-    setArmedId(null);
-    setDropTarget(null);
+    setPreview(null);
   };
-
-  const dropAt = (event: React.DragEvent<HTMLElement>, id: DashboardWidgetId): DropTarget => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const boardWidth = boardRef.current?.getBoundingClientRect().width ?? rect.width;
-    const axis = rect.width >= boardWidth - 1 ? 'y' : 'x';
-    const isBefore = axis === 'x' ? event.clientX < rect.left + rect.width / 2 : event.clientY < rect.top + rect.height / 2;
-    return { id, side: isBefore ? 'before' : 'after', axis };
+  const handleStart = (event: DragStartEvent) => {
+    guard.reset();
+    setDragId(event.active.id as DashboardWidgetId);
+    setPreview(shownIds);
   };
+  // Evaluated on every move as well as when the widget under the pointer changes: a swap the guard
+  // held back while the board reflowed happens once the hand moves on, still over the same widget.
+  const handleMove = ({ active, over, delta }: DragMoveEvent) => {
+    if (!over || !guard.shouldSwap(String(active.id), String(over.id), delta)) return;
+    setPreview((current) => {
+      if (!current) return current;
+      const from = current.indexOf(active.id as DashboardWidgetId);
+      const to = current.indexOf(over.id as DashboardWidgetId);
+      return from < 0 || to < 0 ? current : arrayMove(current, from, to);
+    });
+  };
+  const handleEnd = ({ active }: DragEndEvent) => {
+    const order = preview;
+    endDrag();
+    const id = active.id as DashboardWidgetId;
+    const index = order?.indexOf(id) ?? -1;
+    if (!order || index < 0 || order.join() === shownIds.join()) return;
+    // Placed after the widget now before it, or before the one after it when it leads the board.
+    onChange(index > 0 ? moveDashboardWidget(layout, id, order[index - 1], 'after') : moveDashboardWidget(layout, id, order[1], 'before'));
+  };
+  const dragged = dragId ? shown.find((item) => item.id === dragId) : undefined;
 
   const spanLabel = (span: DashboardWidgetSpan) => t(SPAN_LABEL_KEYS[span]);
+
+  const resize = (item: DashboardLayoutItem, cell: HTMLElement, axis: ResizeAxis, input: { dx: number; dy: number } | { key: string }) => {
+    const grid = cell.parentElement;
+    if (!grid) return;
+    const spec = dashboardWidgetSpec(item.id);
+    const metrics = boardMetrics(grid);
+    const box = cell.getBoundingClientRect();
+    const current = latestLayout.current.find((entry) => entry.id === item.id) ?? item;
+    // A board folded to two columns draws widths its own way, so only the four-column board takes one.
+    const canWiden = metrics.columns === 4 && axis !== 'y' && spec.spans.length > 1;
+    const canHeighten = axis !== 'x';
+    let span = current.span;
+    let rows = current.rows;
+    if ('key' in input) {
+      const index = spec.spans.indexOf(current.span);
+      if (canWiden && input.key === 'ArrowRight') span = spec.spans[Math.min(index + 1, spec.spans.length - 1)];
+      if (canWiden && input.key === 'ArrowLeft') span = spec.spans[Math.max(index - 1, 0)];
+      if (canHeighten && input.key === 'ArrowDown') rows = current.rows + 1;
+      if (canHeighten && input.key === 'ArrowUp') rows = current.rows - 1;
+    } else {
+      if (canWiden) span = nearestSpan(spec.spans, settle((box.width + input.dx + metrics.gap) / (metrics.column + metrics.gap), current.span));
+      if (canHeighten) rows = settle((box.height + input.dy + DASHBOARD_GAP_PX) / (DASHBOARD_ROW_PX + DASHBOARD_GAP_PX), current.rows);
+    }
+    rows = Math.min(Math.max(rows, naturalRows(cell)), DASHBOARD_MAX_ROWS);
+    setResizing({ id: item.id, span, rows });
+    if ('key' in input) setSizeAnnouncement(`${t(spec.labelKey)}: ${t('dash.layout.size', { width: spanLabel(span), rows })}`);
+    const next = resizeDashboardWidget(latestLayout.current, item.id, { span, rows });
+    if (next !== latestLayout.current) onChange(next);
+  };
+
+  const startResize = (event: React.PointerEvent<HTMLElement>, item: DashboardLayoutItem, axis: ResizeAxis) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const cell = event.currentTarget.closest<HTMLElement>('.dashboard-cell');
+    if (!cell) return;
+    // The size is measured from where the drag started, so the step the pointer crossed is the one
+    // the widget takes however many reflows the board made on the way.
+    const origin = { x: event.clientX, y: event.clientY };
+    const start = cell.getBoundingClientRect();
+    let isMoving = false;
+    const move = (moveEvent: PointerEvent) => {
+      // A press on a grip is not a resize until the hand has clearly moved.
+      if (!isMoving && Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) < RESIZE_START_PX) return;
+      isMoving = true;
+      const now = cell.getBoundingClientRect();
+      resize(item, cell, axis, { dx: moveEvent.clientX - origin.x - (now.width - start.width), dy: moveEvent.clientY - origin.y - (now.height - start.height) });
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      document.body.classList.remove('is-board-resizing', `is-resizing-${axis}`);
+      setResizing(null);
+      // A narrower widget can need more rows than it was given on the way; the drop gives it them.
+      requestAnimationFrame(() => {
+        const settled = latestLayout.current.find((entry) => entry.id === item.id);
+        const needed = cell.isConnected ? naturalRows(cell) : 0;
+        if (settled && settled.rows < needed) onChange(resizeDashboardWidget(latestLayout.current, item.id, { rows: needed }));
+      });
+    };
+    document.body.classList.add('is-board-resizing', `is-resizing-${axis}`);
+    const current = latestLayout.current.find((entry) => entry.id === item.id) ?? item;
+    setResizing({ id: item.id, span: current.span, rows: current.rows });
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
 
   return (
     <>
@@ -109,58 +258,38 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
         </div>
       )}
 
-      <div ref={boardRef} className="dashboard-grid" data-testid="dashboard-board">
-        {shown.map((item, index) => {
+      <DndContext sensors={sensors} collisionDetection={underThePointer} measuring={MEASURE} onDragStart={handleStart} onDragMove={handleMove} onDragOver={handleMove} onDragEnd={handleEnd} onDragCancel={endDrag}>
+      <SortableContext items={ordered.map((item) => item.id)} strategy={REFLOW} disabled={!isEditing || isPhone}>
+      {isEditing && <span className="sr-only" aria-live="polite" data-testid="dashboard-size-announcement">{sizeAnnouncement}</span>}
+      <div className="dashboard-grid" data-testid="dashboard-board">
+        {ordered.map((item, index) => {
           const spec = dashboardWidgetSpec(item.id);
           const content = renderWidget(item.id);
           if (!isEditing && (content === null || content === undefined || content === false)) return null;
           const label = t(spec.labelKey);
-          const drop = dropTarget?.id === item.id ? dropTarget : null;
           return (
-            <div
+            <SortableCell
               key={item.id}
-              className={clsx('dashboard-cell', isEditing && styles['cell'], dragId === item.id && styles['is-dragging'])}
+              id={item.id}
+              className={clsx('dashboard-cell', isEditing && styles['cell'], dragId === item.id && styles['is-placeholder'], resizing?.id === item.id && styles['is-resizing'])}
+              rows={item.rows}
               data-widget={item.id}
               data-widget-kind={spec.isMetric ? 'metric' : 'panel'}
               data-span={item.span}
-              data-drop={drop?.side}
-              data-drop-axis={drop?.axis}
-              draggable={isEditing && armedId === item.id}
-              onDragStart={isEditing ? (event) => {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', item.id);
-                setDragId(item.id);
-              } : undefined}
-              onDragEnd={isEditing ? endDrag : undefined}
-              onDragOver={isEditing ? (event) => {
-                if (!dragId || dragId === item.id) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
-                const next = dropAt(event, item.id);
-                if (next.id !== dropTarget?.id || next.side !== dropTarget.side || next.axis !== dropTarget.axis) setDropTarget(next);
-              } : undefined}
-              onDragLeave={isEditing ? (event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setDropTarget((current) => (current?.id === item.id ? null : current));
-                }
-              } : undefined}
-              onDrop={isEditing ? (event) => {
-                event.preventDefault();
-                if (dragId) onChange(moveDashboardWidget(layout, dragId, item.id, dropAt(event, item.id).side));
-                endDrag();
-              } : undefined}
+              data-rows={item.rows}
             >
+              {(handle) => (<>
               {isEditing && (
                 <div className={styles['toolbar']}>
                   <div className={styles['toolbar-row']}>
                     {!isPhone && (
                       <Tooltip title={t('dash.layout.drag')}>
                         <span
+                          ref={handle.ref}
                           className={styles['handle']}
                           data-drag-handle
                           aria-hidden="true"
-                          onPointerDown={() => setArmedId(item.id)}
-                          onPointerUp={() => { if (!dragId) setArmedId(null); }}
+                          onPointerDown={handle.onPointerDown}
                         >
                           <HolderOutlined />
                         </span>
@@ -183,7 +312,7 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
                         type="text"
                         icon={<RightOutlined />}
                         aria-label={`${t('dash.layout.move_later')} · ${label}`}
-                        disabled={index === shown.length - 1}
+                        disabled={index === ordered.length - 1}
                         onClick={() => onChange(stepDashboardWidget(layout, item.id, 1, isShown))}
                       />
                     </Tooltip>
@@ -198,32 +327,67 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
                       />
                     </Tooltip>
                   </div>
-                  {/* A phone collapses every width to its two columns, so a width chosen there
-                      would change nothing on screen; the control is a desktop one. */}
-                  {!isPhone && spec.spans.length > 1 && (
-                    <Segmented
-                      size="small"
-                      className={styles['spans']}
-                      value={item.span}
-                      aria-label={`${t('dash.layout.width')} · ${label}`}
-                      options={spec.spans.map((span) => ({ value: span, label: spanLabel(span) }))}
-                      onChange={(span) => onChange(resizeDashboardWidget(layout, item.id, span as DashboardWidgetSpan))}
-                    />
-                  )}
                 </div>
+              )}
+              {/* A phone draws every widget at its content's height on its two columns, so a size
+                  chosen there would change nothing on screen; resizing is a desktop control. */}
+              {isEditing && !isPhone && (
+                <>
+                  <span className={clsx(styles['grip'], styles['grip-x'])} data-resize="x" aria-hidden="true" onPointerDown={(event) => startResize(event, item, 'x')} />
+                  <span className={clsx(styles['grip'], styles['grip-y'])} data-resize="y" aria-hidden="true" onPointerDown={(event) => startResize(event, item, 'y')} />
+                  <Tooltip title={t('dash.layout.resize')}>
+                    <button
+                      type="button"
+                      className={clsx(styles['grip'], styles['grip-xy'])}
+                      data-resize="xy"
+                      aria-label={`${t('dash.layout.resize')} · ${label}`}
+                      aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+                      onPointerDown={(event) => startResize(event, item, 'xy')}
+                      onKeyDown={(event) => {
+                        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                        event.preventDefault();
+                        const cell = event.currentTarget.closest<HTMLElement>('.dashboard-cell');
+                        if (cell) resize(item, cell, 'xy', { key: event.key });
+                      }}
+                      onKeyUp={() => setResizing(null)}
+                      onBlur={() => setResizing(null)}
+                    />
+                  </Tooltip>
+                  {resizing?.id === item.id && (
+                    <span className={styles['size-badge']} aria-hidden="true">
+                      {t('dash.layout.size', { width: spanLabel(resizing.span), rows: resizing.rows })}
+                    </span>
+                  )}
+                </>
               )}
               {isEditing ? (
                 <div className={styles['content']} ref={markInert}>
                   {content ?? <div className={styles['empty']}>{label}</div>}
                 </div>
               ) : content}
-            </div>
+              </>)}
+            </SortableCell>
           );
         })}
         {isEditing && shown.length === 0 && (
           <div className={styles['board-empty']}>{t('dash.layout.all_hidden')}</div>
         )}
       </div>
+      </SortableContext>
+      <DragOverlay dropAnimation={null} modifiers={OVERLAY_MODIFIERS}>
+        {dragged ? (
+          <div className={styles['lifted']} data-span={dragged.span}>
+            <div className={styles['lifted-head']}>
+              <HolderOutlined aria-hidden="true" />
+              <span className={styles['name']}>{t(dashboardWidgetSpec(dragged.id).labelKey)}</span>
+            </div>
+            <div className={styles['content']} ref={markInert}>
+              {renderWidget(dragged.id) ?? <div className={styles['empty']}>{t(dashboardWidgetSpec(dragged.id).labelKey)}</div>}
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
     </>
   );
 };
@@ -235,4 +399,77 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
  */
 function markInert(element: HTMLDivElement | null) {
   element?.setAttribute('inert', '');
+}
+
+interface CellHandle {
+  ref: (element: HTMLElement | null) => void;
+  onPointerDown?: React.PointerEventHandler;
+}
+
+/** One widget's cell: the node the board sorts, with its handle's wiring for the toolbar it draws. */
+function SortableCell({ id, rows, children, ...attributes }: Omit<React.HTMLAttributes<HTMLDivElement>, 'children' | 'id'> & {
+  id: DashboardWidgetId;
+  rows: number;
+  children: (handle: CellHandle) => React.ReactNode;
+} & Record<`data-${string}`, string | number | undefined>) {
+  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition } = useSortable({ id, animateLayoutChanges: glideWhileSorting });
+  // Only the glide's offset is drawn: a reflow that changed the widget's row also changes its size,
+  // and scaling the widget to its old size would stretch its content for the length of the glide.
+  const style = {
+    '--rows': rows,
+    ...(transform || transition
+      ? { transform: transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined, transition }
+      : {}),
+  } as React.CSSProperties;
+  return (
+    <div {...attributes} ref={setNodeRef} style={style}>
+      {children({ ref: setActivatorNodeRef, onPointerDown: listeners?.onPointerDown as React.PointerEventHandler | undefined })}
+    </div>
+  );
+}
+
+type ResizeAxis = 'x' | 'y' | 'xy';
+
+/** Pixels the pointer moves on a grip before the widget starts to resize. */
+const RESIZE_START_PX = 6;
+/** How far past the halfway point a step is crossed before the size changes, in steps. */
+const RESIZE_DEADBAND = 0.15;
+
+/**
+ * The whole number of steps a drag has reached from `current`, `fraction` being where the pointer
+ * is. The size changes a step only once the pointer is past that step's halfway point by a margin,
+ * and changes back only once it is as far past it the other way, so a hand resting near a boundary
+ * does not flip the widget between two sizes.
+ */
+function settle(fraction: number, current: number): number {
+  const reach = 0.5 + RESIZE_DEADBAND;
+  if (fraction >= current + reach) return Math.floor(fraction + 1 - reach);
+  if (fraction <= current - reach) return Math.ceil(fraction - 1 + reach);
+  return current;
+}
+
+/** The board's column count, column width and gap, read from the grid as it is laid out now. */
+function boardMetrics(grid: HTMLElement): { columns: number; column: number; gap: number } {
+  const style = getComputedStyle(grid);
+  const columns = style.gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+  const gap = Number.parseFloat(style.columnGap) || DASHBOARD_GAP_PX;
+  const column = (grid.getBoundingClientRect().width - gap * (columns - 1)) / columns;
+  return { columns, column, gap };
+}
+
+/** The offered width nearest to `columns`, a fractional count of the board's columns. */
+function nearestSpan(spans: readonly DashboardWidgetSpan[], columns: number): DashboardWidgetSpan {
+  return spans.reduce((best, span) => (Math.abs(span - columns) < Math.abs(best - columns) ? span : best), spans[0]);
+}
+
+/**
+ * The fewest rows the widget's content fills: its height laid out at the top of its cell rather than
+ * stretched to the rows it spans, read in one synchronous pass so the board never paints it so.
+ */
+function naturalRows(cell: HTMLElement): number {
+  const saved = cell.style.alignSelf;
+  cell.style.alignSelf = 'start';
+  const height = cell.getBoundingClientRect().height;
+  cell.style.alignSelf = saved;
+  return rowsForHeight(height);
 }
