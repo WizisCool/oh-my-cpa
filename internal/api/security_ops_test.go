@@ -70,6 +70,15 @@ func TestSecurityHeadersApplied(t *testing.T) {
 		if robots.StatusCode != http.StatusOK || string(body) != robotsTxt || robots.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
 			t.Errorf("%s = %d %q (%s), want the disallow-all robots.txt", path, robots.StatusCode, body, robots.Header.Get("Content-Type"))
 		}
+		head, err := http.Head(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		headBody, _ := io.ReadAll(head.Body)
+		head.Body.Close()
+		if head.StatusCode != http.StatusOK || len(headBody) != 0 || head.Header.Get("Content-Type") != "text/plain; charset=utf-8" || head.ContentLength != int64(len(robotsTxt)) {
+			t.Errorf("HEAD %s = %d, %d body bytes, %s, length %d; want 200 with the GET headers and no body", path, head.StatusCode, len(headBody), head.Header.Get("Content-Type"), head.ContentLength)
+		}
 	}
 }
 
