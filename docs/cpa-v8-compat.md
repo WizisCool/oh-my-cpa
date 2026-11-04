@@ -53,6 +53,14 @@ then perform the upstream write and read back the result. Refuse a stale revisio
 `config_conflict` and a rejected value as `config_rejected`; do not overwrite unrelated
 settings to make the operation succeed. Restore also backs up the file it replaces.
 
+The visual editor exposes shared Claude header settings through the
+[configuration schema](../web/src/types/configSchema.ts) and the existing change-set
+path. Native-client entrypoint labels extend CPA's built-in entries and still require
+its other strong request signals; an absent or empty list adds no custom entries.
+CPA owns normalization (trim, lowercase, drop blanks and duplicates in order) and
+request detection; OMC accepts the gateway's saved readback without maintaining a
+client catalog or detection policy.
+
 A multi-path change can require several CPA calls (merge, map replacement, deletion).
 It is not an upstream atomic transaction. Pre-write backup and honest failure/readback
 reporting matter precisely because an earlier call can succeed before a later one fails.

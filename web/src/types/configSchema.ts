@@ -241,6 +241,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
       'claudeHeaderTimeout',
       'claudeHeaderTimezone',
       'claudeHeaderStabilizeDeviceProfile',
+      'claudeHeaderNativeEntrypoints',
       'claudeHeaderAnthropicBetaStrip',
       'claudeHeaderAnthropicBetaAppend',
       'claudeHeaderInjectDiagnostics',
@@ -1344,6 +1345,16 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'string',
     placeholder: 'Asia/Singapore',
     keywords: ['claude', 'timezone', 'currentDate'],
+  },
+  {
+    id: 'claudeHeaderNativeEntrypoints',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_native_entrypoints',
+    descKey: 'cfg.f_claude_native_entrypoints_desc',
+    yamlPath: ['upstream', 'claude', 'header-defaults', 'native-entrypoints'],
+    type: 'string_list',
+    placeholderKey: 'cfg.string_list_placeholder',
+    keywords: ['claude', 'native', 'entrypoint', 'entrypoints', 'header', 'client'],
   },
   // Operator overrides added in CPA v8.0.30. They exist only under the
   // canonical path, so they declare no historical spelling.

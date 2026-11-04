@@ -409,6 +409,8 @@ export default {
   'cfg.f_claude_tool_search_desc': '在 Claude 的 Responses 路由上启用 tool_search 工具。',
   'cfg.f_claude_session_date_pin': 'Claude 会话日期锚定保留天数',
   'cfg.f_claude_session_date_pin_desc': '固定会话内 currentDate 锚定的保留天数以提高缓存命中率。留空使用默认 7 天，0 表示空闲时重置。',
+  'cfg.f_claude_native_entrypoints': '原生客户端入口',
+  'cfg.f_claude_native_entrypoints_desc': '扩展内置 Claude Code 原生入口标签，仍须匹配其他强请求信号；留空仅用内置项。',
   'cfg.f_claude_beta_strip': '移除 Anthropic-Beta',
   'cfg.f_claude_beta_strip_desc': '从请求头 Anthropic-Beta 中移除指定的特性标签。',
   'cfg.f_claude_beta_append': '追加 Anthropic-Beta',

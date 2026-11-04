@@ -412,6 +412,8 @@ export default {
   'cfg.f_claude_tool_search_desc': 'Enables Codex tool_search on Claude Responses routes.',
   'cfg.f_claude_session_date_pin': 'Claude session date pin retention (days)',
   'cfg.f_claude_session_date_pin_desc': 'Days to retain currentDate pin per session to optimize prompt caching. Defaults to 7 days; 0 resets on idle.',
+  'cfg.f_claude_native_entrypoints': 'Native Client Entrypoints',
+  'cfg.f_claude_native_entrypoints_desc': 'Add native Claude Code entrypoint labels alongside CPA\'s built-in entries; other strong request signals must also match. Leave empty for built-in entries only.',
   'cfg.f_claude_beta_strip': 'Strip Anthropic-Beta',
   'cfg.f_claude_beta_strip_desc': 'Removes matching feature flags from the Anthropic-Beta header.',
   'cfg.f_claude_beta_append': 'Append Anthropic-Beta',
