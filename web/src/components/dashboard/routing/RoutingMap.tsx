@@ -6,7 +6,6 @@ import { isMotionReduced } from '../../../utils/motionPreference';
 import { BrandArtwork } from '../../common/BrandArtwork';
 import { ProviderBrandIcon } from '../../LobeIcon';
 import { ModelMark } from '../../ModelMark';
-import { StatusLabel } from '../../common/StatusLabel';
 import { useT } from '../../../i18n';
 import { MOTION_ROUTE_ENTER, MOTION_ROUTE_EXIT, MOTION_ROUTE_PRESENCE } from '../../../theme/themeConfig';
 import {
@@ -18,7 +17,7 @@ import {
   type RoutingTarget,
 } from '../../../types/usageRouting';
 import { GATEWAY_NODE, createPacketPlayer, edgeKey, laneKey } from './routingPackets';
-import { formatLatency, targetIdentity, type IdentitySources } from './routingIdentity';
+import { targetIdentity, type IdentitySources } from './routingIdentity';
 import { CooldownLabel } from './CooldownLabel';
 import { usePresence } from './usePresence';
 import { useFlip, useRowMotion } from './rowMotion';
@@ -26,8 +25,6 @@ import styles from './RoutingPanel.module.css';
 
 interface Point { x: number; y: number }
 
-/** Vertical spacing of the lanes where they meet the gateway. */
-const FAN_GAP = 8;
 /** How far a row drifts as it enters or leaves the map. */
 const PRESENCE_SHIFT_PX = 12;
 /** A row arrives from, and leaves towards, its own edge of the map. */
@@ -40,9 +37,12 @@ const TRACKING_MS = MOTION_ROUTE_ENTER.duration + MAX_DRAWN_MODELS * ENTER_STAGG
 const DENSE_ROWS = 4;
 /** The key of the placeholder rows an empty minute draws, which no model or credential id can take. */
 const GHOST = '\u0000ghost';
+/** The orbits drawn around the gateway tile, in the drawing's own pixels. */
+const ORBIT_BOX = 184;
 
+/** A lane: level where it leaves a tile and where it reaches the next, bending between. */
 function curve(from: Point, to: Point): string {
-  const dx = (to.x - from.x) / 2;
+  const dx = (to.x - from.x) * 0.55;
   return `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} C ${(from.x + dx).toFixed(1)} ${from.y.toFixed(1)}, ${(to.x - dx).toFixed(1)} ${to.y.toFixed(1)}, ${to.x.toFixed(1)} ${to.y.toFixed(1)}`;
 }
 
@@ -101,9 +101,7 @@ export interface RoutingArrivals {
 
 export interface RoutingMapProps {
   model: RoutingModel;
-  colorOf: (modelId: string) => string;
   nowMs: number;
-  strategy?: string;
   sources: IdentitySources;
   arrivals: RoutingArrivals;
 }
@@ -114,7 +112,9 @@ const ghostKey = (key: string) => key;
 
 /**
  * The routing map: the models called in the last minute on the left, the
- * gateway, and the credentials and providers that answered on the right. A
+ * gateway, and the credentials and providers that answered on the right - the
+ * sign-in showcase's drawing, fed by real traffic. Every row faces the gateway
+ * with a tile, and its label reads outward, so the lanes run tile to tile. A
  * model has one lane into the gateway and a credential one lane out of it, so
  * the drawing stays legible with seven of each; which model went where is what
  * the travelling requests show.
@@ -126,16 +126,15 @@ const ghostKey = (key: string) => key;
  * it joins. The drawing is written to the DOM directly rather than through
  * React state, which would re-render the whole map sixty times a second.
  */
-export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals }: RoutingMapProps) {
+export function RoutingMap({ model, nowMs, sources, arrivals }: RoutingMapProps) {
   const t = useT();
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const layerRef = React.useRef<HTMLDivElement>(null);
-  const gatewayRef = React.useRef<HTMLDivElement>(null);
+  const layerRef = React.useRef<SVGGElement>(null);
+  const hubRef = React.useRef<HTMLDivElement>(null);
+  const gatewayRef = React.useRef<HTMLSpanElement>(null);
   const paths = useRegistry<SVGPathElement>();
-  const flows = useRegistry<SVGPathElement>();
   const washes = useRegistry<HTMLElement>();
   const halos = useRegistry<HTMLElement>();
-  const rings = useRegistry<HTMLElement>();
 
   const isReducedMotion = usePrefersReducedMotion();
   const exitMs = isReducedMotion ? 0 : MOTION_ROUTE_EXIT.duration;
@@ -146,14 +145,6 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
   // leaves as the first request's rows arrive rather than being swapped out.
   const ghostItems = React.useMemo(() => (isEmpty ? [GHOST] : []), [isEmpty]);
   const ghosts = usePresence(ghostItems, ghostKey, exitMs);
-
-  // A leaving row keeps the colour it had; the panel may already have given its slot away.
-  const colorsRef = React.useRef(new Map<string, string>());
-  const colorFor = (modelId: string) => {
-    const color = model.models.some((row) => row.id === modelId) ? colorOf(modelId) : colorsRef.current.get(modelId) ?? colorOf(modelId);
-    colorsRef.current.set(modelId, color);
-    return color;
-  };
 
   const draw = React.useCallback(() => {
     const container = containerRef.current;
@@ -171,29 +162,17 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
     const modelAnchors = anchorsOf('routeModel', '[data-route-model]', 'right');
     const targetAnchors = anchorsOf('routeTarget', '[data-route-target]', 'left');
     const node = gateway.getBoundingClientRect();
+    // Every lane meets the gateway at the middle of its side, as the sign-in drawing's do.
     const middle = node.top + node.height / 2 - box.top;
-    const limit = Math.max(0, node.height / 2 - 18);
-    // The lanes meet the gateway side by side, in their rows' order, so none crosses another there.
-    const fan = (order: string[], id: string) => {
-      const index = order.indexOf(id);
-      if (index < 0) return 0;
-      return Math.max(-limit, Math.min(limit, (index - (order.length - 1) / 2) * FAN_GAP));
-    };
-    const modelOrder = [...modelAnchors.keys()];
-    const targetOrder = [...targetAnchors.keys()];
-    // The gateway's rails span exactly the fan the lanes dock into on each side.
-    const extentOf = (count: number) => Math.min(limit, (Math.max(1, count) - 1) / 2 * FAN_GAP);
-    gateway.style.setProperty('--rail-in', `${extentOf(modelOrder.length)}px`);
-    gateway.style.setProperty('--rail-out', `${extentOf(targetOrder.length)}px`);
     container.querySelectorAll<SVGPathElement>('path[data-model], path[data-target]').forEach((path) => {
       const { model: modelId, target: targetId } = path.dataset;
       let d = '';
       if (modelId) {
         const from = modelAnchors.get(modelId);
-        if (from) d = curve(from, { x: node.left - box.left, y: middle + fan(modelOrder, modelId) });
+        if (from) d = curve(from, { x: node.left - box.left, y: middle });
       } else if (targetId) {
         const to = targetAnchors.get(targetId);
-        if (to) d = curve({ x: node.right - box.left, y: middle + fan(targetOrder, targetId) }, to);
+        if (to) d = curve({ x: node.right - box.left, y: middle }, to);
       }
       if (path.getAttribute('d') !== d) path.setAttribute('d', d);
     });
@@ -224,8 +203,6 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
     return () => observer.disconnect();
   }, [draw]);
 
-  const colorRef = React.useRef(colorFor);
-  colorRef.current = colorFor;
   // Created in the effect rather than memoised, so a remount (StrictMode runs one in
   // development) gets a live player instead of the one its cleanup disposed.
   const playerRef = React.useRef<ReturnType<typeof createPacketPlayer> | undefined>(undefined);
@@ -233,18 +210,14 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
     const player = createPacketPlayer({
       layer: () => layerRef.current,
       path: paths.get,
-      flow: flows.get,
       wash: washes.get,
       halo: halos.get,
-      ring: rings.get,
-      gateway: () => gatewayRef.current,
-      color: (modelId) => colorRef.current(modelId),
+      gateway: () => hubRef.current,
       classNames: {
         packet: styles['packet'],
-        packetDot: styles['packet-dot'],
-        flowOn: styles['edge-flow-on'],
-        flowBack: styles['edge-flow-back'],
-        gatewayBusy: styles['gateway-busy'],
+        packetHead: styles['packet-head'],
+        packetTail: styles['packet-tail'],
+        gatewayBusy: styles['hub-busy'],
         washRequest: styles['wash-request'],
         washSuccess: styles['wash-success'],
         washFailure: styles['wash-failure'],
@@ -255,18 +228,12 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
       player.dispose();
       playerRef.current = undefined;
     };
-  }, [paths, flows, washes, halos, rings]);
+  }, [paths, washes, halos]);
   React.useEffect(() => {
     if (arrivals.routes.length === 0) return;
     playerRef.current?.play(arrivals.routes);
   }, [arrivals]);
 
-  const maxModel = Math.max(1, ...model.models.map((row) => row.requests));
-  const maxTarget = Math.max(1, ...model.targets.map((target) => target.attempts));
-  const strokeFor = (ratio: number) => 1.25 + 1.75 * Math.sqrt(ratio);
-  const latestTargetId = model.targets.reduce<RoutingTarget | undefined>(
-    (latest, target) => (!latest || target.lastAtMs > latest.lastAtMs ? target : latest), undefined,
-  )?.id;
   const isDense = Math.max(models.length, targets.length) > DENSE_ROWS;
   // The map's first rows arrive one after another; later arrivals come as they happen.
   const isFirstPaintRef = React.useRef(true);
@@ -274,7 +241,7 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
   const enterDelay = (index: number) => (isFirstPaintRef.current ? index * ENTER_STAGGER_MS : 0);
 
   return (
-    <div ref={containerRef} className={clsx(styles['map'], isDense && styles['map-dense'])} data-testid="routing-map">
+    <div ref={containerRef} className={clsx(styles['map'], isDense && styles['map-dense'], isEmpty && styles['map-idle'])} data-testid="routing-map">
       <svg className={styles['map-edges']} aria-hidden="true">
         {ghosts.map(({ key, phase }) => (
           <React.Fragment key={key}>
@@ -288,11 +255,8 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
             phase={phase}
             delayMs={enterDelay(index)}
             modelId={key}
-            color={colorFor(key)}
-            width={strokeFor(item.requests / maxModel)}
             isFailing={item.failures === item.requests}
             pathRef={paths.ref(laneKey(key))}
-            flowRef={flows.ref(laneKey(key))}
           />
         ))}
         {targets.map(({ key, item, phase }, index) => (
@@ -301,18 +265,16 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
             phase={phase}
             delayMs={enterDelay(index)}
             targetId={key}
-            color="var(--fg-2)"
-            width={strokeFor(item.attempts / maxTarget)}
             isFailing={item.failures === item.attempts}
             isResting={Boolean(item.cooldown)}
             pathRef={paths.ref(edgeKey(key))}
-            flowRef={flows.ref(edgeKey(key))}
           />
         ))}
+        <g ref={layerRef} data-testid="routing-packets" />
       </svg>
 
-      <div className={styles['map-column']} role="list" aria-label={t('routing.models')}>
-        <ColumnHead label={t('routing.models')} count={model.models.length} containerRef={containerRef} />
+      <div className={clsx(styles['map-column'], styles['column-models'])} role="list" aria-label={t('routing.models')}>
+        <ColumnHead label={t('routing.models')} containerRef={containerRef} />
         {ghosts.map(({ key, phase }) => (
           <GhostNode key={key} side={-1} phase={phase} containerRef={containerRef}
             title={t('routing.empty')} hint={t('routing.empty_hint')} testId="routing-empty" />
@@ -324,10 +286,8 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
             phase={phase}
             delayMs={enterDelay(index)}
             containerRef={containerRef}
-            color={colorFor(key)}
             washRef={washes.ref(key)}
             haloRef={halos.ref(key)}
-            ringRef={rings.ref(key)}
           />
         ))}
         {model.hiddenModels > 0 && (
@@ -336,26 +296,23 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
       </div>
 
       <div className={styles['map-center']}>
-        <div
-          ref={gatewayRef}
-          className={clsx(styles['gateway'], isEmpty && styles['gateway-idle'])}
-          data-testid="routing-gateway"
-        >
-          <span ref={halos.ref(GATEWAY_NODE)} className={styles['halo']} aria-hidden="true" />
-          <span ref={washes.ref(GATEWAY_NODE)} className={clsx(styles['wash'], styles['wash-centre'])} aria-hidden="true" />
-          <span className={clsx(styles['gateway-rail'], styles['gateway-rail-in'])} aria-hidden="true" />
-          <span className={clsx(styles['gateway-rail'], styles['gateway-rail-out'])} aria-hidden="true" />
-          <span className={styles['gateway-mark']} aria-hidden="true"><BrandArtwork shape="mark" height={22} /></span>
-          <span className={styles['gateway-name']}>{t('routing.gateway')}</span>
-          {strategy && <span className={styles['gateway-strategy']}>{strategy}</span>}
-          <span className={styles['gateway-meta']}>
-            {isEmpty ? t('routing.waiting') : t('routing.attempts_count', { count: model.attempts.toLocaleString() })}
+        <div ref={hubRef} className={styles['hub']} data-testid="routing-gateway">
+          {/* The orbits and the glow light the page around the tile without tinting it. */}
+          <svg className={styles['orbits']} viewBox={`0 0 ${ORBIT_BOX} ${ORBIT_BOX}`} aria-hidden="true">
+            <circle className={styles['orbit-outer']} cx={ORBIT_BOX / 2} cy={ORBIT_BOX / 2} r={ORBIT_BOX / 2 - 1} />
+            <circle className={styles['orbit-inner']} cx={ORBIT_BOX / 2} cy={ORBIT_BOX / 2} r={ORBIT_BOX / 2 - 26} />
+          </svg>
+          <span className={styles['hub-glow']} aria-hidden="true" />
+          <span ref={gatewayRef} className={clsx(styles['tile'], styles['gateway'])} data-route-hub="" role="img" aria-label={t('routing.gateway')}>
+            <span ref={halos.ref(GATEWAY_NODE)} className={styles['halo']} aria-hidden="true" />
+            <span ref={washes.ref(GATEWAY_NODE)} className={styles['wash']} aria-hidden="true" />
+            <BrandArtwork shape="mark" height={30} />
           </span>
         </div>
       </div>
 
-      <div className={styles['map-column']} role="list" aria-label={t('routing.credentials')}>
-        <ColumnHead label={t('routing.credentials')} count={model.targets.length} containerRef={containerRef} />
+      <div className={clsx(styles['map-column'], styles['column-targets'])} role="list" aria-label={t('routing.credentials')}>
+        <ColumnHead label={t('routing.credentials')} containerRef={containerRef} />
         {ghosts.map(({ key, phase }) => (
           <GhostNode key={key} side={1} phase={phase} containerRef={containerRef}
             title={t('routing.empty_credentials')} hint={t('routing.empty_credentials_hint')} />
@@ -368,39 +325,29 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
             delayMs={enterDelay(index)}
             containerRef={containerRef}
             nowMs={nowMs}
-            isLatest={key === latestTargetId}
             sources={sources}
             washRef={washes.ref(key)}
             haloRef={halos.ref(key)}
-            ringRef={rings.ref(key)}
           />
         ))}
         {model.hiddenTargets > 0 && (
           <div className={styles['column-more']}>{t('routing.more_credentials', { count: model.hiddenTargets })}</div>
         )}
       </div>
-
-      <div ref={layerRef} className={styles['packet-layer']} aria-hidden="true" data-testid="routing-packets" />
     </div>
   );
 }
 
 interface ColumnHeadProps {
   label: string;
-  count: number;
   containerRef: React.RefObject<HTMLElement | null>;
 }
 
 /** A column's heading slides with its rows when the column re-centres. */
-function ColumnHead({ label, count, containerRef }: ColumnHeadProps) {
+function ColumnHead({ label, containerRef }: ColumnHeadProps) {
   const ref = React.useRef<HTMLDivElement>(null);
   useFlip(ref, containerRef);
-  return (
-    <div ref={ref} className={styles['column-head']}>
-      <span>{label}</span>
-      <span className={styles['column-count']}>{count}</span>
-    </div>
-  );
+  return <div ref={ref} className={styles['column-head']}>{label}</div>;
 }
 
 interface LaneProps {
@@ -409,17 +356,14 @@ interface LaneProps {
   /** A model's lane into the gateway, or a credential's lane out of it. */
   modelId?: string;
   targetId?: string;
-  color: string;
-  width: number;
   isFailing: boolean;
   /** A credential inside its cooldown: the lane rests, and says so with a dash rather than a hue. */
   isResting?: boolean;
   pathRef: (element: SVGPathElement | null) => void;
-  flowRef: (element: SVGPathElement | null) => void;
 }
 
-/** One lane: its resting stroke, and the dashes that flow over it while a request travels it. */
-function Lane({ phase, delayMs, modelId, targetId, color, width, isFailing, isResting = false, pathRef, flowRef }: LaneProps) {
+/** One lane: a hairline track the requests travel along. */
+function Lane({ phase, delayMs, modelId, targetId, isFailing, isResting = false, pathRef }: LaneProps) {
   const groupRef = React.useRef<SVGGElement>(null);
   useLaneMotion(groupRef, phase, delayMs);
   return (
@@ -429,9 +373,7 @@ function Lane({ phase, delayMs, modelId, targetId, color, width, isFailing, isRe
         data-model={modelId}
         data-target={targetId}
         className={clsx(styles['edge'], isFailing && styles['edge-failing'], isResting && styles['edge-resting'])}
-        style={{ stroke: color, strokeWidth: width }}
       />
-      <path ref={flowRef} data-model={modelId} data-target={targetId} className={styles['edge-flow']} style={{ strokeWidth: width + 1.5 }} />
     </g>
   );
 }
@@ -442,7 +384,7 @@ function GhostLane({ phase, modelId, targetId }: { phase: PresencePhase; modelId
   useLaneMotion(groupRef, phase, 0);
   return (
     <g ref={groupRef}>
-      <path data-model={modelId} data-target={targetId} className={clsx(styles['edge'], styles['edge-ghost'])} style={{ strokeWidth: 1.25 }} />
+      <path data-model={modelId} data-target={targetId} className={clsx(styles['edge'], styles['edge-ghost'])} />
     </g>
   );
 }
@@ -460,35 +402,50 @@ interface GhostNodeProps {
 function GhostNode({ side, phase, containerRef, title, hint, testId }: GhostNodeProps) {
   const ref = React.useRef<HTMLDivElement>(null);
   useRowMotion(ref, containerRef, { phase, away: awayFrom(side), delayMs: 0 });
-  return (
-    <div
-      ref={ref}
-      className={clsx(styles['node'], styles['node-ghost'])}
+  // The tile faces the gateway on either side, so a model's placeholder reads label first.
+  const tile = (
+    <span
+      className={clsx(styles['tile'], styles['tile-ghost'])}
       data-route-model={side < 0 ? GHOST : undefined}
       data-route-target={side > 0 ? GHOST : undefined}
-      data-testid={testId}
-    >
-      <span className={clsx(styles['port'], styles['port-ghost'], side < 0 ? styles['port-out'] : styles['port-in'])} aria-hidden="true" />
-      <span className={styles['ghost-text']}>
+      aria-hidden="true"
+    />
+  );
+  return (
+    <div ref={ref} className={clsx(styles['node'], styles['node-ghost'])} data-testid={testId}>
+      {side > 0 && tile}
+      <span className={styles['row-text']}>
         <span className={styles['row-name']}>{title}</span>
-        <span className={styles['ghost-hint']}>{hint}</span>
+        <span className={styles['row-meta']}>{hint}</span>
       </span>
+      {side < 0 && tile}
     </div>
   );
 }
 
-interface ModelNodeProps {
+interface TileLightProps {
+  washRef: (element: HTMLElement | null) => void;
+  haloRef: (element: HTMLElement | null) => void;
+}
+
+/** The light routingPackets.ts plays on a tile as a request docks in it. */
+function TileLight({ washRef, haloRef }: TileLightProps) {
+  return (
+    <>
+      <span ref={haloRef} className={styles['halo']} aria-hidden="true" />
+      <span ref={washRef} className={styles['wash']} aria-hidden="true" />
+    </>
+  );
+}
+
+interface ModelNodeProps extends TileLightProps {
   row: RoutingModelRow;
   phase: PresencePhase;
   delayMs: number;
   containerRef: React.RefObject<HTMLElement | null>;
-  color: string;
-  washRef: (element: HTMLElement | null) => void;
-  haloRef: (element: HTMLElement | null) => void;
-  ringRef: (element: HTMLElement | null) => void;
 }
 
-function ModelNode({ row, phase, delayMs, containerRef, color, washRef, haloRef, ringRef }: ModelNodeProps) {
+function ModelNode({ row, phase, delayMs, containerRef, washRef, haloRef }: ModelNodeProps) {
   const t = useT();
   const ref = React.useRef<HTMLDivElement>(null);
   useRowMotion(ref, containerRef, { phase, away: awayFrom(-1), delayMs });
@@ -497,42 +454,34 @@ function ModelNode({ row, phase, delayMs, containerRef, color, washRef, haloRef,
       ref={ref}
       role="listitem"
       className={styles['node']}
-      data-route-model={row.id}
       data-testid="routing-model"
       data-phase={phase}
-      style={{ '--route-color': color } as React.CSSProperties}
     >
-      <span ref={haloRef} className={styles['halo']} aria-hidden="true" />
-      <span ref={washRef} className={clsx(styles['wash'], styles['wash-right'])} aria-hidden="true" />
-      <span className={styles['node-mark']} aria-hidden="true"><ModelMark model={row.name} size={18} /></span>
       <span className={styles['row-text']}>
         <span className={styles['row-name']} title={row.name}>{row.name}</span>
         <span className={styles['row-meta']}>
-          {t('routing.requests_count', { count: row.requests.toLocaleString() })} · {formatLatency(row.latencyMs)}
+          {t('routing.requests_count', { count: row.requests.toLocaleString() })}
           {row.failures > 0 && <span className={styles['row-failures']}> · {t('routing.failed_count', { count: row.failures })}</span>}
         </span>
       </span>
-      <span className={clsx(styles['port'], styles['port-out'])} aria-hidden="true">
-        <span ref={ringRef} className={styles['ring']} />
+      <span className={styles['tile']} data-route-model={row.id}>
+        <TileLight washRef={washRef} haloRef={haloRef} />
+        <ModelMark model={row.name} size={20} />
       </span>
     </div>
   );
 }
 
-interface TargetNodeProps {
+interface TargetNodeProps extends TileLightProps {
   target: RoutingTarget;
   phase: PresencePhase;
   delayMs: number;
   containerRef: React.RefObject<HTMLElement | null>;
   nowMs: number;
-  isLatest: boolean;
   sources: IdentitySources;
-  washRef: (element: HTMLElement | null) => void;
-  haloRef: (element: HTMLElement | null) => void;
-  ringRef: (element: HTMLElement | null) => void;
 }
 
-function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, sources, washRef, haloRef, ringRef }: TargetNodeProps) {
+function TargetNode({ target, phase, delayMs, containerRef, nowMs, sources, washRef, haloRef }: TargetNodeProps) {
   const t = useT();
   const ref = React.useRef<HTMLDivElement>(null);
   useRowMotion(ref, containerRef, { phase, away: awayFrom(1), delayMs });
@@ -542,36 +491,24 @@ function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, sou
       ref={ref}
       role="listitem"
       className={clsx(styles['node'], target.cooldown && styles['node-resting'])}
-      data-route-target={target.id}
       data-testid="routing-target"
       data-phase={phase}
-      style={{ '--route-color': 'var(--accent)', '--port-color': 'var(--fg-2)' } as React.CSSProperties}
     >
-      <span ref={haloRef} className={styles['halo']} aria-hidden="true" />
-      <span ref={washRef} className={clsx(styles['wash'], styles['wash-left'])} aria-hidden="true" />
-      <span className={clsx(styles['port'], styles['port-in'])} aria-hidden="true">
-        <span ref={ringRef} className={styles['ring']} />
+      <span className={styles['tile']} data-route-target={target.id}>
+        <TileLight washRef={washRef} haloRef={haloRef} />
+        <ProviderBrandIcon mark={identity} size={20} />
       </span>
-      <span className={styles['node-mark']} aria-hidden="true">
-        <ProviderBrandIcon mark={identity} size={18} />
-      </span>
+      {/* Two lines, as on a model's row, so both sides of the gateway weigh the same: who answered,
+          then which credential. Only trouble earns a state: a rest CPA reported, or refusals. */}
       <span className={styles['row-text']}>
-        <span className={styles['row-name']}>{identity.title}</span>
-        <span className={styles['row-meta']} title={identity.credential || undefined}>{identity.credential || target.sample.model || '—'}</span>
-      </span>
-      <span className={styles['node-state']}>
-        {target.cooldown ? (
-          <CooldownLabel cooldown={target.cooldown} nowMs={nowMs} />
-        ) : isLatest ? (
-          <StatusLabel tone="accent">{t('routing.answered_last')}</StatusLabel>
-        ) : (
-          <span className={styles['row-meta']}>
-            {t('routing.requests_count', { count: target.attempts.toLocaleString() })} · {formatLatency(target.latencyMs)}
-          </span>
-        )}
-        {target.failures > 0 && (
-          <span className={clsx(styles['node-figure'], styles['row-failures'])}>{t('routing.failed_count', { count: target.failures })}</span>
-        )}
+        <span className={styles['row-title']}>
+          <span className={styles['row-name']}>{identity.title}</span>
+          {target.cooldown && <CooldownLabel cooldown={target.cooldown} nowMs={nowMs} />}
+        </span>
+        <span className={styles['row-meta']} title={identity.credential || undefined}>
+          {identity.credential || target.sample.model || '—'}
+          {target.failures > 0 && <span className={styles['row-failures']}> · {t('routing.failed_count', { count: target.failures })}</span>}
+        </span>
       </span>
     </div>
   );

@@ -46,11 +46,6 @@ export function targetIdentity(event: UsageEvent, sources: IdentitySources): Tar
   return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo, fallbackIconId: info.fallbackIconId, providerKeys: info.providerKeys, isIdentityUnknown: info.isIdentityUnknown };
 }
 
-/** The CSS colour of a model's lane slot: an identity hue, never a status hue. */
-export function routeColor(slot: number): string {
-  return `var(--route-${slot + 1})`;
-}
-
 export function formatLatency(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '—';
   if (ms < 1000) return `${Math.round(ms)} ms`;

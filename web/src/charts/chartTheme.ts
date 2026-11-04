@@ -19,14 +19,17 @@ export function sparkColor(colors: ThemePalette, tone: ChartTone): string {
 }
 
 /**
- * Categorical series identities, in the order a legend reads them.
+ * Model identities, in the order the dashboard's model legend reads them.
  *
  * A *series* is a category, not a verdict, which is what makes this the one palette in the app whose
  * hues are decoration. Everything else here resolves to a semantic token, where green means healthy and
  * red means failed; a model's colour cannot mean anything, because the model list is whatever the
  * deployment happens to serve. Borrowing the status hues for it would be worse than decoration - a green
- * line labelled "model B" beside a green pip that means "healthy" makes both unreadable - so the series
- * families are their own. Their contrast is resolved with the palette in `theme/palette.ts`.
+ * line labelled "model B" beside a green pip that means "healthy" makes both unreadable - so a model
+ * slot reads the palette's model identities (`model`), which leave green and red out. The folded
+ * remainder is not a slot: "other models" is everything the ranking did not name, so it reads in the
+ * neutral rather than taking an identity a named model could have. Contrast is resolved in
+ * `theme/palette.ts`.
  *
  * A slot is a *rank*, not a model. Colour is assigned from the ranked list both dashboard panels share,
  * which is what guarantees a group's line and its ring slice are the same hue; it also means a group's
@@ -45,7 +48,7 @@ export const SERIES_SLOTS = 6;
  * that is worse than one drawn in a repeated colour.
  */
 export function seriesColor(palette: ThemePalette, index: number): string {
-  const slots = palette.series;
+  const slots = palette.model;
   const slot = ((Math.trunc(index) % SERIES_SLOTS) + SERIES_SLOTS) % SERIES_SLOTS;
   return slots[slot] ?? slots[0] ?? palette.accent;
 }
@@ -77,7 +80,8 @@ export function seriesDomainKey(entry: { folded: boolean; model: string }): stri
  * instead of being a library's internal ordering that could change under us.
  */
 export function seriesColorRange(palette: ThemePalette, entries: Array<{ folded: boolean; model: string }>): string[] {
-  return entries.map((_, index) => seriesColor(palette, index));
+  let named = 0;
+  return entries.map((entry) => (entry.folded ? palette.muted : seriesColor(palette, named++)));
 }
 
 
