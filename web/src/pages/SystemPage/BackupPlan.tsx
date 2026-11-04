@@ -445,7 +445,8 @@ function Locations(props: Props & { value: BackupAutomation }) {
   const isLocalOn = value.keep_local > 0;
   const hasCloud = value.destinations.length > 0;
   const remove = (id: string) => {
-    const destinations = value.destinations.filter((entry) => entry.id !== id);
+    // A write carries the input shape only: the server refuses read-only fields such as has_config.
+    const destinations = value.destinations.filter((entry) => entry.id !== id).map(destinationInput);
     return props.onSave({
       destinations,
       ...(destinations.length === 0 && !isLocalOn ? { keep_local: DEFAULT_KEEP_LOCAL } : {}),
@@ -479,7 +480,16 @@ function Locations(props: Props & { value: BackupAutomation }) {
             key={destination.id}
             data-new={!initialIds.current.has(destination.id) || undefined}
           >
-            <Checkbox checked aria-label={destination.name} disabled={isBusy} onChange={() => void remove(destination.id)} />
+            {/* Clearing a cloud box removes the location and its saved connection, so it asks first,
+                exactly as the row's delete does; the box stays ticked until that is confirmed. */}
+            <ConfirmAction
+              isDanger
+              title={t('sys.backup_destination_remove_confirm', { name: destination.name })}
+              confirmLabel={t('common.delete')}
+              onConfirm={() => remove(destination.id)}
+            >
+              <Checkbox checked aria-label={destination.name} disabled={isBusy} />
+            </ConfirmAction>
             <BackupProviderMark provider={destination.provider} />
             <div className={styles['location-text']}>
               <span className={styles['location-name']}>

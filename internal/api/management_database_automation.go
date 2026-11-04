@@ -86,7 +86,7 @@ func (h *Handler) probeDatabaseDestination(w http.ResponseWriter, r *http.Reques
 	if !h.databaseBackupsReady(w) {
 		return
 	}
-	ctx, cancel := contextWithBackupTimeout(r)
+	ctx, cancel := h.contextWithBackupTimeout(w, r)
 	defer cancel()
 	if err := h.databaseBackups.ProbeDestination(ctx, chi.URLParam(r, "id")); err != nil {
 		h.databaseBackupError(w, err)
@@ -122,7 +122,7 @@ func (h *Handler) listDatabaseArchives(w http.ResponseWriter, r *http.Request) {
 	if !h.databaseBackupsReady(w) {
 		return
 	}
-	ctx, cancel := contextWithBackupTimeout(r)
+	ctx, cancel := h.contextWithBackupTimeout(w, r)
 	defer cancel()
 	items, err := h.databaseBackups.ListArchives(ctx, r.URL.Query().Get("destination_id"))
 	if err != nil {
@@ -170,11 +170,8 @@ func (h *Handler) inspectDatabaseArchive(w http.ResponseWriter, r *http.Request)
 	if !readAgentInput(w, r, &input) {
 		return
 	}
-	ctx, cancel := contextWithBackupTimeout(r)
+	ctx, cancel := h.contextWithBackupTimeout(w, r)
 	defer cancel()
-	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Minute)); err != nil {
-		h.logger.Warn("database archive validation deadline not applied", "error", err)
-	}
 	job, err := h.databaseBackups.StageArchive(ctx, input.DestinationID, input.Key, input.Passphrase)
 	if err != nil {
 		h.databaseBackupError(w, err)
@@ -183,6 +180,13 @@ func (h *Handler) inspectDatabaseArchive(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, 201, databaseBackupDTO(job))
 }
 
-func contextWithBackupTimeout(r *http.Request) (context.Context, context.CancelFunc) {
+// contextWithBackupTimeout bounds a synchronous cloud call and extends the response's write
+// deadline to match: the server's ordinary 30-second write timeout would otherwise cut a slow probe
+// or remote listing off after the work finished, and the browser would see a reset connection
+// instead of the result or its refusal code.
+func (h *Handler) contextWithBackupTimeout(w http.ResponseWriter, r *http.Request) (context.Context, context.CancelFunc) {
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Minute)); err != nil {
+		h.logger.Warn("database backup response deadline not applied", "error", err)
+	}
 	return context.WithTimeout(r.Context(), 15*time.Minute)
 }

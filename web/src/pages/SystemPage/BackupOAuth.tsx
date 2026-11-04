@@ -53,7 +53,11 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
       if (status.data.status === 'connected') {
         setClientSecret('');
         onAuthorized(status.data.id);
-      } else setErrorKey('sys.backup_oauth_error');
+      } else {
+        // Denied or expired: back to the first step, so Connect account is there to try again.
+        setErrorKey('sys.backup_oauth_error');
+        setStep('idle');
+      }
     }
   }, [status.data, session?.status, onAuthorized]);
   const run = async (action: () => Promise<void>) => {

@@ -356,4 +356,5 @@ export default {
   "sys.backup_step_confirm": "Sahkan pemulihan",
   "sys.backup_rule_met": "(dipenuhi)",
   "sys.backup_rule_broken": "(tidak sepadan)",
+  "sys.backup_error_disk_space": "Ruang cakera tidak mencukupi. Kosongkan sedikit ruang dan cuba lagi.",
 } satisfies Translation<typeof source>;

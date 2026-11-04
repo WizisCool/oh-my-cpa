@@ -122,6 +122,19 @@ it('says why the local disk cannot be cleared while it is the only location', as
   expect(screen.getByRole('button', { name: 'Google Drive' })).toBeTruthy();
 });
 
+it('asks before a cleared cloud box removes it, and saves the rest in their write shape', async () => {
+  const server = installOmcApi();
+  const second = { ...cloud, id: 'cloud-second', name: 'Second cloud' };
+  server.on('PUT', '/management/system/database-backup-automation', (request) => ({ ...configured, ...(request.body as BackupAutomationInput), destinations: [second] }));
+  open(server, { ...configured, destinations: [cloud, second] });
+  fireEvent.click(await screen.findByRole('checkbox', { name: cloud.name }));
+  expect(puts(server)).toHaveLength(0);
+  fireEvent.click(within(await screen.findByRole('tooltip')).getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(puts(server)).toHaveLength(1));
+  // The server refuses read-only fields, so has_config must not ride along with the kept location.
+  expect(puts(server)[0].destinations).toEqual([{ id: second.id, name: second.name, provider: second.provider, root: second.root }]);
+});
+
 it('saves the daily time to the minute', async () => {
   const server = installOmcApi();
   server.on('PUT', '/management/system/database-backup-automation', (request) => ({ ...configured, ...(request.body as BackupAutomationInput) }));

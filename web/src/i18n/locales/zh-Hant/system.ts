@@ -356,4 +356,5 @@ export default {
   "sys.backup_step_confirm": "確認還原",
   "sys.backup_rule_met": "（已符合）",
   "sys.backup_rule_broken": "（不一致）",
+  "sys.backup_error_disk_space": "磁碟空間不足，請釋放空間後重試。",
 } satisfies Translation<typeof source>;

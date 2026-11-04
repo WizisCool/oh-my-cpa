@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/backup"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
 type DatabaseBackupJobDTO struct {
@@ -61,6 +62,8 @@ func (h *Handler) databaseBackupError(writer http.ResponseWriter, err error) {
 		status, code = 422, "database_backup_version"
 	case errors.Is(err, backup.ErrInvalidArtifact):
 		status, code = 422, "database_backup_invalid"
+	case errors.Is(err, repository.ErrInsufficientDiskSpace):
+		status, code = http.StatusInsufficientStorage, "database_backup_disk_space"
 	}
 	if status >= 500 {
 		h.logger.Error("database backup request failed", "error", err)

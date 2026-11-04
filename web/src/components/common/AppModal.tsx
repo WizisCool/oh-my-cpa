@@ -3,6 +3,7 @@ import { Button, Modal } from 'antd';
 import type { ModalProps } from 'antd';
 import clsx from 'clsx';
 import { CloseOutlined, LeftOutlined } from '../icons';
+import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { useT } from '../../i18n';
 import { Tooltip } from './Tooltip';
 import styles from './AppModal.module.css';
@@ -61,6 +62,9 @@ export function AppModal({
 }: AppModalProps) {
   const t = useT();
   const [isScrolled, setIsScrolled] = React.useState(false);
+  // A phone's sheet is sized from the visible viewport, not 100dvh: Android shrinks only the
+  // visual viewport for the keyboard, which would leave a focused form's footer under it.
+  const viewport = useVisibleViewport(!!rest.open);
   const hasStart = footerStart !== undefined && footerStart !== null && footerStart !== false;
   // antd draws OK/Cancel when `footer` is left undefined; a start slot wraps whichever it is.
   const resolvedFooter: ModalProps['footer'] = hasStart
@@ -84,6 +88,12 @@ export function AppModal({
       mask={{ ...maskConfig, closable: isDismissible && maskConfig.closable !== false }}
       closable={isDismissible ? { 'aria-label': t('common.close') } : false}
       closeIcon={<CloseOutlined />}
+      styles={{
+        wrapper: {
+          '--sheet-height': `${viewport.height}px`,
+          '--sheet-bottom': `${viewport.bottom}px`,
+        } as React.CSSProperties,
+      }}
       classNames={{
         wrapper: styles['wrapper'],
         container: styles['container'],

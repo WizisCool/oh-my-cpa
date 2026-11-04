@@ -156,7 +156,7 @@
 @media (max-width: 640px) {
   .wrapper {
     align-items: flex-end;
-    padding: 0;
+    padding: 0 0 var(--sheet-bottom, 0px);
   }
 
   .modal.modal {
@@ -165,7 +165,7 @@
   }
 
   .container.container {
-    max-height: calc(100dvh - max(24px, env(safe-area-inset-top)));
+    max-height: calc(var(--sheet-height, 100dvh) - max(24px, env(safe-area-inset-top)));
     border-radius: 16px 16px 0 0;
     border-bottom: 0;
   }

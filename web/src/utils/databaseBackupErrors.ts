@@ -8,6 +8,7 @@ const ERROR_KEYS = {
   database_backup_passphrase: 'sys.backup_error_passphrase',
   database_backup_invalid: 'sys.backup_error_invalid',
   database_backup_audit: 'sys.backup_error_audit',
+  database_backup_disk_space: 'sys.backup_error_disk_space',
 } as const satisfies Record<string, MessageKey>;
 
 export function databaseBackupErrorKey(code: string, fallback: MessageKey): MessageKey {

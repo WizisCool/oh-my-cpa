@@ -467,10 +467,10 @@
 }
 
 .mark[data-provider='local'] { color: var(--accent); }
-.mark[data-provider='webdav'] { color: #22a5bd; }
-.mark[data-provider='sftp'] { color: #8b5cf6; }
-.mark[data-provider='smb'] { color: #10b981; }
-.mark[data-provider='ftp'] { color: #f59e0b; }
+.mark[data-provider='webdav'] { color: var(--series-6); }
+.mark[data-provider='sftp'] { color: var(--series-3); }
+.mark[data-provider='smb'] { color: var(--series-2); }
+.mark[data-provider='ftp'] { color: var(--series-5); }
 
 .location-text {
   display: flex;

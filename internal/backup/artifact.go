@@ -269,6 +269,10 @@ func publicError(err error) string {
 			return known.Error()
 		}
 	}
+	if errors.Is(err, repository.ErrInsufficientDiskSpace) {
+		// The sentinel's own text is about rebuilding the database, which would mislead here.
+		return "not enough free disk space for the database backup"
+	}
 	if errors.Is(err, context.Canceled) {
 		return "database operation was interrupted"
 	}

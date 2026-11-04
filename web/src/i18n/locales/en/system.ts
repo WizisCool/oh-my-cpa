@@ -356,4 +356,5 @@ export default {
   "sys.backup_step_confirm": "Confirm",
   "sys.backup_rule_met": "(met)",
   "sys.backup_rule_broken": "(does not match)",
+  "sys.backup_error_disk_space": "Not enough free disk space. Free some space and try again.",
 } satisfies Translation<typeof source>;

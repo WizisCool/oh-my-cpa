@@ -353,4 +353,5 @@ export default {
   "sys.backup_step_confirm": "确认恢复",
   "sys.backup_rule_met": "（已满足）",
   "sys.backup_rule_broken": "（不一致）",
+  "sys.backup_error_disk_space": "磁盘空间不足，请释放空间后重试。",
 };

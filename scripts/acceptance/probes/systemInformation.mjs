@@ -183,7 +183,7 @@ export function systemFixtures() {
     [(url, method) => method === 'POST' && url.pathname.endsWith('/management/system/database-backup-authorization'), () => ({ id: 'fixture-authorization', status: 'waiting', authorization_url: 'https://provider.example/authorize?state=fixture-state', expires_at_ms: 1900000000000 })],
     [(url, method) => method === 'POST' && url.pathname.endsWith('/management/system/database-backup-authorization/fixture-authorization/complete'), () => ({ id: 'fixture-authorization', status: 'connected', expires_at_ms: 1900000000000 })],
     [(url) => url.pathname.endsWith('/management/system/database-backup-automation'), () => ({
-      enabled: false, interval_hours: 24, keep_local: 7, keep_remote: 30, has_passphrase: true,
+      enabled: false, daily_at_minute: 180, keep_local: 7, keep_remote: 30, has_passphrase: true,
       destinations: [{ id: completedRestoreID, name: 'Salinan pemulihan awan', provider: 'webdav', root: 'oh-my-cpa/backups', has_config: true }],
       next_run_at_ms: 0, last_run_at_ms: 0, last_success_at_ms: 1790016000000, last_error: '',
     })],
