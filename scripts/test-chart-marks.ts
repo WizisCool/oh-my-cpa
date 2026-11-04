@@ -128,42 +128,41 @@ test('chart marks', () => {
     }
   }
 
-  // ── routing lane palette ───────────────────────────────────────────────────
+  // ── model identity palette ─────────────────────────────────────────────────
   //
-  // The live routing map draws a lane per model in a categorical hue, but unlike the chart legend there
-  // is no legend between the line and the eye: the row's name is its only label. A green, amber or red
-  // lane therefore reads as a verdict on the connection, which is exactly the ambiguity the palette
-  // exists to remove. The rule is asserted, not just documented, so a future palette edit cannot quietly
-  // reintroduce a status hue.
+  // The dashboard's model charts colour each model from one palette. On a console where green and red
+  // mean success and failure, a model drawn in a status hue would read as a verdict, which is exactly the
+  // ambiguity the palette exists to remove. The rule is asserted, not just documented, so a future
+  // palette edit cannot quietly reintroduce one.
 
   const STATUS_TOKENS = ['success', 'warn', 'danger'] as const;
 
   for (const preset of RESOLVED_PALETTES) {
     const { palette: resolved } = preset;
-    assert.equal(resolved.route.length, 6, `${preset.id} defines exactly six routing slots`);
-    assert.equal(new Set(resolved.route).size, resolved.route.length, `${preset.id}: every routing slot is its own colour`);
+    assert.equal(resolved.model.length, 6, `${preset.id} defines exactly six model slots`);
+    assert.equal(new Set(resolved.model).size, resolved.model.length, `${preset.id}: every model slot is its own colour`);
     const card = resolved.surface;
 
-    for (const [index, colour] of resolved.route.entries()) {
+    for (const [index, colour] of resolved.model.entries()) {
       assert.ok(
         contrast(colour, card) >= 3,
-        `${preset.id}: routing ${index} (${colour}) reads ${contrast(colour, card).toFixed(2)}:1 on the card, want >= 3:1`,
+        `${preset.id}: model ${index} (${colour}) reads ${contrast(colour, card).toFixed(2)}:1 on the card, want >= 3:1`,
       );
-      // The status hues are semantic in every palette; a lane may not be drawn in one.
+      // The status hues are semantic in every palette; a model may not be drawn in one.
       for (const tone of STATUS_TOKENS) {
         assert.notEqual(
           colour.toLowerCase(),
           resolved[tone].toLowerCase(),
-          `${preset.id}: routing ${index} must not be the ${tone} hue`,
+          `${preset.id}: model ${index} must not be the ${tone} hue`,
         );
       }
     }
 
-    for (let index = 0; index < resolved.route.length - 1; index += 1) {
-      const distance = labDistance(resolved.route[index], resolved.route[index + 1]);
+    for (let index = 0; index < resolved.model.length - 1; index += 1) {
+      const distance = labDistance(resolved.model[index], resolved.model[index + 1]);
       assert.ok(
         distance >= 25,
-        `${preset.id}: routing ${index} and ${index + 1} are only ΔE ${distance.toFixed(1)} apart`,
+        `${preset.id}: model ${index} and ${index + 1} are only ΔE ${distance.toFixed(1)} apart`,
       );
     }
   }
@@ -195,9 +194,9 @@ test('chart marks', () => {
     'a model named like the remainder stays distinct',
   );
   assert.deepEqual(
-    seriesColorRange(palette.dark, [{ folded: false, model: 'a' }, { folded: true, model: '' }]),
-    [seriesColor(palette.dark, 0), seriesColor(palette.dark, 1)],
-    'the range is generated in the domain order',
+    seriesColorRange(palette.dark, [{ folded: false, model: 'a' }, { folded: true, model: '' }, { folded: false, model: 'b' }]),
+    [seriesColor(palette.dark, 0), palette.dark.muted, seriesColor(palette.dark, 1)],
+    'named groups take slots in domain order and the remainder reads neutral',
   );
 
   for (const preset of RESOLVED_PALETTES) {
@@ -205,10 +204,6 @@ test('chart marks', () => {
     for (let index = 0; index < SERIES_SLOTS; index += 1) {
       assert.equal(typeof css[`--series-${index + 1}`], 'string', `${preset.id} exports series ${index + 1}`);
       assert.equal(css[`--series-${index + 1}`], preset.palette.series[index]);
-    }
-    for (let index = 0; index < preset.palette.route.length; index += 1) {
-      assert.equal(typeof css[`--route-${index + 1}`], 'string', `${preset.id} exports route ${index + 1}`);
-      assert.equal(css[`--route-${index + 1}`], preset.palette.route[index]);
     }
   }
 

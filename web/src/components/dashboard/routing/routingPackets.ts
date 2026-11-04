@@ -4,25 +4,24 @@ import { MOTION_ROUTE, MOTION_ROUTE_GLOW, MOTION_ROUTE_LAND } from '../../../the
 import type { RoutingRoute } from '../../../types/usageRouting';
 
 /**
- * The routing map's travelling requests, after Magpie's: a dot leaves the
+ * The routing map's travelling requests: a short stroke of light leaves the
  * model, passes through the gateway to the credential CPA picked, waits there
- * while that credential answers, and comes back. While a dot is on a lane, or
- * waiting at the end of it, the lane's dashes flow in the direction it travels,
- * so a busy route reads as traffic rather than as a line. The dot and the flow
- * stay in the model's identity colour in both directions; the answer's verdict
- * is carried by the node surfaces, never by the line.
+ * while that credential answers, and comes back - the sign-in showcase's pulse,
+ * driven by real traffic. Every request sets out in the map's one light, and
+ * what comes back is the verdict - green for an answer, red for a refusal. The
+ * lanes themselves stay neutral: the colour belongs to what travels them, never
+ * to the connection.
  *
- * The light is continuous from node to node. A dot emerges from a node's port
- * and sinks into the next one rather than appearing on top of it; the node it
- * sinks into lights as it docks and settles back slowly, and a lane brightens
- * behind the dot that crossed it. A node already glowing lights again from where
- * it is, so a second request never blinks it dark first.
+ * A stroke is a dash on a copy of the lane, so it is drawn out of the tile it
+ * leaves and sinks into the next one rather than appearing on top of it. The
+ * tile it reaches lights as it docks and settles back slowly; a tile already
+ * lit rises again from where it is, so a second request never blinks it dark.
  *
  * It is imperative on purpose. A trip lives for about two seconds and carries
  * no state the page reads back, so holding it in React state would re-render
- * the map on every frame for nothing. The dot is moved on animation frames
- * along the lane as it is drawn at that moment, so a row sliding while a dot is
- * on its lane carries the dot's path with it.
+ * the map on every frame for nothing. The stroke copies its lane as it is drawn
+ * at that moment, on every frame, so a row sliding while a request is on its
+ * lane carries the request with it.
  */
 
 /** At most this many requests replay from one read; the rest are already counted on the rows. */
@@ -39,13 +38,9 @@ const EDGE_HOP_MS = MOTION_ROUTE.duration;
 const REFUSAL_HOP_MS = Math.round(MOTION_ROUTE.duration * 0.75);
 /** How long a refusal shows at the credential before the request moves on. */
 const REFUSAL_PAUSE_MS = 180;
-/**
- * The share of a hop over which a dot emerges from the node it leaves, and sinks
- * into the node it reaches: it passes through nodes rather than resting on them.
- */
-const PORT_FADE_SHARE = 0.18;
-/** How bright a lane is just behind the dot that crossed it, before it settles back. */
-const TRAIL_OPACITY = 0.7;
+/** The bright head of a travelling request, and the fainter tail it draws behind it, in pixels. */
+const HEAD_PX = 18;
+const TAIL_PX = 56;
 
 /**
  * How long a credential holds a request before its answer leaves: a hint of the
@@ -58,23 +53,18 @@ export function holdFor(latencyMs: number): number {
 export type PacketTone = 'request' | 'success' | 'failure';
 
 export interface PacketStage {
-  /** The positioned layer dots are drawn in; it shares the lanes' coordinates. */
-  layer: () => HTMLElement | null;
+  /** The SVG group travelling requests are drawn in; it shares the lanes' coordinates. */
+  layer: () => SVGGElement | null;
   path: (key: string) => SVGPathElement | null;
-  /** The flowing dashes drawn over a lane while something travels it. */
-  flow: (key: string) => SVGPathElement | null;
-  /** A node's light: the wash across it, the glow on its edge, and the ring its port sends out. */
+  /** A tile's light: the wash across it and the edge that brightens. */
   wash: (key: string) => HTMLElement | null;
   halo: (key: string) => HTMLElement | null;
-  ring: (key: string) => HTMLElement | null;
   /** The gateway node, marked busy while any request is on the map. */
   gateway: () => HTMLElement | null;
-  color: (modelId: string) => string;
   classNames: {
     packet: string;
-    packetDot: string;
-    flowOn: string;
-    flowBack: string;
+    packetHead: string;
+    packetTail: string;
     gatewayBusy: string;
     washRequest: string;
     washSuccess: string;
@@ -93,23 +83,21 @@ export function edgeKey(targetId: string): string {
 
 export const GATEWAY_NODE = 'gateway';
 
-/**
- * The node surfaces that still carry a verdict: the port's ring and the wash spread across the row
- * when it answers or refuses. A lane and the dot on it never take these hues - a green or red line
- * on a routing map reads as the state of the connection, which is not what the line means.
- */
-const NODE_TONE_COLORS: Record<Exclude<PacketTone, 'request'>, string> = {
-  success: 'var(--success)',
-  failure: 'var(--danger)',
-};
-
 /** Starts and ends at rest, but leaves and arrives briskly: a cubic lingered at both nodes. */
 function easeInOutQuad(progress: number): number {
   return progress < 0.5 ? 2 * progress ** 2 : 1 - (-2 * progress + 2) ** 2 / 2;
 }
 
+/** The light a request sets out in, defined on the map. */
+const REQUEST_COLOR = 'var(--map-light)';
+/** What a request carries home: an answer, or the refusal it was given. */
+const VERDICT_COLORS: Record<Exclude<PacketTone, 'request'>, string> = {
+  success: 'var(--success)',
+  failure: 'var(--danger)',
+};
+
 interface Flight {
-  holder: HTMLElement;
+  packet: Packet;
   pathKey: string;
   isBack: boolean;
   startedAt: number;
@@ -118,9 +106,12 @@ interface Flight {
 }
 
 interface Packet {
-  holder: HTMLElement;
-  dot: HTMLElement;
+  holder: SVGGElement;
+  strokes: SVGPathElement[];
 }
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const STROKE_PX = [HEAD_PX, TAIL_PX];
 
 export function createPacketPlayer(stage: PacketStage) {
   const flights = new Set<Flight>();
@@ -129,7 +120,6 @@ export function createPacketPlayer(stage: PacketStage) {
   /** Pauses inside a trip, with the resolver that lets a halt end the trip instead of stranding it. */
   const waits = new Map<ReturnType<typeof setTimeout>, () => void>();
   const packets = new Set<Packet>();
-  const lit = new Map<string, number>();
   let frame = 0;
   let inFlight = 0;
   let isDisposed = false;
@@ -146,25 +136,6 @@ export function createPacketPlayer(stage: PacketStage) {
     const timer = setTimeout(() => { waits.delete(timer); resolve(); }, ms);
     waits.set(timer, resolve);
   });
-
-  /** A lane flows while anything travels it or waits at its end, in the direction of travel. */
-  const light = (pathKey: string, color: string, isBack: boolean) => {
-    lit.set(pathKey, (lit.get(pathKey) ?? 0) + 1);
-    const flow = stage.flow(pathKey);
-    if (!flow) return;
-    flow.style.stroke = color;
-    flow.classList.add(stage.classNames.flowOn);
-    flow.classList.toggle(stage.classNames.flowBack, isBack);
-  };
-  const unlight = (pathKey: string) => {
-    const count = (lit.get(pathKey) ?? 1) - 1;
-    if (count > 0) {
-      lit.set(pathKey, count);
-      return;
-    }
-    lit.delete(pathKey);
-    stage.flow(pathKey)?.classList.remove(stage.classNames.flowOn, stage.classNames.flowBack);
-  };
 
   const setBusy = () => stage.gateway()?.classList.toggle(stage.classNames.gatewayBusy, inFlight > 0 && !isDisposed);
 
@@ -186,25 +157,9 @@ export function createPacketPlayer(stage: PacketStage) {
     ));
   };
 
-  /** A lane stays lit behind the dot that crossed it and settles back to its resting weight. */
-  const trail = (pathKey: string) => {
-    const path = stage.path(pathKey);
-    if (!path) return;
-    const from = Number(getComputedStyle(path).opacity) || 0;
-    for (const running of path.getAnimations()) running.cancel();
-    // No closing keyframe: the lane settles to whatever its stylesheet rests it at.
-    void track(path.animate(
-      [
-        { opacity: from, offset: 0, easing: MOTION_ROUTE_LAND.easing },
-        { opacity: Math.max(from, TRAIL_OPACITY), offset: 1 / 6, easing: MOTION_ROUTE_GLOW.easing },
-      ],
-      { duration: MOTION_ROUTE_GLOW.duration },
-    ));
-  };
-
   /**
-   * A node takes a dot that docked in it: its edge glows and its port sends out a
-   * ring, and with `tone` a wash in that tone spreads across it from the port.
+   * A tile takes a request that docked in it: its edge brightens, and with `tone` a wash in that
+   * tone spreads across it.
    */
   const acknowledge = (key: string, tone: PacketTone, isWashed = true) => {
     const halo = stage.halo(key);
@@ -217,33 +172,33 @@ export function createPacketPlayer(stage: PacketStage) {
       wash.dataset.tone = tone;
       glow(wash, 1);
     }
-    const ring = stage.ring(key);
-    if (ring) {
-      ring.style.setProperty('--ring-color', tone === 'request' ? 'var(--accent)' : NODE_TONE_COLORS[tone]);
-      void track(ring.animate(
-        [{ transform: 'scale(0.8)', opacity: 0.7 }, { transform: 'scale(2.2)', opacity: 0 }],
-        { duration: MOTION_ROUTE_LAND.duration, easing: MOTION_ROUTE_LAND.easing },
-      ));
-    }
   };
 
   const tick = (now: number) => {
     frame = 0;
     for (const flight of flights) {
       // The lane is read again every frame: a row that slid or a lane that was
-      // redrawn carries the dot with it, and a lane that went away ends the trip.
+      // redrawn carries the request with it, and a lane that went away ends the trip.
       const path = stage.path(flight.pathKey);
-      const length = path?.getTotalLength() ?? 0;
+      const d = path?.getAttribute('d') ?? '';
+      const length = d ? path?.getTotalLength() ?? 0 : 0;
       if (!path || !(length > 0)) {
         flights.delete(flight);
         flight.resolve(false);
         continue;
       }
       const progress = Math.min(1, Math.max(0, (now - flight.startedAt) / flight.durationMs));
-      const eased = easeInOutQuad(progress);
-      const point = path.getPointAtLength((flight.isBack ? 1 - eased : eased) * length);
-      flight.holder.style.transform = `translate(${point.x.toFixed(1)}px, ${point.y.toFixed(1)}px)`;
-      flight.holder.style.opacity = Math.min(1, progress / PORT_FADE_SHARE, (1 - progress) / PORT_FADE_SHARE).toFixed(3);
+      // The head runs from the lane's start until the whole tail has sunk past its end, so the
+      // stroke is drawn out of one tile and into the next by the lane's own ends.
+      const travelled = easeInOutQuad(progress) * (length + TAIL_PX);
+      flight.packet.strokes.forEach((stroke, index) => {
+        const dash = STROKE_PX[index];
+        if (stroke.getAttribute('d') !== d) stroke.setAttribute('d', d);
+        stroke.style.strokeDasharray = `${dash} ${(length + 2 * TAIL_PX).toFixed(1)}`;
+        // Forwards the dash spans [travelled - dash, travelled]; back it spans the mirror of that.
+        const offset = flight.isBack ? travelled - length : dash - travelled;
+        stroke.style.strokeDashoffset = offset.toFixed(1);
+      });
       if (progress >= 1) {
         flights.delete(flight);
         flight.resolve(true);
@@ -252,48 +207,39 @@ export function createPacketPlayer(stage: PacketStage) {
     if (flights.size > 0 && !isDisposed) frame = requestAnimationFrame(tick);
   };
 
-  /** Carries a packet along one lane, forwards or back; false when the lane is not drawn. */
+  /** Carries a packet along one lane, forwards or back, in `color`; false when the lane is not drawn. */
   const fly = (trip: number, packet: Packet, pathKey: string, color: string, isBack: boolean, durationMs: number): Promise<boolean> => {
     if (!isCurrent(trip) || !stage.path(pathKey)) return Promise.resolve(false);
-    packet.dot.style.setProperty('--packet-color', color);
-    light(pathKey, color, isBack);
+    packet.holder.style.setProperty('--packet-color', color);
     return new Promise<boolean>((resolve) => {
-      flights.add({ holder: packet.holder, pathKey, isBack, startedAt: performance.now(), durationMs, resolve });
+      flights.add({ packet, pathKey, isBack, startedAt: performance.now(), durationMs, resolve });
       if (!frame) frame = requestAnimationFrame(tick);
-    }).then((hasArrived) => {
-      if (hasArrived) trail(pathKey);
-      return hasArrived;
-    }).finally(() => unlight(pathKey));
+    });
   };
-
 
   const launch = (): Packet | undefined => {
     const layer = stage.layer();
     if (!layer) return undefined;
-    const holder = document.createElement('span');
-    holder.className = stage.classNames.packet;
-    // Hidden until its first hop draws it out of the model's port.
-    holder.style.opacity = '0';
-    const dot = document.createElement('span');
-    dot.className = stage.classNames.packetDot;
-    holder.appendChild(dot);
+    const holder = document.createElementNS(SVG_NS, 'g');
+    holder.setAttribute('class', stage.classNames.packet);
+    // Drawn tail first, so the head lies over it. Each starts with no lane, so nothing shows
+    // until its first hop draws it out of the model's tile.
+    const strokes = [stage.classNames.packetHead, stage.classNames.packetTail].map((className) => {
+      const stroke = document.createElementNS(SVG_NS, 'path');
+      stroke.setAttribute('class', className);
+      return stroke;
+    });
+    holder.append(strokes[1], strokes[0]);
     layer.appendChild(holder);
-    const packet = { holder, dot };
+    const packet = { holder, strokes };
     packets.add(packet);
     return packet;
   };
 
-  /** The dot has sunk into its last node; only its element is left to remove. */
+  /** The request has sunk into its last tile; only its element is left to remove. */
   const land = (packet: Packet) => {
     packet.holder.remove();
     packets.delete(packet);
-  };
-
-  /** Waits at a credential with the lane still flowing towards it, as the request does there. */
-  const hold = async (pathKey: string, color: string, ms: number) => {
-    light(pathKey, color, false);
-    await wait(ms);
-    unlight(pathKey);
   };
 
 
@@ -304,20 +250,19 @@ export function createPacketPlayer(stage: PacketStage) {
     inFlight++;
     setBusy();
     try {
-      const color = stage.color(route.modelId);
       const home = laneKey(route.modelId);
       acknowledge(route.modelId, 'request');
-      if (!(await fly(trip, packet, home, color, false, LANE_HOP_MS))) return;
+      if (!(await fly(trip, packet, home, REQUEST_COLOR, false, LANE_HOP_MS))) return;
       acknowledge(GATEWAY_NODE, 'request');
 
       for (let index = 0; index < route.attempts.length; index++) {
         const attempt = route.attempts[index];
         const edge = edgeKey(attempt.targetId);
         // A credential past the map's limit has no lane; the request ends at the gateway.
-        if (!(await fly(trip, packet, edge, color, false, EDGE_HOP_MS))) return;
+        if (!(await fly(trip, packet, edge, REQUEST_COLOR, false, EDGE_HOP_MS))) return;
         // The credential lights as the request docks, and washes in the answer's tone when it answers.
         acknowledge(attempt.targetId, 'request', false);
-        await hold(edge, color, holdFor(attempt.event.latency_ms));
+        await wait(holdFor(attempt.event.latency_ms));
         if (!isCurrent(trip)) return;
         const isLast = index === route.attempts.length - 1;
         if (attempt.event.failed) {
@@ -326,7 +271,7 @@ export function createPacketPlayer(stage: PacketStage) {
           if (!isCurrent(trip)) return;
           if (!isLast) {
             // Refused: back to the gateway, which sends it on to the next credential.
-            if (!(await fly(trip, packet, edge, color, true, REFUSAL_HOP_MS))) return;
+            if (!(await fly(trip, packet, edge, VERDICT_COLORS.failure, true, REFUSAL_HOP_MS))) return;
             acknowledge(GATEWAY_NODE, 'failure');
             continue;
           }
@@ -335,9 +280,9 @@ export function createPacketPlayer(stage: PacketStage) {
         }
         // The answer, or the last refusal, goes home the way it came.
         const tone = attempt.event.failed ? 'failure' : 'success';
-        if (!(await fly(trip, packet, edge, color, true, EDGE_HOP_MS))) return;
+        if (!(await fly(trip, packet, edge, VERDICT_COLORS[tone], true, EDGE_HOP_MS))) return;
         acknowledge(GATEWAY_NODE, tone);
-        if (!(await fly(trip, packet, home, color, true, LANE_HOP_MS))) return;
+        if (!(await fly(trip, packet, home, VERDICT_COLORS[tone], true, LANE_HOP_MS))) return;
         acknowledge(route.modelId, tone);
         break;
       }
@@ -373,8 +318,6 @@ export function createPacketPlayer(stage: PacketStage) {
     animations.clear();
     for (const packet of packets) packet.holder.remove();
     packets.clear();
-    for (const key of lit.keys()) stage.flow(key)?.classList.remove(stage.classNames.flowOn, stage.classNames.flowBack);
-    lit.clear();
     stage.gateway()?.classList.remove(stage.classNames.gatewayBusy);
   };
   const isPageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';

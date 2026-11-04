@@ -394,7 +394,7 @@ export const DashboardPage: React.FC = () => {
     switch (id) {
       case 'requests':
         return (
-          <Panel className="dashboard-tile">
+          <Panel className="dashboard-tile kpi-tile">
             <div className="tile-head">
               <div className="tile-label">{t('dash.total_requests')}</div>
               <Button
@@ -435,7 +435,7 @@ export const DashboardPage: React.FC = () => {
         );
       case 'tokens':
         return (
-          <Panel className="dashboard-tile">
+          <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.total_tokens')}</div>
             <div className="tile-value" title={formatTokensFull(data.tokens.total)}>
               <RollingNumber readout={resolveTokenFlowReadout(data.tokens.total, tokenStyle)} />
@@ -462,9 +462,9 @@ export const DashboardPage: React.FC = () => {
         );
       case 'rpm':
         return (
-          <Panel className="dashboard-tile">
+          <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.rpm')}</div>
-            <div className="tile-value is-small">
+            <div className="tile-value">
               <RollingNumber readout={resolveCountFlowReadout(data.metrics.rpm)} />
             </div>
             <div className="tile-caption">
@@ -485,9 +485,9 @@ export const DashboardPage: React.FC = () => {
         );
       case 'tpm':
         return (
-          <Panel className="dashboard-tile">
+          <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.tpm')}</div>
-            <div className="tile-value is-small" title={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
+            <div className="tile-value" title={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
               <RollingNumber readout={resolveTokenRateFlowReadout(data.metrics.tpm)} />
             </div>
             <div className="tile-caption">
@@ -510,14 +510,14 @@ export const DashboardPage: React.FC = () => {
         );
       case 'cache_rate':
         return (
-          <Panel className="dashboard-tile">
+          <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">
               {t('dash.cache_rate')}
               <Tooltip title={t('dash.cache_rate_hint')}>
                 <QuestionCircleOutlined className="tile-help" />
               </Tooltip>
             </div>
-            <div className="tile-value is-small">
+            <div className="tile-value">
               <RollingNumber readout={resolveCacheRateReadout(data.metrics.cache_rate)} />
             </div>
             <div className="tile-caption">
@@ -547,14 +547,14 @@ export const DashboardPage: React.FC = () => {
         );
       case 'cost':
         return (
-          <Panel className="dashboard-tile">
+          <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">
               {t('dash.total_cost')}
               <Tooltip title={t('dash.cost_hint')}>
                 <QuestionCircleOutlined className="tile-help" />
               </Tooltip>
             </div>
-            <div className="tile-value is-small">
+            <div className="tile-value">
               <RollingNumber readout={currencyReadout(data.metrics.cost, currency)} />
             </div>
             <div className="tile-caption">

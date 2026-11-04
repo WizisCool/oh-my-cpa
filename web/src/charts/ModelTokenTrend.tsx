@@ -27,7 +27,7 @@ export interface ModelTokenTrendProps {
 
 /** Lines separate overlapping model readings; their DOM legend owns the ranked color assignment. */
 export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({
-  groups, focusedKey = null, foldedLabel, unnamedLabel, tokenUnitLabel = '', height = 260, onFocusGroup, onClearFocus,
+  groups, focusedKey = null, foldedLabel, unnamedLabel, tokenUnitLabel = '', height, onFocusGroup, onClearFocus,
 }) => {
   const timeZone = useTimeZone();
   const { theme } = useTheme();

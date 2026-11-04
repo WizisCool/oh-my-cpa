@@ -1,4 +1,3 @@
-import type { MessageKey } from '../../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
 
@@ -11,12 +10,10 @@ import { LoadFailure } from '../../feedback';
 import { useLiveRevision } from '../../../hooks/useLiveRevision';
 import { useProviderBranding } from '../../../hooks/useProviderBranding';
 import { useT } from '../../../i18n';
-import type { ConfigScalarsResponse } from '../../../types/configManagement';
 import { EVENT_AUTO_REFRESH_MS } from '../../../types/usageEventCadence';
 import { indexCredentialFiles } from '../../../types/usageEventIdentity';
 import type { UsageEvent } from '../../../types/usageEvents';
 import {
-  allocateSlots,
   arrivedRoutes,
   routesFinishedSince,
   buildRoutingModel,
@@ -30,15 +27,9 @@ import {
   type UsageRoutingResponse,
 } from '../../../types/usageRouting';
 import { RoutingMap, type RoutingArrivals } from './RoutingMap';
-import { routeColor, type IdentitySources } from './routingIdentity';
+import type { IdentitySources } from './routingIdentity';
 import styles from './RoutingPanel.module.css';
 import { Tooltip } from '../../common/Tooltip';
-
-const STRATEGY_LABEL_KEYS: Record<string, MessageKey> = {
-  'round-robin': 'cfg.strategy_round_robin',
-  'weighted-round-robin': 'cfg.strategy_wrr',
-  'fill-first': 'cfg.strategy_fill_first',
-};
 
 const NO_ARRIVALS: RoutingArrivals = { id: 0, routes: [] };
 /** The panel's clock: how often attempts are aged out of the minute. */
@@ -164,26 +155,9 @@ export function RoutingPanel() {
     [rolling, nowMs],
   );
 
-  // A model keeps its colour for as long as it stays on the panel.
-  const slotsRef = React.useRef(new Map<string, number>());
-  const slots = React.useMemo(() => {
-    const next = allocateSlots(slotsRef.current, model?.models.map((row) => row.id) ?? []);
-    slotsRef.current = next;
-    return next;
-  }, [model]);
-  const colorOf = React.useCallback((modelId: string) => {
-    const slot = slots.get(modelId);
-    return slot === undefined ? 'var(--accent)' : routeColor(slot);
-  }, [slots]);
-
   const authFiles = useQuery({
     queryKey: ['management-auth-files'],
     queryFn: () => api.getManagementAuthFiles(),
-    staleTime: 60_000,
-  });
-  const configQuery = useQuery<ConfigScalarsResponse>({
-    queryKey: ['management-config'],
-    queryFn: () => api.getConfigScalars(),
     staleTime: 60_000,
   });
   const {
@@ -198,10 +172,6 @@ export function RoutingPanel() {
     [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown],
   );
 
-  const strategyValue = configQuery.data?.scalars?.routing_strategy;
-  const strategy = strategyValue
-    ? (STRATEGY_LABEL_KEYS[strategyValue] ? t(STRATEGY_LABEL_KEYS[strategyValue]) : strategyValue)
-    : undefined;
   const isLive = liveState === 'live';
 
   return (
@@ -231,9 +201,7 @@ export function RoutingPanel() {
       {model && (
         <RoutingMap
           model={model}
-          colorOf={colorOf}
           nowMs={nowMs}
-          strategy={strategy}
           sources={sources}
           arrivals={arrivals}
         />

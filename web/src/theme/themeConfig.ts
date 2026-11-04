@@ -60,19 +60,19 @@ export const MOTION_SCROLL: MotionToken = { duration: 160, easing: 'cubic-bezier
  * the caller to the gateway or from the gateway to the credential that answered it.
  *
  * This motion runs on a live signal rather than on an action or a poll. It is
- * longer than `roll` because the reader has to follow a point across most of the map's width, which
- * a quarter second does not allow; it is a fixed length rather than one scaled by distance so a
+ * longer than `roll` because the reader has to follow a glowing stroke across most of the map's
+ * width, which a quarter second does not allow; it is a fixed length rather than one scaled by distance so a
  * reroute's second hop lands on the same beat as a first. The easing starts and ends at rest, unlike
  * the console's `ease`, because the hop begins at one node and settles on another.
  */
-export const MOTION_ROUTE: MotionToken = { duration: 300, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' };
+export const MOTION_ROUTE: MotionToken = { duration: 460, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' };
 
 /** The answering credential's acknowledgement when a hop lands on it: one fade, never repeated. */
 export const MOTION_ROUTE_LAND: MotionToken = { duration: 420, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
 /**
  * A routing-map node or lane lighting as a request reaches it and settling back: the light rises
- * over the first sixth and decays over the rest, so a card glows as the dot docks and cools while the
+ * over the first sixth and decays over the rest, so a tile glows as the request docks and cools while the
  * reader's eye moves on, instead of blinking.
  */
 export const MOTION_ROUTE_GLOW: MotionToken = { duration: 1200, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' };
@@ -370,9 +370,6 @@ export function themePaletteCssVariables(palette: ThemePalette): Record<string, 
   };
   palette.series.forEach((color, index) => {
     variables[`--series-${index + 1}`] = color;
-  });
-  palette.route.forEach((color, index) => {
-    variables[`--route-${index + 1}`] = color;
   });
   palette.effort.forEach((color, index) => {
     variables[`--effort-${index + 1}`] = color;

@@ -7,13 +7,18 @@
    share a row - the activity grid and the quota list beside it by default - end on one line.
    Apart from the rest of the dashboard's styles because the route's loading frame draws this grid
    before the page's own stylesheet has downloaded. */
+/* Rows are short tracks a widget spans a whole number of (see `DASHBOARD_ROW_PX`), at least that
+   tall and taller when a widget's content needs it, so a height chosen at one width never cuts a
+   widget off at another. The row track and the gap here are the model's `DASHBOARD_ROW_PX` and
+   `DASHBOARD_GAP_PX`. */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(24px, auto);
   gap: 16px;
   margin-bottom: 32px;
 }
-.dashboard-cell { display: flex; flex-direction: column; min-width: 0; grid-column: span 1; }
+.dashboard-cell { display: flex; flex-direction: column; min-width: 0; grid-column: span 1; grid-row: span var(--rows, 1); }
 .dashboard-cell[data-span="2"] { grid-column: span 2; }
 .dashboard-cell[data-span="3"] { grid-column: span 3; }
 .dashboard-cell[data-span="4"] { grid-column: span 4; }
@@ -30,5 +35,6 @@
    are a label, a figure and a sparkline, which half the width holds, and the wide ones still span
    the row. */
 @media (max-width: 640px) {
-  .dashboard-grid { gap: 12px; margin-bottom: 12px; }
+  .dashboard-grid { grid-auto-rows: auto; gap: 12px; margin-bottom: 12px; }
+  .dashboard-cell { grid-row: auto; }
 }

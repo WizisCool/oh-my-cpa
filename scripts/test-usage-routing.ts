@@ -13,8 +13,6 @@ import { test } from 'vitest';
 import {
   MAX_DRAWN_MODELS,
   MAX_DRAWN_TARGETS,
-  ROUTE_SLOTS,
-  allocateSlots,
   arrivedRoutes,
   routesFinishedSince,
   buildRoutingModel,
@@ -119,17 +117,6 @@ test('a resting credential is always drawn, and its cooldown ends on the clock',
   assert.equal(resting?.cooldown?.until_at_ms, NOW + 5_000);
   const later = buildRoutingModel(records, [cooldown], NOW + 6_000);
   assert.equal(later.targets.find((target) => target.id === 'auth:resting')?.cooldown, undefined);
-});
-
-test('a model keeps its colour while it stays, and a newcomer takes a free one', () => {
-  const first = allocateSlots(new Map(), ['model:a', 'model:b']);
-  assert.notEqual(first.get('model:a'), first.get('model:b'));
-  const next = allocateSlots(first, ['model:b', 'model:c']);
-  assert.equal(next.get('model:b'), first.get('model:b'));
-  assert.notEqual(next.get('model:c'), next.get('model:b'));
-  assert.equal(next.has('model:a'), false);
-  const many = allocateSlots(new Map(), Array.from({ length: ROUTE_SLOTS }, (_, index) => `model:${index}`));
-  assert.equal(new Set(many.values()).size, ROUTE_SLOTS, 'six drawn models never share a lane colour');
 });
 
 test('only requests past the newest one already seen replay, oldest first, and never on opening', () => {

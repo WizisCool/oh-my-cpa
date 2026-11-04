@@ -93,16 +93,6 @@
   --series-4: #f43f5e;
   --series-5: #f59e0b;
   --series-6: #06b6d4;
-  /* The live routing map's lane identities. A lane is a connection, and a
-     connection drawn in green, amber or red reads as a verdict on it. Every slot therefore stays on
-     the cool side of the wheel, away from the status hues the rest of the map still uses on node
-     surfaces. */
-  --route-1: #3b82f6;
-  --route-2: #8b5cf6;
-  --route-3: #06b6d4;
-  --route-4: #ec4899;
-  --route-5: #d946ef;
-  --route-6: #94a3b8;
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
@@ -239,12 +229,6 @@
   --series-4: #e11d48;
   --series-5: #b45309;
   --series-6: #0891b2;
-  --route-1: #2563eb;
-  --route-2: #7c3aed;
-  --route-3: #0891b2;
-  --route-4: #db2777;
-  --route-5: #c026d3;
-  --route-6: #475569;
   --series-track: #dcdce1;
   /* The same sweep as its darker steps, which is what stays legible on a light page. */
   --effort-1: #39626e;
@@ -1314,8 +1298,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .ant-btn.tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
 .dashboard-tile .ant-card-body { padding: 20px; height: 100%; display: flex; flex-direction: column; }
-.dashboard-tile .tile-caption { flex: 1; }
-.dashboard-tile .chart-slot, .dashboard-tile .chart-placeholder { flex: none; }
+/* A tile given more rows than its reading needs spends them on its sparkline. */
+.dashboard-tile .tile-caption { flex: none; }
+.dashboard-tile .chart-slot { display: flex; flex: 1 1 auto; flex-direction: column; }
+.dashboard-tile .chart-slot > div { flex: 1 1 0; min-height: 0; }
+.dashboard-tile .chart-placeholder { flex: none; margin-top: auto; }
 .tile-caption {
   display: flex;
   align-items: baseline;
@@ -1351,7 +1338,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* `min-width: 0` is load-bearing: these are grid children holding a canvas that sizes to its
    container, and without it a long model name in the legend would push the card wider than its
    track instead of truncating. */
-.model-trend { position: relative; min-width: 0; margin-top: 4px; }
+/* The plot fills the panel's spare height and is never less than 240px. It is a flex child with a
+   zero basis because a percentage height against an auto-height box resolves to nothing, and the
+   chart library then draws at its own default size. */
+.model-trend { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 240px; margin-top: 4px; }
+.model-trend > * { flex: 1 1 0; min-height: 0; }
 /* The ring yields width to the list down to a floor: the list's numeric columns cannot be abbreviated,
    so the name column loses that race whenever the ring insists on its full size, and a model name
    truncated to a few characters tells the reader nothing. `min-width` stops the yield at the point

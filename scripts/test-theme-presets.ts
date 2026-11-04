@@ -77,7 +77,7 @@ test('theme presets', () => {
    */
   function assertSignalsHold(mode: 'dark' | 'light', palette: ReturnType<typeof derivePalette>, where: string): void {
     const reference = resolvedBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').palette;
-    const signals = (of: typeof palette) => [of.success, of.warn, of.danger, ...of.series, ...of.route];
+    const signals = (of: typeof palette) => [of.success, of.warn, of.danger, ...of.series, ...of.model];
     const weakest = (color: string, of: typeof palette) => Math.min(contrastRatio(color, of.bg), contrastRatio(color, of.surface));
     signals(palette).forEach((color, index) => {
       const floor = Math.min(weakest(signals(reference)[index], reference), CONTRAST_FLOORS.text ?? 4.5);
@@ -112,7 +112,7 @@ test('theme presets', () => {
     const where = `${definition.id}:`;
 
     assert.equal(palette.series.length, 6, `${where} defines exactly six series slots`);
-    assert.equal(palette.route.length, 6, `${where} defines exactly six routing slots`);
+    assert.equal(palette.model.length, 6, `${where} defines exactly six model slots`);
     assert.equal(palette.tooltipBg, definition.mode === 'light' ? palette.fg : palette.surface,
       `${where} a tooltip sits on the surface it floats over`);
     assert.equal(palette.heatmapQuiet, palette.borderSoft, `${where} the ramp's floor is the border-soft step`);

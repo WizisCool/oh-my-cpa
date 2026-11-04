@@ -5,13 +5,14 @@ import { until } from '../harness.mjs';
  * board keeps what they chose.
  *
  * The rules about a stored arrangement are pinned by the logic suite (`test-dashboard-layout.ts`).
- * What needs a browser is that the pieces agree: the board draws the stored order and widths, the
- * editor's drag, step, width and hide controls change the board on the frame they are used, nothing
+ * What needs a browser is that the pieces agree: the board draws the stored order and sizes, the
+ * editor's drag, step, resize and hide controls change the board on the frame they are used, nothing
  * is written until Done, Cancel throws a draft away, a reload keeps the stored arrangement, and
  * Restore default puts the catalog back.
  *
- * The drag is a real HTML5 drag through Playwright's mouse rather than a synthetic event, so the
- * handle's arming of its cell - the only way a cell becomes draggable - is part of the claim.
+ * The drag and the resize are real pointer gestures through Playwright's mouse rather than synthetic
+ * events, so the handle being the only way to pick a widget up, the travel a drag needs before it
+ * starts, and the grid the resize snaps to are all part of the claim.
  */
 export async function dashboardLayout({ base, page, check }) {
   const preferences = {};
@@ -96,10 +97,66 @@ export async function dashboardLayout({ base, page, check }) {
   check('restoring the usage card returns the shared selection', await restoredSelection().textContent() === selectedModel);
 
   const quarter = await widthOf('tpm');
-  await cell('rpm').locator('.ant-segmented-item', { hasText: '1/2' }).click();
+  // The corner grip sizes on the board's grid: dragged one column right and down, the widget snaps
+  // to the next width and to whole rows, and the board reflows as it goes.
+  const rowsBefore = Number(await cell('rpm').getAttribute('data-rows'));
+  const heightBefore = (await cell('rpm').boundingBox()).height;
+  await cell('rpm').hover();
+  const corner = await cell('rpm').locator('[data-resize="xy"]').boundingBox();
+  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(corner.x + corner.width / 2 + quarter * 0.9, corner.y + corner.height / 2 + 125, { steps: 12 });
   await until(async () => (await cell('rpm').getAttribute('data-span')) === '2', { label: 'the RPM tile to widen' });
+  check('a resize reads out the size it has reached', /^1\/2 · \d+ rows$/.test((await page.locator('[class*="size-badge"]').textContent()) ?? ''));
+  await page.mouse.up();
   const half = await widthOf('rpm');
-  check('a width choice resizes the widget on the board', half > quarter * 1.8, `rpm=${half} tpm=${quarter}`);
+  const rowsAfter = Number(await cell('rpm').getAttribute('data-rows'));
+  check('the corner grip widens the widget a column', half > quarter * 1.8, `rpm=${half} tpm=${quarter}`);
+  check('the corner grip makes the widget taller by whole rows',
+    rowsAfter === rowsBefore + 3 && (await cell('rpm').boundingBox()).height > heightBefore + 100, `${rowsBefore} -> ${rowsAfter}`);
+  // The corner grip also takes the arrow keys, and a screen reader hears the size each one reaches,
+  // a limit included: the region is cleared and written again, so even unchanged text is re-read.
+  const announcement = page.getByTestId('dashboard-size-announcement');
+  const grip = cell('rpm').locator('[data-resize="xy"]');
+  await grip.focus();
+  await page.keyboard.press('ArrowDown');
+  await until(async () => (await announcement.textContent()) === `RPM: 1/2 · ${rowsAfter + 1} rows`, { label: 'the keyboard resize announcement' });
+  await page.keyboard.press('ArrowUp');
+  await until(async () => (await announcement.textContent()) === `RPM: 1/2 · ${rowsAfter} rows`, { label: 'the size back where it was' });
+  await announcement.evaluate((node) => {
+    window.__announcements = [];
+    new MutationObserver(() => window.__announcements.push(node.textContent)).observe(node, { childList: true, characterData: true, subtree: true });
+  });
+  // Narrowed to the board's narrowest span and pressed past it, the text stays the same, so only
+  // the clear makes the second press heard.
+  const narrowest = /^RPM: 1\/4 · \d+ rows$/;
+  const narrowestCount = async () => (await page.evaluate(() => window.__announcements)).filter((text) => narrowest.test(text)).length;
+  await page.keyboard.press('ArrowLeft');
+  await until(async () => (await narrowestCount()) === 1, { label: 'the narrowest span announced' });
+  await page.keyboard.press('ArrowLeft');
+  await until(async () => (await narrowestCount()) === 2, { label: 'the narrowest span announced again at the limit' });
+  const sequence = await page.evaluate(() => window.__announcements);
+  check('a keyboard resize is announced in a region that stays mounted, again at a limit',
+    sequence.filter((text) => narrowest.test(text)).length >= 2 && sequence.filter((text) => text === '').length >= 2,
+    JSON.stringify(sequence));
+  await page.keyboard.press('ArrowRight');
+  await until(async () => (await cell('rpm').getAttribute('data-span')) === '2', { label: 'the RPM tile back at half width' });
+  // Dragged far above its content, the bottom edge stops where the content still fits.
+  const bottom = await cell('rpm').locator('[data-resize="y"]').boundingBox();
+  await page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bottom.x + bottom.width / 2, bottom.y - 600, { steps: 10 });
+  await page.mouse.up();
+  const shrunk = Number(await cell('rpm').getAttribute('data-rows'));
+  const fit = await cell('rpm').evaluate((node) => {
+    const box = node.getBoundingClientRect().height;
+    node.style.alignSelf = 'start';
+    const content = node.getBoundingClientRect().height;
+    node.style.alignSelf = '';
+    return { box, content };
+  });
+  check('a widget is never made shorter than its content',
+    shrunk < rowsAfter && fit.content <= fit.box + 0.5 && fit.box - fit.content < 40, JSON.stringify({ shrunk, ...fit }));
 
   await cell('requests').getByRole('button', { name: /^Move later/ }).click();
   await until(async () => (await order())[0] === 'tokens', { label: 'the requests tile to step later' });
@@ -110,7 +167,7 @@ export async function dashboardLayout({ base, page, check }) {
       && await restoredSelection().textContent() === selectedModel);
 
   // Both cells are on the first row, so the drag never has to scroll the page under the pointer.
-  await cell('tpm').locator('[data-drag-handle]').dragTo(cell('tokens'), { targetPosition: { x: 8, y: 40 } });
+  await cell('tpm').locator('[data-drag-handle]').dragTo(cell('tokens'), { targetPosition: { x: 8, y: 40 }, steps: 12 });
   await until(async () => (await order())[0] === 'tpm', { label: 'the TPM tile to be dragged first' });
   check('a drag places the widget where it is dropped', (await order()).slice(0, 2).join(',') === 'tpm,tokens', (await order()).join(','));
   check('nothing is stored while the operator is still arranging', layoutWrites().length === 0);
@@ -120,7 +177,7 @@ export async function dashboardLayout({ base, page, check }) {
   const stored = JSON.parse(layoutWrites()[0].body);
   const storedItem = (id) => stored.find((entry) => entry.id === id);
   check('Done stores the arrangement as one ordered document',
-    stored[0].id === 'tpm' && storedItem('cost').hidden === true && storedItem('rpm').span === 2,
+    stored[0].id === 'tpm' && storedItem('cost').hidden === true && storedItem('rpm').span === 2 && storedItem('rpm').rows === shrunk,
     layoutWrites()[0].body);
 
   await open();

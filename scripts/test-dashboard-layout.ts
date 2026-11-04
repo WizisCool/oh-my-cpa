@@ -50,7 +50,9 @@ test('dashboard layout', () => {
     null,
     { id: 'routing', span: 1 },
     { id: 'cost', span: 2.5 },
-    { id: 'tokens', span: 3, hidden: 'yes' },
+    { id: 'tokens', span: 3, rows: 12, hidden: 'yes' },
+    { id: 'tpm', span: 1, rows: 99 },
+    { id: 'cache_rate', span: 1, rows: 0.5 },
   ])!;
   assert.equal(ids(stored)[0], 'providers', 'a stored order is kept');
   assert.equal(ids(stored)[1], 'requests');
@@ -59,6 +61,10 @@ test('dashboard layout', () => {
   assert.equal(item(stored, 'routing').span, 3, 'a width the widget does not offer lands on the nearest one it does');
   assert.equal(item(stored, 'cost').span, 1, 'a fractional width falls back to the default');
   assert.equal(item(stored, 'tokens').hidden, false, 'only `true` hides a widget');
+  assert.equal(item(stored, 'tokens').rows, 12, 'a stored height is kept');
+  assert.equal(item(stored, 'tpm').rows, 24, 'a height past the board\'s tallest is held to it');
+  assert.equal(item(stored, 'cache_rate').rows, 7, 'a fractional height falls back to the default');
+  assert.equal(item(stored, 'providers').rows, 3, 'a document written before heights reads each default');
   assert.equal(new Set(ids(stored)).size, defaultIds.length, 'every catalog widget appears exactly once');
   assert.deepEqual([...ids(stored)].sort(), [...defaultIds].sort());
 
@@ -98,8 +104,13 @@ test('dashboard layout', () => {
 
   // ── resizing and hiding ─────────────────────────────────────────────────────
 
-  assert.equal(item(resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'rpm', 3), 'rpm').span, 3);
-  assert.equal(resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'routing', 1), DEFAULT_DASHBOARD_LAYOUT, 'a width the widget does not offer is refused');
+  assert.equal(item(resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'rpm', { span: 3 }), 'rpm').span, 3);
+  assert.equal(resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'routing', { span: 1 }), DEFAULT_DASHBOARD_LAYOUT, 'a width the widget does not offer is refused');
+  const taller = resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'rpm', { span: 2, rows: 9 });
+  assert.deepEqual([item(taller, 'rpm').span, item(taller, 'rpm').rows], [2, 9], 'a corner resize sets both at once');
+  assert.ok(!sameDashboardLayout(taller, DEFAULT_DASHBOARD_LAYOUT), 'a height is part of the arrangement');
+  assert.equal(resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'rpm', { rows: 0 }), DEFAULT_DASHBOARD_LAYOUT, 'a height under one row is refused');
+  assert.equal(resizeDashboardWidget(DEFAULT_DASHBOARD_LAYOUT, 'rpm', { rows: 7 }), DEFAULT_DASHBOARD_LAYOUT, 'a resize to the same size changes nothing');
   assert.equal(item(hiddenTokens, 'tokens').hidden, true);
   assert.equal(item(setDashboardWidgetHidden(hiddenTokens, 'tokens', false), 'tokens').hidden, false);
   assert.ok(sameDashboardLayout(setDashboardWidgetHidden(hiddenTokens, 'tokens', false), DEFAULT_DASHBOARD_LAYOUT));

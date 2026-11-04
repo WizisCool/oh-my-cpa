@@ -6,7 +6,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
-import { seriesColor, seriesDomainKey, seriesGroupLabel as groupLabel } from '../../charts/chartTheme';
+import { seriesColorRange, seriesDomainKey, seriesGroupLabel as groupLabel } from '../../charts/chartTheme';
 import { useTheme } from '../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
@@ -237,6 +237,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
   const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups, models.data !== undefined);
+  const colors = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
 
   return (
     <Panel
@@ -253,7 +254,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
             const key = seriesDomainKey(group);
             return {
               id: key,
-              color: seriesColor(theme.palette, index),
+              color: colors[index],
               content: <ModelSeriesName group={group} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} />,
               title: t(focusedKey === key ? 'dash.models.clear_series_focus' : 'dash.models.focus_series'),
               isPressed: focusedKey === key,
@@ -266,7 +267,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
           <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
         ) : (
           <React.Suspense fallback={chartFallback}>
-            <LazyModelTokenTrend groups={groups} focusedKey={focusedKey} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onFocusGroup={toggleSeries} onClearFocus={clearFocus} />
+            <LazyModelTokenTrend groups={groups} focusedKey={focusedKey} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} onFocusGroup={toggleSeries} onClearFocus={clearFocus} />
           </React.Suspense>
         )}
       </ModelPanelBody>
@@ -285,6 +286,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
   const total = models.data?.total_tokens ?? 0;
   const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups, models.data !== undefined);
+  const colors = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
 
   return (
     <Panel
@@ -314,7 +316,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
                 // second thing an operator reads a spend table for, and the share stays last
                 // where it continues the percentage column of the ring beside it.
                 <li className="model-usage-row" key={seriesDomainKey(group)}>
-                  <span className="model-usage-swatch" style={{ background: seriesColor(theme.palette, index) }} aria-hidden="true" />
+                  <span className="model-usage-swatch" style={{ background: colors[index] }} aria-hidden="true" />
                   <span className="model-usage-name">
                     <button
                       type="button"

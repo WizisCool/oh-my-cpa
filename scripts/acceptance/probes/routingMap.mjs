@@ -92,7 +92,6 @@ export function routingFixtures() {
     routes: [
       [(url) => url.pathname.endsWith('/usage/routing'), respond],
       [(url) => url.pathname.endsWith('/usage/live'), () => ({ contentType: 'text/event-stream', body: 'retry: 1000\nevent: ready\ndata: {}\n\n' })],
-      [(url) => url.pathname.endsWith('/management/config'), () => ({ scalars: { routing_strategy: 'round-robin' } })],
     ],
   };
 }
@@ -102,7 +101,7 @@ export async function routingMap({ base, page, check, fixtures }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   const panel = page.locator('[data-testid="dashboard-routing"]');
   const map = panel.locator('[data-testid="routing-map"]');
-  const packets = map.locator('[data-testid="routing-packets"] > span');
+  const packets = map.locator('[data-testid="routing-packets"] > *');
   const modelRow = (name) => map.locator('[data-testid="routing-model"]', { hasText: name });
   await map.waitFor({ timeout: 20_000 });
   await until(async () => (await map.locator('[data-testid="routing-model"]').count()) === 2, { label: 'the models of the minute' });
@@ -110,7 +109,6 @@ export async function routingMap({ base, page, check, fixtures }) {
   const text = await panel.innerText();
   check('the left column names the models called', text.includes('claude-sonnet-5-5') && text.includes('gpt-5-codex'), text);
   check('the left column carries no caller or client', !/codex_cli_rs|claude-cli|Claude Code/.test(text), text);
-  check('the gateway names the routing strategy CPA is configured with', /轮询|Round Robin/i.test(await panel.locator('[data-testid="routing-gateway"]').innerText()));
   check('a credential CPA reported resting says when it is back', /back in \d+ s|\d+ 秒后恢复/.test(text), text);
   check('the panel offers no window of its own: it is live only', (await panel.locator('.ant-segmented').count()) === 0);
 
@@ -121,7 +119,7 @@ export async function routingMap({ base, page, check, fixtures }) {
     const box = mapNode.getBoundingClientRect();
     const ends = [...mapNode.querySelectorAll('[data-testid="routing-lane"] > path:first-child')]
       .map((path) => path.getPointAtLength(path.getTotalLength()));
-    const rows = [...mapNode.querySelectorAll('[data-route-target], [data-testid="routing-gateway"]')].map((row) => row.getBoundingClientRect());
+    const rows = [...mapNode.querySelectorAll('[data-route-target], [data-route-hub]')].map((row) => row.getBoundingClientRect());
     return ends.length === 5 && ends.every((end) => rows.some((rect) => Math.abs(rect.left - box.left - end.x) <= 1 && end.y >= rect.top - box.top && end.y <= rect.bottom - box.top));
   });
   check('every lane ends on the row it joins', landsOnRows);
@@ -163,31 +161,31 @@ export async function routingMap({ base, page, check, fixtures }) {
   const isTravelling = await until(async () => (await packets.count()) > 0, { label: 'a request packet', timeoutMs: 5_000 })
     .then(() => true, () => false);
   check('a request stored while the dashboard is open travels the map', isTravelling);
-  // A flow is on only while a dot is on the lane, so reading the packet colours in the same pass is
-  // what makes the claim below non-vacuous: the request is visibly travelling when it is checked.
-  const travellingColors = await until(
-    () => map.locator('[data-testid="routing-lane"] > path:nth-child(2)')
-      .evaluateAll((flows) => flows.some((flow) => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0))
-      .then(async (isFlowing) => {
-        if (!isFlowing) return false;
-        const colors = await packets.evaluateAll((holders) => holders.map((holder) => holder.firstElementChild?.style.getPropertyValue('--packet-color') ?? ''));
-        return colors.length > 0 ? colors : false;
-      }),
-    { label: 'a lane flowing under the request', timeoutMs: 3_000 },
-  ).then((colors) => colors, () => []);
-  check('the lane a request travels flows while it is on it', travellingColors.length > 0);
-  check(
-    'the travelling request keeps the model colour, never a status hue',
-    travellingColors.length > 0 && travellingColors.every((color) => color.startsWith('var(--route-')),
-    JSON.stringify(travellingColors),
-  );
+  // A request is drawn on a copy of the lane it is on. Its colours are sampled over the whole trip:
+  // it sets out in the map's one light, the credential that refuses it sends it back red, and the
+  // answer comes home green - while every lane it crossed stays neutral.
+  const trip = new Set();
+  await until(async () => {
+    const seen = await map.evaluate((mapNode) => {
+      const lanes = new Set([...mapNode.querySelectorAll('[data-testid="routing-lane"] > path')].map((path) => path.getAttribute('d')));
+      return [...mapNode.querySelectorAll('[data-testid="routing-packets"] > *')]
+        .filter((holder) => [...holder.children].every((stroke) => lanes.has(stroke.getAttribute('d'))))
+        .map((holder) => holder.style.getPropertyValue('--packet-color'));
+    });
+    seen.forEach((color) => trip.add(color));
+    return trip.has('var(--success)');
+  }, { label: 'the request travelling out and home', timeoutMs: 8_000 }).catch(() => {});
+  const colors = [...trip];
+  check('a travelling request is drawn along the lane it is on', colors.length > 0, JSON.stringify(colors));
+  check('a request sets out in the map\'s one light', colors.includes('var(--map-light)'), JSON.stringify(colors));
+  check('a refusal travels back red and the answer comes home green',
+    colors.includes('var(--danger)') && colors.includes('var(--success)'), JSON.stringify(colors));
   const isAnswered = await until(
     () => modelRow('glm-5-air').locator('[data-tone="success"]').count().then((count) => count > 0),
     { label: 'the answer acknowledged at the model', timeoutMs: 8_000 },
   ).then(() => true, () => false);
   check('the answering credential sends a response back to the model', isAnswered);
   await until(async () => (await packets.count()) === 0, { label: 'the packets to finish', timeoutMs: 8_000 });
-  check('the gateway counts the arrival\'s two attempts', /\b6 attempts\b/.test(await panel.locator('[data-testid="routing-gateway"]').innerText()));
 
   // Away from the page. A hidden page runs no animation frames, so a trip left running there would
   // finish every hop it missed in a frame each on return; and a request stored while nobody looked
@@ -246,9 +244,8 @@ export async function routingMap({ base, page, check, fixtures }) {
   const reducedRead = fixtures.reads();
   await until(() => fixtures.reads() > reducedRead, { label: 'the reduced-motion arrival applied' });
   check('reduced motion updates the map without a travelling packet', (await page.evaluate(() => window.__reducedPackets)) === 0 && (await packets.count()) === 0);
-  const hasFlow = await map.locator('[data-testid="routing-lane"] > path:nth-child(2)')
-    .evaluateAll(flows => flows.some(flow => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0));
-  check('reduced motion leaves every lane at rest', !hasFlow);
+  const isSpinning = await map.locator('svg circle').evaluateAll((circles) => circles.some((circle) => getComputedStyle(circle).animationName !== 'none'));
+  check('reduced motion leaves the gateway at rest', !isSpinning);
 }
 
 export async function routingNarrow({ base, page, check }) {

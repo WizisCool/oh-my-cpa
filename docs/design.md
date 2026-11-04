@@ -90,8 +90,8 @@ labelled-row representation, not a separately maintained mobile dataset. Preserv
 ordering, values, action reachability and empty/loading states in either presentation.
 
 A list the operator arranges by hand uses
-[`RowReorder`](../web/src/components/common/RowReorder.tsx); the routing board uses the
-same drag library for its own layout. Only a handle starts a
+[`RowReorder`](../web/src/components/common/RowReorder.tsx); the dashboard grid and the
+routing board use the same drag library for their own layouts. Only a handle starts a
 drag. On a wide screen it stays hidden along the row's leading edge until the pointer
 reaches that edge, so it takes no column. On a phone it sits inline with the row's
 controls. Rows sort live, without dimming, and travel only along the list. The drop
