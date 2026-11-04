@@ -1,4 +1,5 @@
-import { Button, Input, InputNumber, Select, Typography } from 'antd';
+import { Button, Input, Select, Typography } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { DeleteOutlined, PlusOutlined, SettingOutlined } from '../icons';
 
 import {
@@ -222,7 +223,7 @@ export function renderTypedParamsSection(draft: PayloadRulesDraft, category: 'de
                   {/* Typed Value Control */}
                   <div className="payload-param-value-wrap">
                     {p.type === 'number' ? (
-                      <InputNumber
+                      <NumberInput
                         size="small"
                         style={{ width: '100%' }}
                         value={Number(p.value) || 0}

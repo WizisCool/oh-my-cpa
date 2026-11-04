@@ -1,4 +1,5 @@
-import { Button, Input, InputNumber, Select, Typography } from 'antd';
+import { Button, Input, Select, Typography } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { Switch } from '../common/Switch';
 import {
   ApiOutlined,
@@ -113,7 +114,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
     if (field.type === 'number') {
       return (
         <div className="settings-number-control">
-          <InputNumber
+          <NumberInput
             id={`cfg-${field.id}`}
             aria-describedby={`desc-${field.id}`}
             className="config-mono-input"

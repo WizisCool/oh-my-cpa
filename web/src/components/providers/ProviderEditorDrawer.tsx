@@ -7,10 +7,10 @@ import {
   Col,
   Form,
   Input,
-  InputNumber,
   Row,
   Select,
 } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined } from '../icons';
 
 import { useT } from '../../i18n';
@@ -467,7 +467,7 @@ export function ProviderEditorDrawer({
             </Col>
             <Col xs={24} sm={12}>
               <Form.Item label={t('pro.field_priority')}>
-                <InputNumber
+                <NumberInput
                   value={formPriority}
                   onChange={(val) => setFormPriority(val)}
                   placeholder="e.g. 1"
@@ -654,7 +654,7 @@ export function ProviderEditorDrawer({
                             <div className={styles['item-field-label']}>
                               {t('pro.weight_label')}
                             </div>
-                            <InputNumber
+                            <NumberInput
                               value={k.weight ?? 1}
                               onChange={(val) =>
                                 setFormKeys((prev) =>

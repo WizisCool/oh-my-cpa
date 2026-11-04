@@ -1,7 +1,8 @@
 import { prefixedKey } from '../../i18n/catalog';
 import React from 'react';
 
-import { Button, InputNumber, Table, Typography } from 'antd';
+import { Button, Table, Typography } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
@@ -142,7 +143,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
         <div className={styles['backups-toolbar']}>
           <div className={styles['backups-retention']}>
             <Text>{t('cfg.backups_retention')}</Text>
-            <InputNumber
+            <NumberInput
               size="small"
               min={settings?.retention_min ?? 5}
               max={settings?.retention_max ?? 100}

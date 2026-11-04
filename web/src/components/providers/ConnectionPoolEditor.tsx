@@ -1,4 +1,5 @@
-import { Checkbox, Input, InputNumber, Segmented } from 'antd';
+import { Checkbox, Input, Segmented } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 import { useId } from 'react';
 import { useT } from '../../i18n';
 import type { ProviderConnectionPoolSettings, ProviderOverride } from '../../types/providers';
@@ -42,7 +43,7 @@ export function ConnectionPoolEditor({ draft, onChange, isGroup = false, groupNa
       </div>
       <div className={styles['policy-field']}>
         <label className={styles['item-field-label']} htmlFor={`${id}-max`}>{t('pool.max_idle')}</label>
-        <InputNumber id={`${id}-max`} className={styles['full-width']} value={draft.maxIdleConnsPerHost} precision={0} placeholder={String(inheritedPool?.max_idle_conns_per_host ?? 2)} onChange={maxIdleConnsPerHost => onChange({ ...draft, maxIdleConnsPerHost })} />
+        <NumberInput id={`${id}-max`} className={styles['full-width']} value={draft.maxIdleConnsPerHost} precision={0} placeholder={String(inheritedPool?.max_idle_conns_per_host ?? 2)} onChange={maxIdleConnsPerHost => onChange({ ...draft, maxIdleConnsPerHost })} />
       </div>
       <div className={styles['policy-desc']}>{t('pool.limits_hint')}</div>
     </>}

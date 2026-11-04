@@ -171,3 +171,14 @@ it('keeps field edits dirty when recovery leaves the drawer open', async () => {
     expect(surface.writes).toHaveLength(0);
   } finally { surface.unmount(); }
 });
+
+it('leaves the wheel to the drawer over a number field its form disables', async () => {
+  installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }] });
+  renderWithOmc(<AuthFileDetailDrawer file={FILE} open canEdit={false} initialSection="configuration" onClose={vi.fn()} onSaved={vi.fn()} onDownload={vi.fn()} />);
+  const field = (await screen.findAllByRole('spinbutton'))[0] as HTMLInputElement;
+  await waitFor(() => expect(field.disabled).toBe(true));
+  const before = field.value;
+  // `fireEvent` reports false when a listener took the event from the page.
+  expect(fireEvent.wheel(field, { deltaY: -100 })).toBe(true);
+  expect(field.value).toBe(before);
+});

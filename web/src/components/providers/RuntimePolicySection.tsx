@@ -2,7 +2,8 @@ import { ConnectionPoolEditor } from './ConnectionPoolEditor';
 import type { ConnectionPoolDraft } from './connectionPool';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Checkbox, Input, InputNumber, Segmented } from 'antd';
+import { Checkbox, Input, Segmented } from 'antd';
+import { NumberInput } from '../common/NumberInput';
 
 import { useT } from '../../i18n';
 import type { ProviderBehaviorSwitch, ProviderOverride } from '../../types/providers';
@@ -75,7 +76,7 @@ export function RuntimePolicySection({
 
       <div className={styles['policy-field']}>
         <label className={styles['item-field-label']} htmlFor="provider-policy-retry">{t('policy.retry')}</label>
-        <InputNumber
+        <NumberInput
           id="provider-policy-retry"
           className={styles['policy-number']}
           value={policy.requestRetry}
