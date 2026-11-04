@@ -88,9 +88,14 @@ describe('credential quota board', () => {
     ]);
     expect(board).toMatchObject({ servingCount: 3, blockedCount: 2, disabledCount: 1 });
     const low = board.rows.find((row) => row.fileName === 'low')!;
-    expect(low.windows.map((entry) => entry.kind)).toEqual(['five_hour', 'weekly']);
+    expect(low.slots.map((entry) => entry?.kind)).toEqual(['five_hour', 'weekly']);
     expect(low.bindingWindow?.kind).toBe('weekly');
     expect(low.remainingPercent).toBe(12);
+  });
+
+  it('keeps a credential without a five-hour limit from moving its weekly reading into that place', () => {
+    const board = buildCredentialQuotaBoard([file('weekly-only')], [quota('weekly-only', [quotaWindow('weekly', 60, 30)])]);
+    expect(board.rows[0].slots.map((entry) => entry?.kind)).toEqual([undefined, 'weekly']);
   });
 
   it('recovers an exhausted credential only when every spent window has reset', () => {

@@ -50,27 +50,55 @@ export function quotaWindowPeriod(window: QuotaWindow): QuotaWindowPeriod | unde
 const PERIOD_ORDER: (QuotaWindowPeriod | undefined)[] = ['five_hour', 'daily', 'weekly', 'monthly', undefined];
 
 /**
- * The two windows a row has room for: the credential's own plan when it publishes one, otherwise
- * the first family the provider reports, shortest period first. Per-model and side allowances
- * belong to the workspace's detail view.
+ * Which of a row's two places a window takes: the short one for limits that refill within a day,
+ * the long one for the weekly and monthly ones. A period with no name is placed by its hours, and
+ * one without hours takes whichever place is free.
  */
-function pickRowWindows(windows: QuotaWindow[]): QuotaWindow[] {
+function slotOf(window: QuotaWindow): 0 | 1 | undefined {
+  const period = quotaWindowPeriod(window);
+  if (period === 'five_hour' || period === 'daily') return 0;
+  if (period === 'weekly' || period === 'monthly') return 1;
+  if (window.period_hours != null) return window.period_hours <= 24 ? 0 : 1;
+  return undefined;
+}
+
+function familyOf(window: QuotaWindow): string {
+  return window.scope === 'group' ? `group:${window.label.split(' · ')[0]}` : window.scope === 'model' ? `model:${window.model || window.label}` : window.scope;
+}
+
+/**
+ * The family a row reads - the credential's own plan when it publishes one, otherwise the first
+ * family the provider reports - placed into its two fixed slots, short limit first. A slot the
+ * credential has no limit for stays empty, so every row's five-hour reading sits under the one
+ * above it whichever limits each credential reports. Per-model and side allowances belong to the
+ * workspace's detail view.
+ */
+function pickRowWindows(windows: QuotaWindow[]): [QuotaWindow?, QuotaWindow?] {
   const first = windows.find((window) => window.scope === 'standard') ?? windows[0];
   if (!first) return [];
-  const familyOf = (window: QuotaWindow) => (
-    window.scope === 'group' ? `group:${window.label.split(' · ')[0]}` : window.scope === 'model' ? `model:${window.model || window.label}` : window.scope
-  );
+  const family = familyOf(first);
   const seenIds = new Set<string>();
-  return windows
-    .filter((window) => familyOf(window) === familyOf(first))
+  const candidates = windows
+    .filter((window) => familyOf(window) === family)
     .filter((window) => {
       if (!window.id) return true;
       if (seenIds.has(window.id)) return false;
       seenIds.add(window.id);
       return true;
     })
-    .sort((left, right) => PERIOD_ORDER.indexOf(quotaWindowPeriod(left)) - PERIOD_ORDER.indexOf(quotaWindowPeriod(right)))
-    .slice(0, 2);
+    .sort((left, right) => PERIOD_ORDER.indexOf(quotaWindowPeriod(left)) - PERIOD_ORDER.indexOf(quotaWindowPeriod(right)));
+  const slots: [QuotaWindow?, QuotaWindow?] = [];
+  const unplaced: QuotaWindow[] = [];
+  for (const window of candidates) {
+    const slot = slotOf(window);
+    if (slot === undefined) unplaced.push(window);
+    else if (!slots[slot]) slots[slot] = window;
+  }
+  for (const window of unplaced) {
+    if (!slots[0]) slots[0] = window;
+    else if (!slots[1]) slots[1] = window;
+  }
+  return slots;
 }
 
 /**
@@ -100,9 +128,9 @@ export interface CredentialQuotaRow {
   primary: string;
   provider: string;
   state: CredentialQuotaState;
-  /** The credential's own model family, shortest limit first; at most two. */
-  windows: QuotaWindow[];
-  /** The tightest of `windows`, which is the limit that stops the credential first. */
+  /** The credential's own model family in two fixed places: the short limit, then the long one. */
+  slots: [QuotaWindow?, QuotaWindow?];
+  /** The tightest of `slots`, which is the limit that stops the credential first. */
   bindingWindow?: QuotaWindow;
   remainingPercent?: number;
   /** When a blocked credential serves again, where the gateway or the provider stated it. */
@@ -169,7 +197,8 @@ export function buildCredentialQuotaBoard(files: ManagementAuthFile[], quotas: Q
       continue;
     }
     const item = file.auth_index ? quotaByAuthIndex.get(file.auth_index) : undefined;
-    const windows = pickRowWindows(item?.windows ?? []);
+    const slots = pickRowWindows(item?.windows ?? []);
+    const windows = slots.filter((window): window is QuotaWindow => window !== undefined);
     let bindingWindow: QuotaWindow | undefined;
     let remainingPercent: number | undefined;
     for (const window of windows) {
@@ -186,7 +215,7 @@ export function buildCredentialQuotaBoard(files: ManagementAuthFile[], quotas: Q
       primary: credentialLabel(file),
       provider: (file.type || file.provider || 'unknown').trim().toLowerCase(),
       state,
-      windows,
+      slots,
       bindingWindow,
       remainingPercent,
       recoverAtMS: resolveRecovery(state, item, windows),

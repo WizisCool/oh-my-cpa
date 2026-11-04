@@ -110,6 +110,8 @@ const QuotaWindowMeter: React.FC<{ window: QuotaWindow }> = ({ window }) => {
   );
 };
 
+const EmptyQuotaSlot: React.FC = () => <span className="quota-window is-missing" aria-hidden="true">—</span>;
+
 const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number; pluginLogos?: PluginOAuthLogos }> = ({ row, nowMS, pluginLogos }) => {
   const t = useT();
   const status = STATUS_ROW_STATES[row.state];
@@ -139,7 +141,10 @@ const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number;
         </span>
       ) : (
         <span className="quota-row-windows">
-          {row.windows.map((window) => <QuotaWindowMeter key={window.id || window.label} window={window} />)}
+          {/* Both places are always drawn, so a credential without a five-hour limit leaves that
+              place empty instead of moving its weekly reading under everyone else's five hours. */}
+          {row.slots[0] ? <QuotaWindowMeter window={row.slots[0]} /> : <EmptyQuotaSlot />}
+          {row.slots[1] ? <QuotaWindowMeter window={row.slots[1]} /> : <EmptyQuotaSlot />}
         </span>
       )}
       <span className="quota-row-when">

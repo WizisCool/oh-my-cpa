@@ -409,6 +409,7 @@
   min-width: 0;
 }
 .quota-window { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px; align-items: center; gap: 8px; min-width: 0; }
+.quota-window.is-missing { display: block; color: var(--muted); font-size: var(--text-sm); }
 .quota-window-label { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-sm); }
 .quota-window-track { display: block; height: 6px; border-radius: var(--radius-xs); background: var(--border); overflow: hidden; }
 .quota-window-fill { display: block; height: 100%; border-radius: inherit; }
