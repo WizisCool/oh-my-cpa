@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -52,6 +53,23 @@ func TestSecurityHeadersApplied(t *testing.T) {
 	}
 	if resp.Header.Get("Content-Security-Policy-Report-Only") == "" {
 		t.Errorf("expected Content-Security-Policy-Report-Only header")
+	}
+	if resp.Header.Get("X-Robots-Tag") != robotsTagValue {
+		t.Errorf("expected X-Robots-Tag %q, got %q", robotsTagValue, resp.Header.Get("X-Robots-Tag"))
+	}
+
+	// A mounted console answers robots.txt at the origin root, where crawlers look, and
+	// under its own base path; neither falls through to the SPA's index.html.
+	for _, path := range []string{"/robots.txt", "/omc/robots.txt"} {
+		robots, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(robots.Body)
+		robots.Body.Close()
+		if robots.StatusCode != http.StatusOK || string(body) != robotsTxt || robots.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			t.Errorf("%s = %d %q (%s), want the disallow-all robots.txt", path, robots.StatusCode, body, robots.Header.Get("Content-Type"))
+		}
 	}
 }
 

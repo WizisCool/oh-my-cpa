@@ -202,6 +202,12 @@ func (h *Handler) routes() chi.Router {
 	if base == "" {
 		base = "/"
 	}
+	if base != "/" {
+		// Crawlers read robots.txt only at the origin's root, which a mounted console also
+		// answers when it is reached directly rather than through a path-forwarding proxy.
+		router.Get("/robots.txt", h.robots)
+		router.Head("/robots.txt", h.robots)
+	}
 	router.Route(base, func(r chi.Router) {
 		r.Route("/api", func(apiRouter chi.Router) {
 			apiRouter.Use(compressAPIResponses)
@@ -431,6 +437,8 @@ func (h *Handler) routes() chi.Router {
 		r.Head("/assets/*", h.asset)
 		r.Get("/lobe-icons/*", h.asset)
 		r.Head("/lobe-icons/*", h.asset)
+		r.Get("/robots.txt", h.robots)
+		r.Head("/robots.txt", h.robots)
 		r.Get("/favicon.svg", h.asset)
 		r.Head("/favicon.svg", h.asset)
 		// The installable-app surface. These do not go through asset(): their names are
@@ -1091,6 +1099,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("Referrer-Policy", "no-referrer")
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		writer.Header().Set("X-Robots-Tag", robotsTagValue)
 		writer.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=()")
 		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self';")
 		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {

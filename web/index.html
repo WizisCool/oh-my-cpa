@@ -13,6 +13,10 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <meta name="application-name" content="Oh My CPA" />
+    <!-- A back office is not for search results. The server sends the same policy as an
+         X-Robots-Tag header on every response and answers robots.txt (internal/api/robots.go);
+         this copy survives a cache or proxy that drops response headers. -->
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
     <!-- Current browsers take standalone display from the manifest. These two meta tags are
          the legacy declarations: Chrome on Android read `mobile-web-app-capable` before it
          honored `display`, and iOS before 16.4 reads only the prefixed form to launch without
