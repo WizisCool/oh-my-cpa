@@ -1,3 +1,4 @@
+import { applyKeyOrder } from '../../types/displayOrder';
 import type { MessageKey } from '../../i18n/catalog';
 import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../types/credentialProviders';
 import type { QuotaWindow } from '../../types/quota';
@@ -248,9 +249,14 @@ function clusterByShape(records: OAuthWorkspaceRecord[]): OAuthWorkspaceRecord[]
 
 /**
  * Section order stays fixed. Inside a section an active quota sort orders the provider's full
- * filtered records; otherwise its credentials are grouped by plan shape in the chosen order.
+ * filtered records; otherwise its credentials are grouped by plan shape in the chosen order, and
+ * the custom order, when given, puts the credentials the operator arranged first in their order.
  */
-export function orderBySection(records: OAuthWorkspaceRecord[], columnSorts: Readonly<Partial<Record<string, QuotaColumnSort>>> = {}): OAuthWorkspaceRecord[] {
+export function orderBySection(
+  records: OAuthWorkspaceRecord[],
+  columnSorts: Readonly<Partial<Record<string, QuotaColumnSort>>> = {},
+  customOrder?: Readonly<Record<string, readonly string[]>>,
+): OAuthWorkspaceRecord[] {
   const sections = new Map<string, OAuthWorkspaceRecord[]>();
   for (const record of records) {
     const rows = sections.get(record.displayProvider) ?? [];
@@ -261,8 +267,15 @@ export function orderBySection(records: OAuthWorkspaceRecord[], columnSorts: Rea
     .sort(([left], [right]) => compareSections(left, right))
     .flatMap(([provider, rows]) => {
       const sort = columnSorts[provider];
-      return sort ? sortByQuotaColumn(rows, sort.direction) : clusterByShape(rows);
+      if (sort) return sortByQuotaColumn(rows, sort.direction);
+      const clustered = clusterByShape(rows);
+      return customOrder ? applyKeyOrder(clustered, credentialOrderKey, customOrder[provider]) : clustered;
     });
+}
+
+/** What the custom order stores for a credential: its file name, which is how CPA names it. */
+export function credentialOrderKey(record: OAuthWorkspaceRecord): string {
+  return record.file.name;
 }
 
 /**

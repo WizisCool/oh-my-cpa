@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 
 	"github.com/go-chi/chi/v5"
 
@@ -30,6 +31,9 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceUsageEventsView:     true,
 	repository.PreferenceUsageEventsColumns:  true,
 	repository.PreferenceOAuthManagementView: true,
+	repository.PreferenceProviderOrder:       true,
+	repository.PreferenceRoutingCardOrder:    true,
+	repository.PreferenceCredentialOrder:     true,
 	repository.PreferenceTimezone:            true,
 	repository.PreferenceDisplayCurrency:     true,
 	repository.PreferenceTokenStyle:          true,
@@ -148,6 +152,15 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		var enabled *bool
 		if json.Unmarshal(body, &enabled) != nil || enabled == nil {
 			writeError(writer, http.StatusBadRequest, "the plugin source preference must be true or false")
+			return
+		}
+	}
+	// Every save, move and delete of a provider re-keys the positional overlays, so one that is
+	// not an object of strings would fail each of those writes until someone replaced it.
+	if slices.Contains(positionalProviderOverlays, key) {
+		var values map[string]string
+		if json.Unmarshal(body, &values) != nil {
+			writeError(writer, http.StatusBadRequest, "a provider overlay preference must be an object of strings")
 			return
 		}
 	}

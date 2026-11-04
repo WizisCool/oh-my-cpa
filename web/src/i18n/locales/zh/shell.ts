@@ -81,6 +81,7 @@ export default {
   'common.back': '返回',
   'common.confirm': '确定',
   'common.delete': '删除',
+  'common.reorder_handle': '拖动排序',
   'common.load_failed_title': '加载失败',
   'toast.group_failed': '失败',
   'toast.group_unknown': '结果未知',

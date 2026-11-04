@@ -134,6 +134,45 @@ export async function oauthManagement({ base, page, check, ledger }) {
     (await priorityRecord.innerText()).includes('Priority 0') && (await priorityRecord.innerText()).includes('Weight 1'));
   check('a row names no auth index', !(await page.locator('[data-testid="oauth-credential-section"]').first().innerText()).includes('auth-0'));
 
+  // A row moves only from its handle, which stays out of sight until the pointer reaches the row's
+  // edge: dragged below its neighbour the rows trade places as it goes, the drop keeps that order and
+  // saves it as a display preference, and dragged back it restores the first order.
+  const claudeRows = page.locator('[data-testid="oauth-credential-section"][data-provider="claude"] [data-testid="oauth-credential-record"]');
+  const claudeOrder = () => claudeRows.evaluateAll((rows) => rows.map((row) => row.getAttribute('data-auth-index')));
+  const dragRow = async (from, to, fraction) => {
+    const handle = await claudeRows.nth(from).locator('[data-reorder-handle]').boundingBox();
+    const target = await claudeRows.nth(to).boundingBox();
+    const saved = page.waitForResponse((response) => response.url().endsWith('/preferences/omc_credential_order') && response.request().method() === 'PUT');
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 6, { steps: 3 });
+    await page.mouse.move(handle.x + handle.width / 2, target.y + target.height * fraction, { steps: 10 });
+    const isShown = await claudeRows.nth(from).locator('[data-reorder-handle]').evaluate((element) => Number(getComputedStyle(element).opacity) > 0.9);
+    await page.mouse.up();
+    return { isShown, isSaved: (await saved).ok() };
+  };
+  const initialClaudeOrder = await claudeOrder();
+  const restingHandle = await claudeRows.nth(0).locator('[data-reorder-handle]').evaluate((element) => ({
+    opacity: Number(getComputedStyle(element).opacity),
+    width: element.getBoundingClientRect().width,
+  }));
+  check('a row\'s drag handle is out of sight and takes no room until the pointer reaches it',
+    restingHandle.opacity === 0 && restingHandle.width <= 12, JSON.stringify(restingHandle));
+  const pressedRow = await claudeRows.nth(0).boundingBox();
+  await page.mouse.move(pressedRow.x + pressedRow.width * 0.4, pressedRow.y + pressedRow.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(pressedRow.x + pressedRow.width * 0.4, pressedRow.y + pressedRow.height * 1.5, { steps: 8 });
+  await page.mouse.up();
+  check('pressing and moving a row away from its handle rearranges nothing', (await claudeOrder()).join() === initialClaudeOrder.join());
+  const down = await dragRow(0, 1, 0.75);
+  const movedOrder = await claudeOrder();
+  check('a credential dragged by its handle lands beside the marked row and the order is saved',
+    down.isShown && down.isSaved && movedOrder.join() === [initialClaudeOrder[1], initialClaudeOrder[0], ...initialClaudeOrder.slice(2)].join(),
+    JSON.stringify({ ...down, initialClaudeOrder, movedOrder }));
+  const back = await dragRow(1, 0, 0.25);
+  check('dragged back, the credential restores the first order', back.isSaved && (await claudeOrder()).join() === initialClaudeOrder.join(),
+    JSON.stringify({ ...back, order: await claudeOrder() }));
+
   // Each provider is one section, in the console's fixed provider order, whatever the records' order.
   const sectionProviders = await page.getByTestId('oauth-credential-section').evaluateAll((sections) => sections.map((section) => section.getAttribute('data-provider')));
   check('credentials are grouped into one section per provider in the pinned order',

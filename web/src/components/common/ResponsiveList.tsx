@@ -36,6 +36,11 @@ export interface ResponsiveListProps<T extends object> {
   /** A value that, when it changes, returns the reader to the first page (a filter, a search). */
   pageResetKey?: unknown;
   phone: ResponsiveListPhoneLayout;
+  /**
+   * Wraps each phone row, for a list whose rows do more than render (the wide table's counterpart
+   * is a body row in `tableProps.components`).
+   */
+  phoneRowWrapper?: React.ComponentType<{ rowKey: string; children: React.ReactNode }>;
   /** Passed to the wide rendering's table: its size, class and scroll behaviour. */
   tableProps?: Omit<TableProps<T>, 'columns' | 'dataSource' | 'rowKey' | 'loading' | 'pagination'>;
 }
@@ -70,6 +75,7 @@ export function ResponsiveList<T extends object>({
   pageSize = false,
   pageResetKey,
   phone,
+  phoneRowWrapper: PhoneRowWrapper,
   tableProps,
 }: ResponsiveListProps<T>) {
   const isPhone = useIsPhoneViewport();
@@ -122,9 +128,10 @@ export function ResponsiveList<T extends object>({
     <div className="responsive-list" ref={listRef}>
       {visible.map((record, localIndex) => {
         const index = offset + localIndex;
-        return (
+        const key = keyOf(record, rowKey);
+        const row = (
           <PhoneRow
-            key={keyOf(record, rowKey)}
+            key={key}
             identity={renderedCell(columns, phone.identity, record, index)}
             fields={phoneRowFields(columns, record, { skip, index })}
             actions={actionKeys.length > 0
@@ -132,6 +139,7 @@ export function ResponsiveList<T extends object>({
               : undefined}
           />
         );
+        return PhoneRowWrapper ? <PhoneRowWrapper key={key} rowKey={String(key)}>{row}</PhoneRowWrapper> : row;
       })}
       {pageSize !== false && (
         <Pager variant="stepped" page={safePage} pageSize={pageSize} total={dataSource.length} onChange={changePage} />

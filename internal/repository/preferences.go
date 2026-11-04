@@ -25,6 +25,24 @@ const (
 	PreferenceUsageEventsColumns  = "usage_events_columns"
 	PreferenceOAuthManagementView = "oauth_management_view_v1"
 
+	// PreferenceProviderOrder is the AI providers list's display order: each provider's positional
+	// id mapped to a rank, as a decimal string so it shares the names', websites' and icons' shape
+	// and is re-keyed with them when a delete moves later entries down. It is presentation only;
+	// which provider serves a request is the routing arrangement's business, never this order.
+	PreferenceProviderOrder = "provider_order"
+
+	// PreferenceCredentialOrder is the OAuth list's display order: each provider section mapped
+	// to its credential file names in the order the operator arranged them. A credential the
+	// document does not name follows the named ones, so an added credential needs no rewrite.
+	PreferenceCredentialOrder = "omc_credential_order"
+
+	// PreferenceRoutingCardOrder is the routing board's display order of the members inside each
+	// tier: a member key mapped to a rank, as a decimal string. Provider members are keyed by
+	// "provider:" and their positional id, so the document is re-keyed with the other provider
+	// overlays when a delete moves later entries down. Priority decides the tiers; this order only
+	// decides where a member is drawn within its tier and is never written to the gateway.
+	PreferenceRoutingCardOrder = "routing_card_order"
+
 	// PreferenceDisplayCurrency, PreferenceTokenStyle, PreferenceTpsCalculationMode, PreferenceModelView, PreferenceTheme and PreferenceReducedMotion
 	// are Oh My CPA's own display settings: how token counts are abbreviated across the
 	// console, which currency displays USD costs, how TPS accounts for first-token latency, how the dashboard's model panels group their series (by call point or by

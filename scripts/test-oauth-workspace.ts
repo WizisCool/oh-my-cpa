@@ -20,6 +20,7 @@ import {
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
+import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../web/src/types/displayOrder.ts';
 import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection } from '../web/src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../web/src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../web/src/pages/quota/quotaFormat.ts';
@@ -255,7 +256,7 @@ test('query parsing clamps unknown state and keeps one-shot OAuth intent separat
   assert.equal(parsed.pageSize, 12);
   assert.equal(parsed.density, 'compact');
   // A link or a saved view from before the request-count sort was retired reads as the default.
-  assert.equal(parseOAuthWorkspaceQuery(new URLSearchParams('sort=requests-desc')).sort, 'name-asc');
+  assert.equal(parseOAuthWorkspaceQuery(new URLSearchParams('sort=requests-desc')).sort, 'custom');
   const durable = consumeOneShotIntent(new URLSearchParams(
     'provider=codex&q=ops&density=compact&action=connect&connect_provider=iflow&focus=quota',
   ));
@@ -674,6 +675,33 @@ test('a section keeps one plan shape together, richest first, unread last', () =
   const records = [plus('a-plus'), pro('b-pro'), quotaRecord('c-unread', []), proWithoutArgon('d-pro'), pro('e-pro')];
   // The chosen order holds inside each shape; a quota sort still orders the whole provider.
   assert.deepEqual(orderBySection(records).map((record) => record.fileName), ['b-pro', 'e-pro', 'a-plus', 'd-pro', 'c-unread']);
+  // An arranged order leads; a credential it does not name keeps the shape order after it, a name
+  // it no longer matches is ignored, and a quota sort still orders the whole provider.
+  const provider = records[0].displayProvider;
+  assert.deepEqual(
+    orderBySection(records, {}, { [provider]: ['d-pro', 'gone', 'c-unread'] }).map((record) => record.fileName),
+    ['d-pro', 'c-unread', 'b-pro', 'e-pro', 'a-plus'],
+  );
+  assert.deepEqual(
+    orderBySection(records, { [provider]: { key: 'quota', direction: 'asc' } }, { [provider]: ['d-pro'] }).map((record) => record.fileName),
+    sortByQuotaColumn(records, 'asc').map((record) => record.fileName),
+  );
+});
+
+test('a dragged row lands beside its target, and an arrangement keeps what it does not name', () => {
+  const order = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(moveKey(order, 'a', 'c', 'after'), ['b', 'c', 'a', 'd']);
+  assert.deepEqual(moveKey(order, 'd', 'b', 'before'), ['a', 'd', 'b', 'c']);
+  // A drop that changes nothing hands back the same order, so nothing is written.
+  assert.equal(moveKey(order, 'b', 'c', 'before'), order);
+  assert.equal(moveKey(order, 'b', 'missing', 'after'), order);
+  // The provider document ranks positional ids; an id it does not rank follows in its own order.
+  const ranks = parseRankOrder({ 'codex-0': '2', 'claude-0': '0', 'gemini-0': '1', bogus: 'x' }) ?? {};
+  const ids = ['claude-0', 'codex-0', 'meta-0', 'gemini-0'];
+  assert.deepEqual(applyKeyOrder(ids, (id) => id, rankedKeys(ids, ranks)), ['claude-0', 'gemini-0', 'codex-0', 'meta-0']);
+  assert.deepEqual(ranksOf(['gemini-0', 'claude-0']), { 'gemini-0': '0', 'claude-0': '1' });
+  assert.equal(parseGroupedOrder(['a']), undefined);
+  assert.deepEqual(parseGroupedOrder({ codex: ['a.json', 'a.json', 3, 'b.json'], empty: [] }), { codex: ['a.json', 'b.json'] });
 });
 
 test('antigravity list excludes Claude and GPT while drawer preserves all windows', () => {

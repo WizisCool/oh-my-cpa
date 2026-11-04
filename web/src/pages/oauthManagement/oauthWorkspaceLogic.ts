@@ -74,7 +74,7 @@ export interface OAuthWorkspaceQueryState {
   query: string;
   status: AuthFileStatusFilter;
   quota: OAuthWorkspaceQuotaFilter;
-  sort: AuthFileSortKey;
+  sort: OAuthWorkspaceSortKey;
   page: number;
   pageSize: 12 | 24 | 48;
   density?: OAuthWorkspaceDensity;
@@ -96,7 +96,15 @@ const QUOTA_FILTERS = new Set<OAuthWorkspaceQuotaFilter>([
   'unobserved',
   'unsupported',
 ]);
-const AUTH_FILE_SORTS = new Set<AuthFileSortKey>([
+/**
+ * The list's orders: the auth-file sorts, and the operator's own arrangement. The arrangement is the
+ * default because, until a row has been dragged, it is the name order the list has always had.
+ */
+export type OAuthWorkspaceSortKey = AuthFileSortKey | 'custom';
+export const DEFAULT_OAUTH_SORT: OAuthWorkspaceSortKey = 'custom';
+
+const AUTH_FILE_SORTS = new Set<OAuthWorkspaceSortKey>([
+  'custom',
   'name-asc',
   'name-desc',
   'priority-desc',
@@ -108,14 +116,14 @@ export interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
   status: AuthFileStatusFilter;
   quota: OAuthWorkspaceQuotaFilter;
-  sort: AuthFileSortKey;
+  sort: OAuthWorkspaceSortKey;
 }
 
 export const DEFAULT_OAUTH_MANAGEMENT_VIEW: OAuthManagementViewPreference = {
   pageSize: 12,
   status: 'all',
   quota: 'all',
-  sort: 'name-asc',
+  sort: DEFAULT_OAUTH_SORT,
 };
 
 export function parseOAuthManagementView(raw: unknown): OAuthManagementViewPreference | undefined {
@@ -406,7 +414,7 @@ function fileText(value: unknown): string {
 
 export function sortOAuthWorkspaceRecords(
   records: OAuthWorkspaceRecord[],
-  sort: AuthFileSortKey,
+  sort: OAuthWorkspaceSortKey,
 ): OAuthWorkspaceRecord[] {
   const copy = [...records];
   // Reuse comparison setup within this sort only; each invocation still resolves the default locale.
@@ -430,6 +438,9 @@ export function sortOAuthWorkspaceRecords(
         const weightDelta = (right.file.weight ?? 1) - (left.file.weight ?? 1);
         return weightDelta || byName(left, right);
       });
+    // The custom order is applied per section over the name order; a credential it does not name
+    // keeps its place by name.
+    case 'custom':
     case 'name-asc':
     default:
       return copy.sort(byName);
@@ -508,7 +519,7 @@ export function parseOAuthWorkspaceQuery(params: URLSearchParams): OAuthWorkspac
   const query = params.get('q') ?? '';
   const statusRaw = params.get('status') as AuthFileStatusFilter | null;
   const quotaRaw = params.get('quota') as OAuthWorkspaceQuotaFilter | null;
-  const sortRaw = params.get('sort') as AuthFileSortKey | null;
+  const sortRaw = params.get('sort') as OAuthWorkspaceSortKey | null;
   const pageRaw = Number(params.get('page') ?? '1');
   const pageSizeRaw = Number(params.get('page_size') ?? '12');
   const densityRaw = params.get('density');
@@ -524,7 +535,7 @@ export function parseOAuthWorkspaceQuery(params: URLSearchParams): OAuthWorkspac
     query,
     status: statusRaw && AUTH_FILE_STATUS_FILTERS.has(statusRaw) ? statusRaw : 'all',
     quota: quotaRaw && QUOTA_FILTERS.has(quotaRaw) ? quotaRaw : 'all',
-    sort: sortRaw && AUTH_FILE_SORTS.has(sortRaw) ? sortRaw : 'name-asc',
+    sort: sortRaw && AUTH_FILE_SORTS.has(sortRaw) ? sortRaw : DEFAULT_OAUTH_SORT,
     page: Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1,
     pageSize: PAGE_SIZES.has(pageSizeRaw) ? pageSizeRaw as 12 | 24 | 48 : 12,
     density: densityRaw === 'compact' || densityRaw === 'expanded' ? densityRaw : undefined,

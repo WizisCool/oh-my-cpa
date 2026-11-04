@@ -27,7 +27,7 @@ func TestConfigProviderSavesEveryKey(t *testing.T) {
 				fixture.state.mu.Unlock()
 				sourceID, neighbourID := spec.IDPrefix+"0", spec.IDPrefix+"1"
 				ctx := context.Background()
-				for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons} {
+				for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons, repository.PreferenceProviderOrder} {
 					values, _ := json.Marshal(map[string]string{sourceID: "source-value", neighbourID: "neighbour-value"})
 					if err := fixture.handler.repo.PutPreference(ctx, preference, string(values)); err != nil {
 						t.Fatal(err)
@@ -129,7 +129,7 @@ func TestConfigProviderSavesEveryKey(t *testing.T) {
 						t.Errorf("row %s missing after save", id)
 					}
 				}
-				for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons} {
+				for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons, repository.PreferenceProviderOrder} {
 					raw, _, err := fixture.handler.repo.GetPreference(ctx, preference)
 					if err != nil {
 						t.Fatal(err)
@@ -141,10 +141,10 @@ func TestConfigProviderSavesEveryKey(t *testing.T) {
 					if values[neighbourID] != "neighbour-value" {
 						t.Errorf("%s moved neighbouring metadata", preference)
 					}
-					if !isCreate && preference == repository.PreferenceProviderIcons {
+					if !isCreate && (preference == repository.PreferenceProviderIcons || preference == repository.PreferenceProviderOrder) {
 						for _, id := range ids {
 							if values[id] != "source-value" {
-								t.Errorf("new row %s did not inherit its icon", id)
+								t.Errorf("new row %s did not inherit its %s", id, preference)
 							}
 						}
 					}

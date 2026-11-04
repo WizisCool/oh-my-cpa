@@ -43,8 +43,8 @@ beforeEach(() => {
 
 describe('list view preference persistence', () => {
   it('preserves old OAuth page sizes and normalizes unknown filter values', () => {
-    expect(parseOAuthManagementView({ pageSize: 48, density: 'expanded' })).toEqual({ pageSize: 48, status: 'all', quota: 'all', sort: 'name-asc' });
-    expect(parseOAuthManagementView({ pageSize: '24', status: 'bogus', quota: 'bogus', sort: 'bogus' })).toEqual({ pageSize: 12, status: 'all', quota: 'all', sort: 'name-asc' });
+    expect(parseOAuthManagementView({ pageSize: 48, density: 'expanded' })).toEqual({ pageSize: 48, status: 'all', quota: 'all', sort: 'custom' });
+    expect(parseOAuthManagementView({ pageSize: '24', status: 'bogus', quota: 'bogus', sort: 'bogus' })).toEqual({ pageSize: 12, status: 'all', quota: 'all', sort: 'custom' });
   });
 
   it('saves OAuth filters and sorting with page size, restores them with a fresh cache and persists reset', async () => {
@@ -61,10 +61,10 @@ describe('list view preference persistence', () => {
     expect(writes()).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Reset OAuth' }));
     await waitFor(() => expect(writes()).toHaveLength(3));
-    expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, status: 'all', quota: 'all', sort: 'name-asc' });
+    expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, status: 'all', quota: 'all', sort: 'custom' });
     second.unmount();
     mount(<OAuthView />);
-    await waitFor(() => expect(readView()).toMatchObject({ pageSize: 24, status: 'all', quota: 'all', sort: 'name-asc' }));
+    await waitFor(() => expect(readView()).toMatchObject({ pageSize: 24, status: 'all', quota: 'all', sort: 'custom' }));
   });
 
   it('honors explicit OAuth link dimensions without saving navigation or one-shot intent', async () => {
@@ -88,7 +88,7 @@ describe('list view preference persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resize OAuth' }));
     expect(readView().pageSize).toBe(24);
     fireEvent.click(screen.getByRole('button', { name: 'Reset OAuth' }));
-    expect(readView()).toMatchObject({ status: 'all', quota: 'all', sort: 'name-asc', pageSize: 24 });
+    expect(readView()).toMatchObject({ status: 'all', quota: 'all', sort: 'custom', pageSize: 24 });
     expect(writes()).toHaveLength(0);
     expect(api.state.preferences.oauth_management_view_v1).toEqual(unreadPreference);
   });

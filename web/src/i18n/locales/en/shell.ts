@@ -84,6 +84,7 @@ export default {
   'common.back': 'Back',
   'common.confirm': 'Confirm',
   'common.delete': 'Delete',
+  'common.reorder_handle': 'Drag to reorder',
   'common.load_failed_title': 'Could not load',
   'toast.group_failed': 'Failed',
   'toast.group_unknown': 'No outcome',

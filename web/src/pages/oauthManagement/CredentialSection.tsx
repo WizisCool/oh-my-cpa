@@ -61,6 +61,9 @@ import { maskAccount } from '../../utils/maskAccount';
 import styles from './CredentialSection.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
 import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../../components/common/InlineName';
+import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../../components/common/RowReorder';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import type { DropSide } from '../../types/displayOrder';
 
 export interface CredentialRowActions {
   isBusy: (record: OAuthWorkspaceRecord) => boolean;
@@ -89,6 +92,11 @@ interface CredentialSectionProps {
   actions: CredentialRowActions;
   columnSort?: QuotaColumnSort;
   onSort: (key: string) => void;
+  /**
+   * Puts a dragged credential beside another in this section's display order; absent where rows
+   * cannot be rearranged (a phone, or before the stored order has been read).
+   */
+  onReorder?: (record: OAuthWorkspaceRecord, target: OAuthWorkspaceRecord, side: DropSide) => unknown;
 }
 
 const PERIOD_KEYS: Record<QuotaPeriod, MessageKey> = {
@@ -120,7 +128,7 @@ function readingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
  * column's header sorts the section by that reading, which is how an operator with many accounts
  * finds the one with the most Claude quota left without opening anything.
  */
-export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
+export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort, onReorder }: CredentialSectionProps) {
   const t = useT();
   const metadata = getCredentialProviderMetadata(section.provider);
   const records = section.records;
@@ -129,6 +137,26 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
   const { hasQuota } = section;
 
   const isSorted = columnSort?.key === 'quota';
+  // A quota sort is an order the operator did not arrange, so the handles step aside while it holds.
+  const canReorder = Boolean(onReorder);
+  const byKey = React.useMemo(() => new Map(section.visibleRecords.map((record) => [record.key, record])), [section.visibleRecords]);
+  const write = (key: string, targetKey: string, side: DropSide) => {
+    const record = byKey.get(key);
+    const target = byKey.get(targetKey);
+    return record && target ? onReorder?.(record, target, side) : undefined;
+  };
+  const reorder = useReorderList(records, recordKey, write);
+  const rowKeys = React.useMemo(() => reorder.ordered.map(recordKey), [reorder.ordered]);
+  // A keyboard step moves past the neighbour the operator can see, not one a filter hides; past the
+  // page's edge it lands on the next page, so there is nothing on this one to hold.
+  const step = (key: string, direction: -1 | 1) => {
+    const index = section.visibleRecords.findIndex((record) => record.key === key);
+    const neighbour = section.visibleRecords[index + direction];
+    if (index < 0 || !neighbour) return;
+    const side = direction < 0 ? 'before' : 'after';
+    if (rowKeys.includes(neighbour.key)) reorder.move(key, neighbour.key, side);
+    else void write(key, neighbour.key, side);
+  };
   return (
     <section className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
       <header className={styles.head}>
@@ -154,76 +182,96 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
           </div>
         )}
       </header>
-      <div className={styles.scroll}>
-        <table className={styles.table}>
-          <colgroup>
-            <col className={styles['col-identity']} />
-            <col className={styles['col-status']} />
-            <col className={styles['col-switch']} />
-            {hasQuota && <><col /><col /></>}
-            {!hasQuota && <col />}
-            <col className={styles['col-actions']} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th className={styles['th-identity']}>
-                <span className={styles['identity-head']}>
-                  <Checkbox
-                    checked={selectable.length > 0 && selectedCount === selectable.length}
-                    indeterminate={selectedCount > 0 && selectedCount < selectable.length}
-                    disabled={selectable.length === 0}
-                    onChange={(event) => actions.onSelect(selectable, event.target.checked)}
-                    aria-label={t('omc.section_select', { provider: title ?? metadata.label })}
-                  />
-                  {t('omc.col_credential')}
-                </span>
-              </th>
-              <th>{t('af.detail_status')}</th>
-              <th>{t('pro.col_switch')}</th>
-              {hasQuota && (
-                // Every reading names itself, so the two columns share one header; it sorts by the
-                // share left in each credential's tightest limit.
-                <th colSpan={2} className={styles['th-period']} aria-sort={isSorted ? (columnSort.direction === 'asc' ? 'ascending' : 'descending') : undefined}>
-                  <button type="button" className={styles['sort-button']} onClick={() => onSort('quota')}>
-                    <span className={styles['sort-label']}>{t('omc.section_quota')}</span>
-                    {isSorted && (columnSort.direction === 'asc' ? <ArrowUpOutlined /> : <ArrowDownOutlined />)}
-                  </button>
+      {/* Outside the table: the drag context draws its own accessible text, which a table may not hold. */}
+      <RowReorder items={rowKeys} isEnabled={canReorder && !isSorted} onMove={reorder.move} onStep={step}>
+        <div className={styles.scroll}>
+          <table className={styles.table}>
+            <colgroup>
+              <col className={styles['col-identity']} />
+              <col className={styles['col-status']} />
+              <col className={styles['col-switch']} />
+              {hasQuota && <><col /><col /></>}
+              {!hasQuota && <col />}
+              <col className={styles['col-actions']} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th className={styles['th-identity']}>
+                  <span className={styles['identity-head']}>
+                      <Checkbox
+                      checked={selectable.length > 0 && selectedCount === selectable.length}
+                      indeterminate={selectedCount > 0 && selectedCount < selectable.length}
+                      disabled={selectable.length === 0}
+                      onChange={(event) => actions.onSelect(selectable, event.target.checked)}
+                      aria-label={t('omc.section_select', { provider: title ?? metadata.label })}
+                    />
+                    {t('omc.col_credential')}
+                  </span>
                 </th>
-              )}
-              {!hasQuota && <th aria-hidden="true" />}
-              <th className={styles['th-actions']}><span className={styles['visually-hidden']}>{t('keys.col_actions')}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record) => (
-              <CredentialRow
-                key={record.key}
-                record={record}
-                provider={section.provider}
-                hasQuota={hasQuota}
-                isSelected={selectedKeys.has(record.key)}
-                nowMS={nowMS}
-                actions={actions}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+                <th>{t('af.detail_status')}</th>
+                <th>{t('pro.col_switch')}</th>
+                {hasQuota && (
+                  // Every reading names itself, so the two columns share one header; it sorts by the
+                  // share left in each credential's tightest limit.
+                  <th colSpan={2} className={styles['th-period']} aria-sort={isSorted ? (columnSort.direction === 'asc' ? 'ascending' : 'descending') : undefined}>
+                    <button type="button" className={styles['sort-button']} onClick={() => onSort('quota')}>
+                      <span className={styles['sort-label']}>{t('omc.section_quota')}</span>
+                      {isSorted && (columnSort.direction === 'asc' ? <ArrowUpOutlined /> : <ArrowDownOutlined />)}
+                    </button>
+                  </th>
+                )}
+                {!hasQuota && <th aria-hidden="true" />}
+                <th className={styles['th-actions']}><span className={styles['visually-hidden']}>{t('keys.col_actions')}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {reorder.ordered.map((record) => (
+                <CredentialRow
+                  key={record.key}
+                  record={record}
+                  provider={section.provider}
+                  hasQuota={hasQuota}
+                  hasHandle={canReorder}
+                  isSelected={selectedKeys.has(record.key)}
+                  nowMS={nowMS}
+                  actions={actions}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </RowReorder>
     </section>
   );
 }
+
+/**
+ * What the row's headline says before the operator reveals the account: the operator's own name, or
+ * the masked account, or the file's identity. The drag chip and the handle's label repeat it, so
+ * neither publishes an address the row keeps masked.
+ */
+function maskedCredentialLabel(record: OAuthWorkspaceRecord): string {
+  const displayName = record.file.display_name?.trim();
+  if (displayName) return displayName;
+  const identity = deriveAuthFileIdentity(record.file);
+  return identity.isAccountPrimary ? maskAccount(identity.primary) : identity.primary;
+}
+
+const recordKey = (record: OAuthWorkspaceRecord) => record.key;
 
 interface CredentialRowProps {
   record: OAuthWorkspaceRecord;
   provider: string;
   /** Whether the section has quota columns at all. */
   hasQuota: boolean;
+  /** Whether the row draws a drag handle; it may still be hidden while a quota sort holds. */
+  hasHandle: boolean;
   isSelected: boolean;
   nowMS: number;
   actions: CredentialRowActions;
 }
 
-function CredentialRow({ record, provider, hasQuota, isSelected, nowMS, actions }: CredentialRowProps) {
+function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowMS, actions }: CredentialRowProps) {
   const t = useT();
   const { modal } = AntdApp.useApp();
   const isDemo = isDemoMode();
@@ -268,8 +316,15 @@ function CredentialRow({ record, provider, hasQuota, isSelected, nowMS, actions 
   const needsRefresh = (status.canRefreshFix || Boolean(failure)) && record.canRefreshQuota;
   const credits = quota?.reset_credits?.available_count ?? 0;
 
+  const reorder = useReorderRow(record.key);
+  // The grip leads the row on a wide screen; a card keeps its name over its state line, so there the
+  // grip closes the glyph strip at the card's edge, where a phone list keeps its reorder control.
+  const isPhone = useIsPhoneViewport();
+  const handle = <ReorderHandle {...reorder.handle} name={maskedCredentialLabel(record)} variant={isPhone ? 'inline' : 'edge'} />;
+
   return (
     <tr
+      {...reorder.row}
       className={clsx(styles.row, isSelected && styles['row-selected'], isDisabled && styles['row-disabled'])}
       data-testid="oauth-credential-record"
       data-identity={record.key}
@@ -278,6 +333,7 @@ function CredentialRow({ record, provider, hasQuota, isSelected, nowMS, actions 
       data-quota-focus-anchor={quota ? record.authIndex : undefined}
     >
       <td className={styles['td-identity']}>
+        {hasHandle && !isPhone && handle}
         <div className={styles.identity}>
           {!file.runtime_only ? (
             <Checkbox
@@ -493,6 +549,7 @@ function CredentialRow({ record, provider, hasQuota, isSelected, nowMS, actions 
             <Button type="text" size="small" icon={<MoreOutlined />} aria-label={`${t('keys.actions_more')}: ${file.name}`} />
           </Tooltip>
         </Dropdown>
+        {hasHandle && isPhone && handle}
       </td>
     </tr>
   );

@@ -29,7 +29,7 @@ import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
 import { pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
 import { providerFilterTabs } from '../../types/credentialProviders';
-import type { AuthFileSortKey, AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
+import type { AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import {
   isAuthFileDisabled,
   isAuthFileHealthy,
@@ -43,7 +43,9 @@ import { SummaryStrip } from '../../components/common/SummaryStrip';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
 import { CredentialSection, type CredentialRowActions } from './CredentialSection';
-import { buildCredentialSections, orderBySection, type QuotaColumnSort } from './credentialSections';
+import { buildCredentialSections, credentialOrderKey, orderBySection, type QuotaColumnSort } from './credentialSections';
+import { useCredentialOrder } from './useCredentialOrder';
+import { moveKey, type DropSide } from '../../types/displayOrder';
 import { useOAuthSessions } from './useOAuthSessions';
 import { isSIWCPending, siwcTargetKey, useSIWCBindings } from '../../hooks/useSIWCBindings';
 import { siwcBadgeState } from '../../components/authFiles/siwcBadge';
@@ -54,10 +56,12 @@ import {
   filterOAuthWorkspaceRecords,
   resolveAuthorizationProviderId,
   sortOAuthWorkspaceRecords,
+  DEFAULT_OAUTH_SORT,
   workspaceProviderCounts,
   workspaceProviderOptions,
   type OAuthWorkspaceQuotaFilter,
   type OAuthWorkspaceRecord,
+  type OAuthWorkspaceSortKey,
 } from './oauthWorkspaceLogic';
 import styles from './OAuthManagementPage.module.css';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -113,7 +117,7 @@ export const OAuthManagementPage: React.FC = () => {
   const [quotaColumnSorts, setQuotaColumnSorts] = React.useState<Partial<Record<string, QuotaColumnSort>>>({});
   const isDemo = isDemoMode();
   React.useEffect(() => {
-    if (queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== 'name-asc') {
+    if (queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== DEFAULT_OAUTH_SORT) {
       setIsFiltersOpen(true);
     }
   }, [queryState.status, queryState.quota, queryState.sort]);
@@ -179,7 +183,30 @@ export const OAuthManagementPage: React.FC = () => {
     [queryState.provider, queryState.query, queryState.quota, queryState.sort, queryState.status, records],
   );
   // Pages are cut from the section order, so a page groups into the same sections the next page continues.
-  const visibleRecords = React.useMemo(() => orderBySection(sortedRecords, quotaColumnSorts), [sortedRecords, quotaColumnSorts]);
+  const credentialOrder = useCredentialOrder();
+  const isCustomOrder = queryState.sort === 'custom';
+  const visibleRecords = React.useMemo(
+    () => orderBySection(sortedRecords, quotaColumnSorts, isCustomOrder ? credentialOrder.value : undefined),
+    [sortedRecords, quotaColumnSorts, isCustomOrder, credentialOrder.value],
+  );
+  // A drag rearranges the provider's whole list, filters and pages notwithstanding, starting from
+  // the order on screen; under another sort that order becomes the custom one. The document then
+  // names exactly the credentials the provider has, so deleted ones do not linger in it.
+  const reorderCredential = React.useCallback((record: OAuthWorkspaceRecord, target: OAuthWorkspaceRecord, side: DropSide) => {
+    if (!credentialOrder.loaded) return undefined;
+    const provider = record.displayProvider;
+    const arranged = orderBySection(
+      sortOAuthWorkspaceRecords(records.filter((entry) => entry.displayProvider === provider), queryState.sort),
+      {},
+      isCustomOrder ? credentialOrder.value : undefined,
+    );
+    const keys = [...new Set(arranged.map(credentialOrderKey))];
+    const next = moveKey(keys, credentialOrderKey(record), credentialOrderKey(target), side);
+    if (next === keys) return undefined;
+    const saved = credentialOrder.set({ ...credentialOrder.value, [provider]: [...next] });
+    if (!isCustomOrder) setSearch({ sort: null });
+    return saved;
+  }, [credentialOrder, isCustomOrder, queryState.sort, records, setSearch]);
 
   const pageSize = queryState.pageSize;
   const maxPage = Math.max(1, Math.ceil(visibleRecords.length / pageSize));
@@ -746,7 +773,7 @@ export const OAuthManagementPage: React.FC = () => {
           icon={<FilterOutlined />}
           aria-expanded={isFiltersOpen}
           aria-controls="oauth-collection-filters"
-          type={isFiltersOpen || queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== 'name-asc' ? 'primary' : 'default'}
+          type={isFiltersOpen || queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== DEFAULT_OAUTH_SORT ? 'primary' : 'default'}
           onClick={() => setIsFiltersOpen((open) => !open)}
         >
           {t('events.more_filters')}
@@ -825,13 +852,14 @@ export const OAuthManagementPage: React.FC = () => {
           </div>
           <div className={styles['filter-field']}>
             <span className={styles['filter-field-label']}>{t('af.sort_label')}</span>
-            <Select<AuthFileSortKey>
+            <Select<OAuthWorkspaceSortKey>
               aria-label={t('af.sort_label')}
               disabled={!isViewLoaded}
               value={queryState.sort}
-              onChange={(sort) => setSearch({ sort: sort === 'name-asc' ? null : sort, page: null })}
+              onChange={(sort) => setSearch({ sort: sort === DEFAULT_OAUTH_SORT ? null : sort, page: null })}
               style={{ width: 160 }}
               options={[
+                { value: 'custom', label: t('omc.sort_custom') },
                 { value: 'name-asc', label: t('af.sort_name_asc') },
                 { value: 'name-desc', label: t('af.sort_name_desc') },
                 { value: 'priority-desc', label: t('af.sort_priority') },
@@ -900,6 +928,7 @@ export const OAuthManagementPage: React.FC = () => {
                 nowMS={visibleNow}
                 actions={rowActions}
                 columnSort={quotaColumnSorts[section.provider]}
+                onReorder={credentialOrder.loaded ? reorderCredential : undefined}
                 onSort={(key) => {
                   setQuotaColumnSorts((current) => {
                     const next = { ...current };
