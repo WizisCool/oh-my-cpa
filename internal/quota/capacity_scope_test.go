@@ -33,11 +33,11 @@ func TestSelectWindowUsageMatchesMeteredFamilies(t *testing.T) {
 	}
 }
 
-func TestSelectWindowUsageFailsClosed(t *testing.T) {
+func TestSelectWindowUsageKeepsMatchedTrafficAndNamesUnknownScope(t *testing.T) {
 	window := QuotaWindow{Scope: "group", ModelFamilies: []string{"gemini"}}
 	groups := []ModelWindowUsage{{Model: "gemini-3-pro", Usage: WindowUsage{Requests: 1, Tokens: 100}}, {Model: "fast-alias", Usage: WindowUsage{Requests: 1, Tokens: 100}}}
-	if actual, reason := SelectWindowUsage(window, groups); reason != CapacityReasonScopeUnknown || actual.Requests != 0 {
-		t.Fatalf("partial scope accepted: %+v %q", actual, reason)
+	if actual, reason := SelectWindowUsage(window, groups); reason != "" || actual.Requests != 1 || actual.UnmatchedRequests != 1 || actual.Tokens != 100 {
+		t.Fatalf("matched traffic lost: %+v %q", actual, reason)
 	}
 	for _, window := range []QuotaWindow{{Scope: "group"}, {Scope: "model"}, {Scope: "group", ModelFamilies: []string{"gemini", "unreviewed-family"}}} {
 		if _, reason := SelectWindowUsage(window, nil); reason != CapacityReasonScopeUnknown {

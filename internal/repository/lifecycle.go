@@ -106,7 +106,7 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"pricing_model_links":           {Kind: LifecyclePermanent, Reason: "operator-owned price links"},
 	"pricing_match_reviews":         {Kind: LifecyclePermanent, Reason: "operator answers, one per priced model"},
 	"quota_refresh_attempts":        {Kind: LifecycleReplaced, Reason: "one row per credential, overwritten by the next attempt"},
-	"quota_snapshots":               {Kind: LifecycleOwnerBounded, Reason: "trimmed to the newest observations per credential on every write"},
+	"quota_snapshots":               {Kind: LifecycleOwnerBounded, Reason: "trimmed on every write to the newest observations per credential and the cycle anchors capacity estimates use"},
 	"cpa_config_backups":            {Kind: LifecycleOwnerBounded, Reason: "trimmed to the operator's retention in the transaction that stores a copy"},
 	"agent_documents":               {Kind: LifecycleOwnerBounded, Reason: "sessions are capped by turns; terminal operations expire lazily on agent requests"},
 	"cpa_config_backup_settings":    {Kind: LifecycleReplaced, Reason: "one settings row"},

@@ -12,7 +12,7 @@ import (
 )
 
 func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
-	repo, now, _ := seededDatabase(t)
+	repo, _, _ := seededDatabase(t)
 	ctx := context.Background()
 	latest, err := repo.GetLatestQuotaSnapshots(ctx, []string{"auth-codex-01", "auth-codex-02", "auth-claude-01", "auth-antigravity-01"})
 	if err != nil {
@@ -61,10 +61,11 @@ func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
 		}
 		history = append(history, quota.ObservedWindows{ObservedAtMS: record.ObservedAtMS, Windows: observed})
 	}
-	previous, observedAtMS, ok := quota.PreviousWindowObservation(windows[0], history, latest["auth-codex-02"].ObservedAtMS, now.UnixMilli())
-	if !ok {
-		t.Fatal("demo has no adjacent previous-cycle observation")
+	points := quota.CapacityReferencePoints(windows[0], history, latest["auth-codex-02"].ObservedAtMS)
+	if len(points) == 0 {
+		t.Fatal("demo has no historical capacity observation")
 	}
+	previous, observedAtMS := points[0].Window, points[0].ObservedAtMS
 	fromMS, toMS, reason := quota.WindowCycleRange(previous, observedAtMS, observedAtMS)
 	usage, err := repo.QueryCredentialWindowUsage(ctx, "auth-codex-02", fromMS, toMS)
 	if err != nil || reason != "" || usage.Requests == 0 {

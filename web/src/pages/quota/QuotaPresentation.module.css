@@ -126,8 +126,9 @@
   text-overflow: ellipsis;
 }
 
-/* Recorded usage sits at the start and the estimate at the end; on a narrow Drawer the two
-   wrap onto their own lines instead of truncating a figure. */
+/* What is left of the window sits at the start and its whole size at the end - before an
+   estimate, what was recorded and why there is none yet. On a narrow Drawer the two wrap onto
+   their own lines instead of truncating a figure. */
 .capacity-row {
   display: flex;
   flex-wrap: wrap;
@@ -153,7 +154,7 @@
 
 .capacity-label,
 .capacity-note,
-.capacity-error {
+.capacity-tokens {
   color: var(--meta);
 }
 
@@ -167,8 +168,7 @@
   font-weight: 600;
 }
 
-.capacity-error {
-  font-size: var(--text-2xs);
+.capacity-tokens {
   font-variant-numeric: tabular-nums;
 }
 

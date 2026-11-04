@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import type { TFunc } from '../../i18n';
 import type { QuotaCapacityUnavailableReason, QuotaWindow } from '../../types/quota';
-import { formatUsd, nanosToUsd } from '../../types/pricingDisplay';
+import { formatUsd } from '../../types/pricingDisplay';
 import { formatTokens, type TokenNumberStyle } from '../../types/tokenDisplay';
 
 type CapacityWindow = Pick<QuotaWindow, 'usage' | 'capacity' | 'capacity_unavailable'>;
@@ -21,105 +21,91 @@ export function formatEstimatedUsd(usd: number, errorPercent: number): string {
   return `$${rounded.toLocaleString('en-US', { maximumSignificantDigits: digits })}`;
 }
 
-/** "±2.5%", without a trailing ".0" for a whole number. */
-export function formatCapacityError(errorPercent: number): string {
-  return `±${Number(errorPercent.toFixed(1))}%`;
-}
-
+// No used share leaves the bar itself empty; a second line saying so adds nothing.
 const REASON_KEYS: Record<QuotaCapacityUnavailableReason, MessageKey | null> = {
   scope_unknown: 'quota.capacity_reason_scope_unknown',
   history_unavailable: 'quota.capacity_reason_history_unavailable',
   usage_unavailable: 'quota.capacity_reason_usage_unavailable',
   boundary_unknown: 'quota.capacity_reason_boundary_unknown',
   expired: 'quota.capacity_reason_expired',
-  stale: 'quota.capacity_reason_stale',
-  // No used share means the bar itself is empty; a second line saying so adds nothing.
   no_reading: null,
   low_usage: 'quota.capacity_reason_low_usage',
   no_traffic: 'quota.capacity_reason_no_traffic',
   reset_mid_cycle: 'quota.capacity_reason_reset_mid_cycle',
 };
 
+/** The share of requests that must be priced before a cost is stated; the server's rule too. */
+const MIN_PRICED_SHARE = 0.95;
+
+const NANOS_PER_USD = 1_000_000_000;
+
+/** An amount in the reader's terms: its cost with the tokens beside it, or the tokens alone. */
+export interface CapacityFigure {
+  value: string;
+  tokens: string | null;
+}
+
 export interface QuotaCapacityReading {
-  /** What was recorded in the cycle, e.g. "$1.20 · 480K tokens"; null when nothing was. */
-  recorded: string | null;
-  /** A historical reference is never labelled as the current cycle's capacity. */
-  basis: string | null;
-  /** The estimate, e.g. "≈ $24 · 9.6M tokens"; null when it is withheld. */
-  estimate: string | null;
-  /** The estimate's uncertainty, e.g. "±10%". */
-  error: string | null;
-  /** Why the estimate is withheld, already localized. */
+  /** What is left of the window; null without a live reading. */
+  remaining: CapacityFigure | null;
+  /** The whole window's estimated size; null when there is no estimate yet. */
+  capacity: CapacityFigure | null;
+  /** What this gateway recorded in the cycle, shown while there is no remaining figure. */
+  recorded: CapacityFigure | null;
+  /** Why there is no estimate yet, already localized. */
   note: string | null;
 }
 
-/**
- * The Drawer's reading of a window's recorded usage and estimated capacity. Returns null for a
- * window the estimate does not apply to, so the caller renders no line at all.
- */
-export function describeQuotaCapacity(
-  window: CapacityWindow,
-  tokenStyle: TokenNumberStyle,
-  t: TFunc,
-): QuotaCapacityReading | null {
-  const { usage, capacity, capacity_unavailable: reason } = window;
-  if (!usage && !capacity && !reason) return null;
-
-  const tokens = (count: number) => t('quota.capacity_tokens', { n: formatTokens(count, tokenStyle) });
-
-  let recorded: string | null = null;
-  if (usage && usage.requests > 0) {
-    const parts: string[] = [];
-    if (usage.priced_requests > 0) parts.push(formatUsd(nanosToUsd(usage.cost_nanos)));
-    parts.push(tokens(usage.tokens));
-    // A partly priced cycle's cost is a floor, and the share says how much of one.
-    if (usage.priced_requests > 0 && usage.priced_requests < usage.requests) {
-      parts.push(t('quota.capacity_priced_share', { percent: Math.floor((usage.priced_requests / usage.requests) * 100) }));
-    }
-    recorded = parts.join(' · ');
-  }
-
-  let estimate: string | null = null;
-  let error: string | null = null;
-  if (capacity) {
-    const parts: string[] = [];
-    if (capacity.cost_nanos != null) parts.push(formatEstimatedUsd(capacity.cost_nanos / 1_000_000_000, capacity.error_percent));
-    parts.push(tokens(capacity.tokens));
-    estimate = `≈ ${parts.join(' · ')}`;
-    error = formatCapacityError(capacity.error_percent);
-  }
-
-  const basis = capacity?.basis === 'previous_cycle' ? t('quota.capacity_previous') : null;
-  const reasonKey = (!capacity || basis) && reason ? REASON_KEYS[reason] : null;
-  const note = reasonKey ? t(reasonKey) : null;
-
-  if (!recorded && !estimate && !note) return null;
-  return { recorded, estimate, error, note, basis };
+/** "≈ $987 (196M tokens)": one line for a tooltip. */
+export function formatCapacityFigure(amount: CapacityFigure, t: TFunc): string {
+  return amount.tokens ? t('quota.capacity_figure', { value: amount.value, tokens: amount.tokens }) : amount.value;
 }
 
 /**
- * The list row's reading: the estimate alone, in its shortest form. A row has no room for the
- * recorded usage or for a reason, both of which the Drawer carries.
+ * The reading of a window's estimate: what is left of it and its whole size, or what was recorded
+ * and why there is no estimate yet. Returns null for a window the estimate does not apply to.
+ */
+export function describeQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): QuotaCapacityReading | null {
+  const { usage, capacity, capacity_unavailable: reason } = window;
+  const tokens = (count: number) => t('quota.capacity_tokens', { n: formatTokens(count, tokenStyle) });
+  const estimate = (costNanos: number | undefined, tokenCount: number): CapacityFigure => costNanos == null
+    ? { value: `≈ ${tokens(tokenCount)}`, tokens: null }
+    : { value: `≈ ${formatEstimatedUsd(costNanos / NANOS_PER_USD, capacity?.error_percent ?? 0)}`, tokens: tokens(tokenCount) };
+
+  const remaining = capacity?.remaining_tokens != null ? estimate(capacity.remaining_cost_nanos, capacity.remaining_tokens) : null;
+  const whole = capacity ? estimate(capacity.cost_nanos, capacity.tokens) : null;
+  let recorded: CapacityFigure | null = null;
+  if (!remaining && usage && usage.requests > 0) {
+    recorded = usage.priced_requests >= usage.requests * MIN_PRICED_SHARE
+      ? { value: formatUsd(usage.cost_nanos / NANOS_PER_USD), tokens: tokens(usage.tokens) }
+      : { value: tokens(usage.tokens), tokens: null };
+  }
+  const reasonKey = !capacity && reason ? REASON_KEYS[reason] : null;
+  const note = reasonKey ? t(reasonKey) : null;
+
+  if (!remaining && !whole && !recorded && !note) return null;
+  return { remaining, capacity: whole, recorded, note };
+}
+
+/**
+ * The list row's reading in its shortest form: what is left of the window while the reading is
+ * live, otherwise its size. The row's tooltip names both, and the Drawer carries the rest.
  */
 export function compactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
   const { capacity } = window;
   if (!capacity) return null;
-  const prefix = capacity.basis === 'previous_cycle' ? `${t('quota.capacity_previous_short')} ` : '';
-  if (capacity.cost_nanos != null) {
-    return `${prefix}≈${formatEstimatedUsd(capacity.cost_nanos / 1_000_000_000, capacity.error_percent)}`;
-  }
-  return `${prefix}≈${t('quota.capacity_tokens', { n: formatTokens(capacity.tokens, tokenStyle) })}`;
+  const isRemaining = capacity.remaining_tokens != null;
+  const cost = isRemaining ? capacity.remaining_cost_nanos : capacity.cost_nanos;
+  if (cost != null) return `≈${formatEstimatedUsd(cost / NANOS_PER_USD, capacity.error_percent)}`;
+  return `≈${t('quota.capacity_tokens', { n: formatTokens(capacity.remaining_tokens ?? capacity.tokens, tokenStyle) })}`;
 }
 
-/**
- * The same reading for the row's tooltip, where it is a sentence of its own: the basis names the
- * estimate once instead of reading "Est. capacity Prev ≈…", and a previous cycle is never called
- * the current cycle's capacity.
- */
+/** The same estimate as tooltip lines: what is left, then the whole window. */
 export function describeCompactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
-  const reading = compactQuotaCapacity(window, tokenStyle, t);
-  if (!reading) return null;
-  const isPreviousCycle = window.capacity?.basis === 'previous_cycle';
-  const figure = isPreviousCycle ? reading.slice(`${t('quota.capacity_previous_short')} `.length) : reading;
-  return `${t(isPreviousCycle ? 'quota.capacity_previous' : 'quota.capacity_estimate')} ${figure}`;
+  const reading = describeQuotaCapacity(window, tokenStyle, t);
+  if (!reading?.capacity) return null;
+  return [
+    reading.remaining ? `${t('quota.capacity_remaining')} ${formatCapacityFigure(reading.remaining, t)}` : null,
+    `${t('quota.capacity_estimate')} ${formatCapacityFigure(reading.capacity, t)}`,
+  ].filter(Boolean).join('\n');
 }

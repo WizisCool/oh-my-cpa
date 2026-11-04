@@ -4048,6 +4048,18 @@
                             "integer"
                           ]
                         },
+                        "remaining_tokens": {
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "remaining_cost_nanos": {
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
                         "error_percent": {
                           "type": "number"
                         }
@@ -4351,6 +4363,18 @@
                     "type": "integer"
                   },
                   "cost_nanos": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "remaining_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "remaining_cost_nanos": {
                     "type": [
                       "null",
                       "integer"

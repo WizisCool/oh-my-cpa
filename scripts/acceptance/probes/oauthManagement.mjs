@@ -43,11 +43,17 @@ function quotaFor(index) {
     remaining_percent: 80 - windowIndex * 5,
     reset_at_ms: Date.now() + (windowIndex + 1) * 3_600_000,
     // Only the first credential carries an estimate, so the record beside it is the same
-    // row without one. The figures are four-digit dollars: the widest reading a row has to fit.
+    // row without one. Its first window is live, so it also states what is left; the second is
+    // an estimate without a live reading. The figures are four-digit dollars: the widest
+    // reading a row has to fit.
     ...(index === 0 ? {
       usage: { from_ms: Date.now() - 3_600_000, to_ms: Date.now(), requests: 420, priced_requests: 420, tokens: 61_250_000, cost_nanos: 308_500_000_000 },
-      ...(windowIndex === 1 ? { capacity_unavailable: 'low_usage' } : {}),
-      capacity: { tokens: 245_000_000, cost_nanos: 1_234_000_000_000, error_percent: 2.5, basis: windowIndex === 0 ? 'current_cycle' : 'previous_cycle', observed_at_ms: Date.now() - 86_400_000 },
+      capacity: {
+        tokens: 245_000_000, cost_nanos: 1_234_000_000_000, error_percent: 2.5,
+        basis: windowIndex === 0 ? 'observed_delta' : 'previous_cycle',
+        observed_at_ms: Date.now() - 86_400_000,
+        ...(windowIndex === 0 ? { remaining_tokens: 196_000_000, remaining_cost_nanos: 987_200_000_000 } : {}),
+      },
     } : index === 1 ? { capacity_unavailable: 'scope_unknown' } : {}),
   }));
   const cooldown = index === 8 || index === 9;
@@ -202,8 +208,9 @@ export async function oauthManagement({ base, page, check, ledger }) {
     plainDetails.push(await readQuotaDetails(page, cell));
   }
   check(
-    'each reading carries its estimated capacity in its detail, and a record without one carries none',
-    estimates.length === 2 && estimates[0].includes('Est. capacity ≈$1,230') && estimates[1].includes('Previous cycle estimate ≈$1,230')
+    'each reading carries its estimate in its detail, what is left only beside a live reading, and a record without one carries none',
+    estimates.length === 2 && estimates[0].includes('Est. remaining ≈ $987 (196M tokens)') && estimates[0].includes('Est. capacity ≈ $1,230')
+      && estimates[1].includes('Est. capacity ≈ $1,230') && !estimates[1].includes('Est. remaining')
       && plainDetails.length === 2 && plainDetails.every((detail) => !detail.includes('≈')),
     JSON.stringify({ estimates, plainDetails }),
   );
@@ -523,9 +530,9 @@ export async function oauthManagement({ base, page, check, ledger }) {
     });
     check(
       `the quota drawer keeps recorded usage and the estimate inside the panel at ${width}px`,
-      drawerEstimates.length === 5 && drawerEstimates.every(Boolean)
+      drawerEstimates.length === 4 && drawerEstimates.every(Boolean)
         && (await phoneDrawer.locator('[data-quota-capacity-hint]').isVisible())
-        && (await phoneDrawer.locator('[data-quota-capacity-basis="previous_cycle"]').innerText()).includes('Previous cycle estimate'),
+        && (await phoneDrawer.locator('[data-quota-capacity-remaining]').count()) === 1,
       JSON.stringify(drawerEstimates),
     );
     await page.screenshot({ path: `tmp/oauth-management-drawer-${width}.png` });
@@ -826,13 +833,15 @@ async function verifyFullCodexCountdown({ base, page, check, ledger }) {
 
 async function verifyFullTokenCapacity({ base, page, check }) {
   const tokenQuota = structuredClone(quota);
-  // The widest reading a window can hold: a previous cycle's token count in full digits, with no
-  // dollar figure to shorten it. The row states it in its tooltip and the Drawer prints it, so both
-  // surfaces are checked for the same figure.
-  const previousWindow = tokenQuota[0].windows[1];
-  previousWindow.capacity.tokens = 123_456_789_012_345;
-  delete previousWindow.capacity.cost_nanos;
+  // The widest reading a window can hold: token counts in full digits, with no dollar figure to
+  // shorten them, for both what is left and the whole window. The row states them in its tooltip
+  // and the Drawer prints them, so both surfaces are checked for the same figures.
+  const wideWindow = tokenQuota[0].windows[1];
+  wideWindow.capacity.tokens = 123_456_789_012_345;
+  wideWindow.capacity.remaining_tokens = 92_592_591_759_259;
+  delete wideWindow.capacity.cost_nanos;
   const FULL_DIGITS = '123,456,789,012,345 tokens';
+  const REMAINING_DIGITS = '92,592,591,759,259 tokens';
   const quotaPattern = '**/api/v1/management/quota';
   const quotaHandler = (route) => route.fulfill({ json: { quotas: tokenQuota, total: tokenQuota.length } });
   await page.route(quotaPattern, quotaHandler);
@@ -855,12 +864,11 @@ async function verifyFullTokenCapacity({ base, page, check }) {
       weeklyDetails = await readQuotaDetails(page, weeklyCell);
       return weeklyDetails.includes(FULL_DIGITS);
     }, {
-      label: 'the previous-cycle token estimate in full-digit style',
+      label: 'the token estimate in full-digit style',
     });
     check(
-      'a row states its previous-cycle estimate in full digits and never calls it this cycle',
-      weeklyDetails.includes(`Previous cycle estimate ≈${FULL_DIGITS}`)
-        && !weeklyDetails.includes('Est. capacity Prev'),
+      'a row states what is left and the whole window in full digits',
+      weeklyDetails.includes(`Est. remaining ≈ ${REMAINING_DIGITS}`) && weeklyDetails.includes(`Est. capacity ≈ ${FULL_DIGITS}`),
       weeklyDetails,
     );
     // A phone row has no reading of its own, so the same figure is checked where a phone reads it:
@@ -873,7 +881,7 @@ async function verifyFullTokenCapacity({ base, page, check }) {
       await row.getByRole('button', { name: /^Details:/ }).click();
       const drawer = page.locator('.ant-drawer-open');
       await drawer.getByRole('tab', { name: 'Quota', exact: true }).click();
-      const reading = drawer.locator('[data-quota-capacity-basis="previous_cycle"]').filter({ hasText: FULL_DIGITS }).first();
+      const reading = drawer.locator('[data-quota-capacity="estimated"]').filter({ hasText: FULL_DIGITS }).first();
       await reading.waitFor({ state: 'visible', timeout: 10_000 });
       await settleLayout(page);
       const geometry = await reading.evaluate((element) => {
@@ -888,8 +896,8 @@ async function verifyFullTokenCapacity({ base, page, check }) {
         return { parts, overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth) };
       });
       check(
-        `the full-digit previous-cycle estimate stays inside the drawer at ${width}px`,
-        geometry.parts.some((part) => (part.text ?? '').includes('Previous cycle estimate'))
+        `the full-digit estimate stays inside the drawer at ${width}px`,
+        geometry.parts.some((part) => (part.text ?? '').includes(REMAINING_DIGITS))
           && geometry.parts.some((part) => (part.text ?? '').includes(FULL_DIGITS))
           && geometry.parts.every((part) => part.contained)
           && geometry.overflow === 0,

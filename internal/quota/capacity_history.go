@@ -27,16 +27,7 @@ func HasIncompleteWindowHistory(window QuotaWindow, history []ObservedWindows, f
 // HasWindowCycleReset checks the whole retained sequence, not just the peak
 // against today's value: a reset remains a reset after consumption catches up.
 func HasWindowCycleReset(window QuotaWindow, history []ObservedWindows, fromMS, toMS int64) bool {
-	observations := slices.Clone(history)
-	slices.SortStableFunc(observations, func(first, second ObservedWindows) int {
-		if first.ObservedAtMS < second.ObservedAtMS {
-			return -1
-		}
-		if first.ObservedAtMS > second.ObservedAtMS {
-			return 1
-		}
-		return 0
-	})
+	observations := sortedCapacityHistory(history)
 	var previous *QuotaWindow
 	for _, observation := range observations {
 		if observation.ObservedAtMS > toMS {
@@ -60,12 +51,16 @@ func HasWindowCycleReset(window QuotaWindow, history []ObservedWindows, fromMS, 
 			if earlier.HasMidCycleReset {
 				return true
 			}
-			if previous != nil && previous.UsedPercent != nil && earlier.UsedPercent != nil && *previous.UsedPercent > *earlier.UsedPercent+capacityResetTolerancePercent {
-				return true
+			if previous != nil {
+				priorUsed, hasPrior := WindowUsedPercent(*previous)
+				earlierUsed, hasEarlier := WindowUsedPercent(earlier)
+				if hasPrior && hasEarlier && priorUsed > earlierUsed+capacityResetTolerancePercent {
+					return true
+				}
 			}
 			// An early reset may also replace the advertised boundary without a
 			// percentage decrease (for example when the next reading is already high).
-			if previous != nil && previous.ResetAtMS != nil && earlier.ResetAtMS != nil && *previous.ResetAtMS > observation.ObservedAtMS && math.Abs(float64(*previous.ResetAtMS-*earlier.ResetAtMS)) > 1000 {
+			if previous != nil && hasChangedCapacityBoundary(*previous, earlier) && *previous.ResetAtMS > observation.ObservedAtMS {
 				return true
 			}
 			previous = &earlier
@@ -74,10 +69,19 @@ func HasWindowCycleReset(window QuotaWindow, history []ObservedWindows, fromMS, 
 	if window.HasMidCycleReset {
 		return true
 	}
-	if previous != nil && previous.ResetAtMS != nil && window.ResetAtMS != nil && *previous.ResetAtMS > toMS && math.Abs(float64(*previous.ResetAtMS-*window.ResetAtMS)) > 1000 {
+	if previous == nil {
+		return false
+	}
+	if hasChangedCapacityBoundary(*previous, window) && *previous.ResetAtMS > toMS {
 		return true
 	}
-	return previous != nil && previous.UsedPercent != nil && window.UsedPercent != nil && *previous.UsedPercent > *window.UsedPercent+capacityResetTolerancePercent
+	priorUsed, hasPrior := WindowUsedPercent(*previous)
+	used, hasReading := WindowUsedPercent(window)
+	return hasPrior && hasReading && priorUsed > used+capacityResetTolerancePercent
+}
+
+func hasChangedCapacityBoundary(first, second QuotaWindow) bool {
+	return first.ResetAtMS != nil && second.ResetAtMS != nil && first.ResetAccuracy != "approximate" && second.ResetAccuracy != "approximate" && math.Abs(float64(*first.ResetAtMS-*second.ResetAtMS)) > 1000
 }
 
 func hasSameCapacityScope(first, second QuotaWindow) bool {
@@ -87,45 +91,124 @@ func hasSameCapacityScope(first, second QuotaWindow) bool {
 	return len(windowModelFamilies(first)) > 0 || first.Model == second.Model
 }
 
-// PreviousWindowObservation chooses the last reading of the immediately
-// preceding scheduled cycle. It never searches farther back to find a nicer
-// number, nor crosses a changed scope or a reset boundary that moved early.
-func PreviousWindowObservation(window QuotaWindow, history []ObservedWindows, observedAtMS, nowMS int64) (QuotaWindow, int64, bool) {
-	currentStart, _, reason := WindowCycleRange(window, observedAtMS, nowMS)
-	if reason != "" {
-		return QuotaWindow{}, 0, false
+// CapacityPoint keeps a percentage paired with the instant it was observed.
+type CapacityPoint struct {
+	Window       QuotaWindow
+	ObservedAtMS int64
+}
+
+func hasCompatibleCapacityPeriod(first, second QuotaWindow) bool {
+	return first.PeriodHours == nil || second.PeriodHours == nil || *first.PeriodHours == *second.PeriodHours
+}
+
+func sortedCapacityHistory(history []ObservedWindows) []ObservedWindows {
+	ordered := slices.Clone(history)
+	slices.SortStableFunc(ordered, func(first, second ObservedWindows) int {
+		if first.ObservedAtMS < second.ObservedAtMS {
+			return -1
+		}
+		if first.ObservedAtMS > second.ObservedAtMS {
+			return 1
+		}
+		return 0
+	})
+	return ordered
+}
+
+// CapacityBaseline uses the widest observed change in the latest uninterrupted
+// segment. It works after a mid-cycle reset and without a published cycle start.
+// Rounded plateaus are kept in the segment, so more evidence improves the slope
+// instead of producing one noisy estimate per polling interval.
+func CapacityBaseline(window QuotaWindow, history []ObservedWindows, observedAtMS int64) (CapacityPoint, bool) {
+	used, hasReading := WindowUsedPercent(window)
+	if !hasReading {
+		return CapacityPoint{}, false
 	}
-	previousStart := currentStart - int64(*window.PeriodHours*3600*1000)
-	var selected QuotaWindow
-	var selectedAtMS int64
-	hasSelected := false
-	for _, observation := range history {
-		if observation.ObservedAtMS < previousStart || observation.ObservedAtMS >= currentStart {
+	ordered := sortedCapacityHistory(history)
+	next := window
+	nextUsed := used
+	var baseline CapacityPoint
+	hasBaseline := false
+	for i := len(ordered) - 1; i >= 0; i-- {
+		observation := ordered[i]
+		if observation.ObservedAtMS >= observedAtMS {
 			continue
 		}
 		for _, candidate := range observation.Windows {
 			if candidate.ID != window.ID {
 				continue
 			}
-			// A changed or invalid final reading must not resurrect an older,
-			// more convenient observation from this same scheduled cycle.
-			if candidate.HasIncompleteHistory || !hasSameCapacityScope(window, candidate) || candidate.ResetAtMS == nil || candidate.PeriodHours == nil || *candidate.PeriodHours != *window.PeriodHours || math.Abs(float64(*candidate.ResetAtMS-currentStart)) > 1000 {
-				return QuotaWindow{}, 0, false
+			if !hasSameCapacityScope(window, candidate) || !hasCompatibleCapacityPeriod(window, candidate) || next.HasMidCycleReset && !candidate.HasMidCycleReset {
+				return baseline, hasBaseline
 			}
-			if _, _, candidateReason := WindowCycleRange(candidate, observation.ObservedAtMS, observation.ObservedAtMS); candidateReason != "" {
-				return QuotaWindow{}, 0, false
+			periodHours := window.PeriodHours
+			if periodHours == nil {
+				periodHours = candidate.PeriodHours
 			}
-			if !hasSelected || observation.ObservedAtMS >= selectedAtMS {
-				selected, selectedAtMS, hasSelected = candidate, observation.ObservedAtMS, true
+			if periodHours != nil && float64(observedAtMS-observation.ObservedAtMS) >= *periodHours*3600000 {
+				return baseline, hasBaseline
 			}
+			// Approximate reset instants can move as a provider updates its
+			// recovery estimate; percentage changes remain useful in that case.
+			if hasChangedCapacityBoundary(candidate, next) {
+				return baseline, hasBaseline
+			}
+			candidateUsed, hasCandidateReading := WindowUsedPercent(candidate)
+			if !hasCandidateReading {
+				continue
+			}
+			if candidateUsed > nextUsed+capacityResetTolerancePercent {
+				return baseline, hasBaseline
+			}
+			if candidateUsed < used {
+				baseline, hasBaseline = CapacityPoint{Window: candidate, ObservedAtMS: observation.ObservedAtMS}, true
+			}
+			next, nextUsed = candidate, candidateUsed
 		}
 	}
-	if !hasSelected {
-		return QuotaWindow{}, 0, false
+	return baseline, hasBaseline
+}
+
+// CapacityReferencePoints selects recent same-scope cycles, allowing gaps when
+// an account was idle. One point per cycle segment and three candidates bound
+// accounting joins. A reset starts a new segment, keeping the preceding estimate
+// available until fresh traffic can calibrate the new one. Observation times stay
+// with each reference so idle accounts keep a dated result instead of losing it.
+func CapacityReferencePoints(window QuotaWindow, history []ObservedWindows, observedAtMS int64) []CapacityPoint {
+	ordered := sortedCapacityHistory(history)
+	points := make([]CapacityPoint, 0, 3)
+	type segment struct {
+		resetAtMS int64
+		hasReset  bool
 	}
-	fromMS, _, _ := WindowCycleRange(selected, selectedAtMS, selectedAtMS)
-	if HasWindowCycleReset(selected, history, fromMS, currentStart-1) {
-		return QuotaWindow{}, 0, false
+	seenSegments := make(map[segment]bool)
+	for i := len(ordered) - 1; i >= 0 && len(points) < 3; i-- {
+		observation := ordered[i]
+		if observation.ObservedAtMS >= observedAtMS {
+			continue
+		}
+		for _, candidate := range observation.Windows {
+			if candidate.ID != window.ID {
+				continue
+			}
+			if !hasSameCapacityScope(window, candidate) || !hasCompatibleCapacityPeriod(window, candidate) {
+				return points
+			}
+			used, hasReading := WindowUsedPercent(candidate)
+			if !hasReading || used <= 0 {
+				continue
+			}
+			cycle := int64(0)
+			if candidate.ResetAtMS != nil {
+				cycle = *candidate.ResetAtMS
+			}
+			key := segment{resetAtMS: cycle, hasReset: candidate.HasMidCycleReset}
+			if seenSegments[key] {
+				continue
+			}
+			seenSegments[key] = true
+			points = append(points, CapacityPoint{Window: candidate, ObservedAtMS: observation.ObservedAtMS})
+		}
 	}
-	return selected, selectedAtMS, true
+	return points
 }

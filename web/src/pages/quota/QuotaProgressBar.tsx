@@ -1,8 +1,8 @@
 import React from 'react';
 import { useT } from '../../i18n';
-import { formatShortDateTime, formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel, resetAccuracyMarker } from './quotaFormat';
+import { formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel, resetAccuracyMarker } from './quotaFormat';
 import { quotaRemainingStroke } from './quotaThresholds';
-import { describeQuotaCapacity } from './quotaCapacity';
+import { describeQuotaCapacity, type CapacityFigure } from './quotaCapacity';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import type { QuotaWindow } from '../../types/quota';
 import styles from './QuotaPresentation.module.css';
@@ -96,26 +96,17 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
       {capacityReading && (
         <div
           className={styles['capacity-row']}
-          data-quota-capacity-basis={capacity?.capacity?.basis ?? 'current_cycle'}
-          data-quota-capacity={capacityReading.estimate ? 'estimated' : 'withheld'}
+          data-quota-capacity={capacityReading.capacity ? 'estimated' : 'pending'}
+          data-quota-capacity-basis={capacity?.capacity?.basis}
         >
-          {capacityReading.recorded && (
-            <span className={styles['capacity-part']}>
-              <span className={styles['capacity-label']}>{t('quota.capacity_recorded')}</span>
-              <span className={styles['capacity-value']}>{capacityReading.recorded}</span>
-            </span>
+          {capacityReading.remaining ? (
+            <CapacityAmount label={t('quota.capacity_remaining')} amount={capacityReading.remaining} isStrong data-quota-capacity-remaining />
+          ) : capacityReading.recorded && (
+            <CapacityAmount label={t('quota.capacity_recorded')} amount={capacityReading.recorded} />
           )}
-          {capacityReading.estimate ? (
-            <span className={`${styles['capacity-part']} ${styles['capacity-part-end']}`}>
-              <span className={styles['capacity-label']}>{capacityReading.basis ?? t('quota.capacity_estimate')}</span>
-              {capacityReading.basis && capacity?.capacity?.observed_at_ms != null && (
-                <span className={styles['capacity-label']}>{formatShortDateTime(capacity.capacity.observed_at_ms)}</span>
-              )}
-              <span className={`${styles['capacity-value']} ${styles['capacity-value-strong']}`}>{capacityReading.estimate}</span>
-              <span className={styles['capacity-error']}>{capacityReading.error}</span>
-            </span>
-          ) : null}
-          {capacityReading.note && (
+          {capacityReading.capacity ? (
+            <CapacityAmount label={t('quota.capacity_estimate')} amount={capacityReading.capacity} isEnd />
+          ) : capacityReading.note && (
             <span className={`${styles['capacity-note']} ${styles['capacity-part-end']}`}>{capacityReading.note}</span>
           )}
         </div>
@@ -123,3 +114,20 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
     </div>
   );
 };
+
+/** A labelled amount under the bar: the figure, with its tokens in a quieter voice when it is a cost. */
+function CapacityAmount({ label, amount, isStrong = false, isEnd = false, ...data }: {
+  label: string;
+  amount: CapacityFigure;
+  isStrong?: boolean;
+  isEnd?: boolean;
+  'data-quota-capacity-remaining'?: boolean;
+}) {
+  return (
+    <span className={`${styles['capacity-part']}${isEnd ? ` ${styles['capacity-part-end']}` : ''}`} {...data}>
+      <span className={styles['capacity-label']}>{label}</span>
+      <span className={`${styles['capacity-value']}${isStrong ? ` ${styles['capacity-value-strong']}` : ''}`}>{amount.value}</span>
+      {amount.tokens && <span className={styles['capacity-tokens']}>{amount.tokens}</span>}
+    </span>
+  );
+}

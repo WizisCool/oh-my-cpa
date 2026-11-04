@@ -409,8 +409,8 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 	if isUsable, _ := quota.ReadOutcome(q, nil); !isUsable {
 		return nil
 	}
-	// Carry observed reset evidence through the existing JSON snapshots, so a
-	// tainted cycle stays tainted after earlier readings fall out of retention.
+	// Carry observed resets through the raw snapshots so calibration can
+	// separate pre-reset traffic even after the detailed history is trimmed.
 	var history []quota.ObservedWindows
 	hasIncompleteHistory := false
 	for _, window := range q.Windows {
