@@ -6,7 +6,7 @@ import { ConfirmAction } from '../../components/common/ConfirmAction';
 import { FileDropzone } from '../../components/common/FileDropzone';
 import { SecretInput } from '../../components/common/SecretInput';
 import { ToolButton } from '../../components/common/ToolButton';
-import { DownloadOutlined, ReloadOutlined } from '../../components/icons';
+import { CheckOutlined, DownloadOutlined, ReloadOutlined, SafetyCertificateOutlined } from '../../components/icons';
 import { LoadFailure, Notice } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
@@ -74,31 +74,42 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
     }
   };
 
+  const step = preview ? 2 : (source === UPLOAD ? file : selectedKey) ? 1 : 0;
+  const steps = <RestoreSteps current={step} />;
+
   if (preview) {
     return (
-      <section className={styles['preview']}>
-        <h3 className={styles['preview-title']}>{t('sys.backup_preview_title')}</h3>
-        <dl className={styles['facts']}>
-          <dt>{t('sys.backup_source_time')}</dt>
-          <dd>{dayjs(preview.backup_created_at_ms).format('YYYY-MM-DD HH:mm:ss')}</dd>
-          <dt>{t('sys.backup_source_version')}</dt>
-          <dd>{preview.source_version}</dd>
-          <dt>{t('sys.backup_size')}</dt>
-          <dd>{formatBytes(preview.size_bytes)}</dd>
-        </dl>
-        <Notice tone="warning" title={t('sys.backup_restore_hint')} />
-        <div className={styles['actions']}>
-          <Button onClick={() => setPreviewId('')}>{t('sys.backup_choose_another')}</Button>
-          <ConfirmAction
-            isDanger
-            title={t('sys.backup_restore_confirm')}
-            confirmLabel={t('sys.backup_restore')}
-            onConfirm={() => onSchedule(preview)}
-          >
-            <Button type="primary" danger disabled={isBusy || preview.state !== 'ready'}>
-              {t('sys.backup_restore')}
-            </Button>
-          </ConfirmAction>
+      <section className={styles['restore']}>
+        {steps}
+        <div className={styles['preview']}>
+          <div className={styles['preview-head']}>
+            <span className={styles['preview-icon']} aria-hidden>
+              <SafetyCertificateOutlined />
+            </span>
+            <h3 className={styles['preview-title']}>{t('sys.backup_preview_title')}</h3>
+          </div>
+          <dl className={styles['facts']}>
+            <dt>{t('sys.backup_source_time')}</dt>
+            <dd>{dayjs(preview.backup_created_at_ms).format('YYYY-MM-DD HH:mm:ss')}</dd>
+            <dt>{t('sys.backup_source_version')}</dt>
+            <dd>{preview.source_version}</dd>
+            <dt>{t('sys.backup_size')}</dt>
+            <dd>{formatBytes(preview.size_bytes)}</dd>
+          </dl>
+          <Notice tone="warning" title={t('sys.backup_restore_hint')} />
+          <div className={styles['actions']}>
+            <Button onClick={() => setPreviewId('')}>{t('sys.backup_choose_another')}</Button>
+            <ConfirmAction
+              isDanger
+              title={t('sys.backup_restore_confirm')}
+              confirmLabel={t('sys.backup_restore')}
+              onConfirm={() => onSchedule(preview)}
+            >
+              <Button type="primary" danger disabled={isBusy || preview.state !== 'ready'}>
+                {t('sys.backup_restore')}
+              </Button>
+            </ConfirmAction>
+          </div>
         </div>
       </section>
     );
@@ -132,6 +143,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
 
   return (
     <section className={styles['restore']}>
+      {steps}
       <Segmented
         block
         className={styles['sources']}
@@ -210,6 +222,9 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
                       />
                     )}
                     <Button
+                      size="small"
+                      type={selectedKey === item.key ? 'primary' : 'default'}
+                      aria-expanded={selectedKey === item.key}
                       disabled={isBusy || isWorking}
                       onClick={() => {
                         setSelectedKey(selectedKey === item.key ? '' : item.key);
@@ -228,5 +243,27 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
         </>
       )}
     </section>
+  );
+}
+
+const STEP_KEYS = ['sys.backup_step_choose', 'sys.backup_step_unlock', 'sys.backup_step_confirm'] as const;
+
+/** Where the reader is in the three steps, so the page says what comes after the one in front of them. */
+function RestoreSteps({ current }: { current: number }) {
+  const t = useT();
+  return (
+    <ol className={styles['restore-steps']}>
+      {STEP_KEYS.map((key, index) => {
+        const state = index < current ? 'done' : index === current ? 'active' : undefined;
+        return (
+          <li key={key} className={styles['restore-step']} data-state={state} aria-current={state === 'active' ? 'step' : undefined}>
+            <span className={styles['restore-step-index']} aria-hidden>
+              {state === 'done' ? <CheckOutlined /> : index + 1}
+            </span>
+            <span className={styles['restore-step-label']}>{t(key)}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

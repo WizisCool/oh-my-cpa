@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react';
-import { Button, Checkbox, TimePicker } from 'antd';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Button, Checkbox, Select, TimePicker } from 'antd';
 import dayjs from '../../utils/time';
 import {
   CheckCircleOutlined,
   CloudUploadOutlined,
   DeleteOutlined,
   EditOutlined,
+  LockOutlined,
   PlusOutlined,
+  RollbackOutlined,
   SyncOutlined,
   WarningOutlined,
 } from '../../components/icons';
 import { api, apiErrorCode } from '../../api/client';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
+import { Fold } from '../../components/common/Fold';
 import { SectionHeading } from '../../components/common/SectionHeading';
-import { SecretInput } from '../../components/common/SecretInput';
+import { SettingRow } from '../../components/common/SettingRow';
+import { Switch } from '../../components/common/Switch';
 import { ToolButton } from '../../components/common/ToolButton';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
@@ -27,15 +31,9 @@ import type {
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
 import { formatTimeAgo } from '../../utils/format';
 import { BACKUP_PROVIDERS, newBackupDestination, type DestinationInput } from './BackupDestination';
+import { PassphraseFields, isPassphrasePairValid } from './BackupPassphrase';
 import { BackupProviderMark } from './BackupProviderMark';
-import {
-  DEFAULT_KEEP_LOCAL,
-  KEEP_COUNTS,
-  MAX_DESTINATIONS,
-  STATE_KEYS,
-  destinationInput,
-  isPassphraseLongEnough,
-} from './backupModel';
+import { DEFAULT_KEEP_LOCAL, KEEP_COUNTS, MAX_DESTINATIONS, STATE_KEYS, destinationInput } from './backupModel';
 import styles from './DatabaseBackups.module.css';
 
 interface Props {
@@ -50,6 +48,9 @@ interface Props {
   onEditDestination: (index: number | null, draft: DestinationInput) => void;
   onRestore: () => void;
 }
+
+/** The stages a run passes through, in order; a run with no cloud location has nothing to upload. */
+const RUN_STAGES: DatabaseBackupJob['state'][] = ['snapshotting', 'packaging', 'validating', 'uploading'];
 
 const minuteToTime = (minute: number) =>
   dayjs().hour(Math.floor(minute / 60)).minute(minute % 60).second(0).millisecond(0);
@@ -109,7 +110,10 @@ export function BackupPlan(props: Props) {
   );
 }
 
-/** When it last ran and when it runs next, with the two things to do about it. */
+/**
+ * The verdict the panel opens on: when it last worked, when it runs next, and the two things to do
+ * about it. A run in progress shows which stage it is at, so a long upload does not read as a hang.
+ */
 function Status({
   value,
   runningJob,
@@ -128,23 +132,31 @@ function Status({
   const [isStarting, setIsStarting] = useState(false);
   const isRunning = !!runningJob && runningJob.kind === 'automatic';
   const hasLocation = value.keep_local > 0 || value.destinations.length > 0;
-  const tone = isRunning || value.last_error ? 'warn' : value.last_success_at_ms ? 'ok' : 'idle';
+  const tone = isRunning ? 'run' : value.last_error ? 'warn' : value.last_success_at_ms ? 'ok' : 'idle';
+  const label = isRunning
+    ? t(STATE_KEYS[runningJob.state])
+    : value.last_error
+      ? t('sys.backup_auto_last_failed')
+      : value.last_success_at_ms
+        ? t('sys.backup_last_success')
+        : null;
   return (
     <section className={styles['status']} data-tone={tone} aria-live="polite">
       <div className={styles['status-head']}>
-        <span className={styles['status-icon']} aria-hidden>
-          {tone === 'ok' ? <CheckCircleOutlined /> : tone === 'warn' ? <WarningOutlined /> : <CloudUploadOutlined />}
+        {/* Keyed by tone so a change of verdict lands with its own small arrival. */}
+        <span key={tone} className={styles['status-icon']} aria-hidden>
+          {tone === 'ok' ? (
+            <CheckCircleOutlined />
+          ) : tone === 'warn' ? (
+            <WarningOutlined />
+          ) : tone === 'run' ? (
+            <SyncOutlined spin />
+          ) : (
+            <CloudUploadOutlined />
+          )}
         </span>
         <div className={styles['status-text']}>
-          <span className={styles['status-label']}>
-            {isRunning
-              ? t(STATE_KEYS[runningJob.state])
-              : value.last_error
-                ? t('sys.backup_auto_last_failed')
-                : value.last_success_at_ms
-                  ? t('sys.backup_last_success')
-                  : t('sys.backup_auto_never')}
-          </span>
+          {label && <span className={styles['status-label']}>{label}</span>}
           <strong className={styles['status-value']}>
             {isRunning
               ? t('sys.backup_running')
@@ -153,41 +165,63 @@ function Status({
                 : t('sys.backup_none_yet')}
           </strong>
           <span className={styles['status-next']}>
-            {value.enabled && value.next_run_at_ms
-              ? t('sys.backup_next_run', { time: dayjs(value.next_run_at_ms).format('YYYY-MM-DD HH:mm') })
-              : t('sys.backup_schedule_off_hint')}
+            {!value.has_passphrase
+              ? t('sys.backup_needs_passphrase')
+              : value.enabled && value.next_run_at_ms
+                ? t('sys.backup_next_run', { time: dayjs(value.next_run_at_ms).format('YYYY-MM-DD HH:mm') })
+                : t('sys.backup_schedule_off_hint')}
           </span>
         </div>
       </div>
+      {isRunning && <RunStages state={runningJob.state} hasUpload={value.destinations.length > 0} />}
       {value.last_error && !isRunning && (
-        <Notice
-          tone="warning"
-          title={t('sys.backup_auto_last_failed')}
-          description={t(value.keep_local > 0 ? 'sys.backup_auto_local_hint' : 'sys.backup_auto_fallback_hint')}
-        />
+        <p className={styles['status-alert']}>
+          {t(value.keep_local > 0 ? 'sys.backup_auto_local_hint' : 'sys.backup_auto_fallback_hint')}
+        </p>
       )}
       <div className={styles['status-actions']}>
-        <Button
-          type="primary"
-          icon={<CloudUploadOutlined />}
-          loading={isStarting || isRunning}
-          disabled={isBusy || !hasLocation || !value.has_passphrase}
-          onClick={async () => {
-            setIsStarting(true);
-            try {
-              await onRun();
-            } finally {
-              setIsStarting(false);
-            }
-          }}
-        >
-          {t('sys.backup_auto_run')}
-        </Button>
-        <Button type="text" onClick={onRestore}>
+        {value.has_passphrase && (
+          <Button
+            type="primary"
+            icon={<CloudUploadOutlined />}
+            // A run in progress shows as this button working, not as a dead one: a loading button
+            // already refuses clicks, so it keeps its colour and spinner instead of greying out.
+            loading={isStarting || isRunning}
+            disabled={(isBusy && !isRunning) || !hasLocation}
+            onClick={async () => {
+              setIsStarting(true);
+              try {
+                await onRun();
+              } finally {
+                setIsStarting(false);
+              }
+            }}
+          >
+            {t('sys.backup_auto_run')}
+          </Button>
+        )}
+        <Button type="text" icon={<RollbackOutlined />} onClick={onRestore}>
           {t('sys.backup_restore_from_backup')}
         </Button>
       </div>
     </section>
+  );
+}
+
+/** One segment per stage: the done ones filled, the current one breathing. */
+function RunStages({ state, hasUpload }: { state: DatabaseBackupJob['state']; hasUpload: boolean }) {
+  const stages = hasUpload ? RUN_STAGES : RUN_STAGES.slice(0, -1);
+  const current = stages.indexOf(state);
+  return (
+    <ol className={styles['stages']} aria-hidden>
+      {stages.map((stage, index) => (
+        <li
+          key={stage}
+          className={styles['stage']}
+          data-state={index < current ? 'done' : index === current ? 'active' : undefined}
+        />
+      ))}
+    </ol>
   );
 }
 
@@ -201,8 +235,6 @@ function PassphraseSetup({ isBusy, onSave }: { isBusy: boolean; onSave: Props['o
   const [passphrase, setPassphrase] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const isMismatch = confirmation.length > 0 && passphrase !== confirmation;
-  const canSave = isPassphraseLongEnough(passphrase) && passphrase === confirmation;
   const submit = async () => {
     setIsSaving(true);
     // The passphrase is what stands between the operator and having any backup at all, so the
@@ -215,41 +247,33 @@ function PassphraseSetup({ isBusy, onSave }: { isBusy: boolean; onSave: Props['o
     toast.success(t('sys.backup_setup_done'));
   };
   return (
-    <section className={styles['setup']} aria-labelledby="backup-setup-title">
-      <SectionHeading
-        level="group"
-        as="h3"
-        id="backup-setup-title"
-        title={t('sys.backup_setup_title')}
-        description={t('sys.backup_setup_hint')}
+    <section className={styles['setup-card']} aria-labelledby="backup-setup-title">
+      <div className={styles['setup-head']}>
+        <span className={styles['setup-icon']} aria-hidden>
+          <LockOutlined />
+        </span>
+        <SectionHeading
+          level="group"
+          as="h3"
+          id="backup-setup-title"
+          title={t('sys.backup_setup_title')}
+          description={t('sys.backup_setup_hint')}
+        />
+      </div>
+      <PassphraseFields
+        passphrase={passphrase}
+        confirmation={confirmation}
+        isDisabled={isBusy || isSaving}
+        onPassphrase={setPassphrase}
+        onConfirmation={setConfirmation}
       />
-      <div className={styles['field']}>
-        <label htmlFor="backup-passphrase">{t('sys.backup_passphrase')}</label>
-        <SecretInput
-          id="backup-passphrase"
-          value={passphrase}
-          maxLength={1024}
-          autoComplete="new-password"
-          disabled={isBusy || isSaving}
-          onChange={(event) => setPassphrase(event.target.value)}
-        />
-        <span className={styles['field-hint']}>{t('sys.backup_length_hint')}</span>
-      </div>
-      <div className={styles['field']}>
-        <label htmlFor="backup-passphrase-confirm">{t('sys.backup_confirm_passphrase')}</label>
-        <SecretInput
-          id="backup-passphrase-confirm"
-          value={confirmation}
-          maxLength={1024}
-          autoComplete="new-password"
-          disabled={isBusy || isSaving}
-          status={isMismatch ? 'error' : undefined}
-          onChange={(event) => setConfirmation(event.target.value)}
-        />
-      </div>
-      <p className={styles['hint']}>{t('sys.backup_key_hint')}</p>
       <div className={styles['actions']}>
-        <Button type="primary" loading={isSaving} disabled={!canSave || isBusy} onClick={() => void submit()}>
+        <Button
+          type="primary"
+          loading={isSaving}
+          disabled={!isPassphrasePairValid(passphrase, confirmation) || isBusy}
+          onClick={() => void submit()}
+        >
           {t('sys.backup_setup_start')}
         </Button>
       </div>
@@ -257,62 +281,44 @@ function PassphraseSetup({ isBusy, onSave }: { isBusy: boolean; onSave: Props['o
   );
 }
 
-function PassphraseChange({
-  isBusy,
-  onSave,
-  onDone,
-}: {
-  isBusy: boolean;
-  onSave: Props['onSave'];
-  onDone: () => void;
-}) {
+function PassphraseChange({ isBusy, onSave, onDone }: { isBusy: boolean; onSave: Props['onSave']; onDone: () => void }) {
   const t = useT();
   const toast = useToast();
   const [passphrase, setPassphrase] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const canSave = isPassphraseLongEnough(passphrase) && passphrase === confirmation;
+  const finish = () => {
+    setPassphrase('');
+    setConfirmation('');
+    onDone();
+  };
   return (
     <div className={styles['passphrase-change']}>
-      <label className={styles['field']}>
-        <span>{t('sys.backup_new_passphrase')}</span>
-        <SecretInput
-          value={passphrase}
-          maxLength={1024}
-          autoComplete="new-password"
-          disabled={isSaving}
-          onChange={(event) => setPassphrase(event.target.value)}
-        />
-      </label>
-      <label className={styles['field']}>
-        <span>{t('sys.backup_confirm_passphrase')}</span>
-        <SecretInput
-          value={confirmation}
-          maxLength={1024}
-          autoComplete="new-password"
-          disabled={isSaving}
-          onChange={(event) => setConfirmation(event.target.value)}
-        />
-      </label>
       <p className={styles['hint']}>{t('sys.backup_passphrase_change_hint')}</p>
+      <PassphraseFields
+        label="sys.backup_new_passphrase"
+        passphrase={passphrase}
+        confirmation={confirmation}
+        isDisabled={isSaving}
+        onPassphrase={setPassphrase}
+        onConfirmation={setConfirmation}
+      />
       <div className={styles['actions']}>
-        <Button size="small" onClick={onDone} disabled={isSaving}>
+        <Button size="small" onClick={finish} disabled={isSaving}>
           {t('common.cancel')}
         </Button>
         <Button
           size="small"
           type="primary"
           loading={isSaving}
-          disabled={!canSave || isBusy}
+          disabled={!isPassphrasePairValid(passphrase, confirmation) || isBusy}
           onClick={async () => {
             setIsSaving(true);
             const isSaved = await onSave({ passphrase });
             setIsSaving(false);
             if (!isSaved) return;
-            setPassphrase('');
-            setConfirmation('');
             toast.success(t('sys.backup_passphrase_changed'));
-            onDone();
+            finish();
           }}
         >
           {t('sys.backup_passphrase_save')}
@@ -322,85 +328,107 @@ function PassphraseChange({
   );
 }
 
-/** The daily time, whether the schedule runs, how many copies each place keeps. */
+/**
+ * The schedule as a settings group, the shape every other settings page uses: whether it runs, at
+ * what time, how many copies each place keeps, and the passphrase that seals them.
+ */
 function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: boolean; onSave: Props['onSave'] }) {
   const t = useT();
   const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
   const [time, setTime] = useState(() => minuteToTime(value.daily_at_minute));
   useEffect(() => setTime(minuteToTime(value.daily_at_minute)), [value.daily_at_minute]);
+  // A count saved outside the presets (the server accepts 1-100) is still offered, so the control
+  // names it rather than showing a bare number.
+  const keepOptions = [...new Set([...KEEP_COUNTS, value.keep_local, value.keep_remote])]
+    .filter((count) => count > 0)
+    .sort((left, right) => left - right)
+    .map((count) => ({ value: count, label: t('sys.backup_keep_count', { count }) }));
   return (
     <section className={styles['setup']}>
-      <div className={styles['schedule-head']}>
-        <SectionHeading level="group" as="h3" title={t('sys.backup_schedule')} />
-        <label className={styles['schedule-switch']}>
-          <span>{t(value.enabled ? 'sys.backup_schedule_on' : 'sys.backup_schedule_off')}</span>
-          <Checkbox
-            checked={value.enabled}
-            disabled={isBusy}
-            aria-label={t('sys.backup_auto_enabled')}
-            onChange={(event) => void onSave({ enabled: event.target.checked })}
-          />
-        </label>
-      </div>
-      <label className={styles['field']}>
-        <span>{t('sys.backup_daily_at')}</span>
-        <TimePicker
-          className={styles['time-picker']}
-          aria-label={t('sys.backup_daily_at')}
-          value={time}
-          format="HH:mm"
-          allowClear={false}
-          needConfirm={false}
-          disabled={isBusy || !value.enabled}
-          minuteStep={1}
-          onChange={(next) => {
-            if (!next) return;
-            setTime(next);
-            void onSave({ daily_at_minute: next.hour() * 60 + next.minute() });
-          }}
-        />
-      </label>
-      <div className={styles['retention']}>
-        {value.keep_local > 0 && (
-          <label className={styles['field']}>
-            <span>{t('sys.backup_keep_local')}</span>
-            <select
-              className={styles['select-native']}
-              aria-label={t('sys.backup_keep_local')}
-              value={value.keep_local}
+      <SectionHeading level="group" as="h3" title={t('sys.backup_schedule')} />
+      <div className={`settings-group ${styles['group']}`}>
+        <SettingRow
+          label={t('sys.backup_auto_enabled')}
+          description={t('sys.backup_auto_desc')}
+          control={
+            <Switch
+              checked={value.enabled}
               disabled={isBusy}
-              onChange={(event) => void onSave({ keep_local: Number(event.target.value) })}
-            >
-              {KEEP_COUNTS.map((count) => (
-                <option key={count} value={count}>{t('sys.backup_keep_count', { count })}</option>
-              ))}
-            </select>
-          </label>
+              aria-label={t('sys.backup_auto_enabled')}
+              onChange={(checked) => void onSave({ enabled: checked })}
+            />
+          }
+        />
+        <SettingRow
+          label={t('sys.backup_daily_at')}
+          control={
+            <TimePicker
+              className={styles['time-picker']}
+              aria-label={t('sys.backup_daily_at')}
+              value={time}
+              format="HH:mm"
+              allowClear={false}
+              needConfirm={false}
+              disabled={isBusy || !value.enabled}
+              minuteStep={1}
+              onChange={(next) => {
+                if (!next) return;
+                setTime(next);
+                void onSave({ daily_at_minute: next.hour() * 60 + next.minute() });
+              }}
+            />
+          }
+        />
+        {value.keep_local > 0 && (
+          <SettingRow
+            label={t('sys.backup_keep_local')}
+            control={
+              <Select<number>
+                className={styles['keep-select']}
+                aria-label={t('sys.backup_keep_local')}
+                value={value.keep_local}
+                disabled={isBusy}
+                options={keepOptions}
+                popupMatchSelectWidth={false}
+                onChange={(count) => void onSave({ keep_local: count })}
+              />
+            }
+          />
         )}
         {value.destinations.length > 0 && (
-          <label className={styles['field']}>
-            <span>{t('sys.backup_keep_remote')}</span>
-            <select
-              className={styles['select-native']}
-              aria-label={t('sys.backup_keep_remote')}
-              value={value.keep_remote}
-              disabled={isBusy}
-              onChange={(event) => void onSave({ keep_remote: Number(event.target.value) })}
-            >
-              {KEEP_COUNTS.map((count) => (
-                <option key={count} value={count}>{t('sys.backup_keep_count', { count })}</option>
-              ))}
-            </select>
-          </label>
+          <SettingRow
+            label={t('sys.backup_keep_remote')}
+            control={
+              <Select<number>
+                className={styles['keep-select']}
+                aria-label={t('sys.backup_keep_remote')}
+                value={value.keep_remote}
+                disabled={isBusy}
+                options={keepOptions}
+                popupMatchSelectWidth={false}
+                onChange={(count) => void onSave({ keep_remote: count })}
+              />
+            }
+          />
         )}
+        <SettingRow
+          label={t('sys.backup_passphrase')}
+          description={t('sys.backup_passphrase_set')}
+          control={
+            <Button
+              size="small"
+              icon={<LockOutlined />}
+              aria-expanded={isChangingPassphrase}
+              onClick={() => setIsChangingPassphrase((isOpen) => !isOpen)}
+            >
+              {t('sys.backup_passphrase_change')}
+            </Button>
+          }
+        />
+        <Fold isOpen={isChangingPassphrase} className={styles['row-fold']}>
+          <PassphraseChange isBusy={isBusy} onSave={onSave} onDone={() => setIsChangingPassphrase(false)} />
+        </Fold>
       </div>
-      {isChangingPassphrase ? (
-        <PassphraseChange isBusy={isBusy} onSave={onSave} onDone={() => setIsChangingPassphrase(false)} />
-      ) : (
-        <button type="button" className={styles['link-action']} onClick={() => setIsChangingPassphrase(true)}>
-          {t('sys.backup_passphrase_change')}
-        </button>
-      )}
     </section>
   );
 }
@@ -412,6 +440,8 @@ function Locations(props: Props & { value: BackupAutomation }) {
   const { value, isBusy } = props;
   const [isChoosing, setIsChoosing] = useState(false);
   const [probing, setProbing] = useState<string | null>(null);
+  // Rows present when the panel opened are simply there; one added since arrives.
+  const initialIds = useRef(new Set(value.destinations.map((entry) => entry.id)));
   const isLocalOn = value.keep_local > 0;
   const hasCloud = value.destinations.length > 0;
   const remove = (id: string) => {
@@ -423,7 +453,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
   };
   return (
     <section className={styles['setup']}>
-      <SectionHeading level="group" as="h3" title={t('sys.backup_where')} />
+      <SectionHeading level="group" as="h3" title={t('sys.backup_where')} description={t(hasCloud ? 'sys.backup_where_hint' : 'sys.backup_cloud_why')} />
       <ul className={styles['locations']}>
         <li className={styles['location']}>
           <Checkbox
@@ -440,11 +470,15 @@ function Locations(props: Props & { value: BackupAutomation }) {
               <strong>{t('sys.backup_local')}</strong>
               {isLocalOn && !hasCloud && <span className={styles['location-note']}>{t('sys.backup_local_needs_cloud')}</span>}
             </span>
-            <span>{t('sys.backup_local_on')}</span>
+            <span className={styles['location-path']}>{t('sys.backup_local_on')}</span>
           </div>
         </li>
         {value.destinations.map((destination, index) => (
-          <li className={styles['location']} key={destination.id}>
+          <li
+            className={styles['location']}
+            key={destination.id}
+            data-new={!initialIds.current.has(destination.id) || undefined}
+          >
             <Checkbox checked aria-label={destination.name} disabled={isBusy} onChange={() => void remove(destination.id)} />
             <BackupProviderMark provider={destination.provider} />
             <div className={styles['location-text']}>
@@ -491,47 +525,51 @@ function Locations(props: Props & { value: BackupAutomation }) {
           </li>
         ))}
       </ul>
-      {value.destinations.length < MAX_DESTINATIONS &&
-        (isChoosing ? (
-          <ProviderChoices
-            onCancel={() => setIsChoosing(false)}
-            onSelect={(provider) => {
-              setIsChoosing(false);
-              props.onEditDestination(null, newBackupDestination(provider));
-            }}
-          />
-        ) : (
-          <button type="button" className={styles['add-location']} disabled={isBusy} onClick={() => setIsChoosing(true)}>
-            <PlusOutlined aria-hidden />
+      {value.destinations.length < MAX_DESTINATIONS && (
+        <>
+          <button
+            type="button"
+            className={styles['add-location']}
+            aria-expanded={isChoosing}
+            aria-controls="backup-provider-choices"
+            disabled={isBusy}
+            onClick={() => setIsChoosing((isOpen) => !isOpen)}
+          >
+            <PlusOutlined aria-hidden className={styles['add-glyph']} />
             {t('sys.backup_add_cloud')}
           </button>
-        ))}
-      <p className={styles['hint']}>{t(hasCloud ? 'sys.backup_where_hint' : 'sys.backup_cloud_why')}</p>
+          <Fold isOpen={isChoosing} id="backup-provider-choices">
+            <ProviderChoices
+              isOpen={isChoosing}
+              onSelect={(provider) => {
+                setIsChoosing(false);
+                props.onEditDestination(null, newBackupDestination(provider));
+              }}
+            />
+          </Fold>
+        </>
+      )}
     </section>
   );
 }
 
-function ProviderChoices({
-  onSelect,
-  onCancel,
-}: {
-  onSelect: (provider: BackupProvider) => void;
-  onCancel: () => void;
-}) {
+/** The services as tiles that arrive one after another as the picker unfolds. */
+function ProviderChoices({ isOpen, onSelect }: { isOpen: boolean; onSelect: (provider: BackupProvider) => void }) {
   const t = useT();
   return (
-    <div className={styles['choices-panel']}>
-      <div className={styles['choices']} role="group" aria-label={t('sys.backup_add_cloud')}>
-        {BACKUP_PROVIDERS.map((entry) => (
-          <button type="button" key={entry.value} className={styles['choice']} onClick={() => onSelect(entry.value)}>
-            <BackupProviderMark provider={entry.value} size={36} />
-            <span className={styles['choice-label']}>{entry.label}</span>
-          </button>
-        ))}
-      </div>
-      <button type="button" className={styles['add-location']} onClick={onCancel}>
-        {t('common.cancel')}
-      </button>
+    <div className={styles['choices']} data-open={isOpen || undefined} role="group" aria-label={t('sys.backup_add_cloud')}>
+      {BACKUP_PROVIDERS.map((entry, index) => (
+        <button
+          type="button"
+          key={entry.value}
+          className={styles['choice']}
+          style={{ '--stagger': index } as CSSProperties}
+          onClick={() => onSelect(entry.value)}
+        >
+          <BackupProviderMark provider={entry.value} size={36} />
+          <span className={styles['choice-label']}>{entry.label}</span>
+        </button>
+      ))}
     </div>
   );
 }

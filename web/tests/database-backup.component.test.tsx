@@ -97,7 +97,7 @@ it('opens on the passphrase, turns the schedule on with it and then shows the fo
   fireEvent.click(screen.getByRole('button', { name: 'Manage backups' }));
   // The schedule and the locations are not offered before the passphrase that protects them.
   expect(screen.queryByLabelText('Daily backup time')).toBeNull();
-  expect(screen.queryByRole('checkbox', { name: 'Automatic backups' })).toBeNull();
+  expect(screen.queryByRole('switch', { name: 'Automatic backups' })).toBeNull();
   const save = (await screen.findByRole('button', { name: 'Save and turn on' })) as HTMLButtonElement;
   fireEvent.change(screen.getByLabelText('Backup passphrase'), { target: { value: 'scheduled independent passphrase' } });
   fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'scheduled independent passphras' } });
@@ -107,7 +107,7 @@ it('opens on the passphrase, turns the schedule on with it and then shows the fo
   await screen.findByLabelText('Daily backup time');
   expect(puts(server)).toEqual([{ enabled: true, daily_at_minute: 180, keep_local: 7, keep_remote: 30, destinations: [], passphrase: 'scheduled independent passphrase' }]);
   expect(screen.queryByLabelText('Backup passphrase')).toBeNull();
-  expect((screen.getByRole('checkbox', { name: 'Automatic backups' }) as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByRole('switch', { name: 'Automatic backups' }).getAttribute('aria-checked')).toBe('true');
 });
 
 it('says why the local disk cannot be cleared while it is the only location', async () => {

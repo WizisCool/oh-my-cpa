@@ -24,24 +24,53 @@
   margin-inline-start: -6px;
 }
 
+/* The panel's tools sit in its head, just before the close control. */
+.drawer-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* The panel is one form: its parts are separated by space and a quiet heading, not by nested
    boxes. */
 .content {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 24px;
 }
 
-.section,
+/* Moving to a task slides it in from the side the way back does not point to, and returning
+   slides the panel back from the other side: the drawer reads as one stack of pages. */
+.content[data-direction='forward'] { animation: view-forward var(--motion-slow) var(--ease-out); }
+.content[data-direction='back'] { animation: view-back var(--motion-slow) var(--ease-out); }
+
+@keyframes view-forward {
+  from { opacity: 0; transform: translateX(20px); }
+}
+
+@keyframes view-back {
+  from { opacity: 0; transform: translateX(-20px); }
+}
+
+/* Something that has just arrived - a new location, the first-run card - rises into place. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* A verdict or a met rule lands with a small overshoot; the spring is the console's own token. */
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.6); }
+}
+
 .setup {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
-/* A part's name is a quiet line above its controls, at the weight the settings page uses. */
-.setup > :global(.section-head) { padding: 0 2px 2px; }
+/* A part's name is a quiet line above its card, at the weight the settings page uses. */
+.setup > :global(.section-head) { padding: 0 2px; }
 .setup > :global(.section-head) :global(.section-head-title) {
   color: var(--fg-2);
   font-size: var(--text-md);
@@ -82,11 +111,6 @@
   gap: 8px;
 }
 
-.field-hint {
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
 .field-pair {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
@@ -122,20 +146,30 @@
 .advanced > summary:hover { color: var(--fg); }
 .advanced[open] > summary { margin-bottom: 14px; }
 
-/* ── status: a verdict line, its next run, and the two acts - no frame, so it reads as the page's
-   opening rather than as a card among cards ── */
+/* ── status: the verdict the panel opens on. Its tone washes in from the icon's corner, so the
+   reading is carried by the icon, the words and a tint together rather than by colour alone. ── */
 .status {
+  --tone: var(--muted);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 2px 0 22px;
-  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--tone) 11%, transparent), transparent 62%),
+    var(--bg);
+  transition: border-color var(--motion-slow) var(--ease-standard);
 }
+
+.status[data-tone='ok'] { --tone: var(--success); }
+.status[data-tone='warn'] { --tone: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
+.status[data-tone='run'] { --tone: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
 
 .status-head {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -144,16 +178,16 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: 18px;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
   border-radius: 50%;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 15%, transparent);
+  animation: pop-in var(--motion-spring) var(--ease-spring);
 }
 
-.status[data-tone='ok'] .status-icon { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
-.status[data-tone='warn'] .status-icon { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.status[data-tone='idle'] .status-icon { color: var(--fg-2); background: color-mix(in srgb, var(--fg) 7%, transparent); }
 
 .status-text {
   display: flex;
@@ -168,45 +202,108 @@
 }
 
 .status-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
   font-size: var(--text-xl);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--fg);
-}
-
-.status-exact {
-  font-size: var(--text-sm);
-  font-weight: 400;
-  color: var(--muted);
 }
 
 .status-next {
   color: var(--fg-2);
   font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
-.status-notice { width: 100%; }
+/* Why the last run fell short, said inside the verdict it qualifies rather than as a second box
+   repeating its title. */
+.status-alert {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
 
 .status-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding-inline-start: 46px;
+  padding-inline-start: 54px;
 }
 
-/* ── passphrase: the whole page on first visit, a row under More settings after ── */
-.is-first {
-  padding: 18px 20px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+/* A run's stages as segments: done ones filled, the current one breathing, the rest empty. */
+.stages {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  overflow: hidden;
+}
+
+.stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--motion-slow) var(--ease-out);
+}
+
+.stage[data-state]::after { transform: scaleX(1); }
+.stage[data-state='active']::after { animation: stage-breathe 1.4s var(--ease-standard) infinite; }
+
+@keyframes stage-breathe {
+  50% { opacity: 0.4; }
+}
+
+/* ── the first visit: the passphrase is the whole task, so it is the one card with the accent ── */
+.setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg));
+  animation: rise-in var(--motion-slow) var(--ease-out);
+}
+
+.setup-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.setup-head > :global(.section-head) { flex: 1; min-width: 0; }
+
+.setup-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 17px;
+  color: var(--accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .passphrase {
@@ -215,12 +312,104 @@
   gap: 12px;
 }
 
-/* ── locations: the disk and each cloud account as cards of one list ── */
-/* One card holds the locations, the way a settings group holds its rows: the enclosure is the
-   section's, and each location is a row separated by the same dashed hairline. */
+/* The rules a passphrase has to meet, each ticked the moment it is met. */
+.rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.rule-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  color: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.rule[data-met] { color: var(--fg-2); }
+.rule[data-met] .rule-mark {
+  color: var(--bg);
+  background: var(--success);
+  border-color: var(--success);
+  animation: pop-in var(--motion-spring) var(--ease-spring);
+}
+.rule[data-broken] { color: var(--danger); }
+.rule[data-broken] .rule-mark { color: var(--danger); border-color: var(--danger); }
+
+.keep-safe {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.keep-safe > :global(.anticon) { flex: none; color: var(--warn); }
+
+/* ── schedule: a settings group, as on every settings page ── */
+/* Short controls stay beside their label even on a phone; the row does not need two lines. */
+.group > :global(.settings-toggle-row) { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 12px 18px; }
+.group > :global(.settings-toggle-row + .settings-toggle-row)::before { inset-inline: 18px; }
+.group :global(.settings-toggle-desc) { margin-top: 2px; font-size: var(--text-sm); }
+.group > :global(.settings-toggle-row) :global(.settings-toggle-control) { width: auto; justify-content: flex-end; }
+
+.time-picker { width: 132px; }
+.keep-select { width: 132px; }
+
+/* The passphrase change opens under its row, inside the same group. */
+.row-fold { padding: 0 18px 14px; }
+
+.passphrase-change {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+
+/* A one-off export is the same kind of card as the settings it sits beside. */
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+
+/* ── locations: the disk and each cloud account as rows of one card ── */
 .locations,
 .archives,
 .jobs {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -234,10 +423,14 @@
 .archive-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 60px;
+  gap: 12px;
+  min-height: 62px;
   padding: 12px 14px;
 }
+
+.location { transition: background-color var(--motion-fast) var(--ease-standard); }
+.location:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.location[data-new] { animation: rise-in var(--motion-slow) var(--ease-out); }
 
 .location + .location,
 .archive + .archive,
@@ -245,21 +438,19 @@
   border-top: 1px dashed var(--border);
 }
 
-/* The section's own action is a row of the same card, at its foot. */
-.locations + .add-location { margin-top: 8px; }
+.archive,
+.job { background: transparent; }
 
-.archives, .jobs { display: flex; flex-direction: column; }
-.archive, .job { padding: 14px 14px; background: transparent; }
-
-/* The mark: a tinted tile that carries each service's own hue, so a list of locations reads by
-   shape and colour before it reads by name. */
+/* The mark: every location sits on the same quiet tile, so a brand logo and a protocol glyph read
+   as one family. The hue lives in the logo or the glyph, never in a tile of its own. */
 .mark {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
   color: var(--fg-2);
 }
 
@@ -275,15 +466,11 @@
   line-height: 1;
 }
 
-.mark[data-provider='local'] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-.mark[data-provider='onedrive'] { background: transparent; }
-.mark[data-provider='drive'] { background: transparent; }
-/* This mark is its own green tile, so the wrapper must not tint it a second time. */
-.mark[data-provider='s3'] { background: transparent; }
-.mark[data-provider='webdav'] { background: color-mix(in srgb, #06b6d4 12%, transparent); color: #22a5bd; }
-.mark[data-provider='sftp'] { background: color-mix(in srgb, #8b5cf6 12%, transparent); color: #8b5cf6; }
-.mark[data-provider='smb'] { background: color-mix(in srgb, #10b981 12%, transparent); color: #10b981; }
-.mark[data-provider='ftp'] { background: color-mix(in srgb, #f59e0b 12%, transparent); color: #f59e0b; }
+.mark[data-provider='local'] { color: var(--accent); }
+.mark[data-provider='webdav'] { color: #22a5bd; }
+.mark[data-provider='sftp'] { color: #8b5cf6; }
+.mark[data-provider='smb'] { color: #10b981; }
+.mark[data-provider='ftp'] { color: #f59e0b; }
 
 .location-text {
   display: flex;
@@ -307,14 +494,11 @@
   overflow-wrap: anywhere;
 }
 
-.location-text span:not(.location-name) {
+.location-text > span:not(.location-name) {
   color: var(--fg-2);
   font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
-}
-
-.location-name > :global(.status-label) {
-  font-family: var(--font-ui);
 }
 
 .location-path {
@@ -322,8 +506,6 @@
   font-size: var(--text-xs) !important;
   color: var(--muted) !important;
 }
-
-.location-error { color: var(--danger) !important; }
 
 /* Why the disk cannot be cleared yet, said beside the location that needs it. */
 .location-note {
@@ -335,10 +517,12 @@
 .location-actions {
   display: flex;
   flex: none;
+  align-items: center;
   gap: 2px;
 }
 
-/* Adding a location is the section's own action, drawn as the slot it will fill. */
+/* Adding a location is the section's own action, drawn as the slot it will fill. Open, its plus
+   turns into the close it now is, and the label stays put. */
 .add-location {
   display: flex;
   align-items: center;
@@ -353,23 +537,24 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
 
-.add-location:hover:not(:disabled) { color: var(--fg); border-color: var(--muted); background: var(--thread-field); }
+.add-location:hover:not(:disabled),
+.add-location[aria-expanded='true'] {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
 .add-location:disabled { opacity: 0.5; cursor: default; }
 .add-location:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.choices-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
+.add-glyph { transition: transform var(--motion-spring) var(--ease-spring); }
+.add-location[aria-expanded='true'] .add-glyph { transform: rotate(45deg); }
 
 .choices {
   display: grid;
@@ -393,103 +578,34 @@
   border-radius: var(--radius-md);
   cursor: pointer;
   overflow-wrap: anywhere;
-  transition: border-color var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 
-.choice:hover { border-color: var(--muted); }
-.choice:active { transform: scale(0.985); }
+/* The tiles arrive one after another as the picker unfolds. */
+.choices[data-open] .choice {
+  animation: rise-in var(--motion-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--stagger, 0) * 30ms);
+}
+
+.choice:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg));
+  transform: translateY(-1px);
+}
+
+.choice:active { transform: scale(0.98); }
 .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .choice-label { font-size: var(--text-sm); font-weight: 500; }
-
-.select { width: 160px; }
-
-/* ── schedule ── */
-.schedule-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.schedule-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.time-picker { width: 128px; }
-
-.retention {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-}
-
-.retention .field { flex: 0 1 140px; }
-
-/* A native select keeps the form to one control style: a setting that is a short list of counts
-   does not need the search behaviour of the console's remote selects. */
-.select-native {
-  height: 32px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: var(--text-sm);
-  color: var(--fg);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  cursor: pointer;
-}
-
-.select-native:disabled { opacity: 0.5; cursor: not-allowed; }
-.select-native:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-.link-action {
-  align-self: flex-start;
-  padding: 0;
-  font: inherit;
-  font-size: var(--text-sm);
-  color: var(--accent);
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-
-.link-action:hover { text-decoration: underline; }
-.link-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
-
-.passphrase-change {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-
-/* ── the folded, seldom-changed settings ── */
-/* The disclosure is the card's last row while closed, so it sits where the settings it opens
-   will appear. */
-.more-toggle:hover { color: var(--fg); }
-.more-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
 
 /* ── connecting an account: numbered steps on one page ── */
 .connect {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.connect-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
 }
 
 .steps {
@@ -566,7 +682,63 @@
 .restore {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+}
+
+/* Three steps as a ruled track: the current one inked in the accent, the done ones ticked. */
+.restore-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.restore-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 10px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  border-bottom: 2px solid var(--border-soft);
+  transition: color var(--motion-slow) var(--ease-standard), border-color var(--motion-slow) var(--ease-standard);
+}
+
+.restore-step[data-state='active'] { color: var(--fg); border-color: var(--accent); }
+.restore-step[data-state='done'] { color: var(--fg-2); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-soft)); }
+
+.restore-step-index {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.restore-step[data-state='active'] .restore-step-index { color: var(--accent-on); background: var(--accent); border-color: var(--accent); }
+.restore-step[data-state='done'] .restore-step-index {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  animation: pop-in var(--motion-spring) var(--ease-spring);
+}
+
+.restore-step-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sources { max-width: 100%; overflow-x: auto; }
@@ -579,23 +751,54 @@
   min-height: 28px;
 }
 
-.archive[data-selected] { background: var(--thread-field); }
+/* The chosen backup is marked by a quiet wash over its whole row, never by an edge bar. */
+.archive { transition: background-color var(--motion-fast) var(--ease-standard); }
+.archive[data-selected] { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 
 .unlock {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px 12px;
-  padding: 0 16px 14px;
+  padding: 0 14px 14px;
 }
 
-.restore > .unlock { padding: 0; }
+.unlock { animation: rise-in var(--motion-slow) var(--ease-out); }
+.restore .unlock { padding-inline: 0; }
+.archive .unlock { padding-inline: 14px; }
 .unlock .field { flex: 1 1 240px; }
 
 .preview {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--success) 9%, transparent), transparent 60%),
+    var(--bg);
+  animation: rise-in var(--motion-slow) var(--ease-out);
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  color: var(--success);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  animation: pop-in var(--motion-spring) var(--ease-spring);
 }
 
 .preview-title {
@@ -615,35 +818,65 @@
 .facts dt { color: var(--fg-2); }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
-/* ── jobs ── */
+/* ── jobs: one row per operation, its kind as a glyph, its state beside its name ── */
 .job {
+  --tone: var(--success);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
+
+.job[data-tone='danger'] { --tone: var(--danger); }
+.job[data-tone='warn'] { --tone: var(--warn); }
+.job[data-tone='accent'] { --tone: var(--accent); }
 
 .job-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
-.job .actions { justify-content: flex-start; }
+.job-glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 15px;
+  color: var(--tone);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+/* Details and the row's decisive actions line up under its text, not under its glyph. */
+.job > .facts,
+.job > .job-actions,
+.job > :global(.omc-notice) { margin-inline-start: 44px; }
+
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 @media (max-width: 640px) {
-  .status { padding: 16px; }
-  .status-actions > :global(.ant-btn) { flex: 1 1 auto; min-height: 40px; }
-  .is-first { padding: 16px; }
-  .select { width: 120px; }
-  /* A short select and a switch stay beside their label; the row does not need two lines. */
-  .card > :global(.settings-toggle-row) { grid-template-columns: minmax(0, 1fr) auto; }
-  .card > :global(.settings-toggle-row) :global(.settings-toggle-control) { width: auto; }
+  .status,
+  .setup-card,
+  .form-card,
+  .preview { padding: 16px; }
+  .status-actions { padding-inline-start: 0; }
+  .status-actions > :global(.ant-btn-primary) { flex: 1 1 auto; min-height: 40px; }
+  .row-fold { padding-inline: 16px; }
   .location { padding-inline-start: 10px; }
   /* Two providers per row on a phone: one per row turned the picker into a long column that
      pushed the rest of the panel out of sight. */
   .choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .choice { min-height: 68px; padding: 10px 8px; flex-direction: column; align-items: flex-start; gap: 6px; }
   .location-actions :global(.ant-btn) { min-width: 36px; min-height: 36px; }
+  .job > .facts,
+  .job > .job-actions,
+  .job > :global(.omc-notice) { margin-inline-start: 0; }
 }

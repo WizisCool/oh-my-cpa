@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Button } from 'antd';
 import { api, apiErrorCode } from '../../api/client';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
-import { SecretInput } from '../../components/common/SecretInput';
+import { SectionHeading } from '../../components/common/SectionHeading';
 import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
-import { DownloadOutlined } from '../../components/icons';
+import { CloudUploadOutlined, DeleteOutlined, DownloadOutlined, UploadOutlined } from '../../components/icons';
 import { LoadFailure, Notice } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
@@ -12,13 +12,21 @@ import type { DatabaseBackupJob } from '../../types/databaseBackup';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
 import { formatBytes } from '../../utils/format';
 import dayjs from '../../utils/time';
-import { RUNNING_STATES, STATE_KEYS, isPassphraseLongEnough } from './backupModel';
+import { PassphraseFields, isPassphrasePairValid } from './BackupPassphrase';
+import { RUNNING_STATES, STATE_KEYS } from './backupModel';
 import styles from './DatabaseBackups.module.css';
 
 const KIND_KEYS = {
   automatic: 'sys.backup_automatic',
   export: 'sys.backup_export',
   import: 'sys.backup_import',
+} as const;
+
+/** What made the record, at a glance: a run going out, a file coming down, a backup coming in. */
+const KIND_GLYPHS = {
+  automatic: <CloudUploadOutlined />,
+  export: <DownloadOutlined />,
+  import: <UploadOutlined />,
 } as const;
 
 const tone = (state: DatabaseBackupJob['state']): StatusTone =>
@@ -43,7 +51,7 @@ export function BackupExport({
   const [isWorking, setIsWorking] = useState(false);
   const [errorKey, setErrorKey] = useState<MessageKey | null>(null);
   const exports = jobs.filter((job) => job.kind === 'export');
-  const canSubmit = isPassphraseLongEnough(passphrase) && passphrase === confirmation;
+  const canSubmit = isPassphrasePairValid(passphrase, confirmation);
   const submit = async () => {
     setIsWorking(true);
     setErrorKey(null);
@@ -61,34 +69,18 @@ export function BackupExport({
   return (
     <>
       {errorKey && <Notice tone="error" title={t(errorKey)} />}
-      <div className={styles['passphrase']}>
-        <div className={styles['field-pair']}>
-          <label className={styles['field']}>
-            <span>{t('sys.backup_passphrase')}</span>
-            <SecretInput
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.target.value)}
-              disabled={isBusy || isWorking}
-              autoComplete="new-password"
-              maxLength={1024}
-            />
-          </label>
-          <label className={styles['field']}>
-            <span>{t('sys.backup_confirm_passphrase')}</span>
-            <SecretInput
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              disabled={isBusy || isWorking}
-              autoComplete="new-password"
-              status={confirmation && passphrase !== confirmation ? 'error' : undefined}
-              maxLength={1024}
-            />
-          </label>
-        </div>
-        <p className={styles['hint']}>{t('sys.backup_key_hint')}</p>
+      <div className={styles['form-card']}>
+        <PassphraseFields
+          passphrase={passphrase}
+          confirmation={confirmation}
+          isDisabled={isBusy || isWorking}
+          onPassphrase={setPassphrase}
+          onConfirmation={setConfirmation}
+        />
         <div className={styles['actions']}>
           <Button
             type="primary"
+            icon={<DownloadOutlined />}
             loading={isWorking}
             disabled={!canSubmit || isBusy}
             onClick={() => void submit()}
@@ -98,11 +90,14 @@ export function BackupExport({
         </div>
       </div>
       {exports.length > 0 && (
-        <ul className={styles['jobs']}>
-          {exports.map((job) => (
-            <JobCard key={job.id} job={job} />
-          ))}
-        </ul>
+        <section className={styles['setup']}>
+          <SectionHeading level="group" as="h3" title={t('sys.backup_export_files')} count={exports.length} />
+          <ul className={styles['jobs']}>
+            {exports.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </ul>
+        </section>
       )}
     </>
   );
@@ -145,20 +140,50 @@ function JobCard({
 }) {
   const t = useT();
   const canDownload = job.kind === 'export' && job.state === 'ready';
+  const canRestore = !!onAct && job.kind === 'import' && job.state === 'ready';
   const canRemove = !!onAct && !RUNNING_STATES.has(job.state);
+  const isScheduled = job.state === 'scheduled';
   return (
-    <li className={styles['job']}>
+    <li className={styles['job']} data-tone={tone(job.state)}>
       <div className={styles['job-head']}>
+        <span className={styles['job-glyph']} aria-hidden>
+          {KIND_GLYPHS[job.kind]}
+        </span>
         <div className={styles['location-text']}>
-          <strong>{t(KIND_KEYS[job.kind])}</strong>
+          <span className={styles['location-name']}>
+            <strong>{t(KIND_KEYS[job.kind])}</strong>
+            <StatusLabel tone={tone(job.state)}>
+              <span role="status">{t(STATE_KEYS[job.state])}</span>
+            </StatusLabel>
+          </span>
           <span>
             {dayjs(job.created_at_ms).format('YYYY-MM-DD HH:mm:ss')}
             {job.size_bytes > 0 && ` · ${formatBytes(job.size_bytes)}`}
           </span>
         </div>
-        <StatusLabel tone={tone(job.state)}>
-          <span role="status">{t(STATE_KEYS[job.state])}</span>
-        </StatusLabel>
+        <div className={styles['location-actions']}>
+          {canDownload && (
+            <Button
+              size="small"
+              icon={<DownloadOutlined />}
+              href={api.databaseBackupDownloadUrl(job.id)}
+              target="_blank"
+              rel="noopener"
+            >
+              {t('sys.backup_download')}
+            </Button>
+          )}
+          {canRemove && !isScheduled && (
+            <ConfirmAction
+              isDanger
+              title={t(job.state === 'completed' ? 'sys.backup_remove_completed_confirm' : 'sys.backup_remove_confirm')}
+              tooltip={t('sys.backup_remove')}
+              onConfirm={() => onAct(job, 'delete')}
+            >
+              <Button type="text" icon={<DeleteOutlined />} aria-label={t('sys.backup_remove')} />
+            </ConfirmAction>
+          )}
+        </div>
       </div>
       {job.kind === 'import' && job.backup_created_at_ms > 0 && (
         <dl className={styles['facts']}>
@@ -177,19 +202,9 @@ function JobCard({
         </dl>
       )}
       {job.has_audit_error && <Notice tone="warning" title={t('sys.backup_outcome_audit')} />}
-      {(canDownload || canRemove || (onAct && job.kind === 'import' && job.state === 'ready')) && (
-        <div className={styles['actions']}>
-          {canDownload && (
-            <Button
-              icon={<DownloadOutlined />}
-              href={api.databaseBackupDownloadUrl(job.id)}
-              target="_blank"
-              rel="noopener"
-            >
-              {t('sys.backup_download')}
-            </Button>
-          )}
-          {onAct && job.kind === 'import' && job.state === 'ready' && (
+      {(canRestore || (canRemove && isScheduled)) && (
+        <div className={styles['job-actions']}>
+          {canRestore && (
             <ConfirmAction
               isDanger
               title={t('sys.backup_restore_confirm')}
@@ -197,26 +212,14 @@ function JobCard({
               confirmLabel={t('sys.backup_restore')}
               onConfirm={() => onAct(job, 'restore')}
             >
-              <Button danger disabled={isBusy}>
+              <Button size="small" danger disabled={isBusy}>
                 {t('sys.backup_restore')}
               </Button>
             </ConfirmAction>
           )}
-          {canRemove && (
-            <ConfirmAction
-              isDanger
-              title={t(
-                job.state === 'scheduled'
-                  ? 'sys.backup_cancel_confirm'
-                  : job.state === 'completed'
-                    ? 'sys.backup_remove_completed_confirm'
-                    : 'sys.backup_remove_confirm'
-              )}
-              onConfirm={() => onAct(job, 'delete')}
-            >
-              <Button type="text">
-                {t(job.state === 'scheduled' ? 'sys.backup_cancel' : 'sys.backup_remove')}
-              </Button>
+          {canRemove && isScheduled && (
+            <ConfirmAction isDanger title={t('sys.backup_cancel_confirm')} onConfirm={() => onAct(job, 'delete')}>
+              <Button size="small">{t('sys.backup_cancel')}</Button>
             </ConfirmAction>
           )}
         </div>

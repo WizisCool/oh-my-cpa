@@ -6,9 +6,8 @@ import { AppDrawer } from '../../components/common/AppDrawer';
 import { AppModal } from '../../components/common/AppModal';
 import { ToolButton } from '../../components/common/ToolButton';
 import { DownloadOutlined, HistoryOutlined, LeftOutlined } from '../../components/icons';
-import { Notice, useToast } from '../../components/feedback';
+import { useToast } from '../../components/feedback';
 import { useT } from '../../i18n';
-import type { MessageKey } from '../../i18n/catalog';
 import type { BackupAutomation, BackupAutomationInput, DatabaseBackupJob } from '../../types/databaseBackup';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
 import dayjs from '../../utils/time';
@@ -40,7 +39,9 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
   const [view, setView] = useState<View>('plan');
   const [editing, setEditing] = useState<{ index: number | null; draft: DestinationInput } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [errorKey, setErrorKey] = useState<MessageKey | null>(null);
+  // Which way the last move went, so a sub-page arrives from the side its back arrow points away
+  // from. Unset until the first move: the drawer's own entrance is the panel's arrival.
+  const [direction, setDirection] = useState<'forward' | 'back' | undefined>();
   const automation = useQuery({
     queryKey: AUTOMATION_KEY,
     queryFn: () => api.getDatabaseBackupAutomation(),
@@ -75,7 +76,6 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
     if (!current) return false;
     const previous = current;
     setIsSaving(true);
-    setErrorKey(null);
     queryClient.setQueryData(AUTOMATION_KEY, { ...current, ...patch });
     try {
       const saved = await api.saveDatabaseBackupAutomation({ ...automationInput(current), ...patch });
@@ -91,26 +91,25 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
     }
   };
   const act = async (job: DatabaseBackupJob, action: 'restore' | 'delete') => {
-    setErrorKey(null);
     try {
       if (action === 'restore') await api.scheduleDatabaseRestore(job.id, job.digest);
       else await api.deleteDatabaseBackupJob(job.id);
       await jobsQuery.refetch();
       toast.success(t(action === 'restore' ? 'sys.backup_scheduled' : 'sys.backup_removed'));
-      if (action === 'restore') setView('plan');
+      if (action === 'restore') go('plan');
     } catch (error) {
       toast.error(t(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_error_failed')));
     }
   };
   const go = (next: View) => {
-    setErrorKey(null);
+    setDirection(next === 'plan' ? 'back' : 'forward');
     setView(next);
   };
   const close = () => {
     setIsOpen(false);
     setView('plan');
+    setDirection(undefined);
     setEditing(null);
-    setErrorKey(null);
   };
 
   const title =
@@ -159,23 +158,20 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
           )
         }
         onClose={close}
-        footerStart={
+        // The two tasks that are not settings are the panel's own tools, beside its close control,
+        // rather than a footer of labelled links under a scrolling form.
+        extra={
           view === 'plan' && (
-            <>
-              <Button type="text" size="small" icon={<DownloadOutlined />} onClick={() => go('export')}>
-                {t('sys.backup_export_task')}
-              </Button>
-              <Button type="text" size="small" icon={<HistoryOutlined />} onClick={() => go('history')}>
-                {t('sys.backup_history')}
-              </Button>
-            </>
+            <span className={styles['drawer-tools']}>
+              <ToolButton type="text" icon={<DownloadOutlined />} label={t('sys.backup_export_task')} onClick={() => go('export')} />
+              <ToolButton type="text" icon={<HistoryOutlined />} label={t('sys.backup_history')} onClick={() => go('history')} />
+            </span>
           )
         }
         destroyOnHidden
       >
-        <div className={styles['content']}>
+        <div key={view} className={styles['content']} data-direction={direction}>
           {description && <p className={styles['hint']}>{description}</p>}
-          {errorKey && <Notice tone="error" title={t(errorKey)} />}
           {view === 'plan' && (
             <BackupPlan
               value={value}
@@ -185,7 +181,6 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
               isBusy={isBusy}
               onSave={save}
               onRun={async () => {
-                setErrorKey(null);
                 try {
                   await api.runDatabaseBackupAutomation();
                   await refresh();
