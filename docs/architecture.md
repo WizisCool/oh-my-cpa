@@ -64,8 +64,14 @@ it failed; preserve that outcome while reporting audit trouble appropriately.
 ### Trusted plugin pages
 
 Installing a CPA plugin is a trust decision: its same-origin page is not an untrusted
-sandbox. The authenticated host deliberately exposes native, possibly secret-bearing
-responses only from the configured CPA origin:
+sandbox. Registered plugin logos and catalog logos from their confirmed installation
+source may load as HTTP(S) images in the browser. Other catalog logos must be inline;
+listing a plugin does not grant its publisher access to the browser's network. The same
+source rule applies when catalog artwork fills a missing installed-plugin identity.
+Trusted image URLs still use the browser's ordinary DNS and redirect behavior.
+
+The authenticated host deliberately exposes native, possibly secret-bearing responses
+only from the configured CPA origin:
 
 - plugin resources under `/v0/resource/plugins/<id>/`, with no injected credential;
 - the `/v0/management/` and `/v8/management/` trees;
@@ -98,8 +104,8 @@ HTTP hostname requests cannot use a proxy, because proxy-side DNS would bypass
 that pinning. Add the hostname to `NO_PROXY` for environment proxies, or configure
 a private IP endpoint when the proxy is required. OMC never silently bypasses an
 operator-selected proxy. HTTPS and allowed IP-literal endpoints keep their existing
-proxy behavior. Plugin-declared fetches retain their separate, stricter policy in
-[`outbound_fetch.go`](../internal/api/outbound_fetch.go).
+proxy behavior. These server-side requests are separate from optional plugin logos,
+which browsers load as images rather than through an OMC outbound proxy.
 
 ### Agent and MCP
 
@@ -161,8 +167,11 @@ keep unsaved drafts separate from server refreshes. See [Design](design.md).
 The production SPA, fonts, icons and time-zone data ship with the application. No CDN
 is required to render it. Preserve the configured base path through routing, assets,
 API calls and reverse proxies. Optional upstream/model/reference-data requests do not
-make the UI dependent on third-party asset hosting. A Go build without the frontend
-contains a placeholder, not a complete release; generated assets are not committed.
+make the UI dependent on third-party asset hosting. Plugin publishers may declare
+optional HTTP(S) logos; the browser loads those directly, with bundled or neutral
+fallbacks when unavailable. The public demo withholds external plugin logos. A Go build
+without the frontend contains a placeholder, not a complete release; generated assets
+are not committed.
 
 The demo uses synthetic data and an explicit route boundary around the real console.
 It must not call a live gateway or expose production data. Its dataset is generated

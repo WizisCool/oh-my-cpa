@@ -13,6 +13,8 @@ import {
   isRenderableLogoURL,
   pluginOAuthLogoFor,
   pluginOAuthProviderEntryTexts,
+  pluginOAuthProviderIds,
+  pluginOAuthProviderKeys,
   pluginOAuthProviderLogos,
 } from '../web/src/types/pluginOAuthProviders.ts';
 import { resolveProviderMark, resolveProviderPickerIcon, resolveCredentialMark, resolveMarkArtworks } from '../web/src/types/brandMark';
@@ -20,7 +22,7 @@ import { modelMarkIconId } from '../web/src/types/modelSquare';
 import type { CustomIcon } from '../web/src/types/customIcons';
 import type { PluginItem } from '../web/src/types/plugin.ts';
 
-/** Inline artwork, which is the only shape the console renders as a plugin logo. */
+/** Self-contained artwork remains supported alongside publisher-hosted logos. */
 const INLINE_LOGO = 'data:image/svg+xml,%3Csvg/%3E';
 const catalogIds = new Set(LOBE_ICON_CATALOG.map((item) => item.id));
 
@@ -143,22 +145,23 @@ test('pluginOAuthProviderLogos: only an enabled OAuth plugin with a usable logo 
     { ...pluginOAuthProviderLogos([{ ...base, supports_oauth: false, oauth_provider: undefined }]) },
     {},
   );
-  // A remote logo, a relative path or an empty value is not artwork this page may
-  // load: the console falls back to its own catalog mark for all of them.
-  assert.deepEqual({ ...pluginOAuthProviderLogos([{ ...base, logo: 'https://cdn.example.test/example.svg' }]) }, {});
+  const remoteLogo = 'https://cdn.example.test/example.svg';
+  assert.equal(pluginOAuthProviderLogos([{ ...base, logo: remoteLogo }]).example, remoteLogo);
+  // Relative paths and empty values still fall back to the catalog mark.
   assert.deepEqual({ ...pluginOAuthProviderLogos([{ ...base, logo: 'icons/example.svg' }]) }, {});
   assert.deepEqual({ ...pluginOAuthProviderLogos([{ ...base, logo: '' }]) }, {});
   assert.deepEqual({ ...pluginOAuthProviderLogos(undefined) }, {});
 });
 
-test('isRenderableLogoURL: only inline artwork is a logo this page may load', () => {
+test('isRenderableLogoURL: inline images and absolute HTTP(S) logos are renderable', () => {
   assert.equal(isRenderableLogoURL('data:image/svg+xml,%3Csvg/%3E'), true);
   assert.equal(isRenderableLogoURL('  data:image/png;base64,iVBORw0KGgo=  '), true);
-  // Everything else falls back to the catalog mark. A remote URL is refused because the
-  // deployment must not depend on a CDN - the Go process inlines a plugin's logo
-  // instead - and a relative path would silently resolve against this console's origin.
-  assert.equal(isRenderableLogoURL('https://cdn.example.test/a.svg'), false);
-  assert.equal(isRenderableLogoURL('http://127.0.0.1:8317/logo.png'), false);
+  assert.equal(isRenderableLogoURL('https://cdn.example.test/a.svg'), true);
+  assert.equal(isRenderableLogoURL('  http://127.0.0.1:8317/logo.png  '), true);
+  assert.equal(isRenderableLogoURL('https://user:pass@cdn.example.test/a.svg'), false);
+  assert.equal(isRenderableLogoURL('https://'), false);
+  assert.equal(isRenderableLogoURL('https:relative.svg'), false);
+  // A relative path would silently resolve against this console's origin.
   assert.equal(isRenderableLogoURL('//cdn.example.test/a.svg'), false);
   assert.equal(isRenderableLogoURL('/lobe-icons/devin.svg'), false);
   assert.equal(isRenderableLogoURL('./lobe-icons/devin.svg'), false);
@@ -252,7 +255,7 @@ test('pluginOAuthProviderLogos: a portal mark wins for its own key, the plugin m
   // A portal whose own artwork cannot be rendered falls back to the plugin's, not to a gap.
   const unusable = pluginOAuthProviderLogos([{
     id: 'zcode', enabled: true, supports_oauth: true, oauth_providers: ['zcode-bigmodel'], logo: INLINE_LOGO,
-    oauth_provider_entries: [{ identifier: 'zcode-bigmodel', name: 'BigModel', logo: 'https://cdn.example.test/bigmodel.svg' }],
+    oauth_provider_entries: [{ identifier: 'zcode-bigmodel', name: 'BigModel', logo: 'javascript:alert(1)' }],
   }]);
   assert.equal(pluginOAuthLogoFor(unusable, 'zcode-bigmodel'), INLINE_LOGO);
 
@@ -265,6 +268,18 @@ test('pluginOAuthProviderLogos: a portal mark wins for its own key, the plugin m
   }]);
   assert.equal(pluginOAuthLogoFor(portalOnly, 'zcode-zai'), INLINE_LOGO);
   assert.equal(pluginOAuthLogoFor(portalOnly, 'zcode'), undefined);
+});
+
+test('quota provider identity connects a multi-portal plugin to its credential mark without adding login choices', () => {
+  const logo = 'https://cdn.example.test/zcode.png';
+  const plugin = {
+    id: 'omc-zcode-oauth', supports_oauth: true, supports_quota: true,
+    oauth_providers: ['zcode-zai', 'zcode-bigmodel'], quota_provider: ' ZCode ', logo,
+  } as PluginItem;
+  assert.deepEqual(pluginOAuthProviderIds(plugin), ['zcode-zai', 'zcode-bigmodel']);
+  assert.ok(pluginOAuthProviderKeys(plugin).includes('zcode'));
+  const logos = pluginOAuthProviderLogos([plugin]);
+  assert.equal(resolveCredentialMark('zcode', undefined, logos).logo, logo);
 });
 
 test('pluginOAuthLogoFor: lookup is case and pad insensitive, and misses are empty', () => {
@@ -356,7 +371,9 @@ test('DOM and exported marks share ownership, revision, missing-resource and col
   assert.deepEqual(resolveMarkArtworks({ ...mark, logo: INLINE_LOGO }, sources), [
     { url: INLINE_LOGO, isMono: false }, ...candidates.slice(1),
   ]);
-  assert.deepEqual(resolveMarkArtworks({ ...mark, logo: 'https://cdn.example.test/logo.svg' }, sources), candidates.slice(1));
+  assert.deepEqual(resolveMarkArtworks({ ...mark, logo: 'https://cdn.example.test/logo.svg' }, sources), [
+    { url: 'https://cdn.example.test/logo.svg', isMono: false }, ...candidates.slice(1),
+  ]);
   assert.equal(resolveMarkArtworks(mark, { ...sources, customIcons: [{ ...icon, revision: 4 }] })[0].url.endsWith('revision=4'), true);
   assert.deepEqual(resolveMarkArtworks({ iconId: 'Kimi' }, sources), [{ url: '/omc/lobe-icons/kimi.svg', isMono: true }]);
   assert.deepEqual(resolveMarkArtworks({ iconId: 'Codex' }, { ...sources, baseURL: '/', variant: 'mono' }), [{ url: '/lobe-icons/codex.svg', isMono: true }]);

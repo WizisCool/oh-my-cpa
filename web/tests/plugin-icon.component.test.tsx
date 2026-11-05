@@ -29,10 +29,10 @@ describe('plugin artwork', () => {
     expect(container.querySelector('.app-menu-plugin-logo[data-plugin-logo="svg"] img')!.getAttribute('src')).toBe(SVG);
   });
 
-  it('keeps raster artwork and recovers when a failed source changes', () => {
-    const { container, rerender } = render(<PluginLogo logo={PNG} />);
+  it.each([PNG, 'https://example.test/logo.svg', 'http://example.test/logo.png'])('renders artwork and recovers when a failed source changes: %s', (logo) => {
+    const { container, rerender } = render(<PluginLogo logo={logo} />);
     const image = container.querySelector('img')!;
-    expect(image.getAttribute('src')).toBe(PNG);
+    expect(image.getAttribute('src')).toBe(logo);
     fireEvent.error(image);
     expect(container.querySelector('[data-plugin-logo="fallback"]')).not.toBeNull();
     rerender(<PluginLogo logo={SVG} />);
@@ -47,7 +47,7 @@ describe('plugin artwork', () => {
     expect(container.querySelector('[data-plugin-logo="svg"] img')).not.toBeNull();
   });
 
-  it.each([undefined, 'https://example.test/logo.svg', '/logo.svg', 'javascript:alert(1)', 'data:text/html,<svg/>', 'data:image/svg+xml'])('uses the generic glyph for unusable input: %s', (logo) => {
+  it.each([undefined, '/logo.svg', 'javascript:alert(1)', 'data:text/html,<svg/>', 'data:image/svg+xml'])('uses the generic glyph for unusable input: %s', (logo) => {
     const { container } = render(<PluginLogo logo={logo} />);
     expect(container.querySelector('[data-plugin-logo="fallback"] svg')).not.toBeNull();
     expect(container.querySelector('img')).toBeNull();

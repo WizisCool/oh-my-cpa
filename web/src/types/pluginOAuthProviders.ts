@@ -17,7 +17,7 @@ function collectDeclaredPluginOAuthProviders(plugin: PluginItem): string[] {
  * the key is the normalized identifier because that is what a card or a credential row
  * is built for.
  *
- * Only a usable name or an inline logo is kept, so "this portal declares nothing" and
+ * Only a usable name or a renderable logo is kept, so "this portal declares nothing" and
  * "this portal's artwork cannot be rendered" both leave the entry absent and the caller
  * on the plugin-wide fallback. An entry naming a portal the plugin did not declare as an
  * identifier is discarded: nothing is drawn per entry, so it would have nowhere to appear.
@@ -58,11 +58,11 @@ export function pluginOAuthProviderIds(plugin: PluginItem): string[] {
   return ids.filter((id) => OAUTH_PROVIDER_PATTERN.test(id));
 }
 
-/** Credential identity includes the plugin id even when it is not a login portal. */
+/** Credential identity includes the plugin id and quota provider, not just login portals. */
 export function pluginOAuthProviderKeys(plugin: PluginItem): string[] {
   const declared = collectDeclaredPluginOAuthProviders(plugin);
   if (!plugin.supports_oauth && !declared.length) return [];
-  return [...new Set([...declared, plugin.id.trim().toLowerCase()].filter(Boolean))];
+  return [...new Set([...declared, plugin.id.trim().toLowerCase(), (plugin.quota_provider ?? '').trim().toLowerCase()].filter(Boolean))];
 }
 
 /**
@@ -84,25 +84,24 @@ export type PluginOAuthLogos = Record<string, string>;
 /**
  * Whether a plugin-published logo can be rendered in an `<img>`.
  *
- * Only inline `data:image/*` artwork qualifies. A remote URL - http(s), scheme-relative
- * or rooted - is refused, and the caller falls back to the console's catalog mark: the
- * bundle's contract is that a deployment has no CDN or static-file dependency, and the
- * console's own CSP allows images from itself or inline only (`img-src 'self' data:
- * blob:`). The plugin's own mark is still what gets drawn - the Go process fetches a
- * logo the plugin publishes and inlines it, so what arrives here is already inline
- * (`internal/api/management_plugin_logos.go`).
- *
- * The scheme is the boundary: `data:` is inert as an image source, whereas a
- * `javascript:` value must never reach the DOM at all. This is deliberately narrower
- * than `isSafeExternalURL`, which guards `<a href>` destinations - a link the operator
- * chooses to follow is not a resource the page loads by itself.
+ * Publisher-owned HTTP(S) artwork loads in the browser, independently of the OMC
+ * server's network. Inline images remain supported. Relative paths are not publisher
+ * URLs: resolving them against the console origin would request the wrong resource.
+ * Artwork is rendered only as an isolated image, never as host markup.
  */
 export function isRenderableLogoURL(raw: string | null | undefined): boolean {
   const trimmed = (raw ?? '').trim();
-  return /^data:image\//i.test(trimmed) && trimmed.includes(',');
+  if (/^data:image\//i.test(trimmed) && trimmed.includes(',')) return true;
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    return Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
 }
 
-/** Inline artwork remains inert inside an image, never interpreted as host markup. */
+/** Artwork remains isolated inside an image, never interpreted as host markup. */
 export function pluginLogoArtworks(logo?: string): { url: string; isMono: boolean }[] {
   const source = (logo ?? '').trim();
   return isRenderableLogoURL(source) ? [{ url: source, isMono: false }] : [];
