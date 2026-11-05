@@ -968,11 +968,13 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
   };
   await openPluginConnection('key-service-secondary');
   const pluginPanel = page.getByTestId('oauth-connect-panel');
-  check('an API-key auth provider is plugin-managed rather than an OAuth redirect',
-    (await pluginPanel.getByText('Plugin-managed', { exact: true }).count()) === 1
+  check('an auth provider keeps login and management separate without assuming a redirect',
+    (await pluginPanel.getByText('Plugin sign-in', { exact: true }).count()) === 1
       && (await pluginPanel.getByText('Key Bridge · key-service-secondary', { exact: true }).count()) > 0
       && (await pluginPanel.getByText('Redirect callback', { exact: true }).count()) === 0
-      && (await pluginPanel.locator('[data-oauth-start]').count()) === 0);
+      && (await pluginPanel.locator('[data-oauth-start="key-service-secondary"]').count()) === 1
+      && (await pluginPanel.locator('[data-plugin-connect="key-service-secondary"]').count()) === 1
+      && (await pluginPanel.locator('[data-oauth-callback-input]').count()) === 0);
   // Two portals of one plugin used to read the same and draw the same mark, so the
   // operator could not tell which portal a card starts. The one that publishes a name
   // and a logo of its own names and draws itself; the one that publishes neither still
@@ -1003,7 +1005,7 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
     pluginFlow = flow;
     await openPluginConnection('interactive-secondary');
     check(`plugin ${flow} flow is not assumed before Start`,
-      (await pluginPanel.getByText('Plugin-managed', { exact: true }).count()) === 1);
+      (await pluginPanel.getByText('Plugin sign-in', { exact: true }).count()) === 1);
     await pluginPanel.locator('[data-oauth-start="interactive-secondary"]').click();
     if (flow === 'device') {
       await pluginPanel.locator('[data-oauth-user-code]').waitFor({ state: 'visible' });

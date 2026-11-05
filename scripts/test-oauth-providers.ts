@@ -351,7 +351,7 @@ test('credentials keep the name their plugin\'s login card gives the provider', 
 });
 
 
-test('auth-provider metadata does not declare a redirect flow, and plugin pages own connection', () => {
+test('auth-provider metadata keeps login flow unknown and management pages independent', () => {
   const t = ((key: string) => key) as Parameters<typeof builtinOAuthProviderChoices>[0];
   const plugins = [{
     id: 'key-bridge', configured: true, registered: true, enabled: true,
@@ -362,16 +362,19 @@ test('auth-provider metadata does not declare a redirect flow, and plugin pages 
   const [choice] = pluginOAuthProviderChoices(plugins, t);
   assert.equal(choice.flow, 'plugin');
   assert.equal(choice.pluginPageRoute, '/plugin-pages/key-bridge/0');
-  assert.equal(choice.description, 'oauth.plugin_page_hint');
-  assert.equal(choice.callback, undefined, 'a plugin-managed connection must not expose callback submission');
   const secondary = pluginOAuthProviderChoices(plugins, t)[1];
   assert.equal(secondary.id, 'key-service-secondary');
   assert.equal(secondary.pluginPageRoute, choice.pluginPageRoute);
-  assert.equal(secondary.callback, undefined);
+  assert.deepEqual(secondary.callback, choice.callback);
   const [pageless] = pluginOAuthProviderChoices([{ ...plugins[0], pages: [] }], t);
   assert.equal(pageless.flow, 'plugin', 'pageless auth providers have no declared login flow either');
   assert.equal(pageless.pluginPageRoute, undefined);
-  assert.equal(pageless.description, 'oauth.plugin_hint');
+  assert.equal(choice.description, pageless.description, 'a management page must not change the login offer');
+  assert.equal(choice.loginLabel, pageless.loginLabel);
+  assert.deepEqual(choice.callback, {
+    errorKeys: { invalid: 'oauth.callback_invalid_url', missingState: 'oauth.missing_state' },
+  }, 'callback rules are available if a successful response declares a redirect flow');
+  assert.deepEqual(pageless.callback, choice.callback);
 });
 
 

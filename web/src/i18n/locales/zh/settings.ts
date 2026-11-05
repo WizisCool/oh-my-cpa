@@ -146,7 +146,7 @@ export default {
   'omc.connect_provider': 'OAuth 提供商',
   'omc.connect_provider_placeholder': '选择要连接的提供商',
   'omc.flow_device': '设备码',
-  'omc.flow_plugin': '由插件管理',
+  'omc.flow_plugin': '插件认证',
   'omc.flow_redirect': '重定向回调',
   'omc.active_authorizations': '进行中的授权',
   'omc.session_waiting': '等待完成',

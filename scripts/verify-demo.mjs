@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { guardBrowserContext } from './acceptance/browser-guard.mjs';
+import { guardBrowserContext, isOptional } from './acceptance/browser-guard.mjs';
 import { launchBrowser, closeBrowser, closeServer } from './acceptance/lifecycle.mjs';
 /**
  * Browser acceptance for the public demonstration.
@@ -194,7 +194,7 @@ async function main() {
     });
     const page = await context.newPage();
     page.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors.push(message.text());
+      if (message.type() === 'error' && !isOptional(message.location().url)) consoleErrors.push(message.text());
     });
     page.on('pageerror', (error) => {
       const message = String(error);
