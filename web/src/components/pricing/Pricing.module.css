@@ -260,6 +260,48 @@
   width: 160px;
 }
 
+.reference-prices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.reference-prices-label {
+  color: var(--meta);
+  font-size: var(--text-xs);
+}
+
+.reference-prices ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reference-prices li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.reference-providers {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.reference-rates {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 .rate-reference {
   display: inline-flex;
   align-items: center;

@@ -12,6 +12,7 @@ import {
   heatmapDrillDown,
   heatmapFocusDay,
   fitHeatmapCell,
+  fitHeatmapField,
   heatmapMonthLabels,
   heatmapMoveFocus,
   localDayOf,
@@ -127,6 +128,27 @@ test('token heatmap', () => {
   assert.equal(fitHeatmapCell(0, WIDE_COLUMNS, TARGET_CELL, CELL_GAP), null, 'an unmeasured panel is not sized');
   assert.equal(fitHeatmapCell(600, 0, TARGET_CELL, CELL_GAP), null, 'no columns means no cell size');
   assert.equal(fitHeatmapCell(600, WIDE_COLUMNS, 0, CELL_GAP), null, 'a missing target token is not a size');
+
+  // A panel taller than seven comfortable rows gives the rows its height, and the weeks that fit
+  // span its width through their gaps, with the squares kept square.
+  const MAX_CELL = 30;
+  for (const [fieldWidth, fieldHeight] of [[500, 200], [612, 230], [298, 180]]) {
+    const fit = fitHeatmapField(fieldWidth, fieldHeight, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL)!;
+    const weeks = Math.floor((fieldWidth + CELL_GAP) / (fit.cell + CELL_GAP));
+    const height = 7 * fit.cell + 6 * CELL_GAP;
+    const span = weeks * fit.cell + (weeks - 1) * fit.columnGap;
+    assert.ok(fit.cell > TARGET_CELL && fieldHeight - height >= 0 && fieldHeight - height < 1, `${fieldHeight}px is filled by seven rows`);
+    assert.ok(span <= fieldWidth && fieldWidth - span < 1, `${fieldWidth}px is spanned by ${weeks} whole weeks`);
+    assert.ok(fit.columnGap >= CELL_GAP && fit.columnGap - CELL_GAP < fit.cell / Math.max(weeks - 1, 1) + 1, 'the weeks absorb only the remainder');
+  }
+  // A short panel keeps the width rule; one that holds the year is left to the tracks.
+  assert.deepEqual(fitHeatmapField(500, 100, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), { cell: fitHeatmapCell(500, WIDE_COLUMNS, TARGET_CELL, CELL_GAP)!, columnGap: CELL_GAP });
+  assert.equal(fitHeatmapField(yearWidth + 400, 150, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), null);
+  // However tall, a panel that holds the year at the comfortable size keeps every week in view.
+  assert.equal(fitHeatmapField(yearWidth, 300, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), null);
+  assert.equal(fitHeatmapField(0, 200, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), null);
+  // A very tall panel stops growing the squares at the cap and leaves the rest below the field.
+  assert.equal(fitHeatmapField(500, 600, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, 22)?.cell, 22);
 
   // ── local-day reading ──────────────────────────────────────────────────────
 

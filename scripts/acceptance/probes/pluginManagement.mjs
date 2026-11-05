@@ -317,12 +317,14 @@ export async function pluginManagement({ base, page, check, writes }) {
     const style = getComputedStyle(button);
     return { width: bounds.width, height: bounds.height, top: bounds.top, background: style.backgroundColor, border: style.borderColor, color: style.color };
   }));
-  check('configuration and overflow use two aligned, matching 28px row controls', actions.length === 2
-    && actions.every((action) => action.width === 28 && action.height === 28)
-    && actions[0].top === actions[1].top
-    && actions[0].background === actions[1].background
-    && actions[0].border === actions[1].border
-    && actions[0].color === actions[1].color, JSON.stringify(actions));
+  // The fixture's store lists a newer release of this plugin, so its row also offers the update.
+  check('update, configuration and overflow use aligned, matching 28px row controls', actions.length === 3
+    && (await loggerRow.locator('[data-testid="plugin-row-update"]').count()) === 1
+    && actions.every((action) => action.width === 28 && action.height === 28
+      && action.top === actions[0].top
+      && action.background === actions[0].background
+      && action.border === actions[0].border
+      && action.color === actions[0].color), JSON.stringify(actions));
   check('removal and external links do not crowd the installed row',
     (await loggerRow.getByRole('button', { name: /卸载|Uninstall/ }).count()) === 0
       && (await loggerRow.locator('a[target="_blank"]').count()) === 0);

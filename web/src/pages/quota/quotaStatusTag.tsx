@@ -3,12 +3,12 @@ import React from 'react';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
-  StopOutlined,
+  HourglassOutlined,
   WarningOutlined,
 } from '../../components/icons';
 import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { resolveQuotaCooldownTooltip } from './quotaCooldown';
+import { describeQuotaCooldown } from './quotaCooldown';
 import { Tag } from '../../components/common/Tag';
 import { Tooltip } from '../../components/common/Tooltip';
 
@@ -22,8 +22,10 @@ export function quotaStatusTag(item: QuotaItem, t: TFunc): React.ReactNode {
   if (item.active_cooldown?.is_active || item.status === 'cooldown') {
     const reason = item.active_cooldown?.reason;
     return (
-      <Tooltip title={resolveQuotaCooldownTooltip(reason, t('quota.cooldown_active_desc'))}>
-        <Tag tone="danger" icon={<StopOutlined />}>{t('quota.status_cooldown')}</Tag>
+      <Tooltip title={describeQuotaCooldown(reason, t('quota.cooldown_active_desc'))}>
+        {/* Cooling down is a wait the credential comes back from on its own clock; the dashboard's
+            quota row draws the same hourglass. */}
+        <Tag tone="danger" icon={<HourglassOutlined />}>{t('quota.status_cooldown')}</Tag>
       </Tooltip>
     );
   }

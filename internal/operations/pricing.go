@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
@@ -199,16 +200,42 @@ type PriceMatch struct {
 	MatchKind string                `json:"match_kind"`
 }
 
+// ReferencePrice is one rate a public catalog other than OpenRouter lists for a model. It is
+// never applied: an operator who adopts it enters it as a custom price.
+type ReferencePrice struct {
+	Source           string   `json:"source"`
+	Model            string   `json:"model"`
+	Providers        []string `json:"providers"`
+	PromptPricePer1M float64  `json:"prompt_price_per_1m"`
+	CompletionPer1M  float64  `json:"completion_price_per_1m"`
+	CacheReadPer1M   *float64 `json:"cache_read_price_per_1m,omitempty"`
+	CacheWritePer1M  *float64 `json:"cache_write_price_per_1m,omitempty"`
+}
+
+// ReferencePrices lists the bundled models.dev rates for a model OpenRouter cannot price
+// automatically. Every disagreeing rate is returned, so the operator, not OMC, chooses.
+func ReferencePrices(model string) []ReferencePrice {
+	canonical, costs := modelcatalog.DEFAULT_CATALOG.ReferenceCostsFor(model)
+	prices := make([]ReferencePrice, 0, len(costs))
+	for _, cost := range costs {
+		prices = append(prices, ReferencePrice{Source: "models.dev", Model: canonical, Providers: cost.Providers,
+			PromptPricePer1M: cost.Input, CompletionPer1M: cost.Output, CacheReadPer1M: cost.CacheRead, CacheWritePer1M: cost.CacheWrite})
+	}
+	return prices
+}
+
 // PriceDetail is everything needed to decide one model's price in a single read.
 type PriceDetail struct {
 	Model       string                  `json:"model"`
 	Price       *pricing.ModelPrice     `json:"price,omitempty"`
 	Automatic   *PriceMatch             `json:"automatic,omitempty"`
 	Suggestions []pricing.UpstreamModel `json:"suggestions"`
-	Candidate   *pricing.Candidate      `json:"candidate,omitempty"`
-	Channels    []string                `json:"channels"`
-	Usage       PriceUsage              `json:"usage_30d"`
-	Profile     repository.TokenProfile `json:"profile_7d"`
+	// References appear only without an automatic OpenRouter match.
+	References []ReferencePrice        `json:"reference_prices"`
+	Candidate  *pricing.Candidate      `json:"candidate,omitempty"`
+	Channels   []string                `json:"channels"`
+	Usage      PriceUsage              `json:"usage_30d"`
+	Profile    repository.TokenProfile `json:"profile_7d"`
 }
 
 type PriceModelInput struct {
@@ -227,7 +254,7 @@ func (s *Service) GetPrice(ctx context.Context, input PriceModelInput) (PriceDet
 	if err != nil {
 		return PriceDetail{}, err
 	}
-	output := PriceDetail{Model: model, Suggestions: []pricing.UpstreamModel{}, Channels: []string{}}
+	output := PriceDetail{Model: model, Suggestions: []pricing.UpstreamModel{}, References: []ReferencePrice{}, Channels: []string{}}
 	for index := range rows {
 		if rows[index].Model == model {
 			output.Price = &rows[index]
@@ -238,6 +265,8 @@ func (s *Service) GetPrice(ctx context.Context, input PriceModelInput) (PriceDet
 	// failed lookup leaves them out rather than hiding the price itself.
 	if match, found, err := s.Pricing.AutomaticMatch(ctx, model); err == nil && found {
 		output.Automatic = &PriceMatch{Model: match.Model, MatchKind: match.Kind}
+	} else if err == nil {
+		output.References = ReferencePrices(model)
 	}
 	if suggestions, err := s.Pricing.Suggestions(ctx, model, 5); err == nil && suggestions != nil {
 		output.Suggestions = suggestions
@@ -564,7 +593,7 @@ func (s *Service) registerPricing(registry *capability.Registry) error {
 	if err := read(registry, "pricing_overview", "The first stop for pricing work: OpenRouter sync state, how many models are priced in each mode, and the unpriced models busiest first with their recent traffic and closest OpenRouter suggestions, paginated.", s.OverviewPricing); err != nil {
 		return err
 	}
-	if err := read(registry, "pricing_get", "Read everything needed to price one model: its current price (absent when unpriced), what auto mode would match, OpenRouter suggestions, a pending candidate, the channels that serve it, 30-day traffic and the 7-day median request size.", s.GetPrice); err != nil {
+	if err := read(registry, "pricing_get", "Read everything needed to price one model: its current price (absent when unpriced), what auto mode would match, OpenRouter suggestions, models.dev reference prices when nothing matches automatically (advice only; adopting one means saving it as a custom price), a pending candidate, the channels that serve it, 30-day traffic and the 7-day median request size.", s.GetPrice); err != nil {
 		return err
 	}
 	if err := read(registry, "pricing_catalog_search", "Search the stored OpenRouter price list by id or name, 20 per page, to find the upstream_id for a linked price or published rates and tiers to copy into a custom one.", s.SearchPricingCatalog); err != nil {

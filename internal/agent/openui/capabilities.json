@@ -1622,7 +1622,7 @@
   },
   {
     "name": "pricing_get",
-    "description": "Read everything needed to price one model: its current price (absent when unpriced), what auto mode would match, OpenRouter suggestions, a pending candidate, the channels that serve it, 30-day traffic and the 7-day median request size.",
+    "description": "Read everything needed to price one model: its current price (absent when unpriced), what auto mode would match, OpenRouter suggestions, models.dev reference prices when nothing matches automatically (advice only; adopting one means saving it as a custom price), a pending candidate, the channels that serve it, 30-day traffic and the 7-day median request size.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -2024,6 +2024,58 @@
             "additionalProperties": false
           }
         },
+        "reference_prices": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "providers": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "prompt_price_per_1m": {
+                "type": "number"
+              },
+              "completion_price_per_1m": {
+                "type": "number"
+              },
+              "cache_read_price_per_1m": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "cache_write_price_per_1m": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "model",
+              "providers",
+              "prompt_price_per_1m",
+              "completion_price_per_1m"
+            ],
+            "additionalProperties": false
+          }
+        },
         "candidate": {
           "type": [
             "null",
@@ -2224,6 +2276,7 @@
       "required": [
         "model",
         "suggestions",
+        "reference_prices",
         "channels",
         "usage_30d",
         "profile_7d"

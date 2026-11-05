@@ -15,7 +15,7 @@ import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   buildHeatmapGrid,
   createHeatmapCellClassifier,
-  fitHeatmapCell,
+  fitHeatmapField,
   heatmapColumnCount,
   heatmapDrillDown,
   heatmapFocusDay,
@@ -363,25 +363,33 @@ export const TokenHeatmap: React.FC = () => {
     if (cells.length === 0) return;
     const container = scrollRef.current;
     if (!container) return;
-    let fittedWidth = -1;
+    let fittedSize = '';
     // How far the field scrolls, known from the fit itself. Reading the container's extent for it
     // would force layout from inside a scroll handler on every frame of a swipe.
     let newestOffset = 0;
-    const fitCells = (width: number) => {
+    const fitCells = (width: number, height: number) => {
       // Custom properties resolve without layout, and the observer delivers after it anyway.
       const tokens = getComputedStyle(container);
       const readToken = (name: string) => Number.parseFloat(tokens.getPropertyValue(name)) || 0;
       const gutter = readToken('--heatmap-label') + readToken('--heatmap-label-gap');
       const gap = readToken('--heatmap-gap');
-      const cell = fitHeatmapCell(width - gutter, columns, readToken('--heatmap-cell-target'), gap);
-      if (cell === null) {
+      const axis = readToken('--heatmap-axis');
+      const fit = fitHeatmapField(width - gutter, height - axis, columns, readToken('--heatmap-cell-target'), gap, readToken('--heatmap-cell-max'));
+      // The field is as tall as the panel gives it, never shorter than its rows: the height it
+      // needs travels as its minimum, so a panel too short for the fitted squares grows instead of
+      // clipping the last weekday.
+      const cell = fit?.cell ?? (width - gutter - (columns - 1) * gap) / columns;
+      container.style.setProperty('--heatmap-field-min', `${axis + 7 * cell + 6 * gap}px`);
+      if (fit === null) {
         container.style.removeProperty('--heatmap-cell');
+        container.style.removeProperty('--heatmap-column-gap');
         newestOffset = 0;
       } else {
-        container.style.setProperty('--heatmap-cell', `${cell}px`);
-        newestOffset = gutter + columns * cell + (columns - 1) * gap - width;
+        container.style.setProperty('--heatmap-cell', `${fit.cell}px`);
+        container.style.setProperty('--heatmap-column-gap', `${fit.columnGap}px`);
+        newestOffset = gutter + columns * fit.cell + (columns - 1) * fit.columnGap - width;
       }
-      return cell !== null;
+      return fit !== null;
     };
     const markOlderWeeks = (hasOlderWeeks: boolean) => {
       container.toggleAttribute('data-has-older', hasOlderWeeks);
@@ -397,11 +405,13 @@ export const TokenHeatmap: React.FC = () => {
     // pending layout into the navigation commit.
     const observer = new ResizeObserver((observations) => {
       const width = observations.reduce((widest, entry) => Math.max(widest, entry.contentRect.width), 0);
+      const height = observations.reduce((tallest, entry) => Math.max(tallest, entry.contentRect.height), 0);
       if (width <= 0) return;
-      // The cell size changes the container's height, which re-enters this callback; only a new
-      // width is a new fit.
-      const isScrollable = width === fittedWidth ? container.hasAttribute('data-scrollable') : fitCells(width);
-      fittedWidth = width;
+      // The field's height comes from the panel, not from its cells, so a fit settles in one pass:
+      // the minimum it writes equals the height it was fitted to, and an unchanged box is no new fit.
+      const size = `${width}x${height}`;
+      const isScrollable = size === fittedSize ? container.hasAttribute('data-scrollable') : fitCells(width, height);
+      fittedSize = size;
       container.toggleAttribute('data-scrollable', isScrollable);
       if (isPinnedToNewest.current) container.scrollLeft = HEATMAP_SCROLL_END;
       // Read where the field ended up rather than assuming the pinned edge: a panel that grew until
@@ -583,6 +593,24 @@ export const TokenHeatmap: React.FC = () => {
       <div className="heatmap-inner">
       <div className="heatmap-head">
         <span className="tile-label">{t('dash.heatmap.title')}</span>
+        {/* The key names only the ramp's direction. The shade is relative to the window's own
+            busiest day, so the swatches carry no quantities; those are in each cell's tooltip
+            and accessible name. It sits where the quota panel beside it keeps its summary. */}
+        {data && (
+          <div className="heatmap-legend" aria-hidden="true">
+            <span>{t('dash.heatmap.legend_less')}</span>
+            <span className="heatmap-legend-scale">
+              {HEATMAP_LEGEND_SHARES.map((share) => (
+                <i
+                  key={share}
+                  className="heatmap-legend-swatch"
+                  style={{ '--heatmap-quiet-share': share } as React.CSSProperties}
+                />
+              ))}
+            </span>
+            <span>{t('dash.heatmap.legend_more')}</span>
+          </div>
+        )}
       </div>
 
       {!data ? (
@@ -660,22 +688,6 @@ export const TokenHeatmap: React.FC = () => {
             </div>
           </div>
 
-          {/* The key names only the ramp's direction. The shade is relative to the window's own
-              busiest day, so the swatches carry no quantities; those are in each cell's tooltip
-              and accessible name. */}
-          <div className="heatmap-legend" aria-hidden="true">
-            <span>{t('dash.heatmap.legend_less')}</span>
-            <span className="heatmap-legend-scale">
-              {HEATMAP_LEGEND_SHARES.map((share) => (
-                <i
-                  key={share}
-                  className="heatmap-legend-swatch"
-                  style={{ '--heatmap-quiet-share': share } as React.CSSProperties}
-                />
-              ))}
-            </span>
-            <span>{t('dash.heatmap.legend_more')}</span>
-          </div>
           {isFetching && !isError && <span className="heatmap-progress" aria-hidden="true" />}
         </>
       )}

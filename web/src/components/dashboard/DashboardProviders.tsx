@@ -21,6 +21,9 @@ import { SectionHeading } from '../common/SectionHeading';
 import { Tag } from '../common/Tag';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ProviderActivityStrip } from './ProviderActivityStrip';
+import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
+import { useRankedSortableList } from '../../hooks/useSortableList';
+import { DASHBOARD_PROVIDER_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatMinuteSpan } from '../../utils/dateTimeFormat';
 import './dashboard.css';
@@ -163,14 +166,18 @@ export const DashboardProviders = React.memo(function DashboardProviders({
     });
   }, [overviewProviders, windowProviders, windowCredentials, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos, pluginTitles]);
 
-  const isFoldable = aggregated.length > PROVIDER_PREVIEW_LIMIT;
+  // The operator's order replaces the volume sort for the rows it names; a provider it does not
+  // name still lands by volume after them, and the fold keeps hiding the tail of that order.
+  const sortable = useRankedSortableList(DASHBOARD_PROVIDER_ORDER_PREFERENCE, aggregated, providerRowKey);
+  const ordered = sortable.ordered;
+  const isFoldable = ordered.length > PROVIDER_PREVIEW_LIMIT;
   const visibleProviders = useMemo(() => {
-    const visible = isFoldable && !isExpanded ? aggregated.slice(0, PROVIDER_PREVIEW_LIMIT) : aggregated;
+    const visible = isFoldable && !isExpanded ? ordered.slice(0, PROVIDER_PREVIEW_LIMIT) : ordered;
     return visible.map((provider) => ({
       provider,
       blocks: hasActivityGrid && !isPhone ? activityBlocks(provider.buckets, fromMs, toMs, bucketMs) : [],
     }));
-  }, [aggregated, isFoldable, isExpanded, hasActivityGrid, isPhone, fromMs, toMs, bucketMs]);
+  }, [ordered, isFoldable, isExpanded, hasActivityGrid, isPhone, fromMs, toMs, bucketMs]);
 
   const handleRowClick = (provider: AggregatedProvider) => {
     if (provider.kind === 'oauth') {
@@ -190,87 +197,21 @@ export const DashboardProviders = React.memo(function DashboardProviders({
         {aggregated.length === 0 ? (
           <EmptyState size="compact" title={t('dash.empty_providers')} />
         ) : (
-          <div className="provider-list-items">
-            {visibleProviders.map(({ provider, blocks }) => {
-              const isOAuth = provider.kind === 'oauth';
-              // The window rate carries its band colour itself: the strip beside it colours each
-              // bucket, and a phone does not draw the strip at all.
-              const rateColor = RATE_TONE_COLOR[successRateTone(provider.successRate)];
-              return (
-                <div
-                  className="provider-row-enhanced is-clickable"
+          <RowReorder {...sortable.reorder} items={visibleProviders.map(({ provider }) => provider.key)}>
+            <div className="provider-list-items">
+              {visibleProviders.map(({ provider, blocks }) => (
+                <ProviderRow
                   key={provider.key}
-                  onClick={() => handleRowClick(provider)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleRowClick(provider);
-                    }
-                  }}
-                >
-                  {/* Brand Icon & Name */}
-                  <div className="provider-main-col">
-                    <div className="provider-brand-badge">
-                      <ProviderBrandIcon
-                        mark={provider}
-                        size={20}
-                        className="provider-brand-icon"
-                      />
-                      <span
-                        className={`status-pip ${provider.disabled ? 'is-disabled' : 'is-active'}`}
-                        title={provider.disabled ? t('dash.providers_status_disabled') : undefined}
-                      />
-                    </div>
-                    <div className="provider-title-line">
-                      <span className="provider-title">{provider.name}</span>
-                      {isOAuth && (
-                        <Tag size="small" tone="accent">{t('dash.providers_type_oauth')}</Tag>
-                      )}
-                      {provider.disabled && (
-                        <Tag size="small" tone="danger">{t('dash.providers_status_disabled')}</Tag>
-                      )}
-                      <RightOutlined className="provider-jump-arrow" aria-hidden="true" />
-                    </div>
-                  </div>
-
-                  {/* Credentials Count */}
-                  <div className="provider-creds-col">
-                    <span className="provider-credentials">
-                      {t('dash.credentials_n', { n: provider.credentials })}
-                    </span>
-                  </div>
-
-                  {/* Requests Total */}
-                  <div className="provider-total-col">
-                    <span className="provider-total">{formatCount(provider.total)}</span>
-                  </div>
-
-                  {/* Success Rate */}
-                  <div className="provider-rate-col">
-                    <span className="provider-rate" style={{ color: rateColor }}>
-                      {formatRate(provider.successRate)}
-                    </span>
-                  </div>
-
-                  {/* The rate across the window, bucket by bucket. A phone omits it: two dozen blocks
-                      in a phone's width are too narrow to read or to touch, and the rate stays. */}
-                  {!isPhone && (
-                    <div className="provider-visual-col">
-                      {hasActivityGrid && (
-                        <ProviderActivityStrip
-                          name={provider.name}
-                          blocks={blocks}
-                          labels={activityLabels}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  provider={provider}
+                  blocks={blocks}
+                  isPhone={isPhone}
+                  hasActivityGrid={hasActivityGrid}
+                  activityLabels={activityLabels}
+                  onOpen={handleRowClick}
+                />
+              ))}
+            </div>
+          </RowReorder>
         )}
         {isFoldable && (
           <button
@@ -282,10 +223,110 @@ export const DashboardProviders = React.memo(function DashboardProviders({
             {isExpanded ? <UpOutlined aria-hidden="true" /> : <DownOutlined aria-hidden="true" />}
             {isExpanded
               ? t('dash.providers_show_less')
-              : t('dash.providers_show_all', { n: aggregated.length })}
+              : t('dash.providers_show_all', { n: ordered.length })}
           </button>
         )}
       </div>
     </section>
   );
 });
+
+interface ProviderRowProps {
+  provider: AggregatedProvider;
+  blocks: ReturnType<typeof activityBlocks>;
+  isPhone: boolean;
+  hasActivityGrid: boolean;
+  activityLabels: string[];
+  onOpen: (provider: AggregatedProvider) => void;
+}
+
+/** One provider's row: a link to where it is managed, and a place in the operator's order. */
+function ProviderRow({ provider, blocks, isPhone, hasActivityGrid, activityLabels, onOpen }: ProviderRowProps) {
+  const t = useT();
+  const reorder = useReorderRow(provider.key);
+  const isOAuth = provider.kind === 'oauth';
+  // The window rate carries its band colour itself: the strip beside it colours each
+  // bucket, and a phone does not draw the strip at all.
+  const rateColor = RATE_TONE_COLOR[successRateTone(provider.successRate)];
+  return (
+    <div
+      {...reorder.row}
+      className="provider-row-enhanced is-clickable"
+      onClick={() => onOpen(provider)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        // The handle inside the row takes its own keys; Enter there must not open the row.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(provider);
+        }
+      }}
+    >
+      {!isPhone && <ReorderHandle {...reorder.handle} name={provider.name} />}
+      {/* Brand Icon & Name */}
+      <div className="provider-main-col">
+        <div className="provider-brand-badge">
+          <ProviderBrandIcon
+            mark={provider}
+            size={20}
+            className="provider-brand-icon"
+          />
+          <span
+            className={`status-pip ${provider.disabled ? 'is-disabled' : 'is-active'}`}
+            title={provider.disabled ? t('dash.providers_status_disabled') : undefined}
+          />
+        </div>
+        <div className="provider-title-line">
+          <span className="provider-title">{provider.name}</span>
+          {isOAuth && (
+            <Tag size="small" tone="accent">{t('dash.providers_type_oauth')}</Tag>
+          )}
+          {provider.disabled && (
+            <Tag size="small" tone="danger">{t('dash.providers_status_disabled')}</Tag>
+          )}
+          <RightOutlined className="provider-jump-arrow" aria-hidden="true" />
+        </div>
+      </div>
+
+      {/* Credentials Count */}
+      <div className="provider-creds-col">
+        <span className="provider-credentials">
+          {t('dash.credentials_n', { n: provider.credentials })}
+        </span>
+      </div>
+
+      {/* Requests Total */}
+      <div className="provider-total-col">
+        <span className="provider-total">{formatCount(provider.total)}</span>
+      </div>
+
+      {/* Success Rate */}
+      <div className="provider-rate-col">
+        <span className="provider-rate" style={{ color: rateColor }}>
+          {formatRate(provider.successRate)}
+        </span>
+        {isPhone && <ReorderHandle {...reorder.handle} name={provider.name} variant="inline" />}
+      </div>
+
+      {/* The rate across the window, bucket by bucket. A phone omits it: two dozen blocks
+          in a phone's width are too narrow to read or to touch, and the rate stays. */}
+      {!isPhone && (
+        <div className="provider-visual-col">
+          {hasActivityGrid && (
+            <ProviderActivityStrip
+              name={provider.name}
+              blocks={blocks}
+              labels={activityLabels}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function providerRowKey(provider: AggregatedProvider): string {
+  return provider.key;
+}
