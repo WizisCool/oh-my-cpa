@@ -490,7 +490,9 @@
   /* The panel's height, not the cells', sets the field's: the component fits the rows to it and
      writes the height they need as the minimum, so a short panel grows rather than clipping. */
   flex: 1 1 0;
-  min-height: var(--heatmap-field-min, calc(var(--heatmap-axis) + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6));
+  /* Plus the 4px of paint room below (see `padding`): the box is border-box, and a panel fitted to
+     its content gives the field exactly this minimum, so without it the last weekday overflows. */
+  min-height: calc(var(--heatmap-field-min, calc(var(--heatmap-axis) + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6)) + 4px);
   margin-top: 12px;
   overflow-x: auto;
   overflow-y: hidden;
