@@ -39,7 +39,7 @@ export interface RowReorderProps {
   isEnabled: boolean;
   /** Where a dropped row landed: beside `target`, on the side it was moved towards. */
   onMove: (key: string, target: string, side: DropSide) => void;
-  /** A keyboard move from the focused handle: one place earlier or later. */
+  /** A keyboard move from the focused handle, one place earlier or later; only past a drawn row. */
   onStep: (key: string, direction: -1 | 1) => void;
   children: React.ReactNode;
 }
@@ -65,7 +65,13 @@ export function RowReorder({ items, isEnabled, onMove, onStep, children }: RowRe
     onMove(String(active.id), String(over.id), from < to ? 'after' : 'before');
   };
 
-  const value = React.useMemo(() => ({ isEnabled, onStep }), [isEnabled, onStep]);
+  // A step past the last drawn row would move it among rows a fold or filter hides, out of view and
+  // out of focus, so a step only ever trades places with a drawn neighbour.
+  const step = React.useCallback((key: string, direction: -1 | 1) => {
+    const index = ids.indexOf(key);
+    if (index >= 0 && ids[index + direction] !== undefined) onStep(key, direction);
+  }, [ids, onStep]);
+  const value = React.useMemo(() => ({ isEnabled, onStep: step }), [isEnabled, step]);
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={MODIFIERS} onDragStart={handleStart} onDragEnd={handleEnd} onDragCancel={finish}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy} disabled={!isEnabled}>
