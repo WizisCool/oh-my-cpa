@@ -22,14 +22,11 @@ export function sparkColor(colors: ThemePalette, tone: ChartTone): string {
  * Model identities, in the order the dashboard's model legend reads them.
  *
  * A *series* is a category, not a verdict, which is what makes this the one palette in the app whose
- * hues are decoration. Everything else here resolves to a semantic token, where green means healthy and
- * red means failed; a model's colour cannot mean anything, because the model list is whatever the
- * deployment happens to serve. Borrowing the status hues for it would be worse than decoration - a green
- * line labelled "model B" beside a green pip that means "healthy" makes both unreadable - so a model
- * slot reads the palette's model identities (`model`), which leave green and red out. The folded
- * remainder is not a slot: "other models" is everything the ranking did not name, so it reads in the
- * neutral rather than taking an identity a named model could have. Contrast is resolved in
- * `theme/palette.ts`.
+ * hues are decoration: a model's colour cannot mean anything, because the model list is whatever the
+ * deployment happens to serve. The slots are the conventional dashboard set (`series`), which readers
+ * already know from other consoles. The folded remainder is not a slot: "other models" is everything
+ * the ranking did not name, so it reads in the neutral rather than taking an identity a named model
+ * could have. Contrast is resolved in `theme/palette.ts`.
  *
  * A slot is a *rank*, not a model. Colour is assigned from the ranked list both dashboard panels share,
  * which is what guarantees a group's line and its ring slice are the same hue; it also means a group's
@@ -48,7 +45,7 @@ export const SERIES_SLOTS = 6;
  * that is worse than one drawn in a repeated colour.
  */
 export function seriesColor(palette: ThemePalette, index: number): string {
-  const slots = palette.model;
+  const slots = palette.series;
   const slot = ((Math.trunc(index) % SERIES_SLOTS) + SERIES_SLOTS) % SERIES_SLOTS;
   return slots[slot] ?? slots[0] ?? palette.accent;
 }

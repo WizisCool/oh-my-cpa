@@ -134,12 +134,8 @@ export interface ThemePalette extends ThemeCore {
   heatmapZeroUnrecorded: string;
   heatmapZeroRecorded: string;
   heatmapTipLink: string;
+  /** Categorical identities for multi-series charts, in legend order. */
   series: readonly string[];
-  /**
-   * Model identities for the dashboard's model charts, in legend order. Green and red are left out:
-   * on this console they mean success and failure.
-   */
-  model: readonly string[];
   seriesTrack: string;
   /** The reasoning-effort scale, lowest reasoning step first (`effortScale.ts`). */
   effort: readonly string[];
@@ -264,26 +260,21 @@ type LadderDirection = 'deeper' | 'lighter';
 /**
  * Per-mode values that are not derived from the nine authored tokens.
  *
- * Status hues, timing bands, category identities, model identities and reasoning effort have
+ * Status hues, timing bands, category identities and reasoning effort have
  * their own colour roles. A category keeps its identity through a theme switch, and an effort
  * step keeps its place on an ordered sweep. Deriving those roles from an operator's accent
  * would make their meaning depend on a colour choice. A custom palette inherits its mode's
  * set, with contrast held by `holdSignal`.
  */
-const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; timingOrange: string; series: readonly string[]; model: readonly string[]; effort: readonly string[] }> = {
+const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; timingOrange: string; series: readonly string[]; effort: readonly string[] }> = {
   dark: {
     success: '#10b981',
     warn: '#f59e0b',
     danger: '#ef4444',
     timingOrange: '#fb923c',
     series: ['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4'],
-    // Model identity on the dashboard's model charts. Brand blue first, then warm and cool in turn -
-    // orange, violet, gold, cyan, magenta - so neighbouring ranks never share a family; green and
-    // red stay with success and failure. Each mode has its own steps (lighter on dark, deeper on
-    // light, as categorical palettes are stepped per theme), validated on that mode's card for
-    // 3:1 contrast, a shared lightness band and colour-vision separation between neighbours. The
-    // folded "other models" group is not a slot: it reads in the muted neutral.
-    model: ['#3f86f0', '#e06a24', '#8f6ff0', '#b58a00', '#139dba', '#df5b95'],
+    // Categorical identities for multi-series charts: the familiar dashboard set of blue, emerald,
+    // violet, rose, amber and cyan, stepped lighter on dark and deeper on light.
     effort: ['#94bfce', '#4eccd3', '#91b7fe', '#bda7fe', '#f08dee', '#ff8cc1'],
   },
   light: {
@@ -292,7 +283,6 @@ const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger:
     danger: '#dc2626',
     timingOrange: '#c2410c',
     series: ['#2563eb', '#059669', '#7c3aed', '#e11d48', '#b45309', '#0891b2'],
-    model: ['#2f6fe0', '#cf5a14', '#7550d8', '#9a7300', '#0a83a0', '#c23b78'],
     effort: ['#39626e', '#00686c', '#3057a3', '#6343a4', '#8a2b8a', '#9b2065'],
   },
 };
@@ -585,7 +575,6 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     heatmapZeroRecorded: core.border,
     heatmapTipLink: core.accent,
     series: semantics.series.map(hold),
-    model: semantics.model.map(hold),
     seriesTrack: core.border,
     effort: semantics.effort.map(holdBadge),
   };
