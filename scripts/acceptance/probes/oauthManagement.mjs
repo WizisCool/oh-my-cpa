@@ -297,8 +297,9 @@ export async function oauthManagement({ base, page, check, ledger }) {
   check('the consolidated cooldown status explains the known condition', (await cooldownTooltip.innerText()).includes('CPA 429 rate limit protection active'));
   await cooldownRow.getByRole('button', { name: /^(Details|详情):/i }).click();
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
-  check('the quota drawer retains raw cooldown evidence',
-    (await detailPanel.innerText()).includes(KNOWN_COOLDOWN_REASON));
+  const drawerText = await detailPanel.innerText();
+  check('the quota drawer explains a known cooldown reason instead of printing it',
+    drawerText.includes('CPA 429 rate limit protection active') && !drawerText.includes('credential_quota'));
   await detailPanel.locator('.ant-drawer-close').click();
   await detailPanel.waitFor({ state: 'hidden' });
 
