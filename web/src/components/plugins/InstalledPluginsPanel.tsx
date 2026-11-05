@@ -3,14 +3,15 @@ import { Button, Dropdown } from 'antd';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, SettingOutlined, ShopOutlined } from '../icons';
+import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, PackageSearchOutlined, SettingOutlined, ShopOutlined, UpgradeOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useI18n, useT } from '../../i18n';
 import { selectInstalledPluginMetadata } from '../../types/pluginStoreMetadata';
 import type { PluginItem, StorePluginItem } from '../../types/plugin';
 import { safeExternalURL } from '../../utils/externalUrl';
 import { StatusLabel } from '../common/StatusLabel';
-import { filterInstalledPlugins } from './pluginStoreLogic';
+import { filterInstalledPlugins, isStoreInstallBlocked } from './pluginStoreLogic';
+import { PluginInstallModal } from './PluginInstallModal';
 import { waitForPluginRuntime } from './pluginRuntime';
 import { formatPluginVersion, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
@@ -20,6 +21,7 @@ import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
+import { ToolButton } from '../common/ToolButton';
 
 interface InstalledPluginsPanelProps {
   plugins: PluginItem[];
@@ -30,6 +32,10 @@ interface InstalledPluginsPanelProps {
   isDemo: boolean;
   onConfigure: (plugin: PluginItem) => void;
   onBrowseStore: () => void;
+  onOpenSettings: () => void;
+  /** Reads the store, which is what knows the newest releases; resolves to its listings by plugin id. */
+  onCheckUpdates: () => Promise<ReadonlyMap<string, StorePluginItem> | null>;
+  isCheckingUpdates: boolean;
 }
 
 /**
@@ -48,6 +54,9 @@ export function InstalledPluginsPanel({
   isDemo,
   onConfigure,
   onBrowseStore,
+  onOpenSettings,
+  onCheckUpdates,
+  isCheckingUpdates,
 }: InstalledPluginsPanelProps) {
   const t = useT();
   const { lang } = useI18n();
@@ -55,6 +64,7 @@ export function InstalledPluginsPanel({
   const queryClient = useQueryClient();
   const [query, setQuery] = React.useState('');
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
+  const [updating, setUpdating] = React.useState<StorePluginItem | null>(null);
   const moreButtonRefs = React.useRef(new Map<string, HTMLElement>());
   const previousDeleteIdRef = React.useRef<string | null>(null);
 
@@ -66,6 +76,19 @@ export function InstalledPluginsPanel({
   }, [pendingDeleteId]);
 
   const visible = React.useMemo(() => filterInstalledPlugins(plugins, query, catalog, lang), [plugins, query, catalog, lang]);
+
+  // The store is read on request rather than with the list: CPA fetches every registry to
+  // answer it, which is slow and rate limited. The outcome is a toast; the rows carry the result.
+  const checkUpdates = async () => {
+    const listings = await onCheckUpdates();
+    if (!listings) {
+      toast.error(t('plugin.check_updates_failed'));
+      return;
+    }
+    const count = plugins.filter((plugin) => listings.get(plugin.id)?.update_available).length;
+    if (count > 0) toast.success(t('plugin.check_updates_found', { n: count }));
+    else toast.success(t('plugin.check_updates_none'));
+  };
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
@@ -137,6 +160,13 @@ export function InstalledPluginsPanel({
           value={query}
           onChange={setQuery}
           label={t('plugin.search_installed')}
+        />
+        <ToolButton
+          icon={<PackageSearchOutlined />}
+          label={t('plugin.check_updates')}
+          loading={isCheckingUpdates}
+          onClick={() => void checkUpdates()}
+          data-testid="plugin-check-updates"
         />
       </Toolbar>
 
@@ -221,6 +251,19 @@ export function InstalledPluginsPanel({
                     />
                   </span>
                   <div className="row-actions">
+                    {listing?.update_available && (
+                      <Tooltip title={isDemo ? t('demo.blocked') : isStoreInstallBlocked(listing) === 'auth' ? t('plugin.auth_required_hint') : t('plugin.update_to', { version: formatPluginVersion(listing.version) })}>
+                        <Button
+                          size="small"
+                          className="row-action-btn"
+                          icon={<UpgradeOutlined />}
+                          disabled={isDemo || isDeleting || isStoreInstallBlocked(listing) !== undefined}
+                          onClick={() => setUpdating(listing)}
+                          aria-label={t('plugin.update_label', { name })}
+                          data-testid="plugin-row-update"
+                        />
+                      </Tooltip>
+                    )}
                     <Tooltip title={t('plugin.configure')}>
                       <Button
                         size="small"
@@ -287,6 +330,13 @@ export function InstalledPluginsPanel({
           })}
         </div>
       )}
+
+      <PluginInstallModal
+        entry={updating}
+        isPluginSystemEnabled={isPluginSystemEnabled}
+        onClose={() => setUpdating(null)}
+        onOpenSettings={onOpenSettings}
+      />
     </div>
   );
 }

@@ -88,8 +88,8 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetSpec[] = Object.freeze([
   { id: 'model_trend', labelKey: 'dash.models.trend_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
   { id: 'model_usage', labelKey: 'dash.models.usage_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
   { id: 'routing', labelKey: 'routing.title', defaultSpan: 4, defaultRows: 8, spans: [3, 4], isPhoneOmitted: true },
-  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 8, spans: HALF_OR_WIDER },
-  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 8, spans: HALF_OR_WIDER },
+  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 7, spans: HALF_OR_WIDER },
+  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 7, spans: HALF_OR_WIDER },
   { id: 'providers', labelKey: 'dash.providers', defaultSpan: 4, defaultRows: 3, spans: HALF_OR_WIDER },
 ] satisfies DashboardWidgetSpec[]);
 
@@ -116,6 +116,13 @@ export type DashboardLayout = readonly DashboardLayoutItem[];
 
 /** The stored preference key holding the arrangement. */
 export const DASHBOARD_LAYOUT_PREFERENCE = 'omc_dashboard_layout';
+/** The display order of rows inside the dashboard's lists, one named list per widget. */
+export const DASHBOARD_ORDER_PREFERENCE = 'omc_dashboard_order';
+/**
+ * The provider widget's order, as a rank per row key. A configured provider's key carries its
+ * positional id, so the server re-keys this document when a delete or move shifts later entries.
+ */
+export const DASHBOARD_PROVIDER_ORDER_PREFERENCE = 'dashboard_provider_order';
 
 /** Module-scope so `usePreference` sees one stable fallback reference. */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = Object.freeze(

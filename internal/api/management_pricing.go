@@ -154,6 +154,28 @@ type pricingUnpricedDTO struct {
 	Suggestions []pricing.UpstreamModel `json:"suggestions"`
 }
 
+// pricingReferencePriceDTO is a models.dev rate offered beside an unmatched model; it is
+// advice the editor can copy into a custom price, never a price itself.
+type pricingReferencePriceDTO struct {
+	Source           string   `json:"source"`
+	Model            string   `json:"model"`
+	Providers        []string `json:"providers"`
+	PromptPricePer1M float64  `json:"prompt_price_per_1m"`
+	CompletionPer1M  float64  `json:"completion_price_per_1m"`
+	CacheReadPer1M   *float64 `json:"cache_read_price_per_1m,omitempty"`
+	CacheWritePer1M  *float64 `json:"cache_write_price_per_1m,omitempty"`
+}
+
+func projectPricingReferences(prices []operations.ReferencePrice) []pricingReferencePriceDTO {
+	projected := make([]pricingReferencePriceDTO, len(prices))
+	for index, price := range prices {
+		projected[index] = pricingReferencePriceDTO{Source: price.Source, Model: price.Model, Providers: price.Providers,
+			PromptPricePer1M: price.PromptPricePer1M, CompletionPer1M: price.CompletionPer1M,
+			CacheReadPer1M: price.CacheReadPer1M, CacheWritePer1M: price.CacheWritePer1M}
+	}
+	return projected
+}
+
 type pricingProviderDTO struct {
 	pricing.CatalogProvider
 	IconID string `json:"icon_id,omitempty"`
@@ -436,10 +458,13 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 	// switches: a switch that would find nothing is refused, and the editor says so
 	// up front instead of after a failed save.
 	var automatic any
+	references := []pricingReferencePriceDTO{}
 	if match, found, err := h.pricing.AutomaticMatch(ctx, model); err != nil {
 		slog.Warn("pricing automatic match unavailable", "model", model, "error", err)
 	} else if found {
 		automatic = map[string]any{"model": match.Model, "match_kind": match.Kind}
+	} else {
+		references = projectPricingReferences(operations.ReferencePrices(model))
 	}
 	var candidate any
 	if current != nil && channel == "" {
@@ -454,7 +479,7 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 		projected := projectPricingModel(*current)
 		price = &projected
 	}
-	response := map[string]any{"model": model, "price": price, "suggestions": suggestions, "automatic": automatic,
+	response := map[string]any{"model": model, "price": price, "suggestions": suggestions, "automatic": automatic, "reference_prices": references,
 		"candidate": candidate, "versions": []pricingPriceVersionDTO{}, "profile": repository.TokenProfile{}}
 	if channel != "" {
 		response["channel"], response["is_inherited"] = channel, isInherited

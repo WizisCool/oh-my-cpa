@@ -43,9 +43,9 @@ function quotaFor(index) {
     remaining_percent: 80 - windowIndex * 5,
     reset_at_ms: Date.now() + (windowIndex + 1) * 3_600_000,
     // Only the first credential carries an estimate, so the record beside it is the same
-    // row without one. Its first window is live, so it also states what is left; the second is
-    // an estimate without a live reading. The figures are four-digit dollars: the widest
-    // reading a row has to fit.
+    // row without one. Its first window is live, so the server also sends what is left, which
+    // the console does not state; the second is an estimate without a live reading. The figures
+    // are four-digit dollars: the widest reading a row has to fit.
     ...(index === 0 ? {
       usage: { from_ms: Date.now() - 3_600_000, to_ms: Date.now(), requests: 420, priced_requests: 420, tokens: 61_250_000, cost_nanos: 308_500_000_000 },
       capacity: {
@@ -208,9 +208,8 @@ export async function oauthManagement({ base, page, check, ledger }) {
     plainDetails.push(await readQuotaDetails(page, cell));
   }
   check(
-    'each reading carries its estimate in its detail, what is left only beside a live reading, and a record without one carries none',
-    estimates.length === 2 && estimates[0].includes('Est. remaining ≈ $987 (196M tokens)') && estimates[0].includes('Est. capacity ≈ $1,230')
-      && estimates[1].includes('Est. capacity ≈ $1,230') && !estimates[1].includes('Est. remaining')
+    'each reading carries only its estimated capacity in its detail, and a record without one carries none',
+    estimates.length === 2 && estimates.every((detail) => detail.includes('Est. capacity ≈ $1,230 (245M tokens)') && !detail.includes('$987'))
       && plainDetails.length === 2 && plainDetails.every((detail) => !detail.includes('≈')),
     JSON.stringify({ estimates, plainDetails }),
   );
@@ -298,8 +297,9 @@ export async function oauthManagement({ base, page, check, ledger }) {
   check('the consolidated cooldown status explains the known condition', (await cooldownTooltip.innerText()).includes('CPA 429 rate limit protection active'));
   await cooldownRow.getByRole('button', { name: /^(Details|详情):/i }).click();
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
-  check('the quota drawer retains raw cooldown evidence',
-    (await detailPanel.innerText()).includes(KNOWN_COOLDOWN_REASON));
+  const drawerText = await detailPanel.innerText();
+  check('the quota drawer explains a known cooldown reason instead of printing it',
+    drawerText.includes('CPA 429 rate limit protection active') && !drawerText.includes('credential_quota'));
   await detailPanel.locator('.ant-drawer-close').click();
   await detailPanel.waitFor({ state: 'hidden' });
 
@@ -520,7 +520,7 @@ export async function oauthManagement({ base, page, check, ledger }) {
     await settleLayout(page);
     const drawerOverflow = await phoneDrawer.evaluate((drawer) => drawer.querySelector('.ant-drawer-body').scrollWidth - drawer.querySelector('.ant-drawer-body').clientWidth);
     check(`tabbed quota drawer has no horizontal overflow at ${width}px`, drawerOverflow <= 1, `overflow=${drawerOverflow}`);
-    // Recorded usage and the estimate wrap onto their own lines here; neither may leave the panel.
+    // Each window states its estimate alone, which may not leave the panel.
     const drawerEstimates = await phoneDrawer.evaluate((drawer) => {
       const panel = drawer.querySelector('.ant-drawer-body').getBoundingClientRect();
       return [...drawer.querySelectorAll('[data-quota-capacity="estimated"] > span')].map((part) => {
@@ -529,10 +529,10 @@ export async function oauthManagement({ base, page, check, ledger }) {
       });
     });
     check(
-      `the quota drawer keeps recorded usage and the estimate inside the panel at ${width}px`,
-      drawerEstimates.length === 4 && drawerEstimates.every(Boolean)
+      `the quota drawer keeps each estimate, and only the estimate, inside the panel at ${width}px`,
+      drawerEstimates.length === 2 && drawerEstimates.every(Boolean)
         && (await phoneDrawer.locator('[data-quota-capacity-hint]').isVisible())
-        && (await phoneDrawer.locator('[data-quota-capacity-remaining]').count()) === 1,
+        && !(await phoneDrawer.innerText()).includes('$987'),
       JSON.stringify(drawerEstimates),
     );
     await page.screenshot({ path: `tmp/oauth-management-drawer-${width}.png` });
@@ -834,8 +834,8 @@ async function verifyFullCodexCountdown({ base, page, check, ledger }) {
 async function verifyFullTokenCapacity({ base, page, check }) {
   const tokenQuota = structuredClone(quota);
   // The widest reading a window can hold: token counts in full digits, with no dollar figure to
-  // shorten them, for both what is left and the whole window. The row states them in its tooltip
-  // and the Drawer prints them, so both surfaces are checked for the same figures.
+  // shorten them. The server also sends what is left, which neither surface states. The row
+  // states the estimate in its tooltip and the Drawer prints it, so both are checked.
   const wideWindow = tokenQuota[0].windows[1];
   wideWindow.capacity.tokens = 123_456_789_012_345;
   wideWindow.capacity.remaining_tokens = 92_592_591_759_259;
@@ -867,8 +867,8 @@ async function verifyFullTokenCapacity({ base, page, check }) {
       label: 'the token estimate in full-digit style',
     });
     check(
-      'a row states what is left and the whole window in full digits',
-      weeklyDetails.includes(`Est. remaining ≈ ${REMAINING_DIGITS}`) && weeklyDetails.includes(`Est. capacity ≈ ${FULL_DIGITS}`),
+      'a row states the whole window in full digits and not what is left',
+      weeklyDetails.includes(`Est. capacity ≈ ${FULL_DIGITS}`) && !weeklyDetails.includes(REMAINING_DIGITS),
       weeklyDetails,
     );
     // A phone row has no reading of its own, so the same figure is checked where a phone reads it:
@@ -897,7 +897,7 @@ async function verifyFullTokenCapacity({ base, page, check }) {
       });
       check(
         `the full-digit estimate stays inside the drawer at ${width}px`,
-        geometry.parts.some((part) => (part.text ?? '').includes(REMAINING_DIGITS))
+        geometry.parts.every((part) => !(part.text ?? '').includes(REMAINING_DIGITS))
           && geometry.parts.some((part) => (part.text ?? '').includes(FULL_DIGITS))
           && geometry.parts.every((part) => part.contained)
           && geometry.overflow === 0,

@@ -29,34 +29,26 @@ test('estimate precision follows the sensitivity of the percentage reading', () 
   assert.equal(formatEstimatedUsd(Number.NaN, 5), '—');
 });
 
-test('a live estimate reads as what is left of the window and its whole size', () => {
-  assert.deepEqual(describeQuotaCapacity({ usage, capacity }, 'en-compact', t), {
-    remaining: { value: '≈ $18.00', tokens: 'quota.capacity_tokens(7.2M)' },
-    capacity: { value: '≈ $24.00', tokens: 'quota.capacity_tokens(9.6M)' },
-    recorded: null,
-    note: null,
-  });
-  assert.equal(compactQuotaCapacity({ capacity }, 'en-compact', t), '≈$18.00');
-  assert.equal(describeCompactQuotaCapacity({ capacity }, 'en-compact', t), [
-    'quota.capacity_remaining quota.capacity_figure(≈ $18.00,quota.capacity_tokens(7.2M))',
-    'quota.capacity_estimate quota.capacity_figure(≈ $24.00,quota.capacity_tokens(9.6M))',
-  ].join('\n'));
-});
-
-test('a dated reading keeps the size of the window and the usage recorded beside it', () => {
-  const reading = describeQuotaCapacity({ usage, capacity: dated }, 'en-compact', t);
-  assert.equal(reading?.remaining, null);
-  assert.deepEqual(reading?.recorded, { value: '$1.20', tokens: 'quota.capacity_tokens(480K)' });
-  assert.equal(compactQuotaCapacity({ capacity: dated }, 'en-compact', t), '≈$24.00');
-  assert.equal(describeCompactQuotaCapacity({ capacity: dated }, 'en-compact', t), 'quota.capacity_estimate quota.capacity_figure(≈ $24.00,quota.capacity_tokens(9.6M))');
+test('an estimate states only the size of the window, live or dated', () => {
+  // The server's remaining figure is not repeated: the bar already shows the remaining share.
+  for (const window of [capacity, dated]) {
+    assert.deepEqual(describeQuotaCapacity({ usage, capacity: window }, 'en-compact', t), {
+      capacity: { value: '≈ $24.00', tokens: 'quota.capacity_tokens(9.6M)' },
+      recorded: null,
+      note: null,
+    });
+    assert.equal(compactQuotaCapacity({ capacity: window }, 'en-compact', t), '≈$24.00');
+    assert.equal(describeCompactQuotaCapacity({ capacity: window }, 'en-compact', t), 'quota.capacity_estimate quota.capacity_figure(≈ $24.00,quota.capacity_tokens(9.6M))');
+  }
 });
 
 test('without a stated cost the figures are tokens, and a mostly unpriced cycle states none', () => {
   const unpriced = { ...dated, cost_nanos: undefined };
   const reading = describeQuotaCapacity({ usage: { ...usage, priced_requests: 30 }, capacity: unpriced }, 'en-compact', t);
-  assert.deepEqual(reading?.recorded, { value: 'quota.capacity_tokens(480K)', tokens: null });
   assert.deepEqual(reading?.capacity, { value: '≈ quota.capacity_tokens(9.6M)', tokens: null });
   assert.equal(compactQuotaCapacity({ capacity: unpriced }, 'en-compact', t), '≈quota.capacity_tokens(9.6M)');
+  const pending = describeQuotaCapacity({ usage: { ...usage, priced_requests: 30 }, capacity_unavailable: 'low_usage' }, 'en-compact', t);
+  assert.deepEqual(pending?.recorded, { value: 'quota.capacity_tokens(480K)', tokens: null });
 });
 
 test('before an estimate the recorded usage stays beside the step that starts one', () => {

@@ -67,6 +67,8 @@
      edge, so the size lands at or just above it. The floor only bounds the tracks before the
      panel has been measured. */
   --heatmap-cell-target: 18px;
+  /* How large a square may grow to fill a tall panel; past it the field keeps its size. */
+  --heatmap-cell-max: 22px;
   --heatmap-min-cell: 7px;
   --heatmap-gap: 4px;
   --heatmap-label: 20px;

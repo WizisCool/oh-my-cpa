@@ -45,11 +45,22 @@ type Model struct {
 	Weights          []Link     `json:"weights,omitempty"`
 	Links            []Link     `json:"links,omitempty"`
 }
+
+// ReferenceCost is one rate a set of models.dev providers list for a canonical model, in USD
+// per million tokens. An absent cache rate was not listed; it is not zero.
+type ReferenceCost struct {
+	Input      float64  `json:"input"`
+	Output     float64  `json:"output"`
+	CacheRead  *float64 `json:"cache_read,omitempty"`
+	CacheWrite *float64 `json:"cache_write,omitempty"`
+	Providers  []string `json:"providers"`
+}
 type Catalog struct {
-	Source    string            `json:"source"`
-	UpdatedAt string            `json:"updated_at"`
-	Models    map[string]Model  `json:"models"`
-	Aliases   map[string]string `json:"aliases"`
+	Source         string                     `json:"source"`
+	UpdatedAt      string                     `json:"updated_at"`
+	Models         map[string]Model           `json:"models"`
+	Aliases        map[string]string          `json:"aliases"`
+	ReferenceCosts map[string][]ReferenceCost `json:"reference_costs"`
 }
 
 var DEFAULT_CATALOG = readBundledCatalog()
@@ -156,4 +167,15 @@ func (catalog Catalog) Select(identities []string) map[string]Model {
 		}
 	}
 	return models
+}
+
+// ReferenceCostsFor returns the rates providers list for exactly this identity: its canonical
+// id or an unambiguous alias. Unlike Match it never strips a variant suffix or namespace,
+// because a price is a stronger claim than a specification and similar names do not share one.
+func (catalog Catalog) ReferenceCostsFor(identity string) (string, []ReferenceCost) {
+	model, exists := catalog.matchExact(strings.TrimSpace(identity))
+	if !exists || len(catalog.ReferenceCosts[model.ID]) == 0 {
+		return "", nil
+	}
+	return model.ID, catalog.ReferenceCosts[model.ID]
 }

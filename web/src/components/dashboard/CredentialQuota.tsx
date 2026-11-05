@@ -15,8 +15,8 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   ExclamationCircleOutlined,
+  HourglassOutlined,
   KeyOutlined,
-  PauseCircleOutlined,
   RightOutlined,
 } from '../icons';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -42,6 +42,10 @@ import {
   type QuotaWindowPeriod,
 } from './credentialQuotaLogic';
 import { Panel } from '../common/Panel';
+import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
+import { useSortableList } from '../../hooks/useSortableList';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { DASHBOARD_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import './dashboard.css';
 
 /** The prefixes the page's refresh button invalidates; shared with the credential workspace. */
@@ -63,7 +67,7 @@ const WINDOW_LABEL_KEYS: Record<QuotaWindowPeriod, MessageKey> = {
 /** The states whose row says what is wrong instead of drawing the windows it cannot use. */
 const STATUS_ROW_STATES: Partial<Record<CredentialQuotaState, { labelKey: MessageKey; Icon: React.ComponentType<{ className?: string }> }>> = {
   reauth: { labelKey: 'dash.quota.state_reauth', Icon: KeyOutlined },
-  cooldown: { labelKey: 'dash.quota.state_cooldown', Icon: PauseCircleOutlined },
+  cooldown: { labelKey: 'dash.quota.state_cooldown', Icon: HourglassOutlined },
   problem: { labelKey: 'dash.quota.state_problem', Icon: CloseCircleOutlined },
   unread: { labelKey: 'dash.quota.state_unread', Icon: ExclamationCircleOutlined },
 };
@@ -112,7 +116,16 @@ const QuotaWindowMeter: React.FC<{ window: QuotaWindow }> = ({ window }) => {
 
 const EmptyQuotaSlot: React.FC = () => <span className="quota-window is-missing" aria-hidden="true">—</span>;
 
-const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number; pluginLogos?: PluginOAuthLogos }> = ({ row, nowMS, pluginLogos }) => {
+interface QuotaRowProps {
+  row: CredentialQuotaRow;
+  nowMS: number;
+  pluginLogos?: PluginOAuthLogos;
+  /** The row's part in a sortable list; absent where the list keeps its urgency order. */
+  reorder?: ReturnType<typeof useReorderRow>;
+  isPhone?: boolean;
+}
+
+const CredentialQuotaRowView: React.FC<QuotaRowProps> = ({ row, nowMS, pluginLogos, reorder, isPhone = false }) => {
   const t = useT();
   const status = STATUS_ROW_STATES[row.state];
   // A blocked row counts down to when it serves again; a serving one to when its tightest window
@@ -125,9 +138,11 @@ const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number;
     // A row is not a link. It scrolls under a finger, and a row that navigates turns every touch
     // that was meant to move the list into leaving the page; the panel's one exit is its footer.
     <li
+      {...reorder?.row}
       className={clsx('quota-row', `is-${row.state}`, isCredentialQuotaBlocked(row.state) && 'is-blocked')}
       data-quota-state={row.state}
     >
+      {reorder && !isPhone && <ReorderHandle {...reorder.handle} name={row.primary} />}
       <CredentialMark
         provider={row.provider} hint={row.fileName} pluginLogos={pluginLogos}
         size={16}
@@ -154,8 +169,36 @@ const CredentialQuotaRowView: React.FC<{ row: CredentialQuotaRow; nowMS: number;
             {when}
           </>
         )}
+        {reorder && isPhone && <ReorderHandle {...reorder.handle} name={row.primary} variant="inline" />}
       </span>
     </li>
+  );
+};
+
+/** A row that takes its place in the operator's order. */
+const SortableQuotaRow: React.FC<Omit<QuotaRowProps, 'reorder'>> = (props) => {
+  const reorder = useReorderRow(quotaRowKey(props.row));
+  return <CredentialQuotaRowView {...props} reorder={reorder} />;
+};
+
+/** What the stored order names a credential by: its file name, as the OAuth list does. */
+function quotaRowKey(row: CredentialQuotaRow): string {
+  return row.fileName;
+}
+
+/**
+ * The rows in the operator's order. A credential the order does not name - one connected since,
+ * or every credential before anything was dragged - keeps the urgency order after the named ones.
+ */
+const SortableQuotaList: React.FC<{ rows: CredentialQuotaRow[]; nowMS: number; pluginLogos?: PluginOAuthLogos }> = ({ rows, nowMS, pluginLogos }) => {
+  const isPhone = useIsPhoneViewport();
+  const sortable = useSortableList(DASHBOARD_ORDER_PREFERENCE, 'credential_quota', rows, quotaRowKey);
+  return (
+    <RowReorder {...sortable.reorder} items={sortable.ordered.map(quotaRowKey)}>
+      <ul className="quota-list">
+        {sortable.ordered.map((row) => <SortableQuotaRow key={row.key} row={row} nowMS={nowMS} pluginLogos={pluginLogos} isPhone={isPhone} />)}
+      </ul>
+    </RowReorder>
   );
 };
 
@@ -173,6 +216,8 @@ export interface CredentialQuotaPanelProps {
   /** Asks the providers for fresh readings; absent where the panel only shows stored ones. */
   onRefreshQuota?: () => void;
   isRefreshingQuota?: boolean;
+  /** Lets the operator drag rows into their own order, stored with the dashboard's preferences. */
+  isSortable?: boolean;
   className?: string;
 }
 
@@ -191,8 +236,7 @@ export function resolveCredentialQuotaPanelState(
  * A count of credentials would say that something is wrong and stop there; the reader's next
  * question is always which credential, why, and when it recovers - and for the ones still serving,
  * how long they will last. Those are what the rows carry. Its one action re-reads those quotas from
- * the providers; everything done about a single credential stays in the workspace its footer links
- * to.
+ * the providers; everything done about a single credential stays in the OAuth workspace.
  */
 export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
   files,
@@ -205,6 +249,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
   onRetry,
   onRefreshQuota,
   isRefreshingQuota = false,
+  isSortable = false,
   className,
 }) => {
   const t = useT();
@@ -276,21 +321,17 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
                 onRetry={onRetry}
               />
             )}
-            {board.rows.length > 0 ? (
-              // Every credential is listed and the list scrolls inside the panel, so a large fleet
-              // is readable here without the panel outgrowing the row it shares.
+            {/* Every credential is listed and the list scrolls inside the panel, so a large fleet
+                is readable here without the panel outgrowing the row it shares. */}
+            {board.rows.length > 0 && isSortable ? (
+              <SortableQuotaList rows={board.rows} nowMS={nowMS} pluginLogos={pluginLogos} />
+            ) : board.rows.length > 0 ? (
               <ul className="quota-list">
                 {board.rows.map((row) => <CredentialQuotaRowView key={row.key} row={row} nowMS={nowMS} pluginLogos={pluginLogos} />)}
               </ul>
             ) : (
               <p className="empty-copy quota-all-disabled">{t('dash.quota.all_disabled')}</p>
             )}
-            <div className="quota-foot">
-              <Link to="/oauth-management" className="quota-foot-link">
-                <span>{t('oauth.view_auth_files')}</span>
-                <RightOutlined className="quota-link-icon" />
-              </Link>
-            </div>
           </>
         )}
       </div>
@@ -372,6 +413,7 @@ export const CredentialQuota: React.FC = () => {
 
   return (
     <CredentialQuotaPanel
+      isSortable
       pluginLogos={pluginLogos}
       onRefreshQuota={() => void refreshQuota()}
       isRefreshingQuota={isRefreshingQuota}

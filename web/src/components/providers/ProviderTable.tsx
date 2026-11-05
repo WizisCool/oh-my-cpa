@@ -417,12 +417,7 @@ export function ProviderTable({
         items={reorder.ordered.map(providerKey)}
         isEnabled={Boolean(onMove)}
         onMove={reorder.move}
-        onStep={(key, direction) => {
-          // Past the neighbour on screen, not one a filter hides.
-          const index = reorder.ordered.findIndex((provider) => provider.id === key);
-          const neighbour = reorder.ordered[index + direction];
-          if (index >= 0 && neighbour) reorder.move(key, neighbour.id, direction < 0 ? 'before' : 'after');
-        }}
+        onStep={reorder.step}
       >
         <ResponsiveList
           columns={providerColumns}

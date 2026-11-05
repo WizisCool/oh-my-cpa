@@ -114,6 +114,13 @@ export const PluginsPage: React.FC = () => {
     // every render and is deliberately not a trigger.
   }, [requestedPlugin, pluginsQuery.data]);
 
+  // Checking for updates is reading the store; it stays read for this visit once asked.
+  const checkUpdates = async () => {
+    setHasVisitedStore(true);
+    const result = await storeQuery.refetch();
+    return result.isSuccess ? storeListingsByPluginId(result.data.plugins) : null;
+  };
+
   const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
 
   const refresh = () => {
@@ -203,6 +210,9 @@ export const PluginsPage: React.FC = () => {
             isDemo={isDemo}
             onConfigure={setConfiguring}
             onBrowseStore={() => selectTab('store')}
+            onOpenSettings={() => selectTab('settings')}
+            onCheckUpdates={checkUpdates}
+            isCheckingUpdates={storeQuery.isFetching}
           />
         </Panel>
       )}

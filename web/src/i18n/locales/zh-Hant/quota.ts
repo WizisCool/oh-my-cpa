@@ -69,7 +69,6 @@ export default {
   "quota.usage_share_unavailable": "不可用",
   "quota.windows_title": "限額資訊",
   "quota.reset_occurrence": "第 {n} 次",
-  "quota.capacity_remaining": "預計剩餘",
   "quota.capacity_estimate": "預估額度",
   "quota.capacity_recorded": "已記錄",
   "quota.capacity_tokens": "{n} tokens",
