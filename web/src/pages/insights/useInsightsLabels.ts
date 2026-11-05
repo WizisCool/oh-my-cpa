@@ -53,7 +53,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
 
   const keys = React.useMemo(() => new Map((cube?.keys ?? []).map((key) => [key.id, key])), [cube?.keys]);
   const credentialFiles = React.useMemo(() => indexCredentialFiles(authFiles?.files ?? []), [authFiles]);
-  const providerName = React.useMemo(() => createProviderNameResolver(configuredProviders), [configuredProviders]);
+  const providerName = React.useMemo(() => createProviderNameResolver(configuredProviders, pluginTitles), [configuredProviders, pluginTitles]);
   const renderMark = React.useMemo(
     () => createFacetMarkRenderer({ credentials: credentialFiles, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
     [configuredProviders, credentialFiles, pluginLogos, providerIcons, isProviderCatalogUnknown],

@@ -75,6 +75,17 @@ export function providerDisplayName(providerKey: string, pluginTitles?: Readonly
 }
 
 /**
+ * knownProviderDisplayName is `providerDisplayName` for a key someone actually names - a plugin
+ * or the brand table - and nothing otherwise, for a surface that must print an unknown key as
+ * recorded rather than a capitalized guess.
+ */
+export function knownProviderDisplayName(providerKey: string, pluginTitles?: ReadonlyMap<string, string>): string | undefined {
+  const key = (providerKey || '').toLowerCase().trim();
+  const isBrand = Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key);
+  return pluginTitles?.get(isBrand ? CREDENTIAL_PROVIDERS[key].id : key) || (isBrand ? CREDENTIAL_PROVIDERS[key].label : undefined);
+}
+
+/**
  * credentialProviderIconId resolves the brand mark every provider surface renders.
  *
  * The named table above is display metadata (label plus mark); this is the floor

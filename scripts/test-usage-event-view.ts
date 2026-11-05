@@ -1289,10 +1289,10 @@ test('usage event view', () => {
 
   // Provider-key to configured-name resolution for the request filter.
   //
-  // The reported value is CPA's stored provider key, so the label has to come from
-  // the operator's configuration. Guessing it from the key (stripping a prefix,
-  // capitalising, or matching a substring) would print a name the operator never
-  // chose and would disagree with the providers page for the same line.
+  // The reported value is CPA's stored provider key, so the label comes from the
+  // operator's configuration, then from the name a plugin or the brand table gives the
+  // key - the name the record's own row prints. Guessing it from the key (stripping a
+  // prefix, capitalising, or matching a substring) would print a name nobody chose.
   const nameResolver = createProviderNameResolver([
     { id: 'openai-compat-0', name: 'CommandCode GOAT', upstream_name: 'commandcode goat', family: 'openai-compatibility' },
     { id: 'custom-deepseek', name: 'DeepSeek 专线', upstream_name: 'deepseek', family: 'openai-compatibility' },
@@ -1314,7 +1314,10 @@ test('usage event view', () => {
   assert.equal(nameResolver('openai-compatible-goat'), 'openai-compatible-goat');
   // A deleted or renamed provider keeps the raw key: still true, never fabricated.
   assert.equal(nameResolver('openai-compatible-vanished-line'), 'openai-compatible-vanished-line');
-  assert.equal(nameResolver('codex'), 'codex');
+  assert.equal(nameResolver('codex'), 'Codex', 'a brand is spelled as the request row spells it');
+  assert.equal(nameResolver('xai'), 'xAI');
+  assert.equal(createProviderNameResolver([], new Map([['opencode-go', 'OpenCode Go']]))('opencode-go'), 'OpenCode Go');
+  assert.equal(nameResolver('opencode-go'), 'opencode-go', 'a key nobody names is not capitalized');
   assert.equal(nameResolver(''), '');
   assert.equal(nameResolver(null), '');
   assert.equal(nameResolver(undefined), '');
@@ -1346,7 +1349,7 @@ test('usage event view', () => {
     resolveProviderInfo(familyOnlyEvent, credFiles),
     'an upstream name in a different CPA namespace cannot claim a family label',
   );
-  assert.equal(createProviderNameResolver(familyNamedRelay)('codex'), 'codex');
+  assert.equal(createProviderNameResolver(familyNamedRelay)('codex'), 'Codex');
   assert.equal(createProviderNameResolver(familyNamedRelay)('openai-compatible-codex'), 'Codex relay');
   const duplicateNames = [
     { id: 'openai-compat-0', name: 'Relay', upstream_name: 'relay' },

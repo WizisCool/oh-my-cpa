@@ -1,6 +1,6 @@
 import { resolveCredentialMark, resolveProviderMark, resolveRecordedProviderMark, type BrandMark } from './brandMark';
 import type { PluginOAuthLogos } from './pluginOAuthProviders';
-import { providerDisplayName } from './providerMetadata';
+import { knownProviderDisplayName, providerDisplayName } from './providerMetadata';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -206,12 +206,20 @@ function createProviderResolver(configured: readonly ProviderLookupEntry[]) {
   };
 }
 
-/** Provider facets have no credential index, so only exact provider keys resolve. */
+/**
+ * Provider facets have no credential index, so only exact provider keys resolve: to the configured
+ * provider's name, then to the name a plugin or the brand table gives the key, as a record's row
+ * does. A key nobody names stays as recorded.
+ */
 export function createProviderNameResolver(
   configured: readonly ProviderLookupEntry[] = [],
+  pluginTitles?: ReadonlyMap<string, string>,
 ): (providerKey: string | null | undefined) => string {
   const resolveProvider = createProviderResolver(configured);
-  return (providerKey) => resolveProvider(providerKey)?.name.trim() || providerKey?.trim() || '';
+  return (providerKey) => {
+    const key = providerKey?.trim() || '';
+    return resolveProvider(providerKey)?.name.trim() || (key && knownProviderDisplayName(key, pluginTitles)) || key;
+  };
 }
 
 export interface ResolvedProviderInfo extends BrandMark {
