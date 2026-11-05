@@ -3,13 +3,12 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
-	"encoding/json"
-	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 )
 
 func TestMigrationBackupContainsCommittedWAL(t *testing.T) {
@@ -58,39 +57,25 @@ func TestMigrationBackupContainsCommittedWAL(t *testing.T) {
 	if busy == 0 {
 		t.Fatal("fixture did not block checkpoint")
 	}
-	err = db.createMigrationBackup(ctx, 999)
-	if err != nil {
-		t.Logf("safe refusal: %v", err)
-		return
+	if err := db.createMigrationBackup(ctx, 999); err != nil {
+		t.Fatal(err)
 	}
 	files, err := filepath.Glob(filepath.Join(backupDir, "*.db.enc"))
 	if err != nil || len(files) != 1 {
 		t.Fatalf("backup files=%d err=%v", len(files), err)
 	}
-	smokeErr := RestoreBackupSmoke(ctx, files[0], cipher)
-	encoded, err := os.ReadFile(files[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	var envelope encryptedBackup
-	if err = json.Unmarshal(encoded, &envelope); err != nil {
-		t.Fatal(err)
-	}
-	nonce, err := base64.RawStdEncoding.DecodeString(envelope.Nonce)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ciphertext, err := base64.RawStdEncoding.DecodeString(envelope.Ciphertext)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plaintext, err := cipher.Decrypt(ciphertext, nonce)
-	if err != nil {
+	if err := RestoreBackupSmoke(ctx, files[0], cipher); err != nil {
 		t.Fatal(err)
 	}
 	restoredPath := filepath.Join(directory, "restored.db")
-	if err = os.WriteFile(restoredPath, plaintext, 0600); err != nil {
+	output, err := os.OpenFile(restoredPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
 		t.Fatal(err)
+	}
+	decryptErr := decryptMigrationBackup(ctx, files[0], output, cipher)
+	closeErr := output.Close()
+	if decryptErr != nil || closeErr != nil {
+		t.Fatalf("restore backup: %v; close: %v", decryptErr, closeErr)
 	}
 	restored, err := sql.Open("sqlite", restoredPath)
 	if err != nil {
@@ -100,7 +85,7 @@ func TestMigrationBackupContainsCommittedWAL(t *testing.T) {
 	if err = restored.QueryRowContext(ctx, `SELECT COUNT(*) FROM sentinels`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("backup succeeded restore_smoke_error=%v committed_rows=2 backup_rows=%d", smokeErr, count)
+	t.Logf("committed_rows=2 backup_rows=%d", count)
 	if count != 2 {
 		t.Error("readable backup omits committed WAL row")
 	}

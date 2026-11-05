@@ -2,14 +2,11 @@ package repository
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -249,6 +246,8 @@ func (db *DB) Migrate(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
+		started := time.Now()
+		slog.InfoContext(ctx, "database migration started", "migration", version)
 		tx, err := db.SQL.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("begin migration %d: %w", version, err)
@@ -279,6 +278,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 			return fmt.Errorf("commit migration %d: %w", version, err)
 		}
 		migrationSucceeded = true
+		slog.InfoContext(ctx, "database migration completed", "migration", version, "duration", time.Since(started))
 	}
 	return nil
 }
@@ -310,251 +310,6 @@ func (db *DB) requiresMigrationBackup(ctx context.Context) bool {
 func isFileDatabase(path string) bool {
 	trimmed := strings.TrimSpace(path)
 	return trimmed != "" && !strings.HasPrefix(strings.ToLower(trimmed), "file:") && !strings.Contains(trimmed, ":memory:")
-}
-
-func (db *DB) createMigrationBackup(ctx context.Context, migrationVersion int) error {
-	if db == nil || db.SQL == nil || db.cipher == nil {
-		return ErrMigrationBackupRequired
-	}
-	config := db.backup
-	if config.Cipher == nil {
-		config.Cipher = db.cipher
-	}
-	if config.Cipher == nil {
-		return ErrMigrationBackupRequired
-	}
-	databasePath, err := filepath.Abs(db.path)
-	if err != nil {
-		return fmt.Errorf("resolve database path for backup: %w", err)
-	}
-	info, err := os.Stat(databasePath)
-	if err != nil {
-		return fmt.Errorf("stat database before migration backup: %w", err)
-	}
-	backupDir := strings.TrimSpace(config.Directory)
-	if backupDir == "" {
-		backupDir = filepath.Join(filepath.Dir(databasePath), "backups")
-	}
-	backupDir, err = filepath.Abs(backupDir)
-	if err != nil {
-		return fmt.Errorf("resolve backup directory: %w", err)
-	}
-	if err := os.MkdirAll(backupDir, 0o700); err != nil {
-		return fmt.Errorf("create backup directory: %w", err)
-	}
-	_ = os.Chmod(backupDir, 0o700)
-	freeSpace := config.FreeSpace
-	if freeSpace == nil {
-		freeSpace = availableBytes
-	}
-	free, err := freeSpace(backupDir)
-	if err != nil {
-		return fmt.Errorf("check free space for migration backup: %w", err)
-	}
-	minimum := config.MinFreeBytes
-	if minimum == 0 {
-		minimum = uint64(info.Size()) + 4096
-	}
-	if free < minimum {
-		return fmt.Errorf("insufficient free space for migration backup: %d bytes available, %d required", free, minimum)
-	}
-	plaintext, err := db.snapshotForBackup(ctx, backupDir)
-	if err != nil {
-		return err
-	}
-	ciphertext, nonce, err := config.Cipher.Encrypt(plaintext)
-	if err != nil {
-		return fmt.Errorf("encrypt migration backup: %w", err)
-	}
-	envelope := encryptedBackup{
-		Format:     "oh-my-cpa/sqlite-backup-v1",
-		Nonce:      base64.RawStdEncoding.EncodeToString(nonce),
-		Ciphertext: base64.RawStdEncoding.EncodeToString(ciphertext),
-	}
-	encoded, err := json.Marshal(envelope)
-	if err != nil {
-		return fmt.Errorf("encode migration backup: %w", err)
-	}
-	stamp := time.Now().UTC().Format("20060102T150405.000000000Z")
-	backupPath := filepath.Join(backupDir, fmt.Sprintf("oh-my-cpa-%s-before-migration-%d.db.enc", stamp, migrationVersion))
-	if err := writePrivateFile(backupPath, encoded); err != nil {
-		return fmt.Errorf("write migration backup: %w", err)
-	}
-	digest := sha256.Sum256(encoded)
-	digestText := hex.EncodeToString(digest[:])
-	if err := writePrivateFile(backupPath+".sha256", []byte(digestText+"  "+filepath.Base(backupPath)+"\n")); err != nil {
-		return fmt.Errorf("write migration backup digest: %w", err)
-	}
-	if err := RestoreBackupSmoke(ctx, backupPath, config.Cipher); err != nil {
-		return fmt.Errorf("%w: %v", ErrBackupRestoreFailed, err)
-	}
-	if err := retainBackups(backupDir, config.Retention); err != nil {
-		return fmt.Errorf("retain migration backups: %w", err)
-	}
-	return nil
-}
-
-// snapshotForBackup returns the database as one consistent file image.
-//
-// Copying the main file after a checkpoint is not that: a reader holding a WAL
-// snapshot makes the checkpoint report busy and leave committed frames in the
-// log, so the copy is a readable database that is missing recent writes.
-// VACUUM INTO reads through the WAL inside one read transaction instead.
-func (db *DB) snapshotForBackup(ctx context.Context, backupDir string) ([]byte, error) {
-	scratch, err := os.MkdirTemp(backupDir, ".snapshot-")
-	if err != nil {
-		return nil, fmt.Errorf("create migration backup snapshot directory: %w", err)
-	}
-	defer os.RemoveAll(scratch)
-	snapshotPath := filepath.Join(scratch, "snapshot.db")
-	if _, err := db.SQL.ExecContext(ctx, `VACUUM INTO ?`, snapshotPath); err != nil {
-		return nil, fmt.Errorf("snapshot database before migration backup: %w", err)
-	}
-	plaintext, err := os.ReadFile(snapshotPath)
-	if err != nil {
-		return nil, fmt.Errorf("read database snapshot for migration backup: %w", err)
-	}
-	return plaintext, nil
-}
-
-// BackupArtifact describes a completed encrypted backup.
-type BackupArtifact struct {
-	Path      string
-	SHA256    string
-	Size      int64
-	CreatedAt time.Time
-}
-
-// RestoreBackupSmoke decrypts a backup into a temporary SQLite file, opens it,
-// and verifies that SQLite can read its schema before the source database is
-// changed.
-func RestoreBackupSmoke(ctx context.Context, backupPath string, cipher *appcrypto.Cipher) error {
-	if strings.TrimSpace(backupPath) == "" || cipher == nil {
-		return errors.New("backup path and cipher are required")
-	}
-	encoded, err := os.ReadFile(backupPath)
-	if err != nil {
-		return fmt.Errorf("read backup: %w", err)
-	}
-	digestData, err := os.ReadFile(backupPath + ".sha256")
-	if err != nil {
-		return fmt.Errorf("read backup digest: %w", err)
-	}
-	{
-		parts := strings.Fields(string(digestData))
-		if len(parts) == 0 {
-			return errors.New("backup digest is empty")
-		}
-		digest := sha256.Sum256(encoded)
-		if !strings.EqualFold(parts[0], hex.EncodeToString(digest[:])) {
-			return errors.New("backup digest mismatch")
-		}
-	}
-	var envelope encryptedBackup
-	if err := json.Unmarshal(encoded, &envelope); err != nil || envelope.Format != "oh-my-cpa/sqlite-backup-v1" {
-		return errors.New("backup envelope is invalid")
-	}
-	nonce, err := base64.RawStdEncoding.DecodeString(envelope.Nonce)
-	if err != nil {
-		return fmt.Errorf("decode backup nonce: %w", err)
-	}
-	ciphertext, err := base64.RawStdEncoding.DecodeString(envelope.Ciphertext)
-	if err != nil {
-		return fmt.Errorf("decode backup ciphertext: %w", err)
-	}
-	plaintext, err := cipher.Decrypt(ciphertext, nonce)
-	if err != nil {
-		return fmt.Errorf("decrypt backup: %w", err)
-	}
-	// The backup volume is writable even when the container's root filesystem is not.
-	// Keep decrypted scratch data private and remove it before returning.
-	temporaryDirectory, err := os.MkdirTemp(filepath.Dir(backupPath), ".restore-")
-	if err != nil {
-		return fmt.Errorf("create restore directory: %w", err)
-	}
-	defer os.RemoveAll(temporaryDirectory)
-	temporaryPath := filepath.Join(temporaryDirectory, "restore.db")
-	if err := writePrivateFile(temporaryPath, plaintext); err != nil {
-		return fmt.Errorf("write restore database: %w", err)
-	}
-	restored, err := sql.Open("sqlite", temporaryPath)
-	if err != nil {
-		return fmt.Errorf("open restored database: %w", err)
-	}
-	defer restored.Close()
-	restored.SetMaxOpenConns(1)
-	if err := restored.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping restored database: %w", err)
-	}
-	var count int
-	if err := restored.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master`).Scan(&count); err != nil {
-		return fmt.Errorf("read restored schema: %w", err)
-	}
-	if count == 0 {
-		return errors.New("restored database has no schema")
-	}
-	return nil
-}
-
-type encryptedBackup struct {
-	Format     string `json:"format"`
-	Nonce      string `json:"nonce"`
-	Ciphertext string `json:"ciphertext"`
-}
-
-func writePrivateFile(path string, data []byte) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(data); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
-}
-
-func retainBackups(directory string, retention int) error {
-	if retention <= 0 {
-		retention = 5
-	}
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return err
-	}
-	type backupEntry struct {
-		path string
-		info os.FileInfo
-	}
-	backups := make([]backupEntry, 0)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".db.enc") {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		backups = append(backups, backupEntry{path: filepath.Join(directory, entry.Name()), info: info})
-	}
-	sort.Slice(backups, func(i, j int) bool { return backups[i].info.ModTime().After(backups[j].info.ModTime()) })
-	if len(backups) <= retention {
-		return nil
-	}
-	for _, entry := range backups[retention:] {
-		if err := os.Remove(entry.path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		_ = os.Remove(entry.path + ".sha256")
-	}
-	return nil
 }
 
 func checkJSON1(ctx context.Context, tx *sql.Tx) error {
