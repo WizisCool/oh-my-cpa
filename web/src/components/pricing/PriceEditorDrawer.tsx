@@ -416,13 +416,14 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                     {t('pricing.editor.reference_prices', { source: referencePrices[0].source, model: referencePrices[0].model })}
                   </span>
                   <ul>
-                    {referencePrices.map((price) => {
+                    {referencePrices.map((price, index) => {
                       const shown = price.providers.slice(0, REFERENCE_PROVIDERS_SHOWN).join(', ');
                       const hidden = price.providers.length - REFERENCE_PROVIDERS_SHOWN;
                       const rateText = [price.prompt_price_per_1m, price.completion_price_per_1m, price.cache_read_price_per_1m]
                         .map((value) => (value === undefined ? '—' : formatRatePer1M(value))).join(' / ');
                       return (
-                        <li key={price.providers.join(',')}>
+                        // One provider can list two rates for a model, so its name alone is not unique.
+                        <li key={`${index}:${price.providers.join(',')}`}>
                           <span className={styles['reference-providers']} title={price.providers.join(', ')}>
                             {hidden > 0 ? t('pricing.editor.reference_providers_more', { providers: shown, n: hidden }) : shown}
                           </span>
