@@ -105,9 +105,10 @@ export function isOAuthChannel(id: string, accountType?: string, pluginOAuthIds?
 
 /** Resolve user-friendly channel name for an OAuth channel or provider. */
 export function resolveChannelName(id: string, fallbackName?: string): string {
-  const known = CREDENTIAL_PROVIDERS[(id || '').toLowerCase().trim()] ?? CREDENTIAL_PROVIDERS[normalizeProviderKey(id)];
+  const known = [(id || '').toLowerCase().trim(), normalizeProviderKey(id)]
+    .find((key) => Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key));
   if (known) {
-    return known.label;
+    return CREDENTIAL_PROVIDERS[known].label;
   }
   if (fallbackName && fallbackName.trim()) {
     return fallbackName.trim();
@@ -535,7 +536,12 @@ export function aggregateProviders({
     const normIdentity = normalizeProviderKey(identity);
 
     const meta = isOAuth ? OAUTH_CHANNEL_META[normIdentity] : undefined;
-    const name = isOAuth && meta ? providerDisplayName(normIdentity, pluginTitles) : (cp.name || cp.upstream_name || cp.id);
+    // A channel row takes the channel's name unless the operator named it: a name that only
+    // repeats CPA's own is the default, not an override.
+    const isNamedByOperator = Boolean(cp.name) && cp.name !== identity;
+    const name = isOAuth && (meta || !isNamedByOperator)
+      ? providerDisplayName(identity, pluginTitles)
+      : (cp.name || cp.upstream_name || cp.id);
 
     const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
 

@@ -150,7 +150,7 @@ export const OAuthManagementPage: React.FC = () => {
     () => oauthProviderChoices(pluginsQuery.data?.plugins, t),
     [pluginsQuery.data?.plugins, t],
   );
-  const pluginTitles = React.useMemo(() => pluginOAuthProviderTitles(choices), [choices]);
+  const pluginTitles = React.useMemo(() => pluginOAuthProviderTitles(pluginsQuery.data?.plugins), [pluginsQuery.data?.plugins]);
   const pluginLogos = React.useMemo(
     () => pluginOAuthProviderLogos(pluginsQuery.data?.plugins),
     [pluginsQuery.data?.plugins],

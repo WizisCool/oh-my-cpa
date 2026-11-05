@@ -49,7 +49,8 @@ export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = Object.fro
 
 export function getCredentialProviderMetadata(providerKey: string): ProviderMetadata {
   const key = (providerKey || '').toLowerCase().trim();
-  if (CREDENTIAL_PROVIDERS[key]) {
+  // Provider keys come from plugins too; `constructor` must not read Object's inherited member.
+  if (Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key)) {
     return CREDENTIAL_PROVIDERS[key];
   }
   const capitalized = key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Unknown';
@@ -64,11 +65,13 @@ export function getCredentialProviderMetadata(providerKey: string): ProviderMeta
  * providerDisplayName is the one name every provider surface gives a provider key: the
  * title a plugin publishes for a provider it registers, then the brand table above. The
  * dashboard and the OAuth page both read it, so a brand is never spelled from its raw
- * key on one page (`Deepseek`) and by its own name on the other (`DeepSeek`).
+ * key on one page (`Deepseek`) and by its own name on the other (`DeepSeek`). Titles are
+ * keyed by the canonical key, so an alias (`workbuddy`) reads the same as the section the
+ * OAuth page files it under (`codebuddy`).
  */
 export function providerDisplayName(providerKey: string, pluginTitles?: ReadonlyMap<string, string>): string {
-  const key = (providerKey || '').toLowerCase().trim();
-  return pluginTitles?.get(key) || getCredentialProviderMetadata(key).label;
+  const metadata = getCredentialProviderMetadata(providerKey);
+  return pluginTitles?.get(metadata.id) || metadata.label;
 }
 
 /**

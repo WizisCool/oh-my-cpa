@@ -2,6 +2,7 @@ import { collectPluginPages } from '../components/plugins/pluginPages';
 import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
+import { getCredentialProviderMetadata } from '../types/providerMetadata';
 import { pluginOAuthProviderEntryTexts, pluginOAuthProviderIds, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
 /**
@@ -386,16 +387,12 @@ export function pluginOAuthProviderChoices(
     if (!plugin.supports_oauth || !isEnabled) continue;
     const providerIds = pluginOAuthProviderIds(plugin);
     const logos = pluginOAuthProviderLogos([plugin]);
-    const entries = pluginOAuthProviderEntryTexts([plugin]);
-    const name = pluginDisplayName(plugin);
+    const portalTitle = pluginPortalTitles(plugin, providerIds);
     const pluginPageRoute = pages.find((page) => page.pluginId === plugin.id)?.route;
     for (const providerId of providerIds) {
       if (seen.has(providerId)) continue;
       seen.add(providerId);
-      const entryName = entries[providerId]?.name;
-      const title = entryName && entryName !== name
-        ? entryName
-        : providerIds.length > 1 ? `${name} · ${providerId}` : name;
+      const title = portalTitle(providerId);
       choices.push({
         id: providerId,
         flow: 'plugin',
@@ -418,9 +415,40 @@ export function pluginOAuthProviderChoices(
   return choices;
 }
 
-/** The title each plugin login portal carries, keyed by provider key, for naming its credentials. */
-export function pluginOAuthProviderTitles(choices: readonly OAuthProviderChoice[]): Map<string, string> {
-  return new Map(choices.filter((choice) => choice.pluginId).map((choice) => [choice.id, choice.title]));
+/** The title a plugin's login card gives each portal it declares. */
+function pluginPortalTitles(plugin: PluginItem, providerIds: readonly string[]): (providerId: string) => string {
+  const entries = pluginOAuthProviderEntryTexts([plugin]);
+  const name = pluginDisplayName(plugin);
+  return (providerId) => {
+    const entryName = entries[providerId]?.name;
+    return entryName && entryName !== name
+      ? entryName
+      : providerIds.length > 1 ? `${name} · ${providerId}` : name;
+  };
+}
+
+/**
+ * pluginOAuthProviderTitles names the credentials of every plugin-registered provider with
+ * the title its login card carries, keyed by the canonical provider key `providerDisplayName`
+ * looks up.
+ *
+ * Unlike the login cards, a disabled plugin still contributes: switching it off keeps the
+ * credentials it registered, and they keep its name, as they keep its logo. A built-in
+ * provider keeps its own name, matching the login cards a plugin cannot replace.
+ */
+export function pluginOAuthProviderTitles(plugins: PluginItem[] | undefined): Map<string, string> {
+  const titles = new Map<string, string>();
+  for (const plugin of plugins ?? []) {
+    if (!plugin.supports_oauth) continue;
+    const providerIds = pluginOAuthProviderIds(plugin);
+    const portalTitle = pluginPortalTitles(plugin, providerIds);
+    for (const providerId of providerIds) {
+      const key = getCredentialProviderMetadata(providerId).id;
+      if (BUILTIN_OAUTH_IDS.has(providerId) || BUILTIN_OAUTH_IDS.has(key) || titles.has(key)) continue;
+      titles.set(key, portalTitle(providerId));
+    }
+  }
+  return titles;
 }
 
 export function oauthProviderChoices(plugins: PluginItem[] | undefined, t: TFunc): OAuthProviderChoice[] {

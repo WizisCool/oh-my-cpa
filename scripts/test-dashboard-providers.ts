@@ -333,6 +333,17 @@ test('dashboard providers', () => {
     pluginTitles: new Map([['opencode-go', 'OpenCode Go']]),
   });
   assert.deepEqual(namedChannels.map((row) => row.name).sort(), ['DeepSeek', 'MiniMax', 'OpenCode Go']);
+  // A configured row standing for a plugin channel takes its title unless the operator renamed it.
+  const configuredChannel = (name: string) => aggregateProviders({
+    pluginOAuthIds: new Set(['opencode-go']),
+    pluginTitles: new Map([['opencode-go', 'OpenCode Go']]),
+    configuredProviders: [{
+      id: 'openai-compat-9', family: 'openai-compatibility', name, upstream_name: 'opencode-go',
+      protocol: 'OpenAI Chat Completions', disabled: false, key_configured: true,
+    }],
+  })[0].name;
+  assert.equal(configuredChannel('opencode-go'), 'OpenCode Go');
+  assert.equal(configuredChannel('My Go relay'), 'My Go relay');
   assert.equal(resolveChannelName('minimax'), 'MiniMax');
 
 

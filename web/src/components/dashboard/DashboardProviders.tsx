@@ -6,7 +6,7 @@ import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { pluginOAuthProviderKeys, pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
-import { oauthProviderChoices, pluginOAuthProviderTitles } from '../../pages/oauthProviderLogic';
+import { pluginOAuthProviderTitles } from '../../pages/oauthProviderLogic';
 import { usePreference } from '../../hooks/usePreference';
 import { parseProviderIcons, PROVIDER_ICONS_PREFERENCE } from '../../types/providerIcons';
 import type { ManagementOverview, ManagementOverviewProvider } from '../../types/management';
@@ -129,7 +129,7 @@ export const DashboardProviders = React.memo(function DashboardProviders({
   // otherwise resolve for it, including an operator-stored icon override.
   const pluginLogos = useMemo(() => pluginOAuthProviderLogos(pluginsData?.plugins), [pluginsData]);
   // Rows carry the names the OAuth page gives the same providers.
-  const pluginTitles = useMemo(() => pluginOAuthProviderTitles(oauthProviderChoices(pluginsData?.plugins, t)), [pluginsData, t]);
+  const pluginTitles = useMemo(() => pluginOAuthProviderTitles(pluginsData?.plugins), [pluginsData]);
 
   const configuredProviders = providersData?.providers || [];
   const overviewProviders: ManagementOverviewProvider[] = overview.providers || [];
