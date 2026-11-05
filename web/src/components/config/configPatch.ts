@@ -1,4 +1,4 @@
-import { parseDocument, type Document } from 'yaml';
+import { isMap, isScalar, parseDocument, type Document, type YAMLMap } from 'yaml';
 
 import type { ConfigChange } from '../../types/configManagement';
 import { ALL_CONFIG_FIELDS } from '../../types/configSchema';
@@ -53,7 +53,7 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
       if (change.remove) {
         if (rebased.hasIn(change.path)) rebased.deleteIn(change.path);
       } else {
-        rebased.setIn(change.path, rebased.createNode(change.value));
+        applyRebasedValue(rebased, draftBase, change.path, change.value);
       }
     }
     for (const { field, value } of migratedEdits) {
@@ -63,6 +63,38 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
     return null;
   }
   return rebased.toString();
+}
+
+/**
+ * Applies a change to the newer document. A map the draft created is merged
+ * into a map that appeared there, so a refresh cannot drop siblings the draft
+ * never saw. A path the baseline already held, or a value that is not a map,
+ * keeps the existing whole-value replacement. Removals are handled separately.
+ */
+function applyRebasedValue(doc: Document, draftBase: Document | null, path: string[], value: unknown): void {
+  const original = draftBase?.getIn(path, true);
+  const current = doc.getIn(path, true);
+  if (!isAbsentNode(original) || !isPlainMap(value) || !isMap(current)) {
+    doc.setIn(path, doc.createNode(value));
+    return;
+  }
+  mergeRebasedMap(doc, current, value);
+}
+
+function mergeRebasedMap(doc: Document, target: YAMLMap, value: Record<string, unknown>): void {
+  for (const [key, child] of Object.entries(value)) {
+    // YAMLMap.get's overload describes scalars even though a map value is returned intact.
+    const existing: unknown = target.get(key, true);
+    if (isMap(existing) && isPlainMap(child)) {
+      mergeRebasedMap(doc, existing, child);
+    } else {
+      target.set(key, doc.createNode(child));
+    }
+  }
+}
+
+function isAbsentNode(node: unknown): boolean {
+  return node === undefined || node === null || (isScalar(node) && isAbsent(node.value));
 }
 
 function diffValue(baseline: unknown, draft: unknown, path: string[], changes: ConfigChange[]): void {
