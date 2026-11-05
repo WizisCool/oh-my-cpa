@@ -24,8 +24,13 @@ the login card did. The declared `quota_provider` also identifies the plugin's c
 family when it differs from the login and plugin IDs; it does not add a login choice.
 OMC does not infer undeclared credential families from naming similarities. Plugin logos
 may be inline images or absolute HTTP(S) URLs loaded by the browser, independently of
-OMC's egress network. A plugin's installed page takes precedence over requesting an
-interactive login; CPA still owns login execution and account matching.
+OMC's egress network. Plugin sign-in and management-page actions are independent:
+an explicit sign-in request lets CPA determine the authorization flow, while a
+registered page remains available separately. Device-code and redirect controls
+appear only after CPA returns an authorization URL and session identity; incomplete
+details produce an actionable error. The page action is disabled while authorization
+is active. CPA still owns login execution and account matching. Targeted recovery
+for credentials owned by plugins with a registered page remains unavailable.
 
 Plugin-store translations are optional publisher metadata, not a plugin page's
 language or installation identity. The [locale projection](../internal/api/management_plugin_projection.go)

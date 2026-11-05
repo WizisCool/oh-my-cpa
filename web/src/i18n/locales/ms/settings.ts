@@ -149,7 +149,7 @@ export default {
   "omc.connect_provider": "Penyedia OAuth",
   "omc.connect_provider_placeholder": "Pilih penyedia untuk disambung",
   "omc.flow_device": "Kod peranti",
-  "omc.flow_plugin": "Diurus oleh pemalam",
+  "omc.flow_plugin": "Pengesahan pemalam",
   "omc.flow_redirect": "Panggil balik ubah hala",
   "omc.active_authorizations": "Kebenaran sedang berjalan",
   "omc.session_waiting": "Menunggu",

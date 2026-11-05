@@ -333,7 +333,7 @@ export interface OAuthProviderChoice extends BrandMark {
   loginLabel: string;
   /** Set only for CPA plugin providers. */
   pluginId?: string;
-  /** A plugin-owned page takes precedence over a speculative interactive login. */
+  /** Optional management destination, independent of an explicit login request. */
   pluginPageRoute?: string;
   requiresExplicitCancel?: boolean;
   callback?: OAuthCallbackRules;
@@ -355,8 +355,8 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
 }
 
 /**
- * Auth-provider capability does not declare a login method. Prefer the plugin
- * page when one exists; otherwise request a flow only after an explicit action.
+ * Auth-provider capability does not declare a login method. Request a flow only
+ * after an explicit action, independently of the plugin's management page.
  * A disabled plugin keeps owning any credentials it previously created, but it cannot start a new
  * authorization until its effective-enabled state says it may.
  *
@@ -397,10 +397,10 @@ export function pluginOAuthProviderChoices(
         pluginPageRoute,
         ...resolveCredentialMark(providerId, title, logos),
         title: t('oauth.plugin_title', { name: title }),
-        description: t(pluginPageRoute ? 'oauth.plugin_page_hint' : 'oauth.plugin_hint', { name: title }),
-        loginLabel: t(pluginPageRoute ? 'oauth.plugin_open_page' : 'oauth.plugin_login', { name: title }),
+        description: t('oauth.plugin_hint', { name: title }),
+        loginLabel: t('oauth.plugin_login', { name: title }),
         pluginId: plugin.id,
-        callback: pluginPageRoute ? undefined : {
+        callback: {
           // These rules become usable only after CPA actually starts a redirect session.
           errorKeys: {
             invalid: 'oauth.callback_invalid_url',

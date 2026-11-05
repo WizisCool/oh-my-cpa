@@ -149,7 +149,7 @@ export default {
   'omc.connect_provider': 'OAuth provider',
   'omc.connect_provider_placeholder': 'Select a provider to connect',
   'omc.flow_device': 'Device code',
-  'omc.flow_plugin': 'Plugin-managed',
+  'omc.flow_plugin': 'Plugin sign-in',
   'omc.flow_redirect': 'Redirect callback',
   'omc.active_authorizations': 'In-progress authorizations',
   'omc.session_waiting': 'Waiting',

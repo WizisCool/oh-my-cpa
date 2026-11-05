@@ -274,7 +274,7 @@ export function useOAuthSessions(
     recovery?: OAuthRecoveryTarget,
   ) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
-    if (!choice || choice.pluginPageRoute) return;
+    if (!choice) return;
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
     if (current?.requiresProxyReentry && !proxyUrl?.trim() && !isDefaultRouteConfirmed) return;
@@ -299,6 +299,9 @@ export function useOAuthSessions(
       const response = await api.startOAuthFlow(providerId, proxyUrl, target);
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       const token = (response.state || response.session_id || '').trim();
+      if (choice.flow === 'plugin' && (!response.url?.trim() || !token)) {
+        throw new Error(t('oauth.plugin_login_unavailable'));
+      }
       const flow = resolveStartedOAuthFlow(choice.flow, response);
       const userCode = (response.user_code || '').trim() || undefined;
       updateProviderState(providerId, {

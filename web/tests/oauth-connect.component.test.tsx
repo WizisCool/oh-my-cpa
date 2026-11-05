@@ -2,11 +2,13 @@ import { CredentialRecoveryPanel } from '../src/components/authFiles/CredentialR
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import type { OAuthRecoveryTarget } from '../src/types/oauth';
 import React from 'react';
+import { useLocation } from 'react-router-dom';
+import { useT } from '../src/i18n';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OAuthConnectPanel } from '../src/pages/oauthManagement/OAuthConnectPanel';
 import { useOAuthSessions } from '../src/pages/oauthManagement/useOAuthSessions';
-import type { OAuthProviderChoice } from '../src/pages/oauthProviderLogic';
+import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../src/pages/oauthProviderLogic';
 import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 
@@ -14,19 +16,87 @@ const CHOICES: OAuthProviderChoice[] = ['codex', 'anthropic'].map(id => ({
   id, title: id, description: '', iconId: '', flow: 'manual-callback', loginLabel: id,
 }));
 
-function ConnectWorkspace({ recovery, isRecoverySupported = true }: { recovery?: OAuthRecoveryTarget; isRecoverySupported?: boolean } = {}) {
+function ConnectWorkspace({ choices = CHOICES, recovery, isRecoverySupported = true }: { choices?: OAuthProviderChoice[]; recovery?: OAuthRecoveryTarget; isRecoverySupported?: boolean } = {}) {
   const [isOpen, setIsOpen] = React.useState(true);
-  const [providerId, setProviderId] = React.useState('codex');
-  const sessions = useOAuthSessions(CHOICES);
+  const [providerId, setProviderId] = React.useState(choices[0].id);
+  const location = useLocation();
+  const sessions = useOAuthSessions(choices);
   return <>
     <button data-testid="minimize" onClick={() => setIsOpen(false)} />
     <button data-testid="reopen" onClick={() => setIsOpen(true)} />
     <button data-testid="other-provider" onClick={() => setProviderId(current => current === 'codex' ? 'anthropic' : 'codex')} />
     <output data-testid="sessions">{JSON.stringify(sessions.states)}</output>
-    <OAuthConnectPanel recoveryTarget={recovery} isRecoverySupported={isRecoverySupported} open={isOpen} choices={CHOICES} selectedProviderId={providerId}
+    <output data-testid="location">{location.pathname}</output>
+    <OAuthConnectPanel recoveryTarget={recovery} isRecoverySupported={isRecoverySupported} open={isOpen} choices={choices} selectedProviderId={providerId}
       onSelectProvider={setProviderId} onClose={() => setIsOpen(false)} onViewCredentials={() => {}} sessions={sessions} />
   </>;
 }
+
+function PluginConnectWorkspace() {
+  const choices = pluginOAuthProviderChoices([{
+    id: 'workbuddy', configured: true, registered: true, enabled: true, effective_enabled: true,
+    supports_oauth: true, oauth_provider: 'workbuddy', config_fields: [],
+    pages: [{ path: '/v0/resource/plugins/workbuddy/panel', label: 'Accounts' }],
+  }], useT());
+  return <ConnectWorkspace choices={choices} />;
+}
+
+it('logs in from a plugin with a management page, completes polling and keeps navigation separate', async () => {
+  vi.useFakeTimers();
+  const server = installOmcApi();
+  let shouldFail = false;
+  let shouldReturnSession = true;
+  server.on('POST', '/management/oauth/start', () => shouldFail
+    ? json({ code: 'cpa_rejected_request', error: 'Plugin login unavailable' }, 400)
+    : { url: 'https://auth.example.test/workbuddy', ...(shouldReturnSession ? { state: 'workbuddy-login' } : {}) });
+  server.on('GET', '/management/oauth/status', () => ({ status: 'ok' }));
+  const surface = renderWithOmc(<PluginConnectWorkspace />, { route: '/omc/oauth-management', isStrict: true });
+  const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start="workbuddy"]');
+  const pluginPage = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-plugin-connect="workbuddy"]');
+  const callback = () => surface.baseElement.querySelector('[data-oauth-callback-input]');
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).workbuddy;
+  try {
+    expect(pluginPage()).toBeTruthy();
+    expect(callback()).toBeNull();
+    await act(async () => { fireEvent.click(pluginPage()!); });
+    expect(screen.getByTestId('location').textContent).toBe('/plugin-pages/workbuddy/0');
+    expect(server.writes('/management/oauth/start')).toEqual([]);
+    await act(async () => { fireEvent.click(screen.getByTestId('reopen')); });
+    expect(start()).toBeTruthy();
+    await act(async () => { fireEvent.click(start()!); });
+    expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'workbuddy' }]);
+    expect(session().status).toBe('waiting');
+    expect(callback()).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(server.requests.filter(request => request.path === '/management/oauth/status').map(request => request.query.get('state'))).toEqual(['workbuddy-login']);
+    expect(session().status).toBe('success');
+    expect(callback()).toBeNull();
+    expect(start()!.disabled).toBe(false);
+
+    shouldFail = true;
+    await act(async () => { fireEvent.click(start()!); });
+    expect(server.writes('/management/oauth/start')).toHaveLength(2);
+    expect(session().status).toBe('error');
+    expect(surface.baseElement.textContent).toContain('Plugin login unavailable');
+    expect(start()!.disabled).toBe(false);
+    expect(callback()).toBeNull();
+    expect(pluginPage()).toBeTruthy();
+
+    shouldFail = false;
+    shouldReturnSession = false;
+    await act(async () => { fireEvent.click(start()!); });
+    expect(server.writes('/management/oauth/start')).toHaveLength(3);
+    expect(session().status).toBe('error');
+    expect(session().error).toBeTruthy();
+    expect(surface.baseElement.textContent).toContain(session().error);
+    expect(callback()).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(server.requests.filter(request => request.path === '/management/oauth/status')).toHaveLength(1);
+  } finally {
+    surface.unmount();
+    vi.useRealTimers();
+  }
+});
 
 // This rendered wiring claim is distinct from the Go boundary: the secret must
 // travel from the task input through the hook/client once, never into session UI

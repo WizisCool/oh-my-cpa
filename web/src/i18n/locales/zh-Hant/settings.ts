@@ -149,7 +149,7 @@ export default {
   "omc.connect_provider": "OAuth 供應商",
   "omc.connect_provider_placeholder": "選擇要連接的供應商",
   "omc.flow_device": "裝置碼",
-  "omc.flow_plugin": "由外掛管理",
+  "omc.flow_plugin": "外掛認證",
   "omc.flow_redirect": "重定向回呼",
   "omc.active_authorizations": "進行中的授權",
   "omc.session_waiting": "等待完成",

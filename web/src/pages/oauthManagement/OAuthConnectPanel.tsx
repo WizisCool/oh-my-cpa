@@ -96,6 +96,12 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     void sessions.startDefaultRoute(choice.id, target ? { ...target, verify: shouldVerify } : undefined);
   };
 
+  const openPluginPage = () => {
+    if (!choice?.pluginPageRoute) return;
+    onClose();
+    navigate(choice.pluginPageRoute);
+  };
+
   const copyValue = async (value?: string, successKey: MessageKey = 'oauth.link_copied') => {
     if (!value) return;
     if (await copyText(value)) {
@@ -239,7 +245,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 {t('recovery.verify_opt_in')}
               </Checkbox>
             </>}
-            {!choice.pluginPageRoute && !isWaiting && !session?.starting && (
+            {!isWaiting && !session?.starting && (
               <div>
                 <label className={styles['field-label']} htmlFor="oauth-connect-proxy">{t('oauth.session_proxy')}</label>
                 <SecretInput
@@ -268,20 +274,21 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <Button
                 type="primary"
                 loading={session?.starting}
-                disabled={isWaiting || isStartBlocked || (Boolean(target) && !isRecoverySupported) || (isDemo && !choice.pluginPageRoute)}
-                onClick={() => {
-                  if (choice.pluginPageRoute) {
-                    onClose();
-                    navigate(choice.pluginPageRoute);
-                  } else {
-                    startAuthorization();
-                  }
-                }}
-                data-oauth-start={choice.pluginPageRoute ? undefined : choice.id}
-                data-plugin-connect={choice.pluginPageRoute ? choice.id : undefined}
+                disabled={isWaiting || isStartBlocked || (Boolean(target) && !isRecoverySupported) || isDemo}
+                onClick={startAuthorization}
+                data-oauth-start={choice.id}
               >
                 {target ? t('recovery.recover') : isSuccess ? t('oauth.login_another') : choice.loginLabel}
               </Button>
+              {choice.pluginPageRoute && (
+                <Button
+                  disabled={isWaiting || session?.starting}
+                  onClick={openPluginPage}
+                  data-plugin-connect={choice.id}
+                >
+                  {t('oauth.plugin_open_page')}
+                </Button>
+              )}
               {isStartBlocked && (
                 <Button type="link" data-oauth-default-route onClick={useDefaultRoute}>
                   {t('oauth.use_default_route')}
