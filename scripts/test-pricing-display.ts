@@ -312,6 +312,10 @@ test('pricing display', () => {
     assert.equal(pricingProviderIdentity(provider).iconId, 'DeepSeek');
     assert.equal(pricingProviderIdentity({ ...provider, icon_id: 'Gemini' }).iconId, 'Gemini');
     assert.equal(pricingProviderIdentity({ ...provider, family: 'codex', name: 'codex', is_oauth: true }).label, 'Codex');
+    assert.equal(
+      pricingProviderIdentity({ ...provider, family: 'opencode-go', name: 'opencode-go', is_oauth: true }, { pluginTitles: new Map([['opencode-go', 'OpenCode Go']]) }).label,
+      'OpenCode Go',
+    );
     assert.equal(pricingProviderIdentity({ ...provider, family: 'unknown-plugin', name: 'unknown-plugin', is_oauth: true }).iconId, '');
     assert.deepEqual(pricingModelIdentity('GPT-5'), { label: 'GPT-5' });
   });

@@ -1243,6 +1243,13 @@ test('usage event view', () => {
   const plainResolved = resolveProviderInfo(pluginEvent, pluginCredFiles);
   assert.equal(plainResolved.logo, undefined);
   assert.equal(oauthResolved.logo, undefined, 'a built-in provider carries no plugin logo');
+  // The provider is named the way the OAuth page names it: the brand's own spelling, then the
+  // title a plugin gives the provider it registers, never the raw key capitalized.
+  assert.equal(resolveProviderInfo({ ...pluginEvent, provider: 'xai', auth_index: 'auth-unbound' }, pluginCredFiles).title, 'xAI');
+  assert.equal(
+    resolveProviderInfo({ ...pluginEvent, provider: 'opencode-go', auth_index: 'auth-unbound' }, pluginCredFiles, {}, [], {}, false, new Map([['opencode-go', 'OpenCode Go']])).title,
+    'OpenCode Go',
+  );
 
 
 

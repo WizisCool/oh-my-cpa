@@ -1,5 +1,6 @@
 import { resolveCredentialMark, resolveProviderMark, resolveRecordedProviderMark, type BrandMark } from './brandMark';
 import type { PluginOAuthLogos } from './pluginOAuthProviders';
+import { providerDisplayName } from './providerMetadata';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -242,6 +243,8 @@ export function resolveProviderInfo(
   pluginLogos: PluginOAuthLogos = {},
   /** The provider catalog could not be read, so a recorded label is not yet proven either way. */
   isProviderCatalogUnknown = false,
+  /** Titles plugins give the OAuth providers they register. */
+  pluginTitles?: ReadonlyMap<string, string>,
 ): ResolvedProviderInfo {
   const file = matchingCredential(event, credentials);
   const isOAuth =
@@ -264,7 +267,7 @@ export function resolveProviderInfo(
     // credential that answered is the line under it. Leading with the account
     // here made an OAuth cell answer a different question from the API-key cell
     // beside it.
-    const providerLabel = providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1);
+    const providerLabel = providerDisplayName(providerFamily, pluginTitles);
     // The account is the one display value masking must reach here: the API-key half
     // of the same line is already a server-side mask, and a request record carries no
     // reveal, so this is the only form the row can print.

@@ -40,7 +40,8 @@ import { useCredentialRename } from '../../components/authFiles/useCredentialRen
 import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { SummaryStrip } from '../../components/common/SummaryStrip';
-import { oauthProviderChoices } from '../oauthProviderLogic';
+import { oauthProviderChoices, pluginOAuthProviderTitles } from '../oauthProviderLogic';
+import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
 import { CredentialSection, type CredentialRowActions } from './CredentialSection';
 import { buildCredentialSections, credentialOrderKey, orderBySection, type QuotaColumnSort } from './credentialSections';
@@ -149,6 +150,7 @@ export const OAuthManagementPage: React.FC = () => {
     () => oauthProviderChoices(pluginsQuery.data?.plugins, t),
     [pluginsQuery.data?.plugins, t],
   );
+  const pluginTitles = React.useMemo(() => pluginOAuthProviderTitles(pluginsQuery.data?.plugins), [pluginsQuery.data?.plugins]);
   const pluginLogos = React.useMemo(
     () => pluginOAuthProviderLogos(pluginsQuery.data?.plugins),
     [pluginsQuery.data?.plugins],
@@ -758,6 +760,7 @@ export const OAuthManagementPage: React.FC = () => {
         active={queryState.provider}
         onChange={(provider) => setSearch({ provider: provider === 'all' ? null : provider, page: null })}
         pluginLogos={pluginLogos}
+        pluginTitles={pluginTitles}
       />
 
       <Toolbar className={styles.toolbar}>
@@ -922,7 +925,7 @@ export const OAuthManagementPage: React.FC = () => {
               <CredentialSection
                 key={section.provider}
                 section={section}
-                title={choices.find((choice) => choice.pluginId && choice.id === section.provider)?.title}
+                title={providerDisplayName(section.provider, pluginTitles)}
                 pluginLogos={pluginLogos}
                 selectedKeys={selectedKeySet}
                 nowMS={visibleNow}
@@ -1059,6 +1062,7 @@ export const OAuthManagementPage: React.FC = () => {
           }}
           providerOptions={providerOptions.filter((provider) => provider !== 'all')}
           pluginLogos={pluginLogos}
+          pluginTitles={pluginTitles}
         />
       </DeferredMount>
     </div>

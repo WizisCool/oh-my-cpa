@@ -46,6 +46,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   const {
     providerIcons,
     pluginLogos,
+    pluginTitles,
     configuredProviders,
     isProviderCatalogUnknown,
   } = useProviderBranding();
@@ -80,7 +81,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   return React.useMemo<InsightsLabels>(() => {
     const nameProvider = (id: string) => {
       const named = providerName(id);
-      return named && named !== id ? named : resolveChannelName(id);
+      return named && named !== id ? named : resolveChannelName(id, pluginTitles);
     };
     return {
       label: (dimension, id) => {
@@ -117,5 +118,5 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
       },
       isNonKey: (id) => keys.get(id)?.is_client_key === false,
     };
-  }, [credentials, keys, providerName, renderMark, t]);
+  }, [credentials, keys, pluginTitles, providerName, renderMark, t]);
 }

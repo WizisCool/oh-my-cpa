@@ -331,6 +331,7 @@ export const UsageEventsPage: React.FC = () => {
   const {
     providerIcons,
     pluginLogos,
+    pluginTitles,
     configuredProviders,
     isProviderCatalogUnknown,
     isProviderCatalogUnproven,
@@ -715,6 +716,7 @@ export const UsageEventsPage: React.FC = () => {
                     providerIcons={providerIcons}
                     configuredProviders={configuredProviders}
                     pluginLogos={pluginLogos}
+                    pluginTitles={pluginTitles}
                     isProviderCatalogUnknown={isProviderCatalogUnknown}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
@@ -766,6 +768,7 @@ export const UsageEventsPage: React.FC = () => {
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
         pluginLogos={pluginLogos}
+        pluginTitles={pluginTitles}
         isProviderUnproven={isProviderCatalogUnproven}
         onRetryProviders={() => void refetchProviders()}
       />

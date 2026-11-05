@@ -7,6 +7,7 @@ import {
   builtinOAuthProviderChoices,
   lookupOAuthProvider,
   pluginOAuthProviderChoices,
+  pluginOAuthProviderTitles,
   normalizeOAuthFlow,
   normalizeOAuthStatus,
   resolveStartedOAuthFlow,
@@ -14,6 +15,7 @@ import {
   validateDevinCallback,
 } from '../web/src/pages/oauthProviderLogic.ts';
 import { OAUTH_PROVIDER_PATTERN } from '../web/src/types/pluginOAuthProviders.ts';
+import { providerDisplayName } from '../web/src/types/providerMetadata.ts';
 
 test('Registry: provider ids are unique, routable and consistent with the lookup', () => {
   assert.ok(BUILTIN_OAUTH_PROVIDERS.length > 0, 'registry must not be empty');
@@ -310,6 +312,23 @@ test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
     oauth_provider_entries: [{ identifier: 'anon-portal-login', logo: 'icons/anon.svg' }],
   }], t);
   assert.equal(catalogOnly.logo, undefined, 'an unusable mark leaves the catalog mark, never a plugin logo');
+});
+
+test('credentials keep the name their plugin\'s login card gives the provider', () => {
+  const titles = pluginOAuthProviderTitles([
+    // Switching a plugin off keeps its credentials, so it keeps naming them.
+    { id: 'opencode', enabled: false, effective_enabled: false, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'OpenCode Go' }, config_fields: [] },
+    // A credential filed under an alias reads like the section it is grouped into.
+    { id: 'buddy', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'workbuddy', metadata: { name: 'WorkBuddy' }, config_fields: [] },
+    // A built-in provider keeps its own name.
+    { id: 'codex-shadow', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'codex', metadata: { name: 'Shadow' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('opencode-go', titles), 'OpenCode Go');
+  assert.equal(providerDisplayName('workbuddy', titles), 'WorkBuddy');
+  assert.equal(providerDisplayName('codebuddy', titles), 'WorkBuddy');
+  assert.equal(providerDisplayName('codex', titles), 'Codex');
+  // Provider keys come from plugins; an inherited member is not a brand.
+  assert.equal(providerDisplayName('constructor'), 'Constructor');
 });
 
 

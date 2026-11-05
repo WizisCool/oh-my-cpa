@@ -3,6 +3,7 @@ import { resolveProviderMark, type BrandMark } from '../../types/brandMark';
 import type { ProviderItem } from '../../types/providers';
 import type { TrafficBucket, WindowCredentialTraffic, WindowProviderTraffic } from '../../types/dashboard';
 import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { CREDENTIAL_PROVIDERS, getCredentialProviderMetadata, providerDisplayName } from '../../types/providerMetadata';
 
 export type ProviderKind = 'oauth' | 'ai_provider';
 
@@ -63,19 +64,19 @@ export interface ProviderSummaryStats {
 const OPENAI_COMPATIBILITY_FAMILY = 'openai-compatibility';
 
 /**
- * Built-in and known OAuth channels and their display names and protocols.
- * As requested, Codex, Meta, Devin, Codebuddy, etc. use their official channel titles rather than raw IDs.
+ * Built-in and known OAuth channels and their protocols. Their names come from
+ * `providerDisplayName`, the source the OAuth page reads too.
  */
-export const OAUTH_CHANNEL_META: Record<string, { name: string; protocol: string }> = {
-  codex: { name: 'Codex', protocol: 'OpenAI Responses (OAuth)' },
-  meta: { name: 'Meta', protocol: 'Meta Muse (OAuth)' },
-  devin: { name: 'Devin', protocol: 'Cognition Devin (OAuth)' },
-  antigravity: { name: 'Antigravity', protocol: 'Antigravity (OAuth)' },
-  kimi: { name: 'Kimi', protocol: 'Moonshot Kimi (OAuth)' },
-  anthropic: { name: 'Anthropic', protocol: 'Anthropic Claude (OAuth)' },
-  claude: { name: 'Claude', protocol: 'Anthropic Claude (OAuth)' },
-  xai: { name: 'xAI', protocol: 'xAI Grok (OAuth)' },
-  codebuddy: { name: 'Codebuddy', protocol: 'Codebuddy (OAuth)' },
+export const OAUTH_CHANNEL_META: Record<string, { protocol: string }> = {
+  codex: { protocol: 'OpenAI Responses (OAuth)' },
+  meta: { protocol: 'Meta Muse (OAuth)' },
+  devin: { protocol: 'Cognition Devin (OAuth)' },
+  antigravity: { protocol: 'Antigravity (OAuth)' },
+  kimi: { protocol: 'Moonshot Kimi (OAuth)' },
+  anthropic: { protocol: 'Anthropic Claude (OAuth)' },
+  claude: { protocol: 'Anthropic Claude (OAuth)' },
+  xai: { protocol: 'xAI Grok (OAuth)' },
+  codebuddy: { protocol: 'Codebuddy (OAuth)' },
 };
 
 /** Capitalize first letter of a string safely. */
@@ -103,13 +104,13 @@ export function isOAuthChannel(id: string, accountType?: string, pluginOAuthIds?
 }
 
 /** Resolve user-friendly channel name for an OAuth channel or provider. */
-export function resolveChannelName(id: string, fallbackName?: string): string {
-  const norm = normalizeProviderKey(id);
-  if (OAUTH_CHANNEL_META[norm]) {
-    return OAUTH_CHANNEL_META[norm].name;
-  }
-  if (fallbackName && fallbackName.trim()) {
-    return fallbackName.trim();
+export function resolveChannelName(id: string, pluginTitles?: ReadonlyMap<string, string>): string {
+  const pluginTitle = pluginTitles?.get(getCredentialProviderMetadata(id).id);
+  if (pluginTitle) return pluginTitle;
+  const known = [(id || '').toLowerCase().trim(), normalizeProviderKey(id)]
+    .find((key) => Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key));
+  if (known) {
+    return CREDENTIAL_PROVIDERS[known].label;
   }
   return capitalize(id);
 }
@@ -200,6 +201,8 @@ export interface AggregateProvidersOptions {
   authFilesByType?: ManagementOverviewTypeCount[];
   pluginOAuthIds?: Set<string>;
   pluginLogos?: PluginOAuthLogos;
+  /** Titles plugins publish for the providers they register, keyed by provider key */
+  pluginTitles?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -231,6 +234,7 @@ export function aggregateProviders({
   authFilesByType: authFilesTally,
   pluginOAuthIds,
   pluginLogos = {},
+  pluginTitles,
 }: AggregateProvidersOptions): AggregatedProvider[] {
   const result: AggregatedProvider[] = [];
   // Once the tally has been read it is the only evidence an OAuth channel exists: the live
@@ -531,7 +535,12 @@ export function aggregateProviders({
     const normIdentity = normalizeProviderKey(identity);
 
     const meta = isOAuth ? OAUTH_CHANNEL_META[normIdentity] : undefined;
-    const name = isOAuth && meta ? meta.name : (cp.name || cp.upstream_name || cp.id);
+    // A channel row takes the channel's name unless the operator named it: a name that only
+    // repeats CPA's own is the default, not an override.
+    const isNamedByOperator = Boolean(cp.name) && cp.name !== identity;
+    const name = isOAuth && (meta || !isNamedByOperator)
+      ? providerDisplayName(identity, pluginTitles)
+      : (cp.name || cp.upstream_name || cp.id);
 
     const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
 
@@ -602,7 +611,7 @@ export function aggregateProviders({
     if (!isOAuth) continue;
 
     const meta = OAUTH_CHANNEL_META[normType];
-    const name = meta ? meta.name : capitalize(item.type);
+    const name = providerDisplayName(item.type, pluginTitles);
     const mark = resolveProviderMark({ id: item.type, family: item.type, name: item.type, is_oauth: true, aliases: [normType] }, { providerIcons: customIcons, pluginLogos });
 
     const traffic = resolveTraffic([item.type]);
@@ -643,7 +652,7 @@ export function aggregateProviders({
     // missing tally leaves the bucket as the best evidence there is.
     if (isOAuth && hasCredentialTally) continue;
     const meta = isOAuth ? OAUTH_CHANNEL_META[normId] : undefined;
-    const name = isOAuth && meta ? meta.name : capitalize(op.id);
+    const name = providerDisplayName(op.id, pluginTitles);
     const mark = resolveProviderMark({ id: op.id, family: normId, name: op.id, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
 
     const traffic = resolveTraffic([op.id]);

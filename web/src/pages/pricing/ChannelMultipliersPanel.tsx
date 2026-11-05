@@ -53,7 +53,7 @@ export const ChannelMultipliersPanel: React.FC<{
       title: t('pricing.channels.col.multiplier'),
       key: 'multiplier',
       width: 320,
-      render: (_: unknown, channel: PricingChannel) => <ChannelEditor channel={channel} label={channelIdentity(channel.channel, providers).label} />,
+      render: (_: unknown, channel: PricingChannel) => <ChannelEditor channel={channel} label={channelIdentity(channel.channel, providers, branding).label} />,
     },
     {
       title: t('pricing.col.usage'),

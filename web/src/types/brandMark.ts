@@ -32,6 +32,8 @@ export interface ProviderBrandIdentity {
 export interface ProviderBrandSources {
   providerIcons?: Record<string, string>;
   pluginLogos?: PluginOAuthLogos;
+  /** Titles plugins give the OAuth providers they register, as `providerDisplayName` reads them. */
+  pluginTitles?: ReadonlyMap<string, string>;
   providersByID?: ReadonlyMap<string, ProviderBrandIdentity>;
   isProviderCatalogUnknown?: boolean;
 }
