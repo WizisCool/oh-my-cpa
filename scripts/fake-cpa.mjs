@@ -94,6 +94,9 @@ function json(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
+export const FAKE_INSTALLED_PLUGIN_LOGO_URL = 'https://plugin-artwork.example.test/installed.svg';
+export const FAKE_UNINSTALLED_PLUGIN_LOGO_URL = 'http://127.0.0.1:8317/uninstalled-plugin-logo.svg';
+
 export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } = {}) {
   const requests = [];
   const initialAuthFiles = [
@@ -352,13 +355,13 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       id: 'fixture-limiter', name: 'Rate Limiter', description: 'In-memory client token-bucket rate limiter',
       author: 'router-for-me', version: '1.2.0', repository: 'router-for-me/fixture-limiter', install_type: 'github_release',
       auth_required: false, auth_configured: false, platforms: [{ goos: 'linux', goarch: 'amd64' }],
-      logo: FAKE_PLUGIN_LOGO_DATA_URL, homepage: 'https://limiter.fake-cpa.local', license: 'MIT', tags: ['network', 'limits'],
+      logo: FAKE_UNINSTALLED_PLUGIN_LOGO_URL, homepage: 'https://limiter.fake-cpa.local', license: 'MIT', tags: ['network', 'limits'],
     },
     {
       store_id: 'official/fixture-logger', source_id: 'official', source_name: 'official', source_url: 'https://registry.fake-cpa.local/plugins.json',
       id: 'fixture-logger', name: 'Request Logger Plugin', description: 'Audits and logs request metadata to internal store',
       author: 'router-for-me', version: '1.1.0', repository: 'router-for-me/fixture-logger', install_type: 'github_release',
-      auth_required: false, auth_configured: false, platforms: [], logo: '', homepage: '', license: 'MIT', tags: ['logging'],
+      auth_required: false, auth_configured: false, platforms: [], logo: FAKE_INSTALLED_PLUGIN_LOGO_URL, homepage: '', license: 'MIT', tags: ['logging'],
     },
     {
       store_id: 'source-community/fixture-mirror', source_id: 'source-community', source_name: 'community.fake-cpa.local', source_url: 'https://community.fake-cpa.local/registry.json',
@@ -1036,6 +1039,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
           return {
             ...entry,
             installed: Boolean(installed),
+            install_source_status: installed ? 'matched' : undefined,
             installed_version: installed?.metadata?.version ?? '',
             effective_enabled: Boolean(installed?.enabled && installed?.registered),
             update_available: Boolean(installed && installed.metadata?.version !== entry.version),

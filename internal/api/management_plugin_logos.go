@@ -40,6 +40,15 @@ func projectPluginLogo(logo string) string {
 	return logo
 }
 
+// Catalog artwork can make browser requests only after the operator installed this
+// copy from this source. Browsing a registry alone grants no network authority.
+func projectStorePluginLogo(plugin management.StorePluginItem) string {
+	if plugin.Installed && plugin.InstallSourceStatus == "matched" {
+		return projectPluginLogo(plugin.Logo)
+	}
+	return projectInlinePluginLogo(plugin.Logo)
+}
+
 // The public demo uses only self-contained plugin artwork.
 func projectInlinePluginLogo(logo string) string {
 	logo = strings.TrimSpace(logo)

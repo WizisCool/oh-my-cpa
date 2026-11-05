@@ -11,7 +11,7 @@ import (
 )
 
 const identityStoreBody = `{"plugins":[` +
-	`{"id":"codebuddy","name":"CodeBuddy","author":"tencent","installed":true,"installed_version":"0.2.1","logo":"https://cdn.example/codebuddy.png"},` +
+	`{"id":"codebuddy","name":"CodeBuddy","author":"tencent","installed":true,"installed_version":"0.2.1","install_source_status":"matched","logo":"https://cdn.example/codebuddy.png"},` +
 	`{"id":"limiter","name":"Rate Limiter","installed":false}]}`
 
 func newIdentityStoreServer(t *testing.T, reads *atomic.Int32) *management.Client {
@@ -108,6 +108,35 @@ func TestPluginIdentityRemembersTheStorePageAndSkipsCompletePlugins(t *testing.T
 	}
 	if plugins[0].Logo != "data:image/png;base64,AAAA" {
 		t.Fatalf("logo = %q, want the matched listing's", plugins[0].Logo)
+	}
+
+	for _, source := range []struct {
+		name      string
+		installed bool
+		status    string
+		logo      string
+		want      string
+	}{
+		{name: "available", logo: "https://cdn.example/logo.png"},
+		{name: "unknown", installed: true, logo: "https://cdn.example/logo.png"},
+		{name: "different", installed: true, status: "different", logo: "https://cdn.example/logo.png"},
+		{name: "matched", installed: true, status: "matched", logo: "https://cdn.example/logo.png", want: "https://cdn.example/logo.png"},
+		{name: "inline-unknown", installed: true, logo: "data:image/png;base64,AAAA", want: "data:image/png;base64,AAAA"},
+		{name: "inline-different", installed: true, status: "different", logo: "data:image/png;base64,AAAA", want: "data:image/png;base64,AAAA"},
+	} {
+		t.Run(source.name, func(t *testing.T) {
+			cache := newPluginIdentityCache()
+			cache.remember([]management.StorePluginItem{{ID: "catalog-logo", Name: "Catalog name", Installed: source.installed, InstallSourceStatus: source.status, Logo: source.logo}})
+			plugins := []management.PluginItem{{ID: "catalog-logo"}}
+			cache.fill(context.Background(), nil, plugins)
+			projected := projectPluginItems(plugins, false)[0]
+			if projected.Logo != source.want || projected.Metadata != nil && projected.Metadata.Logo != "" {
+				t.Fatalf("filled artwork = %#v, want %q with no metadata bypass", projected, source.want)
+			}
+			if source.installed && (projected.Metadata == nil || projected.Metadata.Name != "Catalog name") {
+				t.Fatalf("non-logo identity was lost: %#v", projected.Metadata)
+			}
+		})
 	}
 }
 

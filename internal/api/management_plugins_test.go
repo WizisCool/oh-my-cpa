@@ -438,8 +438,8 @@ func TestPluginsLifecycle(t *testing.T) {
 	if _, hasLocales := community["locales"]; hasLocales {
 		t.Fatal("a legacy store response must not invent locales")
 	}
-	if storeLogo, _ := official["logo"].(string); storeLogo != "https://cdn.example/limiter.png" {
-		t.Fatalf("store logo = %q, want the registry's declared URL", storeLogo)
+	if storeLogo, _ := official["logo"].(string); storeLogo != "" {
+		t.Fatalf("uninstalled store logo = %q, want no external request before installation", storeLogo)
 	}
 	if _, hasHomepage := official["homepage"]; hasHomepage {
 		t.Fatalf("homepage = %#v, want a non-http link dropped", official["homepage"])

@@ -53,6 +53,36 @@ func TestPluginLogoProjection(t *testing.T) {
 	if got := projectPluginLogo(oversized); got != "" {
 		t.Error("inline artwork above the decoded size ceiling was retained")
 	}
+
+	for _, source := range []struct {
+		name      string
+		installed bool
+		status    string
+		canLoad   bool
+	}{
+		{name: "available"},
+		{name: "available-matched", status: "matched"},
+		{name: "installed-unknown", installed: true},
+		{name: "installed-different", installed: true, status: "different"},
+		{name: "installed-matched", installed: true, status: "matched", canLoad: true},
+	} {
+		t.Run(source.name, func(t *testing.T) {
+			for _, remote := range []string{"https://cdn.example.test/logo.png", "http://127.0.0.1:8317/logo.png"} {
+				plugin := management.StorePluginItem{ID: "catalog-logo", Installed: source.installed, InstallSourceStatus: source.status, Logo: remote}
+				want := ""
+				if source.canLoad {
+					want = remote
+				}
+				if got := projectStorePlugin(plugin).Logo; got != want {
+					t.Errorf("store logo = %q, want %q for %s", got, want, source.name)
+				}
+				plugin.Logo = "data:image/svg+xml,%3Csvg/%3E"
+				if got := projectStorePlugin(plugin).Logo; got != plugin.Logo {
+					t.Errorf("inline store logo = %q, want %q", got, plugin.Logo)
+				}
+			}
+		})
+	}
 }
 
 func TestPluginLogosRemainInlineOnlyInDemo(t *testing.T) {
@@ -77,7 +107,7 @@ func TestPluginLogosRemainInlineOnlyInDemo(t *testing.T) {
 	if normal.Logo != remote || normal.Metadata.Logo != remote || normal.OAuthProviderEntries[0].Logo != remote {
 		t.Fatalf("ordinary projection lost declared logo URLs: %#v", normal)
 	}
-	store := []management.StorePluginItem{{ID: "remote", Logo: remote}, {ID: "inline", Logo: inline}}
+	store := []management.StorePluginItem{{ID: "remote", Installed: true, InstallSourceStatus: "matched", Logo: remote}, {ID: "inline", Logo: inline}}
 	if got := projectStorePlugins(store, true); got[0].Logo != "" || got[1].Logo != inline {
 		t.Fatalf("demo store artwork = %#v, want inline logos only", got)
 	}

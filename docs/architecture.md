@@ -64,8 +64,14 @@ it failed; preserve that outcome while reporting audit trouble appropriately.
 ### Trusted plugin pages
 
 Installing a CPA plugin is a trust decision: its same-origin page is not an untrusted
-sandbox. The authenticated host deliberately exposes native, possibly secret-bearing
-responses only from the configured CPA origin:
+sandbox. Registered plugin logos and catalog logos from their confirmed installation
+source may load as HTTP(S) images in the browser. Other catalog logos must be inline;
+listing a plugin does not grant its publisher access to the browser's network. The same
+source rule applies when catalog artwork fills a missing installed-plugin identity.
+Trusted image URLs still use the browser's ordinary DNS and redirect behavior.
+
+The authenticated host deliberately exposes native, possibly secret-bearing responses
+only from the configured CPA origin:
 
 - plugin resources under `/v0/resource/plugins/<id>/`, with no injected credential;
 - the `/v0/management/` and `/v8/management/` trees;

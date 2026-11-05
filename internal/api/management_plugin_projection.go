@@ -431,7 +431,7 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		License:              boundedText(plugin.License, pluginTextLimit),
 		Tags:                 boundedPluginList(plugin.Tags),
 		Locales:              projectPluginStoreLocales(plugin.Locales),
-		Logo:                 projectPluginLogo(plugin.Logo),
+		Logo:                 projectStorePluginLogo(plugin),
 		InstallType:          boundedText(plugin.InstallType, 64),
 		Platforms:            platforms,
 		IsOfficial:           isOfficialStoreSource(plugin.SourceID),
