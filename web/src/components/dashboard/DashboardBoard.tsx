@@ -472,7 +472,7 @@ function nearestSpan(spans: readonly DashboardWidgetSpan[], columns: number): Da
 }
 
 /**
- * The fewest rows the widget's content fills: its height laid out at the top of its cell rather than
+ * The rows the widget's content fills: its height laid out at the top of its cell rather than
  * stretched to the rows it spans, read in one synchronous pass so the board never paints it so.
  */
 function naturalRows(cell: HTMLElement): number {

@@ -43,7 +43,9 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({
     const ticks = new Set(Array.from({ length: Math.min(4, categories.length) }, (_, index) =>
       Math.round(index * (categories.length - 1) / Math.max(1, Math.min(4, categories.length) - 1))));
     return {
-      grid: { left: 56, right: 56, top: 26, bottom: 48 },
+      // The value axis has no labels, so the plot runs to the card's edges: the side margins only
+      // hold the first and last time label, and the bottom one the time labels themselves.
+      grid: { left: 16, right: 16, top: 12, bottom: 24 },
       xAxis: {
         type: 'category', data: categories, boundaryGap: false,
         axisLabel: {
