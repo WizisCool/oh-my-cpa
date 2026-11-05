@@ -250,8 +250,8 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
 
 test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
   const t = ((key: string, args?: { name?: string }) => args?.name || key) as Parameters<typeof builtinOAuthProviderChoices>[0];
-  const zaiLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22zai%22/%3E';
-  const bigmodelLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22bigmodel%22/%3E';
+  const zaiLogo = 'https://cdn.example.test/zai.png';
+  const bigmodelLogo = 'http://cdn.example.test/bigmodel.png';
   const [zai, bigmodel, plain] = pluginOAuthProviderChoices([
     {
       id: 'omc-zcode-oauth', enabled: true, effective_enabled: true, supports_oauth: true,
@@ -301,7 +301,7 @@ test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
   const [unusable] = pluginOAuthProviderChoices([{
     id: 'one-portal', enabled: true, effective_enabled: true, supports_oauth: true,
     oauth_provider: 'one-portal-login', logo: 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E',
-    oauth_provider_entries: [{ identifier: 'one-portal-login', logo: 'https://cdn.example.test/one.svg' }],
+    oauth_provider_entries: [{ identifier: 'one-portal-login', logo: 'javascript:alert(1)' }],
   }], t);
   assert.equal(unusable.logo, 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E');
   const [catalogOnly] = pluginOAuthProviderChoices([{

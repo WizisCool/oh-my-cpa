@@ -913,7 +913,11 @@ async function verifyFullTokenCapacity({ base, page, check }) {
 }
 
 async function verifyPluginConnections({ base, page, check, oauthStarts }) {
-  const portalLogo = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230EA5E9'/%3E%3C/svg%3E";
+  const portalLogo = new URL('/fixture-plugin-logo.svg', base).href;
+  await page.route(portalLogo, (route) => route.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#0EA5E9"/></svg>',
+  }));
   // An auth-provider interface also serves API-key plugins. Their own page must
   // remain reachable without starting the interactive login method they reject.
   const plugins = [
@@ -976,7 +980,11 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
       (await portalPanel.getByRole('heading', { name: label, exact: true }).count()) === 1, JSON.stringify(detail));
     const artworks = await portalPanel.locator('img').evaluateAll(nodes => nodes.map(node => node.getAttribute('src')));
     check(`a declared portal draws its own mark: ${provider}`,
-      artworks.some((src) => (src ?? '').includes('0EA5E9')) === (provider === 'interactive-secondary'), JSON.stringify(artworks));
+      artworks.includes(portalLogo) === (provider === 'interactive-secondary'), JSON.stringify(artworks));
+    if (provider === 'interactive-secondary') {
+      await page.waitForFunction((src) => [...document.images].some((image) => image.src === src && image.complete && image.naturalWidth > 0), portalLogo);
+      check('the browser loads the HTTP plugin logo as an image', true);
+    }
   }
 
   const startsBeforePluginPage = oauthStarts.length;
