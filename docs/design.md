@@ -27,10 +27,11 @@ sheets lift with the shared floating/overlay shadows. Group related content thro
 enclosure rather than a stack of headings and dividers.
 
 Use the UI font role for interface prose, the mono role for code and aligned values,
-and tabular numerals for changing measurements. The default bundled typeface is
-Sarasa Mono SC; operator-selected fonts must preserve readability and stay local.
-Ship the console's fonts, icons and artwork locally. Publisher-owned plugin logos are
-optional assets, as described below.
+and tabular numerals for changing measurements. The default typeface is
+Sarasa Mono SC: its Latin side is bundled and hinted, its CJK glyphs come from Google
+Fonts' Noto Sans SC, the same Source Han Sans design (`web/src/theme/cjkFont.ts`).
+Operator-selected fonts must preserve readability.
+Publisher-owned plugin logos are optional assets, as described below.
 
 Keep chrome muted. Semantic status colors convey actual health/state; categorical
 chart colors identify series and must remain distinguishable in both modes. Do not

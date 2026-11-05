@@ -1,5 +1,5 @@
 /**
- * Regenerates the sharded Sarasa Mono SC under `web/src/assets/fonts/sarasa/`.
+ * Regenerates the sharded, hinted Sarasa Mono SC under `web/src/assets/fonts/sarasa/`.
  *
  * The source TTFs come from SARASA_FONT_DIR when it is set, and otherwise from the pinned
  * npm release below, cached in `tmp/fonts/` and checked against its integrity hash on
@@ -28,6 +28,7 @@ import {
   renderCoreCss,
   renderShardUrlsModule,
   shardFileName,
+  shippedCodePoints,
 } from './font-shards.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,7 +39,7 @@ const SOURCE_PACKAGE = {
   tarball: 'https://registry.npmjs.org/@fontpkg/sarasa-mono-sc/-/sarasa-mono-sc-0.36.0.tgz',
   integrity: 'sha512-+4yD9Yez9fCgmshLWm8HaMhQZlsgqib4dgGl0jWLslZtRCkRrBIHIoTJ6kUDDafhuJdjLZnTLXb6mOd9EF0jLg==',
 };
-const SOURCE_FILES = { 400: 'sarasa-mono-sc-regular.ttf', 700: 'sarasa-mono-sc-bold.ttf' };
+const SOURCE_FILES = { 400: 'sarasa-mono-sc-regular.ttf', 600: 'sarasa-mono-sc-semibold.ttf', 700: 'sarasa-mono-sc-bold.ttf' };
 
 function isVerifiedArchive(archive) {
   return `sha512-${createHash('sha512').update(archive).digest('base64')}` === SOURCE_PACKAGE.integrity;
@@ -70,7 +71,7 @@ async function resolveSources(workDirectory) {
   const label = process.env.SARASA_FONT_DIR ? `Sarasa Mono SC from ${path.basename(directory)}` : SOURCE_PACKAGE.label;
   const sources = Object.fromEntries(FONT_WEIGHTS.map((weight) => {
     const file = path.join(directory, SOURCE_FILES[weight]);
-    if (!fs.existsSync(file)) throw new Error(`${file} not found; SARASA_FONT_DIR must hold ${Object.values(SOURCE_FILES).join(' and ')}`);
+    if (!fs.existsSync(file)) throw new Error(`${file} not found; SARASA_FONT_DIR must hold ${Object.values(SOURCE_FILES).join(', ')}`);
     return [weight, file];
   }));
   return { label, sources };
@@ -115,8 +116,10 @@ try {
   if (codePointSets.some((codePoints) => codePoints.size !== codePointSets[0].size || [...codePoints].some((codePoint) => !codePointSets[0].has(codePoint)))) {
     throw new Error('the source weights cover different characters');
   }
-  const plan = planShards(codePointSets[0], collectSourceCharacters(root));
-  console.log(`[font-subset] ${codePointSets[0].size} characters in ${plan.length} shards per weight`);
+  const sourceCharacters = collectSourceCharacters(root);
+  const shipped = shippedCodePoints(codePointSets[0], sourceCharacters);
+  const plan = planShards(shipped, sourceCharacters);
+  console.log(`[font-subset] ${shipped.length} of ${codePointSets[0].size} characters in ${plan.length} shards per weight`);
 
   // The whole directory is built beside the work files - every shard, the manifest, the core
   // stylesheet, the URL module and the files kept from the committed directory, such as the
@@ -137,7 +140,6 @@ try {
       `--output-file=${path.join(stagedDirectory, shardFileName(weight, shard.name))}`,
       '--flavor=woff2',
       '--layout-features=*',
-      '--no-hinting',
       '--desubroutinize',
     ]);
   }));

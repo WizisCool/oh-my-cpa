@@ -1,4 +1,4 @@
-import { fulfillFixture } from '../browser-guard.mjs';
+import { fulfillFixture, isOptional } from '../browser-guard.mjs';
 import { settleLayout, until } from '../harness.mjs';
 
 /**
@@ -210,7 +210,7 @@ export async function systemInformationPage({ base, page, check }) {
   const ownOrigin = new URL(base).origin;
   page.on('request', (request) => {
     const url = request.url();
-    if (url.startsWith('data:') || url.startsWith('blob:')) return;
+    if (url.startsWith('data:') || url.startsWith('blob:') || isOptional(url)) return;
     try {
       if (new URL(url).origin === ownOrigin) return;
     } catch {

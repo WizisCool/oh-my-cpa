@@ -2,7 +2,8 @@
  * Which font shards a text needs: what an exported conversation embeds.
  *
  * An export that misses a shard draws those characters from the reader's own fonts; one
- * that takes every shard carries the whole typeface. The committed manifest is used as
+ * that takes every shard carries the whole typeface. The CJK side comes from Google Fonts,
+ * narrowed to the characters the bundle leaves out. The committed manifest is used as
  * well as a hand-written one, so a regenerated font is held to the same answers: the
  * runtime parses its ranges as the generator does, and common text stays in few shards.
  */
@@ -10,7 +11,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import manifest from '../web/src/assets/fonts/sarasa/manifest.json' with { type: 'json' };
 import { parseUnicodeRange, shardsForText } from '../web/src/theme/fontShards.ts';
-import { parseUnicodeRange as generatorParseUnicodeRange } from './font-shards.mjs';
+import { SERVED_ELSEWHERE_RANGES, parseUnicodeRange as generatorParseUnicodeRange } from './font-shards.mjs';
+import { SERVED_RANGES, narrowUnicodeRange, parseCJKFaces } from '../web/src/theme/cjkFont.ts';
 
 const SHARDS = [
   { name: '000', unicodeRange: 'U+20-7E,U+4EEA' },
@@ -38,24 +40,21 @@ test('the runtime and the generator read every committed range alike', () => {
   }
 });
 
-test('the most common Chinese characters fill the shards right after the core', () => {
-  // GB2312 level 1, rows B0-D7, is the first frequency tier: ordinary text outside the
-  // console's copy should need only the shards just after the core.
-  const decoder = new TextDecoder('gbk');
-  let levelOne = '';
-  for (let lead = 0xb0; lead <= 0xd7; lead += 1) {
-    for (let trail = 0xa1; trail <= 0xfe; trail += 1) {
-      const character = decoder.decode(new Uint8Array([lead, trail]));
-      if (character !== '\ufffd') levelOne += character;
-    }
-  }
-  const core = manifest.shards[0];
-  const outsideCore = [...levelOne].filter((character) => shardsForText(character, manifest.shards)[0] !== core).join('');
-  const expectedCount = Math.ceil([...outsideCore].length / 400);
-  assert.deepEqual(
-    shardsForText(outsideCore, manifest.shards).map((shard) => shard.name),
-    Array.from({ length: expectedCount }, (_, i) => String(i + 1).padStart(3, '0')),
-  );
-  const poem = shardsForText('床前明月光疑是地上霜举头望明月低头思故乡', manifest.shards);
-  assert.ok(poem.every((shard) => Number(shard.name) <= expectedCount), poem.map((shard) => shard.name).join(','));
+test('the CJK faces keep only the ranges the bundle leaves out, in their own weights', () => {
+  // Google's Noto also declares Latin and emoji; those must not draw over Sarasa or colour emoji.
+  const css = [
+    "@font-face{font-family:'Noto Sans SC';font-style:normal;font-weight:600;src:url(https://fonts.gstatic.com/s/a.woff2) format('woff2');unicode-range:U+0020-007e,U+4e00-4e05,U+1f300;}",
+    "@font-face{font-family:'Noto Sans SC';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/b.woff2) format('woff2');unicode-range:U+0000-00ff,U+1f600;}",
+    "@font-face{font-family:'Noto Sans SC';font-style:normal;font-weight:400;src:url(https://example.com/c.woff2) format('woff2');unicode-range:U+4e00;}",
+    "@font-face{font-family:'Noto Sans SC';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/d.woff2) format('woff2');unicode-range:U+abfe-ac01,U+20000-2a6df;}",
+  ].join('\n');
+  assert.deepEqual(parseCJKFaces(css), [
+    { weight: 600, url: 'https://fonts.gstatic.com/s/a.woff2', unicodeRange: 'U+4E00-4E05' },
+    { weight: 400, url: 'https://fonts.gstatic.com/s/d.woff2', unicodeRange: 'U+AC00-AC01,U+20000-2A6DF' },
+  ]);
+  assert.equal(narrowUnicodeRange('U+4e00'), 'U+4E00');
+});
+
+test('the bundle and the CJK faces split the code points along the same line', () => {
+  assert.deepEqual(SERVED_RANGES, SERVED_ELSEWHERE_RANGES);
 });

@@ -10,8 +10,8 @@ import type { MessageKey } from '../i18n/catalog';
  *
  * Every family the console can draw is served from its own origin. A built-in is either
  * bundled (Sarasa Mono SC, the default) or the platform's own fonts; a library family was
- * uploaded or installed from Google Fonts by the server, which stores the files. Nothing
- * here ever names a URL on another host. This module is pure, so the settings page, the
+ * uploaded or installed from Google Fonts by the server, which stores the files. The one
+ * outside source is the default typeface's CJK side, loaded from Google Fonts by `theme/cjkFont.ts`. This module is pure, so the settings page, the
  * first-frame bootstrap and the tests all read the same rules.
  */
 
@@ -52,8 +52,12 @@ export interface BuiltInFont {
   stack: string;
 }
 
-/** The bundled typeface, in the order its installed copies and fallbacks are tried. */
-export const SARASA_STACK = '"Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+/**
+ * The default typeface, in the order its sources and fallbacks are tried: the bundled Sarasa
+ * Mono SC, its CJK glyphs from Google Fonts (`theme/cjkFont.ts`), installed copies, then
+ * the platform's faces.
+ */
+export const SARASA_STACK = '"Sarasa Mono SC", "OMC Noto Sans SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
 
 /** Each platform's interface face, then each platform's Chinese face before the generic. */
 const SYSTEM_SANS_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", Roboto, "Helvetica Neue", Arial, sans-serif';
