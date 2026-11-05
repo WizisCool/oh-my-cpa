@@ -331,8 +331,22 @@ test('credentials keep the name their plugin\'s login card gives the provider', 
     { id: 'opencode', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'OpenCode Go' }, config_fields: [] },
   ]);
   assert.equal(providerDisplayName('opencode-go', overlapping), 'OpenCode Go');
-  // Provider keys come from plugins; an inherited member is not a brand.
-  assert.equal(providerDisplayName('constructor'), 'Constructor');
+  // Provider keys come from plugins; an inherited member is not a brand, and a key nobody
+  // names reads as recorded.
+  assert.equal(providerDisplayName('constructor'), 'constructor');
+  assert.equal(providerDisplayName(''), 'Unknown');
+  // A plugin's own id and quota provider name the same credentials its login portal does.
+  const familyKeys = pluginOAuthProviderTitles([
+    { id: 'acme', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'acme-login', quota_provider: 'acme-credentials', metadata: { name: 'Acme' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('acme-credentials', familyKeys), 'Acme');
+  assert.equal(providerDisplayName('acme', familyKeys), 'Acme');
+  // Built-in credentials and CPA's native API-key families are never renamed by a plugin.
+  const reserved = pluginOAuthProviderTitles([
+    { id: 'shadow', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['claude', 'gemini'], metadata: { name: 'Shadow' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('claude', reserved), 'Claude');
+  assert.equal(providerDisplayName('gemini', reserved), 'Gemini');
 });
 
 

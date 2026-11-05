@@ -79,11 +79,6 @@ export const OAUTH_CHANNEL_META: Record<string, { protocol: string }> = {
   codebuddy: { protocol: 'Codebuddy (OAuth)' },
 };
 
-/** Capitalize first letter of a string safely. */
-export function capitalize(str: string): string {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
 
 /** Normalize provider keys for robust matching across CPA prefix variants. */
 export function normalizeProviderKey(str: string | undefined): string {
@@ -112,7 +107,7 @@ export function resolveChannelName(id: string, pluginTitles?: ReadonlyMap<string
   if (known) {
     return CREDENTIAL_PROVIDERS[known].label;
   }
-  return capitalize(id);
+  return (id || '').trim();
 }
 
 /**
