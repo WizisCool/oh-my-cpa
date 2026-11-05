@@ -222,6 +222,78 @@ test('a draft is carried over onto a newer baseline without undoing what it did 
   ]);
 });
 
+test('a new nested map merges into a newer baseline without dropping siblings', () => {
+  const base = parseDocument(SERVER_YAML);
+  const draft = parseDocument(SERVER_YAML);
+  updateFieldWithBaseline(draft, base, field('kvStorePath'), '/data/cpa/kv.db');
+  const newer = SERVER_YAML.replace(
+    'port: 8317',
+    'port: 8317\n    kv-store:\n        disabled: true\n        operator-extra: retained',
+  );
+
+  const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
+  assert.equal(rebased.getIn(['server', 'port']), 8317, 'the newer server map is retained');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'disabled']), true, 'a newer sibling is retained');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'path']), '/data/cpa/kv.db');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
+    { path: ['server', 'kv-store', 'path'], value: '/data/cpa/kv.db' },
+  ]);
+
+  // The same merge applies when the whole parent map is new.
+  const nestedBase = parseDocument(SERVER_YAML.replace('server:\n    port: 8317\n', ''));
+  const nestedDraft = parseDocument(nestedBase.toString());
+  updateFieldWithBaseline(nestedDraft, nestedBase, field('kvStorePath'), '/nested/kv.db');
+  const nested = parseDocument(rebaseDraft(nestedBase, nestedDraft, newer) ?? '');
+  assert.equal(nested.getIn(['server', 'port']), 8317);
+  assert.equal(nested.getIn(['server', 'kv-store', 'disabled']), true);
+  assert.equal(nested.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.equal(nested.getIn(['server', 'kv-store', 'path']), '/nested/kv.db');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), nested), [
+    { path: ['server', 'kv-store', 'path'], value: '/nested/kv.db' },
+  ]);
+});
+
+test('rebase keeps newer siblings beside an existing map edit, its removal and a type replacement', () => {
+  const configured = SERVER_YAML.replace(
+    'port: 8317',
+    'port: 8317\n    kv-store:\n        disabled: true\n        path: /old/kv.db',
+  );
+  const base = parseDocument(configured);
+  const draft = parseDocument(configured);
+  updateFieldWithBaseline(draft, base, field('kvStorePath'), '/new/kv.db');
+  const newer = configured.replace('/old/kv.db', '/concurrent/kv.db').replace(
+    'disabled: true',
+    'disabled: true\n        operator-extra: retained',
+  );
+
+  const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'path']), '/new/kv.db');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'disabled']), true);
+  assert.equal(rebased.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
+    { path: ['server', 'kv-store', 'path'], value: '/new/kv.db' },
+  ]);
+
+  const removeBase = parseDocument(newer);
+  const removeDraft = parseDocument(newer);
+  updateFieldWithBaseline(removeDraft, removeBase, field('kvStorePath'), '');
+  const removed = parseDocument(rebaseDraft(removeBase, removeDraft, newer) ?? '');
+  assert.equal(removed.hasIn(['server', 'kv-store', 'path']), false);
+  assert.equal(removed.getIn(['server', 'kv-store', 'disabled']), true);
+  assert.equal(removed.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), removed), [
+    { path: ['server', 'kv-store', 'path'], remove: true },
+  ]);
+
+  const replaced = parseDocument(rebaseDraft(
+    parseDocument('server:\n    kv-store:\n        path: /old/kv.db\n'),
+    parseDocument('server:\n    kv-store: false\n'),
+    'server:\n    kv-store:\n        disabled: true\n        operator-extra: retained\n',
+  ) ?? '');
+  assert.equal(replaced.getIn(['server', 'kv-store']), false, 'a value that is not a map still replaces whole');
+});
+
 test('a draft without edits takes the newer baseline as it is', () => {
   const newer = SERVER_YAML.replace('port: 8317', 'port: 9000');
   assert.equal(rebaseDraft(parseDocument(SERVER_YAML), parseDocument(SERVER_YAML), newer), newer);
@@ -341,8 +413,97 @@ for (const setting of CODEX_BEHAVIOR_FIELDS) {
   });
 }
 
-// CPA holds the Claude session date pin as a pointer (`*int`): an absent key is its
-// 7-day default, while an explicit 0 is a different setting — the legacy
+test('KV store defaults remain omitted through unrelated saves and reverted edits', () => {
+  const disabled = field('kvStoreDisabled');
+  const path = field('kvStorePath');
+  const server = parseDocument(SERVER_YAML);
+  const draft = server.clone();
+  assert.equal(disabled.type, 'switch');
+  assert.equal(path.type, 'string');
+  for (const setting of [disabled, path]) {
+    assert.ok(CONFIG_GROUPS.find((group) => group.id === 'grp_service')?.fieldIds.includes(setting.id));
+  }
+  assert.equal(getFieldSemanticValue(server, disabled), false);
+  assert.equal(getFieldSemanticValue(server, path), '');
+
+  updateFieldWithBaseline(draft, server, disabled, false);
+  updateFieldWithBaseline(draft, server, path, '');
+  assert.equal(draft.toString(), server.toString());
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+
+  updateFieldWithBaseline(draft, server, field('debug'), true);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['observability', 'logs', 'debug'], value: true },
+  ]);
+  assert.equal(draft.hasIn(['server', 'kv-store']), false);
+  updateFieldWithBaseline(draft, server, field('debug'), false);
+
+  updateFieldWithBaseline(draft, server, disabled, true);
+  updateFieldWithBaseline(draft, server, path, '/data/cpa/kv.db');
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['server', 'kv-store'], value: { disabled: true, path: '/data/cpa/kv.db' } },
+  ]);
+  updateFieldWithBaseline(draft, server, disabled, false);
+  updateFieldWithBaseline(draft, server, path, '');
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+  assert.equal(draft.toString(), server.toString());
+});
+
+for (const setting of [
+  { disabled: false, path: '', pinDays: 0, editedPath: '/data/cpa/kv.db' },
+  { disabled: true, path: '/data/cpa/kv.db', pinDays: 21, editedPath: '' },
+]) {
+  test(`KV store edits preserve siblings and retention with disabled=${setting.disabled} and path=${JSON.stringify(setting.path)}`, () => {
+    const disabled = field('kvStoreDisabled');
+    const path = field('kvStorePath');
+    const server = parseDocument(`${SERVER_YAML}upstream:
+    claude:
+        session-date-pin-days: ${setting.pinDays} # retained policy
+`);
+    server.setIn(['server', 'kv-store'], server.createNode({
+      disabled: setting.disabled,
+      path: setting.path,
+      'operator-extra': 'retained',
+    }));
+    assert.equal(getFieldSemanticValue(server, disabled), setting.disabled);
+    assert.equal(getFieldSemanticValue(server, path), setting.path);
+
+    const unrelated = server.clone();
+    updateFieldWithBaseline(unrelated, server, field('debug'), true);
+    assert.deepEqual(computeConfigChanges(server, unrelated), [
+      { path: ['observability', 'logs', 'debug'], value: true },
+    ]);
+
+    const draft = server.clone();
+    updateFieldWithBaseline(draft, server, disabled, !setting.disabled);
+    updateFieldWithBaseline(draft, server, path, setting.editedPath);
+    assert.deepEqual(computeConfigChanges(server, draft), [
+      { path: ['server', 'kv-store', 'disabled'], value: !setting.disabled },
+      setting.editedPath === ''
+        ? { path: ['server', 'kv-store', 'path'], remove: true }
+        : { path: ['server', 'kv-store', 'path'], value: setting.editedPath },
+    ]);
+    const expected = server.clone();
+    expected.setIn(['server', 'kv-store', 'disabled'], !setting.disabled);
+    if (setting.editedPath === '') expected.deleteIn(['server', 'kv-store', 'path']);
+    else expected.setIn(['server', 'kv-store', 'path'], setting.editedPath);
+
+    const readback = parseDocument(draft.toString());
+    assert.deepEqual(readback.toJS(), expected.toJS());
+    assert.equal(getFieldSemanticValue(readback, disabled), !setting.disabled);
+    assert.equal(getFieldSemanticValue(readback, path), setting.editedPath);
+    assert.equal(getFieldSemanticValue(readback, field('claudeSessionDatePinDays')), setting.pinDays);
+    assert.equal(readback.toString().includes('# retained policy'), true);
+
+    updateFieldWithBaseline(draft, server, disabled, setting.disabled);
+    updateFieldWithBaseline(draft, server, path, setting.path);
+    assert.deepEqual(computeConfigChanges(server, draft), []);
+    assert.deepEqual(draft.toJS(), server.toJS());
+  });
+}
+
+// In memory mode, CPA holds the Claude session date pin as a pointer (`*int`): an
+// absent key is its 7-day default, while an explicit 0 is a different setting — the legacy
 // continuity-scoped pin. The schema default therefore has to reproduce the absent
 // key, not stand in for a value, so an untouched gateway is never written, and a
 // zero the operator typed has to survive the save and the readback instead of

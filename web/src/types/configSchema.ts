@@ -88,7 +88,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_service',
     descKey: 'cfg.grp_service_desc',
     variant: 'form-grid',
-    fieldIds: ['host', 'port', 'authDir', 'trustedProxies', 'maxRequestBodyBytes', 'githubToken'],
+    fieldIds: ['host', 'port', 'authDir', 'kvStoreDisabled', 'kvStorePath', 'trustedProxies', 'maxRequestBodyBytes', 'githubToken'],
   },
   {
     id: 'grp_apikeys',
@@ -354,6 +354,27 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'string',
     placeholder: '~/.cli-proxy-api',
     keywords: ['auth', 'dir', 'directory'],
+  },
+  {
+    id: 'kvStoreDisabled',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_kv_store_disabled',
+    descKey: 'cfg.f_kv_store_disabled_desc',
+    yamlPath: ['server', 'kv-store', 'disabled'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['kv', 'bbolt', 'persistence', 'storage', 'memory', 'home'],
+  },
+  {
+    id: 'kvStorePath',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_kv_store_path',
+    descKey: 'cfg.f_kv_store_path_desc',
+    yamlPath: ['server', 'kv-store', 'path'],
+    type: 'string',
+    defaultValue: '',
+    placeholder: '<auth-dir>/kv.db',
+    keywords: ['kv', 'bbolt', 'persistence', 'storage', 'path', 'kv.db'],
   },
   {
     id: 'apiKeys',
@@ -1282,9 +1303,9 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     labelKey: 'cfg.f_claude_session_date_pin',
     descKey: 'cfg.f_claude_session_date_pin_desc',
     yamlPath: ['upstream', 'claude', 'session-date-pin-days'],
-    // CPA holds this as a pointer, so the key's absence and an explicit 0 are two
-    // different settings: omitted is 7 days, 0 keeps the legacy continuity-scoped
-    // pin. The default mirrors the omitted state rather than replacing the 0.
+    // In memory mode, omitted is 7 days and an explicit 0 keeps the continuity-scoped
+    // pin. Active local or Home KV ignores this policy; keep its stored value intact
+    // so editing persistence never rewrites the operator's memory-mode policy.
     // The setting arrived after the section's own relocation, so it has no
     // pre-relocation spelling a gateway could still be holding.
     type: 'number',
