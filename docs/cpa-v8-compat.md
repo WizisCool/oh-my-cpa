@@ -28,9 +28,13 @@ OMC's egress network. Plugin sign-in and management-page actions are independent
 an explicit sign-in request lets CPA determine the authorization flow, while a
 registered page remains available separately. Device-code and redirect controls
 appear only after CPA returns an authorization URL and session identity; incomplete
-details produce an actionable error. The page action is disabled while authorization
-is active. CPA still owns login execution and account matching. Targeted recovery
-for credentials owned by plugins with a registered page remains unavailable.
+details produce an actionable error. If an incomplete response includes a session
+identity, OMC cancels it before allowing another start; failed cancellation retains
+the session controls and status polling until cancellation or a terminal status is
+confirmed. The page action is disabled while any authorization is starting or
+waiting, including another provider's attempt. CPA still owns login execution and
+account matching. Targeted recovery for credentials owned by plugins with a
+registered page remains unavailable.
 
 Plugin-store translations are optional publisher metadata, not a plugin page's
 language or installation identity. The [locale projection](../internal/api/management_plugin_projection.go)

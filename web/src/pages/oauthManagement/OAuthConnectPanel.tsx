@@ -282,7 +282,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               </Button>
               {choice.pluginPageRoute && (
                 <Button
-                  disabled={isWaiting || session?.starting}
+                  disabled={sessions.activeProviders.length > 0}
                   onClick={openPluginPage}
                   data-plugin-connect={choice.id}
                 >
@@ -408,7 +408,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                         <span className={styles['waiting-desc']}>{t('oauth.status_waiting')}</span>
                         {session?.error && (
                           <span className={styles['waiting-note']} data-oauth-status-read-failure>
-                            {t('oauth.status_unread', { msg: session.error })}
+                            {session.url ? t('oauth.status_unread', { msg: session.error }) : session.error}
                           </span>
                         )}
                         {/* A cancelled attempt stays waiting, so this is the only state that can

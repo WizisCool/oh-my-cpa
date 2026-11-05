@@ -24,7 +24,7 @@ function ConnectWorkspace({ choices = CHOICES, recovery, isRecoverySupported = t
   return <>
     <button data-testid="minimize" onClick={() => setIsOpen(false)} />
     <button data-testid="reopen" onClick={() => setIsOpen(true)} />
-    <button data-testid="other-provider" onClick={() => setProviderId(current => current === 'codex' ? 'anthropic' : 'codex')} />
+    <button data-testid="other-provider" onClick={() => setProviderId(current => choices.find(choice => choice.id !== current)?.id ?? current)} />
     <output data-testid="sessions">{JSON.stringify(sessions.states)}</output>
     <output data-testid="location">{location.pathname}</output>
     <OAuthConnectPanel recoveryTarget={recovery} isRecoverySupported={isRecoverySupported} open={isOpen} choices={choices} selectedProviderId={providerId}
@@ -93,6 +93,96 @@ it('logs in from a plugin with a management page, completes polling and keeps na
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     expect(server.requests.filter(request => request.path === '/management/oauth/status')).toHaveLength(1);
   } finally {
+    surface.unmount();
+    vi.useRealTimers();
+  }
+});
+
+it.each(['starting', 'waiting'] as const)('blocks plugin-page navigation while another provider is %s', async status => {
+  vi.useFakeTimers();
+  const server = installOmcApi();
+  server.on('POST', '/management/oauth/start', () => ({ url: 'https://auth.example.test/authorize', state: 'codex-login' }));
+  server.on('GET', '/management/oauth/status', () => ({ status: 'wait' }));
+  const held = status === 'starting' ? server.hold('POST', '/management/oauth/start') : undefined;
+  const choices: OAuthProviderChoice[] = [CHOICES[0], {
+    id: 'workbuddy', title: 'WorkBuddy', description: '', iconId: '', flow: 'plugin', loginLabel: 'Start WorkBuddy sign-in',
+    pluginId: 'workbuddy', pluginPageRoute: '/plugin-pages/workbuddy/0',
+  }];
+  const surface = renderWithOmc(<ConnectWorkspace choices={choices} />, { route: '/omc/oauth-management', isStrict: true });
+  try {
+    await act(async () => { fireEvent.click(surface.baseElement.querySelector('[data-oauth-start="codex"]')!); });
+    expect(JSON.parse(screen.getByTestId('sessions').textContent!).codex.status).toBe(status);
+    await act(async () => { fireEvent.click(screen.getByTestId('other-provider')); });
+    const pluginPage = surface.baseElement.querySelector<HTMLButtonElement>('[data-plugin-connect="workbuddy"]')!;
+    expect(pluginPage.disabled).toBe(true);
+    fireEvent.click(pluginPage);
+    expect(screen.getByTestId('location').textContent).toBe('/omc/oauth-management');
+    expect(surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start="workbuddy"]')!.disabled).toBe(false);
+    if (held) await act(async () => { held.release(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(server.requests.filter(request => request.path === '/management/oauth/status').map(request => request.query.get('state'))).toEqual(['codex-login']);
+  } finally {
+    held?.release();
+    surface.unmount();
+    vi.useRealTimers();
+  }
+});
+
+it.each(['cancelled', 'failed', 'waiting', 'completed'] as const)('cleans up an incomplete plugin start without losing session control: %s', async outcome => {
+  vi.useFakeTimers();
+  const server = installOmcApi();
+  server.on('POST', '/management/oauth/start', () => ({ url: '   ', state: 'incomplete-plugin-session' }));
+  server.on('DELETE', '/management/oauth/session', () => ({ status: 'ok', cancelled: true }));
+  server.on('GET', '/management/oauth/status', () => ({ status: outcome === 'completed' ? 'ok' : 'wait' }));
+  const held = server.hold('DELETE', '/management/oauth/session');
+  const surface = renderWithOmc(<PluginConnectWorkspace />, { route: '/omc/oauth-management', isStrict: true });
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).workbuddy;
+  const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start="workbuddy"]')!;
+  const pluginPage = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-plugin-connect="workbuddy"]')!;
+  try {
+    await act(async () => { fireEvent.click(start()); });
+    expect(server.writes('/management/oauth/session').map(request => request.query.get('session_id'))).toEqual(['incomplete-plugin-session']);
+    expect(session().state).toBe('incomplete-plugin-session');
+    expect(session().status).toBe('waiting');
+    expect(start().disabled).toBe(true);
+    expect(pluginPage().disabled).toBe(true);
+    expect(surface.baseElement.querySelector('[data-oauth-callback-input]')).toBeNull();
+    await act(async () => {
+      held.release(outcome === 'failed'
+        ? json({ error: 'Cancellation unavailable' }, 502)
+        : { status: 'ok', cancelled: outcome === 'cancelled' });
+    });
+    if (outcome === 'cancelled') {
+      expect(session().status).toBe('error');
+      expect(session().state).toBeUndefined();
+      expect(session().error).toBeTruthy();
+      expect(surface.baseElement.textContent).toContain(session().error);
+      expect(start().disabled).toBe(false);
+      expect(pluginPage().disabled).toBe(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(server.requests.filter(request => request.path === '/management/oauth/status')).toHaveLength(0);
+    } else if (outcome === 'completed') {
+      expect(session().status).toBe('success');
+      expect(session().state).toBeUndefined();
+      expect(session().error).toBeUndefined();
+      expect(start().disabled).toBe(false);
+    } else {
+      expect(session().status).toBe('waiting');
+      expect(session().state).toBe('incomplete-plugin-session');
+      expect(start().disabled).toBe(true);
+      expect(pluginPage().disabled).toBe(true);
+      if (outcome === 'failed') expect(session().cancelError).toBe('Cancellation unavailable');
+      const reads = server.requests.filter(request => request.path === '/management/oauth/status').length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(server.requests.filter(request => request.path === '/management/oauth/status')).toHaveLength(reads + 1);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel Authorization' })); });
+      expect(server.writes('/management/oauth/session').map(request => request.query.get('session_id'))).toEqual(['incomplete-plugin-session', 'incomplete-plugin-session']);
+      expect(session().status).toBe('idle');
+      expect(session().state).toBeUndefined();
+      expect(start().disabled).toBe(false);
+    }
+  } finally {
+    held.release();
     surface.unmount();
     vi.useRealTimers();
   }

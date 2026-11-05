@@ -267,6 +267,45 @@ export function useOAuthSessions(
     }, STATUS_POLL_INTERVAL_MS);
   }, [clearStatusTimer, enqueueCheck, performStatusCheck]);
 
+  // Both explicit cancellation and incomplete-start cleanup keep the same CPA
+  // completion race and retry behavior. Only the caller chooses the cancelled UI.
+  const cancelAttempt = React.useCallback(async (
+    providerId: string,
+    token: string,
+    generation: number,
+  ): Promise<boolean> => {
+    updateProviderState(providerId, { cancelling: true, cancelError: undefined });
+
+    try {
+      const response = token
+        ? await api.cancelOAuthSession(token)
+        : { status: 'ok', cancelled: true };
+      if (disposedRef.current || generationRef.current[providerId] !== generation) return false;
+      clearProviderTimers(providerId);
+      if (response.cancelled) {
+        delete attemptUsesProxyRef.current[providerId];
+        return true;
+      }
+
+      // CPA says the session could not be cancelled, which means it may already
+      // have completed. Re-read it instead of painting a false cancellation.
+      updateProviderState(providerId, { cancelling: false, status: 'waiting' });
+      const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, true));
+      if (disposedRef.current) return false;
+      if (isPollingOutcome(outcome) && generationRef.current[providerId] === generation) {
+        updateProviderState(providerId, { polling: true });
+        scheduleStatusPoll(providerId, token, generation);
+      }
+    } catch (error: unknown) {
+      if (disposedRef.current || generationRef.current[providerId] !== generation) return false;
+      const errorMessage = describeError(error);
+      updateProviderState(providerId, { cancelling: false, cancelError: errorMessage, polling: Boolean(token) });
+      if (token) scheduleStatusPoll(providerId, token, generation);
+      toast.error(t('oauth.cancel_failed', { msg: errorMessage }));
+    }
+    return false;
+  }, [clearProviderTimers, enqueueCheck, toast, performStatusCheck, scheduleStatusPoll, t, updateProviderState]);
+
   const startAttempt = React.useCallback(async (
     providerId: string,
     proxyUrl: string | undefined,
@@ -300,7 +339,22 @@ export function useOAuthSessions(
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       const token = (response.state || response.session_id || '').trim();
       if (choice.flow === 'plugin' && (!response.url?.trim() || !token)) {
-        throw new Error(t('oauth.plugin_login_unavailable'));
+        const errorMessage = t('oauth.plugin_login_unavailable');
+        if (token) {
+          // A malformed reply can still own a live CPA session. Keep its token
+          // and controls until cancellation or a terminal status is confirmed.
+          updateProviderState(providerId, {
+            state: token,
+            status: 'waiting',
+            starting: false,
+            error: errorMessage,
+            requiresProxyReentry: Boolean(proxyUrl?.trim()),
+          });
+          const wasCancelled = await cancelAttempt(providerId, token, generation);
+          if (!wasCancelled || disposedRef.current || generationRef.current[providerId] !== generation) return;
+          updateProviderState(providerId, { state: undefined, cancelling: false });
+        }
+        throw new Error(errorMessage);
       }
       const flow = resolveStartedOAuthFlow(choice.flow, response);
       const userCode = (response.user_code || '').trim() || undefined;
@@ -332,7 +386,7 @@ export function useOAuthSessions(
     } finally {
       startInFlightRef.current[providerId] = false;
     }
-  }, [clearProviderTimers, toast, scheduleStatusPoll, states, t, updateProviderState]);
+  }, [cancelAttempt, clearProviderTimers, toast, scheduleStatusPoll, states, t, updateProviderState]);
 
   const start = React.useCallback(
     (providerId: string, proxyUrl?: string, recovery?: OAuthRecoveryTarget) => startAttempt(providerId, proxyUrl, false, recovery),
@@ -350,38 +404,11 @@ export function useOAuthSessions(
     const token = (states[providerId]?.state ?? '').trim();
     const generation = (generationRef.current[providerId] ?? 0) + 1;
     generationRef.current[providerId] = generation;
-    updateProviderState(providerId, { cancelling: true, cancelError: undefined });
-
-    try {
-      const response = token
-        ? await api.cancelOAuthSession(token)
-        : { status: 'ok', cancelled: true };
-      if (disposedRef.current || generationRef.current[providerId] !== generation) return;
-      clearProviderTimers(providerId);
-      if (response.cancelled) {
-        delete attemptUsesProxyRef.current[providerId];
-        setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
-        toast.info(t('oauth.session_cancelled'));
-        return;
-      }
-
-      // CPA says the session could not be cancelled, which means it may already
-      // have completed. Re-read it instead of painting a false cancellation.
-      updateProviderState(providerId, { cancelling: false, status: 'waiting' });
-      const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, true));
-      if (disposedRef.current) return;
-      if (isPollingOutcome(outcome) && generationRef.current[providerId] === generation) {
-        updateProviderState(providerId, { polling: true });
-        scheduleStatusPoll(providerId, token, generation);
-      }
-    } catch (error: unknown) {
-      if (disposedRef.current || generationRef.current[providerId] !== generation) return;
-      const errorMessage = describeError(error);
-      updateProviderState(providerId, { cancelling: false, cancelError: errorMessage, polling: Boolean(token) });
-      if (token) scheduleStatusPoll(providerId, token, generation);
-      toast.error(t('oauth.cancel_failed', { msg: errorMessage }));
-    }
-  }, [clearProviderTimers, enqueueCheck, toast, performStatusCheck, scheduleStatusPoll, states, t, updateProviderState]);
+    const wasCancelled = await cancelAttempt(providerId, token, generation);
+    if (!wasCancelled || disposedRef.current || generationRef.current[providerId] !== generation) return;
+    setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
+    toast.info(t('oauth.session_cancelled'));
+  }, [cancelAttempt, states, t, toast]);
 
   const setCallbackUrl = React.useCallback((providerId: string, value: string) => {
     updateProviderState(providerId, { callbackUrl: value });
