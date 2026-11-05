@@ -29,7 +29,8 @@ enclosure rather than a stack of headings and dividers.
 Use the UI font role for interface prose, the mono role for code and aligned values,
 and tabular numerals for changing measurements. The default bundled typeface is
 Sarasa Mono SC; operator-selected fonts must preserve readability and stay local.
-Don't introduce externally hosted fonts, icons or artwork.
+Ship the console's fonts, icons and artwork locally. Publisher-owned plugin logos are
+optional assets, as described below.
 
 Keep chrome muted. Semantic status colors convey actual health/state; categorical
 chart colors identify series and must remain distinguishable in both modes. Do not
@@ -59,8 +60,9 @@ collection-level sources through shared queries and revalidates the sanitized pr
 catalog on mount. The DOM renderer and request-image painter consume the same artwork
 candidates. Plugin ownership remains authoritative even when its logo is
 missing or a registry read fails. Render plugin SVGs only as isolated images, never as
-host markup or direct remote asset requests. Operations/status glyphs remain in the
-static icon module, separate from brand identity.
+host markup. Plugin-published HTTP(S) logos load in the browser and fall back to catalog
+artwork or a neutral mark if unavailable; they do not require server-side network access.
+Operations/status glyphs remain in the static icon module, separate from brand identity.
 
 A protocol family is not a provider identity. Only an OAuth channel's family names the
 provider a connection belongs to, so only that family may resolve a plugin's artwork or

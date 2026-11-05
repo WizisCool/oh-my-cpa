@@ -20,7 +20,11 @@ login entries from their owning plugin's credential identity and branding, while
 older single-entry declarations. A plugin that publishes `oauth_provider_entries` names
 and draws each login portal for itself; the plugin-wide logo remains the fallback, so a
 credential, quota or request row that only knows a provider key resolves the same artwork
-the login card did. A plugin's installed page takes precedence over requesting an
+the login card did. The declared `quota_provider` also identifies the plugin's credential
+family when it differs from the login and plugin IDs; it does not add a login choice.
+OMC does not infer undeclared credential families from naming similarities. Plugin logos
+may be inline images or absolute HTTP(S) URLs loaded by the browser, independently of
+OMC's egress network. A plugin's installed page takes precedence over requesting an
 interactive login; CPA still owns login execution and account matching.
 
 Plugin-store translations are optional publisher metadata, not a plugin page's

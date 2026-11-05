@@ -27,7 +27,7 @@ declares the fields CPA validates:
 | `author` | yes | |
 | `repository` | yes for `github-release` | `https://github.com/{owner}/{repo}` exactly: the store builds release URLs from it and refuses an `owner/repo` shorthand, a `.git` suffix, or any other host |
 | `version` | optional | Display fallback; the latest release is authoritative. No leading `v` (that belongs to the tag) |
-| `homepage`, `license`, `tags`, `logo` | optional | `logo` is a URL the console inlines |
+| `homepage`, `license`, `tags`, `logo` | optional | `logo` is an inline image or absolute HTTP(S) URL loaded by the browser |
 
 An empty `plugins` list is valid: the registry is published before the first plugin
 exists, so the store has a working source rather than a failing one. One malformed
