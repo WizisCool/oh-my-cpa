@@ -12,7 +12,8 @@ import { test } from 'vitest';
 import manifest from '../web/src/assets/fonts/sarasa/manifest.json' with { type: 'json' };
 import { parseUnicodeRange, shardsForText } from '../web/src/theme/fontShards.ts';
 import { SERVED_ELSEWHERE_RANGES, parseUnicodeRange as generatorParseUnicodeRange } from './font-shards.mjs';
-import { SERVED_RANGES, narrowUnicodeRange, parseCJKFaces } from '../web/src/theme/cjkFont.ts';
+import { CJK_STYLESHEET_URL, SERVED_RANGES, facesForText, narrowUnicodeRange, parseCJKFaces } from '../web/src/theme/cjkFont.ts';
+import { isOptional } from './acceptance/browser-guard.mjs';
 
 const SHARDS = [
   { name: '000', unicodeRange: 'U+20-7E,U+4EEA' },
@@ -53,6 +54,19 @@ test('the CJK faces keep only the ranges the bundle leaves out, in their own wei
     { weight: 400, url: 'https://fonts.gstatic.com/s/d.woff2', unicodeRange: 'U+AC00-AC01,U+20000-2A6DF' },
   ]);
   assert.equal(narrowUnicodeRange('U+4e00'), 'U+4E00');
+});
+
+test('an export embeds the CJK faces its text needs in every weight', () => {
+  const face = (weight: number, unicodeRange: string) => ({ weight, url: `https://fonts.gstatic.com/s/${weight}-${unicodeRange}.woff2`, unicodeRange });
+  const faces = [face(400, 'U+4E00'), face(400, 'U+4E01'), face(600, 'U+4E00'), face(600, 'U+4E01'), face(700, 'U+4E00')];
+  assert.deepEqual(facesForText('一', faces).map((chosen) => chosen.weight), [400, 600, 700]);
+  assert.deepEqual(facesForText('丁', faces).map((chosen) => `${chosen.weight} ${chosen.unicodeRange}`), ['400 U+4E01', '600 U+4E01']);
+});
+
+test('the browser checks exempt only the console\'s own CJK stylesheet request', () => {
+  assert.ok(isOptional(CJK_STYLESHEET_URL));
+  assert.ok(!isOptional('https://fonts.gstatic.com/s/tracker.png'));
+  assert.ok(!isOptional('https://fonts.googleapis.com/css2?family=Other'));
 });
 
 test('the bundle and the CJK faces split the code points along the same line', () => {

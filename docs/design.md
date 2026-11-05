@@ -28,7 +28,7 @@ enclosure rather than a stack of headings and dividers.
 
 Use the UI font role for interface prose, the mono role for code and aligned values,
 and tabular numerals for changing measurements. The default typeface is
-Sarasa Mono SC: its Latin side is bundled and hinted, its CJK glyphs come from Google
+Sarasa Mono SC: its Latin side is bundled and hinted, the CJK glyphs it leaves out come from Google
 Fonts' Noto Sans SC, the same Source Han Sans design (`web/src/theme/cjkFont.ts`).
 Operator-selected fonts must preserve readability.
 Publisher-owned plugin logos are optional assets, as described below.

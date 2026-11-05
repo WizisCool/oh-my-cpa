@@ -108,6 +108,18 @@ export function registerCJKFont(fonts: FontFaceSet = document.fonts): Promise<CJ
   return loading;
 }
 
+/** The faces that draw at least one character of `text`, chosen within each weight. */
+export function facesForText(text: string, faces: readonly CJKFace[]): CJKFace[] {
+  // Every weight covers the same characters, so the choice is made per weight: across all of
+  // them, a character would pick one weight's face and leave the others out.
+  const weights = [...new Set(faces.map((face) => face.weight))];
+  return weights.flatMap((weight) => {
+    const ofWeight = faces.filter((face) => face.weight === weight);
+    const shards = ofWeight.map((face, index) => ({ name: String(index), unicodeRange: face.unicodeRange }));
+    return shardsForText(text, shards).map((shard) => ofWeight[Number(shard.name)]);
+  });
+}
+
 function readDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -123,9 +135,7 @@ function readDataURL(blob: Blob): Promise<string> {
  * the reader's own CJK font draws those characters.
  */
 export async function embeddedCJKFontCSS(text: string, family: string): Promise<string> {
-  const faces = await registerCJKFont();
-  const byShard = faces.map((face, index) => ({ name: String(index), unicodeRange: face.unicodeRange }));
-  const needed = shardsForText(text, byShard).map((shard) => faces[Number(shard.name)]);
+  const needed = facesForText(text, await registerCJKFont());
   const rules = await Promise.all(needed.map(async (face) => {
     try {
       const response = await fetch(face.url, { ...FETCH_OPTIONS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
