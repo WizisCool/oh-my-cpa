@@ -22,8 +22,8 @@ import { Tag } from '../common/Tag';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ProviderActivityStrip } from './ProviderActivityStrip';
 import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
-import { useSortableList } from '../../hooks/useSortableList';
-import { DASHBOARD_ORDER_PREFERENCE } from '../../types/dashboardLayout';
+import { useRankedSortableList } from '../../hooks/useSortableList';
+import { DASHBOARD_PROVIDER_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatMinuteSpan } from '../../utils/dateTimeFormat';
 import './dashboard.css';
@@ -165,7 +165,7 @@ export const DashboardProviders = React.memo(function DashboardProviders({
 
   // The operator's order replaces the volume sort for the rows it names; a provider it does not
   // name still lands by volume after them, and the fold keeps hiding the tail of that order.
-  const sortable = useSortableList(DASHBOARD_ORDER_PREFERENCE, 'providers', aggregated, providerRowKey);
+  const sortable = useRankedSortableList(DASHBOARD_PROVIDER_ORDER_PREFERENCE, aggregated, providerRowKey);
   const ordered = sortable.ordered;
   const isFoldable = ordered.length > PROVIDER_PREVIEW_LIMIT;
   const visibleProviders = useMemo(() => {

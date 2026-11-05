@@ -97,10 +97,11 @@ reaches that edge, so it takes no column. On a phone it sits inline with the row
 controls. Rows sort live, without dimming, and travel only along the list. The drop
 keeps the order on screen until the stored preference arrives. A focused handle moves
 its row with the arrow keys. A display order is presentation only: routing priority and
-weight belong to the routing board. A new list stored in a grouped order document, as the
-dashboard's lists share one, takes
+weight belong to the routing board. A new list takes
 [`useSortableList`](../web/src/hooks/useSortableList.ts) rather than its own preference
-wiring.
+wiring: a grouped order document when its keys are stable, such as credential file names, or a
+rank document of its own when they carry a provider's positional id, which the server re-keys
+with the other provider overlays when a delete or move shifts later entries.
 
 ## Feedback and loading
 

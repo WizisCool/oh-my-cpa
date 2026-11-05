@@ -178,7 +178,7 @@ describe('credential quota presentation', () => {
 
   it('draws the operator\'s stored order first, keeps urgency for the rest and writes a keyboard step beside other lists', async () => {
     const api = installOmcApi();
-    api.state.preferences.omc_dashboard_order = { providers: ['configured:keep'], credential_quota: ['ample', 'low'] };
+    api.state.preferences.omc_dashboard_order = { other_list: ['keep'], credential_quota: ['ample', 'low'] };
     const files = FILES.filter((entry) => !entry.disabled && !entry.runtime_only);
     renderWithOmc(<MemoryRouter><CredentialQuotaPanel nowMS={NOW_MS} files={files} quotas={QUOTAS} isSortable /></MemoryRouter>);
     const handleName = (name: string) => `${makeT('en')('common.reorder_handle')}: ${name}`;
@@ -191,7 +191,7 @@ describe('credential quota presentation', () => {
     await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
     expect(api.preferenceWrites()[0]).toEqual({
       key: 'omc_dashboard_order',
-      value: { providers: ['configured:keep'], credential_quota: ['low', 'ample', ...urgency] },
+      value: { other_list: ['keep'], credential_quota: ['low', 'ample', ...urgency] },
     });
   });
 

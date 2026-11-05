@@ -26,6 +26,7 @@
     "omc_sidebar_collapsed",
     "omc_dashboard_layout",
     "omc_dashboard_order",
+    "dashboard_provider_order",
     "omc_fonts",
     "playground_session",
     "agent_target",

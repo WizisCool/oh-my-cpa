@@ -93,20 +93,23 @@ var positionalProviderOverlays = []string{
 	repository.PreferenceProviderIcons,
 	repository.PreferenceProviderOrder,
 	repository.PreferenceRoutingCardOrder,
+	repository.PreferenceDashboardProviderOrder,
 }
 
 // overlayKeyPrefix names the overlays that key a provider by more than its positional id: the
-// routing board orders providers and credentials in one document, so a provider's entry carries
-// its member kind in front of the id.
+// routing board and the dashboard order providers beside other rows in one document, so a
+// provider's entry carries its row kind in front of the id.
 var overlayKeyPrefix = map[string]string{
-	repository.PreferenceRoutingCardOrder: "provider:",
+	repository.PreferenceRoutingCardOrder:       "provider:",
+	repository.PreferenceDashboardProviderOrder: "configured:",
 }
 
 // isConsoleOverlay reports whether the console writes the overlay through the preferences API
 // rather than a provider save writing it with the row.
 func isConsoleOverlay(preference string) bool {
 	switch preference {
-	case repository.PreferenceProviderIcons, repository.PreferenceProviderOrder, repository.PreferenceRoutingCardOrder:
+	case repository.PreferenceProviderIcons, repository.PreferenceProviderOrder, repository.PreferenceRoutingCardOrder,
+		repository.PreferenceDashboardProviderOrder:
 		return true
 	}
 	return false

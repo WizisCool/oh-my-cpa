@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"testing"
 
@@ -140,10 +141,22 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 			t.Fatalf("seed %s: %v", key, err)
 		}
 	}
-	// The routing board's order names providers by member key, beside credentials it must not touch.
-	routingOrder := `{"provider:codex-0":"0","provider:codex-2":"1","credential:codex-9.json":"2","provider:meta-0":"3"}`
-	if err := fixture.handler.repo.PutPreference(ctx, repository.PreferenceRoutingCardOrder, routingOrder); err != nil {
-		t.Fatalf("seed routing order: %v", err)
+	// The routing board's and the dashboard's orders name providers by row key, beside rows they
+	// must not touch.
+	prefixedOrders := map[string]struct{ seeded, want string }{
+		repository.PreferenceRoutingCardOrder: {
+			`{"provider:codex-0":"0","provider:codex-2":"1","credential:codex-9.json":"2","provider:meta-0":"3"}`,
+			`{"provider:codex-1":"1","credential:codex-9.json":"2","provider:meta-0":"3"}`,
+		},
+		repository.PreferenceDashboardProviderOrder: {
+			`{"configured:codex-0":"0","configured:codex-2":"1","oauth:codex":"2","configured:meta-0":"3"}`,
+			`{"configured:codex-1":"1","oauth:codex":"2","configured:meta-0":"3"}`,
+		},
+	}
+	for key, order := range prefixedOrders {
+		if err := fixture.handler.repo.PutPreference(ctx, key, order.seeded); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
 	}
 
 	resp, payload := doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/codex-0", "")
@@ -179,21 +192,20 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 			}
 		}
 	}
-	raw, _, err := fixture.handler.repo.GetPreference(ctx, repository.PreferenceRoutingCardOrder)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var routing map[string]string
-	if err := json.Unmarshal([]byte(raw), &routing); err != nil {
-		t.Fatalf("routing order is not a string map: %s", raw)
-	}
-	wantRouting := map[string]string{"provider:codex-1": "1", "credential:codex-9.json": "2", "provider:meta-0": "3"}
-	if len(routing) != len(wantRouting) {
-		t.Fatalf("routing order = %v after delete, want %v", routing, wantRouting)
-	}
-	for key, value := range wantRouting {
-		if routing[key] != value {
-			t.Fatalf("routing order = %v after delete, want %v", routing, wantRouting)
+	for key, order := range prefixedOrders {
+		raw, _, err := fixture.handler.repo.GetPreference(ctx, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stored, want map[string]string
+		if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+			t.Fatalf("%s is not a string map: %s", key, raw)
+		}
+		if err := json.Unmarshal([]byte(order.want), &want); err != nil {
+			t.Fatal(err)
+		}
+		if !maps.Equal(stored, want) {
+			t.Fatalf("%s = %v after delete, want %v", key, stored, want)
 		}
 	}
 }

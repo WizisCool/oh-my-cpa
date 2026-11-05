@@ -43,6 +43,12 @@ const (
 	// decides where a member is drawn within its tier and is never written to the gateway.
 	PreferenceRoutingCardOrder = "routing_card_order"
 
+	// PreferenceDashboardProviderOrder is the dashboard provider widget's display order: a row key
+	// mapped to a rank, as a decimal string. A configured provider's row is keyed by "configured:"
+	// and its positional id, so the document is re-keyed with the other provider overlays when a
+	// delete or move shifts later entries.
+	PreferenceDashboardProviderOrder = "dashboard_provider_order"
+
 	// PreferenceDisplayCurrency, PreferenceTokenStyle, PreferenceTpsCalculationMode, PreferenceModelView, PreferenceTheme and PreferenceReducedMotion
 	// are Oh My CPA's own display settings: how token counts are abbreviated across the
 	// console, which currency displays USD costs, how TPS accounts for first-token latency, how the dashboard's model panels group their series (by call point or by
@@ -71,7 +77,9 @@ const (
 	// PreferenceDashboardOrder is the display order of the dashboard's own lists: each list's name
 	// mapped to its row keys in the order the operator dragged them into. A row the document does
 	// not name follows the named ones in the list's own order, so new rows need no rewrite, and a
-	// list a later release makes sortable only adds a name. It is presentation only.
+	// list a later release makes sortable only adds a name. It is presentation only. Row keys here
+	// must outlive a provider delete: a list keyed by positional ids belongs in a rank document the
+	// server re-keys, as the provider widget's does.
 	PreferenceDashboardOrder = "omc_dashboard_order"
 
 	// PreferenceSidebarCollapsed remembers the desktop rail independently of the transient phone drawer.

@@ -118,6 +118,11 @@ export type DashboardLayout = readonly DashboardLayoutItem[];
 export const DASHBOARD_LAYOUT_PREFERENCE = 'omc_dashboard_layout';
 /** The display order of rows inside the dashboard's lists, one named list per widget. */
 export const DASHBOARD_ORDER_PREFERENCE = 'omc_dashboard_order';
+/**
+ * The provider widget's order, as a rank per row key. A configured provider's key carries its
+ * positional id, so the server re-keys this document when a delete or move shifts later entries.
+ */
+export const DASHBOARD_PROVIDER_ORDER_PREFERENCE = 'dashboard_provider_order';
 
 /** Module-scope so `usePreference` sees one stable fallback reference. */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = Object.freeze(
