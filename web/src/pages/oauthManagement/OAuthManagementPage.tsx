@@ -1061,6 +1061,7 @@ export const OAuthManagementPage: React.FC = () => {
           }}
           providerOptions={providerOptions.filter((provider) => provider !== 'all')}
           pluginLogos={pluginLogos}
+          pluginTitles={pluginTitles}
         />
       </DeferredMount>
     </div>
