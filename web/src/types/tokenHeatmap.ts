@@ -176,6 +176,47 @@ export function fitHeatmapCell(fieldWidth: number, columns: number, targetCell: 
   return Math.floor(((fieldWidth - (fitted - 1) * gap) / fitted) * 100) / 100;
 }
 
+export interface HeatmapFieldFit {
+  cell: number;
+  /** The space between weeks; the space between weekdays stays the stylesheet's gap. */
+  columnGap: number;
+}
+
+/**
+ * fitHeatmapField sizes the field to the panel's height as well as its width.
+ *
+ * The board gives a widget the height the operator chose, so a field sized by its width alone ended
+ * partway down a taller panel while the list beside it ran to the bottom. When the height allows
+ * squares larger than the comfortable size, the seven weekday rows take it exactly, and the width
+ * left over after the whole weeks that fit goes into the gaps between weeks - a fraction of a pixel
+ * each - so the squares stay square and both sides still meet the panel's edges. The squares grow
+ * no larger than `maxCell`: a field of large squares outweighs the list beside it, so a panel taller
+ * than that keeps the rest below the field. A shorter panel, or one that holds the whole year,
+ * keeps the width rule of `fitHeatmapCell`.
+ */
+export function fitHeatmapField(
+  fieldWidth: number,
+  fieldHeight: number,
+  columns: number,
+  targetCell: number,
+  gap: number,
+  maxCell: number,
+): HeatmapFieldFit | null {
+  if (!(fieldWidth > 0) || !(targetCell > 0) || columns <= 0) return null;
+  const rows = 7;
+  const fromHeight = fieldHeight > 0 ? Math.min(Math.floor(((fieldHeight - (rows - 1) * gap) / rows) * 100) / 100, maxCell) : 0;
+  if (fromHeight > targetCell) {
+    const visibleColumns = Math.floor((fieldWidth + gap) / (fromHeight + gap));
+    if (visibleColumns < columns) {
+      const fitted = Math.max(visibleColumns, 1);
+      const columnGap = fitted > 1 ? Math.floor(((fieldWidth - fitted * fromHeight) / (fitted - 1)) * 100) / 100 : gap;
+      return { cell: fromHeight, columnGap };
+    }
+  }
+  const cell = fitHeatmapCell(fieldWidth, columns, targetCell, gap);
+  return cell === null ? null : { cell, columnGap: gap };
+}
+
 /** The number of columns a grid's cells occupy. */
 export function heatmapColumnCount(cells: HeatmapCell[]): number {
   return cells.length === 0 ? 0 : cells[cells.length - 1].column + 1;

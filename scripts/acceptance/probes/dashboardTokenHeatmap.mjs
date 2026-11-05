@@ -178,7 +178,10 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     const months = document.querySelector('.heatmap-months');
     return {
       panelWidth: panel.clientWidth,
-      scrollRight: scroll.getBoundingClientRect().right,
+      // The content edge: the container keeps padding past it as room for a hovered cell's lift.
+      scrollRight: scroll.getBoundingClientRect().right - parseFloat(getComputedStyle(scroll).paddingRight),
+      scrollBottom: scroll.getBoundingClientRect().bottom - parseFloat(getComputedStyle(scroll).paddingBottom),
+      lastBottom: Math.max(...[...grid.querySelectorAll('.heatmap-cell')].map((cell) => cell.getBoundingClientRect().bottom)),
       gutterRight: document.querySelector('.heatmap-weekdays').getBoundingClientRect().right,
       newestRight: Math.max(...[...grid.querySelectorAll('.heatmap-cell')].map((cell) => cell.getBoundingClientRect().right)),
       bodyWidth: body.getBoundingClientRect().width,
@@ -220,6 +223,11 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     `weeksInView=${weeksInView.toFixed(3)} cell=${fit.cell} gap=${fit.gap}`,
   );
   check('the field never scrolls vertically', fit.verticalOverflow <= 0, `verticalOverflow=${fit.verticalOverflow}`);
+  check(
+    'the last weekday reaches the bottom of the panel the board gives the field',
+    Math.abs(fit.lastBottom - fit.scrollBottom) <= 1,
+    `lastBottom=${fit.lastBottom} scrollBottom=${fit.scrollBottom}`,
+  );
   // The axis is aligned with the columns it names. Measured per label rather than by comparing
   // widths, which passes on a drifting axis.
   check(

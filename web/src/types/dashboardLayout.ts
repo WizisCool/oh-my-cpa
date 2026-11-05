@@ -88,8 +88,8 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetSpec[] = Object.freeze([
   { id: 'model_trend', labelKey: 'dash.models.trend_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
   { id: 'model_usage', labelKey: 'dash.models.usage_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
   { id: 'routing', labelKey: 'routing.title', defaultSpan: 4, defaultRows: 8, spans: [3, 4], isPhoneOmitted: true },
-  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 8, spans: HALF_OR_WIDER },
-  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 8, spans: HALF_OR_WIDER },
+  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 7, spans: HALF_OR_WIDER },
+  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 7, spans: HALF_OR_WIDER },
   { id: 'providers', labelKey: 'dash.providers', defaultSpan: 4, defaultRows: 3, spans: HALF_OR_WIDER },
 ] satisfies DashboardWidgetSpec[]);
 
