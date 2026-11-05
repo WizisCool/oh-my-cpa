@@ -331,6 +331,7 @@ export const UsageEventsPage: React.FC = () => {
   const {
     providerIcons,
     pluginLogos,
+    pluginTitles,
     configuredProviders,
     isProviderCatalogUnknown,
     isProviderCatalogUnproven,
@@ -339,8 +340,8 @@ export const UsageEventsPage: React.FC = () => {
   // Resolves CPA's stored provider key to the name the operator configured, so
   // the filter names a line the same way the providers page does.
   const providerName = React.useMemo(
-    () => createProviderNameResolver(configuredProviders),
-    [configuredProviders],
+    () => createProviderNameResolver(configuredProviders, pluginTitles),
+    [configuredProviders, pluginTitles],
   );
   const renderFacetMark = React.useMemo(
     () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
@@ -715,6 +716,7 @@ export const UsageEventsPage: React.FC = () => {
                     providerIcons={providerIcons}
                     configuredProviders={configuredProviders}
                     pluginLogos={pluginLogos}
+                    pluginTitles={pluginTitles}
                     isProviderCatalogUnknown={isProviderCatalogUnknown}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
@@ -752,6 +754,7 @@ export const UsageEventsPage: React.FC = () => {
       </section>
       <UsageEventDrawer
         credentials={credentials}
+        providerName={providerName}
         eventId={selected}
         onClose={() => setSelected(null)}
         events={events}
@@ -766,6 +769,7 @@ export const UsageEventsPage: React.FC = () => {
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
         pluginLogos={pluginLogos}
+        pluginTitles={pluginTitles}
         isProviderUnproven={isProviderCatalogUnproven}
         onRetryProviders={() => void refetchProviders()}
       />

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs, Space } from 'antd';
 import { AppstoreOutlined } from '../icons';
-import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialMark } from '../LobeIcon';
 import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useT } from '../../i18n';
@@ -15,6 +15,8 @@ export interface ProviderFilterTabsProps {
   onChange: (provider: string) => void;
   /** Logos published by installed plugins, keyed by the OAuth provider they register. */
   pluginLogos?: PluginOAuthLogos;
+  /** Titles plugins give the OAuth providers they register. */
+  pluginTitles?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -33,14 +35,14 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
   active,
   onChange,
   pluginLogos,
+  pluginTitles,
 }) => {
   const t = useT();
 
   const items = providers.map((provider) => {
     const isAll = provider === 'all';
     const isActive = provider === active;
-    const meta = isAll ? null : getCredentialProviderMetadata(provider);
-    const label = isAll ? t('common.all') : meta?.label ?? provider;
+    const label = isAll ? t('common.all') : providerDisplayName(provider, pluginTitles);
     const count = counts[provider] ?? 0;
 
     return {

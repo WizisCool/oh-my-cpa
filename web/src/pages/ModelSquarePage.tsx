@@ -15,7 +15,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { ListLoading } from '../components/common/PageLoading';
 import { CopyButton } from '../components/common/CopyButton';
 import { StatusLabel } from '../components/common/StatusLabel';
-import { getCredentialProviderMetadata } from '../types/providerMetadata';
+import { providerDisplayName } from '../types/providerMetadata';
 import { LoadFailure, Notice, useToast, type ToastItem } from '../components/feedback';
 import { useOpenPriceEditor } from '../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
@@ -91,7 +91,8 @@ function describeProvider(provider: ModelSquareProvider, branding: ProviderBrand
   const hasOwnName = provider.name !== '' && provider.name.toLowerCase() !== provider.family.toLowerCase();
   return {
     id: provider.id,
-    name: hasOwnName ? provider.name : getCredentialProviderMetadata(provider.family).label,
+    // Only an OAuth family is a plugin's provider; an API-key family is a dialect a plugin cannot rename.
+    name: hasOwnName ? provider.name : providerDisplayName(provider.family, provider.is_oauth ? branding.pluginTitles : undefined),
     ...resolveProviderMark({ ...provider, base_url: provider.endpoint_host }, branding),
   };
 }

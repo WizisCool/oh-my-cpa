@@ -31,6 +31,8 @@ export interface RequestExportInput {
   credentials: CredentialIndex;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos?: PluginOAuthLogos;
+  /** Titles plugins give the OAuth providers they register. */
+  pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
   isProviderCatalogUnknown?: boolean;
 }
@@ -63,6 +65,7 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       input.configuredProviders,
       input.pluginLogos,
       input.isProviderCatalogUnknown,
+      input.pluginTitles,
     );
     const record: Record<string, unknown> = { id: event.id };
     const put = (key: string, value: unknown) => {

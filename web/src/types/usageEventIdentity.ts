@@ -1,5 +1,6 @@
 import { resolveCredentialMark, resolveProviderMark, resolveRecordedProviderMark, type BrandMark } from './brandMark';
 import type { PluginOAuthLogos } from './pluginOAuthProviders';
+import { knownProviderDisplayName, providerDisplayName } from './providerMetadata';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -205,12 +206,20 @@ function createProviderResolver(configured: readonly ProviderLookupEntry[]) {
   };
 }
 
-/** Provider facets have no credential index, so only exact provider keys resolve. */
+/**
+ * Provider facets have no credential index, so only exact provider keys resolve: to the configured
+ * provider's name, then to the name a plugin or the brand table gives the key, as a record's row
+ * does. A key nobody names stays as recorded.
+ */
 export function createProviderNameResolver(
   configured: readonly ProviderLookupEntry[] = [],
+  pluginTitles?: ReadonlyMap<string, string>,
 ): (providerKey: string | null | undefined) => string {
   const resolveProvider = createProviderResolver(configured);
-  return (providerKey) => resolveProvider(providerKey)?.name.trim() || providerKey?.trim() || '';
+  return (providerKey) => {
+    const key = providerKey?.trim() || '';
+    return resolveProvider(providerKey)?.name.trim() || (key && knownProviderDisplayName(key, pluginTitles)) || key;
+  };
 }
 
 export interface ResolvedProviderInfo extends BrandMark {
@@ -242,6 +251,8 @@ export function resolveProviderInfo(
   pluginLogos: PluginOAuthLogos = {},
   /** The provider catalog could not be read, so a recorded label is not yet proven either way. */
   isProviderCatalogUnknown = false,
+  /** Titles plugins give the OAuth providers they register. */
+  pluginTitles?: ReadonlyMap<string, string>,
 ): ResolvedProviderInfo {
   const file = matchingCredential(event, credentials);
   const isOAuth =
@@ -264,7 +275,7 @@ export function resolveProviderInfo(
     // credential that answered is the line under it. Leading with the account
     // here made an OAuth cell answer a different question from the API-key cell
     // beside it.
-    const providerLabel = providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1);
+    const providerLabel = providerDisplayName(providerFamily, pluginTitles);
     // The account is the one display value masking must reach here: the API-key half
     // of the same line is already a server-side mask, and a request record carries no
     // reveal, so this is the only form the row can print.

@@ -61,6 +61,8 @@ import { AppModal } from '../common/AppModal';
 export interface UsageEventDrawerProps {
   eventId: number | null;
   credentials: CredentialIndex;
+  /** Names a provider key the way the request list does; the routing fields keep the recorded key. */
+  providerName?: (providerKey: string | null | undefined) => string;
   onClose: () => void;
   events?: UsageEvent[];
   onSelectEvent?: (id: number) => void;
@@ -70,6 +72,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   eventId,
   onClose,
   credentials,
+  providerName,
   events,
   onSelectEvent,
 }) => {
@@ -404,7 +407,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       <ArrowRightOutlined />
                       <div>
                         <span>{t('events.provider')}</span>
-                        <strong>{value(event.provider)}</strong>
+                        <strong>{value(providerName ? providerName(event.provider) : event.provider)}</strong>
                       </div>
                       <ArrowRightOutlined />
                       <div>

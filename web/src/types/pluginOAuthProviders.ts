@@ -1,6 +1,14 @@
-import type { PluginItem } from './plugin';
+import { pluginDisplayName, type PluginItem } from './plugin';
+import { getCredentialProviderMetadata } from './providerMetadata';
 
 export const OAUTH_PROVIDER_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * The OAuth providers OMC signs in to itself. A plugin cannot replace their login cards or
+ * rename them. The sign-in registry in `pages/oauthProviderLogic.ts` defines each one; this
+ * leaf copy lets every surface name providers without loading that page module.
+ */
+export const BUILTIN_OAUTH_IDS: ReadonlySet<string> = new Set(['kimi', 'kimi-ai', 'codex', 'anthropic', 'antigravity', 'xai', 'devin', 'meta']);
 
 function collectDeclaredPluginOAuthProviders(plugin: PluginItem): string[] {
   return [...new Set([...(plugin.oauth_providers ?? []), plugin.oauth_provider ?? '']
@@ -162,4 +170,62 @@ export function pluginOAuthLogoFor(
 export function pluginOwnsProvider(plugins: PluginItem[] | undefined, providerKeys: readonly (string | undefined)[]): boolean {
   const keys = new Set(providerKeys.filter(Boolean).map((key) => key!.trim().toLowerCase()));
   return (plugins ?? []).some((plugin) => pluginOAuthProviderKeys(plugin).some((key) => keys.has(key)));
+}
+
+/** The title a plugin's login card gives each portal it declares. */
+export function pluginPortalTitles(plugin: PluginItem, providerIds: readonly string[]): (providerId: string) => string {
+  const entries = pluginOAuthProviderEntryTexts([plugin]);
+  const name = pluginDisplayName(plugin);
+  return (providerId) => {
+    const entryName = entries[providerId]?.name;
+    return entryName && entryName !== name
+      ? entryName
+      : providerIds.length > 1 ? `${name} · ${providerId}` : name;
+  };
+}
+
+/**
+ * Provider keys no plugin title may rename, by canonical key: the credentials the built-in
+ * sign-ins create (Anthropic's are filed as `claude`) and CPA's native API-key families. A
+ * native family's records carry the bare family key, so a record under one of these keys is
+ * no proof that it belongs to a plugin's OAuth provider. The native families mirror
+ * `ConfigKeyFamilies` in `internal/cpa/management/config_keys.go`.
+ */
+const RESERVED_PROVIDER_KEYS: ReadonlySet<string> = new Set([
+  'claude', 'codex', 'xai', 'kimi', 'antigravity', 'devin', 'meta', 'gemini', 'vertex', 'interactions',
+]);
+
+/**
+ * pluginOAuthProviderTitles names the credentials of every plugin-registered provider with
+ * the title its login card carries, keyed by the canonical provider key `providerDisplayName`
+ * looks up. A credential typed by the plugin's own id or quota provider is the same identity,
+ * as it is for the logo, so it takes the plugin's name.
+ *
+ * Unlike the login cards, a disabled plugin still contributes: switching it off keeps the
+ * credentials it registered, and they keep its name, as they keep its logo. When an enabled
+ * plugin declares the same provider, its title wins, as its login card does. A built-in
+ * provider keeps its own name, matching the login cards a plugin cannot replace.
+ */
+export function pluginOAuthProviderTitles(plugins: PluginItem[] | undefined): Map<string, string> {
+  const titles = new Map<string, string>();
+  const isEnabled = (plugin: PluginItem) => Boolean(plugin.effective_enabled ?? plugin.enabled);
+  const ordered = [...(plugins ?? [])]
+    .filter((plugin) => plugin.supports_oauth)
+    .sort((a, b) => Number(isEnabled(b)) - Number(isEnabled(a)));
+  const claim = (providerKey: string, title: string) => {
+    const key = getCredentialProviderMetadata(providerKey).id;
+    if (BUILTIN_OAUTH_IDS.has(providerKey) || BUILTIN_OAUTH_IDS.has(key) || RESERVED_PROVIDER_KEYS.has(key) || titles.has(key)) return;
+    titles.set(key, title);
+  };
+  // Login portals first: a portal's own title outranks another plugin's name for the same key.
+  for (const plugin of ordered) {
+    const providerIds = pluginOAuthProviderIds(plugin);
+    const portalTitle = pluginPortalTitles(plugin, providerIds);
+    for (const providerId of providerIds) claim(providerId, portalTitle(providerId));
+  }
+  for (const plugin of ordered) {
+    const name = pluginDisplayName(plugin);
+    for (const key of pluginOAuthProviderKeys(plugin)) claim(key, name);
+  }
+  return titles;
 }
