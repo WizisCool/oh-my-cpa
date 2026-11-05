@@ -24,20 +24,25 @@ export const DASHBOARD_COLUMNS = 4;
  * between rows is the board's gap, so one step of height is `ROW + GAP` and a widget `n` rows tall
  * is `n * ROW + (n - 1) * GAP`. Short rows make a fine step, so a height can follow the content.
  *
- * A height is the box the widget fills, and it always holds the widget's content: a widget is never
- * given fewer rows than its content needs, so every row stays `ROW` tall and widgets side by side
- * end on the same line. A row still grows if content outgrows its box at a narrower window than the
- * one it was sized at, so nothing is cut off. The phone ignores heights and lets each widget take its
- * content's.
+ * A height is the box the widget fills, and it always holds the widget's content. The rows are
+ * `minmax(ROW, auto)` tracks, so a widget given no more rows than its content fills grows those
+ * tracks to the content's exact height, and a neighbour spanning the same tracks grows with it: a
+ * card sized to its content ends where its content does, and the card beside it ends on that line
+ * too, rather than both stopping at the next whole step with a strip of empty space in one of them.
+ * The same growth keeps content whole at a narrower window than the one it was sized at. The phone
+ * ignores heights and lets each widget take its content's.
  */
 export const DASHBOARD_ROW_PX = 24;
 export const DASHBOARD_GAP_PX = 16;
 export const DASHBOARD_MAX_ROWS = 24;
 
-/** The fewest rows whose box holds `height` pixels of content. */
+/**
+ * The most rows `height` pixels of content fill. The tracks grow by the remainder, so the widget is
+ * exactly as tall as its content; rounding up instead would leave up to a step of empty space under it.
+ */
 export function rowsForHeight(height: number): number {
-  // A sub-pixel overshoot from layout rounding is not another row.
-  return Math.max(1, Math.ceil((height + DASHBOARD_GAP_PX) / (DASHBOARD_ROW_PX + DASHBOARD_GAP_PX) - 0.02));
+  // A sub-pixel shortfall from layout rounding is not one row fewer.
+  return Math.max(1, Math.floor((height + DASHBOARD_GAP_PX) / (DASHBOARD_ROW_PX + DASHBOARD_GAP_PX) + 0.02));
 }
 
 export type DashboardWidgetSpan = 1 | 2 | 3 | 4;
@@ -85,11 +90,11 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetSpec[] = Object.freeze([
   { id: 'tpm', labelKey: 'dash.tpm', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
   { id: 'cache_rate', labelKey: 'dash.cache_rate', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
   { id: 'cost', labelKey: 'dash.total_cost', defaultSpan: 1, defaultRows: 7, spans: ANY_SPAN, isMetric: true },
-  { id: 'model_trend', labelKey: 'dash.models.trend_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
-  { id: 'model_usage', labelKey: 'dash.models.usage_title', defaultSpan: 2, defaultRows: 12, spans: HALF_OR_WIDER },
+  { id: 'model_trend', labelKey: 'dash.models.trend_title', defaultSpan: 2, defaultRows: 9, spans: HALF_OR_WIDER },
+  { id: 'model_usage', labelKey: 'dash.models.usage_title', defaultSpan: 2, defaultRows: 9, spans: HALF_OR_WIDER },
   { id: 'routing', labelKey: 'routing.title', defaultSpan: 4, defaultRows: 8, spans: [3, 4], isPhoneOmitted: true },
-  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 7, spans: HALF_OR_WIDER },
-  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 7, spans: HALF_OR_WIDER },
+  { id: 'token_activity', labelKey: 'dash.heatmap.title', defaultSpan: 2, defaultRows: 6, spans: HALF_OR_WIDER },
+  { id: 'credential_quota', labelKey: 'dash.quota.title', defaultSpan: 2, defaultRows: 6, spans: HALF_OR_WIDER },
   { id: 'providers', labelKey: 'dash.providers', defaultSpan: 4, defaultRows: 3, spans: HALF_OR_WIDER },
 ] satisfies DashboardWidgetSpec[]);
 

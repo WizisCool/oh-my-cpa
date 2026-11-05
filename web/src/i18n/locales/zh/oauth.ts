@@ -137,7 +137,7 @@ export default {
   'oauth.cancel_failed': '取消失败：{msg}',
   'oauth.plugin_title': '{name}',
   'oauth.plugin_hint': '{name} 的认证方式由插件决定，支持交互式登录的插件可在此发起授权。',
-  'oauth.plugin_login_unavailable': '插件未返回完整的浏览器授权信息，请使用插件页面提供的方式添加账号。',
+  'oauth.plugin_login_unavailable': '插件未返回完整的浏览器授权信息，请使用插件提供的方式添加账号。',
   'oauth.plugin_open_page': '打开插件页面',
   'oauth.plugin_login': '开始 {name} 登录',
   'oauth.plugin_tag': 'CPA 插件',

@@ -1297,9 +1297,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   background: var(--bg) !important;
   box-shadow: none !important;
   min-width: 0;
+  /* The body takes the height under the panel's header, not the whole card's: a body sized to
+     100% of a card that also has a header ran past the card's bottom by the header's height. */
+  display: flex;
+  flex-direction: column;
 }
 .ant-btn.tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
-.dashboard-tile .ant-card-body { padding: 20px; height: 100%; display: flex; flex-direction: column; }
+.dashboard-tile .ant-card-body { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 /* A tile given more rows than its reading needs spends them on its sparkline. */
 .dashboard-tile .tile-caption { flex: none; }
 .dashboard-tile .chart-slot { display: flex; flex: 1 1 auto; flex-direction: column; }
@@ -1340,22 +1344,23 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* `min-width: 0` is load-bearing: these are grid children holding a canvas that sizes to its
    container, and without it a long model name in the legend would push the card wider than its
    track instead of truncating. */
-/* The plot fills the panel's spare height and is never less than 240px. It is a flex child with a
+/* The plot fills the panel's spare height and is never less than 190px - low enough that the usage
+   card beside it, whose ranked list cannot stretch, sets the pair's height. It is a flex child with a
    zero basis because a percentage height against an auto-height box resolves to nothing, and the
    chart library then draws at its own default size. */
-.model-trend { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 240px; margin-top: 4px; }
+.model-trend { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 190px; margin-top: 4px; }
 .model-trend > * { flex: 1 1 0; min-height: 0; }
 /* The ring yields width to the list down to a floor: the list's numeric columns cannot be abbreviated,
    so the name column loses that race whenever the ring insists on its full size, and a model name
    truncated to a few characters tells the reader nothing. `min-width` stops the yield at the point
    where the drawing stops being worth the space it is taking - the query below stacks the panels
    instead once even that is not enough. */
-.model-ring { position: relative; flex: 0 1 220px; min-width: 160px; display: flex; align-items: center; justify-content: center; }
+.model-ring { position: relative; flex: 0 1 240px; min-width: 160px; display: flex; align-items: center; justify-content: center; }
 /* The SVG and DOM readout share one square, so container resizing cannot separate their centres. */
 .model-ring-frame {
   position: relative;
   flex: none;
-  width: 220px;
+  width: 240px;
   max-width: 100%;
   /* The frame stays square when the flex row shrinks it. The drawing's size comes from the box it is
      given, so a frame that kept its 220px height while its width was clamped would leave the ring

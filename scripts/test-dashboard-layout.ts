@@ -13,6 +13,7 @@ import {
   moveDashboardWidget,
   parseDashboardLayout,
   resizeDashboardWidget,
+  rowsForHeight,
   sameDashboardLayout,
   setDashboardWidgetHidden,
   stepDashboardWidget,
@@ -32,6 +33,14 @@ test('dashboard layout', () => {
   for (const spec of DASHBOARD_WIDGETS) {
     assert.ok(spec.spans.includes(spec.defaultSpan), `${spec.id} offers its own default width`);
   }
+
+  // ── a height fitted to content ends where the content does ─────────────────
+  // Rounding a content height up left up to a step of empty card below it; the rows round down and
+  // their auto tracks grow by the remainder instead. 24px rows with a 16px gap: 7 rows are 264px.
+  assert.equal(rowsForHeight(264), 7, 'content exactly seven rows tall takes seven');
+  assert.equal(rowsForHeight(300), 7, 'content between steps takes the rows it fills, not the next step');
+  assert.equal(rowsForHeight(263.6), 7, 'a sub-pixel shortfall is not one row fewer');
+  assert.equal(rowsForHeight(0), 1, 'every widget is at least one row');
 
   // ── the stored value is input, not state ────────────────────────────────────
 

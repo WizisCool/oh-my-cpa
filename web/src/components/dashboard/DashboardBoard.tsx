@@ -174,7 +174,7 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
 
   const spanLabel = (span: DashboardWidgetSpan) => t(SPAN_LABEL_KEYS[span]);
 
-  const resize = (item: DashboardLayoutItem, cell: HTMLElement, axis: ResizeAxis, input: { dx: number; dy: number } | { key: string }) => {
+  const resize = (item: DashboardLayoutItem, cell: HTMLElement, axis: ResizeAxis, input: { dx: number; dy: number; startRows: number } | { key: string }) => {
     const grid = cell.parentElement;
     if (!grid) return;
     const spec = dashboardWidgetSpec(item.id);
@@ -194,7 +194,9 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
       if (canHeighten && input.key === 'ArrowUp') rows = current.rows - 1;
     } else {
       if (canWiden) span = nearestSpan(spec.spans, settle((box.width + input.dx + metrics.gap) / (metrics.column + metrics.gap), current.span));
-      if (canHeighten) rows = settle((box.height + input.dy + DASHBOARD_GAP_PX) / (DASHBOARD_ROW_PX + DASHBOARD_GAP_PX), current.rows);
+      // Height is counted in rows from where the drag started, not read off the box: a card fitted
+      // to its content is taller than its rows, so its box would already read as part of the next row.
+      if (canHeighten) rows = settle(input.startRows + input.dy / (DASHBOARD_ROW_PX + DASHBOARD_GAP_PX), current.rows);
     }
     rows = Math.min(Math.max(rows, naturalRows(cell)), DASHBOARD_MAX_ROWS);
     setResizing({ id: item.id, span, rows });
@@ -213,13 +215,14 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
     // the widget takes however many reflows the board made on the way.
     const origin = { x: event.clientX, y: event.clientY };
     const start = cell.getBoundingClientRect();
+    const startRows = (latestLayout.current.find((entry) => entry.id === item.id) ?? item).rows;
     let isMoving = false;
     const move = (moveEvent: PointerEvent) => {
       // A press on a grip is not a resize until the hand has clearly moved.
       if (!isMoving && Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) < RESIZE_START_PX) return;
       isMoving = true;
       const now = cell.getBoundingClientRect();
-      resize(item, cell, axis, { dx: moveEvent.clientX - origin.x - (now.width - start.width), dy: moveEvent.clientY - origin.y - (now.height - start.height) });
+      resize(item, cell, axis, { dx: moveEvent.clientX - origin.x - (now.width - start.width), dy: moveEvent.clientY - origin.y, startRows });
     };
     const end = () => {
       window.removeEventListener('pointermove', move);
@@ -472,7 +475,7 @@ function nearestSpan(spans: readonly DashboardWidgetSpan[], columns: number): Da
 }
 
 /**
- * The fewest rows the widget's content fills: its height laid out at the top of its cell rather than
+ * The rows the widget's content fills: its height laid out at the top of its cell rather than
  * stretched to the rows it spans, read in one synchronous pass so the board never paints it so.
  */
 function naturalRows(cell: HTMLElement): number {

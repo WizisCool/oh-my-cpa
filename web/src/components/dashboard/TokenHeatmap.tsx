@@ -593,24 +593,6 @@ export const TokenHeatmap: React.FC = () => {
       <div className="heatmap-inner">
       <div className="heatmap-head">
         <span className="tile-label">{t('dash.heatmap.title')}</span>
-        {/* The key names only the ramp's direction. The shade is relative to the window's own
-            busiest day, so the swatches carry no quantities; those are in each cell's tooltip
-            and accessible name. It sits where the quota panel beside it keeps its summary. */}
-        {data && (
-          <div className="heatmap-legend" aria-hidden="true">
-            <span>{t('dash.heatmap.legend_less')}</span>
-            <span className="heatmap-legend-scale">
-              {HEATMAP_LEGEND_SHARES.map((share) => (
-                <i
-                  key={share}
-                  className="heatmap-legend-swatch"
-                  style={{ '--heatmap-quiet-share': share } as React.CSSProperties}
-                />
-              ))}
-            </span>
-            <span>{t('dash.heatmap.legend_more')}</span>
-          </div>
-        )}
       </div>
 
       {!data ? (
@@ -688,6 +670,23 @@ export const TokenHeatmap: React.FC = () => {
             </div>
           </div>
 
+          {/* The key names only the ramp's direction. The shade is relative to the window's own
+              busiest day, so the swatches carry no quantities; those are in each cell's tooltip
+              and accessible name. It closes the field from below, where it is read after the
+              cells, and its line is the panel's last, level with the end of the list beside it. */}
+          <div className="heatmap-legend" aria-hidden="true">
+            <span>{t('dash.heatmap.legend_less')}</span>
+            <span className="heatmap-legend-scale">
+              {HEATMAP_LEGEND_SHARES.map((share) => (
+                <i
+                  key={share}
+                  className="heatmap-legend-swatch"
+                  style={{ '--heatmap-quiet-share': share } as React.CSSProperties}
+                />
+              ))}
+            </span>
+            <span>{t('dash.heatmap.legend_more')}</span>
+          </div>
           {isFetching && !isError && <span className="heatmap-progress" aria-hidden="true" />}
         </>
       )}

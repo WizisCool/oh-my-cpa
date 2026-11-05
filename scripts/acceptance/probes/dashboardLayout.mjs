@@ -174,6 +174,18 @@ export async function dashboardLayout({ base, page, check }) {
   });
   check('a widget is never made shorter than its content',
     shrunk < rowsAfter && fit.content <= fit.box + 0.5 && fit.box - fit.content < 40, JSON.stringify({ shrunk, ...fit }));
+  // A widget fitted to its content is taller than its rows, so a nudge must count from the rows it
+  // has: reading the box instead took a few pixels' drag upward for a whole row more. The tile's
+  // content is held 34px past its rows - just under a step - so the box reads as most of a row more.
+  await cell('rpm').evaluate((node, rows) => { node.style.minHeight = `${rows * 40 - 16 + 34}px`; }, shrunk);
+  const nudge = await cell('rpm').locator('[data-resize="y"]').boundingBox();
+  await page.mouse.move(nudge.x + nudge.width / 2, nudge.y + nudge.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(nudge.x + nudge.width / 2, nudge.y + nudge.height / 2 - 6, { steps: 3 });
+  await page.mouse.up();
+  check('a small drag on a fitted widget keeps its rows', Number(await cell('rpm').getAttribute('data-rows')) === shrunk,
+    `${shrunk} -> ${await cell('rpm').getAttribute('data-rows')}`);
+  await cell('rpm').evaluate((node) => { node.style.minHeight = ''; });
 
   await cell('requests').getByRole('button', { name: /^Move later/ }).click();
   await until(async () => (await order())[0] === 'tokens', { label: 'the requests tile to step later' });

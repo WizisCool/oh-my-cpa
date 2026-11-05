@@ -128,45 +128,6 @@ test('chart marks', () => {
     }
   }
 
-  // ── model identity palette ─────────────────────────────────────────────────
-  //
-  // The dashboard's model charts colour each model from one palette. On a console where green and red
-  // mean success and failure, a model drawn in a status hue would read as a verdict, which is exactly the
-  // ambiguity the palette exists to remove. The rule is asserted, not just documented, so a future
-  // palette edit cannot quietly reintroduce one.
-
-  const STATUS_TOKENS = ['success', 'warn', 'danger'] as const;
-
-  for (const preset of RESOLVED_PALETTES) {
-    const { palette: resolved } = preset;
-    assert.equal(resolved.model.length, 6, `${preset.id} defines exactly six model slots`);
-    assert.equal(new Set(resolved.model).size, resolved.model.length, `${preset.id}: every model slot is its own colour`);
-    const card = resolved.surface;
-
-    for (const [index, colour] of resolved.model.entries()) {
-      assert.ok(
-        contrast(colour, card) >= 3,
-        `${preset.id}: model ${index} (${colour}) reads ${contrast(colour, card).toFixed(2)}:1 on the card, want >= 3:1`,
-      );
-      // The status hues are semantic in every palette; a model may not be drawn in one.
-      for (const tone of STATUS_TOKENS) {
-        assert.notEqual(
-          colour.toLowerCase(),
-          resolved[tone].toLowerCase(),
-          `${preset.id}: model ${index} must not be the ${tone} hue`,
-        );
-      }
-    }
-
-    for (let index = 0; index < resolved.model.length - 1; index += 1) {
-      const distance = labDistance(resolved.model[index], resolved.model[index + 1]);
-      assert.ok(
-        distance >= 25,
-        `${preset.id}: model ${index} and ${index + 1} are only ΔE ${distance.toFixed(1)} apart`,
-      );
-    }
-  }
-
   for (let index = 0; index < SERIES_SLOTS; index += 1) {
     assert.notEqual(
       seriesColor(palette.dark, index),

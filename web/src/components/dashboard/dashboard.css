@@ -243,13 +243,6 @@
   .tile-label { font-size: var(--text-sm); }
   .tile-split { gap: 10px; padding-left: 10px; }
 }
-.model-usage-card {
-  /* The usage card often shares a row with the taller trend card, which stretches it even when
-     its own content is shorter. A flex column lets the body claim that spare height instead of
-     leaving the row at the top of the card with an empty strip beneath it. */
-  display: flex;
-  flex-direction: column;
-}
 /* The trend's shared chart legend wraps rather than scrolls: a legend that scrolls hides the very
    series the reader is looking for, and six entries in a two-column card is at most two rows. */
 .model-trend-legend { margin: 12px 0 4px; }
@@ -257,9 +250,8 @@
 .model-series-mark { flex: none; }
 .model-series-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-usage-card .ant-card-body {
-  flex: 1 1 auto;
-  /* Centre the row in the height the card actually has below its header. Grid centring keeps the
-     row stretched to the body's full width, unlike flex centring, which would shrink it to its
+  /* Centre the row in any height the operator gave the card beyond its content. Grid centring keeps
+     the row stretched to the body's full width, unlike flex centring, which would shrink it to its
      content width and let the list collapse. */
   display: grid;
   align-content: center;
@@ -309,9 +301,9 @@
   grid-template-columns: subgrid;
   grid-column: 1 / -1;
   align-items: center;
-  /* The pill's padding and hairline are its hit area, not the row's rhythm: the row pads 4px around
-     a control that carries its own air, so six rows fit the card without a scrollbar. */
-  padding: 4px 0;
+  /* The pill's padding and hairline are its hit area, not the row's rhythm: the row pads 7px around
+     a control that carries its own air, so six rows are as tall as the ring beside them. */
+  padding: 7px 0;
   border-bottom: 1px solid var(--border-soft);
   font-variant-numeric: tabular-nums;
 }
@@ -498,7 +490,9 @@
   /* The panel's height, not the cells', sets the field's: the component fits the rows to it and
      writes the height they need as the minimum, so a short panel grows rather than clipping. */
   flex: 1 1 0;
-  min-height: var(--heatmap-field-min, calc(var(--heatmap-axis) + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6));
+  /* Plus the 4px of paint room below (see `padding`): the box is border-box, and a panel fitted to
+     its content gives the field exactly this minimum, so without it the last weekday overflows. */
+  min-height: calc(var(--heatmap-field-min, calc(var(--heatmap-axis) + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6)) + 4px);
   margin-top: 12px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -735,7 +729,10 @@
 }
 .heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
 .heatmap-tip-link-icon { font-size: 9px; }
+/* The key is the field's footer, right-aligned under the newest weeks. */
 .heatmap-legend {
+  align-self: flex-end;
+  margin-top: 10px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
