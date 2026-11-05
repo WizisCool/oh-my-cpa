@@ -49,7 +49,8 @@ export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = Object.fro
 
 export function getCredentialProviderMetadata(providerKey: string): ProviderMetadata {
   const key = (providerKey || '').toLowerCase().trim();
-  if (CREDENTIAL_PROVIDERS[key]) {
+  // Provider keys come from plugins too; `constructor` must not read Object's inherited member.
+  if (Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key)) {
     return CREDENTIAL_PROVIDERS[key];
   }
   const capitalized = key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Unknown';
@@ -58,6 +59,34 @@ export function getCredentialProviderMetadata(providerKey: string): ProviderMeta
     label: capitalized,
     iconId: '', // Empty iconId renders neutral fallback icon, never OpenAI!
   };
+}
+
+/**
+ * providerDisplayName is the one name every provider surface gives a provider key: the
+ * title a plugin publishes for a provider it registers, then the brand table above, then the
+ * key as recorded. The
+ * dashboard and the OAuth page both read it, so a brand is never spelled from its raw
+ * key on one page (`Deepseek`) and by its own name on the other (`DeepSeek`). Titles are
+ * keyed by the canonical key, so an alias (`workbuddy`) reads the same as the section the
+ * OAuth page files it under (`codebuddy`).
+ */
+export function providerDisplayName(providerKey: string, pluginTitles?: ReadonlyMap<string, string>): string {
+  const key = (providerKey || '').trim();
+  // A key nobody names reads as recorded, not as a capitalized guess. `unknown` is the id
+  // `getCredentialProviderMetadata` gives a missing key, so it keeps that table's label.
+  return knownProviderDisplayName(key, pluginTitles)
+    || (key && key.toLowerCase() !== 'unknown' ? key : getCredentialProviderMetadata(key).label);
+}
+
+/**
+ * knownProviderDisplayName is `providerDisplayName` for a key someone actually names - a plugin
+ * or the brand table - and nothing otherwise, for a surface that must print an unknown key as
+ * recorded rather than a capitalized guess.
+ */
+export function knownProviderDisplayName(providerKey: string, pluginTitles?: ReadonlyMap<string, string>): string | undefined {
+  const key = (providerKey || '').toLowerCase().trim();
+  const isBrand = Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key);
+  return pluginTitles?.get(isBrand ? CREDENTIAL_PROVIDERS[key].id : key) || (isBrand ? CREDENTIAL_PROVIDERS[key].label : undefined);
 }
 
 /**

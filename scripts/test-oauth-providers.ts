@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  BUILTIN_OAUTH_IDS,
   BUILTIN_OAUTH_PROVIDERS,
   XAI_CALLBACK_URL,
   builtinOAuthProviderChoices,
@@ -13,7 +12,8 @@ import {
   resolveXaiCallback,
   validateDevinCallback,
 } from '../web/src/pages/oauthProviderLogic.ts';
-import { OAUTH_PROVIDER_PATTERN } from '../web/src/types/pluginOAuthProviders.ts';
+import { BUILTIN_OAUTH_IDS, OAUTH_PROVIDER_PATTERN, pluginOAuthProviderTitles } from '../web/src/types/pluginOAuthProviders.ts';
+import { providerDisplayName } from '../web/src/types/providerMetadata.ts';
 
 test('Registry: provider ids are unique, routable and consistent with the lookup', () => {
   assert.ok(BUILTIN_OAUTH_PROVIDERS.length > 0, 'registry must not be empty');
@@ -33,7 +33,7 @@ test('Registry: provider ids are unique, routable and consistent with the lookup
       assert.equal(provider.callback, undefined, `${provider.id} is a device flow and cannot take a paste`);
     }
   }
-  assert.equal(BUILTIN_OAUTH_IDS.size, BUILTIN_OAUTH_PROVIDERS.length, 'registry ids must be unique');
+  assert.deepEqual([...BUILTIN_OAUTH_IDS].sort(), BUILTIN_OAUTH_PROVIDERS.map((provider) => provider.id).sort(), 'registry ids are unique and match the leaf list every surface reads');
 });
 
 test('Registry: the Devin and Meta Muse adapters are registered', () => {
@@ -310,6 +310,44 @@ test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
     oauth_provider_entries: [{ identifier: 'anon-portal-login', logo: 'icons/anon.svg' }],
   }], t);
   assert.equal(catalogOnly.logo, undefined, 'an unusable mark leaves the catalog mark, never a plugin logo');
+});
+
+test('credentials keep the name their plugin\'s login card gives the provider', () => {
+  const titles = pluginOAuthProviderTitles([
+    // Switching a plugin off keeps its credentials, so it keeps naming them.
+    { id: 'opencode', enabled: false, effective_enabled: false, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'OpenCode Go' }, config_fields: [] },
+    // A credential filed under an alias reads like the section it is grouped into.
+    { id: 'buddy', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'workbuddy', metadata: { name: 'WorkBuddy' }, config_fields: [] },
+    // A built-in provider keeps its own name.
+    { id: 'codex-shadow', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'codex', metadata: { name: 'Shadow' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('opencode-go', titles), 'OpenCode Go');
+  assert.equal(providerDisplayName('workbuddy', titles), 'WorkBuddy');
+  assert.equal(providerDisplayName('codebuddy', titles), 'WorkBuddy');
+  assert.equal(providerDisplayName('codex', titles), 'Codex');
+  // When an enabled plugin declares the same provider, its title wins, as its login card does.
+  const overlapping = pluginOAuthProviderTitles([
+    { id: 'old-go', enabled: false, effective_enabled: false, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'Old Go' }, config_fields: [] },
+    { id: 'opencode', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'OpenCode Go' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('opencode-go', overlapping), 'OpenCode Go');
+  // Provider keys come from plugins; an inherited member is not a brand, and a key nobody
+  // names reads as recorded.
+  assert.equal(providerDisplayName('constructor'), 'constructor');
+  assert.equal(providerDisplayName(''), 'Unknown');
+  // A plugin's own id and quota provider name the same credentials its login portal does.
+  const familyKeys = pluginOAuthProviderTitles([
+    { id: 'acme', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'acme-login', quota_provider: 'acme-credentials', metadata: { name: 'Acme' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('acme-credentials', familyKeys), 'Acme');
+  assert.equal(providerDisplayName('acme', familyKeys), 'Acme');
+  // Built-in credentials and CPA's native API-key families are never renamed by a plugin.
+  const reserved = pluginOAuthProviderTitles([
+    { id: 'shadow', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['claude', 'gemini', 'interactions'], metadata: { name: 'Shadow' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('claude', reserved), 'Claude');
+  assert.equal(providerDisplayName('gemini', reserved), 'Gemini');
+  assert.equal(providerDisplayName('interactions', reserved), 'interactions');
 });
 
 

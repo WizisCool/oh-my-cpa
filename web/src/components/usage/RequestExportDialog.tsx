@@ -44,6 +44,8 @@ export interface RequestExportDialogProps {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  /** Titles plugins give the OAuth providers they register. */
+  pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a provider name is a placeholder. */
   isProviderUnproven?: boolean;
   /** Re-reads the provider catalog the names come from. */
@@ -75,6 +77,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   providerIcons,
   configuredProviders,
   pluginLogos,
+  pluginTitles,
   isProviderUnproven = false,
   onRetryProviders,
 }) => {
@@ -116,12 +119,13 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             providerIcons,
             configuredProviders,
             pluginLogos,
+            pluginTitles,
             isProviderCatalogUnknown: isProviderUnproven,
           })
         : null,
     [
       open, isImage, rows, masks, colWidths, t, tokenStyle, currency, tpsMode, modelView, showModelIcons,
-      credentials, providerIcons, configuredProviders, pluginLogos, isProviderUnproven,
+      credentials, providerIcons, configuredProviders, pluginLogos, pluginTitles, isProviderUnproven,
     ],
   );
   // A program has no use for the image's row cap, so the document holds the whole selection.
@@ -136,10 +140,11 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             credentials,
             configuredProviders,
             pluginLogos,
+            pluginTitles,
             isProviderCatalogUnknown: isProviderUnproven,
           })
         : null,
-    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, isProviderUnproven],
+    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, pluginTitles, isProviderUnproven],
   );
   const jsonPreview = React.useMemo(
     () =>

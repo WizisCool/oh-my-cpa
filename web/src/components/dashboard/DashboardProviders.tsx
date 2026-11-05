@@ -5,7 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { ProviderBrandIcon } from '../LobeIcon';
-import { pluginOAuthProviderKeys, pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
+import { pluginOAuthProviderKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
 import { usePreference } from '../../hooks/usePreference';
 import { parseProviderIcons, PROVIDER_ICONS_PREFERENCE } from '../../types/providerIcons';
 import type { ManagementOverview, ManagementOverviewProvider } from '../../types/management';
@@ -130,6 +130,8 @@ export const DashboardProviders = React.memo(function DashboardProviders({
   // A plugin-registered provider's own logo replaces the mark the console would
   // otherwise resolve for it, including an operator-stored icon override.
   const pluginLogos = useMemo(() => pluginOAuthProviderLogos(pluginsData?.plugins), [pluginsData]);
+  // Rows carry the names the OAuth page gives the same providers.
+  const pluginTitles = useMemo(() => pluginOAuthProviderTitles(pluginsData?.plugins), [pluginsData]);
 
   const configuredProviders = providersData?.providers || [];
   const overviewProviders: ManagementOverviewProvider[] = overview.providers || [];
@@ -160,8 +162,9 @@ export const DashboardProviders = React.memo(function DashboardProviders({
       authFilesByType,
       pluginOAuthIds,
       pluginLogos,
+      pluginTitles,
     });
-  }, [overviewProviders, windowProviders, windowCredentials, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos]);
+  }, [overviewProviders, windowProviders, windowCredentials, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos, pluginTitles]);
 
   // The operator's order replaces the volume sort for the rows it names; a provider it does not
   // name still lands by volume after them, and the fold keeps hiding the tail of that order.

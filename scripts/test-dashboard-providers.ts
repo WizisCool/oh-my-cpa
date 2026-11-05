@@ -3,7 +3,6 @@ import {
   activityBlocks,
   aggregateProviders,
   computeProviderSummary,
-  OAUTH_CHANNEL_META,
   isOAuthChannel,
   resolveChannelName,
   normalizeProviderKey,
@@ -15,12 +14,6 @@ import { test } from 'vitest';
 
 test('dashboard providers', () => {
   // Test 1: OAuth channel metadata check
-  assert.equal(OAUTH_CHANNEL_META.codex.name, 'Codex');
-  assert.equal(OAUTH_CHANNEL_META.meta.name, 'Meta');
-  assert.equal(OAUTH_CHANNEL_META.devin.name, 'Devin');
-  assert.equal(OAUTH_CHANNEL_META.antigravity.name, 'Antigravity');
-  assert.equal(OAUTH_CHANNEL_META.kimi.name, 'Kimi');
-  assert.equal(OAUTH_CHANNEL_META.codebuddy.name, 'Codebuddy');
   assert.equal(isOAuthChannel('codex'), true);
   assert.equal(isOAuthChannel('meta'), true);
   assert.equal(isOAuthChannel('devin'), true);
@@ -327,6 +320,40 @@ test('dashboard providers', () => {
   });
   assert.equal(pluginChannel.length, 1);
   assert.equal(pluginChannel[0].disabled, true, 'A plugin OAuth channel reads the files its plugin id names');
+
+  // A channel row carries the name the OAuth page gives the same provider: the plugin's own
+  // title for a provider it registers, the brand table otherwise - never the capitalized key.
+  const namedChannels = aggregateProviders({
+    authFilesByType: [
+      { type: 'deepseek', count: 1 },
+      { type: 'minimax', count: 1 },
+      { type: 'opencode-go', count: 1 },
+    ],
+    pluginOAuthIds: new Set(['deepseek', 'minimax', 'opencode-go']),
+    pluginTitles: new Map([['opencode-go', 'OpenCode Go']]),
+  });
+  assert.deepEqual(namedChannels.map((row) => row.name).sort(), ['DeepSeek', 'MiniMax', 'OpenCode Go']);
+  // A configured row standing for a plugin channel takes its title unless the operator renamed it.
+  const configuredChannel = (name: string) => aggregateProviders({
+    pluginOAuthIds: new Set(['opencode-go']),
+    pluginTitles: new Map([['opencode-go', 'OpenCode Go']]),
+    configuredProviders: [{
+      id: 'openai-compat-9', family: 'openai-compatibility', name, upstream_name: 'opencode-go',
+      protocol: 'OpenAI Chat Completions', disabled: false, key_configured: true,
+    }],
+  })[0].name;
+  assert.equal(configuredChannel('opencode-go'), 'OpenCode Go');
+  assert.equal(configuredChannel('My Go relay'), 'My Go relay');
+  // A built-in channel is no exception: an operator's name outranks the brand name.
+  const renamedBuiltin = aggregateProviders({
+    configuredProviders: [{
+      id: 'openai-compat-10', family: 'openai-compatibility', name: 'My Codex relay', upstream_name: 'codex',
+      protocol: 'OpenAI Chat Completions', disabled: false, key_configured: true,
+    }],
+  })[0].name;
+  assert.equal(renamedBuiltin, 'My Codex relay');
+  assert.equal(resolveChannelName('minimax'), 'MiniMax');
+  assert.equal(resolveChannelName('opencode-go', new Map([['opencode-go', 'OpenCode Go']])), 'OpenCode Go');
 
 
   // A plugin that registers an OAuth provider publishes the mark for it, and that

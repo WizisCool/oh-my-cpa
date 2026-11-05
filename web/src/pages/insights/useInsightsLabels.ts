@@ -46,13 +46,14 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   const {
     providerIcons,
     pluginLogos,
+    pluginTitles,
     configuredProviders,
     isProviderCatalogUnknown,
   } = useProviderBranding();
 
   const keys = React.useMemo(() => new Map((cube?.keys ?? []).map((key) => [key.id, key])), [cube?.keys]);
   const credentialFiles = React.useMemo(() => indexCredentialFiles(authFiles?.files ?? []), [authFiles]);
-  const providerName = React.useMemo(() => createProviderNameResolver(configuredProviders), [configuredProviders]);
+  const providerName = React.useMemo(() => createProviderNameResolver(configuredProviders, pluginTitles), [configuredProviders, pluginTitles]);
   const renderMark = React.useMemo(
     () => createFacetMarkRenderer({ credentials: credentialFiles, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
     [configuredProviders, credentialFiles, pluginLogos, providerIcons, isProviderCatalogUnknown],
@@ -80,7 +81,7 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
   return React.useMemo<InsightsLabels>(() => {
     const nameProvider = (id: string) => {
       const named = providerName(id);
-      return named && named !== id ? named : resolveChannelName(id);
+      return named && named !== id ? named : resolveChannelName(id, pluginTitles);
     };
     return {
       label: (dimension, id) => {
@@ -117,5 +118,5 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
       },
       isNonKey: (id) => keys.get(id)?.is_client_key === false,
     };
-  }, [credentials, keys, providerName, renderMark, t]);
+  }, [credentials, keys, pluginTitles, providerName, renderMark, t]);
 }

@@ -1,8 +1,8 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
 import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
-import { pluginDisplayName, type PluginItem } from '../types/plugin';
-import { pluginOAuthProviderEntryTexts, pluginOAuthProviderIds, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
+import type { PluginItem } from '../types/plugin';
+import { BUILTIN_OAUTH_IDS, pluginOAuthProviderIds, pluginOAuthProviderLogos, pluginPortalTitles } from '../types/pluginOAuthProviders';
 
 /**
  * The OAuth provider contract for the console: which authorizations exist, how
@@ -317,7 +317,6 @@ export const BUILTIN_OAUTH_PROVIDERS: OAuthProviderDefinition[] = [
 ];
 
 /** The plugin-supplied providers the card builder skips, because a built-in already owns the id. */
-export const BUILTIN_OAUTH_IDS = new Set<string>(BUILTIN_OAUTH_PROVIDERS.map((provider) => provider.id));
 
 export function lookupOAuthProvider(id: string): OAuthProviderDefinition | undefined {
   const normalized = (id || '').trim().toLowerCase();
@@ -386,16 +385,12 @@ export function pluginOAuthProviderChoices(
     if (!plugin.supports_oauth || !isEnabled) continue;
     const providerIds = pluginOAuthProviderIds(plugin);
     const logos = pluginOAuthProviderLogos([plugin]);
-    const entries = pluginOAuthProviderEntryTexts([plugin]);
-    const name = pluginDisplayName(plugin);
+    const portalTitle = pluginPortalTitles(plugin, providerIds);
     const pluginPageRoute = pages.find((page) => page.pluginId === plugin.id)?.route;
     for (const providerId of providerIds) {
       if (seen.has(providerId)) continue;
       seen.add(providerId);
-      const entryName = entries[providerId]?.name;
-      const title = entryName && entryName !== name
-        ? entryName
-        : providerIds.length > 1 ? `${name} · ${providerId}` : name;
+      const title = portalTitle(providerId);
       choices.push({
         id: providerId,
         flow: 'plugin',

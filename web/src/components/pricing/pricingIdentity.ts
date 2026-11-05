@@ -5,7 +5,7 @@
  */
 import { PROVIDER_KEY_PREFIX } from '../../types/usageEventIdentity';
 import { resolveProviderMark, type BrandMark, type ProviderBrandSources } from '../../types/brandMark';
-import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import { providerDisplayName } from '../../types/providerMetadata';
 import type { PricingProvider } from '../../types/pricing';
 export interface ChannelIdentity extends BrandMark {
   label: string;
@@ -36,9 +36,8 @@ export function pricingModelIdentity(model: string): PricingModelIdentity {
 }
 
 export function pricingProviderIdentity(provider: PricingProvider, sources: ProviderBrandSources = {}): ChannelIdentity {
-  const metadata = getCredentialProviderMetadata(provider.family);
   return {
-    label: provider.is_oauth && provider.name === provider.family ? metadata.label : provider.name,
+    label: provider.is_oauth && provider.name === provider.family ? providerDisplayName(provider.family, sources.pluginTitles) : provider.name,
     ...resolveProviderMark({ ...provider, base_url: provider.endpoint_host }, sources),
   };
 }

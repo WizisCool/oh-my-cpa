@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntdApp, Button, Segmented } from 'antd';
 import { DeleteOutlined, SaveOutlined } from '../icons';
 import { CredentialMark } from '../LobeIcon';
-import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import { providerDisplayName } from '../../types/providerMetadata';
 import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
@@ -40,6 +40,7 @@ interface OAuthModelRulesDrawerProps {
   onSaved: () => void;
   providerOptions: string[];
   pluginLogos?: PluginOAuthLogos;
+  pluginTitles?: ReadonlyMap<string, string>;
 }
 
 const ALIASES_QUERY_KEY = ['management-oauth-model-aliases'] as const;
@@ -70,10 +71,14 @@ function safeError(error: unknown, t: TFunc): string {
   return error instanceof Error ? error.message : t('af.request_failed');
 }
 
-const ProviderIdentity: React.FC<{ provider: string; pluginLogos?: PluginOAuthLogos }> = ({ provider, pluginLogos }) => (
+const ProviderIdentity: React.FC<{
+  provider: string;
+  pluginLogos?: PluginOAuthLogos;
+  pluginTitles?: ReadonlyMap<string, string>;
+}> = ({ provider, pluginLogos, pluginTitles }) => (
   <span className={styles['provider-identity']} data-testid="oauth-model-rules-provider-identity" data-provider={provider}>
     <CredentialMark provider={provider} pluginLogos={pluginLogos} size={18} />
-    <span className={styles['provider-option-name']}>{getCredentialProviderMetadata(provider).label}</span>
+    <span className={styles['provider-option-name']}>{providerDisplayName(provider, pluginTitles)}</span>
   </span>
 );
 
@@ -83,6 +88,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   onSaved,
   providerOptions,
   pluginLogos,
+  pluginTitles,
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
@@ -298,10 +304,10 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   const providerSelectOptions = useMemo(() => {
     const options = knownProviders.map((value) => ({
       value,
-      searchText: `${value} ${getCredentialProviderMetadata(value).label}`.toLowerCase(),
+      searchText: `${value} ${providerDisplayName(value, pluginTitles)}`.toLowerCase(),
       label: (
         <span className={styles['provider-option']}>
-          <ProviderIdentity provider={value} pluginLogos={pluginLogos} />
+          <ProviderIdentity provider={value} pluginLogos={pluginLogos} pluginTitles={pluginTitles} />
           <span className={styles['provider-option-meta']}>
             {t('af.rules_provider_counts', {
               aliases: savedAliases?.[value]?.length ?? 0,
@@ -316,17 +322,17 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     if (typedProvider && isValidOAuthModelAliasProvider(typedProvider) && !knownProviders.includes(typedProvider)) {
       options.push({
         value: typedProvider,
-        searchText: `${typedProvider} ${getCredentialProviderMetadata(typedProvider).label}`.toLowerCase(),
+        searchText: `${typedProvider} ${providerDisplayName(typedProvider, pluginTitles)}`.toLowerCase(),
         label: (
           <span className={styles['provider-option']}>
-            <ProviderIdentity provider={typedProvider} pluginLogos={pluginLogos} />
+            <ProviderIdentity provider={typedProvider} pluginLogos={pluginLogos} pluginTitles={pluginTitles} />
             <span className={styles['provider-option-meta']}>{t('af.rules_provider_use', { provider: typedProvider })}</span>
           </span>
         ),
       });
     }
     return options;
-  }, [knownProviders, pluginLogos, savedAliases, savedRules, t, typedProvider]);
+  }, [knownProviders, pluginLogos, pluginTitles, savedAliases, savedRules, t, typedProvider]);
 
   const sectionQuery = section === 'aliases' ? aliasesQuery : excludedQuery;
   const isSectionDirty = section === 'aliases' ? isAliasDirty : isRuleDirty;
@@ -446,7 +452,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
                   placeholder={t('af.rules_provider_placeholder')}
                   options={providerSelectOptions}
                   // Counts belong to the options and tabs; the selected identity matches the page's provider tabs.
-                  labelRender={(option) => <ProviderIdentity provider={String(option.value ?? '')} pluginLogos={pluginLogos} />}
+                  labelRender={(option) => <ProviderIdentity provider={String(option.value ?? '')} pluginLogos={pluginLogos} pluginTitles={pluginTitles} />}
                   showSearch={{
                     searchValue: providerSearch,
                     onSearch: setProviderSearch,
