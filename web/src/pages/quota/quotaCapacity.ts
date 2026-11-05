@@ -46,11 +46,9 @@ export interface CapacityFigure {
 }
 
 export interface QuotaCapacityReading {
-  /** What is left of the window; null without a live reading. */
-  remaining: CapacityFigure | null;
   /** The whole window's estimated size; null when there is no estimate yet. */
   capacity: CapacityFigure | null;
-  /** What this gateway recorded in the cycle, shown while there is no remaining figure. */
+  /** What this gateway recorded in the cycle, shown while there is no estimate. */
   recorded: CapacityFigure | null;
   /** Why there is no estimate yet, already localized. */
   note: string | null;
@@ -62,8 +60,11 @@ export function formatCapacityFigure(amount: CapacityFigure, t: TFunc): string {
 }
 
 /**
- * The reading of a window's estimate: what is left of it and its whole size, or what was recorded
- * and why there is no estimate yet. Returns null for a window the estimate does not apply to.
+ * The reading of a window's estimate: its whole size, or what was recorded and why there is no
+ * estimate yet. Returns null for a window the estimate does not apply to.
+ *
+ * What is left of the window is not stated even when the server derives it: the bar already shows
+ * the remaining share, and a second, derived figure beside it read as a separate promise.
  */
 export function describeQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): QuotaCapacityReading | null {
   const { usage, capacity, capacity_unavailable: reason } = window;
@@ -72,10 +73,9 @@ export function describeQuotaCapacity(window: CapacityWindow, tokenStyle: TokenN
     ? { value: `≈ ${tokens(tokenCount)}`, tokens: null }
     : { value: `≈ ${formatEstimatedUsd(costNanos / NANOS_PER_USD, capacity?.error_percent ?? 0)}`, tokens: tokens(tokenCount) };
 
-  const remaining = capacity?.remaining_tokens != null ? estimate(capacity.remaining_cost_nanos, capacity.remaining_tokens) : null;
   const whole = capacity ? estimate(capacity.cost_nanos, capacity.tokens) : null;
   let recorded: CapacityFigure | null = null;
-  if (!remaining && usage && usage.requests > 0) {
+  if (!whole && usage && usage.requests > 0) {
     recorded = usage.priced_requests >= usage.requests * MIN_PRICED_SHARE
       ? { value: formatUsd(usage.cost_nanos / NANOS_PER_USD), tokens: tokens(usage.tokens) }
       : { value: tokens(usage.tokens), tokens: null };
@@ -83,29 +83,21 @@ export function describeQuotaCapacity(window: CapacityWindow, tokenStyle: TokenN
   const reasonKey = !capacity && reason ? REASON_KEYS[reason] : null;
   const note = reasonKey ? t(reasonKey) : null;
 
-  if (!remaining && !whole && !recorded && !note) return null;
-  return { remaining, capacity: whole, recorded, note };
+  if (!whole && !recorded && !note) return null;
+  return { capacity: whole, recorded, note };
 }
 
-/**
- * The list row's reading in its shortest form: what is left of the window while the reading is
- * live, otherwise its size. The row's tooltip names both, and the Drawer carries the rest.
- */
+/** The list row's reading in its shortest form: the window's estimated size. The Drawer carries the rest. */
 export function compactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
   const { capacity } = window;
   if (!capacity) return null;
-  const isRemaining = capacity.remaining_tokens != null;
-  const cost = isRemaining ? capacity.remaining_cost_nanos : capacity.cost_nanos;
-  if (cost != null) return `≈${formatEstimatedUsd(cost / NANOS_PER_USD, capacity.error_percent)}`;
-  return `≈${t('quota.capacity_tokens', { n: formatTokens(capacity.remaining_tokens ?? capacity.tokens, tokenStyle) })}`;
+  if (capacity.cost_nanos != null) return `≈${formatEstimatedUsd(capacity.cost_nanos / NANOS_PER_USD, capacity.error_percent)}`;
+  return `≈${t('quota.capacity_tokens', { n: formatTokens(capacity.tokens, tokenStyle) })}`;
 }
 
-/** The same estimate as tooltip lines: what is left, then the whole window. */
+/** The same estimate as a tooltip line, with its tokens beside a cost. */
 export function describeCompactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
   const reading = describeQuotaCapacity(window, tokenStyle, t);
   if (!reading?.capacity) return null;
-  return [
-    reading.remaining ? `${t('quota.capacity_remaining')} ${formatCapacityFigure(reading.remaining, t)}` : null,
-    `${t('quota.capacity_estimate')} ${formatCapacityFigure(reading.capacity, t)}`,
-  ].filter(Boolean).join('\n');
+  return `${t('quota.capacity_estimate')} ${formatCapacityFigure(reading.capacity, t)}`;
 }
