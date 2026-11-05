@@ -419,7 +419,9 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                     {referencePrices.map((price, index) => {
                       const shown = price.providers.slice(0, REFERENCE_PROVIDERS_SHOWN).join(', ');
                       const hidden = price.providers.length - REFERENCE_PROVIDERS_SHOWN;
-                      const rateText = [price.prompt_price_per_1m, price.completion_price_per_1m, price.cache_read_price_per_1m]
+                      // Every rate the Use action copies is shown, so listings that differ only in cache
+                      // writes, or in stating none, are told apart before one is adopted.
+                      const rateText = [price.prompt_price_per_1m, price.completion_price_per_1m, price.cache_read_price_per_1m, price.cache_write_price_per_1m]
                         .map((value) => (value === undefined ? '—' : formatRatePer1M(value))).join(' / ');
                       return (
                         // One provider can list two rates for a model, so its name alone is not unique.

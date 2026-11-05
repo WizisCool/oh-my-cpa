@@ -120,7 +120,7 @@ export default {
   'pricing.editor.pick_empty': '没有匹配的模型',
   'pricing.editor.rates': '基础费率（$ / 1M tokens）',
   'pricing.editor.fill_reference': '填入 {id} 的价格',
-  'pricing.editor.reference_prices': '{source} 参考价（{model}）· 输入 / 输出 / 缓存读',
+  'pricing.editor.reference_prices': '{source} 参考价（{model}）· 输入 / 输出 / 缓存读 / 缓存写',
   'pricing.editor.reference_providers_more': '{providers} 等 {n} 个',
   'pricing.editor.reference_fill': '填入',
   'pricing.editor.reference': 'OpenRouter {price}',

@@ -123,7 +123,7 @@ export default {
   "pricing.editor.pick_empty": "沒有符合的模型",
   "pricing.editor.rates": "基礎費率（$ / 1M tokens）",
   "pricing.editor.fill_reference": "填入 {id} 的價格",
-  "pricing.editor.reference_prices": "{source} 參考價（{model}）· 輸入 / 輸出 / 快取讀",
+  "pricing.editor.reference_prices": "{source} 參考價（{model}）· 輸入 / 輸出 / 快取讀 / 快取寫",
   "pricing.editor.reference_providers_more": "{providers} 等 {n} 個",
   "pricing.editor.reference_fill": "填入",
   "pricing.editor.reference": "OpenRouter {price}",

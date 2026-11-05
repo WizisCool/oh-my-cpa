@@ -123,7 +123,7 @@ export default {
   'pricing.editor.pick_empty': 'No matching models',
   'pricing.editor.rates': 'Base rates ($ / 1M tokens)',
   'pricing.editor.fill_reference': 'Use {id} rates',
-  'pricing.editor.reference_prices': '{source} reference rates ({model}) · input / output / cache read',
+  'pricing.editor.reference_prices': '{source} reference rates ({model}) · input / output / cache read / cache write',
   'pricing.editor.reference_providers_more': '{providers} +{n}',
   'pricing.editor.reference_fill': 'Use',
   'pricing.editor.reference': 'OpenRouter {price}',
