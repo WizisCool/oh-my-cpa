@@ -40,7 +40,24 @@ export async function dashboardLayout({ base, page, check }) {
     await page.getByTestId('dashboard-layout-tray').waitFor();
   };
   const done = async () => {
-    await page.getByTestId('dashboard-layout-done').click();
+    const button = page.getByTestId('dashboard-layout-done');
+    // The reordered DOM can settle before the drag's click guard releases. Observe delivery at
+    // the button without invoking Save, then exercise the action with one real pointer click.
+    await until(() => button.evaluate((node) => {
+      let hasReceivedClick = false;
+      const receive = (event) => {
+        hasReceivedClick = true;
+        event.stopImmediatePropagation();
+      };
+      node.addEventListener('click', receive, { capture: true });
+      try {
+        node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return hasReceivedClick;
+      } finally {
+        node.removeEventListener('click', receive, { capture: true });
+      }
+    }), { label: 'Done to receive clicks after the drag' });
+    await button.click();
     await page.getByTestId('dashboard-layout-tray').waitFor({ state: 'detached' });
   };
   const open = async () => {
