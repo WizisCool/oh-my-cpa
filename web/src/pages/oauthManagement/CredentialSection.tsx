@@ -19,8 +19,8 @@ import {
   ProfileOutlined,
   RenameOutlined,
   RollbackOutlined,
-  StopOutlined,
   SyncOutlined,
+  TimerResetOutlined,
   WarningOutlined,
 } from '../../components/icons';
 import { getCredentialProviderMetadata } from '../../types/providerMetadata';
@@ -44,7 +44,7 @@ import { quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
 import { compactQuotaCapacity, describeCompactQuotaCapacity } from '../quota/quotaCapacity';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
-import { resolveQuotaCooldownTooltip } from '../quota/quotaCooldown';
+import { describeQuotaCooldown } from '../quota/quotaCooldown';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import {
@@ -312,7 +312,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
   const failure = quota ? refreshFailureLine(quota, nowMS, t) : null;
   const explanation = failure
     ?? (quota ? outlivedResetLine(quota, t) : null)
-    ?? (record.quotaCondition === 'cooldown' ? resolveQuotaCooldownTooltip(quota?.active_cooldown?.reason, t('quota.cooldown_active_desc')) : null);
+    ?? (record.quotaCondition === 'cooldown' ? describeQuotaCooldown(quota?.active_cooldown?.reason, t('quota.cooldown_active_desc')) : null);
   const needsRefresh = (status.canRefreshFix || Boolean(failure)) && record.canRefreshQuota;
   const credits = quota?.reset_credits?.available_count ?? 0;
 
@@ -519,7 +519,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
               { key: 'models', icon: <AppstoreOutlined />, label: t('af.models_btn'), disabled: isBusy || file.runtime_only },
               { key: 'rename', icon: <RenameOutlined />, label: t('af.rename'), disabled: isBusy || !canRename },
               { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), disabled: isBusy || !record.canSelectForFileBatch },
-              { key: 'clear-cooldown', icon: <StopOutlined />, label: t('quota.clear_cooldown'), disabled: isBusy || isDemo || !record.canClearCooldown },
+              { key: 'clear-cooldown', icon: <TimerResetOutlined />, label: t('quota.clear_cooldown'), disabled: isBusy || isDemo || !record.canClearCooldown },
               ...(siwc ? [{ key: 'siwc', icon: <LinkOutlined />, label: t('siwc.menu'), disabled: isBusy }] : []),
               { type: 'divider' as const },
               { key: 'download', icon: <DownloadOutlined />, label: t('af.download_credential'), disabled: isBusy || file.runtime_only || isDemo || !record.canSelectForFileBatch },

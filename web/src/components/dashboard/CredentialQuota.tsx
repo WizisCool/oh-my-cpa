@@ -15,8 +15,8 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   ExclamationCircleOutlined,
+  HourglassOutlined,
   KeyOutlined,
-  PauseCircleOutlined,
   RightOutlined,
 } from '../icons';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -67,7 +67,7 @@ const WINDOW_LABEL_KEYS: Record<QuotaWindowPeriod, MessageKey> = {
 /** The states whose row says what is wrong instead of drawing the windows it cannot use. */
 const STATUS_ROW_STATES: Partial<Record<CredentialQuotaState, { labelKey: MessageKey; Icon: React.ComponentType<{ className?: string }> }>> = {
   reauth: { labelKey: 'dash.quota.state_reauth', Icon: KeyOutlined },
-  cooldown: { labelKey: 'dash.quota.state_cooldown', Icon: PauseCircleOutlined },
+  cooldown: { labelKey: 'dash.quota.state_cooldown', Icon: HourglassOutlined },
   problem: { labelKey: 'dash.quota.state_problem', Icon: CloseCircleOutlined },
   unread: { labelKey: 'dash.quota.state_unread', Icon: ExclamationCircleOutlined },
 };
