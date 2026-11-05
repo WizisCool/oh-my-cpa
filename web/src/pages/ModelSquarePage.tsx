@@ -91,7 +91,8 @@ function describeProvider(provider: ModelSquareProvider, branding: ProviderBrand
   const hasOwnName = provider.name !== '' && provider.name.toLowerCase() !== provider.family.toLowerCase();
   return {
     id: provider.id,
-    name: hasOwnName ? provider.name : providerDisplayName(provider.family, branding.pluginTitles),
+    // Only an OAuth family is a plugin's provider; an API-key family is a dialect a plugin cannot rename.
+    name: hasOwnName ? provider.name : providerDisplayName(provider.family, provider.is_oauth ? branding.pluginTitles : undefined),
     ...resolveProviderMark({ ...provider, base_url: provider.endpoint_host }, branding),
   };
 }

@@ -327,6 +327,12 @@ test('credentials keep the name their plugin\'s login card gives the provider', 
   assert.equal(providerDisplayName('workbuddy', titles), 'WorkBuddy');
   assert.equal(providerDisplayName('codebuddy', titles), 'WorkBuddy');
   assert.equal(providerDisplayName('codex', titles), 'Codex');
+  // When an enabled plugin declares the same provider, its title wins, as its login card does.
+  const overlapping = pluginOAuthProviderTitles([
+    { id: 'old-go', enabled: false, effective_enabled: false, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'Old Go' }, config_fields: [] },
+    { id: 'opencode', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'opencode-go', metadata: { name: 'OpenCode Go' }, config_fields: [] },
+  ]);
+  assert.equal(providerDisplayName('opencode-go', overlapping), 'OpenCode Go');
   // Provider keys come from plugins; an inherited member is not a brand.
   assert.equal(providerDisplayName('constructor'), 'Constructor');
 });

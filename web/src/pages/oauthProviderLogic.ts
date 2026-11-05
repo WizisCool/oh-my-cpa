@@ -433,12 +433,15 @@ function pluginPortalTitles(plugin: PluginItem, providerIds: readonly string[]):
  * looks up.
  *
  * Unlike the login cards, a disabled plugin still contributes: switching it off keeps the
- * credentials it registered, and they keep its name, as they keep its logo. A built-in
+ * credentials it registered, and they keep its name, as they keep its logo. When an enabled
+ * plugin declares the same provider, its title wins, as its login card does. A built-in
  * provider keeps its own name, matching the login cards a plugin cannot replace.
  */
 export function pluginOAuthProviderTitles(plugins: PluginItem[] | undefined): Map<string, string> {
   const titles = new Map<string, string>();
-  for (const plugin of plugins ?? []) {
+  const isEnabled = (plugin: PluginItem) => Boolean(plugin.effective_enabled ?? plugin.enabled);
+  const ordered = [...(plugins ?? [])].sort((a, b) => Number(isEnabled(b)) - Number(isEnabled(a)));
+  for (const plugin of ordered) {
     if (!plugin.supports_oauth) continue;
     const providerIds = pluginOAuthProviderIds(plugin);
     const portalTitle = pluginPortalTitles(plugin, providerIds);

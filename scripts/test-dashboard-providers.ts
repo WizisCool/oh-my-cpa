@@ -344,6 +344,14 @@ test('dashboard providers', () => {
   })[0].name;
   assert.equal(configuredChannel('opencode-go'), 'OpenCode Go');
   assert.equal(configuredChannel('My Go relay'), 'My Go relay');
+  // A built-in channel is no exception: an operator's name outranks the brand name.
+  const renamedBuiltin = aggregateProviders({
+    configuredProviders: [{
+      id: 'openai-compat-10', family: 'openai-compatibility', name: 'My Codex relay', upstream_name: 'codex',
+      protocol: 'OpenAI Chat Completions', disabled: false, key_configured: true,
+    }],
+  })[0].name;
+  assert.equal(renamedBuiltin, 'My Codex relay');
   assert.equal(resolveChannelName('minimax'), 'MiniMax');
   assert.equal(resolveChannelName('opencode-go', new Map([['opencode-go', 'OpenCode Go']])), 'OpenCode Go');
 

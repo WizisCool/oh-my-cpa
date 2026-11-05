@@ -534,11 +534,10 @@ export function aggregateProviders({
     const isOAuth = identity !== '' && isOAuthChannel(identity, undefined, pluginOAuthIds);
     const normIdentity = normalizeProviderKey(identity);
 
-    const meta = isOAuth ? OAUTH_CHANNEL_META[normIdentity] : undefined;
     // A channel row takes the channel's name unless the operator named it: a name that only
     // repeats CPA's own is the default, not an override.
     const isNamedByOperator = Boolean(cp.name) && cp.name !== identity;
-    const name = isOAuth && (meta || !isNamedByOperator)
+    const name = isOAuth && !isNamedByOperator
       ? providerDisplayName(identity, pluginTitles)
       : (cp.name || cp.upstream_name || cp.id);
 
