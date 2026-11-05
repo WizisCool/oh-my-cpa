@@ -13,16 +13,16 @@ export interface PluginMetadata {
   name?: string;
   version?: string;
   author?: string;
-  /** Inline artwork only: the server fetches and inlines a declared logo, or drops it. */
+  /** Inline image or absolute HTTP(S) URL loaded by the browser. */
   logo?: string;
 }
 
 /** One login portal's own display text, as the plugin declared it. */
 export interface PluginOAuthProviderEntry {
-  /** The provider key credential, quota and request records carry. */
+  /** The login identifier sent to CPA, which may differ from the credential family. */
   identifier: string;
   name?: string;
-  /** Inline artwork only, like a plugin's own logo: the server drops or inlines a URL. */
+  /** Inline image or absolute HTTP(S) URL, like the plugin-wide logo. */
   logo?: string;
 }
 

@@ -18,8 +18,7 @@ import (
  * settings document, removal, the store catalog and installation.
  *
  * Every route maps to one fixed CPA plugin route. Responses are projected into this
- * package's DTOs, and the one value rewritten on the way out is a logo, because the
- * browser must not be sent to a plugin's or a registry's host.
+ * package's DTOs; publisher-owned logos are rendered as isolated browser images.
  */
 
 // pluginConfigBodyLimit bounds one plugin settings document.
@@ -102,16 +101,10 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 	}
 
 	// An installed plugin the host has not loaded reports no name or logo of its own;
-	// the store's listing of it supplies them, before the logos are inlined below.
+	// the store's listing of it supplies them.
 	h.pluginIdentities.fill(request.Context(), client, list.Plugins)
 
-	// A plugin's logo is its own to declare, but the browser that draws it must not
-	// depend on the plugin's host: the mark is inlined here instead. A logo that
-	// cannot be inlined is reported as absent, which is what makes the console fall
-	// back to its own catalog mark.
-	h.pluginLogos.inline(request.Context(), list.Plugins)
-
-	projected := projectPluginItems(list.Plugins)
+	projected := projectPluginItems(list.Plugins, h.cfg.IsDemoMode)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"plugins_enabled": list.PluginsEnabled,
 		"plugins_dir":     boundedText(list.PluginsDir, pluginTextLimit),
@@ -343,9 +336,8 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 	}
 
 	h.pluginIdentities.remember(store.Plugins)
-	h.pluginLogos.inlineStore(request.Context(), store.Plugins)
 
-	projected := projectStorePlugins(store.Plugins)
+	projected := projectStorePlugins(store.Plugins, h.cfg.IsDemoMode)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"plugins_enabled": store.PluginsEnabled,
 		"plugins_dir":     boundedText(store.PluginsDir, pluginTextLimit),

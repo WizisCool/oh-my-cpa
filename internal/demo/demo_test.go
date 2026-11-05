@@ -633,10 +633,8 @@ func TestUpstreamStoresCredentialEdits(t *testing.T) {
 	}
 }
 
-// Inlining a plugin's logo means fetching a URL the plugin declares. Every fixture
-// logo is inline artwork instead, which is what keeps the demonstration from fetching
-// anything a plugin or a registry names even if the fetcher were ever installed in
-// demo mode.
+// Fixtures must remain self-contained: the demo displays plugin branding without
+// asking the browser to contact a plugin or registry publisher.
 func TestFixturePublishesNoPluginLogoURL(t *testing.T) {
 	logos := []string{}
 	for _, plugin := range pluginCatalog() {

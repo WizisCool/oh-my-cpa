@@ -82,9 +82,6 @@ type Handler struct {
 	updateWatchers     sync.WaitGroup
 	updateWatchContext context.Context
 	stopUpdateWatchers context.CancelFunc
-	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
-	// plugin's own host; see management_plugin_logos.go.
-	pluginLogos *pluginLogoFetcher
 	// fontInstaller downloads Google Fonts families for the font library. It is built on
 	// first use from the configured stylesheet URL; tests set it to a local fixture.
 	fontInstaller     *fontasset.GoogleInstaller
@@ -152,7 +149,6 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		trustedProxies:   parseTrustedProxyNetworks(cfg.TrustedProxyCIDRs),
 		providerWrites:   newProviderWriteGate(),
 		providerKeyMasks: newProviderKeyMaskCache(),
-		pluginLogos:      newPluginLogoFetcher(),
 		pluginIdentities: newPluginIdentityCache(),
 	}
 	if handler.logger == nil {
@@ -160,12 +156,6 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		// to log. Leaving it nil turns any log line on a request path into a panic served
 		// to the caller, which is a far worse outcome than a default logger.
 		handler.logger = slog.Default()
-	}
-	if cfg.IsDemoMode {
-		// Inlining a plugin's logo means fetching a URL the plugin declares. The
-		// public demo fetches nothing a plugin names, so the inliner is not installed
-		// at all and the console falls back to its own bundled mark.
-		handler.pluginLogos = nil
 	}
 	return handler
 }
@@ -1107,7 +1097,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		writer.Header().Set("X-Robots-Tag", robotsTagValue)
 		writer.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=()")
-		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self';")
+		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http: https:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self';")
 		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {
 			writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

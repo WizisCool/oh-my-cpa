@@ -19,6 +19,8 @@ import {
   FAKE_CPA_MANAGEMENT_KEY,
   FAKE_PROVIDER_SECRET,
   FAKE_SECOND_PROVIDER_SECRET,
+  FAKE_INSTALLED_PLUGIN_LOGO_URL,
+  FAKE_UNINSTALLED_PLUGIN_LOGO_URL,
 } from './fake-cpa.mjs';
 import { createChecker, measureStable } from './acceptance/harness.mjs';
 import { runRequestListAcceptance } from './acceptance/request-list.mjs';
@@ -278,8 +280,17 @@ try {
   browser = await launchBrowser(chromium, { headless: true });
   cancellation.signal.throwIfAborted();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
-  network = await guardBrowserContext(context, [appURL]);
+  network = await guardBrowserContext(context, [appURL, FAKE_INSTALLED_PLUGIN_LOGO_URL]);
   page = await context.newPage();
+  // This one declared image is synthetic; no publisher is contacted by acceptance.
+  await page.route(FAKE_INSTALLED_PLUGIN_LOGO_URL, (route) => route.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#2a78d6"/></svg>',
+  }));
+  const uninstalledLogoRequests = [];
+  page.on('request', (request) => {
+    if (request.url() === FAKE_UNINSTALLED_PLUGIN_LOGO_URL) uninstalledLogoRequests.push(request.url());
+  });
   const responseBodies = [];
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
@@ -343,6 +354,16 @@ try {
     ['/auth-files', '.oauth-management-page', withProviderSecrets],
   ]);
 
+  await page.goto(`${appURL}/plugins/store`, { waitUntil: 'domcontentloaded' });
+  const installedLogo = page.locator('[data-store-id="official/fixture-logger"] img');
+  await installedLogo.waitFor({ state: 'visible' });
+  await installedLogo.evaluate((image) => image.decode());
+  check('a source-matched installed plugin loads its catalog artwork',
+    await installedLogo.getAttribute('src') === FAKE_INSTALLED_PLUGIN_LOGO_URL);
+  check('an uninstalled store entry keeps a placeholder without requesting its declared URL',
+    await page.locator('[data-store-id="official/fixture-limiter"] img').count() === 0
+      && uninstalledLogoRequests.length === 0);
+
   await runRequestListAcceptance({ appURL, page, check });
   await runMcpAcceptance({ appURL, page, check });
   if (!smokeOnly) {
@@ -375,7 +396,7 @@ try {
     try {
       await stopBrowser().catch(error => { failures.push(`Browser teardown: ${error.message}`); throw error; });
       await settleNativeResponseAudits(nativeResponseAudits, check);
-      if (network) check('built console makes no outbound network requests', !network.problems.some(problem => problem.kind === 'outbound'));
+      if (network) check('built console makes no undeclared outbound network requests', !network.problems.some(problem => problem.kind === 'outbound'));
       if (page) {
         check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
         check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));
