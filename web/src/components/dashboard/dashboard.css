@@ -15,6 +15,7 @@
   flex-direction: column;
 }
 .provider-row-enhanced {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, 1.8fr) minmax(90px, .9fr) 80px 75px minmax(160px, 1.6fr);
   align-items: center;
@@ -166,6 +167,7 @@
   .provider-total-col, .provider-rate-col {
     text-align: right;
   }
+  .provider-rate-col { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .provider-visual-col {
     grid-column: 1 / -1;
   }
@@ -405,7 +407,13 @@
   overscroll-behavior-y: contain;
 }
 .quota-row + .quota-row { border-top: 1px solid var(--border-soft); }
+/* The rows sit flush with the panel's text, so the edge grip lives in a gutter the list keeps on its
+   leading side; the list clips sideways, and a grip outside its padding box would be cut away. */
+.quota-list:has(.reorder-handle.is-edge) { margin-left: -14px; padding-left: 14px; }
+.quota-row > .reorder-handle.is-edge { left: -14px; }
+.quota-row-when .reorder-handle.is-inline { margin-left: 4px; }
 .quota-row {
+  position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.7fr) 78px;
   grid-template-areas: "icon name reading when";
@@ -451,9 +459,6 @@
   font-variant-numeric: tabular-nums;
 }
 .quota-row-when-icon { font-size: var(--text-sm); flex: none; }
-.quota-foot { display: flex; justify-content: flex-end; padding-top: 12px; }
-/* Without a list above it the footer still sits on the panel's bottom edge. */
-.quota-all-disabled + .quota-foot { margin-top: auto; }
 .quota-foot-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--text-sm); line-height: 1; }
 .quota-foot-link:hover { color: var(--accent); }
 .quota-link-icon { font-size: var(--text-2xs); }

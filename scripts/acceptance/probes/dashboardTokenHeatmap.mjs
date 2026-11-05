@@ -1289,7 +1289,9 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
     'the retry lists the credentials with the one that cannot serve first',
     await quotaPanel.locator('.quota-row').count() === 2 && await quotaPanel.locator('.quota-row').first().getAttribute('data-quota-state') === 'problem',
   );
-  check('the rows are not interactive, so a touch on the list cannot leave the page', await quotaPanel.locator('.quota-list a, .quota-list button').count() === 0);
+  // The reorder grip is the one control a row carries: it moves the row, never leaves the page.
+  check('the rows carry no link or action, so a touch on the list cannot leave the page',
+    await quotaPanel.locator('.quota-list a, .quota-list button:not([data-reorder-handle])').count() === 0);
 
   canReadCredentials = false;
   await quotaPage.locator('.terminal-page-head button:has(.anticon-reload)').first().click();

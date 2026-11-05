@@ -87,7 +87,12 @@ export function useReorderList<T>(
   items: readonly T[],
   keyOf: (item: T) => string,
   onMove: (key: string, target: string, side: DropSide) => unknown,
-): { ordered: readonly T[]; move: (key: string, target: string, side: DropSide) => void } {
+): {
+  ordered: readonly T[];
+  move: (key: string, target: string, side: DropSide) => void;
+  /** A keyboard step: past the neighbour in the drawn order, one place earlier or later. */
+  step: (key: string, direction: -1 | 1) => void;
+} {
   const signature = items.map(keyOf).join('\u0000');
   const [pending, setPending] = React.useState<{ signature: string; keys: readonly string[] } | null>(null);
   const held = pending?.signature === signature ? pending : null;
@@ -100,7 +105,12 @@ export function useReorderList<T>(
     setPending(hold);
     void Promise.resolve(onMove(key, target, side)).finally(() => setPending((current) => (current === hold ? null : current)));
   };
-  return { ordered, move };
+  const step = (key: string, direction: -1 | 1) => {
+    const index = ordered.findIndex((item) => keyOf(item) === key);
+    const neighbour = ordered[index + direction];
+    if (index >= 0 && neighbour !== undefined) move(key, keyOf(neighbour), direction < 0 ? 'before' : 'after');
+  };
+  return { ordered, move, step };
 }
 
 export interface ReorderRow {

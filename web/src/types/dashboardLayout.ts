@@ -116,6 +116,8 @@ export type DashboardLayout = readonly DashboardLayoutItem[];
 
 /** The stored preference key holding the arrangement. */
 export const DASHBOARD_LAYOUT_PREFERENCE = 'omc_dashboard_layout';
+/** The display order of rows inside the dashboard's lists, one named list per widget. */
+export const DASHBOARD_ORDER_PREFERENCE = 'omc_dashboard_order';
 
 /** Module-scope so `usePreference` sees one stable fallback reference. */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = Object.freeze(

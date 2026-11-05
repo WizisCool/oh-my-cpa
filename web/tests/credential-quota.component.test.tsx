@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom';
-import { I18nProvider } from '../src/i18n';
+import { I18nProvider, makeT } from '../src/i18n';
 import {
   CredentialQuotaPanel,
   type CredentialQuotaPanelProps,
@@ -161,12 +161,9 @@ describe('credential quota presentation', () => {
     expect(within(rows[3]).queryByTitle('ample@example.com')).toBeNull();
     expect(within(rows[4]).getByText('No quota reading')).toBeTruthy();
 
-    // No row is interactive, and the footer is the panel's one way out.
+    // No row is interactive, and the panel carries no shortcut away from the dashboard.
     expect(screen.queryByRole('button')).toBeNull();
-    const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(1);
-    expect(links[0].getAttribute('href')).toBe('/omc/oauth-management');
-    expect(links[0].closest('li')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('lists a large fleet in full, most urgent first, for the panel to scroll', () => {
@@ -177,6 +174,25 @@ describe('credential quota presentation', () => {
     expect(rows).toHaveLength(40);
     expect(within(rows[0]).getByText('credential-39')).toBeTruthy();
     expect(within(rows[39]).getByText('credential-0')).toBeTruthy();
+  });
+
+  it('draws the operator\'s stored order first, keeps urgency for the rest and writes a keyboard step beside other lists', async () => {
+    const api = installOmcApi();
+    api.state.preferences.omc_dashboard_order = { providers: ['configured:keep'], credential_quota: ['ample', 'low'] };
+    const files = FILES.filter((entry) => !entry.disabled && !entry.runtime_only);
+    renderWithOmc(<MemoryRouter><CredentialQuotaPanel nowMS={NOW_MS} files={files} quotas={QUOTAS} isSortable /></MemoryRouter>);
+    const handleName = (name: string) => `${makeT('en')('common.reorder_handle')}: ${name}`;
+    const low = await screen.findByRole('button', { name: handleName('low') });
+    const names = () => screen.getAllByRole('listitem').map((row) => row.getAttribute('data-reorder-key'));
+    // The named two lead; the unnamed keep the board's urgency order behind them.
+    const urgency = buildCredentialQuotaBoard(files, QUOTAS).rows.map((row) => row.fileName).filter((name) => name !== 'ample' && name !== 'low');
+    expect(names()).toEqual(['ample', 'low', ...urgency]);
+    fireEvent.keyDown(low, { key: 'ArrowUp' });
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
+    expect(api.preferenceWrites()[0]).toEqual({
+      key: 'omc_dashboard_order',
+      value: { providers: ['configured:keep'], credential_quota: ['low', 'ample', ...urgency] },
+    });
   });
 
   it('keeps the rows through a failed refresh and reports it additively', () => {

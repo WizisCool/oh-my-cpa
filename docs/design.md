@@ -97,7 +97,10 @@ reaches that edge, so it takes no column. On a phone it sits inline with the row
 controls. Rows sort live, without dimming, and travel only along the list. The drop
 keeps the order on screen until the stored preference arrives. A focused handle moves
 its row with the arrow keys. A display order is presentation only: routing priority and
-weight belong to the routing board.
+weight belong to the routing board. A new list stored in a grouped order document, as the
+dashboard's lists share one, takes
+[`useSortableList`](../web/src/hooks/useSortableList.ts) rather than its own preference
+wiring.
 
 ## Feedback and loading
 

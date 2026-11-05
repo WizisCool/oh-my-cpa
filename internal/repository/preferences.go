@@ -68,6 +68,12 @@ const (
 	// own order, so a release that adds a group or an entry needs no rewrite of what is stored.
 	PreferenceNavOrder = "omc_nav_order"
 
+	// PreferenceDashboardOrder is the display order of the dashboard's own lists: each list's name
+	// mapped to its row keys in the order the operator dragged them into. A row the document does
+	// not name follows the named ones in the list's own order, so new rows need no rewrite, and a
+	// list a later release makes sortable only adds a name. It is presentation only.
+	PreferenceDashboardOrder = "omc_dashboard_order"
+
 	// PreferenceSidebarCollapsed remembers the desktop rail independently of the transient phone drawer.
 	PreferenceSidebarCollapsed = "omc_sidebar_collapsed"
 
