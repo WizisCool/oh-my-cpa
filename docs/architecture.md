@@ -164,10 +164,10 @@ obtain general behavior. Dispose subscriptions, timers and observers by effect l
 including development remounts. Use one dataset for desktop and phone presentations;
 keep unsaved drafts separate from server refreshes. See [Design](design.md).
 
-The production SPA, fonts, icons and time-zone data ship with the application. No CDN
-is required to render it. Preserve the configured base path through routing, assets,
-API calls and reverse proxies. Optional upstream/model/reference-data requests do not
-make the UI dependent on third-party asset hosting. Plugin publishers may declare
+The production SPA ships with the application. Preserve the configured base path
+through routing, assets, API calls and reverse proxies. An asset may come from a public
+CDN when that is chosen for it; a deployment that cannot reach the CDN must still render
+the console, with the asset's local fallback. Plugin publishers may declare
 optional HTTP(S) logos; the browser loads those directly, with bundled or neutral
 fallbacks when unavailable. The public demo withholds external plugin logos. A Go build
 without the frontend contains a placeholder, not a complete release; generated assets

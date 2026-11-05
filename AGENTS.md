@@ -54,8 +54,7 @@ values; documentation explains boundaries, rationale and operator procedures.
   verify signed manifests with the compiled-in key and pull by digest; CPA updates
   pull its existing tag. Never upgrade a pinned image. Failed replacement health
   checks restore the previous container and image tag; never bypass verification.
-- Ship assets in the Go binary, without CDN dependencies. Root and configured base
-  paths must both work. A development-server pass does not prove the shipped build.
+- Ship the SPA in the Go binary. Root and configured base paths must both work. A development-server pass does not prove the shipped build.
 
 ## Make the smallest coherent change
 
