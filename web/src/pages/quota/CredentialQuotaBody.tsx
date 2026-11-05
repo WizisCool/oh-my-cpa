@@ -14,6 +14,7 @@ import { Notice } from '../../components/feedback';
 import { SectionHeading } from '../../components/common/SectionHeading';
 import { Tag } from '../../components/common/Tag';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
+import { describeQuotaCooldown } from './quotaCooldown';
 
 interface CredentialQuotaBodyProps {
   item: QuotaItem;
@@ -245,7 +246,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         <div className={`${styles['rec-banner']} ${styles['rec-banner-danger']}`}>
           <span className={styles['banner-dot']} style={{ background: 'var(--danger)' }} />
           <div className={styles['rec-text']}>
-            <div>{item.active_cooldown.reason || t('quota.cooldown_active_desc')}</div>
+            <div>{describeQuotaCooldown(item.active_cooldown.reason, t('quota.cooldown_active_desc'))}</div>
             {item.active_cooldown.recover_at_ms && (
               <div className={styles['rec-sub-danger']}>
                 {t('quota.recover_at', { time: formatTimeWithCountdown(item.active_cooldown.recover_at_ms, nowMS, t) })}

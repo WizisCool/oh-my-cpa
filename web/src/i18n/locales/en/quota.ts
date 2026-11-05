@@ -69,7 +69,6 @@ export default {
   'quota.usage_share_unavailable': 'Unavailable',
   'quota.windows_title': 'Usage limits',
   'quota.reset_occurrence': 'No.{n}',
-  'quota.capacity_remaining': 'Est. remaining',
   'quota.capacity_estimate': 'Est. capacity',
   'quota.capacity_recorded': 'Recorded',
   'quota.capacity_tokens': '{n} tokens',

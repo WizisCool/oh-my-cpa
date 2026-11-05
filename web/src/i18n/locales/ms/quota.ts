@@ -69,7 +69,6 @@ export default {
   "quota.usage_share_unavailable": "Tidak tersedia",
   "quota.windows_title": "Had penggunaan",
   "quota.reset_occurrence": "Tidak.{n}",
-  "quota.capacity_remaining": "Anggaran baki",
   "quota.capacity_estimate": "Anggaran kapasiti",
   "quota.capacity_recorded": "Direkodkan",
   "quota.capacity_tokens": "{n} token",

@@ -99,15 +99,13 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
           data-quota-capacity={capacityReading.capacity ? 'estimated' : 'pending'}
           data-quota-capacity-basis={capacity?.capacity?.basis}
         >
-          {capacityReading.remaining ? (
-            <CapacityAmount label={t('quota.capacity_remaining')} amount={capacityReading.remaining} isStrong data-quota-capacity-remaining />
-          ) : capacityReading.recorded && (
-            <CapacityAmount label={t('quota.capacity_recorded')} amount={capacityReading.recorded} />
-          )}
           {capacityReading.capacity ? (
-            <CapacityAmount label={t('quota.capacity_estimate')} amount={capacityReading.capacity} isEnd />
-          ) : capacityReading.note && (
-            <span className={`${styles['capacity-note']} ${styles['capacity-part-end']}`}>{capacityReading.note}</span>
+            <CapacityAmount label={t('quota.capacity_estimate')} amount={capacityReading.capacity} isStrong />
+          ) : (
+            <>
+              {capacityReading.recorded && <CapacityAmount label={t('quota.capacity_recorded')} amount={capacityReading.recorded} />}
+              {capacityReading.note && <span className={`${styles['capacity-note']} ${styles['capacity-part-end']}`}>{capacityReading.note}</span>}
+            </>
           )}
         </div>
       )}
@@ -116,15 +114,13 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
 };
 
 /** A labelled amount under the bar: the figure, with its tokens in a quieter voice when it is a cost. */
-function CapacityAmount({ label, amount, isStrong = false, isEnd = false, ...data }: {
+function CapacityAmount({ label, amount, isStrong = false }: {
   label: string;
   amount: CapacityFigure;
   isStrong?: boolean;
-  isEnd?: boolean;
-  'data-quota-capacity-remaining'?: boolean;
 }) {
   return (
-    <span className={`${styles['capacity-part']}${isEnd ? ` ${styles['capacity-part-end']}` : ''}`} {...data}>
+    <span className={styles['capacity-part']}>
       <span className={styles['capacity-label']}>{label}</span>
       <span className={`${styles['capacity-value']}${isStrong ? ` ${styles['capacity-value-strong']}` : ''}`}>{amount.value}</span>
       {amount.tokens && <span className={styles['capacity-tokens']}>{amount.tokens}</span>}

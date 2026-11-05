@@ -15,6 +15,7 @@
   flex-direction: column;
 }
 .provider-row-enhanced {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, 1.8fr) minmax(90px, .9fr) 80px 75px minmax(160px, 1.6fr);
   align-items: center;
@@ -166,6 +167,7 @@
   .provider-total-col, .provider-rate-col {
     text-align: right;
   }
+  .provider-rate-col { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
   .provider-visual-col {
     grid-column: 1 / -1;
   }
@@ -394,7 +396,7 @@
 .quota-list {
   flex: 1 1 0;
   min-height: calc(var(--quota-row-height) * 3);
-  margin: 10px -8px 0 0;
+  margin: 12px -8px 0 0;
   padding: 0 8px 0 0;
   list-style: none;
   /* Vertical only: `overflow-y: auto` alone computes the other axis to `auto` as well, and a list
@@ -405,7 +407,13 @@
   overscroll-behavior-y: contain;
 }
 .quota-row + .quota-row { border-top: 1px solid var(--border-soft); }
+/* The rows sit flush with the panel's text, so the edge grip lives in a gutter the list keeps on its
+   leading side; the list clips sideways, and a grip outside its padding box would be cut away. */
+.quota-list:has(.reorder-handle.is-edge) { margin-left: -14px; padding-left: 14px; }
+.quota-row > .reorder-handle.is-edge { left: -14px; }
+.quota-row-when .reorder-handle.is-inline { margin-left: 4px; }
 .quota-row {
+  position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.7fr) 78px;
   grid-template-areas: "icon name reading when";
@@ -451,9 +459,6 @@
   font-variant-numeric: tabular-nums;
 }
 .quota-row-when-icon { font-size: var(--text-sm); flex: none; }
-.quota-foot { display: flex; justify-content: flex-end; padding-top: 12px; }
-/* Without a list above it the footer still sits on the panel's bottom edge. */
-.quota-all-disabled + .quota-foot { margin-top: auto; }
 .quota-foot-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--text-sm); line-height: 1; }
 .quota-foot-link:hover { color: var(--accent); }
 .quota-link-icon { font-size: var(--text-2xs); }
@@ -478,6 +483,9 @@
   /* A phone shows fewer weeks either way; the smaller target keeps a quarter in view. */
   .heatmap-scroll { --heatmap-cell-target: 14px; --heatmap-gap: 3px; }
 }
+/* The two heads share one height - the quota head carries a refresh control - so the field and the
+   list below them start on one line, as they end on one. */
+.heatmap-head, .quota-head { min-height: 24px; }
 .heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 /* The field scrolls sideways inside its panel whenever a year of weeks is wider than it - with
    the scrollbar itself hidden, because a bar inside a dashboard card is visual noise and touch
@@ -485,7 +493,13 @@
    `overflow-y: hidden` alongside is what stops the pair from computing to `auto` on both axes,
    which is the gotcha that drew a stray vertical scrollbar on a field with room to spare. */
 .heatmap-scroll {
-  margin-top: 14px;
+  /* The month axis above the rows: its height and the space under it. */
+  --heatmap-axis: 16px;
+  /* The panel's height, not the cells', sets the field's: the component fits the rows to it and
+     writes the height they need as the minimum, so a short panel grows rather than clipping. */
+  flex: 1 1 0;
+  min-height: var(--heatmap-field-min, calc(var(--heatmap-axis) + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6));
+  margin-top: 12px;
   overflow-x: auto;
   overflow-y: hidden;
   position: relative;
@@ -495,11 +509,15 @@
   /* `!important` because a global `* { scrollbar-width: thin }` further down the sheet would
      otherwise win this declaration, and the bar is exactly what must not appear here. */
   scrollbar-width: none !important;
-  /* The container's bottom edge is flush with the grid's last row, so `overflow-y: hidden` would
-     cut off the bottom row's hover lift. `scale(1.18)` reaches 0.09 of a cell past its own box
-     and this is the room it paints into. The other three edges need none: the month axis pushes
-     the top row down, and the gutter and the scrolling track already leave space on the sides. */
-  padding-bottom: 2px;
+  /* The container clips on both axes, and its right and bottom edges are flush with the newest
+     week and the last weekday, so a hovered cell's lift (`scale(1.18)`, 0.09 of a cell past its
+     box) and a focused cell's ring (2px outside it, 2px wide) would be cut there. This is the room
+     they paint into; the matching negative margin keeps the field itself flush with the panel's
+     content edge, so the room sits in the panel's padding. The month axis already clears the top
+     row, and the pinned gutter covers the left. */
+  padding: 0 4px 4px 0;
+  margin-right: -4px;
+  margin-bottom: -4px;
 }
 .heatmap-scroll::-webkit-scrollbar { display: none !important; }
 /* The axis and the body are the same two boxes - a pinned gutter, then the week tracks - so both
@@ -511,7 +529,7 @@
   width: max-content;
   min-width: 100%;
 }
-.heatmap-months { margin-bottom: 6px; height: 10px; }
+.heatmap-months { margin-bottom: 6px; height: calc(var(--heatmap-axis) - 6px); }
 /* The gutter carries the space beside it as its own padding, so a week scrolling past is covered
    up to the first visible column instead of showing a sliver between the labels and the field. */
 .heatmap-corner, .heatmap-weekdays {
@@ -531,7 +549,8 @@
      content - so the field was not the uniform grid the month axis assumed, and no axis could
      line up with it. */
   grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell, minmax(var(--heatmap-min-cell), 1fr)));
-  gap: var(--heatmap-gap);
+  row-gap: var(--heatmap-gap);
+  column-gap: var(--heatmap-column-gap, var(--heatmap-gap));
   flex: 1 0 auto;
   min-width: 0;
 }
@@ -716,15 +735,10 @@
 }
 .heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
 .heatmap-tip-link-icon { font-size: 9px; }
-/* The key sits on the panel's bottom edge, so a panel stretched to its neighbour's height spends
-   the difference between the field and the key. */
 .heatmap-legend {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 6px;
-  margin-top: auto;
-  padding-top: 14px;
   color: var(--muted);
   font-size: var(--text-2xs);
   line-height: 1;
@@ -738,7 +752,7 @@
 }
 /* Static skeleton, never a shimmer. */
 .heatmap-skeleton {
-  margin-top: 14px;
+  margin-top: 12px;
   /* The measured field's own height: the month axis, then seven rows at the target size. */
   height: calc(16px + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6);
   border: 1px solid var(--border-soft);

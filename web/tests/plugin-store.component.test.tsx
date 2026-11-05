@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { makeT, useI18n, type Lang } from '../src/i18n';
@@ -35,7 +36,7 @@ function Catalog() {
         {(['en', 'zh', 'zh-Hant', 'ms'] as const).map((value) => <option key={value}>{value}</option>)}
       </select>
       <PluginStorePanel store={store} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} />
-      <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([{ ...entry, installed: true, install_source_status: 'matched' }])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} />
+      <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([{ ...entry, installed: true, install_source_status: 'matched' }])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => null} isCheckingUpdates={false} />
     </>
   );
 }
@@ -112,7 +113,7 @@ it('keeps the runtime identity in search and delete confirmation when the catalo
     locales: { 'zh-CN': { name: 'Unrelated catalog name', author: 'Unrelated catalog author' } },
   };
   const { container } = renderWithOmc(
-    <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([foreignListing])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} />,
+    <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([foreignListing])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => null} isCheckingUpdates={false} />,
   );
   expect(await screen.findByText('Runtime name')).toBeTruthy();
   expect(screen.getByText('Runtime author')).toBeTruthy();
@@ -126,4 +127,41 @@ it('keeps the runtime identity in search and delete confirmation when the catalo
   fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(makeT('zh')('plugin.delete')) }));
   expect(await screen.findByText(makeT('zh')('plugin.delete_confirm_title', { name: 'Runtime name' }))).toBeTruthy();
   expect(server.writes()).toHaveLength(0);
+});
+
+it('checks for updates on request and updates a plugin from its installed row', async () => {
+  const server = installOmcApi();
+  server.on('POST', `/management/plugin-store/${entry.id}/install`, () => ({ status: 'ok', id: entry.id, version: '1.3.0', plugins_enabled: true }));
+  const newer = storeListingsByPluginId([{ ...entry, installed: true, installed_version: '1.0.0', version: '1.3.0', update_available: true, install_source_status: 'matched' }]);
+  let checks = 0;
+  function Installed() {
+    // The page owns the store read; the panel only sees listings once updates were checked.
+    const [catalog, setCatalog] = React.useState<ReadonlyMap<string, StorePluginItem>>(new Map());
+    return (
+      <InstalledPluginsPanel
+        plugins={[installed]} catalog={catalog} isLoading={false} isPluginSystemEnabled isDemo={false}
+        onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} isCheckingUpdates={false}
+        onCheckUpdates={async () => {
+          checks += 1;
+          setCatalog(newer);
+          return newer;
+        }}
+      />
+    );
+  }
+  const t = makeT('en');
+  const { container } = renderWithOmc(<Installed />);
+  await screen.findByText('Runtime name');
+  expect(container.querySelector('[data-testid="plugin-row-update"]')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: t('plugin.check_updates') }));
+  expect(await screen.findByText(t('plugin.check_updates_found', { n: 1 }))).toBeTruthy();
+  expect(checks).toBe(1);
+  fireEvent.click(await screen.findByRole('button', { name: t('plugin.update_label', { name: 'Runtime name' }) }));
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog.textContent).toContain(t('plugin.update_title', { name: 'Base name' }));
+  // Updating replaces executable code, so a third-party plugin still asks for its id.
+  fireEvent.change(within(dialog).getByPlaceholderText(entry.id), { target: { value: entry.id } });
+  fireEvent.click(within(dialog).getByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.update') }));
+  await waitFor(() => expect(server.writes('/install')).toHaveLength(1));
+  expect(server.writes('/install')[0]).toMatchObject({ body: { source_id: entry.source_id } });
 });

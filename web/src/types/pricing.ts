@@ -172,6 +172,20 @@ export interface TokenProfile {
   max_input: number;
 }
 
+/** A rate another public catalog lists for this model; advice an operator may copy into a custom price. */
+export interface ReferencePrice {
+  source: 'models.dev';
+  /** The catalog's canonical id the model resolved to. */
+  model: string;
+  /** Providers in that catalog listing exactly this rate. */
+  providers: string[];
+  prompt_price_per_1m: number;
+  completion_price_per_1m: number;
+  /** Absent when the catalog lists no cache rate; not zero. */
+  cache_read_price_per_1m?: number;
+  cache_write_price_per_1m?: number;
+}
+
 export interface PricingModelDetail {
   model: string;
   channel?: string;
@@ -180,6 +194,8 @@ export interface PricingModelDetail {
   /** What auto mode would price the model at; null when nothing matches automatically. */
   automatic: { model: UpstreamModel; match_kind: PricingMatchKind } | null;
   suggestions: UpstreamModel[];
+  /** Offered only when nothing matches automatically; every disagreeing rate is listed. */
+  reference_prices: ReferencePrice[];
   /** The candidate the book offers for this model, if any; absent for auto and unpriced models. */
   candidate?: PricingCandidate | null;
   versions: PriceVersion[];

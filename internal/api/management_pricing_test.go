@@ -296,6 +296,25 @@ func TestPricingModelModeChangesAndRefusals(t *testing.T) {
 	if response.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"model":"openai/gpt-5"`) {
 		t.Fatalf("model detail: %d %s", response.StatusCode, payload)
 	}
+	// Without an automatic OpenRouter match the editor is offered models.dev rates to copy;
+	// with one, those rates are not offered beside it.
+	var detail struct {
+		References []struct {
+			Source    string   `json:"source"`
+			Model     string   `json:"model"`
+			Providers []string `json:"providers"`
+			Prompt    *float64 `json:"prompt_price_per_1m"`
+		} `json:"reference_prices"`
+	}
+	if err := json.Unmarshal(payload, &detail); err != nil || len(detail.References) == 0 || detail.References[0].Source != "models.dev" ||
+		detail.References[0].Model != "openai/gpt-5" || len(detail.References[0].Providers) == 0 || detail.References[0].Prompt == nil {
+		t.Fatalf("reference prices for an unmatched model: %s", payload)
+	}
+	fake.suggestions = []pricing.UpstreamModel{{ID: "openai/gpt-5", PromptPricePer1M: 1.25}}
+	if _, payload = getJSON(t, client, baseURL+"/omc/api/v1/pricing/models/openai%2Fgpt-5"); !strings.Contains(string(payload), `"reference_prices":[]`) {
+		t.Fatalf("reference prices beside an automatic match: %s", payload)
+	}
+	fake.suggestions = nil
 	// Sync: 202 on start, 409 while one is already in flight.
 	response, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/pricing/sync", "")
 	if response.StatusCode != http.StatusAccepted {
