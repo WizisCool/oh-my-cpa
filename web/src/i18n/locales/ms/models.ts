@@ -3,7 +3,7 @@ import type source from '../zh/models';
 
 export default {
   "models.group_count": "Model: {count}",
-  "models.summary_line": "{models} model · {makers} pengeluar · data models.dev terbina dalam {date}",
+  "models.summary_line": "{models} model · {makers} pengeluar · petikan models.dev terbina dalam {date}",
   "models.showing": "Memaparkan {shown} daripada {total}",
   "models.clear_filters": "Kosongkan penapis",
   "models.filter_makers": "Tapis mengikut pengeluar",

@@ -3,7 +3,7 @@ import type source from '../zh/models';
 
 export default {
   "models.group_count": "{count} 個模型",
-  "models.summary_line": "{models} 個模型 · {makers} 個廠商 · 內建 models.dev 資料 {date}",
+  "models.summary_line": "{models} 個模型 · {makers} 個廠商 · 內建 models.dev 快照 {date}",
   "models.showing": "顯示 {shown} / {total}",
   "models.clear_filters": "清除篩選",
   "models.filter_makers": "依廠商篩選",

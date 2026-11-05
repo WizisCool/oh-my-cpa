@@ -3,7 +3,7 @@ import type source from '../zh/models';
 
 export default {
   'models.group_count': 'Models: {count}',
-  'models.summary_line': '{models} models · {makers} makers · bundled models.dev data {date}',
+  'models.summary_line': '{models} models · {makers} makers · bundled models.dev snapshot {date}',
   'models.showing': 'Showing {shown} of {total}',
   'models.clear_filters': 'Clear filters',
   'models.filter_makers': 'Filter by maker',

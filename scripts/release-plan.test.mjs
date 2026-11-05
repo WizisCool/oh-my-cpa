@@ -31,7 +31,8 @@ test('malformed or mismatched release identities never reach Docker or GitHub', 
 test('a release cannot ship model reference metadata older than its window', () => {
   assertModelMetadataCurrent('2026-10-06', '2026-11-05');
   assert.throws(() => assertModelMetadataCurrent('2026-10-05', '2026-11-05'), /pnpm models:sync/);
-  for (const date of ['', undefined, '2026-13-40', '2026-11-05T00:00:00Z']) {
-    assert.throws(() => assertModelMetadataCurrent(date, '2026-11-05'));
+  for (const date of ['', undefined, '2026-13-40', '2026-02-30', '2026-11-05T00:00:00Z']) {
+    assert.throws(() => assertModelMetadataCurrent(date, '2026-11-05'), /YYYY-MM-DD/);
+    assert.throws(() => assertModelMetadataCurrent('2026-11-05', date), /YYYY-MM-DD/);
   }
 });

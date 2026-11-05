@@ -1,6 +1,6 @@
 export default {
   'models.group_count': '{count} 个模型',
-  'models.summary_line': '{models} 个模型 · {makers} 个厂商 · 内置 models.dev 资料 {date}',
+  'models.summary_line': '{models} 个模型 · {makers} 个厂商 · 内置 models.dev 快照 {date}',
   'models.showing': '显示 {shown} / {total}',
   'models.clear_filters': '清除筛选',
   'models.filter_makers': '按厂商筛选',

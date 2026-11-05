@@ -549,7 +549,7 @@ Model specifications come from the bundled models.dev snapshot in
 `internal/modelcatalog/snapshot.json`. Run `pnpm models:sync` when preparing a release
 to update it from models.dev's canonical model data and exact source aliases, then run
 `pnpm demo:generate` and accept the Model Square API goldens (`UPDATE_GOLDEN=1`) because
-the snapshot date appears in both responses. The release workflow refuses a tag whose
+the demo response and those goldens both carry the snapshot date. The release workflow refuses a tag whose
 snapshot is more than 30 days older than the tagged commit. There is no runtime
 synchronization loop or new environment setting, and **Refresh model catalogs** rereads
 CPA without changing this snapshot. The page labels the date as the bundled snapshot's,

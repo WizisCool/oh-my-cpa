@@ -22,9 +22,17 @@ export function compareReleaseTags(first, second) {
   return 0;
 }
 
+// Date.parse rolls impossible days such as 2026-02-30 into the next month; require a round trip.
+function parseCalendarDate(value) {
+  const time = ISO_DATE.test(value ?? '') ? Date.parse(value) : NaN;
+  if (Number.isNaN(time) || new Date(time).toISOString().slice(0, 10) !== value) {
+    throw new Error('Expected YYYY-MM-DD model metadata and revision dates');
+  }
+  return time;
+}
+
 export function assertModelMetadataCurrent(metadataUpdatedAt, revisionDate) {
-  if (!ISO_DATE.test(metadataUpdatedAt ?? '') || !ISO_DATE.test(revisionDate ?? '')) throw new Error('Expected YYYY-MM-DD model metadata and revision dates');
-  const ageDays = (Date.parse(revisionDate) - Date.parse(metadataUpdatedAt)) / 86_400_000;
+  const ageDays = (parseCalendarDate(revisionDate) - parseCalendarDate(metadataUpdatedAt)) / 86_400_000;
   if (!(ageDays <= MAX_MODEL_METADATA_AGE_DAYS)) {
     throw new Error(`models.dev snapshot ${metadataUpdatedAt} is more than ${MAX_MODEL_METADATA_AGE_DAYS} days older than the release commit; run pnpm models:sync`);
   }
