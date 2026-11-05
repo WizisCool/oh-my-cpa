@@ -276,7 +276,8 @@ export async function routeLazyError(fixtures) {
   }
   await page.goto(`${base}/dashboard`);
   await page.locator('.dashboard-page').waitFor();
-  await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).waitFor();
+  // The first reading lands before the next read is held, so the refresh has data to keep.
+  await page.getByText('98.70%', { exact: true }).first().waitFor();
   const dashboardPattern = '**/api/v1/management/dashboard?*';
   let releaseDashboard;
   let observeDashboard;
@@ -289,8 +290,7 @@ export async function routeLazyError(fixtures) {
   };
   await context.route(dashboardPattern, holdDashboard);
   try {
-    await page.getByText('98.70%', { exact: true }).first().waitFor();
-    await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).click();
+    await page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
     await dashboardObserved;
     await page.locator('.data-progress[data-state="running"]').waitFor();
     check('a real non-silent dashboard refresh keeps its data while reporting waiting',

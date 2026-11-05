@@ -1,5 +1,4 @@
 import type { MessageKey } from '../i18n/catalog';
-import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,7 +25,6 @@ import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigChange, ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
 import { PageHeader } from '../components/common/PageHeader';
-import { RefreshButton } from '../components/common/RefreshButton';
 import { SecretInput } from '../components/common/SecretInput';
 import { SummaryStrip } from '../components/common/SummaryStrip';
 import styles from './ApiKeysPage.module.css';
@@ -385,12 +383,6 @@ export const ApiKeysPage: React.FC = () => {
 
   const formatUsageTime = React.useCallback((ms: number) => dayjs(ms).format('YYYY-MM-DD HH:mm:ss'), [timeZone]);
 
-  const refreshAll = () => {
-    void configQuery.refetch();
-    void keysQuery.refetch();
-    void usageQuery.refetch();
-  };
-
   const keyCount = currentApiKeys.length;
   const records = React.useMemo(
     () => buildKeyRecords(currentApiKeys, keysQuery.data?.keys, usageByFingerprint),
@@ -434,7 +426,6 @@ export const ApiKeysPage: React.FC = () => {
       {t('cfg.api_keys_add')}
     </Button>
   );
-  const isRefreshing = configQuery.isFetching || keysQuery.isFetching || usageQuery.isFetching;
 
   return (
     <div className="terminal-page terminal-page-stack keys-page">
@@ -442,13 +433,11 @@ export const ApiKeysPage: React.FC = () => {
         title={t('keys.title')}
         mobileActions={(
           <>
-            <ActionMenu><RefreshButton isRefreshing={isRefreshing} onRefresh={refreshAll} /></ActionMenu>
             {addButton}
           </>
         )}
         actions={(
           <>
-            <RefreshButton isRefreshing={isRefreshing} onRefresh={refreshAll} />
             {addButton}
           </>
         )}

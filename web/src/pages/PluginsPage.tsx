@@ -1,14 +1,12 @@
-import { ActionMenu } from '../components/common/ActionMenu';
 import React from 'react';
 import { Button, Segmented } from 'antd';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import type { PluginItem } from '../types/plugin';
 import { PageHeader } from '../components/common/PageHeader';
-import { RefreshButton } from '../components/common/RefreshButton';
 import { InstalledPluginsPanel } from '../components/plugins/InstalledPluginsPanel';
 import { PluginStorePanel } from '../components/plugins/PluginStorePanel';
 import { PluginSettingsPanel } from '../components/plugins/PluginSettingsPanel';
@@ -53,7 +51,6 @@ function isPluginTab(value: string | null): value is PluginTab {
 export const PluginsPage: React.FC = () => {
   const t = useT();
   const isDemo = isDemoMode();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -123,13 +120,6 @@ export const PluginsPage: React.FC = () => {
 
   const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
 
-  const refresh = () => {
-    void pluginsQuery.refetch();
-    if (tab === 'store' || storeQuery.data) void storeQuery.refetch();
-    if (tab === 'settings') void queryClient.invalidateQueries({ queryKey: ['management-plugin-settings'] });
-  };
-  const isRefreshing = pluginsQuery.isFetching || (tab === 'store' && storeQuery.isFetching);
-
   const effectiveCount = plugins.filter((plugin) => plugin.effective_enabled).length;
   const activeError = tab === 'store' ? storeQuery.error : pluginsQuery.error;
   const isActiveError = tab === 'store' ? storeQuery.isError : pluginsQuery.isError;
@@ -144,7 +134,6 @@ export const PluginsPage: React.FC = () => {
               { value: 'installed', label: t('plugin.tab_installed', { n: plugins.length }) },
               { value: 'store', label: t('plugin.tab_store') }, { value: 'settings', label: t('plugin.tab_settings') },
             ]} />
-            <ActionMenu><RefreshButton onRefresh={refresh} isRefreshing={isRefreshing} /></ActionMenu>
           </>
         )}
         actions={(
@@ -159,7 +148,6 @@ export const PluginsPage: React.FC = () => {
                 { value: 'settings', label: t('plugin.tab_settings') },
               ]}
             />
-            <RefreshButton onRefresh={refresh} isRefreshing={isRefreshing} />
           </>
         )}
       >

@@ -1,6 +1,5 @@
 import { translateOr } from '../../i18n/catalog';
 import { FilterDisclosure } from '../common/FilterDisclosure';
-import { ActionMenu } from '../common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Segmented, Select } from 'antd';
@@ -40,7 +39,6 @@ import {
   type AuditRange,
 } from '../../types/audit';
 import { PageHeader } from '../common/PageHeader';
-import { RefreshButton } from '../common/RefreshButton';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { ResponsiveList } from '../common/ResponsiveList';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -230,10 +228,6 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
     setOpenId(undefined);
     onFiltersChange({ ...filters, ...patch });
   };
-  const refresh = () => {
-    void query.refetch();
-    void summary.refetch();
-  };
   const closeDetail = React.useCallback(() => setOpenId(undefined), []);
   const navigateDetail = React.useCallback((event: AuditEvent) => setOpenId(event.id), []);
   const searchFromDetail = (needle: string) => update({ search: needle });
@@ -334,16 +328,11 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
         title={title}
         mobileActions={(
           <>
-            <ActionMenu><RefreshButton label={t('common.refresh')} isRefreshing={(query.isFetching && !query.isFetchingNextPage) || summary.isFetching} onRefresh={refresh} /></ActionMenu>
             <Button icon={<DownloadOutlined />} loading={isExporting} onClick={() => void onExport()}>{t('audit.export')}</Button>
           </>
         )}
         actions={(
           <>
-            <RefreshButton
-              isRefreshing={(query.isFetching && !query.isFetchingNextPage) || summary.isFetching}
-              onRefresh={refresh}
-            />
             <ToolButton
               icon={<DownloadOutlined />}
               label={t('audit.export')}

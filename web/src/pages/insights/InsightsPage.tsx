@@ -27,7 +27,6 @@ import { Panel } from '../../components/common/Panel';
 import { PanelTitle } from '../../components/common/PanelTitle';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ToolButton } from '../../components/common/ToolButton';
-import { RefreshButton } from '../../components/common/RefreshButton';
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { LoadingRegion, Placeholder } from '../../components/common/Placeholder';
 import { SwapOutlined } from '../../components/icons';
@@ -387,9 +386,6 @@ export const InsightsPage: React.FC = () => {
       data-testid="insights-compare"
     />
   );
-  const refreshButton = (
-    <RefreshButton label={t('header.refresh_all')} isRefreshing={cubeQuery.isFetching} onRefresh={() => { void cubeQuery.refetch(); void rhythmQuery.refetch(); }} />
-  );
 
   const header = (
     <PageHeader
@@ -400,7 +396,6 @@ export const InsightsPage: React.FC = () => {
         <>
           <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} isDisabled={!isRangeStored} />
           {compareButton}
-          {refreshButton}
         </>
       )}
       mobileActions={(
@@ -408,7 +403,6 @@ export const InsightsPage: React.FC = () => {
           <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} isDisabled={!isRangeStored} />
           <ActionMenu>
             {compareButton}
-            {refreshButton}
           </ActionMenu>
         </>
       )}

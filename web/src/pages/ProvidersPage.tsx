@@ -1,13 +1,11 @@
 import type { MessageKey } from '../i18n/catalog';
 import { FilterDisclosure } from '../components/common/FilterDisclosure';
-import { ActionMenu } from '../components/common/ActionMenu';
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Select } from 'antd';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { PlusOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
-import { RefreshButton } from '../components/common/RefreshButton';
 import { StatTiles } from '../components/common/StatTiles';
 import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 
@@ -72,7 +70,6 @@ export const ProvidersPage: React.FC = () => {
   const {
     providers,
     providersLoading,
-    providersFetching,
     providersError,
     providersErr,
     refetchProviders,
@@ -286,19 +283,11 @@ export const ProvidersPage: React.FC = () => {
         title={t('pro.title')}
         mobileActions={(
           <>
-            <ActionMenu><RefreshButton onRefresh={() => { void refetchProviders(); void trafficQuery.refetch(); }} isRefreshing={providersFetching || trafficQuery.isFetching} /></ActionMenu>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>{t('pro.add_provider')}</Button>
           </>
         )}
         actions={(
           <>
-            <RefreshButton
-              onRefresh={() => {
-                void refetchProviders();
-                void trafficQuery.refetch();
-              }}
-              isRefreshing={providersFetching || trafficQuery.isFetching}
-            />
             {/* Creating a provider writes the gateway's configuration, which the demonstration
                 refuses; the drawer still opens so the form can be read. */}
             <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>

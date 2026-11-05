@@ -8,7 +8,6 @@ import { useT } from '../../i18n';
 import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { PageHeader } from '../../components/common/PageHeader';
 import { PanelsPlaceholder } from '../../components/common/PageLoading';
-import { RefreshButton } from '../../components/common/RefreshButton';
 import { SearchSelect } from '../../components/common/SearchSelect';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ConfigDirtyBar } from '../../components/config/ConfigDirtyBar';
@@ -249,7 +248,7 @@ export function RoutingPage() {
   // Until the board is read and its draft seeded, the real head and the board's panels.
   const loadingFrame = (
     <div className="terminal-page terminal-page-stack" data-testid="routing-page">
-      <PageHeader title={t('orch.title')} actions={<RefreshButton isRefreshing onRefresh={() => void boardQuery.refetch()} />} />
+      <PageHeader title={t('orch.title')} />
       <PanelsPlaceholder />
     </div>
   );
@@ -283,10 +282,7 @@ export function RoutingPage() {
 
   return (
     <div ref={pageRef} className={clsx('terminal-page terminal-page-stack', isDirty && styles['has-dirty-bar'])} data-testid="routing-page">
-      <PageHeader
-        title={t('orch.title')}
-        actions={<RefreshButton disabled={applyMutation.isPending} onRefresh={() => void (isDirty && !isAwaitingReadback ? boardQuery.refetch() : reload())} isRefreshing={boardQuery.isFetching} />}
-      />
+      <PageHeader title={t('orch.title')} />
       {isAwaitingReadback && !boardQuery.isFetching && (
         <LoadFailure tone="warning" title={t('orch.readback_pending')} error={boardQuery.error} onRetry={() => void reload()} />
       )}

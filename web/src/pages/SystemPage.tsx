@@ -39,7 +39,6 @@ import type {
   ReleaseProduct,
 } from '../types/system';
 import { PageHeader } from '../components/common/PageHeader';
-import { RefreshButton } from '../components/common/RefreshButton';
 import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
 import { ListLoading, PanelsPlaceholder, SuspenseFallback } from '../components/common/PageLoading';
@@ -49,7 +48,7 @@ import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
 import { deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
 import type { UpdateOffer } from './SystemPage/versionPresentation';
-import { UPDATER_QUERY_KEY, useConsoleUpdate } from './SystemPage/useConsoleUpdate';
+import { useConsoleUpdate } from './SystemPage/useConsoleUpdate';
 import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
 import { DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
@@ -320,7 +319,6 @@ export const SystemPage: React.FC = () => {
   const {
     data: sysInfo,
     isLoading,
-    isFetching,
     isError,
     error,
     refetch,
@@ -594,25 +592,7 @@ export const SystemPage: React.FC = () => {
   if (expandedProduct !== null) lastChangelogProductRef.current = expandedProduct;
   const changelogProduct = expandedProduct ?? lastChangelogProductRef.current;
 
-  const header = (
-    <PageHeader
-      title={t('sys.title')}
-      actions={(
-        <RefreshButton
-          isRefreshing={isFetching}
-          onRefresh={() => {
-            // A refresh clears a completed result the reader has moved past, and never touches a
-            // running job: that one is live server state, and the panel below keeps showing it.
-            setDisplayedOutcome(null);
-            void refetch();
-            void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
-            void queryClient.invalidateQueries({ queryKey: DATA_RETENTION_QUERY_KEY });
-            void queryClient.invalidateQueries({ queryKey: UPDATER_QUERY_KEY });
-          }}
-        />
-      )}
-    />
-  );
+  const header = <PageHeader title={t('sys.title')} />;
 
   // The first read keeps the real head and draws the page's stack of cards, so neither moves when the
   // readings land.

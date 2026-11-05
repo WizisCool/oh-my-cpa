@@ -741,7 +741,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     const response = page.waitForResponse((result) => heatmapRoute.test(result.url()));
     // The click event invalidates the queries, like the panel's background refresh;
     // dispatch alone avoids the unrelated outside-pointer dismissal of a physical click.
-    await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).dispatchEvent('click');
+    await page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).dispatchEvent('click');
     await response;
   };
   await refreshWithoutPointerDismissal();
@@ -1048,13 +1048,12 @@ export async function dashboardTokenHeatmapMobile({ base, page, check }) {
     container.scrollLeft = Math.floor(container.scrollLeft / 2);
     return container.scrollLeft;
   });
-  await page.locator('.terminal-page-actions').getByRole('button', { name: 'More', exact: true }).click();
   const refreshed = page.waitForResponse((response) => response.url().includes('/dashboard/token-heatmap') && response.request().method() === 'GET');
   await Promise.all([
     refreshed,
-    page.locator('.action-menu-content:visible').getByRole('button', { name: 'Refresh all', exact: true }).click(),
+    page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click(),
   ]);
-  await page.locator('.action-menu-content button[aria-busy="false"]').waitFor({ state: 'attached' });
+  await page.waitForFunction(() => document.querySelector('.data-progress')?.hidden);
   check("a refresh preserves the phone reader's chosen week",
     await page.locator('.heatmap-scroll').evaluate((container) => container.scrollLeft) === retainedScroll,
     `expected=${retainedScroll}`);
@@ -1246,12 +1245,12 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   const cellsBefore = await page2.locator('.heatmap-grid .heatmap-cell').count();
   check('the grid renders before the refresh failure', cellsBefore === HEATMAP_TOTAL_DAYS, `cells=${cellsBefore}`);
 
-  // Pressing the page's refresh button re-reads the grid, and that read fails.
+  // Refresh all re-reads the grid, and that read fails.
   failNext = true;
   const overviewRefresh = page2.waitForResponse(response => response.url().includes('/management/overview') && response.request().method() === 'GET');
-  await page2.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
+  await page2.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
   const refreshedOverview = await overviewRefresh;
-  check('the page refresh also re-reads the management overview', refreshedOverview.ok());
+  check('refresh all also re-reads the management overview', refreshedOverview.ok());
   await page2.locator('.heatmap-stale-alert').waitFor({ timeout: 20_000 });
   const cellsAfter = await page2.locator('.heatmap-grid .heatmap-cell').count();
   check(
@@ -1302,7 +1301,7 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
     await quotaPanel.locator('.quota-list a, .quota-list button:not([data-reorder-handle])').count() === 0);
 
   canReadCredentials = false;
-  await quotaPage.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
+  await quotaPage.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
   await quotaPanel.locator('.quota-alert.omc-notice.is-warning').waitFor();
   check('a failed refresh keeps the credential rows with a warning', await quotaPanel.getAttribute('data-quota-panel-state') === 'ready' && await quotaPanel.locator('.quota-row').count() === 2);
 

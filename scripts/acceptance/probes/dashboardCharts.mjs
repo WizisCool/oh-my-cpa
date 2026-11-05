@@ -144,10 +144,9 @@ export async function dashboardChartMarks({ base, page, check }) {
     }
   });
   const answered = page.waitForResponse((response) => /\/management\/dashboard(?:\?|$)/.test(response.url()));
-  await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
+  await page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
   await answered;
-  await until(async () => await page.locator('.terminal-page-head button:has(.anticon-reload)[aria-busy="false"]').count() === 1,
-    { label: 'identical dashboard refresh to settle' });
+  await page.waitForFunction(() => document.querySelector('.data-progress')?.hidden);
   const unchanged = await page.evaluate(async () => {
     const { echarts } = await import('/omc/src/charts/echarts/core.ts');
     return { same: [...document.querySelectorAll('.chart-slot .omc-echart')].every((host, index) => echarts.getInstanceByDom(host) === window.__kpiInstances[index]), resized: window.__kpiResizeCount };
@@ -192,7 +191,7 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
     for (const host of await hosts().all()) out.push(await accessibleReadout(host));
     return out;
   };
-  const refresh = () => page.locator('.terminal-page-head button:has(.anticon-reload)').click();
+  const refresh = () => page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
   const dashboardResponse = (target) =>
     target.waitForResponse((response) => {
       const url = new URL(response.url());
@@ -313,7 +312,7 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
     const sweepBody = bodyWith({ requests: 14_400, tokens: 2_100_000, rpm: 108, tpm: 11_110, cacheRate: 42, cost: 112.5 });
     await serveDashboard(motionContext, sweepBody);
     const swept = dashboardResponse(motionPage);
-    await motionPage.locator('.terminal-page-head button:has(.anticon-reload)').click();
+    await motionPage.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
     await swept;
     await until(
       async () => {
@@ -422,7 +421,7 @@ export async function dashboardChartMotion({ base, page, context, check }) {
         requestAnimationFrame(tick);
       }, selector);
       const answered = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/dashboard/models'));
-      await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
+      await page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
       await answered;
       await page.waitForFunction(() => {
         const sampler = window.__chartSampler;
