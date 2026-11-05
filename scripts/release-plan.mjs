@@ -1,8 +1,14 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const STABLE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Model Square ships models.dev reference data in the binary and never fetches it at runtime,
+// so a release is the only point where that data can advance. Measured against the release
+// commit's date rather than the clock, a rerun of the same tag reaches the same verdict.
+export const MAX_MODEL_METADATA_AGE_DAYS = 30;
 
 export function compareReleaseTags(first, second) {
   const firstParts = STABLE_TAG.exec(first);
@@ -14,6 +20,22 @@ export function compareReleaseTags(first, second) {
     if (firstNumber !== secondNumber) return firstNumber > secondNumber ? 1 : -1;
   }
   return 0;
+}
+
+// Date.parse rolls impossible days such as 2026-02-30 into the next month; require a round trip.
+function parseCalendarDate(value) {
+  const time = ISO_DATE.test(value ?? '') ? Date.parse(value) : NaN;
+  if (Number.isNaN(time) || new Date(time).toISOString().slice(0, 10) !== value) {
+    throw new Error('Expected YYYY-MM-DD model metadata and revision dates');
+  }
+  return time;
+}
+
+export function assertModelMetadataCurrent(metadataUpdatedAt, revisionDate) {
+  const ageDays = (parseCalendarDate(revisionDate) - parseCalendarDate(metadataUpdatedAt)) / 86_400_000;
+  if (!(ageDays <= MAX_MODEL_METADATA_AGE_DAYS)) {
+    throw new Error(`models.dev snapshot ${metadataUpdatedAt} is more than ${MAX_MODEL_METADATA_AGE_DAYS} days older than the release commit; run pnpm models:sync`);
+  }
 }
 
 export function createReleasePlan({ tag, packageVersion, webVersion, image, releases = [] }) {
@@ -34,6 +56,10 @@ export function createReleasePlan({ tag, packageVersion, webVersion, image, rele
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  assertModelMetadataCurrent(
+    JSON.parse(fs.readFileSync(path.join(root, 'internal/modelcatalog/snapshot.json'), 'utf8')).updated_at,
+    execFileSync('git', ['log', '-1', '--format=%cs', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+  );
   const plan = createReleasePlan({
     tag: process.env.RELEASE_TAG,
     image: process.env.RELEASE_IMAGE ?? 'wiziscool/oh-my-cpa',

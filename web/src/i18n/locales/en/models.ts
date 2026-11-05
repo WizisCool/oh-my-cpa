@@ -3,7 +3,7 @@ import type source from '../zh/models';
 
 export default {
   'models.group_count': 'Models: {count}',
-  'models.summary_line': '{models} models · {makers} makers · models.dev data {date}',
+  'models.summary_line': '{models} models · {makers} makers · bundled models.dev snapshot {date}',
   'models.showing': 'Showing {shown} of {total}',
   'models.clear_filters': 'Clear filters',
   'models.filter_makers': 'Filter by maker',
@@ -56,7 +56,7 @@ export default {
   'models.external_resources': 'External model lookup',
   'models.metadata_unknown': 'No exact metadata match in models.dev. Use the links below to explore this model.',
   'models.reference_note': 'Specifications from models.dev for reference; actual limits depend on the connected provider.',
-  'models.snapshot_date': 'Metadata snapshot: {date}',
+  'models.snapshot_date': 'Bundled models.dev snapshot: {date}',
   'models.supported': 'Supported',
   'models.unsupported': 'Not supported',
   'models.modality.text': 'Text',
