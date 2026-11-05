@@ -546,11 +546,14 @@ with partial conditions for unavailable model definitions or mappings. Refresh r
 CPA; it does not make a paid model request.
 
 Model specifications come from the bundled models.dev snapshot in
-`internal/modelcatalog/snapshot.json`. Run `pnpm models:sync` when maintaining a release
+`internal/modelcatalog/snapshot.json`. Run `pnpm models:sync` when preparing a release
 to update it from models.dev's canonical model data and exact source aliases, then run
-`pnpm demo:generate` because the snapshot changes the demonstration's response. There
-is no runtime synchronization loop or new environment setting. The page displays the
-snapshot date and unknown fields, and renders without browser catalog/CDN requests.
+`pnpm demo:generate` and accept the Model Square API goldens (`UPDATE_GOLDEN=1`) because
+the snapshot date appears in both responses. The release workflow refuses a tag whose
+snapshot is more than 30 days older than the tagged commit. There is no runtime
+synchronization loop or new environment setting, and **Refresh model catalogs** rereads
+CPA without changing this snapshot. The page labels the date as the bundled snapshot's,
+shows unknown fields, and renders without browser catalog/CDN requests.
 External reference links are user-initiated navigation. Pricing remains on its existing
 OpenRouter source and is not synchronized by viewing Model Square. The page additionally
 reads the existing `GET /api/v1/pricing` and `GET /api/v1/usage/facets?preset=24h` to show

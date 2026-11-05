@@ -3,7 +3,7 @@ import type source from '../zh/models';
 
 export default {
   "models.group_count": "Model: {count}",
-  "models.summary_line": "{models} model · {makers} pengeluar · data models.dev {date}",
+  "models.summary_line": "{models} model · {makers} pengeluar · data models.dev terbina dalam {date}",
   "models.showing": "Memaparkan {shown} daripada {total}",
   "models.clear_filters": "Kosongkan penapis",
   "models.filter_makers": "Tapis mengikut pengeluar",
@@ -56,7 +56,7 @@ export default {
   "models.external_resources": "Carian model luaran",
   "models.metadata_unknown": "Tiada padanan metadata tepat di models.dev. Gunakan pautan di bawah untuk menerokai model ini.",
   "models.reference_note": "Spesifikasi daripada models.dev untuk rujukan; had sebenar bergantung pada penyedia yang disambungkan.",
-  "models.snapshot_date": "Petikan metadata: {date}",
+  "models.snapshot_date": "Petikan models.dev terbina dalam: {date}",
   "models.supported": "Disokong",
   "models.unsupported": "Tidak disokong",
   "models.modality.text": "Teks",

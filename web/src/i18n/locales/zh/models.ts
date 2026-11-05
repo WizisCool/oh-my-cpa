@@ -1,6 +1,6 @@
 export default {
   'models.group_count': '{count} 个模型',
-  'models.summary_line': '{models} 个模型 · {makers} 个厂商 · models.dev 资料 {date}',
+  'models.summary_line': '{models} 个模型 · {makers} 个厂商 · 内置 models.dev 资料 {date}',
   'models.showing': '显示 {shown} / {total}',
   'models.clear_filters': '清除筛选',
   'models.filter_makers': '按厂商筛选',
@@ -53,7 +53,7 @@ export default {
   'models.external_resources': '外部模型检索',
   'models.metadata_unknown': 'models.dev 暂无此模型的确切资料，可通过下方入口检索。',
   'models.reference_note': '规格参数来自 models.dev，仅供参考，实际配置以服务商为准。',
-  'models.snapshot_date': '资料快照：{date}',
+  'models.snapshot_date': '内置 models.dev 资料快照：{date}',
   'models.supported': '支持',
   'models.unsupported': '不支持',
   'models.modality.text': '文本',

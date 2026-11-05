@@ -62,6 +62,9 @@ signed automatic OMC updates.
 1. Update root and web package versions together and add user-visible changes and
    upgrade notes under [`docs/releases`](releases). Keep lockfile metadata consistent.
    The installation guides use stable aliases, so they do not need a version bump.
+   Refresh the bundled models.dev snapshot as described in
+   [Operations](operations.md#available-model-directory); release verification rejects
+   a snapshot more than 30 days older than the tagged commit.
 2. Run the checks required by [Testing](testing.md). Land the preparation on `main`
    and wait for that exact commit's main CI to be green. A release-preparation PR may
    use `chore(release): prepare vX.Y.Z` so automated review does not re-review notes
