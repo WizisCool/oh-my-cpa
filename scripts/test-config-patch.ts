@@ -222,6 +222,78 @@ test('a draft is carried over onto a newer baseline without undoing what it did 
   ]);
 });
 
+test('a new nested map merges into a newer baseline without dropping siblings', () => {
+  const base = parseDocument(SERVER_YAML);
+  const draft = parseDocument(SERVER_YAML);
+  updateFieldWithBaseline(draft, base, field('kvStorePath'), '/data/cpa/kv.db');
+  const newer = SERVER_YAML.replace(
+    'port: 8317',
+    'port: 8317\n    kv-store:\n        disabled: true\n        operator-extra: retained',
+  );
+
+  const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
+  assert.equal(rebased.getIn(['server', 'port']), 8317, 'the newer server map is retained');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'disabled']), true, 'a newer sibling is retained');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'path']), '/data/cpa/kv.db');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
+    { path: ['server', 'kv-store', 'path'], value: '/data/cpa/kv.db' },
+  ]);
+
+  // The same merge applies when the whole parent map is new.
+  const nestedBase = parseDocument(SERVER_YAML.replace('server:\n    port: 8317\n', ''));
+  const nestedDraft = parseDocument(nestedBase.toString());
+  updateFieldWithBaseline(nestedDraft, nestedBase, field('kvStorePath'), '/nested/kv.db');
+  const nested = parseDocument(rebaseDraft(nestedBase, nestedDraft, newer) ?? '');
+  assert.equal(nested.getIn(['server', 'port']), 8317);
+  assert.equal(nested.getIn(['server', 'kv-store', 'disabled']), true);
+  assert.equal(nested.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.equal(nested.getIn(['server', 'kv-store', 'path']), '/nested/kv.db');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), nested), [
+    { path: ['server', 'kv-store', 'path'], value: '/nested/kv.db' },
+  ]);
+});
+
+test('rebase keeps newer siblings beside an existing map edit, its removal and a type replacement', () => {
+  const configured = SERVER_YAML.replace(
+    'port: 8317',
+    'port: 8317\n    kv-store:\n        disabled: true\n        path: /old/kv.db',
+  );
+  const base = parseDocument(configured);
+  const draft = parseDocument(configured);
+  updateFieldWithBaseline(draft, base, field('kvStorePath'), '/new/kv.db');
+  const newer = configured.replace('/old/kv.db', '/concurrent/kv.db').replace(
+    'disabled: true',
+    'disabled: true\n        operator-extra: retained',
+  );
+
+  const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'path']), '/new/kv.db');
+  assert.equal(rebased.getIn(['server', 'kv-store', 'disabled']), true);
+  assert.equal(rebased.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
+    { path: ['server', 'kv-store', 'path'], value: '/new/kv.db' },
+  ]);
+
+  const removeBase = parseDocument(newer);
+  const removeDraft = parseDocument(newer);
+  updateFieldWithBaseline(removeDraft, removeBase, field('kvStorePath'), '');
+  const removed = parseDocument(rebaseDraft(removeBase, removeDraft, newer) ?? '');
+  assert.equal(removed.hasIn(['server', 'kv-store', 'path']), false);
+  assert.equal(removed.getIn(['server', 'kv-store', 'disabled']), true);
+  assert.equal(removed.getIn(['server', 'kv-store', 'operator-extra']), 'retained');
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), removed), [
+    { path: ['server', 'kv-store', 'path'], remove: true },
+  ]);
+
+  const replaced = parseDocument(rebaseDraft(
+    parseDocument('server:\n    kv-store:\n        path: /old/kv.db\n'),
+    parseDocument('server:\n    kv-store: false\n'),
+    'server:\n    kv-store:\n        disabled: true\n        operator-extra: retained\n',
+  ) ?? '');
+  assert.equal(replaced.getIn(['server', 'kv-store']), false, 'a value that is not a map still replaces whole');
+});
+
 test('a draft without edits takes the newer baseline as it is', () => {
   const newer = SERVER_YAML.replace('port: 8317', 'port: 9000');
   assert.equal(rebaseDraft(parseDocument(SERVER_YAML), parseDocument(SERVER_YAML), newer), newer);
