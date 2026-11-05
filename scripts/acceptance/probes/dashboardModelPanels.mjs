@@ -286,17 +286,20 @@ export async function dashboardModelPanels({ base, page, check }) {
   check('clearing the trend highlight restores every line to its resting weight', restoredTrend.every((series) => series.width === 1.75 && series.opacity === 1)
     && await page.locator('.model-usage-name-button[aria-pressed="true"]').count() === 0
     && await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, JSON.stringify(restoredTrend));
-  const lineTarget = await page.evaluate(async () => {
+  // Rank one's peak is well separated from the zero axis, where the folded
+  // low-volume group's stroke can overlap the axis hit area.
+  const lineTarget = await page.evaluate(async (name) => {
     const { echarts } = await import('/omc/src/charts/echarts/core.ts');
     const host = document.querySelector('.model-trend .omc-echart');
     const chart = echarts.getInstanceByDom(host);
-    const series = chart.getOption().series[0];
-    const values = series.data.map(Number);
+    const series = chart.getOption().series;
+    const seriesIndex = series.findIndex((candidate) => candidate.name === name);
+    const values = series[seriesIndex].data.map(Number);
     const dataIndex = values.indexOf(Math.max(...values));
-    const point = chart.convertToPixel({ seriesIndex: 0 }, [dataIndex, values[dataIndex]]);
+    const point = chart.convertToPixel({ seriesIndex }, [dataIndex, values[dataIndex]]);
     const box = host.getBoundingClientRect();
     return { x: box.left + point[0], y: box.top + point[1] };
-  });
+  }, legend[0].name);
   await page.mouse.click(lineTarget.x, lineTarget.y);
   await until(async () => await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"]').count() === 1, {
     label: 'a painted trend line to pin its legend entry',
@@ -306,9 +309,10 @@ export async function dashboardModelPanels({ base, page, check }) {
     return echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series
       .map((series) => series.lineStyle.opacity);
   });
-  check('clicking a painted trend line pins one legend entry without hiding the other lines', lineFocus.length === 6
-    && lineFocus.filter((opacity) => opacity === 1).length === 1 && lineFocus.filter((opacity) => opacity < 1).length === 5,
-  JSON.stringify(lineFocus));
+  const pinnedLineName = await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"] .model-series-text').innerText();
+  check('clicking a painted trend line pins its legend entry without hiding the other lines', pinnedLineName === legend[0].name
+    && lineFocus.length === 6 && lineFocus.filter((opacity) => opacity === 1).length === 1 && lineFocus.filter((opacity) => opacity < 1).length === 5,
+  JSON.stringify({ pinnedLineName, lineFocus }));
   await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"]').click();
   const surfaces = [];
   for (const theme of ['omc-light', 'omc-dark']) {
