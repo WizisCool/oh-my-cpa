@@ -343,10 +343,11 @@ test('credentials keep the name their plugin\'s login card gives the provider', 
   assert.equal(providerDisplayName('acme', familyKeys), 'Acme');
   // Built-in credentials and CPA's native API-key families are never renamed by a plugin.
   const reserved = pluginOAuthProviderTitles([
-    { id: 'shadow', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['claude', 'gemini'], metadata: { name: 'Shadow' }, config_fields: [] },
+    { id: 'shadow', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['claude', 'gemini', 'interactions'], metadata: { name: 'Shadow' }, config_fields: [] },
   ]);
   assert.equal(providerDisplayName('claude', reserved), 'Claude');
   assert.equal(providerDisplayName('gemini', reserved), 'Gemini');
+  assert.equal(providerDisplayName('interactions', reserved), 'interactions');
 });
 
 

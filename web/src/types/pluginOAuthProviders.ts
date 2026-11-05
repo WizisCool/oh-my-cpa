@@ -188,10 +188,11 @@ export function pluginPortalTitles(plugin: PluginItem, providerIds: readonly str
  * Provider keys no plugin title may rename, by canonical key: the credentials the built-in
  * sign-ins create (Anthropic's are filed as `claude`) and CPA's native API-key families. A
  * native family's records carry the bare family key, so a record under one of these keys is
- * no proof that it belongs to a plugin's OAuth provider.
+ * no proof that it belongs to a plugin's OAuth provider. The native families mirror
+ * `ConfigKeyFamilies` in `internal/cpa/management/config_keys.go`.
  */
 const RESERVED_PROVIDER_KEYS: ReadonlySet<string> = new Set([
-  'claude', 'codex', 'xai', 'kimi', 'antigravity', 'devin', 'meta', 'gemini', 'vertex',
+  'claude', 'codex', 'xai', 'kimi', 'antigravity', 'devin', 'meta', 'gemini', 'vertex', 'interactions',
 ]);
 
 /**
