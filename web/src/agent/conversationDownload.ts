@@ -1,3 +1,4 @@
+import { embeddedCJKFontCSS } from '../theme/cjkFont';
 import { embeddedFontCSS } from '../theme/sarasaFont';
 import { saveBlob } from '../utils/download';
 import type { Theme, ThemeMode } from '@openuidev/react-ui';
@@ -103,7 +104,9 @@ export async function downloadConversation(options: SnapshotDocumentOptions, for
   // The embedded font holds only the shards this export draws: the document's own copy and the
   // conversation as drawn.
   const withFont = async (draft: string) => {
-    const fontCSS = await embeddedFontCSS(draft + JSON.stringify(options.snapshot), 'OMC Snapshot');
+    const text = draft + JSON.stringify(options.snapshot);
+    const [latin, cjk] = await Promise.all([embeddedFontCSS(text, 'OMC Snapshot'), embeddedCJKFontCSS(text, 'OMC Snapshot CJK')]);
+    const fontCSS = latin + cjk;
     // The head's style is the placeholder's first occurrence, before any conversation text.
     return { fontCSS, html: draft.replace(FONT_PLACEHOLDER, () => fontCSS) };
   };

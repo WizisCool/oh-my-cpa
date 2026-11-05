@@ -13,7 +13,7 @@ export const SNAPSHOT_CSS = `
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.65 "OMC Snapshot",ui-monospace,"SF Mono",Menlo,Consolas,monospace;-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.65 "OMC Snapshot","OMC Snapshot CJK",ui-monospace,"SF Mono",Menlo,Consolas,monospace;-webkit-font-smoothing:antialiased}
 button,input{font:inherit;color:inherit}
 button{display:inline-flex;align-items:center;gap:6px;margin:0;padding:0;border:0;border-radius:4px;background:none;cursor:pointer}
 button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -167,7 +167,7 @@ figure{display:flex;flex-direction:column;gap:8px;min-width:0;margin:0;padding:1
 figure[data-frame=none]{padding:0;border:0;background:none}
 figure .table-scroll{margin:0}
 /* An interface keeps OpenUI's own stylesheet; the document lends it the console's two typefaces. */
-.interface{--font-ui:"OMC Snapshot",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--font-mono:var(--font-ui);display:block;min-width:0}
+.interface{--font-ui:"OMC Snapshot","OMC Snapshot CJK",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--font-mono:var(--font-ui);display:block;min-width:0}
 
 .snapshot-foot{display:flex;flex-direction:column;gap:4px;padding-top:14px;border-top:1px solid var(--border-soft,var(--border));font-size:12px;color:var(--muted)}
 .snapshot-foot p{margin:0}

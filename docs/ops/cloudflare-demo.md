@@ -107,5 +107,4 @@ next push deploys it again. There is no demonstration database to restore.
 - **The local Worker fails before serving:** check dependency installation and local
   ignored `.wrangler` state; do not change product behavior to repair a local runtime.
 - **An unexpected analytics script appears only on the public site:** inspect
-  Cloudflare's zone-level injection settings separately from the bundled SPA. A hosting
-  feature does not justify an external asset dependency in self-hosted OMC.
+  Cloudflare's zone-level injection settings separately from the bundled SPA.

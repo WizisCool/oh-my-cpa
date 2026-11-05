@@ -1097,7 +1097,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		writer.Header().Set("X-Robots-Tag", robotsTagValue)
 		writer.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=()")
-		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http: https:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self';")
+		// The console reads Google Fonts' stylesheet for its CJK faces (web/src/theme/cjkFont.ts)
+		// and loads the faces, and a conversation export fetches them, from gstatic.
+		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: http: https:; connect-src 'self' blob: https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self' blob:; frame-ancestors 'self';")
 		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {
 			writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

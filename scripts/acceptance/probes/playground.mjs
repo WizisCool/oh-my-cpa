@@ -1,5 +1,5 @@
 import { checkConversationExport } from './conversation-export.mjs';
-import { abortFixture } from '../browser-guard.mjs';
+import { abortFixture, isOptional } from '../browser-guard.mjs';
 import { attachedText, until, untilBooted, PAGE_BOOT_TIMEOUT_MS } from '../harness.mjs';
 
 export function playgroundFixtures() {
@@ -28,7 +28,7 @@ export async function playground({ base, page, check, context }) {
   const cancelledRequest = new Promise(resolve => { releaseCancelled = resolve; });
   await page.route('**/playground/runs/*/cancel', async route => { cancelled = true; releaseCancelled(); await route.fulfill({ json: { is_cancelled: true } }); });
   const external = [];
-  context.on('request', request => { if (request.url().startsWith('http') && new URL(request.url()).origin !== new URL(base).origin) external.push(request.url()); });
+  context.on('request', request => { if (request.url().startsWith('http') && new URL(request.url()).origin !== new URL(base).origin && !isOptional(request.url())) external.push(request.url()); });
   await page.route('**/playground/chat', async route => {
     const { recovery_turn, ...request } = JSON.parse(route.request().postData());
     calls.push(request);

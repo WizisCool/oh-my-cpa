@@ -5,7 +5,7 @@
 :root {
   /* The two typographic roles, both the bundled Sarasa stack by default; an operator's choice
      (OMC Settings → Appearance) is written over both on the root element by `theme/fontLibrary.ts`. */
-  --font-ui: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-ui: "Sarasa Mono SC", "OMC Noto Sans SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-family: var(--font-ui);
   line-height: 1.5;
   font-weight: 400;
@@ -23,7 +23,7 @@
      Dark palette token for token, which is what stops the two from drifting apart. */
   --elevated: #222226;
   --selected-inset: #2e2e37;
-  --font-mono: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-mono: "Sarasa Mono SC", "OMC Noto Sans SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --fg: #f4f4f6;
   --fg-2: #a1a1aa;
   --muted: #71717a;

@@ -19,3 +19,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // core shard is drawn by a fallback font and later swaps, shifting the text around it. If the
 // chunk never loads, that fallback simply stays.
 void import('./theme/sarasaFont').then((font) => font.registerDeferredShards(), () => undefined);
+// The CJK faces come from Google Fonts; until they arrive, or if they never do, CJK text
+// outside the console's own copy is drawn by the platform's CJK font.
+void import('./theme/cjkFont').then((font) => font.registerCJKFont(), () => undefined);

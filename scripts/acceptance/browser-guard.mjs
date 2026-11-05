@@ -33,6 +33,18 @@ export function createProblemLedger() {
   };
 }
 
+/**
+ * The console's one optional outside request: Google Fonts' stylesheet for the default
+ * typeface's CJK faces (`CJK_STYLESHEET_URL` in `web/src/theme/cjkFont.ts`). Every check runs
+ * with it unreachable, which keeps screenshots independent of the network and exercises the
+ * fallback a deployment without Google gets. Its blocked request is not a problem, and
+ * probes that assert no request leaves the origin exempt it with `isOptional`. Only that URL:
+ * with the stylesheet blocked no font face is registered, so any other request to Google's
+ * hosts is one that untrusted content caused.
+ */
+const OPTIONAL_URL = 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600;700&display=swap';
+export const isOptional = (url) => url === OPTIONAL_URL;
+
 const exact = text => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
 
 /** Applied before scenario routes: the later fixture handlers must fallback, never continue. */
@@ -41,7 +53,7 @@ export async function guardBrowserContext(context, origins, { ledger = createPro
   GUARDS.set(context, ledger);
   const recordedRequests = new WeakSet();
   const inspectRequest = request => {
-    if (allowed.has(new URL(request.url()).origin) || recordedRequests.has(request)) return;
+    if (allowed.has(new URL(request.url()).origin) || isOptional(request.url()) || recordedRequests.has(request)) return;
     recordedRequests.add(request);
     ledger.record({ kind: 'outbound', url: request.url(), method: request.method(), message: 'Undeclared network origin' });
   };
@@ -50,12 +62,14 @@ export async function guardBrowserContext(context, origins, { ledger = createPro
   const inspectPage = page => {
     page.on('pageerror', error => ledger.record({ kind: 'pageerror', message: error.message }));
     page.on('console', message => {
-      if (message.type() === 'error') ledger.record({ kind: 'console', message: message.text(), url: message.location().url });
+      if (message.type() === 'error' && !isOptional(message.location().url)) {
+        ledger.record({ kind: 'console', message: message.text(), url: message.location().url });
+      }
     });
     page.on('requestfailed', request => {
       const message = request.failure()?.errorText ?? '';
       // Cancellation belongs to navigation/AbortController, not an unavailable endpoint.
-      if (message === 'net::ERR_ABORTED') return;
+      if (message === 'net::ERR_ABORTED' || isOptional(request.url())) return;
       ledger.record({kind:'requestfailed',url:request.url(),method:request.method(),message});
     });
   };

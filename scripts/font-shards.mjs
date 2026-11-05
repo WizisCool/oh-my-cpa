@@ -1,19 +1,26 @@
 /**
- * The console's typeface, Sarasa Mono SC, ships complete but cut into shards.
+ * The Latin side of the console's typeface, Sarasa Mono SC, ships with the console, cut into
+ * shards and hinted.
  *
- * A subset cut from the console's own copy cannot draw text that arrives at run time - an
- * Agent answer, a model or user label - and it went stale whenever copy was added after it
- * was cut: the browser drew every missing glyph from a system font, so one label could mix
- * two typefaces. The whole font is about 5 MiB per weight, too much to make every first
- * visit wait for, so it is cut into shards declared with `unicode-range`: a browser fetches
- * only the shards whose characters a page actually draws.
+ * Sarasa Mono SC pairs Iosevka's Latin with Source Han Sans's CJK. Only the Latin side is
+ * Sarasa's own: the CJK glyphs are the ones Google Fonts serves as Noto Sans SC, which the
+ * console loads from there (`web/src/theme/cjkFont.ts`) and names right after Sarasa in
+ * every stack. So the bundle keeps everything except the CJK ideographs and Hangul
+ * syllables - Latin, Greek, Cyrillic, kana, symbols - plus the ideographs the console's
+ * own copy uses, so its labels draw in Sarasa from the first frame and when Google Fonts
+ * cannot be reached. The ideographs are almost all of the font's bytes.
+ *
+ * The shards keep the source's TrueType hinting. Windows snaps outlines to the pixel grid,
+ * and unhinted small text there looks soft; hinting costs about two thirds more bytes, which
+ * matters little now that the CJK bulk is gone.
+ *
+ * It ships Regular, SemiBold and Bold: the console sets most emphasis at 600, which
+ * without a SemiBold face a browser can only draw in Bold.
  *
  * Shard 000 is the core: ASCII, Latin-1, common punctuation and every character the
  * console's source uses, declared in render-blocking CSS so the first frame needs one file
- * per weight. The rest are registered asynchronously and ordered by how common their
- * characters are - GB2312 level 1, Big5 level 1, GB2312 level 2, Big5 level 2, then
- * everything else by code point - so ordinary Chinese text touches a handful of shards
- * rather than one in every stretch of the CJK block.
+ * per weight. The rest are registered asynchronously in code point order, and a browser
+ * fetches one only when a page draws a character it holds.
  *
  * Everything here is pure; `subset-font.mjs` runs the subsetter and writes the outputs.
  */
@@ -29,13 +36,23 @@ export const MANIFEST_FILE = `${FONT_DIRECTORY}/manifest.json`;
 export const CORE_CSS_FILE = `${FONT_DIRECTORY}/core.css`;
 export const SHARD_URLS_FILE = `${FONT_DIRECTORY}/shardUrls.ts`;
 export const FONT_FAMILY = 'Sarasa Mono SC';
-export const FONT_WEIGHTS = [400, 700];
-/** Installed copies a browser may use instead of downloading; they keep `local()` priority. */
-export const LOCAL_NAMES = { 400: ['Sarasa Mono SC', 'Sarasa UI SC', '更纱黑体 SC'], 700: ['Sarasa Mono SC Bold', 'Sarasa UI SC Bold', '更纱黑体 SC Bold'] };
-/** About 40 KiB of woff2 per shard: small enough that a stray character costs little. */
+export const FONT_WEIGHTS = [400, 600, 700];
+/**
+ * Installed copies a browser may use instead of downloading - their full and PostScript names -
+ * which keep `local()` priority. Only Sarasa Mono SC itself: another Sarasa family draws Latin
+ * with other shapes and widths.
+ */
+export const LOCAL_NAMES = {
+  400: ['Sarasa Mono SC', 'Sarasa-Mono-SC-Regular'],
+  600: ['Sarasa Mono SC Semibold', 'Sarasa-Mono-SC-Semibold'],
+  700: ['Sarasa Mono SC Bold', 'Sarasa-Mono-SC-Bold'],
+};
+/** A few dozen KiB of woff2 per shard: small enough that a stray character costs little. */
 export const SHARD_SIZE = 400;
 
 const SOURCE_EXTENSION = /\.(?:tsx?|jsx?|css|html|json)$/;
+/** CJK ideographs (unified, extension A, compatibility, the supplementary planes) and Hangul syllables. */
+export const SERVED_ELSEWHERE_RANGES = [[0x3400, 0x4dbf], [0x4e00, 0x9fff], [0xac00, 0xd7af], [0xf900, 0xfaff], [0x20000, 0x3ffff]];
 const CORE_RANGES = [[0x20, 0x7e], [0xa0, 0xff], [0x2000, 0x206f], [0x3000, 0x303f], [0xff00, 0xffef]];
 
 export function shardFileName(weight, shardName) {
@@ -63,37 +80,22 @@ export function collectSourceCharacters(directory = root) {
   return characters;
 }
 
-/** The characters of a double-byte encoding block, in the encoding's own order of commonness. */
-function encodedBlock(encoding, leads, trails) {
-  const decoder = new TextDecoder(encoding);
-  const codePoints = [];
-  for (let lead = leads[0]; lead <= leads[1]; lead += 1) {
-    for (const [first, last] of trails) {
-      for (let trail = first; trail <= last; trail += 1) {
-        const character = decoder.decode(new Uint8Array([lead, trail]));
-        if ([...character].length === 1 && character !== '\ufffd') codePoints.push(character.codePointAt(0));
-      }
-    }
-  }
-  return codePoints;
-}
-
-export function frequencyTiers() {
-  const gbTrails = [[0xa1, 0xfe]];
-  const big5Trails = [[0x40, 0x7e], [0xa1, 0xfe]];
-  return [
-    encodedBlock('gbk', [0xb0, 0xd7], gbTrails),
-    encodedBlock('big5', [0xa4, 0xc6], big5Trails),
-    encodedBlock('gbk', [0xd8, 0xf7], gbTrails),
-    encodedBlock('big5', [0xc9, 0xf9], big5Trails),
-  ];
+/**
+ * The code points the console ships: all but the CJK ideographs and Hangul syllables the
+ * console's source does not use, which Noto Sans SC draws.
+ */
+export function shippedCodePoints(fontCodePoints, sourceCharacters) {
+  const used = new Set([...sourceCharacters].map((character) => character.codePointAt(0)));
+  const isServedElsewhere = (codePoint) => !used.has(codePoint)
+    && SERVED_ELSEWHERE_RANGES.some(([start, end]) => codePoint >= start && codePoint <= end);
+  return [...fontCodePoints].filter((codePoint) => !isServedElsewhere(codePoint));
 }
 
 /**
- * Splits a font's code points into shards: the core first, then each frequency tier in
- * shards of at most `shardSize`, then the remainder. Every code point lands in exactly one.
+ * Splits a font's code points into shards: the core first, then the rest in code point
+ * order in shards of at most `shardSize`. Every code point lands in exactly one.
  */
-export function planShards(fontCodePoints, sourceCharacters, tiers = frequencyTiers(), shardSize = SHARD_SIZE) {
+export function planShards(fontCodePoints, sourceCharacters, shardSize = SHARD_SIZE) {
   const remaining = new Set(fontCodePoints);
   const take = (codePoints) => {
     const taken = [...new Set(codePoints)].filter((codePoint) => remaining.has(codePoint)).sort((left, right) => left - right);
@@ -105,10 +107,8 @@ export function planShards(fontCodePoints, sourceCharacters, tiers = frequencyTi
     ...[...sourceCharacters].map((character) => character.codePointAt(0)),
   ]);
   const shards = [core];
-  for (const tier of [...tiers, [...remaining]]) {
-    const codePoints = take(tier);
-    for (let i = 0; i < codePoints.length; i += shardSize) shards.push(codePoints.slice(i, i + shardSize));
-  }
+  const rest = take([...remaining]);
+  for (let i = 0; i < rest.length; i += shardSize) shards.push(rest.slice(i, i + shardSize));
   return shards.filter((codePoints) => codePoints.length > 0)
     .map((codePoints, index) => ({ name: String(index).padStart(3, '0'), codePoints }));
 }

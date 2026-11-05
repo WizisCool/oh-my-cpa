@@ -41,7 +41,7 @@ body:
       description: Tick whatever the proposal would touch; these shape how it can be built.
       options:
         - label: It needs a CPA management endpoint or field the console does not read today.
-        - label: It needs network access beyond CPA itself (the console otherwise runs fully offline, with no CDN).
+        - label: It needs network access beyond CPA itself and the console's existing requests.
         - label: It displays, stores or exports a secret (management key, provider key, client key, OAuth token).
         - label: It should also be available to agents as a capability (docs/agent-capabilities.md).
   - type: dropdown

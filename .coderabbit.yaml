@@ -149,7 +149,7 @@ reviews:
         duplicating token values. Static structure is flat; overlays use the
         shared elevation tokens. Status colors convey actual state. CSS-module classes are kebab-case and read
         as `styles['kebab-case']`. The SPA must stay embeddable in the single Go
-        binary, so nothing may depend on a CDN or an externally hosted asset.
+        binary; an asset loaded from a CDN needs a working local fallback.
         State must not be communicated by color alone: keep keyboard
         operability, visible focus, WCAG AA contrast, and
         `prefers-reduced-motion`. Disposable resources must survive React
@@ -202,8 +202,8 @@ reviews:
     - path: '{Dockerfile,.env.example,deploy/**}'
       instructions: >-
         Deployment surface. The image is one CGO-free binary with the SPA
-        embedded, so flag a build-time secret, a CDN or externally hosted asset
-        dependency, or a change that stops `internal/web/dist` from being
+        embedded, so flag a build-time secret, an externally hosted asset
+        without a local fallback, or a change that stops `internal/web/dist` from being
         embedded. Every environment variable needs a default and a matching
         `.env.example` entry, and the operator documents need the same change;
         placeholders only, never a real key, token, or private path. Deployment

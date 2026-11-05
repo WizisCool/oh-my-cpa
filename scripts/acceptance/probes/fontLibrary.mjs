@@ -1,3 +1,4 @@
+import { isOptional } from '../browser-guard.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { settleLayout, until } from '../harness.mjs';
@@ -38,7 +39,7 @@ export async function fontLibrary({ base, page, check }) {
   const origin = new URL(base).origin;
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.origin !== origin && !url.protocol.startsWith('data')) foreignRequests.push(request.url());
+    if (url.origin !== origin && !url.protocol.startsWith('data') && !isOptional(request.url())) foreignRequests.push(request.url());
   });
 
   let holdPreferences;

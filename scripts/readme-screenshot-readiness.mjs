@@ -9,10 +9,10 @@ export function hasReadmeScreenshotContent(selector) {
 }
 
 /**
- * Runs in Chromium: the console font's shards beyond the core are registered. They
+ * Runs in Chromium: the console font's shards beyond the core of each of its three weights are registered. They
  * arrive after load, and a capture taken before them draws demo text outside the core in a
  * fallback font.
  */
 export function hasDeferredFontShards() {
-  return [...document.fonts].filter((face) => face.family.replaceAll('"', '') === 'Sarasa Mono SC').length > 2;
+  return [...document.fonts].filter((face) => face.family.replaceAll('"', '') === 'Sarasa Mono SC').length > 3;
 }

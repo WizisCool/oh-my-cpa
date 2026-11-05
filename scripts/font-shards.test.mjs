@@ -20,6 +20,7 @@ import {
   renderCoreCss,
   renderShardUrlsModule,
   shardFileName,
+  shippedCodePoints,
 } from './font-shards.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -130,17 +131,20 @@ test('unicode ranges collapse consecutive runs and parse back', () => {
   assert.deepEqual(parseUnicodeRange(value), [[0x41, 0x43], [0x5e7f, 0x5e7f], [0x7ec3, 0x7ec3]]);
 });
 
-test('the plan puts the core first, then each tier in bounded shards, each code point once', () => {
-  const font = [0x41, 0x42, 0x4e00, 0x4e01, 0x4e02, 0x4e03, 0x4e04, 0x9fa5, 0xac00];
-  // U+4E04 is used by the source, so the core takes it before its tier can.
-  const plan = planShards(font, new Set(['\u4e04']), [[0x4e04, 0x4e01, 0x4e03], [0x9fa5]], 2);
-  assert.deepEqual(plan, [
+test('the plan puts the core first, then the rest in bounded shards, each code point once', () => {
+  const font = [0x41, 0x42, 0x3042, 0x3043, 0x3044, 0x4e04, 0x2190];
+  // U+4E04 is used by the source, so the core takes it.
+  assert.deepEqual(planShards(font, new Set(['\u4e04']), 2), [
     { name: '000', codePoints: [0x41, 0x42, 0x4e04] },
-    { name: '001', codePoints: [0x4e01, 0x4e03] },
-    { name: '002', codePoints: [0x9fa5] },
-    { name: '003', codePoints: [0x4e00, 0x4e02] },
-    { name: '004', codePoints: [0xac00] },
+    { name: '001', codePoints: [0x2190, 0x3042] },
+    { name: '002', codePoints: [0x3043, 0x3044] },
   ]);
+});
+
+test('ideographs and Hangul syllables ship only when the source uses them', () => {
+  const font = [0x41, 0x3042, 0x4e00, 0x4e01, 0x3400, 0xac00, 0xac01, 0xf900, 0x20000];
+  // Latin and kana always ship; Noto Sans SC draws every other ideograph.
+  assert.deepEqual(shippedCodePoints(font, new Set(['\u4e01', '\uac01'])), [0x41, 0x3042, 0x4e01, 0xac01]);
 });
 
 test('the committed shards, manifest, core stylesheet and URL module agree', () => {

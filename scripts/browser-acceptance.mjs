@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { guardBrowserContext } from './acceptance/browser-guard.mjs';
+import { guardBrowserContext, isOptional } from './acceptance/browser-guard.mjs';
 import { launchBrowser, closeBrowser, stopProcess, closeServer, withinBudget } from './acceptance/lifecycle.mjs';
 // Deterministic browser acceptance against an isolated fake CPA by default.
 // Set OMCPA_LIVE_CPA=1 to run the separately maintained live-system smoke.
@@ -295,11 +295,13 @@ try {
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     if (/status of 401 \(Unauthorized\)/i.test(message.text())) return;
+    // The guard blocks the optional font CDN on purpose; see `isOptional`.
+    if (isOptional(message.location().url)) return;
     consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('requestfailed', (request) => {
-    if (request.failure()?.errorText === 'net::ERR_ABORTED') return;
+    if (request.failure()?.errorText === 'net::ERR_ABORTED' || isOptional(request.url())) return;
     requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`);
   });
   page.on('response', async (response) => {
