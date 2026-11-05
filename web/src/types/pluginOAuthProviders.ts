@@ -1,6 +1,14 @@
-import type { PluginItem } from './plugin';
+import { pluginDisplayName, type PluginItem } from './plugin';
+import { getCredentialProviderMetadata } from './providerMetadata';
 
 export const OAUTH_PROVIDER_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * The OAuth providers OMC signs in to itself. A plugin cannot replace their login cards or
+ * rename them. The sign-in registry in `pages/oauthProviderLogic.ts` defines each one; this
+ * leaf copy lets every surface name providers without loading that page module.
+ */
+export const BUILTIN_OAUTH_IDS: ReadonlySet<string> = new Set(['kimi', 'kimi-ai', 'codex', 'anthropic', 'antigravity', 'xai', 'devin', 'meta']);
 
 function collectDeclaredPluginOAuthProviders(plugin: PluginItem): string[] {
   return [...new Set([...(plugin.oauth_providers ?? []), plugin.oauth_provider ?? '']
@@ -162,4 +170,43 @@ export function pluginOAuthLogoFor(
 export function pluginOwnsProvider(plugins: PluginItem[] | undefined, providerKeys: readonly (string | undefined)[]): boolean {
   const keys = new Set(providerKeys.filter(Boolean).map((key) => key!.trim().toLowerCase()));
   return (plugins ?? []).some((plugin) => pluginOAuthProviderKeys(plugin).some((key) => keys.has(key)));
+}
+
+/** The title a plugin's login card gives each portal it declares. */
+export function pluginPortalTitles(plugin: PluginItem, providerIds: readonly string[]): (providerId: string) => string {
+  const entries = pluginOAuthProviderEntryTexts([plugin]);
+  const name = pluginDisplayName(plugin);
+  return (providerId) => {
+    const entryName = entries[providerId]?.name;
+    return entryName && entryName !== name
+      ? entryName
+      : providerIds.length > 1 ? `${name} · ${providerId}` : name;
+  };
+}
+
+/**
+ * pluginOAuthProviderTitles names the credentials of every plugin-registered provider with
+ * the title its login card carries, keyed by the canonical provider key `providerDisplayName`
+ * looks up.
+ *
+ * Unlike the login cards, a disabled plugin still contributes: switching it off keeps the
+ * credentials it registered, and they keep its name, as they keep its logo. When an enabled
+ * plugin declares the same provider, its title wins, as its login card does. A built-in
+ * provider keeps its own name, matching the login cards a plugin cannot replace.
+ */
+export function pluginOAuthProviderTitles(plugins: PluginItem[] | undefined): Map<string, string> {
+  const titles = new Map<string, string>();
+  const isEnabled = (plugin: PluginItem) => Boolean(plugin.effective_enabled ?? plugin.enabled);
+  const ordered = [...(plugins ?? [])].sort((a, b) => Number(isEnabled(b)) - Number(isEnabled(a)));
+  for (const plugin of ordered) {
+    if (!plugin.supports_oauth) continue;
+    const providerIds = pluginOAuthProviderIds(plugin);
+    const portalTitle = pluginPortalTitles(plugin, providerIds);
+    for (const providerId of providerIds) {
+      const key = getCredentialProviderMetadata(providerId).id;
+      if (BUILTIN_OAUTH_IDS.has(providerId) || BUILTIN_OAUTH_IDS.has(key) || titles.has(key)) continue;
+      titles.set(key, portalTitle(providerId));
+    }
+  }
+  return titles;
 }

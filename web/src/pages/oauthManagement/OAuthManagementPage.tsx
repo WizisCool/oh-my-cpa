@@ -27,7 +27,7 @@ import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
 import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
-import { pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
+import { pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
 import { providerFilterTabs } from '../../types/credentialProviders';
 import type { AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import {
@@ -40,7 +40,7 @@ import { useCredentialRename } from '../../components/authFiles/useCredentialRen
 import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { SummaryStrip } from '../../components/common/SummaryStrip';
-import { oauthProviderChoices, pluginOAuthProviderTitles } from '../oauthProviderLogic';
+import { oauthProviderChoices } from '../oauthProviderLogic';
 import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
 import { CredentialSection, type CredentialRowActions } from './CredentialSection';

@@ -1,9 +1,8 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
 import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
-import { pluginDisplayName, type PluginItem } from '../types/plugin';
-import { getCredentialProviderMetadata } from '../types/providerMetadata';
-import { pluginOAuthProviderEntryTexts, pluginOAuthProviderIds, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
+import type { PluginItem } from '../types/plugin';
+import { BUILTIN_OAUTH_IDS, pluginOAuthProviderIds, pluginOAuthProviderLogos, pluginPortalTitles } from '../types/pluginOAuthProviders';
 
 /**
  * The OAuth provider contract for the console: which authorizations exist, how
@@ -318,7 +317,6 @@ export const BUILTIN_OAUTH_PROVIDERS: OAuthProviderDefinition[] = [
 ];
 
 /** The plugin-supplied providers the card builder skips, because a built-in already owns the id. */
-export const BUILTIN_OAUTH_IDS = new Set<string>(BUILTIN_OAUTH_PROVIDERS.map((provider) => provider.id));
 
 export function lookupOAuthProvider(id: string): OAuthProviderDefinition | undefined {
   const normalized = (id || '').trim().toLowerCase();
@@ -413,45 +411,6 @@ export function pluginOAuthProviderChoices(
     }
   }
   return choices;
-}
-
-/** The title a plugin's login card gives each portal it declares. */
-function pluginPortalTitles(plugin: PluginItem, providerIds: readonly string[]): (providerId: string) => string {
-  const entries = pluginOAuthProviderEntryTexts([plugin]);
-  const name = pluginDisplayName(plugin);
-  return (providerId) => {
-    const entryName = entries[providerId]?.name;
-    return entryName && entryName !== name
-      ? entryName
-      : providerIds.length > 1 ? `${name} · ${providerId}` : name;
-  };
-}
-
-/**
- * pluginOAuthProviderTitles names the credentials of every plugin-registered provider with
- * the title its login card carries, keyed by the canonical provider key `providerDisplayName`
- * looks up.
- *
- * Unlike the login cards, a disabled plugin still contributes: switching it off keeps the
- * credentials it registered, and they keep its name, as they keep its logo. When an enabled
- * plugin declares the same provider, its title wins, as its login card does. A built-in
- * provider keeps its own name, matching the login cards a plugin cannot replace.
- */
-export function pluginOAuthProviderTitles(plugins: PluginItem[] | undefined): Map<string, string> {
-  const titles = new Map<string, string>();
-  const isEnabled = (plugin: PluginItem) => Boolean(plugin.effective_enabled ?? plugin.enabled);
-  const ordered = [...(plugins ?? [])].sort((a, b) => Number(isEnabled(b)) - Number(isEnabled(a)));
-  for (const plugin of ordered) {
-    if (!plugin.supports_oauth) continue;
-    const providerIds = pluginOAuthProviderIds(plugin);
-    const portalTitle = pluginPortalTitles(plugin, providerIds);
-    for (const providerId of providerIds) {
-      const key = getCredentialProviderMetadata(providerId).id;
-      if (BUILTIN_OAUTH_IDS.has(providerId) || BUILTIN_OAUTH_IDS.has(key) || titles.has(key)) continue;
-      titles.set(key, portalTitle(providerId));
-    }
-  }
-  return titles;
 }
 
 export function oauthProviderChoices(plugins: PluginItem[] | undefined, t: TFunc): OAuthProviderChoice[] {

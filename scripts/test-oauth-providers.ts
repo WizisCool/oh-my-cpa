@@ -1,20 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  BUILTIN_OAUTH_IDS,
   BUILTIN_OAUTH_PROVIDERS,
   XAI_CALLBACK_URL,
   builtinOAuthProviderChoices,
   lookupOAuthProvider,
   pluginOAuthProviderChoices,
-  pluginOAuthProviderTitles,
   normalizeOAuthFlow,
   normalizeOAuthStatus,
   resolveStartedOAuthFlow,
   resolveXaiCallback,
   validateDevinCallback,
 } from '../web/src/pages/oauthProviderLogic.ts';
-import { OAUTH_PROVIDER_PATTERN } from '../web/src/types/pluginOAuthProviders.ts';
+import { BUILTIN_OAUTH_IDS, OAUTH_PROVIDER_PATTERN, pluginOAuthProviderTitles } from '../web/src/types/pluginOAuthProviders.ts';
 import { providerDisplayName } from '../web/src/types/providerMetadata.ts';
 
 test('Registry: provider ids are unique, routable and consistent with the lookup', () => {
@@ -35,7 +33,7 @@ test('Registry: provider ids are unique, routable and consistent with the lookup
       assert.equal(provider.callback, undefined, `${provider.id} is a device flow and cannot take a paste`);
     }
   }
-  assert.equal(BUILTIN_OAUTH_IDS.size, BUILTIN_OAUTH_PROVIDERS.length, 'registry ids must be unique');
+  assert.deepEqual([...BUILTIN_OAUTH_IDS].sort(), BUILTIN_OAUTH_PROVIDERS.map((provider) => provider.id).sort(), 'registry ids are unique and match the leaf list every surface reads');
 });
 
 test('Registry: the Devin and Meta Muse adapters are registered', () => {

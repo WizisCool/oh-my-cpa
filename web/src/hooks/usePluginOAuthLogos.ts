@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { pluginOAuthProviderTitles } from '../pages/oauthProviderLogic';
 import {
   pluginOAuthProviderLogos,
+  pluginOAuthProviderTitles,
   pluginOwnsProvider,
   type PluginOAuthLogos,
 } from '../types/pluginOAuthProviders';
