@@ -617,7 +617,7 @@ function QuotaReading({ cell, name, provider, isStale, nowMS }: {
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
   const estimate = compactQuotaCapacity(window, tokenStyle, t);
   const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
-  const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean).join('\n');
+  const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean);
   return (
     <div
       className={clsx(
@@ -631,7 +631,10 @@ function QuotaReading({ cell, name, provider, isStale, nowMS }: {
     >
       {/* A reading is plain text, so the shared hint answers touch and keyboard focus without
           turning quota inspection into an action or relying on a hover-only native title. */}
-      <Tooltip title={detail}>
+      <Tooltip
+        classNames={{ root: styles['quota-tip-popper'] }}
+        title={<div className={styles['quota-tip']}>{detail.map((line) => <div key={line}>{line}</div>)}</div>}
+      >
         <div className={styles['quota-reading']} role="group" aria-label={window.label} tabIndex={0}>
           <Tag size="small" className={styles['quota-name']} title={name}>{name}</Tag>
           <span className={styles['quota-value']}>
