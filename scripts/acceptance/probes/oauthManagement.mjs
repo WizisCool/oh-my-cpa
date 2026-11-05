@@ -738,6 +738,13 @@ async function verifyFullCodexCountdown({ base, page, check, ledger }) {
     const full = page.locator('[data-auth-index="auth-01"] [data-quota-column="standard|five_hour"]');
     const used = page.locator('[data-auth-index="auth-05"] [data-quota-column="standard|five_hour"]');
     await used.getByText('~5h 1m left', { exact: true }).waitFor();
+    const refresh = async (expected, label) => {
+      const button = page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]');
+      await button.click();
+      // Receiving the request is not completion: the row's controls stay disabled through the
+      // response and revalidation. Their tab order must settle before inspecting the reading.
+      await until(async () => refreshes === expected && await button.isEnabled(), { label });
+    };
     const checkFull = async (stage) => {
       check(`unused full Codex quota shows its five-hour duration ${stage}`,
         (await full.innerText()).includes('100%') && await full.getByText('5h', { exact: true }).isVisible()
@@ -755,8 +762,7 @@ async function verifyFullCodexCountdown({ base, page, check, ledger }) {
     await page.clock.fastForward(4 * 60_000);
     await used.getByText('~4h 56m left', { exact: true }).waitFor();
     await checkFull('after five minutes');
-    await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
-    await until(() => refreshes === 1, { label: 'full Codex quota refresh' });
+    await refresh(1, 'full Codex quota refresh to finish');
     const refreshedDetails = await readQuotaDetails(page, full);
     check('the keyboard-readable reset detail follows a quota refresh', refreshedDetails.includes('5h 1m left'), refreshedDetails);
     await checkFull('after quota refresh');
@@ -777,16 +783,14 @@ async function verifyFullCodexCountdown({ base, page, check, ledger }) {
     await used.getByText('~5h left', { exact: true }).waitFor();
     await checkFull('after another minute');
     fullUsedPercent = 0.2;
-    await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
-    await until(() => refreshes === 2, { label: 'used Codex quota refresh' });
+    await refresh(2, 'used Codex quota refresh to finish');
     await full.getByText('~5h 1m left', { exact: true }).waitFor();
     await page.clock.fastForward(60_000);
     await full.getByText('~5h left', { exact: true }).waitFor();
     check('Codex quota resumes counting down once positive usage is reported',
       await full.getByText('100%', { exact: true }).isVisible());
     fullUsedPercent = 0;
-    await page.locator('[data-auth-index="auth-01"] [data-testid="oauth-credential-refresh"]').click();
-    await until(() => refreshes === 3, { label: 'recovered full Codex quota refresh' });
+    await refresh(3, 'recovered full Codex quota refresh to finish');
     await full.getByText('5h', { exact: true }).waitFor();
     await checkFull('when a refresh reports zero usage again');
 
