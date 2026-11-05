@@ -418,6 +418,11 @@ export function pluginOAuthProviderChoices(
   return choices;
 }
 
+/** The title each plugin login portal carries, keyed by provider key, for naming its credentials. */
+export function pluginOAuthProviderTitles(choices: readonly OAuthProviderChoice[]): Map<string, string> {
+  return new Map(choices.filter((choice) => choice.pluginId).map((choice) => [choice.id, choice.title]));
+}
+
 export function oauthProviderChoices(plugins: PluginItem[] | undefined, t: TFunc): OAuthProviderChoice[] {
   return [...builtinOAuthProviderChoices(t), ...pluginOAuthProviderChoices(plugins, t)];
 }
