@@ -76,9 +76,11 @@ makes an interaction ready, not elapsed time or a text fragment from an earlier 
 A development-server pass does not prove packaging, production chunks, root/base
 path resolution, offline assets or secret safety. `pnpm verify:browser` exercises
 the real built binary and fake CPA; `:smoke` is the smaller PR path.
-`pnpm verify:demo` exercises the packaged public demonstration. Run the complete
-`verify:full` serial variant on resource-constrained machines rather than starting
-multiple full gates together.
+`pnpm verify:demo` exercises the packaged public demonstration. CI also builds the
+production SPA with the managed builder's file-descriptor budget; the page and Worker
+graphs share the concurrency bound in [`web/vite.config.ts`](../web/vite.config.ts).
+Run the complete `verify:full` serial variant on resource-constrained machines rather
+than starting multiple full gates together.
 
 ## CI and releases
 
