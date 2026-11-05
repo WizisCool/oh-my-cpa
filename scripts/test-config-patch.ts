@@ -341,8 +341,97 @@ for (const setting of CODEX_BEHAVIOR_FIELDS) {
   });
 }
 
-// CPA holds the Claude session date pin as a pointer (`*int`): an absent key is its
-// 7-day default, while an explicit 0 is a different setting — the legacy
+test('KV store defaults remain omitted through unrelated saves and reverted edits', () => {
+  const disabled = field('kvStoreDisabled');
+  const path = field('kvStorePath');
+  const server = parseDocument(SERVER_YAML);
+  const draft = server.clone();
+  assert.equal(disabled.type, 'switch');
+  assert.equal(path.type, 'string');
+  for (const setting of [disabled, path]) {
+    assert.ok(CONFIG_GROUPS.find((group) => group.id === 'grp_service')?.fieldIds.includes(setting.id));
+  }
+  assert.equal(getFieldSemanticValue(server, disabled), false);
+  assert.equal(getFieldSemanticValue(server, path), '');
+
+  updateFieldWithBaseline(draft, server, disabled, false);
+  updateFieldWithBaseline(draft, server, path, '');
+  assert.equal(draft.toString(), server.toString());
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+
+  updateFieldWithBaseline(draft, server, field('debug'), true);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['observability', 'logs', 'debug'], value: true },
+  ]);
+  assert.equal(draft.hasIn(['server', 'kv-store']), false);
+  updateFieldWithBaseline(draft, server, field('debug'), false);
+
+  updateFieldWithBaseline(draft, server, disabled, true);
+  updateFieldWithBaseline(draft, server, path, '/data/cpa/kv.db');
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['server', 'kv-store'], value: { disabled: true, path: '/data/cpa/kv.db' } },
+  ]);
+  updateFieldWithBaseline(draft, server, disabled, false);
+  updateFieldWithBaseline(draft, server, path, '');
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+  assert.equal(draft.toString(), server.toString());
+});
+
+for (const setting of [
+  { disabled: false, path: '', pinDays: 0, editedPath: '/data/cpa/kv.db' },
+  { disabled: true, path: '/data/cpa/kv.db', pinDays: 21, editedPath: '' },
+]) {
+  test(`KV store edits preserve siblings and retention with disabled=${setting.disabled} and path=${JSON.stringify(setting.path)}`, () => {
+    const disabled = field('kvStoreDisabled');
+    const path = field('kvStorePath');
+    const server = parseDocument(`${SERVER_YAML}upstream:
+    claude:
+        session-date-pin-days: ${setting.pinDays} # retained policy
+`);
+    server.setIn(['server', 'kv-store'], server.createNode({
+      disabled: setting.disabled,
+      path: setting.path,
+      'operator-extra': 'retained',
+    }));
+    assert.equal(getFieldSemanticValue(server, disabled), setting.disabled);
+    assert.equal(getFieldSemanticValue(server, path), setting.path);
+
+    const unrelated = server.clone();
+    updateFieldWithBaseline(unrelated, server, field('debug'), true);
+    assert.deepEqual(computeConfigChanges(server, unrelated), [
+      { path: ['observability', 'logs', 'debug'], value: true },
+    ]);
+
+    const draft = server.clone();
+    updateFieldWithBaseline(draft, server, disabled, !setting.disabled);
+    updateFieldWithBaseline(draft, server, path, setting.editedPath);
+    assert.deepEqual(computeConfigChanges(server, draft), [
+      { path: ['server', 'kv-store', 'disabled'], value: !setting.disabled },
+      setting.editedPath === ''
+        ? { path: ['server', 'kv-store', 'path'], remove: true }
+        : { path: ['server', 'kv-store', 'path'], value: setting.editedPath },
+    ]);
+    const expected = server.clone();
+    expected.setIn(['server', 'kv-store', 'disabled'], !setting.disabled);
+    if (setting.editedPath === '') expected.deleteIn(['server', 'kv-store', 'path']);
+    else expected.setIn(['server', 'kv-store', 'path'], setting.editedPath);
+
+    const readback = parseDocument(draft.toString());
+    assert.deepEqual(readback.toJS(), expected.toJS());
+    assert.equal(getFieldSemanticValue(readback, disabled), !setting.disabled);
+    assert.equal(getFieldSemanticValue(readback, path), setting.editedPath);
+    assert.equal(getFieldSemanticValue(readback, field('claudeSessionDatePinDays')), setting.pinDays);
+    assert.equal(readback.toString().includes('# retained policy'), true);
+
+    updateFieldWithBaseline(draft, server, disabled, setting.disabled);
+    updateFieldWithBaseline(draft, server, path, setting.path);
+    assert.deepEqual(computeConfigChanges(server, draft), []);
+    assert.deepEqual(draft.toJS(), server.toJS());
+  });
+}
+
+// In memory mode, CPA holds the Claude session date pin as a pointer (`*int`): an
+// absent key is its 7-day default, while an explicit 0 is a different setting — the legacy
 // continuity-scoped pin. The schema default therefore has to reproduce the absent
 // key, not stand in for a value, so an untouched gateway is never written, and a
 // zero the operator typed has to survive the save and the readback instead of
