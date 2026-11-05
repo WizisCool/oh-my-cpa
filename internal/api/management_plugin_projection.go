@@ -93,8 +93,8 @@ type PluginItemDTO struct {
 }
 
 // PluginOAuthProviderEntryDTO is one login portal's own display text. `identifier` is
-// the provider key the credential records carry; `name` and `logo` are what the login
-// card draws for that key alone.
+// the login key sent to CPA; `name` and `logo` are what the login card draws for that
+// key alone. The credential family may use a different key.
 type PluginOAuthProviderEntryDTO struct {
 	Identifier string `json:"identifier"`
 	Name       string `json:"name,omitempty"`
@@ -162,10 +162,21 @@ type StorePluginItemDTO struct {
 }
 
 // projectPluginItems projects the installed plugin list, preserving CPA's order.
-func projectPluginItems(plugins []management.PluginItem) []PluginItemDTO {
+func projectPluginItems(plugins []management.PluginItem, isDemoMode bool) []PluginItemDTO {
 	result := make([]PluginItemDTO, 0, len(plugins))
 	for _, plugin := range plugins {
-		result = append(result, projectPluginItem(plugin))
+		item := projectPluginItem(plugin)
+		if isDemoMode {
+			item.Logo = projectInlinePluginLogo(item.Logo)
+			if item.Metadata != nil {
+				item.Metadata.Logo = projectInlinePluginLogo(item.Metadata.Logo)
+			}
+			for index := range item.OAuthProviderEntries {
+				entry := &item.OAuthProviderEntries[index]
+				entry.Logo = projectInlinePluginLogo(entry.Logo)
+			}
+		}
+		result = append(result, item)
 	}
 	return result
 }
@@ -192,7 +203,7 @@ func projectPluginItem(plugin management.PluginItem) PluginItemDTO {
 		SupportsQuota:        plugin.SupportsQuota,
 		QuotaProvider:        boundedText(plugin.QuotaProvider, pluginTextLimit),
 		Pages:                projectPluginPages(plugin),
-		Logo:                 plugin.Logo,
+		Logo:                 pluginLogoURL(plugin),
 		RepositoryURL:        pluginRepositoryURL(repository),
 		ConfigFields:         projectPluginConfigFields(fields),
 		Metadata:             projectPluginMetadata(plugin.Metadata),
@@ -225,11 +236,8 @@ func projectPluginOAuthProviders(providers []string) []string {
 // The name and the logo are presentation, and are handled the opposite way. A name is
 // either the text the plugin published or nothing - cutting it would show a label the
 // plugin never wrote, so an oversized one is dropped and the card falls back to the
-// plugin's name. The logo is already bounded by CPA's inline ceiling
-// (`maxPluginLogoBytes`) and sanitized there, and is additionally held to inline
-// artwork here, because this is the last place before it reaches a browser: an
-// inliner that could not run (the public demonstration fetches nothing a plugin names)
-// would otherwise leave an arbitrary plugin-chosen URL in the response.
+// plugin's name. Logos follow the same inline-image or absolute HTTP(S) contract as
+// the plugin-wide mark.
 //
 // An entry whose identifier is unusable is dropped rather than kept as artwork nobody
 // can reach: the card is drawn per identifier, and ownership of a portal comes from
@@ -259,22 +267,6 @@ func projectPluginOAuthProviderEntries(entries []management.PluginOAuthProviderE
 		})
 	}
 	return result
-}
-
-// projectPluginLogo passes a declared logo through only as artwork the browser may
-// load by itself: an inline `data:image/*` URL the inliner accepted.
-//
-// The inliner already answers this, but it answers it by rewriting the field, and it is
-// deliberately absent in a deployment that fetches nothing a plugin names. Holding the
-// value here as well means the response carries no URL a browser would dereference
-// whichever of the two ran last, rather than depending on the ordering of a fetch this
-// projection cannot see.
-func projectPluginLogo(logo string) string {
-	logo = strings.TrimSpace(logo)
-	if _, ok := inlineImageMediaType(logo); !ok {
-		return ""
-	}
-	return logo
 }
 
 // projectPluginPages keeps the menus that are pages of this plugin: a resource path
@@ -318,7 +310,7 @@ func projectPluginMetadata(metadata *management.PluginMetadata) *PluginMetadataD
 		Name:    boundedText(metadata.Name, pluginTextLimit),
 		Version: boundedText(metadata.Version, pluginTextLimit),
 		Author:  boundedText(metadata.Author, pluginTextLimit),
-		Logo:    metadata.Logo,
+		Logo:    projectPluginLogo(metadata.Logo),
 	}
 }
 
@@ -386,7 +378,7 @@ func projectPluginStoreSourceErrors(sourceErrors []management.PluginStoreSourceE
 // first: the console ships it, so an operator looking for an Oh My CPA plugin should
 // not have to search the list the other registries supply. CPA's order is kept inside
 // each group.
-func projectStorePlugins(plugins []management.StorePluginItem) []StorePluginItemDTO {
+func projectStorePlugins(plugins []management.StorePluginItem, isDemoMode bool) []StorePluginItemDTO {
 	result := make([]StorePluginItemDTO, 0, len(plugins))
 	for _, plugin := range plugins {
 		if isOMCPluginStoreURL(plugin.SourceURL) {
@@ -396,6 +388,11 @@ func projectStorePlugins(plugins []management.StorePluginItem) []StorePluginItem
 	for _, plugin := range plugins {
 		if !isOMCPluginStoreURL(plugin.SourceURL) {
 			result = append(result, projectStorePlugin(plugin))
+		}
+	}
+	if isDemoMode {
+		for index := range result {
+			result[index].Logo = projectInlinePluginLogo(result[index].Logo)
 		}
 	}
 	return result
@@ -434,7 +431,7 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		License:              boundedText(plugin.License, pluginTextLimit),
 		Tags:                 boundedPluginList(plugin.Tags),
 		Locales:              projectPluginStoreLocales(plugin.Locales),
-		Logo:                 plugin.Logo,
+		Logo:                 projectPluginLogo(plugin.Logo),
 		InstallType:          boundedText(plugin.InstallType, 64),
 		Platforms:            platforms,
 		IsOfficial:           isOfficialStoreSource(plugin.SourceID),

@@ -252,20 +252,6 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		Version:  "v0.1.0-test",
 		Usage:    config.UsageConfig{Enabled: false},
 	}, repo, cipher, nil, authManager)
-	// The fixture plugin publishes its logo on an external host. Stubbing the transport
-	// keeps this suite offline while still exercising the inlining the console depends
-	// on; the fetch itself is covered by management_plugin_logos_test.go.
-	handler.pluginLogos.client = &http.Client{
-		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Header:     http.Header{"Content-Type": []string{"image/png"}},
-				Body:       io.NopCloser(strings.NewReader("png-bytes")),
-				Request:    request,
-			}, nil
-		}),
-		CheckRedirect: sameOriginRedirectGuard(errPluginLogoRedirectRefused, maxPluginLogoRedirects),
-	}
 
 	state.handler = handler
 	appServer := httptest.NewServer(handler.Router())
@@ -308,7 +294,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	}
 	// Each login portal carries the display text the plugin published for it: the
 	// identifier is normalized and deduplicated the way the identifier list is, while the
-	// name is kept as declared and the logo is inlined rather than forwarded.
+	// name and logo URL are kept as declared for browser rendering.
 	entries, _ := plugin["oauth_provider_entries"].([]any)
 	if len(entries) != 2 {
 		t.Fatalf("oauth_provider_entries = %#v, want one entry per usable declared identifier", plugin["oauth_provider_entries"])
@@ -318,22 +304,20 @@ func TestPluginsLifecycle(t *testing.T) {
 		t.Fatalf("entry = %#v, want the normalized identifier with the declared name", entries[0])
 	}
 	assertDeclaredKeys(t, "plugin oauth provider entry", first, []string{"identifier", "name", "logo"})
-	if entryLogo, _ := first["logo"].(string); !strings.HasPrefix(entryLogo, "data:image/png;base64,") {
-		t.Fatalf("entry logo = %q, want the portal's own mark inlined", first["logo"])
+	if entryLogo, _ := first["logo"].(string); entryLogo != "https://example.com/portal.png" {
+		t.Fatalf("entry logo = %q, want the portal's declared URL", first["logo"])
 	}
 	if second, _ := entries[1].(map[string]any); second["identifier"] != "logger-secondary" {
 		t.Fatalf("entry = %#v, want the portal that published no text of its own kept as its identifier", entries[1])
 	}
-	// The plugin declares its logo on an external host, and the console must not send
-	// the browser there: the field carries inline artwork instead. Its absence here
-	// would mean the tab, the cards and the request rows fall back to a catalog mark
-	// while the plugin's own mark exists.
+	// Installed and store logos retain the publisher's URL, independently of the
+	// server's egress network.
 	logo, _ := plugin["logo"].(string)
-	if !strings.HasPrefix(logo, "data:image/png;base64,") {
-		t.Fatalf("plugin logo = %q, want the plugin's own mark inlined", logo)
+	if logo != "https://example.com/logo.png" {
+		t.Fatalf("plugin logo = %q, want the plugin's declared URL", logo)
 	}
 	if metadata, _ := plugin["metadata"].(map[string]any); metadata == nil || metadata["logo"] != logo {
-		t.Fatalf("metadata logo = %#v, want the same inlined value", plugin["metadata"])
+		t.Fatalf("metadata logo = %#v, want the same declared URL", plugin["metadata"])
 	}
 	if plugin["repository_url"] != "https://github.com/router-for-me/logger-plugin" {
 		t.Fatalf("repository_url = %#v, want the slug expanded to a GitHub link", plugin["repository_url"])
@@ -454,8 +438,8 @@ func TestPluginsLifecycle(t *testing.T) {
 	if _, hasLocales := community["locales"]; hasLocales {
 		t.Fatal("a legacy store response must not invent locales")
 	}
-	if storeLogo, _ := official["logo"].(string); !strings.HasPrefix(storeLogo, "data:image/png;base64,") {
-		t.Fatalf("store logo = %q, want the registry's mark inlined", storeLogo)
+	if storeLogo, _ := official["logo"].(string); storeLogo != "https://cdn.example/limiter.png" {
+		t.Fatalf("store logo = %q, want the registry's declared URL", storeLogo)
 	}
 	if _, hasHomepage := official["homepage"]; hasHomepage {
 		t.Fatalf("homepage = %#v, want a non-http link dropped", official["homepage"])
@@ -729,11 +713,8 @@ func TestPluginOAuthProviderEntriesKeepDisplayTextAsDeclared(t *testing.T) {
 	if third := projected.OAuthProviderEntries[2]; third.Name != "BigModel" || third.Logo != "" {
 		t.Fatalf("entry = %#v, want the name kept with no inferred logo", third)
 	}
-	// The browser loads whatever logo this field carries by itself, so a URL is not one:
-	// the inliner that normally rewrites it does not run in a deployment that fetches
-	// nothing a plugin names, and this projection is what remains between the two.
+	// Relative paths and active content are not image-source declarations.
 	for _, logo := range []string{
-		"https://cdn.example.com/portal.png",
 		"//cdn.example.com/portal.png",
 		"/assets/portal.png",
 		"javascript:alert(1)",

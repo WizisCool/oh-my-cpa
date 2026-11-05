@@ -432,8 +432,8 @@ func PricingCatalogModels() []string {
 
 // pluginEntry is one installed CPA plugin, in the shape CPA's plugin host reports it.
 //
-// A fixture logo is inline artwork, never a URL: the console inlines plugin-declared
-// logos by fetching them, and a public demo must not fetch anything a plugin names.
+// Fixture artwork is self-contained so the demo can show plugin branding without
+// contacting a publisher's host.
 type pluginEntry struct {
 	id           string
 	name         string

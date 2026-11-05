@@ -12,8 +12,8 @@ interface PluginIconProps {
 /**
  * A plugin's mark, drawn from the artwork it publishes.
  *
- * Artwork stays in an isolated `<img>`, so untrusted plugin SVG markup cannot enter the host
- * DOM and the console's CSP only has to allow `data:` images. It is shown as its author drew
+ * Artwork stays in an isolated `<img>`, so plugin SVG markup cannot enter the host
+ * DOM, whether inline or loaded from the publisher's HTTP(S) URL. It is shown as its author drew
  * it, because a registry mark is artwork rather than a glyph: the published logos are opaque
  * badges, gradients and embedded images, and a plugin that follows the console's theme does so
  * from inside its own SVG. Repainting the artwork in the current text colour would flatten
