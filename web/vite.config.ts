@@ -12,6 +12,10 @@ const devBasePath = resolveBasePath(repoRoot);
 const apiPrefix = `${devBasePath}api/`;
 const apiProxyPattern = `^${apiPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
 
+// Workers Builds caps open files at 1024. Leave room for Vite's dependency
+// manifest reads while both the page and worker graphs load modules.
+const MAX_PARALLEL_FILE_OPS = 128;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
   plugins: [
@@ -70,6 +74,11 @@ export default defineConfig(({ command }) => ({
       'monaco-yaml > vscode-uri',
     ],
   },
+  worker: {
+    rollupOptions: {
+      maxParallelFileOps: MAX_PARALLEL_FILE_OPS,
+    },
+  },
   server: {
     port: 5173,
     // Bind all network interfaces (0.0.0.0) so LAN and Tailscale devices can access
@@ -99,6 +108,7 @@ export default defineConfig(({ command }) => ({
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
+      maxParallelFileOps: MAX_PARALLEL_FILE_OPS,
       output: {
         manualChunks: (id, { getModuleInfo }) => {
           // Vite's shared preload helper is called by every `React.lazy` route, so

@@ -202,7 +202,12 @@ jobs:
         id: prepare
         run: |
           set -o pipefail
-          pnpm build
+          # Exercise the managed builder's file-descriptor budget.
+          (
+            ulimit -Sn 1024
+            ulimit -Hn 1024
+            pnpm build
+          )
           mkdir -p tmp
           CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage
           CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
