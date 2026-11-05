@@ -689,7 +689,7 @@ export async function systemInformationPage({ base, page, check }) {
   await refreshAll(page);
 
   await until(
-    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '')).includes('rebuilt under an exclusive lock'),
     { label: 'the outcome of a job discovered after page load', timeoutMs: 15_000 },
   ).catch(() => {});
   check(
@@ -858,8 +858,9 @@ export async function systemInformationPage({ base, page, check }) {
   servedMaintenance = { ...postRestartJob };
   await refreshAll(page);
 
+  // Refresh all leaves the earlier result on screen, so the wait names this job's own outcome.
   await until(
-    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '')).includes('the job the restarted process ran'),
     { label: 'the restarted process\'s job outcome', timeoutMs: 15_000 },
   ).catch(() => {});
   const postRestartOutcome = await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '');
