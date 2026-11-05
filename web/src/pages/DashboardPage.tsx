@@ -7,7 +7,6 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Select } from 'antd';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
-import { RefreshButton } from '../components/common/RefreshButton';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
 import { api, ApiError } from '../api/client';
@@ -216,7 +215,7 @@ export const DashboardPage: React.FC = () => {
   // The full window is fetched on mount, on range change, on manual refresh and
   // whenever a tail poll finds it cannot be patched. Everything in between is
   // the tail endpoint: whole-window numbers, a few buckets of series.
-  const { data: full, isFetching, isPlaceholderData, isError, error, refetch } = useQuery({
+  const { data: full, isPlaceholderData, isError, error, refetch } = useQuery({
     queryKey: ['dashboard', query],
     queryFn: () => api.getDashboard(query),
     enabled: rangeReady,
@@ -321,7 +320,6 @@ export const DashboardPage: React.FC = () => {
           <TimeRangeControl range={range} onChange={applyRange} isDisabled={!isRangeStored} />
           <ActionMenu>
             <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
-            <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
             <ToolButton icon={<AppstoreOutlined />} label={t('dash.layout.arrange')} onClick={() => setLayoutDraft(layout)} disabled={!data} />
           </ActionMenu>
           {clientKeyOptions.length > 0 && (
@@ -359,7 +357,6 @@ export const DashboardPage: React.FC = () => {
             disabled={!data}
             data-testid="dashboard-layout-arrange"
           />
-          <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
         </>
       )}
     />
@@ -369,10 +366,7 @@ export const DashboardPage: React.FC = () => {
     if (isError) {
       return (
         <div className="terminal-page dashboard-page">
-          <PageHeader
-            title={t('nav.dashboard')}
-            actions={<RefreshButton isLabelled label={t('common.retry')} onRefresh={() => void refetch()} />}
-          />
+          <PageHeader title={t('nav.dashboard')} />
           <LoadFailure
             title={t('dash.error_title')}
             detail={error instanceof ApiError ? error.message : t('dash.error_desc')}

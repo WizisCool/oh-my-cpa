@@ -1,4 +1,3 @@
-import { Button } from 'antd';
 import type { ButtonProps } from 'antd';
 import { ReloadOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -10,11 +9,6 @@ export interface RefreshButtonProps {
   isRefreshing?: boolean;
   /** Overrides the plain "Refresh" name, for a control that re-reads something narrower. */
   label?: string;
-  /**
-   * Keeps the label beside the glyph. For the one place a refresh is the page's only way
-   * forward - a failed read's retry - where it is a primary action rather than a tool.
-   */
-  isLabelled?: boolean;
   disabled?: boolean;
   size?: ButtonProps['size'];
   className?: string;
@@ -33,7 +27,6 @@ export function RefreshButton({
   onRefresh,
   isRefreshing = false,
   label,
-  isLabelled = false,
   disabled,
   size,
   className,
@@ -41,13 +34,6 @@ export function RefreshButton({
   const t = useT();
   const name = label ?? t('common.refresh');
   const icon = <ReloadOutlined spin={isRefreshing} />;
-  if (isLabelled) {
-    return (
-      <Button size={size} className={className} icon={icon} aria-busy={isRefreshing} disabled={disabled} onClick={onRefresh}>
-        {name}
-      </Button>
-    );
-  }
   return (
     <ToolButton
       size={size}

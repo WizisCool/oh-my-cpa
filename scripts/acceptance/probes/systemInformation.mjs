@@ -2,6 +2,16 @@ import { fulfillFixture, isOptional } from '../browser-guard.mjs';
 import { settleLayout, until } from '../harness.mjs';
 
 /**
+ * Presses the header's Refresh all. Its confirmation toast lies over the phone header and stays
+ * while the pointer rests on it, so a repeated press first closes it, as a reader would.
+ */
+async function refreshAll(page) {
+  for (const close of await page.locator('.omc-toast .ant-notification-notice-close').all()) await close.click();
+  await until(async () => (await page.locator('.omc-toast').count()) === 0, { label: 'the closed refresh toast to leave' });
+  await page.locator('.app-header-actions button:has(.anticon-reload)').click();
+}
+
+/**
  * The System Information page, and the claim that rendering a release's change log does
  * not reach outside this origin.
  *
@@ -675,11 +685,11 @@ export async function systemInformationPage({ base, page, check }) {
   servedMaintenance = { action: '', job_id: 0, running: false, started_at_ms: 0, finished_at_ms: 0, size_before_bytes: 0, size_after_bytes: 0, reclaimed_bytes: 0, incomplete: false, detail: '', error: '' };
   await page.route('**/omc/api/v1/management/system/maintenance**', laterJobHandler);
   servedMaintenance = { ...laterJob };
-  // Refresh re-reads both endpoints, which is how this page learns about the job it never started.
-  await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+  // Refresh all re-reads both endpoints, which is how this page learns about the job it never started.
+  await refreshAll(page);
 
   await until(
-    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '')).includes('rebuilt under an exclusive lock'),
     { label: 'the outcome of a job discovered after page load', timeoutMs: 15_000 },
   ).catch(() => {});
   check(
@@ -752,7 +762,7 @@ export async function systemInformationPage({ base, page, check }) {
   await page.route('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
   try {
     servedMaintenance = { ...freshRunningJob };
-    await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+    await refreshAll(page);
 
     // The response stays held throughout these assertions: waiting for the banner
     // cannot accidentally pass because a slow response has already populated the cache.
@@ -846,10 +856,11 @@ export async function systemInformationPage({ base, page, check }) {
   // The process restarts: a new start instant, and the job it admits reuses an id.
   servedProcessStart = 1790070000000;
   servedMaintenance = { ...postRestartJob };
-  await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+  await refreshAll(page);
 
+  // Refresh all leaves the earlier result on screen, so the wait names this job's own outcome.
   await until(
-    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '')).includes('the job the restarted process ran'),
     { label: 'the restarted process\'s job outcome', timeoutMs: 15_000 },
   ).catch(() => {});
   const postRestartOutcome = await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '');
@@ -974,9 +985,9 @@ export async function systemInformationPage({ base, page, check }) {
           (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
         );
 
-        // The Refresh control re-reads the server's retained record; a cleared result must not
+        // Refresh all re-reads the server's retained record; a cleared result must not
         // come back through it, which is the defect the reader reported.
-        await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+        await refreshAll(page);
         await page.waitForTimeout(1500);
         check(
           'a cleared result stays cleared across a refresh',
@@ -1429,16 +1440,16 @@ async function verifySystemOverview({ page, check }) {
   }));
   check('component summaries keep at most two inline label/value pairs per row', componentLayout);
   const maintenanceStyle = await page.evaluate(() => {
-    const reference = document.querySelector('.terminal-page-actions .ant-btn');
     const actions = Array.from(document.querySelectorAll('[data-testid="sys-maintenance-action-head"] button'));
-    if (!reference || actions.length !== 3) return false;
+    if (actions.length !== 3) return false;
+    const [reference] = actions;
     const referenceStyle = getComputedStyle(reference);
     return actions.every((action) => {
       const actionStyle = getComputedStyle(action);
       return action.classList.contains('ant-btn-default') && ['fontSize', 'borderRadius', 'borderTopWidth', 'borderTopStyle', 'borderTopColor', 'backgroundColor'].every((property) => actionStyle[property] === referenceStyle[property]) && action.getBoundingClientRect().height === reference.getBoundingClientRect().height;
     });
   });
-  check('maintenance actions use the same standard button tokens as page refresh', maintenanceStyle);
+  check('maintenance actions share the standard default button tokens', maintenanceStyle);
 }
 
 async function verifySystemHealthAnomalies({ base, page, check }) {
@@ -1483,21 +1494,21 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
     check('health anomaly summaries fit without overlapping or overflowing', isContained);
 
     updaterResponse = { state: 'ready', products: [], job: null };
-    await page.locator('.terminal-page-actions').getByRole('button').click();
+    await refreshAll(page);
     await heads.nth(2).locator('.status-label.is-success').waitFor({ state: 'visible', timeout: 10_000 });
-    check('page refresh reads the current updater status', await heads.nth(2).locator('.status-label.is-success').count() === 1);
+    check('refresh all reads the current updater status', await heads.nth(2).locator('.status-label.is-success').count() === 1);
     const updaterFacts = page.locator('[data-testid="sys-component-facts"]').nth(2);
     const reading = { label: await updaterFacts.locator('dt').allTextContents(), value: await updaterFacts.locator('dd').allTextContents() };
     check('the updater row carries one reading and it is the last check',
       reading.label.length === 1 && reading.value.length === 1 && reading.value[0] !== '—', JSON.stringify(reading));
 
     updaterStatus = 503;
-    await page.locator('.terminal-page-actions').getByRole('button').click();
+    await refreshAll(page);
     await heads.nth(2).locator('.status-label.is-warn').waitFor({ state: 'visible', timeout: 10_000 });
     check('a failed status read does not present the cached healthy verdict',
       await heads.nth(2).locator('.status-label.is-success').count() === 0);
     updaterStatus = 200;
-    await page.locator('.terminal-page-actions').getByRole('button').click();
+    await refreshAll(page);
     await heads.nth(2).locator('.status-label.is-success').waitFor({ state: 'visible', timeout: 10_000 });
   } finally {
     await page.unroute('**/omc/api/v1/management/system', systemHandler);

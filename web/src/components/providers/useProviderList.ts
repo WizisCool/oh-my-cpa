@@ -61,7 +61,6 @@ export function useProviderList() {
   const {
     data: providersData,
     isLoading: providersLoading,
-    isFetching: providersFetching,
     isError: providersError,
     error: providersErr,
     refetch: refetchProviders,
@@ -95,7 +94,6 @@ export function useProviderList() {
   return {
     providers,
     providersLoading,
-    providersFetching,
     providersError,
     providersErr,
     refetchProviders,

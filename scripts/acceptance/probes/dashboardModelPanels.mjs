@@ -397,7 +397,7 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
 
   // ── manual refresh ────────────────────────────────────────────────────────
   const beforeRefresh = calls.length;
-  await page.locator('.terminal-page-head button .anticon-reload').first().click();
+  await page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
   // The predicate is awaited through `until`, which is the probe harness's own condition wait: it
   // reports the label when it times out instead of throwing a bare locator error.
   let refreshRead = false;
@@ -492,7 +492,7 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
     // ranking with an error card because one poll timed out is worse than showing slightly old data.
     return fulfillFixture(route, { status: 503, json: { error: 'database is unavailable' } });
   });
-  await page.locator('.terminal-page-head button .anticon-reload').first().click();
+  await page.locator('.app-header-actions').getByRole('button', { name: 'Refresh all', exact: true }).click();
   let staleReported = false;
   await until(async () => {
     staleReported = (await page.locator('.model-stale-alert').count()) > 0;

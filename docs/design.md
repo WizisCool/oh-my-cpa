@@ -88,6 +88,11 @@ confirmation that names the affected resource. Preserve edits during background
 refreshes; distinguish Apply/Save from Cancel and from viewing current server state.
 A disabled or pending action should not move surrounding controls.
 
+The shell header's Refresh all re-reads every open view. A page adds its own
+[`RefreshButton`](../web/src/components/common/RefreshButton.tsx) only for work that re-read
+cannot do: pulling records from CPA, fetching quota, a model catalogue or exchange rates
+upstream, or reloading a log tail. A page that only refetches its own queries does not get one.
+
 A table is one dataset with one set of column semantics. On phones, use the shared
 labelled-row representation, not a separately maintained mobile dataset. Preserve
 ordering, values, action reachability and empty/loading states in either presentation.

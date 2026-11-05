@@ -12,7 +12,6 @@ import { formatTimeAgo } from '../../utils/format';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useViewSearchParams } from '../../hooks/useViewSearchParams';
 import { PageHeader } from '../../components/common/PageHeader';
-import { RefreshButton } from '../../components/common/RefreshButton';
 import { ResponsiveList } from '../../components/common/ResponsiveList';
 import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
 import { FactList } from '../../components/common/FactList';
@@ -480,7 +479,6 @@ export const PricingPage: React.FC = () => {
               { value: 'models', label: t('pricing.tab.models') }, { value: 'channels', label: t('pricing.tab.channels') },
             ]} />
             <ActionMenu>
-              <RefreshButton isRefreshing={result.isFetching} onRefresh={invalidate} />
               <span className="action-menu-label">{t('pricing.sync.title')}: <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel></span>
               {syncPopover}
             </ActionMenu>
@@ -496,7 +494,6 @@ export const PricingPage: React.FC = () => {
                 { value: 'channels', label: t('pricing.tab.channels') },
               ]}
             />
-            <RefreshButton isRefreshing={result.isFetching} onRefresh={invalidate} />
             <Popover content={syncPopover} trigger="click" placement="bottomRight" title={t('pricing.sync.title')}>
               <Button className={styles['sync-button']} data-testid="pricing-sync-status">
                 <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
