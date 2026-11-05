@@ -144,6 +144,8 @@ test('token heatmap', () => {
   // A short panel keeps the width rule; one that holds the year is left to the tracks.
   assert.deepEqual(fitHeatmapField(500, 100, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), { cell: fitHeatmapCell(500, WIDE_COLUMNS, TARGET_CELL, CELL_GAP)!, columnGap: CELL_GAP });
   assert.equal(fitHeatmapField(yearWidth + 400, 150, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), null);
+  // However tall, a panel that holds the year at the comfortable size keeps every week in view.
+  assert.equal(fitHeatmapField(yearWidth, 300, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), null);
   assert.equal(fitHeatmapField(0, 200, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, MAX_CELL), null);
   // A very tall panel stops growing the squares at the cap and leaves the rest below the field.
   assert.equal(fitHeatmapField(500, 600, WIDE_COLUMNS, TARGET_CELL, CELL_GAP, 22)?.cell, 22);

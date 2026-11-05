@@ -191,8 +191,8 @@ export interface HeatmapFieldFit {
  * left over after the whole weeks that fit goes into the gaps between weeks - a fraction of a pixel
  * each - so the squares stay square and both sides still meet the panel's edges. The squares grow
  * no larger than `maxCell`: a field of large squares outweighs the list beside it, so a panel taller
- * than that keeps the rest below the field. A shorter panel, or one that holds the whole year,
- * keeps the width rule of `fitHeatmapCell`.
+ * than that keeps the rest below the field. A shorter panel, or one that holds the whole year at
+ * the comfortable size however tall it is, keeps the width rule of `fitHeatmapCell`.
  */
 export function fitHeatmapField(
   fieldWidth: number,
@@ -203,6 +203,10 @@ export function fitHeatmapField(
   maxCell: number,
 ): HeatmapFieldFit | null {
   if (!(fieldWidth > 0) || !(targetCell > 0) || columns <= 0) return null;
+  // Every week in view outweighs larger squares: only a field that already scrolls trades the
+  // comfortable size for the panel's height.
+  const widthCell = fitHeatmapCell(fieldWidth, columns, targetCell, gap);
+  if (widthCell === null) return null;
   const rows = 7;
   const fromHeight = fieldHeight > 0 ? Math.min(Math.floor(((fieldHeight - (rows - 1) * gap) / rows) * 100) / 100, maxCell) : 0;
   if (fromHeight > targetCell) {
@@ -213,8 +217,7 @@ export function fitHeatmapField(
       return { cell: fromHeight, columnGap };
     }
   }
-  const cell = fitHeatmapCell(fieldWidth, columns, targetCell, gap);
-  return cell === null ? null : { cell, columnGap: gap };
+  return { cell: widthCell, columnGap: gap };
 }
 
 /** The number of columns a grid's cells occupy. */
