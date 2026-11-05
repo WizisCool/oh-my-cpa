@@ -64,3 +64,22 @@ func TestReferenceLinksRejectExecutableSchemesAndCredentials(t *testing.T) {
 		t.Fatalf("links: %#v", links)
 	}
 }
+func TestReferenceCostsRequireAnExactIdentity(t *testing.T) {
+	cost := []ReferenceCost{{Input: 5, Output: 30, Providers: []string{"azure"}}}
+	catalog := Catalog{
+		Models:         map[string]Model{"maker/model": {ID: "maker/model"}, "maker/bare": {ID: "maker/bare"}},
+		Aliases:        map[string]string{"model": "maker/model", "bare": "maker/bare"},
+		ReferenceCosts: map[string][]ReferenceCost{"maker/model": cost},
+	}
+	for _, identity := range []string{"model", "maker/model", " model "} {
+		if canonical, costs := catalog.ReferenceCostsFor(identity); canonical != "maker/model" || len(costs) != 1 {
+			t.Errorf("costs %q = %q %#v", identity, canonical, costs)
+		}
+	}
+	// Specifications follow these forms; prices do not.
+	for _, identity := range []string{"model-high", "model:free", "relay/model", "bare", "absent"} {
+		if canonical, costs := catalog.ReferenceCostsFor(identity); canonical != "" || costs != nil {
+			t.Errorf("priced %q as %q", identity, canonical)
+		}
+	}
+}

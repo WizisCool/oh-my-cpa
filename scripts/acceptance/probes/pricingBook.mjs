@@ -32,6 +32,13 @@ const OPUS = upstream('anthropic/claude-opus-5.5', 4, 20);
 const SONNET = upstream('anthropic/claude-sonnet-4.5', 3, 15);
 const SONNET_CANDIDATE = { model: SONNET, kind: 'automatic', match_kind: 'date_stripped' };
 
+// OpenRouter lists no model by this name; models.dev providers disagree about its rate.
+const REFERENCED = 'unpriced-model-00';
+const REFERENCE_PRICES = [
+  { source: 'models.dev', model: 'openai/unpriced-model-00', providers: ['azure', 'openai', 'vercel', 'aihubmix'], prompt_price_per_1m: 5, completion_price_per_1m: 30, cache_read_price_per_1m: 1.25 },
+  { source: 'models.dev', model: 'openai/unpriced-model-00', providers: ['digitalocean'], prompt_price_per_1m: 8, completion_price_per_1m: 30 },
+];
+
 const usage = (requests, cost) => ({ requests, priced_requests: cost == null ? 0 : requests, cost_usd: cost });
 
 function book() {
@@ -79,7 +86,9 @@ function modelDetail(model) {
     model,
     price: current,
     automatic: model === 'gpt-6-sol' ? { model: SOL, match_kind: 'exact' } : current?.candidate ? { model: SONNET, match_kind: 'date_stripped' } : null,
-    suggestions: model === 'gpt-5.4-mini-high' ? [MINI] : [],
+    // A resembling OpenRouter model must not outrank rates published for this exact name.
+    suggestions: model === 'gpt-5.4-mini-high' ? [MINI] : model === REFERENCED ? [OPUS] : [],
+    reference_prices: model === REFERENCED ? REFERENCE_PRICES : [],
     candidate: current?.candidate ?? null,
     versions: current ? [{ id: 1, available: true, effective_from_ms: current.updated_at_ms, price: current }] : [],
     profile: { samples: 30, input: 18_000, output: 2_000, cache_read: 9_000, cache_write: 1_000, max_input: 300_000 },
@@ -293,6 +302,30 @@ export async function pricingBook({ base, page, check, writes }) {
   check('search reaches catalog entries beyond the first fifty', await isTrue(async () => (await picker.getByRole('option').count()) === 1 && (await picker.innerText()).includes('test/catalog-model-60'), 'catalog search'));
   check('upstream choices are text-only', (await editor.locator('img').count()) === 0);
   await editor.locator('.ant-drawer-close').click();
+
+  // ── a model OpenRouter does not list starts from its published reference rates ──
+  await search.fill('unpriced model 00');
+  await list.locator(`[data-testid="pricing-row-edit"][aria-label$=": ${REFERENCED}"]`).click();
+  const references = editor.locator('[data-testid="pricing-reference-prices"] li');
+  check(
+    'an unmatched model opens on custom rates listing every disagreeing reference rate',
+    await isTrue(async () => (await references.count()) === 2 && await promptInput.isVisible(), 'the reference rates'),
+    await editor.innerText(),
+  );
+  check('the reference rates are not applied before the operator picks one', (await promptInput.inputValue()) === '');
+  await references.nth(1).getByRole('button').click();
+  const cacheReadInput = editor.locator('input[data-testid="pricing-rate-cacheRead"], [data-testid="pricing-rate-cacheRead"] input').first();
+  check('filling a reference leaves an unlisted cache rate empty', (await promptInput.inputValue()) === '8' && (await cacheReadInput.inputValue()) === '');
+  await editor.locator('[data-testid="pricing-editor-save"]').click();
+  const referenceWrite = await isTrue(async () => writes.some((write) => write.kind === 'model' && write.model === REFERENCED), 'the reference write')
+    ? writes.find((write) => write.kind === 'model' && write.model === REFERENCED) : null;
+  check(
+    'an adopted reference rate saves as an ordinary custom price',
+    referenceWrite?.body.mode === 'custom' && referenceWrite.body.prompt_price_per_1m === 8 && referenceWrite.body.completion_price_per_1m === 30,
+    JSON.stringify(referenceWrite),
+  );
+  await isTrue(async () => !(await editor.isVisible()), 'the editor closing');
+  await search.fill('');
 
   const originalViewport = page.viewportSize();
   await page.setViewportSize({ width: 390, height: 844 });
