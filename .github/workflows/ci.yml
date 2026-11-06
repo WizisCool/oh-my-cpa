@@ -159,6 +159,20 @@ jobs:
           git diff --check
           test -z "$(git status --porcelain)"
 
+  probes:
+    needs: [static, browser]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all verification lanes
+        env:
+          STATIC: ${{ needs.static.result }}
+          BROWSER: ${{ needs.browser.result }}
+        run: |
+          test "$STATIC" = success
+          test "$BROWSER" = success
+
   verify:
     needs: [static, browser]
     if: always()
