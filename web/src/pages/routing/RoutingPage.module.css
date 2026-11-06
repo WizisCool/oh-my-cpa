@@ -63,7 +63,7 @@
 
 /* A link is the line a request falls down at rest and a landing strip while a card is in flight. It
    keeps one height either way: the page must not move under a card the hand has just lifted. */
-.link { position: relative; display: flex; align-items: center; height: 32px; padding-left: 44px; }
+.link { position: relative; display: flex; align-items: center; padding-left: 44px; }
 .link::before {
   content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px;
   background: color-mix(in srgb, var(--fg) 14%, transparent);
@@ -84,27 +84,16 @@
 @keyframes link-open { from { opacity: 0; transform: scaleX(0.92); } }
 @keyframes link-label-in { from { opacity: 0; transform: translateX(-6px); } }
 
+/* The row a tier folds in: Motion owns its height and opacity (`useFold`), and it has no padding or
+   border for that fold to measure, so the band it holds keeps its whole box until the row closes. */
+.tier-fold { position: relative; }
 .tier {
   position: relative; display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 12px; padding: 10px 12px;
   border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface);
-  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
-}
-/* A tier a move closed folds away where it stood, with its link: the outline fades as the space
-   closes, so the tiers below rise into place. */
-.tier-exit {
-  height: 0; margin: 0; padding: 0; overflow: hidden; list-style: none; pointer-events: none;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface);
-  animation: tier-fold var(--motion-slow) var(--ease-standard) forwards;
-}
-@keyframes tier-fold {
-  from { height: var(--exit-height); opacity: 0.6; }
-  60% { opacity: 0; }
-  to { height: 0; opacity: 0; border-width: 0; }
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard);
 }
 /* Only the band a card is about to land in lifts; the rest of the route stays flat. */
 .tier-over { border-color: var(--accent); box-shadow: var(--shadow-float); }
-/* A tier no request reaches - every member disabled, or none serving the chosen model - recedes. */
-.tier-skipped { opacity: 0.55; }
 .tier-gutter { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 2px; }
 .tier-step {
   display: inline-flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 24px;

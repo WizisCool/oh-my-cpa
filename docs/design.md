@@ -136,6 +136,17 @@ a value means, not internal version history or defensive disclaimers.
 Motion explains a state transition; it must not delay the action it describes. Keep
 transitions short and interruptible, preserving semantic values and focus while visual
 readouts settle. Do not animate every item on a large mount or duplicate scroll ownership.
+The console's motion is brisk: it answers the hand at once and is finished before anyone
+waits for it, critically damped rather than bouncy.
+
+Elements React renders animate with Motion through [`web/src/motion`](../web/src/motion/index.tsx)
+only: its named springs, its reduced-motion policy and its `MotionScope`, which keeps the
+library in the consuming route's lazy chunk. Give `animate` a target whose identity is
+stable across renders; a fresh object reads as a new target and fights a running exit.
+A height fold animates a wrapper with no padding or border and the visible box sits inside it:
+Motion measures `auto` in the state it is heading for, so padding folding alongside would stall
+the motion short of its end and snap the rest.
+Library overlays (drawers, dialogs, menus) keep the CSS motion tokens in `index.css`.
 
 Honor reduced motion and visibility changes. Timers, observers, animation frames,
 subscriptions and native listeners belong to a disposable lifetime. Background or

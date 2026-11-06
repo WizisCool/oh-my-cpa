@@ -29,7 +29,7 @@ import { StatusLabel } from '../../components/common/StatusLabel';
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, HolderOutlined, VerticalAlignTopOutlined } from '../../components/icons';
 import type { RoutingMember, RoutingStrategy } from '../../types/routing';
 import type { RouteMemberState, RoutePreview, RouteStep, RoutingDropTarget, RoutingTier } from '../../types/routingPlan';
-import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import { AnimatePresence, INSTANT, MotionScope, m, useIsPresent, useSpringTransition } from '../../motion';
 import { useWheelStep } from '../../hooks/useWheelStep';
 import { useSortGuard } from '../../components/common/sortGuard';
 import { useRoutingCardOrder } from './useRoutingCardOrder';
@@ -195,14 +195,14 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
     const data = over?.data.current as DropData | undefined;
     if (!current || !over || !data) return;
     if (data.kind === 'gap') {
-      presence.arm();
+      move.arm();
       onMove(current.key, data);
       return;
     }
     const tierId = tierOf(current.tiers, current.key);
     if (!tierId) return;
     if (tierId !== current.origin) {
-      presence.arm();
+      move.arm();
       onMove(current.key, { kind: 'tier', tierId });
     }
     order.arrange(current.tiers);
@@ -216,11 +216,11 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
     }));
   };
 
-  const presence = useTierPresence(drawn);
+  const move = useLocalMove(drawn);
   const arranging: TierLadderProps = {
     ...props,
-    onStep: (key, direction) => { presence.arm(); props.onStep(key, direction); },
-    onSplit: (key, side) => { presence.arm(); props.onSplit(key, side); },
+    onStep: (key, direction) => { move.arm(); props.onStep(key, direction); },
+    onSplit: (key, side) => { move.arm(); props.onSplit(key, side); },
   };
   const dragged = drag ? members.get(drag.key) : undefined;
   const isDragging = Boolean(drag);
@@ -234,51 +234,53 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
           <span className={styles['flow-node-label']}>{t('orch.entry')}</span>
           {entry}
         </div>
-        <ol className={styles['ladder']} aria-label={t('orch.ladder')}>
-          <TierLink index={0} isActive={isDragging} />
-          {presence.rows.map((row) => row.kind === 'leaving' ? (
-            <TierExit key={`leaving-${row.tier.id}`} height={row.height} onDone={() => presence.release(row.tier.id)} />
-          ) : (
-            <React.Fragment key={row.tier.id}>
-              <TierBand
-                isEntering={presence.entering.has(row.tier.id)}
-                measureRef={presence.measure(row.tier.id)}
-                tier={row.tier}
-                index={row.index}
-                priority={tierPriorities[row.index]}
-                strategy={strategy}
-                step={steps.get(row.tier.id)}
-                isLens={isLens}
-                isTarget={Boolean(drag) && dropTier === row.tier.id && row.tier.id !== drag?.origin}
-              >
-                <SortableContext
-                  id={row.tier.id}
-                  items={row.tier.memberKeys.filter((key) => !(isLens && preview.states.get(key) === 'ineligible'))}
-                  strategy={LAID_OUT}
+        <MotionScope>
+          <ol className={styles['ladder']} aria-label={t('orch.ladder')}>
+            <TierLink id="top" index={0} isActive={isDragging} isMove={move.isMove} />
+            {/* A tier a move opens unfolds with the link below it; one a move closes folds away where
+                it stood. `custom` tells a leaving tier whether its leaving was that move. */}
+            <AnimatePresence initial={false} custom={move.isMove}>
+              {drawn.flatMap((tier, index) => [
+                <TierBand
+                  key={tier.id}
+                  isMove={move.isMove}
+                  tier={tier}
+                  index={index}
+                  priority={tierPriorities[index]}
+                  strategy={strategy}
+                  step={steps.get(tier.id)}
+                  isLens={isLens}
+                  isTarget={Boolean(drag) && dropTier === tier.id && tier.id !== drag?.origin}
                 >
-                  {row.tier.memberKeys.map((key, position) => {
-                    const member = members.get(key);
-                    return member ? (
-                      <RoutingCard
-                        key={key}
-                        {...arranging}
-                        member={member}
-                        tierIndex={row.index}
-                        tierCount={tiers.length}
-                        isAlone={row.tier.memberKeys.length === 1}
-                        isFirstInTier={position === 0}
-                        isLastInTier={position === row.tier.memberKeys.length - 1}
-                        isServingTier={steps.get(row.tier.id)?.isPrimary ?? false}
-                        onShift={(direction) => shift(key, direction)}
-                      />
-                    ) : null;
-                  })}
-                </SortableContext>
-              </TierBand>
-              <TierLink index={row.index + 1} isActive={isDragging} />
-            </React.Fragment>
-          ))}
-        </ol>
+                  <SortableContext
+                    id={tier.id}
+                    items={tier.memberKeys.filter((key) => !(isLens && preview.states.get(key) === 'ineligible'))}
+                    strategy={LAID_OUT}
+                  >
+                    {tier.memberKeys.map((key, position) => {
+                      const member = members.get(key);
+                      return member ? (
+                        <RoutingCard
+                          key={key}
+                          {...arranging}
+                          member={member}
+                          tierIndex={index}
+                          tierCount={tiers.length}
+                          isAlone={tier.memberKeys.length === 1}
+                          isFirstInTier={position === 0}
+                          isLastInTier={position === tier.memberKeys.length - 1}
+                          isServingTier={steps.get(tier.id)?.isPrimary ?? false}
+                          onShift={(direction) => shift(key, direction)}
+                        />
+                      ) : null;
+                    })}
+                  </SortableContext>
+                </TierBand>,
+                <TierLink key={`link-${tier.id}`} id={tier.id} index={index + 1} isActive={isDragging} isMove={move.isMove} />,
+              ])}
+            </AnimatePresence>
+          </ol>
+        </MotionScope>
         <div className={styles['flow-exit']}>
           <span className={styles['flow-node']} aria-hidden="true" />
           <span className={styles['flow-node-label']}>{t('orch.exit')}</span>
@@ -296,20 +298,89 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
  * The link between two tiers: the line a request falls down at rest, and while a card is in hand a
  * place for a tier of its own. The line says enough at rest; the label appears only for the drag.
  */
-const TierLink: React.FC<{ index: number; isActive: boolean }> = ({ index, isActive }) => {
+const TierLink: React.FC<{ id: string; index: number; isActive: boolean; isMove: boolean }> = ({ id, index, isActive, isMove }) => {
   const t = useT();
-  const { setNodeRef, isOver } = useDroppable({ id: `gap-${index}`, data: { kind: 'gap', index } satisfies RoutingDropTarget, disabled: !isActive });
+  const isPresent = useIsPresent();
+  const fold = useFold();
+  // Gaps are numbered by position, so a leaving link takes a name of its own: under its old number
+  // it would unregister the live link that now holds that number.
+  const { setNodeRef, isOver } = useDroppable({
+    id: isPresent ? `gap-${index}` : `gap-leaving-${id}`,
+    data: { kind: 'gap', index } satisfies RoutingDropTarget,
+    disabled: !isActive || !isPresent,
+  });
   return (
-    <li
+    <m.li
       ref={setNodeRef}
-      data-gap={index}
+      data-gap={isPresent ? index : undefined}
       aria-hidden="true"
-      className={clsx(styles['link'], isActive && styles['link-active'], isOver && styles['link-over'])}
+      className={clsx(styles['link'], isActive && isPresent && styles['link-active'], isOver && styles['link-over'])}
+      custom={isMove}
+      variants={fold.variants}
+      initial={isMove ? 'folded' : false}
+      animate={fold.linkOpen}
+      exit="folded"
     >
-      {isActive && <span className={styles['link-label']}>{t('orch.new_tier_here')}</span>}
-    </li>
+      {isActive && isPresent && <span className={styles['link-label']}>{t('orch.new_tier_here')}</span>}
+    </m.li>
   );
 };
+
+/** A link's height: owned here rather than in the stylesheet, since the link unfolds to it. */
+const LINK_HEIGHT = 32;
+/** A tier no request reaches recedes to this. */
+const SKIPPED_OPACITY = 0.55;
+
+/**
+ * Folded is how a tier or link starts when a move opens it and ends when a move closes it. A change
+ * the operator did not make here - a reload, an applied plan - renumbers the route, and is drawn as
+ * it is: the variant reads whether its coming or going was a move.
+ */
+function useFold() {
+  const settle = useSpringTransition('settle');
+  const leave = useSpringTransition('leave');
+  // A fold animates only height and opacity, on an element with no padding or border of its own:
+  // Motion turns `auto` into pixels by measuring the element in the state it is heading for, and
+  // padding still on its way there would be measured with it - the fold would ease towards the
+  // padding's height, stall there, and snap shut.
+  // Every target keeps its identity across renders. A tier re-renders as it starts to leave, and a
+  // fresh target - its `transition` a new object - reads to Motion as a changed one: it would run
+  // against the exit and hold the tier open. Dropping the target instead sends Motion back to the
+  // height it first read, which holds the tier open just the same.
+  return React.useMemo(() => {
+    const tierOpen = (opacity: number) => ({
+      height: 'auto', opacity, transition: settle, transitionEnd: { overflow: 'visible' },
+    });
+    return {
+      variants: {
+        folded: (isMove: boolean) => ({
+          height: 0, opacity: 0, overflow: 'hidden',
+          transition: isMove ? leave : INSTANT,
+        }),
+      },
+      tierOpen: tierOpen(1),
+      tierSkipped: tierOpen(SKIPPED_OPACITY),
+      linkOpen: { height: LINK_HEIGHT, opacity: 1, transition: settle, transitionEnd: { overflow: 'visible' } },
+    };
+  }, [settle, leave]);
+}
+
+/**
+ * Whether the tiers drawn now are the result of a move the operator just made here. A move is armed
+ * just before it is handed up, in the same event, so the next render either draws that move or
+ * brings none - a move refused or changing nothing. The arm lasts that one render either way: left
+ * standing, it would claim the next change that arrived from elsewhere, a reload or an applied plan.
+ */
+function useLocalMove(tiers: readonly RoutingTier[]) {
+  const isArmed = React.useRef(false);
+  const drawnTiers = React.useRef(tiers);
+  const isMove = isArmed.current && drawnTiers.current !== tiers;
+  React.useLayoutEffect(() => {
+    drawnTiers.current = tiers;
+    isArmed.current = false;
+  });
+  return { isMove, arm: () => { isArmed.current = true; } };
+}
 
 const TierBand: React.FC<{
   tier: RoutingTier;
@@ -320,31 +391,24 @@ const TierBand: React.FC<{
   isLens: boolean;
   /** The card in hand would join this tier if let go now. */
   isTarget: boolean;
-  /** The tier was just opened by a move and unfolds into the route. */
-  isEntering: boolean;
-  measureRef: (element: HTMLElement | null) => void;
+  /** The tier's coming or going is a move the operator just made, and is animated. */
+  isMove: boolean;
   children: React.ReactNode;
-}> = ({ tier, index, priority, strategy, step, isLens, isTarget, isEntering, measureRef, children }) => {
+}> = ({ tier, index, priority, strategy, step, isLens, isTarget, isMove, children }) => {
   const t = useT();
-  const { setNodeRef } = useDroppable({ id: `tier-${tier.id}`, data: { kind: 'tier', tierId: tier.id } satisfies RoutingDropTarget });
-  const node = React.useRef<HTMLLIElement | null>(null);
-  const ref = React.useCallback((element: HTMLLIElement | null) => {
-    node.current = element;
-    setNodeRef(element);
-    measureRef(element);
-  }, [measureRef, setNodeRef]);
-  // An opened tier unfolds from the link it was dropped on: it grows from nothing to its height,
-  // taking the new link's height with it, so the tiers below slide down instead of jumping.
+  // A leaving tier is no longer part of the route: it drops its name and its cards (the card that
+  // left it is already drawn where it went) and takes no drop while it folds away.
+  const isPresent = useIsPresent();
+  const fold = useFold();
+  const isSkipped = !step;
+  // The cards go the moment the tier starts leaving, but the space they took stays until the fold
+  // closes it: a row that dropped to the empty tier's height first would jolt the fold's first frame.
+  const cardsRef = React.useRef<HTMLUListElement>(null);
+  const cardsHeight = React.useRef<number | undefined>(undefined);
   React.useLayoutEffect(() => {
-    const element = node.current;
-    if (!isEntering || !element || typeof element.animate !== 'function') return;
-    const style = getComputedStyle(element);
-    const height = element.getBoundingClientRect().height;
-    element.animate([
-      { height: '0px', marginTop: '-32px', paddingTop: '0px', paddingBottom: '0px', borderWidth: '0px', opacity: 0, overflow: 'hidden' },
-      { height: `${height}px`, marginTop: '0px', paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, borderWidth: style.borderTopWidth, opacity: 1, overflow: 'hidden' },
-    ], { duration: 220, easing: 'cubic-bezier(0.2, 0, 0, 1)' });
-  }, [isEntering]);
+    if (isPresent && cardsRef.current) cardsHeight.current = cardsRef.current.offsetHeight;
+  });
+  const { setNodeRef } = useDroppable({ id: `tier-${tier.id}`, data: { kind: 'tier', tierId: tier.id } satisfies RoutingDropTarget, disabled: !isPresent });
   const sharing = step?.members.filter((member) => member.state === 'serving' || member.state === 'standby').length ?? 0;
   let role: string;
   if (step?.isPrimary) {
@@ -356,118 +420,43 @@ const TierBand: React.FC<{
     role = t(isLens ? 'orch.tier_skipped_model' : 'orch.tier_skipped');
   }
   return (
-    <li
-      ref={ref}
-      className={clsx(styles['tier'], isTarget && styles['tier-over'], step?.isPrimary && styles['tier-primary'], !step && styles['tier-skipped'])}
-      aria-label={t('orch.tier', { n: index + 1 })}
+    <m.li
+      ref={setNodeRef}
+      className={styles['tier-fold']}
+      aria-label={isPresent ? t('orch.tier', { n: index + 1 }) : undefined}
+      aria-hidden={isPresent ? undefined : true}
+      custom={isMove}
+      variants={fold.variants}
+      initial={isMove ? 'folded' : false}
+      // A tier no request reaches recedes; Motion owns the tier's opacity, so that state eases too.
+      animate={isSkipped ? fold.tierSkipped : fold.tierOpen}
+      exit="folded"
     >
-      <div className={styles['tier-gutter']}>
-        <span className={styles['tier-step']}>{index + 1}</span>
-        <span className={styles['tier-meta']}>
-          <span className={styles['tier-name']}>{t('orch.tier', { n: index + 1 })}</span>
-          <span className={styles['tier-priority']}>{t('omc.priority_value', { n: priority })}</span>
-        </span>
+      <div className={clsx(styles['tier'], isTarget && styles['tier-over'], step?.isPrimary && styles['tier-primary'])}>
+        <div className={styles['tier-gutter']}>
+          <span className={styles['tier-step']}>{index + 1}</span>
+          <span className={styles['tier-meta']}>
+            <span className={styles['tier-name']}>{t('orch.tier', { n: index + 1 })}</span>
+            <span className={styles['tier-priority']}>{t('omc.priority_value', { n: priority })}</span>
+          </span>
+        </div>
+        <div className={styles['tier-body']}>
+          <span className={styles['tier-role']}>
+            {role}
+            {sharing > 1 && <> · {t(IN_TIER_KEYS[strategy])}</>}
+          </span>
+          <ul
+            ref={cardsRef}
+            className={clsx(styles['tier-cards'], isPresent && tier.memberKeys.length === 0 && styles['tier-cards-vacant'])}
+            style={isPresent ? undefined : { height: cardsHeight.current }}
+          >
+            {isPresent ? children : null}
+          </ul>
+        </div>
       </div>
-      <div className={styles['tier-body']}>
-        <span className={styles['tier-role']}>
-          {role}
-          {sharing > 1 && <> · {t(IN_TIER_KEYS[strategy])}</>}
-        </span>
-        <ul className={clsx(styles['tier-cards'], tier.memberKeys.length === 0 && styles['tier-cards-vacant'])}>{children}</ul>
-      </div>
-    </li>
+    </m.li>
   );
 };
-
-type LadderRow =
-  | { kind: 'tier'; tier: RoutingTier; index: number }
-  | { kind: 'leaving'; tier: RoutingTier; height: number };
-
-/**
- * Tiers that a move opens or closes come and go with the move rather than appearing between frames:
- * an opened tier unfolds into the route and a closed one folds away where it stood. Only a move the
- * operator made here is animated, armed just before it is handed up; a board read from the server
- * (a reload, an applied plan) renumbers its tiers and is drawn as it is.
- */
-function useTierPresence(tiers: readonly RoutingTier[]) {
-  const isReduced = usePrefersReducedMotion();
-  const isArmed = React.useRef(false);
-  const previous = React.useRef(tiers);
-  const heights = React.useRef(new Map<string, number>());
-  const elements = React.useRef(new Map<string, HTMLElement>());
-  const [leaving, setLeaving] = React.useState<{ tier: RoutingTier; after: string | null; height: number }[]>([]);
-  const [entering, setEntering] = React.useState<ReadonlySet<string>>(new Set());
-
-  React.useLayoutEffect(() => {
-    const before = previous.current;
-    previous.current = tiers;
-    if (before === tiers || !isArmed.current) return;
-    isArmed.current = false;
-    if (isReduced) return;
-    const now = new Set(tiers.map((tier) => tier.id));
-    const was = new Set(before.map((tier) => tier.id));
-    const gone = before.flatMap((tier, index) => {
-      if (now.has(tier.id)) return [];
-      // A closed tier folds away after the last surviving tier that stood above it.
-      const above = before.slice(0, index).reverse().find((candidate) => now.has(candidate.id));
-      return [{ tier, after: above?.id ?? null, height: heights.current.get(tier.id) ?? 0 }];
-    });
-    const opened = tiers.filter((tier) => !was.has(tier.id)).map((tier) => tier.id);
-    if (gone.length > 0) setLeaving(gone);
-    if (opened.length > 0) setEntering(new Set(opened));
-  }, [isReduced, tiers]);
-
-  React.useEffect(() => {
-    if (entering.size === 0) return undefined;
-    const timer = window.setTimeout(() => setEntering(new Set()), 400);
-    return () => window.clearTimeout(timer);
-  }, [entering]);
-
-  const measurers = React.useRef(new Map<string, (element: HTMLElement | null) => void>());
-  const measure = (id: string) => {
-    let measurer = measurers.current.get(id);
-    if (!measurer) {
-      measurer = (element) => {
-        if (element) elements.current.set(id, element);
-        else elements.current.delete(id);
-      };
-      measurers.current.set(id, measurer);
-    }
-    return measurer;
-  };
-
-  const rows: LadderRow[] = [];
-  const pending = leaving.filter((entry) => entry.after === null);
-  for (const entry of pending) rows.push({ kind: 'leaving', tier: entry.tier, height: entry.height });
-  tiers.forEach((tier, index) => {
-    rows.push({ kind: 'tier', tier, index });
-    for (const entry of leaving) {
-      if (entry.after === tier.id) rows.push({ kind: 'leaving', tier: entry.tier, height: entry.height });
-    }
-  });
-
-  return {
-    rows,
-    entering,
-    measure,
-    // Armed before the move is handed up, while the tiers it may close are still on the page.
-    arm: () => {
-      isArmed.current = true;
-      for (const [id, element] of elements.current) heights.current.set(id, element.getBoundingClientRect().height);
-    },
-    release: (id: string) => setLeaving((current) => current.filter((entry) => entry.tier.id !== id)),
-  };
-}
-
-/** A closed tier and its link, folding from their height to nothing. */
-const TierExit: React.FC<{ height: number; onDone: () => void }> = ({ height, onDone }) => (
-  <li
-    aria-hidden="true"
-    className={styles['tier-exit']}
-    style={{ '--exit-height': `${height + 32}px` } as React.CSSProperties}
-    onAnimationEnd={(event) => { if (event.target === event.currentTarget) onDone(); }}
-  />
-);
 
 /** The card's own face, shared by the resting card and the one following the pointer. */
 const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember; className?: string; children?: React.ReactNode }> = ({ member, branding, className, children }) => {
