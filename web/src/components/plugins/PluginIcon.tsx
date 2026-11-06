@@ -7,6 +7,8 @@ interface PluginIconProps {
   logo?: string;
   className?: string;
   fallbackSize?: string;
+  /** `lazy` for a list that draws many marks at once; a visible mark loads immediately either way. */
+  loading?: 'eager' | 'lazy';
 }
 
 /**
@@ -24,12 +26,12 @@ export function PluginIcon(props: PluginIconProps) {
   return <PluginArtwork key={props.logo} {...props} />;
 }
 
-function PluginArtwork({ logo, className, fallbackSize = '1em' }: PluginIconProps) {
+function PluginArtwork({ logo, className, fallbackSize = '1em', loading }: PluginIconProps) {
   // `size="100%"` rather than a font size: each surface that draws the mark owns its box
   // (the management chip, the rail's glyph slot), and the artwork fills it. A `1em` size here
   // lands as an inline style on the image, which no surface rule could then override, so every
   // published logo was drawn at one text glyph in the middle of a 44-48px chip.
-  return <MarkArtwork artworks={pluginLogoArtworks(logo)} size="100%" fallback={<PuzzleOutlined size={fallbackSize} />}>
+  return <MarkArtwork artworks={pluginLogoArtworks(logo)} size="100%" loading={loading} fallback={<PuzzleOutlined size={fallbackSize} />}>
     {(artwork, content) => <span
       className={[styles.icon, className].filter(Boolean).join(' ')}
       aria-hidden="true"

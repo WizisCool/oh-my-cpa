@@ -63,8 +63,9 @@ func newPluginIdentityCache() *pluginIdentityCache {
 	return &pluginIdentityCache{entries: make(map[string]pluginIdentity), now: time.Now}
 }
 
-// remember records the installed entries of a store listing. Artwork follows the same
-// source rule as store cards, so filling an identity gap cannot trust another publisher.
+// remember records the installed entries of a store listing. Artwork follows the same rule as
+// every other surface, so an installed plugin CPA reports without a mark still gets the one the
+// registry publishes for it.
 func (c *pluginIdentityCache) remember(plugins []management.StorePluginItem) {
 	if c == nil {
 		return
@@ -79,7 +80,7 @@ func (c *pluginIdentityCache) remember(plugins []management.StorePluginItem) {
 			Name:    strings.TrimSpace(plugin.Name),
 			Author:  strings.TrimSpace(plugin.Author),
 			Version: strings.TrimSpace(plugin.InstalledVersion),
-			Logo:    projectStorePluginLogo(plugin),
+			Logo:    projectPluginLogo(plugin.Logo),
 		}
 		// Two registries may list the same installed id. The copy CPA says it was installed
 		// from describes the file on disk; otherwise the first listing with a name stands.

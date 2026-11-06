@@ -280,17 +280,15 @@ try {
   browser = await launchBrowser(chromium, { headless: true });
   cancellation.signal.throwIfAborted();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
-  network = await guardBrowserContext(context, [appURL, FAKE_INSTALLED_PLUGIN_LOGO_URL]);
+  network = await guardBrowserContext(context, [appURL, FAKE_INSTALLED_PLUGIN_LOGO_URL, FAKE_UNINSTALLED_PLUGIN_LOGO_URL]);
   page = await context.newPage();
-  // This one declared image is synthetic; no publisher is contacted by acceptance.
-  await page.route(FAKE_INSTALLED_PLUGIN_LOGO_URL, (route) => route.fulfill({
-    contentType: 'image/svg+xml',
-    body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#2a78d6"/></svg>',
-  }));
-  const uninstalledLogoRequests = [];
-  page.on('request', (request) => {
-    if (request.url() === FAKE_UNINSTALLED_PLUGIN_LOGO_URL) uninstalledLogoRequests.push(request.url());
-  });
+  // These two declared images are synthetic; no publisher is contacted by acceptance.
+  for (const logoURL of [FAKE_INSTALLED_PLUGIN_LOGO_URL, FAKE_UNINSTALLED_PLUGIN_LOGO_URL]) {
+    await page.route(logoURL, (route) => route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#2a78d6"/></svg>',
+    }));
+  }
   const responseBodies = [];
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
@@ -357,14 +355,15 @@ try {
   ]);
 
   await page.goto(`${appURL}/plugins/store`, { waitUntil: 'domcontentloaded' });
-  const installedLogo = page.locator('[data-store-id="official/fixture-logger"] img');
-  await installedLogo.waitFor({ state: 'visible' });
-  await installedLogo.evaluate((image) => image.decode());
-  check('a source-matched installed plugin loads its catalog artwork',
-    await installedLogo.getAttribute('src') === FAKE_INSTALLED_PLUGIN_LOGO_URL);
-  check('an uninstalled store entry keeps a placeholder without requesting its declared URL',
-    await page.locator('[data-store-id="official/fixture-limiter"] img').count() === 0
-      && uninstalledLogoRequests.length === 0);
+  // Both cards draw the artwork their registry publishes: a store is how an operator picks a
+  // plugin, so its marks cannot be a privilege of the entries already installed.
+  for (const [storeID, logoURL] of [['official/fixture-logger', FAKE_INSTALLED_PLUGIN_LOGO_URL], ['official/fixture-limiter', FAKE_UNINSTALLED_PLUGIN_LOGO_URL]]) {
+    const cardArtwork = page.locator(`[data-store-id="${storeID}"] img`);
+    await cardArtwork.waitFor({ state: 'visible' });
+    await cardArtwork.evaluate((image) => image.decode());
+    check(`the ${storeID} store card loads the artwork its registry publishes`,
+      await cardArtwork.getAttribute('src') === logoURL);
+  }
 
   await runRequestListAcceptance({ appURL, page, check });
   await runMcpAcceptance({ appURL, page, check });

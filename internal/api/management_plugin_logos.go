@@ -8,8 +8,8 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
-// Inline artwork is part of the plugin-list response; remote artwork is loaded by
-// the browser, so a server without an egress route can still present plugin branding.
+// maxPluginLogoBytes bounds the inline artwork one plugin may add to a response. It is measured on
+// the image, not its encoding; see inlineImageMediaType.
 const maxPluginLogoBytes = 512 * 1024
 
 var renderableLogoMediaTypes = map[string]bool{
@@ -23,8 +23,22 @@ var renderableLogoMediaTypes = map[string]bool{
 	"image/vnd.microsoft.icon": true,
 }
 
-// projectPluginLogo accepts self-contained artwork or a publisher's absolute HTTP(S)
-// URL. Credentials and relative paths are not part of the image-source contract.
+/**
+ * projectPluginLogo is the one artwork rule every surface that draws a plugin's mark applies.
+ *
+ * A plugin publishes its logo as an inline image or an absolute URL, and the browser loads it
+ * directly: the console has no egress proxy of its own, so a deployment without an outbound route
+ * still shows the publisher's artwork. The same rule therefore covers the installed list, the
+ * catalog, and the identity a catalog entry fills for an installed plugin. A second rule for
+ * catalog entries is what drew a wall of placeholders: browsing a registry is how an operator finds
+ * a plugin, so hiding every publisher mark until the plugin was installed hid the very artwork the
+ * cards exist to show.
+ *
+ * What stays refused is a source the browser cannot load as an image: relative paths (resolved
+ * against the console's origin they request the wrong resource), credential-bearing URLs, and
+ * anything that is neither HTTP(S) nor a bounded inline image. The public demo withholds external
+ * artwork separately, because its dataset must not make a reader's browser contact a publisher.
+ */
 func projectPluginLogo(logo string) string {
 	logo = strings.TrimSpace(logo)
 	if inline := projectInlinePluginLogo(logo); inline != "" {
@@ -38,15 +52,6 @@ func projectPluginLogo(logo string) string {
 		return ""
 	}
 	return logo
-}
-
-// Catalog artwork can make browser requests only after the operator installed this
-// copy from this source. Browsing a registry alone grants no network authority.
-func projectStorePluginLogo(plugin management.StorePluginItem) string {
-	if plugin.Installed && plugin.InstallSourceStatus == "matched" {
-		return projectPluginLogo(plugin.Logo)
-	}
-	return projectInlinePluginLogo(plugin.Logo)
 }
 
 // The public demo uses only self-contained plugin artwork.

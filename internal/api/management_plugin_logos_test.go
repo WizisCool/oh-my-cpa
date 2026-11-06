@@ -58,27 +58,31 @@ func TestPluginLogoProjection(t *testing.T) {
 		name      string
 		installed bool
 		status    string
-		canLoad   bool
 	}{
 		{name: "available"},
 		{name: "available-matched", status: "matched"},
 		{name: "installed-unknown", installed: true},
 		{name: "installed-different", installed: true, status: "different"},
-		{name: "installed-matched", installed: true, status: "matched", canLoad: true},
+		{name: "installed-matched", installed: true, status: "matched"},
 	} {
 		t.Run(source.name, func(t *testing.T) {
+			// Artwork is the publisher's, not a privilege of installation: a card in the store
+			// draws the registries' marks whether or not the operator has installed the entry.
 			for _, remote := range []string{"https://cdn.example.test/logo.png", "http://127.0.0.1:8317/logo.png"} {
 				plugin := management.StorePluginItem{ID: "catalog-logo", Installed: source.installed, InstallSourceStatus: source.status, Logo: remote}
-				want := ""
-				if source.canLoad {
-					want = remote
+				if got := projectStorePlugin(plugin).Logo; got != remote {
+					t.Errorf("store logo = %q, want %q for %s", got, remote, source.name)
 				}
-				if got := projectStorePlugin(plugin).Logo; got != want {
-					t.Errorf("store logo = %q, want %q for %s", got, want, source.name)
-				}
-				plugin.Logo = "data:image/svg+xml,%3Csvg/%3E"
-				if got := projectStorePlugin(plugin).Logo; got != plugin.Logo {
-					t.Errorf("inline store logo = %q, want %q", got, plugin.Logo)
+			}
+			plugin := management.StorePluginItem{ID: "catalog-logo", Installed: source.installed, InstallSourceStatus: source.status, Logo: "data:image/svg+xml,%3Csvg/%3E"}
+			if got := projectStorePlugin(plugin).Logo; got != plugin.Logo {
+				t.Errorf("inline store logo = %q, want %q", got, plugin.Logo)
+			}
+			// The store applies the same image contract as every other surface.
+			for _, unusable := range []string{"/assets/logo.png", "icons/logo.png", "https://user:pass@cdn.example.test/logo.png"} {
+				plugin := management.StorePluginItem{ID: "catalog-logo", Installed: source.installed, InstallSourceStatus: source.status, Logo: unusable}
+				if got := projectStorePlugin(plugin).Logo; got != "" {
+					t.Errorf("store logo = %q, want no artwork for %q", got, unusable)
 				}
 			}
 		})

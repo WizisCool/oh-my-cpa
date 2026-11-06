@@ -287,12 +287,18 @@ export const SystemPage: React.FC = () => {
   const [isPollingMaintenance, setIsPollingMaintenance] = useState(false);
   const [isVacuumModalOpen, setIsVacuumModalOpen] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<ReleaseProduct | null>(null);
-  // The completed outcome the page shows, which is deliberately not the server's last job.
-  // The server retains its terminal record for the life of the process, so rendering that
-  // directly would pin the panel to a result from a previous session - one the reader cannot
-  // clear, because every reload re-reads it. This snapshot is set only for a job this page
-  // actually observed finish, and clearing it is local and therefore permanent for the reader.
+  // The completed outcome this page observed, which is deliberately not the server's last job.
+  // The server retains its terminal record for the life of the process, so rendering that directly
+  // would pin the panel to a result from a previous session - one the reader cannot clear, because
+  // every reload re-reads it.
   const [displayedOutcome, setDisplayedOutcome] = useState<SystemMaintenanceStatus | null>(null);
+  // The outcome the reader dismissed. The verdict survives the dismissal - a job this page watched
+  // finish is not running, whatever an older reading says - while the panel stays closed. Only the
+  // panel is the reader's to clear; the status is this page's own observation.
+  const [dismissedOutcomeJobID, setDismissedOutcomeJobID] = useState<number | null>(null);
+  // The backend process the outcome belongs to. Job ids restart with a new process, so an outcome
+  // is evidence about the job of that number only while the process is the same one.
+  const [outcomeProcessStart, setOutcomeProcessStart] = useState<number | null>(null);
 
   const hasMountedCheckRef = useRef(false);
   // The last job completion already reported, so a terminal status is handled once rather than on
@@ -349,7 +355,16 @@ export const SystemPage: React.FC = () => {
     observedJobRef.current = null;
     reportedCompletionRef.current = 0;
     setDisplayedOutcome(null);
-  }, [sysInfo?.runtime.started_at_ms]);
+    setDismissedOutcomeJobID(null);
+    setOutcomeProcessStart(null);
+    // A poll still in flight was sent to the process that just went away, and its answer belongs to
+    // that process's job ids. The new process numbers its jobs from one again, so the answer could
+    // otherwise pass for this process's terminal record - ending the poll for a job that is holding
+    // the write gate - or for a job that superseded it. Cancel it and let adoption start a fresh
+    // poll of the process that is answering now.
+    void queryClient.cancelQueries({ queryKey: ['management-system-maintenance'], exact: true });
+    setIsPollingMaintenance(false);
+  }, [sysInfo?.runtime.started_at_ms, queryClient]);
 
   // A running job reported by the page's own read is adopted and polled to its end: a job
   // admitted before this page was opened, or admitted elsewhere while it is open, is real work
@@ -390,7 +405,17 @@ export const SystemPage: React.FC = () => {
   // job's terminal state, and letting it win thereafter would pin the panel to a job the
   // operator has since moved past - including after a later page refresh reported a newer one.
   const polledMaintenance = isPollingMaintenance ? maintenanceData : undefined;
-  const effectiveMaintenance = polledMaintenance?.maintenance ?? sysInfo?.maintenance;
+  // The page's own `/management/system` read is coarser than the poll and can predate the outcome
+  // the poll just reported: it still describes the job as holding the write gate. Trusting it for
+  // the job this page watched finish flashed the in-progress banner back over the result and hid
+  // the outcome behind it for as long as the re-read took.
+  const effectiveMaintenance = polledMaintenance?.maintenance
+    ?? (displayedOutcome !== null
+      && outcomeProcessStart === (sysInfo?.runtime.started_at_ms ?? null)
+      && sysInfo?.maintenance?.running
+      && sysInfo.maintenance.job_id === displayedOutcome.job_id
+      ? displayedOutcome
+      : sysInfo?.maintenance);
   const effectiveAdmission = polledMaintenance?.maintenance_admission ?? sysInfo?.maintenance_admission;
   const isMaintenanceActive = Boolean(effectiveMaintenance?.running || submittingAction !== null);
 
@@ -423,16 +448,20 @@ export const SystemPage: React.FC = () => {
     // two jobs can start within the same millisecond, and a synchronised clock can step backwards,
     // either of which would make a later job look like one already handled.
     const observed = observedJobRef.current;
+    // A record from an *earlier* job is the stale cache entry a fresh adoption can still read: this
+    // page is following the job that replaced it, so the poll keeps running until that job's own
+    // record arrives.
+    if (observed !== null && job.job_id !== observed && job.job_id < observed) return;
+    // Otherwise this record ends what the page was waiting for, and the poll stops before the
+    // outcome is attributed: a poll left running against a state the server will never change again
+    // shows a job holding the write gate that does not. An empty observation only ends the poll;
+    // the record is the server's retained history rather than this reader's result, so it is not
+    // reported.
+    setIsPollingMaintenance(false);
     if (observed === null) return;
-    if (job.job_id !== observed && job.job_id < observed) return;
     // The observed job moves to the one being reported, so a later poll cannot re-report it and the
     // banner this poll was following does not outlive the job that replaced it.
     observedJobRef.current = job.job_id;
-
-    // The poll stops on the terminal state, whether or not this page already reported it.
-    // Returning early for an already-announced job would leave the poll running forever
-    // against a job that is never going to change again.
-    setIsPollingMaintenance(false);
 
     // A job's terminal state is handled once. The guard sits *before* the outcome is set, not after
     // it: this effect re-runs when the reading language changes, and the terminal record is still
@@ -443,6 +472,7 @@ export const SystemPage: React.FC = () => {
     reportedCompletionRef.current = job.job_id;
 
     setDisplayedOutcome(job);
+    setOutcomeProcessStart(lastProcessRef.current);
     void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
     // A rebuild is also what moves an older file into incremental mode, which the retention
     // card reports.
@@ -869,7 +899,7 @@ export const SystemPage: React.FC = () => {
               server's retained last job. The server keeps that record for the life of the process,
               so rendering it directly would resurrect a result the reader has already cleared on
               every reload. */}
-          {!effectiveMaintenance?.running && displayedOutcome && (
+          {!effectiveMaintenance?.running && displayedOutcome && displayedOutcome.job_id !== dismissedOutcomeJobID && (
             <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
               <div className={styles['maintenance-box-title']}>
                 {displayedOutcome.error ? (
@@ -903,7 +933,7 @@ export const SystemPage: React.FC = () => {
                   icon={<CloseOutlined />}
                   aria-label={t('common.close')}
                   title={t('common.close')}
-                  onClick={() => setDisplayedOutcome(null)}
+                  onClick={() => setDismissedOutcomeJobID(displayedOutcome.job_id)}
                 />
               </div>
 

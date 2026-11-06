@@ -118,6 +118,7 @@ export interface StorePluginItem {
   license?: string;
   tags: string[];
   locales?: Record<string, PluginStoreLocale>;
+  /** Inline image or absolute HTTP(S) URL, under the same rule as an installed plugin's logo. */
   logo?: string;
   install_type?: string;
   platforms: string[];

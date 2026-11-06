@@ -438,8 +438,10 @@ func TestPluginsLifecycle(t *testing.T) {
 	if _, hasLocales := community["locales"]; hasLocales {
 		t.Fatal("a legacy store response must not invent locales")
 	}
-	if storeLogo, _ := official["logo"].(string); storeLogo != "" {
-		t.Fatalf("uninstalled store logo = %q, want no external request before installation", storeLogo)
+	// The catalog is the surface an operator picks a plugin from, so a registry's artwork is
+	// drawn there too: hiding it until installation made the store a wall of placeholders.
+	if storeLogo, _ := official["logo"].(string); storeLogo != "https://cdn.example/limiter.png" {
+		t.Fatalf("uninstalled store logo = %q, want the registry's own artwork", storeLogo)
 	}
 	if _, hasHomepage := official["homepage"]; hasHomepage {
 		t.Fatalf("homepage = %#v, want a non-http link dropped", official["homepage"])
