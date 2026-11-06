@@ -118,8 +118,10 @@ func TestPluginIdentityRemembersTheStorePageAndSkipsCompletePlugins(t *testing.T
 		want      string
 	}{
 		{name: "available", logo: "https://cdn.example/logo.png"},
-		{name: "unknown", installed: true, logo: "https://cdn.example/logo.png"},
-		{name: "different", installed: true, status: "different", logo: "https://cdn.example/logo.png"},
+		// An installed plugin CPA reported without a mark gets the one the registry publishes,
+		// whichever registry that is: the store is how the operator installed it.
+		{name: "unknown", installed: true, logo: "https://cdn.example/logo.png", want: "https://cdn.example/logo.png"},
+		{name: "different", installed: true, status: "different", logo: "https://cdn.example/logo.png", want: "https://cdn.example/logo.png"},
 		{name: "matched", installed: true, status: "matched", logo: "https://cdn.example/logo.png", want: "https://cdn.example/logo.png"},
 		{name: "inline-unknown", installed: true, logo: "data:image/png;base64,AAAA", want: "data:image/png;base64,AAAA"},
 		{name: "inline-different", installed: true, status: "different", logo: "data:image/png;base64,AAAA", want: "data:image/png;base64,AAAA"},

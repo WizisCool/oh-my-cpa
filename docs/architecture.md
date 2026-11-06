@@ -64,10 +64,15 @@ it failed; preserve that outcome while reporting audit trouble appropriately.
 ### Trusted plugin pages
 
 Installing a CPA plugin is a trust decision: its same-origin page is not an untrusted
-sandbox. Registered plugin logos and catalog logos from their confirmed installation
-source may load as HTTP(S) images in the browser. Other catalog logos must be inline;
-listing a plugin does not grant its publisher access to the browser's network. The same
-source rule applies when catalog artwork fills a missing installed-plugin identity.
+sandbox. A plugin's published logo is drawn wherever its identity is, under one rule: the
+installed list, the store's cards, and the identity a catalog entry supplies for an
+installed plugin. The store is where an operator decides what to install, so its cards
+are not a lesser surface. The browser loads those HTTP(S) images itself, without a
+referrer and without OMC proxying a publisher URL: OMC needs no egress route, and a
+publisher learns nothing about the console's address. The public demo withholds external
+artwork, because its dataset must not make a reader's browser contact a publisher. What
+stays refused is a source the browser cannot load as an image: relative paths,
+credential-bearing URLs and anything that is neither HTTP(S) nor a bounded inline image.
 Trusted image URLs still use the browser's ordinary DNS and redirect behavior.
 
 The authenticated host deliberately exposes native, possibly secret-bearing responses

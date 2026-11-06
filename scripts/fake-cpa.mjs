@@ -94,8 +94,10 @@ function json(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
+// The browser loads these two publisher-declared marks; acceptance answers both locally. They share
+// one non-routable artwork origin, so the gateway's own origin stays unreachable from the page.
 export const FAKE_INSTALLED_PLUGIN_LOGO_URL = 'https://plugin-artwork.example.test/installed.svg';
-export const FAKE_UNINSTALLED_PLUGIN_LOGO_URL = 'http://127.0.0.1:8317/uninstalled-plugin-logo.svg';
+export const FAKE_UNINSTALLED_PLUGIN_LOGO_URL = 'https://plugin-artwork.example.test/catalog.svg';
 
 export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } = {}) {
   const requests = [];

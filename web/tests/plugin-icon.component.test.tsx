@@ -33,6 +33,8 @@ describe('plugin artwork', () => {
     const { container, rerender } = render(<PluginLogo logo={logo} />);
     const image = container.querySelector('img')!;
     expect(image.getAttribute('src')).toBe(logo);
+    // A publisher-hosted mark must not tell its host where the console is.
+    expect(image.getAttribute('referrerpolicy')).toBe('no-referrer');
     fireEvent.error(image);
     expect(container.querySelector('[data-plugin-logo="fallback"]')).not.toBeNull();
     rerender(<PluginLogo logo={SVG} />);

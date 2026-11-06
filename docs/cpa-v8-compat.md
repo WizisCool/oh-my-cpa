@@ -24,9 +24,11 @@ the login card did. The declared `quota_provider` also identifies the plugin's c
 family when it differs from the login and plugin IDs; it does not add a login choice.
 OMC does not infer undeclared credential families from naming similarities. Plugin logos
 may be inline images or absolute HTTP(S) URLs loaded by the browser, independently of
-OMC's egress network. Plugin sign-in and management-page actions are independent:
-an explicit sign-in request lets CPA determine the authorization flow, while a
-registered page remains available separately. Device-code and redirect controls
+OMC's egress network. A store entry CPA has not installed carries the same artwork as an
+installed one: OMC projects the catalog under one image rule rather than withholding a
+publisher's mark until installation. Plugin sign-in and management-page actions are
+independent: an explicit sign-in request lets CPA determine the authorization flow, while
+a registered page remains available separately. Device-code and redirect controls
 appear only after CPA returns an authorization URL and session identity; incomplete
 details produce an actionable error. If an incomplete response includes a session
 identity, OMC cancels it before allowing another start; failed cancellation retains

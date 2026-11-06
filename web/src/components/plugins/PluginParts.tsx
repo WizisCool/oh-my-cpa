@@ -15,7 +15,8 @@ interface PluginLogoProps {
 export function PluginLogo({ logo }: PluginLogoProps) {
   return (
     <span className={styles.logo} data-plugin-logo-chip aria-hidden="true">
-      <PluginIcon logo={logo} fallbackSize="55%" />
+      {/* A list of registries can publish dozens of marks; the ones below the fold are not read. */}
+      <PluginIcon logo={logo} fallbackSize="55%" loading="lazy" />
     </span>
   );
 }
