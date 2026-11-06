@@ -179,6 +179,24 @@ export async function oauthManagement({ base, page, check, ledger }) {
   check('dragged back, the credential restores the first order', back.isSaved && (await claudeOrder()).join() === initialClaudeOrder.join(),
     JSON.stringify({ ...back, order: await claudeOrder() }));
 
+  // A row held at the window's edge scrolls the workspace, never the document: the shell has no page
+  // scroll of its own, and moving it would slide the whole console out of the window.
+  const lastHandle = await claudeRows.last().locator('[data-reorder-handle]').boundingBox();
+  await page.mouse.move(lastHandle.x + lastHandle.width / 2, lastHandle.y + lastHandle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(lastHandle.x + lastHandle.width / 2, lastHandle.y + lastHandle.height / 2 + 6, { steps: 3 });
+  const workspaceTop = await page.evaluate(() => document.querySelector('.app-content').scrollTop);
+  await page.mouse.move(lastHandle.x + lastHandle.width / 2, page.viewportSize().height - 2, { steps: 10 });
+  // The drag is live once the workspace auto-scrolls under it; only then is the page's stillness a finding.
+  await until(() => page.evaluate((from) => document.querySelector('.app-content').scrollTop > from + 40, workspaceTop),
+    { label: 'the workspace scrolls under a row held at the window\'s edge' });
+  const pageScroll = await page.evaluate(() => ({ window: window.scrollY, root: document.scrollingElement.scrollTop, body: document.body.scrollTop,
+    document: document.scrollingElement.scrollHeight, viewport: window.innerHeight }));
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  check('a row held at the window\'s edge never scrolls the page itself',
+    pageScroll.window === 0 && pageScroll.root === 0 && pageScroll.body === 0, JSON.stringify(pageScroll));
+
   // Each provider is one section, in the console's fixed provider order, whatever the records' order.
   const sectionProviders = await page.getByTestId('oauth-credential-section').evaluateAll((sections) => sections.map((section) => section.getAttribute('data-provider')));
   check('credentials are grouped into one section per provider in the pinned order',

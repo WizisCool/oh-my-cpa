@@ -221,7 +221,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
                   </th>
                 )}
                 {!hasQuota && <th aria-hidden="true" />}
-                <th className={styles['th-actions']}><span className={styles['visually-hidden']}>{t('keys.col_actions')}</span></th>
+                <th className={styles['th-actions']}><span className="sr-only">{t('keys.col_actions')}</span></th>
               </tr>
             </thead>
             <tbody>
