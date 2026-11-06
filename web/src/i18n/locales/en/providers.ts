@@ -163,6 +163,8 @@ export default {
   'pro.model_count_pill': 'Model {n}',
   'pro.key_count_pill': 'Key {n}',
   'pro.header_count_pill': 'Header {n}',
+  'pro.key_missing_hint': 'No key: the row cannot forward requests even when switched on.',
+  'pro.health_no_key': 'No key',
   'pro.none_text': 'None',
   'pro.status_disabled': 'Disabled',
   'pro.status_active': 'Active',

@@ -163,6 +163,8 @@ export default {
   "pro.model_count_pill": "模型 {n}",
   "pro.key_count_pill": "金鑰 {n}",
   "pro.header_count_pill": "請求頭 {n}",
+  "pro.key_missing_hint": "沒有金鑰，開啟後也無法轉發請求。",
+  "pro.health_no_key": "缺少金鑰",
   "pro.none_text": "無",
   "pro.status_disabled": "已停用",
   "pro.status_active": "正常",

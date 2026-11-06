@@ -18,6 +18,7 @@ import { lookupProviderFamily, PROVIDER_FAMILIES } from '../types/providerFamili
 import { SUCCESS_RATE_HEALTHY_PERCENT, successRateTone } from '../types/usageEventMetrics';
 import { useProviderIconOverrides } from '../components/providers/useProviderIconOverrides';
 import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { useProviderList } from '../components/providers/useProviderList';
 import { useProviderManagement } from '../components/providers/useProviderManagement';
 
@@ -61,6 +62,7 @@ const STATUS_TILES: readonly { key: ProviderStatusFilter; tone: StatusTone; labe
 
 export const ProvidersPage: React.FC = () => {
   const t = useT();
+  const isPhone = useIsPhoneViewport();
   const toast = useToast();
 
   const { providerIcons, writeProviderIcon, shiftCachedProviderIcons } = useProviderIconOverrides();
@@ -296,7 +298,8 @@ export const ProvidersPage: React.FC = () => {
           </>
         )}
       >
-        {summary}
+        {/* On a phone the status filter below states the same counts, one line further down. */}
+        {!isPhone && summary}
       </PageHeader>
 
       {providersError && (

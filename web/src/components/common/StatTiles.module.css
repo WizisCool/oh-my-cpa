@@ -63,25 +63,46 @@
   color: var(--warn);
 }
 
-/* A phone keeps the strip a strip. Folded into two rows the four counts stood taller than the
-   first records they filter; one row of narrower tiles states the same four numbers in a third of
-   the height, and a label too long for its tile is cut rather than wrapped. */
+/* On a phone the strip becomes a segmented filter: one framed row, each segment its label and its
+   count on one line, the selected one filled. Four boxed tiles stood taller than the records they
+   filter and repeated the header's own summary; one line states the same four numbers and reads at
+   once as the control it is. */
 @media (max-width: 640px) {
   .stat-tiles {
-    gap: 6px;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg);
   }
   .stat-tile {
-    gap: 2px;
-    padding: 6px 8px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: calc(var(--radius-md) - 2px);
+    background: transparent;
+  }
+  .stat-tile:hover {
+    border-color: transparent;
+  }
+  /* An ink wash rather than the hover inset, which is too faint on the dark ground to mark the
+     segment that is on. */
+  .stat-tile-active {
+    background: color-mix(in srgb, var(--fg) 10%, transparent);
   }
   .stat-tile-label {
-    max-width: 100%;
+    min-width: 0;
     overflow: hidden;
     font-size: var(--text-xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .stat-tile-value {
-    font-size: var(--text-lg);
+    flex: none;
+    font-size: var(--text-sm);
   }
 }

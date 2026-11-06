@@ -10,7 +10,7 @@ import { phoneRowFields, renderedCell } from './phoneRowFields';
 import { EmptyState } from './EmptyState';
 import { Pager } from './Pager';
 
-export interface ResponsiveListPhoneLayout {
+export interface ResponsiveListPhoneFields {
   /** The column drawn as the row's headline. */
   identity: string;
   /** Columns whose rendered cells form the row's control strip, in order. */
@@ -18,6 +18,17 @@ export interface ResponsiveListPhoneLayout {
   /** Further columns that are not fields, because the headline or the strip already shows them. */
   skip?: readonly string[];
 }
+
+/**
+ * A row laid out by the list's own page, for a record whose facts read better arranged than
+ * labelled. `cell` is the named column's own rendered cell, so the card and the table still cannot
+ * disagree about what a record shows.
+ */
+export interface ResponsiveListPhoneCard<T> {
+  render: (record: T, cell: (columnKey: string) => React.ReactNode) => React.ReactNode;
+}
+
+export type ResponsiveListPhoneLayout<T> = ResponsiveListPhoneFields | ResponsiveListPhoneCard<T>;
 
 export interface ResponsiveListProps<T extends object> {
   columns: ColumnsType<T>;
@@ -35,7 +46,7 @@ export interface ResponsiveListProps<T extends object> {
   pageSize?: number | false;
   /** A value that, when it changes, returns the reader to the first page (a filter, a search). */
   pageResetKey?: unknown;
-  phone: ResponsiveListPhoneLayout;
+  phone: ResponsiveListPhoneLayout<T>;
   /**
    * Wraps each phone row, for a list whose rows do more than render (the wide table's counterpart
    * is a body row in `tableProps.components`).
@@ -120,8 +131,6 @@ export function ResponsiveList<T extends object>({
   const visible = pageSize === false
     ? dataSource
     : dataSource.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const actionKeys = phone.actions ?? [];
-  const skip = [phone.identity, ...actionKeys, ...(phone.skip ?? [])];
   const offset = pageSize === false ? 0 : (safePage - 1) * pageSize;
 
   return (
@@ -129,21 +138,33 @@ export function ResponsiveList<T extends object>({
       {visible.map((record, localIndex) => {
         const index = offset + localIndex;
         const key = keyOf(record, rowKey);
-        const row = (
-          <PhoneRow
-            key={key}
-            identity={renderedCell(columns, phone.identity, record, index)}
-            fields={phoneRowFields(columns, record, { skip, index })}
-            actions={actionKeys.length > 0
-              ? actionKeys.map((key) => <React.Fragment key={key}>{renderedCell(columns, key, record, index)}</React.Fragment>)
-              : undefined}
-          />
-        );
+        const row = 'render' in phone
+          ? <React.Fragment key={key}>{phone.render(record, (columnKey) => renderedCell(columns, columnKey, record, index))}</React.Fragment>
+          : <FieldsPhoneRow key={key} columns={columns} record={record} index={index} layout={phone} />;
         return PhoneRowWrapper ? <PhoneRowWrapper key={key} rowKey={String(key)}>{row}</PhoneRowWrapper> : row;
       })}
       {pageSize !== false && (
         <Pager variant="stepped" page={safePage} pageSize={pageSize} total={dataSource.length} onChange={changePage} />
       )}
     </div>
+  );
+}
+
+function FieldsPhoneRow<T extends object>({ columns, record, index, layout }: {
+  columns: ColumnsType<T>;
+  record: T;
+  index: number;
+  layout: ResponsiveListPhoneFields;
+}) {
+  const actionKeys = layout.actions ?? [];
+  const skip = [layout.identity, ...actionKeys, ...(layout.skip ?? [])];
+  return (
+    <PhoneRow
+      identity={renderedCell(columns, layout.identity, record, index)}
+      fields={phoneRowFields(columns, record, { skip, index })}
+      actions={actionKeys.length > 0
+        ? actionKeys.map((key) => <React.Fragment key={key}>{renderedCell(columns, key, record, index)}</React.Fragment>)
+        : undefined}
+    />
   );
 }
