@@ -138,7 +138,7 @@ export default {
   'events.preflight': 'No generation',
   'events.oauth_badge': 'OAuth account',
   'events.provider_unresolved_badge': 'Unconfirmed',
-  'events.provider_unresolved': 'The provider list could not be read, so this name is the label CPA recorded rather than the provider you configured.',
+  'events.provider_unresolved': 'Provider catalog unavailable; displaying raw label recorded by CPA',
   'events.preflight_hint': 'Preflight request (no generation)',
   'events.non_stream_hint': 'Non-streaming response',
   'events.transport': 'Transport',

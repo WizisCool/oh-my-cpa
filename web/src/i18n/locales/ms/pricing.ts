@@ -143,7 +143,7 @@ export default {
   "pricing.editor.lane_tiers_placeholder": "cth. priority, fast",
   "pricing.editor.lane_remove": "Alih keluar harga peringkat perkhidmatan ini",
   "pricing.editor.lane_unnamed": "Tanpa nama",
-  "pricing.editor.lane_context_hint": "Kadar bertingkat konteks untuk tahap perkhidmatan ini (tidak bertindih dengan tahap standard); lalai kepada harga asas tahap.",
+  "pricing.editor.lane_context_hint": "Penetapan harga konteks berperingkat yang terpakai untuk tahap perkhidmatan ini",
   "pricing.editor.lane_blank_hint": "Kosong mengekalkan kadar peringkat ini",
   "pricing.editor.tier_error_service": "Namakan satu hingga lapan peringkat perkhidmatan (huruf, digit, . _ -, bukan auto); setiap nama hanya milik satu harga peringkat",
   "pricing.editor.preview_service_tier": "Dibilkan pada",

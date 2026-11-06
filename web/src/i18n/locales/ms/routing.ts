@@ -51,7 +51,7 @@ export default {
   "orch.weight": "Pemberat",
   "orch.weight_key": "Kunci {n}",
   "orch.weight_named": "Pemberat {name}",
-  "orch.weight_hint": "Nilai lalai ialah 1; 0 mengecualikan daripada pengagihan trafik.",
+  "orch.weight_hint": "Berat pengagihan trafik relatif",
   "orch.lens": "Model",
   "orch.lens_placeholder": "Pilih model untuk pratonton laluan",
   "orch.lens_none": "Tiada penyedia atau kelayakan yang menyokong model ini.",

@@ -118,27 +118,22 @@ export const PolicyStrip: React.FC<PolicyStripProps> = ({ settings, onChange, di
         <div className={styles['failover']}>
           <SettingRow
             label={t('cfg.request_retry')}
-            description={t('cfg.request_retry_desc')}
             control={<NumberInput size="small" min={0} precision={0} aria-label={t('cfg.request_retry')} value={settings.request_retry} disabled={disabled} onChange={(value) => set('request_retry', whole(value, 0))} />}
           />
           <SettingRow
             label={t('cfg.max_retry_credentials')}
-            description={t('cfg.max_retry_credentials_desc')}
             control={<NumberInput size="small" min={0} precision={0} aria-label={t('cfg.max_retry_credentials')} value={settings.max_retry_credentials} disabled={disabled} onChange={(value) => set('max_retry_credentials', whole(value, 0))} />}
           />
           <SettingRow
             label={t('cfg.max_retry_interval')}
-            description={t('cfg.max_retry_interval_desc')}
             control={<NumberInput size="small" min={0} precision={0} aria-label={t('cfg.max_retry_interval')} value={settings.max_retry_interval} disabled={disabled} onChange={(value) => set('max_retry_interval', whole(value, 0))} />}
           />
           <SettingRow
             label={t('cfg.f_transient_cooldown')}
-            description={t('cfg.f_transient_cooldown_desc')}
             control={<NumberInput size="small" min={-1} precision={0} aria-label={t('cfg.f_transient_cooldown')} value={settings.transient_error_cooldown_seconds} disabled={disabled} onChange={(value) => set('transient_error_cooldown_seconds', whole(value ?? 0, -1))} />}
           />
           <SettingRow
             label={t('cfg.f_disable_cooling')}
-            description={t('cfg.f_disable_cooling_desc')}
             control={<Switch checked={settings.disable_cooling} disabled={disabled} aria-label={t('cfg.f_disable_cooling')} onChange={(checked) => set('disable_cooling', checked)} />}
           />
         </div>

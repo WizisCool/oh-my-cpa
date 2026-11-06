@@ -1858,7 +1858,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 144px;
   gap: 16px;
-  align-items: end;
+  align-items: start;
 }
 
 .settings-field-host-port .settings-number-control {

@@ -82,157 +82,158 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
     t,
   } = view;
 
-    const val = getFieldValue(field);
+  const val = getFieldValue(field);
+  const ariaDescribedBy = field.descKey ? `desc-${field.id}` : undefined;
 
-    if (field.type === 'switch') {
-      return (
-        <Switch
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          checked={Boolean(val)}
-          disabled={disabled}
-          onChange={(checked) => updateFieldInDoc(field, checked)}
-        />
-      );
-    }
+  if (field.type === 'switch') {
+    return (
+      <Switch
+        id={`cfg-${field.id}`}
+        aria-describedby={ariaDescribedBy}
+        checked={Boolean(val)}
+        disabled={disabled}
+        onChange={(checked) => updateFieldInDoc(field, checked)}
+      />
+    );
+  }
 
-    if (field.type === 'string') {
-      return (
-        <Input
+  if (field.type === 'string') {
+    return (
+      <Input
+        id={`cfg-${field.id}`}
+        aria-describedby={ariaDescribedBy}
+        className="config-mono-input"
+        allowClear
+        disabled={disabled}
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
+        value={String(val ?? '')}
+        onChange={(e) => updateFieldInDoc(field, e.target.value)}
+      />
+    );
+  }
+
+  if (field.type === 'number') {
+    return (
+      <div className="settings-number-control">
+        <NumberInput
           id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
+          aria-describedby={ariaDescribedBy}
           className="config-mono-input"
-          allowClear
+          min={field.min ?? 0}
+          max={field.max}
           disabled={disabled}
-          placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
-          value={String(val ?? '')}
-          onChange={(e) => updateFieldInDoc(field, e.target.value)}
+          value={typeof val === 'number' ? val : Number(val) || 0}
+          // A cleared box arrives as null. The draft layer reads that as the field's
+          // default, so an omitted key stays omitted; coercing it to 0 here would store
+          // a setting wherever 0 means something.
+          onChange={(num) => updateFieldInDoc(field, num)}
         />
-      );
-    }
+        {field.unitKey && (
+          <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+            {t(field.unitKey)}
+          </Text>
+        )}
+      </div>
+    );
+  }
 
-    if (field.type === 'number') {
-      return (
-        <div className="settings-number-control">
-          <NumberInput
-            id={`cfg-${field.id}`}
-            aria-describedby={`desc-${field.id}`}
-            className="config-mono-input"
-            min={field.min ?? 0}
-            max={field.max}
-            disabled={disabled}
-            value={typeof val === 'number' ? val : Number(val) || 0}
-            // A cleared box arrives as null. The draft layer reads that as the field's
-            // default, so an omitted key stays omitted; coercing it to 0 here would store
-            // a setting wherever 0 means something.
-            onChange={(num) => updateFieldInDoc(field, num)}
-          />
-          {field.unitKey && (
-            <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-              {t(field.unitKey)}
-            </Text>
-          )}
-        </div>
-      );
-    }
+  if (field.type === 'string_list') {
+    // A list of plain words or addresses, one tag each. A comma separates tags; a space does
+    // not, because a sensitive word may contain one. The dropdown is pinned shut because a
+    // free-form list has nothing to pick from, so the control draws no arrow: an arrow over a
+    // list that never opens promises an interaction the field does not have.
+    const items = Array.isArray(val) ? val.map(String) : [];
+    return (
+      <Select
+        id={`cfg-${field.id}`}
+        aria-describedby={ariaDescribedBy}
+        mode="tags"
+        tokenSeparators={[',']}
+        open={false}
+        suffixIcon={null}
+        disabled={disabled}
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
+        value={items}
+        onChange={(next: string[]) => updateFieldInDoc(field, next.map((item) => item.trim()).filter(Boolean))}
+      />
+    );
+  }
 
-    if (field.type === 'string_list') {
-      // A list of plain words or addresses, one tag each. A comma separates tags; a space does
-      // not, because a sensitive word may contain one. The dropdown is pinned shut because a
-      // free-form list has nothing to pick from, so the control draws no arrow: an arrow over a
-      // list that never opens promises an interaction the field does not have.
-      const items = Array.isArray(val) ? val.map(String) : [];
-      return (
-        <Select
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          mode="tags"
-          tokenSeparators={[',']}
-          open={false}
-          suffixIcon={null}
-          disabled={disabled}
-          placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
-          value={items}
-          onChange={(next: string[]) => updateFieldInDoc(field, next.map((item) => item.trim()).filter(Boolean))}
-        />
-      );
-    }
+  if (field.type === 'select') {
+    const options = field.options ?? [];
+    // An option's YAML value can be a boolean while the picker's keys are strings, so the
+    // current value is matched by its string form and written back as the option's own value.
+    const current = String(val ?? field.defaultValue ?? '');
+    const selected = options.find((opt) => String(opt.yamlValue ?? opt.value) === current);
+    return (
+      <Select
+        id={`cfg-${field.id}`}
+        aria-describedby={ariaDescribedBy}
+        disabled={disabled}
+        value={selected?.value ?? current}
+        options={options.map((opt) => ({
+          value: opt.value,
+          label: t(opt.labelKey),
+        }))}
+        onChange={(key) => {
+          const option = options.find((opt) => opt.value === key);
+          updateFieldInDoc(field, option ? (option.yamlValue ?? option.value) : key);
+        }}
+      />
+    );
+  }
 
-    if (field.type === 'select') {
-      const options = field.options ?? [];
-      // An option's YAML value can be a boolean while the picker's keys are strings, so the
-      // current value is matched by its string form and written back as the option's own value.
-      const current = String(val ?? field.defaultValue ?? '');
-      const selected = options.find((opt) => String(opt.yamlValue ?? opt.value) === current);
-      return (
-        <Select
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          disabled={disabled}
-          value={selected?.value ?? current}
-          options={options.map((opt) => ({
-            value: opt.value,
-            label: t(opt.labelKey),
-          }))}
-          onChange={(key) => {
-            const option = options.find((opt) => opt.value === key);
-            updateFieldInDoc(field, option ? (option.yamlValue ?? option.value) : key);
-          }}
-        />
-      );
-    }
+  if (field.type === 'ice_servers') {
+    return (
+      <IceServersEditor
+        field={field}
+        value={val}
+        disabled={disabled}
+        t={t}
+        onChange={(target, next) => updateFieldInDoc(target, next)}
+      />
+    );
+  }
 
-    if (field.type === 'ice_servers') {
-      return (
-        <IceServersEditor
-          field={field}
-          value={val}
-          disabled={disabled}
-          t={t}
-          onChange={(target, next) => updateFieldInDoc(target, next)}
-        />
-      );
-    }
+  if (field.type === 'json_editor') {
+    return (
+      <Input.TextArea
+        id={`cfg-${field.id}`}
+        aria-describedby={ariaDescribedBy}
+        rows={2}
+        className="config-mono-textarea"
+        placeholder="{}"
+        disabled={disabled}
+        value={typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '')}
+        onChange={(e) => {
+          const str = e.target.value;
+          try {
+            const parsed = JSON.parse(str);
+            updateFieldInDoc(field, parsed);
+          } catch {
+            updateFieldInDoc(field, str);
+          }
+        }}
+      />
+    );
+  }
 
-    if (field.type === 'json_editor') {
-      return (
-        <Input.TextArea
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          rows={2}
-          className="config-mono-textarea"
-          placeholder="{}"
-          disabled={disabled}
-          value={typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '')}
-          onChange={(e) => {
-            const str = e.target.value;
-            try {
-              const parsed = JSON.parse(str);
-              updateFieldInDoc(field, parsed);
-            } catch {
-              updateFieldInDoc(field, str);
-            }
-          }}
-        />
-      );
-    }
+  if (field.type === 'textarea') {
+    return (
+      <Input.TextArea
+        id={`cfg-${field.id}`}
+        aria-describedby={ariaDescribedBy}
+        rows={3}
+        className="config-mono-textarea"
+        disabled={disabled}
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
+        value={String(val ?? '')}
+        onChange={(e) => updateFieldInDoc(field, e.target.value)}
+      />
+    );
+  }
 
-    if (field.type === 'textarea') {
-      return (
-        <Input.TextArea
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          rows={3}
-          className="config-mono-textarea"
-          disabled={disabled}
-          placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
-          value={String(val ?? '')}
-          onChange={(e) => updateFieldInDoc(field, e.target.value)}
-        />
-      );
-    }
-
-    return null;
+  return null;
 }
 
   // Variant 1: Grid Field (Label on top, input below)
@@ -242,29 +243,52 @@ export function renderGridField(view: ConfigSectionContext, field: ConfigFieldDe
     t,
   } = view;
 
-    const isFull =
-      field.type === 'textarea' ||
-      field.type === 'json_editor' ||
-      field.id === 'proxyUrl' ||
-      field.id === 'authDir' ||
-      field.id === 'logDir' ||
-      field.id === 'rmSecretKey' ||
-      field.id === 'githubToken' ||
-      field.id === 'corsOrigins';
+  const descText = field.descKey ? t(field.descKey) : '';
+  const isFull =
+    field.type === 'textarea' ||
+    field.type === 'json_editor' ||
+    field.id === 'proxyUrl' ||
+    field.id === 'authDir' ||
+    field.id === 'logDir' ||
+    field.id === 'rmSecretKey' ||
+    field.id === 'githubToken' ||
+    field.id === 'corsOrigins';
 
+  if (field.type === 'switch') {
     return (
-      <div key={field.id} className={`settings-field${isFull ? ' is-full' : ''}`}>
-        <label htmlFor={`cfg-${field.id}`} className="settings-field-label">
-          <span>{t(field.labelKey)}</span>
-        </label>
-        <div id={`desc-${field.id}`} className="settings-field-desc">
-          {t(field.descKey)}
+      <div key={field.id} className={`settings-field is-switch-field${isFull ? ' is-full' : ''}`}>
+        <div className="settings-field-switch-header">
+          <label htmlFor={`cfg-${field.id}`} className="settings-field-label">
+            <span>{t(field.labelKey)}</span>
+          </label>
+          <div className="settings-field-control is-switch">
+            {renderFieldControl(view, field, disabled)}
+          </div>
         </div>
-        <div className={`settings-field-control is-${field.type}`}>
-          {renderFieldControl(view, field, disabled)}
-        </div>
+        {descText ? (
+          <div id={`desc-${field.id}`} className="settings-field-desc">
+            {descText}
+          </div>
+        ) : null}
       </div>
     );
+  }
+
+  return (
+    <div key={field.id} className={`settings-field${isFull ? ' is-full' : ''}`}>
+      <label htmlFor={`cfg-${field.id}`} className="settings-field-label">
+        <span>{t(field.labelKey)}</span>
+      </label>
+      <div className={`settings-field-control is-${field.type}`}>
+        {renderFieldControl(view, field, disabled)}
+      </div>
+      {descText ? (
+        <div id={`desc-${field.id}`} className="settings-field-desc">
+          {descText}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
   // Variant 2: Toggle Row (Title/desc on left, control on right)
@@ -274,21 +298,25 @@ export function renderToggleRow(view: ConfigSectionContext, field: ConfigFieldDe
     t,
   } = view;
 
-    return (
-      <div key={field.id} className="settings-toggle-row">
-        <div className="settings-toggle-info">
-          <label htmlFor={`cfg-${field.id}`} className="settings-toggle-title">
-            {t(field.labelKey)}
-          </label>
+  const descText = field.descKey ? t(field.descKey) : '';
+
+  return (
+    <div key={field.id} className="settings-toggle-row">
+      <div className="settings-toggle-info">
+        <label htmlFor={`cfg-${field.id}`} className="settings-toggle-title">
+          {t(field.labelKey)}
+        </label>
+        {descText ? (
           <div id={`desc-${field.id}`} className="settings-toggle-desc">
-            {t(field.descKey)}
+            {descText}
           </div>
-        </div>
-        <div className={`settings-toggle-control is-${field.type}`}>
-          {renderFieldControl(view, field, disabled)}
-        </div>
+        ) : null}
       </div>
-    );
+      <div className={`settings-toggle-control is-${field.type}`}>
+        {renderFieldControl(view, field, disabled)}
+      </div>
+    </div>
+  );
 }
 
 /** The element id of a group's card, which the section outline scrolls to. */
@@ -449,19 +477,23 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
                   <label htmlFor="cfg-host" className="settings-field-label">
                     <span>{t(hostField.labelKey)}</span>
                   </label>
-                  <div id="desc-host" className="settings-field-desc">
-                    {t(hostField.descKey)}
-                  </div>
                   <div className="settings-field-control">{renderFieldControl(view, hostField)}</div>
+                  {hostField.descKey ? (
+                    <div id="desc-host" className="settings-field-desc">
+                      {t(hostField.descKey)}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="settings-field">
                   <label htmlFor="cfg-port" className="settings-field-label">
                     <span>{t(portField.labelKey)}</span>
                   </label>
-                  <div id="desc-port" className="settings-field-desc">
-                    {t(portField.descKey)}
-                  </div>
                   <div className="settings-field-control">{renderFieldControl(view, portField)}</div>
+                  {portField.descKey ? (
+                    <div id="desc-port" className="settings-field-desc">
+                      {t(portField.descKey)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}

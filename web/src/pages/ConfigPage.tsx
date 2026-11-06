@@ -185,7 +185,7 @@ export const ConfigPage: React.FC = () => {
         const f = ALL_CONFIG_FIELDS.find((item) => item.id === fid);
         if (!f) return false;
         const label = t(f.labelKey).toLowerCase();
-        const desc = t(f.descKey).toLowerCase();
+        const desc = f.descKey ? t(f.descKey).toLowerCase() : '';
         const yamlKey = f.yamlPath.join('.').toLowerCase();
         const keywords = (f.keywords ?? []).join(' ').toLowerCase();
         return label.includes(q) || desc.includes(q) || yamlKey.includes(q) || keywords.includes(q);

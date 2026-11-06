@@ -143,7 +143,7 @@ export default {
   'pricing.editor.lane_tiers_placeholder': 'e.g. priority, fast',
   'pricing.editor.lane_remove': 'Remove this service tier pricing',
   'pricing.editor.lane_unnamed': 'Unnamed',
-  'pricing.editor.lane_context_hint': 'Context tiered rates for this service tier (does not stack with standard tiers); defaults to tier base price.',
+  'pricing.editor.lane_context_hint': 'Tiered context pricing applicable to this service level',
   'pricing.editor.lane_blank_hint': 'Blank keeps this tier\'s rate',
   'pricing.editor.tier_error_service': 'Name one to eight service tiers (letters, digits, . _ -, not auto); each name belongs to one tier price only',
   'pricing.editor.preview_service_tier': 'Billed on',

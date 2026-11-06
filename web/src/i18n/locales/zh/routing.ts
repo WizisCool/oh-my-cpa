@@ -48,7 +48,7 @@ export default {
   'orch.weight': '权重',
   'orch.weight_key': '密钥 {n}',
   'orch.weight_named': '{name} 的权重',
-  'orch.weight_hint': '默认值为 1；设为 0 表示不分配流量。',
+  'orch.weight_hint': '流量分配相对权重',
   'orch.lens': '模型',
   'orch.lens_placeholder': '选择模型预览路由',
   'orch.lens_none': '暂无支持该模型的提供商或凭据。',

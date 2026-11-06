@@ -138,7 +138,7 @@ export default {
   "events.preflight": "Tiada generasi",
   "events.oauth_badge": "Akaun OAuth",
   "events.provider_unresolved_badge": "Belum disahkan",
-  "events.provider_unresolved": "Senarai provider tidak dapat dibaca, jadi nama ini ialah label yang direkodkan CPA, bukan provider yang anda tetapkan.",
+  "events.provider_unresolved": "Katalog penyedia tidak tersedia; memaparkan label mentah yang direkodkan oleh CPA",
   "events.preflight_hint": "Permintaan prapenerbangan (tiada generasi)",
   "events.non_stream_hint": "Respons bukan strim",
   "events.transport": "Pengangkutan",

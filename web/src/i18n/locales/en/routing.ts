@@ -51,7 +51,7 @@ export default {
   'orch.weight': 'Weight',
   'orch.weight_key': 'Key {n}',
   'orch.weight_named': 'Weight of {name}',
-  'orch.weight_hint': 'Defaults to 1; 0 excludes from traffic allocation.',
+  'orch.weight_hint': 'Relative traffic distribution weight',
   'orch.lens': 'Model',
   'orch.lens_placeholder': 'Select model to preview route',
   'orch.lens_none': 'No provider or credential supports this model.',

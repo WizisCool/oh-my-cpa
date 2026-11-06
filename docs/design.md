@@ -86,6 +86,17 @@ focus management and accessible names when adapting a library component. Number 
 use [`NumberInput`](../web/src/components/common/NumberInput.tsx): the wheel steps the
 field under the pointer by its own step and bounds, without a click.
 
+In form grids (such as `.settings-form-grid`), controls must maintain consistent horizontal
+alignment across columns. Field labels sit at the top of each cell, input controls sit directly
+below their labels with a uniform height (such as 32px for switches, selects, number inputs,
+and text fields), and optional secondary copy (descriptions/hints) sits underneath the control,
+never between the label and the control. This prevents uneven subtitle lengths from pushing
+adjacent controls out of alignment. Combos (such as host/port) align at the start
+(`align-items: start`) so both labels and control baselines align horizontally. Secondary
+copy is strictly optional: self-explanatory settings (ports, URLs with formatted placeholders,
+standard toggles) omit subtitles entirely rather than cluttering cards with redundant or
+defensive text.
+
 Put the primary action where the task finishes. Destructive actions need an explicit
 confirmation that names the affected resource. Preserve edits during background
 refreshes; distinguish Apply/Save from Cancel and from viewing current server state.

@@ -2,7 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/quota';
 
 export default {
-  "quota.reset_estimated_hint": "Masa huluan diperoleh daripada data bil, bukan masa set semula tepat yang disahkan",
+  "quota.reset_estimated_hint": "Masa set semula dianggarkan daripada kitaran pengebilan huluan",
   "quota.reset_expiry_title_zoned": "Tamat kredit set semula ({zone})",
   "quota.reset_grants_title_zoned": "Geran set semula Claude ({zone})",
   "quota.reset_grant_remaining": "Baki {left}/{total}",
