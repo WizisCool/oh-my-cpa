@@ -27,7 +27,7 @@ import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
 import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
-import { pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
+import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
 import { providerFilterTabs } from '../../types/credentialProviders';
 import type { AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import {
@@ -155,13 +155,15 @@ export const OAuthManagementPage: React.FC = () => {
     () => pluginOAuthProviderLogos(pluginsQuery.data?.plugins),
     [pluginsQuery.data?.plugins],
   );
+  const multiPortalKeys = React.useMemo(() => pluginMultiPortalKeys(pluginsQuery.data?.plugins), [pluginsQuery.data?.plugins]);
   const projection = React.useMemo(
     () => buildOAuthWorkspaceProjection(
       filesQuery.data?.files ?? [],
       quotaQuery.data?.quotas ?? [],
       choices,
+      multiPortalKeys,
     ),
-    [choices, filesQuery.data?.files, quotaQuery.data?.quotas],
+    [choices, filesQuery.data?.files, multiPortalKeys, quotaQuery.data?.quotas],
   );
   const records = projection.records;
   const recordsRef = React.useRef(records);
@@ -1030,6 +1032,8 @@ export const OAuthManagementPage: React.FC = () => {
           initialSection={drawerSection}
           canEdit={Boolean(selectedRecord?.canEditFile)}
           hasExternalDraft={hasWarmupDraft}
+          provider={selectedRecord?.displayProvider}
+          pluginLogos={pluginLogos}
           quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord) : undefined}
           warmupContent={selectedRecord?.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider)
             ? <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} /> : undefined}

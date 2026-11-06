@@ -142,6 +142,7 @@ export default {
   'omc.change_provider': '更换提供商',
   'omc.priority_value': '优先级 {n}',
   'omc.weight_value': '权重 {n}',
+  'omc.priority_badge_hint': '数值越高越先被调度；同优先级内再按权重分配。',
   'omc.connect_account': 'OAuth 登录',
   'omc.connect_provider': 'OAuth 提供商',
   'omc.connect_provider_placeholder': '选择要连接的提供商',

@@ -1,0 +1,23 @@
+{
+  "why": "Plugin text is one bounded line, the plan label included: control characters fold to spaces, a long description is cut, a metric without a number or a name is dropped, a malformed currency code is dropped, and a summary alone still makes a plan.",
+  "now_ms": 0,
+  "body": {
+    "subscription": { "plan": "   ", "tierName": "Gift\nplan for a very long promotional name that a plugin might send" },
+    "summary": [
+      { "key": "gift", "label": "Gift\ntokens", "value": "1250000", "unit": "tokens" },
+      { "key": "spend", "label": "Spend", "value": 12.5, "format": "currency", "currency": "usd" },
+      { "key": "odd", "label": "Odd money", "value": 3, "format": "currency", "currency": "US Dollar" },
+      { "key": "broken", "label": "Broken", "value": "n/a" },
+      { "label": "", "value": 1 }
+    ],
+    "groups": [
+      {
+        "displayName": "Harbor",
+        "buckets": [
+          { "window": "5h", "remainingFraction": 0.8 },
+          { "window": "Gift", "remainingFraction": 0.4, "description": "1,250,000 / 3,000,000 gift tokens left\u0000\u001b[31m and this sentence keeps going well past what one line under a quota bar can show, because a plugin is free to write anything at all here and the console must not let it run on" }
+        ]
+      }
+    ]
+  }
+}

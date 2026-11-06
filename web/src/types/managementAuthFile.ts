@@ -38,6 +38,8 @@ export interface ManagementAuthFile {
   auth_index?: string;
   type?: string;
   provider?: string;
+  /** The login entry that issued the credential, when its plugin declares several and the gateway reports it. */
+  oauth_provider?: string;
   status?: string;
   status_message?: string;
   disabled: boolean;

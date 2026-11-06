@@ -1,0 +1,38 @@
+{
+  "plan": {
+    "plan_type": "unknown",
+    "plan_label": "personal_standard",
+    "tier": "unknown",
+    "metrics": [
+      {
+        "key": "credits",
+        "label": "Credits",
+        "value": 100,
+        "unit": "credits",
+        "format": "number"
+      }
+    ]
+  },
+  "windows": [
+    {
+      "id": "ag_Harbor_bucket_0_0",
+      "label": "Harbor · Credits",
+      "scope": "group",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "period_hours": 0,
+      "reset_accuracy": "exact",
+      "description": "100 / 100 credits left"
+    },
+    {
+      "id": "ag_Harbor_bucket_0_1",
+      "label": "Harbor · Add-on credits",
+      "scope": "group",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "period_hours": 0,
+      "reset_accuracy": "exact",
+      "description": "50 / 50 credits left"
+    }
+  ]
+}

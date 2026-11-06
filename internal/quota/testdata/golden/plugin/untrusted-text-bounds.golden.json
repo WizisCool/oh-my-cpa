@@ -1,0 +1,49 @@
+{
+  "plan": {
+    "plan_type": "unknown",
+    "plan_label": "Gift plan for a very long promotional name that…",
+    "tier": "unknown",
+    "metrics": [
+      {
+        "key": "gift",
+        "label": "Gift tokens",
+        "value": 1250000,
+        "unit": "tokens"
+      },
+      {
+        "key": "spend",
+        "label": "Spend",
+        "value": 12.5,
+        "format": "currency",
+        "currency": "USD"
+      },
+      {
+        "key": "odd",
+        "label": "Odd money",
+        "value": 3,
+        "format": "currency"
+      }
+    ]
+  },
+  "windows": [
+    {
+      "id": "ag_Harbor_bucket_0_0",
+      "label": "Harbor · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 20,
+      "remaining_percent": 80,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Harbor_bucket_0_1",
+      "label": "Harbor · Gift",
+      "scope": "group",
+      "used_percent": 60,
+      "remaining_percent": 40,
+      "period_hours": 0,
+      "reset_accuracy": "exact",
+      "description": "1,250,000 / 3,000,000 gift tokens left [31m and this sentence keeps going well past what one line under a quota bar can show, because a plugin is free to write…"
+    }
+  ]
+}

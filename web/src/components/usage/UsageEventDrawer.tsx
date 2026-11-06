@@ -8,7 +8,6 @@ import { Button, Tabs } from 'antd';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
-  ArrowRightOutlined,
   NonStreamOutlined,
   WebsocketOutlined,
   DownloadOutlined,
@@ -33,8 +32,12 @@ import type { UsageEvent } from '../../types/usageEvents';
 import {
   maskCredentialIdentities,
   resolveCredential,
+  resolveProviderInfo,
   type CredentialIndex,
+  type ProviderLookupEntry,
 } from '../../types/usageEventIdentity';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { RequestOverview } from './RequestOverview';
 import {
   formatEventDuration,
   eventTokensPerSecond,
@@ -61,20 +64,28 @@ import { AppModal } from '../common/AppModal';
 export interface UsageEventDrawerProps {
   eventId: number | null;
   credentials: CredentialIndex;
-  /** Names a provider key the way the request list does; the routing fields keep the recorded key. */
-  providerName?: (providerKey: string | null | undefined) => string;
   onClose: () => void;
   events?: UsageEvent[];
   onSelectEvent?: (id: number) => void;
+  /** The provider marks and names the request list resolves its rows with, so both agree. */
+  providerIcons?: Record<string, string>;
+  configuredProviders?: ProviderLookupEntry[];
+  pluginLogos?: PluginOAuthLogos;
+  pluginTitles?: ReadonlyMap<string, string>;
+  isProviderCatalogUnknown?: boolean;
 }
 
 export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   eventId,
   onClose,
   credentials,
-  providerName,
   events,
   onSelectEvent,
+  providerIcons,
+  configuredProviders,
+  pluginLogos,
+  pluginTitles,
+  isProviderCatalogUnknown,
 }) => {
   useTimeZone();
   const { currency } = useDisplayCurrency();
@@ -138,6 +149,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       facts={items.map(([label, content], index) => ({ key: String(index), label, value: content }))}
     />
   );
+  const providerInfo = event
+    ? resolveProviderInfo(event, credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown, pluginTitles)
+    : undefined;
+  // The overview names the credential the way the list's provider cell does: an OAuth account,
+  // else the provider key that answered, else whatever identifies the credential at all.
+  const answeringCredential = providerInfo?.isOAuth
+    ? providerInfo.credential || credentialLabel
+    : providerKeyMask || credentialLabel;
   const section = (title: string, content: React.ReactNode) => (
     <section className="request-detail-section">
       <h3>{title}</h3>
@@ -242,10 +261,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   );
 
   const rate = eventTokensPerSecond(event, tpsMode);
-  const latency = event?.latency_ms ?? 0;
-  // One duration reading, one ramp. The stops travel as custom properties and CSS mixes
-  // them, so every readout in the drawer - hero, waterfall header and legend - asks the
-  // same question of the same three values. TTFT is detail and keeps the secondary ink.
+  // One duration reading, one ramp. The stops travel as custom properties and CSS mixes them,
+  // so every readout in the drawer - the headline and the timing card - asks the same question
+  // of the same three values. TTFT is detail and keeps the secondary ink.
   const durationScale = durationScaleMix(event?.latency_ms);
   const durationScaleStyle = durationScale
     ? ({
@@ -255,10 +273,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       } as React.CSSProperties)
     : undefined;
   const isMeasurable = hasMeasurableTTFT(event);
-  const ttft = isMeasurable && event?.ttft_ms != null ? event.ttft_ms : 0;
-  const streamTime = Math.max(0, latency - ttft);
-  const ttftPercent = latency > 0 && ttft > 0 ? Math.min(100, Math.max(2, (ttft / latency) * 100)) : 0;
-  const streamPercent = latency > 0 && streamTime > 0 ? Math.min(100 - ttftPercent, Math.max(2, (streamTime / latency) * 100)) : 0;
+  const displayModel = event ? (isCallView ? (event.model_alias || event.model) : event.model) : undefined;
 
   return (
     <AppDrawer
@@ -273,18 +288,13 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
         <ParagraphPlaceholder rows={12} />
       ) : result.isError ? (
         <LoadFailure title={t('events.load_error')} error={result.error} onRetry={() => void result.refetch()} />
-      ) : event ? (
+      ) : event && providerInfo ? (
         <>
-          <div className="request-detail-hero">
+          <header className="request-detail-hero">
             <div className="request-detail-heading">
               <div className="request-detail-model-row">
-                <ModelMark
-                  model={isCallView ? (event.model_alias || event.model) : event.model}
-                  fallbackModel={event.model}
-                  size={22}
-                  className="req-model-mark"
-                />
-                <h2>{(isCallView ? (event.model_alias || event.model) : event.model) || t('events.not_captured')}</h2>
+                <ModelMark model={displayModel} fallbackModel={event.model} size={22} className="req-model-mark" />
+                <h2>{displayModel || t('events.not_captured')}</h2>
                 {isFastTierEvent(event) && (
                   <Tooltip title={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}>
                     <span
@@ -311,55 +321,53 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                   </Tooltip>
                 )}
               </div>
-              <span className={`request-result ${event.failed ? 'is-failed' : ''}`}>
+              <span className={`request-result ${event.failed ? 'is-failed' : 'is-success'}`}>
                 <i />
                 {t(event.failed ? 'events.filter_failed' : 'events.filter_success')}
               </span>
             </div>
             <div className="request-detail-id">
-              <span>{event.request_id || t('events.no_request_id')}</span>
-              {event.request_id && (
-                <CopyButton text={event.request_id} label={t('events.copy_id')} />
-              )}
+              <time dateTime={new Date(event.timestamp_ms).toISOString()}>
+                {dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}
+              </time>
+              <span className="request-detail-id-text">{event.request_id || t('events.no_request_id')}</span>
+              {event.request_id && <CopyButton text={event.request_id} label={t('events.copy_id')} />}
             </div>
-            <p className="request-window">{dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}</p>
-          </div>
-          <div className="request-detail-metrics">
-            <div>
-              <span>{t('events.duration')}</span>
-              {durationScaleStyle ? (
-                <strong className="req-timing-value" style={durationScaleStyle}>
+            <dl className="request-detail-metrics">
+              <div>
+                <dt>{t('events.duration')}</dt>
+                <dd className={durationScaleStyle ? 'req-timing-value' : undefined} style={durationScaleStyle}>
                   {formatEventDuration(event.latency_ms)}
-                </strong>
-              ) : (
-                <strong>{formatEventDuration(event.latency_ms)}</strong>
-              )}
-            </div>
-            {rate.basis !== null && (
-              <div>
-                <span>{t('events.col_tps')}</span>
-                <Tooltip title={t(tpsCalculationHintKey(rate.basis))}>
-                  <strong tabIndex={0} aria-label={`${t('events.col_tps')}: ${rate.formatted}. ${t(tpsCalculationHintKey(rate.basis))}`}>{rate.formatted}</strong>
-                </Tooltip>
+                </dd>
               </div>
-            )}
-            {isMeasurable && (
               <div>
-                <span>{t('events.ttft')}</span>
-                <strong>{formatEventDuration(event.ttft_ms)}</strong>
+                <dt>{t('events.timing_speed')}</dt>
+                {rate.basis !== null ? (
+                  <Tooltip title={t(tpsCalculationHintKey(rate.basis))}>
+                    <dd tabIndex={0} aria-label={`${t('events.col_tps')}: ${rate.formatted}. ${t(tpsCalculationHintKey(rate.basis))}`}>{rate.formatted}</dd>
+                  </Tooltip>
+                ) : (
+                  <dd className="terminal-muted">—</dd>
+                )}
               </div>
-            )}
-            <div>
-              <span>{t('events.col_tokens')}</span>
-              {/* The headline is compact to match every other token readout; the exact count is the
-                  accessible name, so the rounding never becomes the only number available. */}
-              <strong title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
-            </div>
-            <div>
-              <span>{t('events.col_cost')}</span>
-              <strong>{event.cost_usd != null ? formatCurrency(event.cost_usd, currency) : '—'}</strong>
-            </div>
-          </div>
+              <div>
+                <dt>{t('events.col_tokens')}</dt>
+                {/* The headline is compact to match every other token readout; the exact count is the
+                    accessible name, so the rounding never becomes the only number available. */}
+                <dd title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</dd>
+              </div>
+              <div>
+                <dt>{t('events.col_cost')}</dt>
+                {event.cost_usd != null ? (
+                  <dd>{formatCurrency(event.cost_usd, currency)}</dd>
+                ) : (
+                  <Tooltip title={t('events.cost_unpriced')}>
+                    <dd tabIndex={0} className="terminal-muted">{t('events.cost_unpriced_short')}</dd>
+                  </Tooltip>
+                )}
+              </div>
+            </dl>
+          </header>
           <Tabs more={TAB_OVERFLOW}
             activeKey={tab}
             onChange={setTab}
@@ -369,223 +377,23 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 key: 'overview',
                 label: t('events.overview'),
                 children: (
-                  <>
-                    {event.failed && (
-                      <div className="req-overview-error-card">
-                        <div className="req-overview-error-top">
-                          <span className="req-overview-error-status">
-                            {errors.length > 0 ? `HTTP: ${errors[0].status_code}` : t('events.filter_failed')}
-                          </span>
-                          <span className="req-overview-error-code">
-                            {errors.length > 0 ? errors[0].code || 'ERROR' : t('events.error_banner_title')}
-                          </span>
-                          <div className="req-overview-error-btns">
-                            {errors.length > 0 && errors[0].body && (
-                              <CopyButton showLabel text={errors[0].body} label={t('events.copy_error')} />
-                            )}
-                            <Button
-                              size="small"
-                              type="link"
-                              onClick={() => setTab('diagnostics')}
-                            >
-                              {t('events.view_diagnostics')} →
-                            </Button>
-                          </div>
-                        </div>
-                        {errors.length > 0 && errors[0].quota_reason && (
-                          <div className="req-overview-error-reason">{errors[0].quota_reason}</div>
-                        )}
-                        {errors.length > 0 && errors[0].body && (
-                          <pre className="req-overview-error-body">{errors[0].body}</pre>
-                        )}
-                      </div>
-                    )}
-                    <div className="request-source-chain" aria-label={t('events.routing')}>
-                      <div>
-                        <span>{t('events.caller')}</span>
-                        <strong>{value(requestGroupName(event))}</strong>
-                      </div>
-                      <ArrowRightOutlined />
-                      <div>
-                        <span>{t('events.provider')}</span>
-                        <strong>{value(providerName ? providerName(event.provider) : event.provider)}</strong>
-                      </div>
-                      <ArrowRightOutlined />
-                      <div>
-                        <span>{t('events.credential')}</span>
-                        <strong>{value(credentialLabel)}</strong>
-                      </div>
-                    </div>
-                    {section(
-                      t('events.routing'),
-                      fields([
-                        [t('events.provider'), value(event.provider)],
-                        ...providerKeyFields,
-                        [t('events.credential'), value(credentialLabel)],
-                        [
-                          t('events.identity_basis'),
-                          identity ? t(`events.credential_${identity.kind}`) : missing,
-                        ],
-                        [t('events.resource_name'), value(resourceNameLabel)],
-                        [t('events.source'), value(event.source)],
-                        [t('events.auth_index'), value(event.auth_index)],
-                        [t('events.auth_type'), value(event.auth_type)],
-                        [t('events.access_provider'), value(event.access_provider)],
-                        [
-                          t('events.native_key'),
-                          event.access_provider ? t(event.is_native_key ? 'events.native_key_yes' : 'events.native_key_no') : missing,
-                        ],
-                        [t('events.caller'), value(requestGroupName(event))],
-                        [t('events.api_group_key'), value(event.api_group_key)],
-                        [t('events.group_category'), value(event.api_group_label)],
-                        [t('events.resource_id'), value(event.resource_id)],
-                        [t('events.transport'), value(transport && t(`events.transport_${transport}`))],
-                        [t('events.executor'), value(event.executor_type)],
-                        [t('events.endpoint'), value(event.endpoint)],
-                      ]),
-                    )}
-                    {section(
-                      t('events.request_parameters'),
-                      fields([
-                        [t('events.call_model'), value(event.model_alias || event.model)],
-                        [t('events.request_model'), value(event.model)],
-                        [
-                          t('events.served_model'),
-                          event.response_model ? (
-                            <span className="request-served-model" data-testid="detail-served-model">
-                              <span>{event.response_model}</span>
-                              {event.model_substituted && (
-                                <Tooltip title={t('events.served_substituted_hint')}>
-                                  <span className="request-served-flag">
-                                    <SwapOutlined aria-hidden />
-                                    {t('events.served_substituted')}
-                                  </span>
-                                </Tooltip>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="terminal-muted">{t('events.served_model_unknown')}</span>
-                          ),
-                        ],
-                        [t('events.reasoning_effort'), value(displayEffortName(event.reasoning_effort))],
-                        [t('events.service_tier'), value(event.service_tier)],
-                        [t('events.outbound_tier'), value(event.effective_service_tier)],
-                        [t('events.response_tier'), value(event.response_service_tier)],
-                        [
-                          t('events.resolved_tier'),
-                          event.resolved_service_tier || event.resolved_service_tier_source === 'outbound'
-                            ? t(resolvedTierHintKey(event), { tier: event.resolved_service_tier || '—' })
-                            : value(undefined),
-                        ],
-                        [
-                          t('events.generation'),
-                          t(event.generate ? 'events.generation_yes' : 'events.preflight'),
-                        ],
-                        [t('events.event_key'), value(event.event_key)],
-                      ]),
-                    )}
-                  </>
+                  <RequestOverview
+                    event={event}
+                    provider={providerInfo}
+                    caller={requestGroupName(event)}
+                    credential={answeringCredential}
+                    rate={rate}
+                    durationScaleStyle={durationScaleStyle}
+                    tokenStyle={tokenStyle}
+                    onShowDiagnostics={() => setTab('diagnostics')}
+                  />
                 ),
               },
               {
                 key: 'usage',
-                label: t('events.performance'),
+                label: t('events.usage_tab'),
                 children: (
                   <>
-                    {latency > 0 && (
-                      <div className="req-waterfall-box">
-                        <div className="req-waterfall-header">
-                          <h4>{t('events.waterfall_title')}</h4>
-                          <span
-                            className="req-waterfall-total req-timing-value"
-                            style={durationScaleStyle}
-                          >
-                            {formatEventDuration(latency)}
-                          </span>
-                        </div>
-                        {isMeasurable && ttft > 0 ? (
-                          <>
-                            <div className="req-waterfall-track">
-                              <div
-                                className="req-waterfall-seg-ttft"
-                                style={{ width: `${ttftPercent}%` }}
-                                title={`TTFT: ${formatEventDuration(ttft)} (${Math.round((ttft / latency) * 100)}%)`}
-                              />
-                              <div
-                                className="req-waterfall-seg-stream"
-                                style={{ width: `${streamPercent}%` }}
-                                title={`${t('events.waterfall_stream')}: ${formatEventDuration(streamTime)} (${Math.round((streamTime / latency) * 100)}%)`}
-                              />
-                            </div>
-                            <div className="req-waterfall-legend">
-                              <div className="req-waterfall-legend-item">
-                                <span className="req-waterfall-pip req-waterfall-pip-ttft" />
-                                <span>{t('events.waterfall_ttft')}</span>
-                                <strong>{formatEventDuration(ttft)}</strong>
-                              </div>
-                              <div className="req-waterfall-legend-item">
-                                <span className="req-waterfall-pip req-waterfall-pip-stream" />
-                                <span>{t('events.waterfall_stream')}</span>
-                                <strong>{formatEventDuration(streamTime)}</strong>
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="req-waterfall-track">
-                              <div
-                                className="req-waterfall-seg-total"
-                                style={{ width: '100%' }}
-                                title={`${t('events.duration')}: ${formatEventDuration(latency)}`}
-                              />
-                            </div>
-                            <div className="req-waterfall-legend">
-                              <div className="req-waterfall-legend-item">
-                                <span className="req-waterfall-pip req-waterfall-pip-total" />
-                                <span>{t('events.duration')}</span>
-                                <strong
-                                  className="req-timing-value"
-                                  style={durationScaleStyle}
-                                >{formatEventDuration(latency)}</strong>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    <div className="req-token-cards-grid">
-                      <div className="req-token-card">
-                        <span>{t('events.total_tokens')}</span>
-                        <strong title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
-                      </div>
-                      <div className="req-token-card">
-                        <span>{t('events.input_tokens')}</span>
-                        <strong title={formatTokensFull(event.tokens.input)}>{formatTokens(event.tokens.input, tokenStyle)}</strong>
-                      </div>
-                      <div className="req-token-card">
-                        <span>{t('events.output_tokens')}</span>
-                        <strong title={formatTokensFull(event.tokens.output)}>{formatTokens(event.tokens.output, tokenStyle)}</strong>
-                      </div>
-                      {event.tokens.reasoning > 0 && (
-                        <div className="req-token-card">
-                          <span>{t('events.reasoning_tokens')}</span>
-                          <strong title={formatTokensFull(event.tokens.reasoning)}>{formatTokens(event.tokens.reasoning, tokenStyle)}</strong>
-                        </div>
-                      )}
-                      <div className="req-token-card">
-                        <span>{t('events.cached_tokens')}</span>
-                        <strong title={formatTokensFull(event.tokens.cached)}>{formatTokens(event.tokens.cached, tokenStyle)}</strong>
-                      </div>
-                    </div>
-                    {section(
-                      t('events.timing'),
-                      fields([
-                        [t('events.duration'), `${event.latency_ms.toLocaleString()} ms`],
-                        ...(isMeasurable && event.ttft_ms != null
-                          ? [[t('events.ttft'), `${event.ttft_ms.toLocaleString()} ms`] as [string, string]]
-                          : []),
-                      ]),
-                    )}
                     <TokenAccountingNote accounting={event.token_accounting} className="request-detail-note" />
                     {section(
                       t('events.token_breakdown'),
@@ -599,11 +407,11 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         [t('events.total_tokens'), formatTokensFull(event.tokens.total)],
                       ]),
                     )}
+                    <p className="request-detail-note">{t('events.token_note')}</p>
                     {section(
                       t('cost.title'),
                       <CostBreakdownView breakdown={result.data?.cost_breakdown} model={event.model} costUsd={event.cost_usd} />,
                     )}
-                    <p className="request-detail-note">{t('events.token_note')}</p>
                     <StructuredUsageView details={event.structured_usage} />
                   </>
                 ),
@@ -720,6 +528,92 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           <p className="request-detail-note">{t('events.log_unavailable')}</p>
                         )}
                       </>,
+                    )}
+                  </>
+                ),
+              },
+              {
+                key: 'raw',
+                label: t('events.raw_fields'),
+                children: (
+                  <>
+                    <p className="request-detail-note">{t('events.raw_fields_note')}</p>
+                    {section(
+                      t('events.routing'),
+                      fields([
+                        [t('events.provider'), value(event.provider)],
+                        ...providerKeyFields,
+                        [t('events.credential'), value(credentialLabel)],
+                        [
+                          t('events.identity_basis'),
+                          identity ? t(`events.credential_${identity.kind}`) : missing,
+                        ],
+                        [t('events.resource_name'), value(resourceNameLabel)],
+                        [t('events.source'), value(event.source)],
+                        [t('events.auth_index'), value(event.auth_index)],
+                        [t('events.auth_type'), value(event.auth_type)],
+                        [t('events.access_provider'), value(event.access_provider)],
+                        [
+                          t('events.native_key'),
+                          event.access_provider ? t(event.is_native_key ? 'events.native_key_yes' : 'events.native_key_no') : missing,
+                        ],
+                        [t('events.caller'), value(requestGroupName(event))],
+                        [t('events.api_group_key'), value(event.api_group_key)],
+                        [t('events.group_category'), value(event.api_group_label)],
+                        [t('events.resource_id'), value(event.resource_id)],
+                        [t('events.transport'), value(transport && t(`events.transport_${transport}`))],
+                        [t('events.executor'), value(event.executor_type)],
+                        [t('events.endpoint'), value(event.endpoint)],
+                      ]),
+                    )}
+                    {section(
+                      t('events.request_parameters'),
+                      fields([
+                        [t('events.call_model'), value(event.model_alias || event.model)],
+                        [t('events.request_model'), value(event.model)],
+                        [
+                          t('events.served_model'),
+                          event.response_model ? (
+                            <span className="request-served-model" data-testid="detail-served-model">
+                              <span>{event.response_model}</span>
+                              {event.model_substituted && (
+                                <Tooltip title={t('events.served_substituted_hint')}>
+                                  <span className="request-served-flag">
+                                    <SwapOutlined aria-hidden />
+                                    {t('events.served_substituted')}
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="terminal-muted">{t('events.served_model_unknown')}</span>
+                          ),
+                        ],
+                        [t('events.reasoning_effort'), value(displayEffortName(event.reasoning_effort))],
+                        [t('events.service_tier'), value(event.service_tier)],
+                        [t('events.outbound_tier'), value(event.effective_service_tier)],
+                        [t('events.response_tier'), value(event.response_service_tier)],
+                        [
+                          t('events.resolved_tier'),
+                          event.resolved_service_tier || event.resolved_service_tier_source === 'outbound'
+                            ? t(resolvedTierHintKey(event), { tier: event.resolved_service_tier || '—' })
+                            : value(undefined),
+                        ],
+                        [
+                          t('events.generation'),
+                          t(event.generate ? 'events.generation_yes' : 'events.preflight'),
+                        ],
+                        [t('events.event_key'), value(event.event_key)],
+                      ]),
+                    )}
+                    {section(
+                      t('events.timing'),
+                      fields([
+                        [t('events.duration'), `${event.latency_ms.toLocaleString()} ms`],
+                        ...(isMeasurable && event.ttft_ms != null
+                          ? [[t('events.ttft'), `${event.ttft_ms.toLocaleString()} ms`] as [string, string]]
+                          : []),
+                      ]),
                     )}
                   </>
                 ),

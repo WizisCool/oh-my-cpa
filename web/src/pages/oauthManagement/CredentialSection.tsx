@@ -18,7 +18,10 @@ import {
   NoteOutlined,
   ProfileOutlined,
   RenameOutlined,
+  CheckOutlined,
+  PlusOutlined,
   RollbackOutlined,
+  StopOutlined,
   SyncOutlined,
   TimerResetOutlined,
   WarningOutlined,
@@ -26,6 +29,7 @@ import {
 import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { CredentialMark } from '../../components/LobeIcon';
+import { PriorityBadge } from '../../components/common/PriorityBadge';
 import { StatusLabel } from '../../components/common/StatusLabel';
 import { Tag } from '../../components/common/Tag';
 import { Meter } from '../../components/common/Meter';
@@ -38,7 +42,7 @@ import {
   isAuthFileProblem,
   summarizeAuthFileStatusMessage,
 } from '../../components/authFiles/authFileLogic';
-import { SIWC_BADGE_LABEL_KEYS, SIWC_BADGE_TONES, type SIWCBadgeState } from '../../components/authFiles/siwcBadge';
+import { SIWC_BADGE_LABEL_KEYS, type SIWCBadgeState } from '../../components/authFiles/siwcBadge';
 import { formatObservedAgo, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown, quotaResetText } from '../quota/quotaFormat';
 import { quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
@@ -64,6 +68,20 @@ import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../../c
 import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../../components/common/RowReorder';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import type { DropSide } from '../../types/displayOrder';
+
+
+/**
+ * Each SIWC state's glyph on the status column's SIWC line. The line always spells its state out
+ * ("SIWC off", "SIWC not bound"), so its presence never reads as "on"; the glyph and the tone back
+ * the words up rather than replace them.
+ */
+const SIWC_STATE_GLYPHS: Record<SIWCBadgeState, React.ReactNode> = {
+  active: <CheckOutlined aria-hidden />,
+  rebind: <WarningOutlined aria-hidden />,
+  pending: <SyncOutlined spin aria-hidden />,
+  off: <StopOutlined aria-hidden />,
+  bind: <PlusOutlined aria-hidden />,
+};
 
 export interface CredentialRowActions {
   isBusy: (record: OAuthWorkspaceRecord) => boolean;
@@ -348,7 +366,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
                 <RenameButton label={file.name} disabled={isBusy} onClick={() => setIsRenaming(true)} data-testid="oauth-credential-rename" />
               )}
             <div className={styles['identity-line']}>
-              <div className={styles['name-group']}>
+              <div className={clsx(styles['name-group'], !isRenaming && !displayName && styles['name-group-fluid'])}>
                 {isRenaming ? (
                   <InlineNameEditor
                     initial={displayName}
@@ -374,6 +392,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
                 </Tooltip>
               )}
               {quota?.plan?.plan_label && <span className={styles.plan}>{quota.plan.plan_label}</span>}
+              <PriorityBadge priority={file.priority} weight={file.weight} />
               {quota?.plan?.subscription_active === false && (
                 <span className={clsx(styles.plan, styles['plan-inactive'])} data-subscription-inactive="true">{t('quota.subscription_inactive')}</span>
               )}
@@ -384,43 +403,22 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
               )}
             </div>
             {displayName && accountToggle && <div className={styles['account-line']}>{accountToggle}</div>}
-            {file.priority !== undefined || file.weight !== undefined ? (
-              <div className={styles.meta}>
-                {file.priority !== undefined && <span>{t('omc.priority_value', { n: file.priority })}</span>}
-                {file.weight !== undefined && <span>{t('omc.weight_value', { n: file.weight })}</span>}
-              </div>
-            ) : null}
-            {/* What the upstream account carries beyond its limits: the SIWC partition and the banked
-                resets. They are tags under the name rather than columns, so a Codex section's quota
+            {/* Banked resets are a tag under the name rather than a column, so a Codex section's quota
                 tracks start and end where every other provider's do. */}
-            {(siwc || credits > 0) && (
+            {credits > 0 && (
               <div className={styles['identity-tags']}>
-                {siwc && (
+                <Tooltip title={t('omc.quota_credit_available_hint')}>
                   <button
                     type="button"
-                    className={clsx(styles.tag, styles[`tag-${SIWC_BADGE_TONES[siwc]}`], siwc === 'bind' && styles['tag-offer'])}
-                    data-siwc-badge={siwc}
-                    onClick={() => actions.onOpenSIWC(record)}
-                    aria-label={t('siwc.badge_aria', { name: file.name })}
+                    className={styles.tag}
+                    data-quota-credits={credits}
+                    onClick={() => actions.onOpen(record, 'overview')}
+                    aria-label={`${t('omc.reset_credits_count', { n: credits })}: ${file.name}`}
                   >
-                    <span className={styles['tag-name']}>SIWC</span>
-                    {t(SIWC_BADGE_LABEL_KEYS[siwc])}
+                    <RollbackOutlined aria-hidden="true" />
+                    {t('omc.reset_credits_count', { n: credits })}
                   </button>
-                )}
-                {credits > 0 && (
-                  <Tooltip title={t('omc.quota_credit_available_hint')}>
-                    <button
-                      type="button"
-                      className={styles.tag}
-                      data-quota-credits={credits}
-                      onClick={() => actions.onOpen(record, 'overview')}
-                      aria-label={`${t('omc.reset_credits_count', { n: credits })}: ${file.name}`}
-                    >
-                      <RollbackOutlined aria-hidden="true" />
-                      {t('omc.reset_credits_count', { n: credits })}
-                    </button>
-                  </Tooltip>
-                )}
+                </Tooltip>
               </div>
             )}
           </div>
@@ -430,6 +428,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
         <div className={styles['status-cell']}>
           <div className={styles['status-main']}>
             <Tooltip title={<>
+              {status.needsReauth && <div>{t('omc.reauthenticate')}</div>}
               {explanation && <div>{explanation}</div>}
               <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
               {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
@@ -441,18 +440,45 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
               )}
               {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
             </>}>
-              <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
+              {/* A state that asks for a sign-in is itself the link to it, so the action costs the
+                  cell no line of its own. */}
+              {status.needsReauth ? (
+                <button
+                  type="button"
+                  className={styles['status-reauth']}
+                  onClick={() => actions.onReauthenticate(record)}
+                  aria-label={`${t('omc.reauthenticate')}: ${t(status.labelKey)}`}
+                  data-status-explained={explanation ? 'true' : undefined}
+                >
+                  <StatusLabel tone={status.tone}>{t(status.labelKey)}</StatusLabel>
+                </button>
+              ) : (
+                <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
+              )}
             </Tooltip>
             <CredentialRenewalBadge
               file={file}
               onOpen={() => actions.onOpen(record, 'renewal')}
             />
+            {/* On the state's line, so the cell never runs past the state and the SIWC line. */}
+            {failure && !status.needsReauth && (
+              <span className={styles['status-failed']} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
+            )}
           </div>
-          {status.needsReauth ? (
-            <button type="button" className={styles['status-action']} onClick={() => actions.onReauthenticate(record)}>{t('omc.reauthenticate')}</button>
-          ) : failure ? (
-            <span className={clsx(styles['status-sub'], styles['status-failed'])} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
-          ) : null}
+          {/* SIWC is a state of the account, so it reads with the status: a quiet line under it that
+              names its state in words and opens the SIWC settings. */}
+          {siwc && (
+            <button
+              type="button"
+              className={clsx(styles['status-siwc'], styles[`status-siwc-${siwc}`])}
+              data-siwc-badge={siwc}
+              onClick={() => actions.onOpenSIWC(record)}
+              aria-label={t('siwc.badge_aria', { name: file.name })}
+            >
+              {SIWC_STATE_GLYPHS[siwc]}
+              <span className={styles['status-siwc-label']}>{t('siwc.status_line', { state: t(SIWC_BADGE_LABEL_KEYS[siwc]) })}</span>
+            </button>
+          )}
         </div>
       </td>
       <td className={styles['td-switch']}>
@@ -615,9 +641,10 @@ function QuotaReading({ cell, name, provider, isStale, nowMS }: {
     && window.used_percent === 0
     && (window.remaining_percent ?? 100) === 100;
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
-  const estimate = compactQuotaCapacity(window, tokenStyle, t);
+  // A plugin window has no estimate; its own words for what is left take the estimate's place.
+  const estimate = compactQuotaCapacity(window, tokenStyle, t) ?? window.description;
   const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
-  const detail = [window.label, quotaResetText(window, nowMS, t), capacity].filter(Boolean);
+  const detail = [window.label, window.description, quotaResetText(window, nowMS, t), capacity].filter(Boolean);
   return (
     <div
       className={clsx(

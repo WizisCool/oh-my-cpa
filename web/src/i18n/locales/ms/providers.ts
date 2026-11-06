@@ -163,6 +163,8 @@ export default {
   "pro.model_count_pill": "Model {n}",
   "pro.key_count_pill": "Kunci {n}",
   "pro.header_count_pill": "Pengepala {n}",
+  "pro.key_missing_hint": "Tiada kunci: baris ini tidak dapat memajukan permintaan walaupun dihidupkan.",
+  "pro.health_no_key": "Tiada kunci",
   "pro.none_text": "Tiada",
   "pro.status_disabled": "Dilumpuhkan",
   "pro.status_active": "Aktif",

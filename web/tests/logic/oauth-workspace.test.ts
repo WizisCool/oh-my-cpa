@@ -19,6 +19,8 @@ import {
   workspaceProviderOptions,
 } from '../../src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../../src/pages/oauthProviderLogic.ts';
+import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
+import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
 import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection } from '../../src/pages/oauthManagement/credentialSections.ts';
@@ -143,6 +145,32 @@ test('providers: Claude maps to anthropic while unknown providers remain selecti
   assert.equal(resolveAuthorizationProviderId('iflow', choices), 'iflow');
   assert.equal(resolveAuthorizationProviderId('mystery-plugin', choices), undefined);
   assert.notEqual(resolveAuthorizationProviderId('gemini', choices), 'antigravity');
+});
+
+test('providers: a multi-portal plugin files each credential under the portal that issued it', () => {
+  const plugins = [
+    // Switched off, it still names and draws its credentials, so it still splits them.
+    {
+      id: 'harbor-oauth', enabled: false, effective_enabled: false, supports_oauth: true, oauth_providers: ['harbor', 'harbor-cn'],
+      oauth_provider_entries: [{ identifier: 'harbor', name: 'Harbor' }, { identifier: 'harbor-cn', name: 'Harbor CN' }],
+      metadata: { name: 'Harbor' }, config_fields: [],
+    },
+    { id: 'acme', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'acme-login', metadata: { name: 'Acme' }, config_fields: [] },
+  ];
+  const portals = pluginMultiPortalKeys(plugins);
+  assert.deepEqual([...portals].sort(), ['harbor', 'harbor-cn']);
+  const key = (overrides: Partial<ManagementAuthFile>) => canonicalDisplayProviderKey(file(overrides), undefined, portals);
+  assert.equal(key({ type: 'harbor', oauth_provider: 'harbor' }), 'harbor');
+  assert.equal(key({ type: 'harbor', oauth_provider: 'Harbor-CN' }), 'harbor-cn');
+  // A gateway that reports no portal, or a single-portal plugin, groups exactly as before.
+  assert.equal(key({ type: 'harbor', oauth_provider: undefined }), 'harbor');
+  assert.equal(key({ type: 'acme', oauth_provider: 'acme-login' }), 'acme');
+  // The portal's group reads with the portal's own name and signs in through that portal.
+  assert.equal(providerDisplayName('harbor-cn', pluginOAuthProviderTitles(plugins)), 'Harbor CN');
+  const portalChoices = pluginOAuthProviderChoices([{ ...plugins[0], enabled: true, effective_enabled: true }], echoT);
+  const projection = buildOAuthWorkspaceProjection([file({ type: 'harbor', oauth_provider: 'harbor-cn' })], [], portalChoices, portals);
+  assert.equal(projection.records[0].displayProvider, 'harbor-cn');
+  assert.equal(projection.records[0].authorizationProviderId, 'harbor-cn');
 });
 
 test('quota conditions: capability is independent from observed health and authenticity', () => {

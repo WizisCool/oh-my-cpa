@@ -145,6 +145,7 @@ export default {
   'omc.change_provider': 'Change provider',
   'omc.priority_value': 'Priority {n}',
   'omc.weight_value': 'Weight {n}',
+  'omc.priority_badge_hint': 'Higher values are selected first; weight applies only within the same priority.',
   'omc.connect_account': 'OAuth sign-in',
   'omc.connect_provider': 'OAuth provider',
   'omc.connect_provider_placeholder': 'Select a provider to connect',

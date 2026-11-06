@@ -11,19 +11,23 @@
  *    path, because the demonstration is served from the site root rather than under
  *    `/omc`.
  *
- * 2. **Asset URLs are made root-relative.** Vite emits `./assets/...` so the bundle
- *    works from any sub-path, which is right for a self-hosted install that may sit
- *    under `/omc` but wrong here: a visitor who reloads `/usage/events` would resolve
- *    `./assets/...` against that path and get the SPA fallback instead of the chunk.
+ * 2. **Relative URLs resolve against the site root.** Vite emits `./` references so the
+ *    bundle works under any sub-path, and the console builds more of them at runtime (the
+ *    provider marks are `${BASE_URL}lobe-icons/...`). The Go server makes them all resolve
+ *    by writing `<base href>` into the page; without it a visitor on `/usage/events` would
+ *    resolve them against that route and get the SPA fallback instead of the file. The
+ *    build writes the same tag rather than rewriting the paths it can find in the bundle:
+ *    a URL assembled at runtime has no literal to find, which is how the provider icons
+ *    once went missing from the request list.
  *
  * 3. **The build is copied rather than built.** The demonstration serves the same
  *    console as the product - that is the point of it - so this reads the existing
  *    `internal/web/dist` instead of running its own build, and `--from-built` lets a
  *    verification pass reuse one production build instead of racing it.
  */
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,14 +60,12 @@ const CONFIG_MARKER = '__OMCPA_CONFIG__';
 /**
  * Rewrites a built HTML file for a static host.
  */
-function rewriteHtml(html) {
+export function rewriteHtml(html) {
   let output = html;
 
-  // The asset references Vite emits are relative to the document, which breaks on a
-  // deep link once the document is served from the site root. They are made absolute
-  // here so a reload of any console route loads the app rather than the fallback.
-  output = output.replaceAll('href="./', 'href="/');
-  output = output.replaceAll('src="./', 'src="/');
+  // The same tag the Go server writes for a root base path (`internal/api/handler.go`).
+  if (output.includes('<base ')) throw new Error('the built index.html already carries a <base> tag');
+  output = output.replace('<head>', '<head>\n    <base href="/">');
 
   const script = `<script>window.${CONFIG_MARKER} = ${JSON.stringify(RUNTIME_CONFIG)};</script>`;
   if (!output.includes(CONFIG_MARKER)) {
@@ -74,80 +76,13 @@ function rewriteHtml(html) {
   // in the first frame.
   output = output.replace(/<script>[\s\S]*?__OMCPA_CONFIG__[\s\S]*?<\/script>/, script);
 
+  if (!output.includes('<base href="/">')) {
+    throw new Error('the built index.html has no <head> to carry the base URL');
+  }
   if (!output.includes('"demo":true') && !output.includes('"demo": true')) {
     throw new Error('the injected runtime configuration does not mark the page as a demonstration');
   }
   return output;
-}
-
-/**
- * The relative references Vite bakes into the built modules and stylesheets.
- *
- * They are relative for the same reason the HTML's are - a self-hosted install may sit
- * under `/omc`, so `./` resolves correctly there - and they break in exactly the same way
- * on a deep link served from the site root. The demonstration therefore has to rewrite
- * them too, and this was learned the hard way: rewriting only the HTML left the provider
- * icons broken in the request list, because the icon path is a template literal inside a
- * JavaScript chunk (`./lobe-icons/${name}-color.svg`), which resolves against the current
- * route. The console's own theme fonts are referenced the same way from its CSS.
- *
- * The rewrite is a literal replacement of the leading `./` rather than a parser pass,
- * because what it is fixing is a path convention rather than a syntax: every occurrence
- * in the built output refers to something served from the site root, and there is no
- * construct in these files where `./` means a directory the browser is already in.
- */
-const RELATIVE_REFERENCES = [
-  { pattern: /\.\/lobe-icons\//g, replacement: '/lobe-icons/' },
-  { pattern: /\.\/([A-Za-z0-9_-]+\.woff2)/g, replacement: '/assets/$1' },
-];
-
-/** Rewrites the leading `./` in a built module or stylesheet. */
-function rewriteModuleReferences(source) {
-  let output = source;
-  for (const { pattern, replacement } of RELATIVE_REFERENCES) {
-    output = output.replace(pattern, replacement);
-  }
-  return output;
-}
-
-/**
- * Applies the module rewrite to every staged JavaScript and CSS file.
- *
- * The walk is over the staged directory rather than a list of file names, because the
- * names are content-hashed: a list would go stale on the next build and would fail by
- * silently skipping the file it named.
- */
-async function rewriteStagedModules(stage) {
-  const assets = join(stage, 'assets');
-  let rewritten = 0;
-  for (const name of await readdir(assets)) {
-    if (!name.endsWith('.js') && !name.endsWith('.css')) continue;
-    const path = join(assets, name);
-    const source = await readFile(path, 'utf8');
-    const output = rewriteModuleReferences(source);
-    if (output === source) continue;
-    await writeFile(path, output);
-    rewritten += 1;
-  }
-  return rewritten;
-}
-
-async function validateStagedModuleReferences(stage, directory = stage) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      await validateStagedModuleReferences(stage, path);
-      continue;
-    }
-    if (!entry.name.endsWith('.js') && !entry.name.endsWith('.css')) continue;
-    const source = await readFile(path, 'utf8');
-    // Scan every staged module, including untouched and nested files: a successful
-    // rewrite elsewhere cannot prove a new Vite asset form is safe on deep links.
-    const leftover = source.match(/\.\/(?:(?:lobe-icons|assets)\/[^\s"'`()<>\\]*|[^\s"'`()<>\\]+\.woff2)/);
-    if (leftover) {
-      throw new Error(`staged module ${relative(stage, path)} still references an asset relatively: ${leftover[0]}`);
-    }
-  }
 }
 
 export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STAGE } = {}) {
@@ -170,21 +105,13 @@ export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STA
   const original = await readFile(index, 'utf8');
   await writeFile(index, rewriteHtml(original));
 
-  const rewritten = await rewriteStagedModules(stageDirectory);
-  await validateStagedModuleReferences(stageDirectory);
-  if (rewritten === 0) {
-    // A build with no relative references would mean this rewrite is dead code, which is
-    // worth knowing rather than assuming: it would mean the convention changed upstream.
-    throw new Error('no staged module referenced an asset relatively; is this rewrite still needed?');
-  }
-
-  return { stageDirectory, rewritten };
+  return { stageDirectory };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { stageDirectory, rewritten } = await stageDemo();
-    console.log(`staged the demonstration console at ${stageDirectory} (${rewritten} module(s) rewritten)`);
+    const { stageDirectory } = await stageDemo();
+    console.log(`staged the demonstration console at ${stageDirectory}`);
   } catch (error) {
     console.error(`build-demo: ${error.message}`);
     process.exitCode = 1;

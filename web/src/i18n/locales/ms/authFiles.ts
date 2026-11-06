@@ -225,4 +225,8 @@ export default {
   "af.page_size_n": "{n} / halaman",
   "af.failure_details_title": "Beberapa operasi gagal",
   "af.status_toggle_label": "Togol status dayakan untuk {name}",
+  "af.tab_overview": "Ringkasan",
+  "af.raw_facts": "Butiran mentah",
+  "af.metric_priority": "Keutamaan",
+  "af.metric_weight": "Pemberat",
 } satisfies Translation<typeof source>;

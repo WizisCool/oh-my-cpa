@@ -22,6 +22,8 @@ export interface QuotaWindow {
   reset_label?: string;
   period_hours?: number;
   reset_accuracy?: 'exact' | 'derived' | 'approximate';
+  /** The provider's own words for the window's standing ("183 / 2,000 credits left"); a plugin's only amounts. */
+  description?: string;
   /** What this deployment recorded for the credential in the window's current cycle, up to the observation. */
   usage?: QuotaWindowUsage;
   /** The estimated size of the whole window and what is left of it; absent when `capacity_unavailable` says why. */
@@ -94,6 +96,16 @@ export interface QuotaUsageShare {
   share_percent?: number;
 }
 
+/** One figure of a plugin's quota summary; `format` says how `value` reads. */
+export interface QuotaMetric {
+  key: string;
+  label: string;
+  value: number;
+  unit?: string;
+  format?: string;
+  currency?: string;
+}
+
 export interface QuotaPlan {
   /** Whether the provider reports an active subscription; absent when unknown. */
   subscription_active?: boolean;
@@ -111,6 +123,8 @@ export interface QuotaPlan {
   credits?: QuotaCredits;
   balances?: QuotaBalance[];
   usage_breakdown?: QuotaUsageShare[];
+  /** A plugin's quota summary, in the order it lists the figures. */
+  metrics?: QuotaMetric[];
 }
 
 export interface QuotaCredits {

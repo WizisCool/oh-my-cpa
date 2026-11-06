@@ -1,8 +1,10 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from 'antd';
+import { App as AntdApp, Button, Dropdown } from 'antd';
 import { Switch } from '../common/Switch';
-import { DeleteOutlined, EditOutlined } from '../icons';
+import { PriorityBadge } from '../common/PriorityBadge';
+import { GlyphBadge } from '../common/GlyphBadge';
+import { BoxOutlined, DeleteOutlined, EditOutlined, ExternalLinkOutlined, KeyOutlined, MoreOutlined, PictureOutlined, RenameOutlined, TagOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';
@@ -69,6 +71,42 @@ interface ProviderTableProps {
  * the switch's rendered state, the row's status label and the icon override the
  * row displays are three readings of the same row that must not disagree.
  */
+/*
+ * Each column's width where the table first fits beside the sidebar (a 1440px window): what its
+ * content needs, plus the cell's 24px of padding. A wider table adds the same width to every
+ * column, so the space between any two columns grows together and the row keeps one rhythm instead
+ * of a hole wherever the surplus happened to land.
+ */
+const COLUMN_BASE_WIDTHS = {
+  name: 280,
+  protocol: 184,
+  base_url: 184,
+  models_headers: 128,
+  traffic: 132,
+  status: 72,
+  switch: 58,
+  actions: 88,
+} as const;
+type ProviderColumnKey = keyof typeof COLUMN_BASE_WIDTHS;
+const COLUMN_BASE_TOTAL = Object.values(COLUMN_BASE_WIDTHS).reduce((sum, width) => sum + width, 0);
+const COLUMN_COUNT = Object.keys(COLUMN_BASE_WIDTHS).length;
+// The table's own border, which its columns do not get.
+const TABLE_FRAME = 2;
+
+/** The element's content width, kept current as the layout changes. */
+function useElementWidth<T extends HTMLElement>() {
+  const ref = React.useRef<T>(null);
+  const [width, setWidth] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
 export function ProviderTable({
   providers,
   providersLoading,
@@ -87,6 +125,10 @@ export function ProviderTable({
 }: ProviderTableProps) {
   const t = useT();
   const isPhone = useIsPhoneViewport();
+  const { modal } = AntdApp.useApp();
+  const [listRef, listWidth] = useElementWidth<HTMLDivElement>();
+  const columnSurplus = Math.max(0, Math.floor((listWidth - TABLE_FRAME - COLUMN_BASE_TOTAL) / COLUMN_COUNT));
+  const columnWidth = (key: ProviderColumnKey) => COLUMN_BASE_WIDTHS[key] + columnSurplus;
   const reorder = useReorderList(providers, providerKey, (key, target, side) => onMove?.(key, target, side));
   // One row's name is edited at a time, like a credential's on the OAuth page. The editor's name
   // field is a full save that also rewrites CPA's entry; the glyph is the only overlay-only rename,
@@ -123,22 +165,17 @@ export function ProviderTable({
       key: 'name',
       // The cell holds the row's edge grip, which is laid over its leading padding.
       className: styles['name-cell'],
-      // The name is the row's identity: auto layout otherwise hands its width to the endpoint
-      // and breaks "Anthropic Claude" one syllable per line. The floor includes the 28px the
-      // rename glyph reserves, so the name keeps the width it had before the glyph existed.
-      minWidth: 236,
+      // The width includes the 28px the rename glyph reserves and the priority badge after the name.
+      width: columnWidth('name'),
       render: (_, record) => {
         const website = safeExternalURL(record.website);
-        // The routing facts under the name: the model prefix, the priority, and the gateway's own
+        // The routing facts under the name: the model prefix and the gateway's own
         // name when the operator renamed the row (request records and CPA's logs carry that name,
         // so it is what a reader cross-checks the row against). The prefix lives here rather than
         // in a column of its own because most rows have none, and a column of "none" was the
         // widest empty space on the page.
         const upstreamName = record.upstream_name && record.upstream_name !== record.name ? record.upstream_name : '';
-        const meta = [
-          upstreamName,
-          record.priority ? t('omc.priority_value', { n: record.priority }) : '',
-        ].filter(Boolean);
+        const meta = [upstreamName].filter(Boolean);
         const hasMeta = Boolean(record.prefix) || meta.length > 0;
         return (
           <div className={styles['provider-identity']}>
@@ -187,6 +224,9 @@ export function ProviderTable({
                 ) : (
                   record.name
                 )}
+                {/* The table is wide enough for the priority to follow the name, as the OAuth list's
+                    badge does, rather than take a line of its own. */}
+                {renamingID !== record.id && Boolean(record.priority) && <PriorityBadge priority={record.priority} />}
               </div>
               {hasMeta && (
                 <div className={styles['provider-meta']}>
@@ -210,6 +250,8 @@ export function ProviderTable({
     {
       title: t('pro.col_protocol'),
       key: 'protocol',
+      // The widest family tag, "Anthropic (Messages)".
+      width: columnWidth('protocol'),
       render: (_, record) => {
         const meta = matchProviderFamily(record.family, record.protocol);
         // The transport is the one behaviour switch that changes how requests travel, so the row
@@ -252,6 +294,8 @@ export function ProviderTable({
     {
       title: t('pro.col_endpoint'),
       key: 'base_url',
+      // The URL fills the column and ellipsizes past it; its tooltip has it whole.
+      width: columnWidth('base_url'),
       render: (_, record) => {
         if (!record.base_url) return <span className={styles['muted']}>{t('pro.none_text')}</span>;
         return (
@@ -266,30 +310,34 @@ export function ProviderTable({
     {
       title: t('pro.col_models_headers'),
       key: 'models_headers',
-      // Two counts a line, wrapping between counts and never inside one. The floor is what keeps
-      // auto layout from squeezing it to one count a line to make room for the endpoint.
-      width: 160,
-      minWidth: 160,
+      // The models and the keys always, the headers only where any are set. The base fits all three
+      // on one line; counts too long for it wrap rather than run into the traffic column.
+      width: columnWidth('models_headers'),
       render: (_, record) => {
         const modelCount = providerModelCount(record);
         const keyCount = providerKeyCount(record);
         const headerCount = providerHeaderCount(record);
-        const modelNames =
-          record.model_entries?.map((m) => m.name).join(', ') ||
-          record.models?.join(', ') ||
-          '';
-
+        const modelNames = record.model_entries?.length ? record.model_entries.map((m) => m.name) : record.models ?? [];
         return (
-          <div className={styles['count-pills']}>
-            <Tooltip title={modelNames || undefined}>
-              <span className={styles['count-pill']}>{t('pro.model_count_pill', { n: modelCount })}</span>
-            </Tooltip>
-            {/* A switched-on row without a key cannot serve, so its key count is the pill that
+          <div className={styles['count-badges']}>
+            <GlyphBadge glyph={<BoxOutlined />} label={t('pro.model_count_pill', { n: modelCount })} items={modelNames}>
+              <span>{modelCount}</span>
+            </GlyphBadge>
+            {/* A switched-on row without a key cannot serve, so its key count is the badge that
                 says why the row counts toward "needs attention". */}
-            <span className={clsx(styles['count-pill'], keyCount === 0 && styles['count-pill-warn'])}>
-              {t('pro.key_count_pill', { n: keyCount })}
-            </span>
-            <span className={styles['count-pill']}>{t('pro.header_count_pill', { n: headerCount })}</span>
+            <GlyphBadge
+              glyph={<KeyOutlined />}
+              label={t('pro.key_count_pill', { n: keyCount })}
+              hint={keyCount === 0 ? t('pro.key_missing_hint') : undefined}
+              tone={keyCount === 0 ? 'warn' : undefined}
+            >
+              <span>{keyCount}</span>
+            </GlyphBadge>
+            {headerCount > 0 && (
+              <GlyphBadge glyph={<TagOutlined />} label={t('pro.header_count_pill', { n: headerCount })} items={Object.keys(record.headers ?? {})}>
+                <span>{headerCount}</span>
+              </GlyphBadge>
+            )}
           </div>
         );
       },
@@ -299,7 +347,7 @@ export function ProviderTable({
     {
       title: t('pro.col_traffic'),
       key: 'traffic',
-      width: 148,
+      width: columnWidth('traffic'),
       render: (_, record) => {
         const row = traffic?.get(record.id);
         if (!row) {
@@ -330,7 +378,7 @@ export function ProviderTable({
     {
       title: t('pro.col_status'),
       key: 'status',
-      width: 96,
+      width: columnWidth('status'),
       // Read through the same resolution the switch uses. During a burst the row shows the
       // operator's newest intent in both places, so the label and the control can never
       // contradict each other on the same line while the gateway catches up.
@@ -343,7 +391,7 @@ export function ProviderTable({
     {
       title: t('pro.col_switch'),
       key: 'switch',
-      width: 72,
+      width: columnWidth('switch'),
       render: (_, record) => {
         // The switch shows the operator's newest intent while a toggle is in
         // flight, so a second click is visible immediately instead of the row
@@ -370,7 +418,7 @@ export function ProviderTable({
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 88,
+      width: columnWidth('actions'),
       align: 'right',
       render: (_, record) => (
         <div className="row-actions">
@@ -406,11 +454,133 @@ export function ProviderTable({
     },
   ];
 
-  // Below 640px each credential line becomes a row. The name is the headline, and the
-  // state, the switch and the actions are the row's control strip - printing them twice would make
-  // the row read as if it had two states that could disagree.
+  /*
+   * A provider on a phone, read the way an operator checks one there: is it on, is it healthy,
+   * what does it speak and to where. The switch is the card's one control in reach; the card itself
+   * opens the editor, and the rarer actions wait behind the menu, so a row is never a strip of
+   * glyphs to aim between.
+   */
+  const renderPhoneCard = (record: ProviderItem, cell: (columnKey: string) => React.ReactNode) => {
+    const isEnabled = resolveEnabled(record);
+    const row = traffic?.get(record.id);
+    const keyCount = providerKeyCount(record);
+    const family = matchProviderFamily(record.family, record.protocol);
+    const host = endpointHost(record.base_url);
+    const website = safeExternalURL(record.website);
+    const tone = successRateTone(row?.successRate);
+    const isLowRate = row !== undefined && row.total > 0 && (tone === 'warn' || tone === 'danger');
+    // The same verdicts the status tiles count, so a card and the tile it falls under agree.
+    const health = !isEnabled
+      ? <StatusLabel tone="warn">{t('pro.status_disabled')}</StatusLabel>
+      : keyCount === 0
+        ? <StatusLabel tone="danger">{t('pro.health_no_key')}</StatusLabel>
+        : isLowRate
+          ? <StatusLabel tone="danger">{t('pro.stat_attention')}</StatusLabel>
+          : <StatusLabel tone="success">{t('pro.status_active')}</StatusLabel>;
+    const isRenaming = renamingID === record.id;
+    const confirmDelete = () => modal.confirm({
+      title: t('pro.delete_provider_confirm'),
+      content: record.name,
+      okText: t('common.delete'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => deleteProviderMutation.mutate(record.id),
+    });
+    const facts = (
+      <>
+        <span className={styles['phone-card-name-line']}>
+          <span className={styles['phone-card-name']}>{record.name}</span>
+          {Boolean(record.priority) && <PriorityBadge priority={record.priority} isStatic />}
+          {record.prefix && <span className={styles['prefix-chip']}>{record.prefix}</span>}
+        </span>
+        <span className={styles['phone-card-route']}>
+          {family && <LobeIcon iconId={family.iconId} size={12} variant="mono" />}
+          <span>{family ? t(family.labelKey) : record.protocol || record.family || t('pro.none_text')}</span>
+          {host && <span className={styles['phone-card-host']}>{host}</span>}
+          {record.behavior?.websockets && <span>{t('pro.websockets_tag')}</span>}
+        </span>
+        <span className={styles['phone-card-health']}>
+          {health}
+          {row && (
+            <span className={styles['phone-card-traffic']}>
+              {t('pro.window_24h')} {row.total === 0
+                ? t('pro.traffic_none')
+                : <>
+                    {t('pro.traffic_requests', { n: row.total.toLocaleString() })}
+                    {' · '}
+                    <span className={clsx(isLowRate && styles[`tone-${tone}`])}>{`${(row.successRate ?? 0).toFixed(1)}%`}</span>
+                  </>}
+            </span>
+          )}
+        </span>
+      </>
+    );
+    return (
+      <article className={styles['phone-card']} data-testid="phone-row" aria-label={record.name}>
+        <span className={styles['phone-card-mark']} aria-hidden="true">
+          <ProviderMark provider={record} sources={{ providerIcons, pluginLogos }} size={22} />
+        </span>
+        {isRenaming ? (
+          <div className={styles['phone-card-main']}>
+            <InlineNameEditor
+              initial={record.name}
+              label={`${t('pro.field_name')}: ${record.name}`}
+              placeholder={record.upstream_name || t('pro.field_name_ph')}
+              onCommit={async (next) => {
+                const isSaved = await onRename(record, next);
+                if (isSaved) setRenamingID(null);
+                return isSaved;
+              }}
+              onCancel={() => setRenamingID(null)}
+              data-testid="provider-name-input"
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles['phone-card-main']}
+            onClick={() => handleOpenEdit(record)}
+            aria-label={`${t('common.edit')}: ${record.name}`}
+          >
+            {facts}
+          </button>
+        )}
+        <div className={styles['phone-card-switch']}>{cell('switch')}</div>
+        <div className={styles['phone-card-tools']}>
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                { key: 'edit', icon: <EditOutlined />, label: t('common.edit') },
+                { key: 'rename', icon: <RenameOutlined />, label: t('af.rename') },
+                { key: 'icon', icon: <PictureOutlined />, label: t('pro.change_icon') },
+                // On a desktop the name is the website link; the card's name opens the editor instead.
+                ...(website ? [{
+                  key: 'website',
+                  icon: <ExternalLinkOutlined />,
+                  label: <a href={website} target="_blank" rel="noopener noreferrer">{t('pro.field_website')}</a>,
+                }] : []),
+                { type: 'divider' as const },
+                { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, disabled: isDemo },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'edit') handleOpenEdit(record);
+                else if (key === 'rename') setRenamingID(record.id);
+                else if (key === 'icon') openIconPicker(record);
+                else if (key === 'delete') confirmDelete();
+              },
+            }}
+          >
+            <Button type="text" size="small" className="row-action-btn" icon={<MoreOutlined />} aria-label={`${t('keys.actions_more')}: ${record.name}`} />
+          </Dropdown>
+          <RowContextHandle name={record.name} variant="inline" />
+        </div>
+      </article>
+    );
+  };
+
   return (
-    <div className={styles['provider-list']}>
+    <div ref={listRef} className={styles['provider-list']}>
       {/* The order is the operator's display order and nothing else: which provider serves a
           request is the routing arrangement's business. */}
       <RowReorder
@@ -426,8 +596,8 @@ export function ProviderTable({
           isLoading={providersLoading}
           isBlocked={isBlocked}
           emptyText={emptyText}
-          phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
-          tableProps={{ components: REORDERABLE_BODY }}
+          phone={{ render: renderPhoneCard }}
+          tableProps={{ components: REORDERABLE_BODY, tableLayout: 'fixed' }}
           phoneRowWrapper={ReorderablePhoneRow}
         />
       </RowReorder>
@@ -436,6 +606,16 @@ export function ProviderTable({
 }
 
 const providerKey = (provider: ProviderItem) => provider.id;
+
+/** The endpoint's host, the part a reader tells two providers apart by; the path is the editor's. */
+function endpointHost(baseURL: string | undefined): string {
+  if (!baseURL) return '';
+  try {
+    return new URL(baseURL).host;
+  } catch {
+    return baseURL;
+  }
+}
 
 type BodyRowProps = React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: React.Key };
 

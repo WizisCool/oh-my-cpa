@@ -66,6 +66,22 @@ export function pluginOAuthProviderIds(plugin: PluginItem): string[] {
   return ids.filter((id) => OAUTH_PROVIDER_PATTERN.test(id));
 }
 
+/**
+ * The login portals of every plugin that declares more than one. Their credentials share one type
+ * (Harbor and Harbor CN are both `harbor`), so the portal that issued each is what tells them apart;
+ * a single-portal plugin's credentials keep being filed under their type. A disabled plugin still
+ * counts, as it still names and draws its credentials.
+ */
+export function pluginMultiPortalKeys(plugins: PluginItem[] | undefined): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const plugin of plugins ?? []) {
+    if (!plugin.supports_oauth) continue;
+    const portals = pluginOAuthProviderIds(plugin).filter((id) => !BUILTIN_OAUTH_IDS.has(id));
+    if (portals.length > 1) for (const portal of portals) keys.add(portal);
+  }
+  return keys;
+}
+
 /** Credential identity includes the plugin id and quota provider, not just login portals. */
 export function pluginOAuthProviderKeys(plugin: PluginItem): string[] {
   const declared = collectDeclaredPluginOAuthProviders(plugin);

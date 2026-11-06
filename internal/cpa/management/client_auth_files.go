@@ -171,11 +171,15 @@ func (s SIWCSummary) SafeSIWCSummary() SIWCSummary {
 type AuthFile struct {
 	CredentialRecoverySummary
 	SIWCSummary
-	ID            string `json:"id"`
-	AuthIndex     string `json:"auth_index"`
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	Provider      string `json:"provider"`
+	ID        string `json:"id"`
+	AuthIndex string `json:"auth_index"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Provider  string `json:"provider"`
+	// OAuthProvider is the login entry that issued the credential, for a plugin
+	// that declares several (Harbor and Harbor CN share the type "harbor"). Gateways
+	// that do not report it leave it empty.
+	OAuthProvider string `json:"oauth_provider,omitempty"`
 	Label         string `json:"label"`
 	Status        string `json:"status"`
 	StatusMessage string `json:"status_message"`

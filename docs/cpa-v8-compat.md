@@ -22,6 +22,12 @@ and draws each login portal for itself; the plugin-wide logo remains the fallbac
 credential, quota or request row that only knows a provider key resolves the same artwork
 the login card did. The declared `quota_provider` also identifies the plugin's credential
 family when it differs from the login and plugin IDs; it does not add a login choice.
+When a plugin declares several login entries, a credential list that reports each
+credential's `oauth_provider` files it under the entry that issued it, with that entry's
+name and artwork; a gateway that does not report it groups those credentials by type.
+A plugin quota's bucket `description` and its `summary` are the only amounts the plugin
+ABI carries, so OMC keeps both, bounded to one line of display text, in the stored
+reading.
 OMC does not infer undeclared credential families from naming similarities. Plugin logos
 may be inline images or absolute HTTP(S) URLs loaded by the browser, independently of
 OMC's egress network. A store entry CPA has not installed carries the same artwork as an

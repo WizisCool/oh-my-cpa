@@ -95,6 +95,7 @@ export default {
   "siwc.badge_rebind": "Ikat semula",
   "siwc.badge_pending": "Mengikat",
   "siwc.badge_aria": "Tetapan SIWC: {name}",
+  "siwc.status_line": "SIWC {state}",
   "siwc.menu": "SIWC…",
   "siwc.invalid_hint": "Token telah tamat tempoh atau tidak sah; ikat semula untuk menyambung semula penggunaan.",
   "siwc.callback_incomplete": "URL panggil balik tiada code atau client_id. Tunggu sehingga pelayar dialihkan ke 127.0.0.1:1455, kemudian salin URL penuh daripada bar alamat.",

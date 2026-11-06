@@ -46,6 +46,7 @@ import {
   fastTierHintKey,
   requestTransport,
 } from '../../src/types/usageEventMetrics.ts';
+import { requestFailureCause, tokenComposition } from '../../src/types/requestDetailSummary.ts';
 import {
   eventProviderIdentity,
   eventCredentialIdentity,
@@ -991,6 +992,30 @@ test('usage event view', () => {
   assert.equal(cacheShown({ input: 1000, output: 100, reasoning: 0, cached: 0, cache_read: 1000, cache_creation: 0, total: 1100 }), '99.9%');
   assert.equal(cacheShown({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 1000, cache_creation: 0, total: 1000 }), '99.9%');
 
+
+  // The drawer's token bar splits the same counts without double counting: cache reads sit inside
+  // the input exactly when the cache-rate badge says so, and reasoning is drawn only where the
+  // totals prove whether the output already holds it.
+  const composition = (tokens: Partial<UsageEvent['tokens']>) => tokenComposition({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0, ...tokens });
+  const drawn = (tokens: Partial<UsageEvent['tokens']>) => Object.fromEntries(composition(tokens).segments.map((segment) => [segment.key, segment.value]));
+  assert.deepEqual(drawn({ input: 1000, cache_read: 800, output: 100, reasoning: 40, total: 1100 }), { cache_read: 800, input: 200, reasoning: 40, output: 60 });
+  assert.deepEqual(drawn({ input: 200, cache_read: 800, output: 100, total: 1100 }), { cache_read: 800, input: 200, output: 100 });
+  // Cache reads beside the input count toward the total that places the reasoning.
+  assert.deepEqual(drawn({ input: 200, cache_read: 800, output: 100, reasoning: 40, total: 1100 }), { cache_read: 800, input: 200, reasoning: 40, output: 60 });
+  assert.deepEqual(drawn({ input: 1000, output: 100, reasoning: 40, total: 1140 }), { input: 1000, reasoning: 40, output: 100 });
+  assert.deepEqual(drawn({ input: 1000, output: 100, reasoning: 40, total: 999 }), { input: 1000, output: 100 });
+  assert.equal(composition({ input: 1000, output: 100, reasoning: 40, total: 999 }).unplacedReasoning, 40);
+  assert.deepEqual(tokenComposition(undefined).segments, []);
+
+  // The failure headline reads the request's own status; a record with nothing to go on says so
+  // rather than guessing.
+  assert.equal(requestFailureCause(503), 'unavailable');
+  assert.equal(requestFailureCause(429), 'rate_limited');
+  assert.equal(requestFailureCause(401), 'auth');
+  assert.equal(requestFailureCause(504), 'timeout');
+  assert.equal(requestFailureCause(502), 'upstream');
+  assert.equal(requestFailureCause(422), 'bad_request');
+  assert.equal(requestFailureCause(undefined), 'unknown');
 
   // The badge paints a continuous scale, so the numeric rate must keep its
   // fraction while the printed reading stays rounded to one decimal.

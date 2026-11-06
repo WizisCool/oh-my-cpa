@@ -64,6 +64,10 @@ func TestParsersMatchGoldenFiles(t *testing.T) {
 			windows, err := ParseAntigravityUsage(input.Body, input.NowMS, 0)
 			return goldenReading{Windows: windows, Error: errorText(err)}
 		},
+		"plugin": func(t *testing.T, input testkit.Case) any {
+			windows, err := parseGroupedQuota(input.Body, input.NowMS, 0, true)
+			return goldenReading{Plan: parsePluginQuotaPlan(input.Body), Windows: windows, Error: errorText(err)}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			testkit.Cases(t, "testdata/golden/"+name, parse)

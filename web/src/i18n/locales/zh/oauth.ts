@@ -92,6 +92,7 @@ export default {
   'siwc.badge_rebind': '需重新绑定',
   'siwc.badge_pending': '绑定中',
   'siwc.badge_aria': 'SIWC 设置：{name}',
+  'siwc.status_line': 'SIWC {state}',
   'siwc.menu': 'SIWC…',
   'siwc.invalid_hint': '令牌已过期或失效，重新绑定后方可恢复使用。',
   'siwc.callback_incomplete': '回调 URL 缺少 code 或 client_id。请等浏览器跳转到 127.0.0.1:1455 之后，再复制地址栏中的完整 URL。',

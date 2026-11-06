@@ -145,6 +145,7 @@ export default {
   "omc.change_provider": "更換供應商",
   "omc.priority_value": "優先級 {n}",
   "omc.weight_value": "權重 {n}",
+  "omc.priority_badge_hint": "數值越高越先被排程；同優先順序內再按權重分配。",
   "omc.connect_account": "OAuth 登入",
   "omc.connect_provider": "OAuth 供應商",
   "omc.connect_provider_placeholder": "選擇要連接的供應商",

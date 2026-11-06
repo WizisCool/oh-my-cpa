@@ -160,6 +160,8 @@ export default {
   'pro.model_count_pill': '模型 {n}',
   'pro.key_count_pill': '密钥 {n}',
   'pro.header_count_pill': '请求头 {n}',
+  'pro.key_missing_hint': '没有密钥，开启后也无法转发请求。',
+  'pro.health_no_key': '缺少密钥',
   'pro.none_text': '无',
   'pro.status_disabled': '已停用',
   'pro.status_active': '正常',

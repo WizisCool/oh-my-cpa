@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+	"unicode"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -118,16 +120,55 @@ func (s *Service) fetchPluginQuota(ctx context.Context, pluginID, authIndex stri
 	if err != nil {
 		return nil, nil, err
 	}
-	windows, err := ParseAntigravityUsage(raw, nowMS, 0)
+	windows, err := parseGroupedQuota(raw, nowMS, 0, true)
 	if err != nil {
 		return nil, nil, err
 	}
 	return windows, parsePluginQuotaPlan(raw), nil
 }
 
-// parsePluginQuotaPlan projects a plugin quota subscription onto a plan. The
-// payload carries display strings only (no active flag, no windows), so tier
-// stays unknown rather than guessing elite/premium from a name.
+// Bounds on what a plugin's quota payload can put in front of an operator: the
+// text is the plugin's, so it is cut to a line's worth and stripped of control
+// characters rather than trusted.
+const (
+	maxPluginDescriptionRunes = 160
+	maxPluginMetricLabelRunes = 48
+	maxPluginMetricTokenRunes = 24
+	maxPluginMetrics          = 8
+)
+
+// pluginDisplayText is plugin-supplied text made fit for one line: control
+// characters become spaces, runs of space collapse, and it is cut at limit.
+func pluginDisplayText(value string, limit int) string {
+	cleaned := strings.Join(strings.FieldsFunc(value, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}), " ")
+	if runes := []rune(cleaned); len(runes) > limit {
+		return strings.TrimSpace(string(runes[:limit-1])) + "…"
+	}
+	return cleaned
+}
+
+// pluginCurrencyCode keeps an ISO 4217 code and drops anything else: a cut or
+// guessed code would print an amount in the wrong money.
+func pluginCurrencyCode(value string) string {
+	code := strings.ToUpper(strings.TrimSpace(value))
+	if len(code) != 3 {
+		return ""
+	}
+	for _, r := range code {
+		if r < 'A' || r > 'Z' {
+			return ""
+		}
+	}
+	return code
+}
+
+// parsePluginQuotaPlan projects a plugin quota subscription and summary onto a
+// plan. The subscription carries display strings only (no active flag, no
+// windows), so tier stays unknown rather than guessing elite/premium from a
+// name. A payload with neither a subscription label nor a usable metric has no
+// plan.
 func parsePluginQuotaPlan(raw []byte) *QuotaPlan {
 	var payload struct {
 		Subscription *struct {
@@ -135,22 +176,58 @@ func parsePluginQuotaPlan(raw []byte) *QuotaPlan {
 			TierName string `json:"tierName"`
 			TierID   string `json:"tierId"`
 		} `json:"subscription"`
+		Summary []struct {
+			Key      string `json:"key"`
+			Label    string `json:"label"`
+			Value    any    `json:"value"`
+			Unit     string `json:"unit"`
+			Format   string `json:"format"`
+			Currency string `json:"currency"`
+		} `json:"summary"`
 	}
-	if json.Unmarshal(raw, &payload) != nil || payload.Subscription == nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return nil
 	}
-	plan := strings.TrimSpace(payload.Subscription.Plan)
-	tierName := strings.TrimSpace(payload.Subscription.TierName)
-	tierID := strings.TrimSpace(payload.Subscription.TierID)
-	label := plan
-	if label == "" {
-		label = tierName
+	label := ""
+	if subscription := payload.Subscription; subscription != nil {
+		for _, candidate := range []string{subscription.Plan, subscription.TierName, subscription.TierID} {
+			if label = pluginDisplayText(candidate, maxPluginMetricLabelRunes); label != "" {
+				break
+			}
+		}
 	}
-	if label == "" {
-		label = tierID
+	metrics := make([]QuotaMetric, 0, len(payload.Summary))
+	for _, entry := range payload.Summary {
+		if len(metrics) == maxPluginMetrics {
+			break
+		}
+		value, ok := toFloat(entry.Value)
+		if !ok || math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		key := pluginDisplayText(entry.Key, maxPluginMetricTokenRunes)
+		metricLabel := pluginDisplayText(entry.Label, maxPluginMetricLabelRunes)
+		if metricLabel == "" {
+			metricLabel = key
+		}
+		if metricLabel == "" {
+			continue
+		}
+		metrics = append(metrics, QuotaMetric{
+			Key:      key,
+			Label:    metricLabel,
+			Value:    value,
+			Unit:     pluginDisplayText(entry.Unit, maxPluginMetricTokenRunes),
+			Format:   strings.ToLower(pluginDisplayText(entry.Format, maxPluginMetricTokenRunes)),
+			Currency: pluginCurrencyCode(entry.Currency),
+		})
 	}
-	if label == "" {
+	if label == "" && len(metrics) == 0 {
 		return nil
 	}
-	return &QuotaPlan{PlanType: "unknown", PlanLabel: label, Tier: "unknown"}
+	plan := &QuotaPlan{PlanType: "unknown", PlanLabel: label, Tier: "unknown"}
+	if len(metrics) > 0 {
+		plan.Metrics = metrics
+	}
+	return plan
 }

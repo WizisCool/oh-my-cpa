@@ -95,6 +95,7 @@ export default {
   "siwc.badge_rebind": "需重新綁定",
   "siwc.badge_pending": "綁定中",
   "siwc.badge_aria": "SIWC 設定：{name}",
+  "siwc.status_line": "SIWC {state}",
   "siwc.menu": "SIWC…",
   "siwc.invalid_hint": "權杖已過期或失效，重新繫結後方可恢復使用。",
   "siwc.callback_incomplete": "回呼 URL 缺少 code 或 client_id。請等瀏覽器跳轉到 127.0.0.1:1455 之後，再複製網址列中的完整 URL。",
