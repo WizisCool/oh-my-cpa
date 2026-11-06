@@ -451,10 +451,23 @@ export async function systemInformationPage({ base, page, check }) {
   // The backend process the fixture reports. It is a variable because a restart mints job ids from
   // the beginning again, which is the case the page has to survive without a reload.
   let servedProcessStart = 1790013000000;
+  // Held when a scenario needs a coarse read to arrive late. A resolved promise is no hold at all.
+  const releasedSystemInfo = Promise.resolve();
+  let systemInfoHold = releasedSystemInfo;
+  // Coarse reads held since the hold was installed. The scenario below counts them, because a
+  // late snapshot that was never delivered proves nothing about what it does to the page.
+  let heldSystemInfoReads = 0;
   await page.route('**/omc/api/v1/management/system', async (route) => {
+    // Captured when the request arrives, not when it is answered: a held response is the snapshot
+    // the server had at that moment, which is exactly the older reading this scenario delivers to
+    // the page after the poll has reported the job finished.
+    const maintenance = servedMaintenance;
     const body = baseSystemBody();
     body.runtime = { ...body.runtime, started_at_ms: servedProcessStart };
-    await fulfillFixture(route, { status: 200, json: { ...body, maintenance: servedMaintenance } });
+    const hold = systemInfoHold;
+    if (hold !== releasedSystemInfo) heldSystemInfoReads += 1;
+    await hold;
+    await fulfillFixture(route, { status: 200, json: { ...body, maintenance } });
   });
 
   // The retained job must actually be what the page is being offered, or the assertion below
@@ -760,9 +773,27 @@ export async function systemInformationPage({ base, page, check }) {
     });
   };
   await page.route('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
+  let releaseSystemInfo;
+  const heldSystemInfo = new Promise((resolve) => { releaseSystemInfo = resolve; });
   try {
     servedMaintenance = { ...freshRunningJob };
+    // Started before the click it belongs to, so the page's own reading of the running job cannot be
+    // missed by a race; the snapshot it carries is what the outcome has to survive below.
+    const runningSnapshot = page.waitForResponse(async (response) => {
+      if (response.request().method() !== 'GET' || !new URL(response.url()).pathname.endsWith('/management/system')) return false;
+      const body = await response.json().catch(() => null);
+      return body?.maintenance?.job_id === freshRunningJob.job_id && body.maintenance.running === true;
+    }, { timeout: 20_000 });
     await refreshAll(page);
+    await runningSnapshot;
+    // The banner below has two possible sources - the page's own /management/system read and the
+    // poll cache it seeds on adoption - so the held poll has to exist before either is read. A
+    // scenario that released a response nobody had asked for proved nothing about the poll.
+    const pollArrived = await until(
+      async () => slowPolls > 0,
+      { label: 'the held maintenance poll', timeoutMs: 10_000 },
+    ).then(() => true).catch(() => false);
+    check('the maintenance poll is in flight while the banner is read', pollArrived, `${slowPolls} poll(s)`);
 
     // The response stays held throughout these assertions: waiting for the banner
     // cannot accidentally pass because a slow response has already populated the cache.
@@ -793,17 +824,51 @@ export async function systemInformationPage({ base, page, check }) {
       `VACUUM disabled=${vacuumDisabledWhileRunning}`,
     );
   } finally {
+    // Hold the coarse read from here on, so the snapshot the page already holds still describes the
+    // job as running when the poll reports its outcome. That lag is the real race - the two reads
+    // are separate - and holding it here makes the state deterministic instead of load-dependent.
+    systemInfoHold = heldSystemInfo;
     releaseSlowPoll();
   }
   // Once the in-flight state is proved, let the real poll follow the job to completion.
+  const slowOutcome = page.locator('[data-testid="sys-maintenance-outcome"]');
   await until(
-    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    async () => /100\.0\s*B/i.test((await slowOutcome.innerText().catch(() => '')).replace(/\s+/g, ' ')),
     { label: 'the slow job reaching its outcome', timeoutMs: 30_000 },
   ).catch(() => {});
+  const slowOutcomeText = await slowOutcome.innerText().catch(() => '');
   check(
-    'the job behind the slow poll is still followed to its outcome',
-    (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 1,
+    'the job behind the slow poll is followed to its own outcome',
+    /100\.0\s*B/i.test(slowOutcomeText.replace(/\s+/g, ' ')),
+    slowOutcomeText.slice(0, 160),
   );
+  // The snapshot this check measures is the one the page already applied: it read the job as running
+  // before the poll reported its end, and that reading stays in the query cache until a newer one
+  // lands. The newer read is held above and never delivered during these assertions - a held
+  // response that was answered *after* the job finished would describe the end of the job, so
+  // delivering it would not describe the race at all. `reads` reports how many newer coarse reads are
+  // waiting behind the hold, which is what the page has to survive.
+  check(
+    'a coarse read that still reports the finished job as running does not put the banner back over its outcome',
+    (await page.locator('[data-testid="sys-card-maintenance"] .omc-notice.is-info').count()) === 0
+      && (/WAL|回收/i.test(slowOutcomeText)),
+    `reads=${heldSystemInfoReads} ${(await page.locator('[data-testid="sys-card-maintenance"]').innerText().catch(() => '')).slice(0, 200)}`,
+  );
+  // The verdict outlives the panel. Closing the result must not hand the card back to the applied
+  // coarse snapshot that still describes the job as running: the page watched this job finish, and
+  // only the panel was the reader's to clear.
+  await page.locator('[data-testid="sys-maintenance-outcome"]').getByRole('button', { name: /Close|关闭/i }).first().click();
+  const outcomeDismissed = await until(
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
+    { label: 'the outcome panel closing', timeoutMs: 5000 },
+  ).then(() => true).catch(() => false);
+  check('closing the outcome panel clears the result', outcomeDismissed);
+  check(
+    'a dismissed outcome does not restore the running banner from the older snapshot',
+    (await page.locator('[data-testid="sys-card-maintenance"] .omc-notice.is-info').count()) === 0,
+    (await page.locator('[data-testid="sys-card-maintenance"]').innerText().catch(() => '')).slice(0, 200),
+  );
+  releaseSystemInfo();
   await page.unroute('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
 
   // ── a backend restart does not make the new process's job look handled ──────
