@@ -95,6 +95,7 @@ export default {
   'siwc.badge_rebind': 'Rebind',
   'siwc.badge_pending': 'Binding',
   'siwc.badge_aria': 'SIWC settings: {name}',
+  'siwc.status_line': 'SIWC {state}',
   'siwc.menu': 'SIWC…',
   'siwc.invalid_hint': 'Token is expired or invalid; rebind to resume use.',
   'siwc.callback_incomplete': 'The callback URL lacks code or client_id. Wait until the browser has redirected to 127.0.0.1:1455, then copy the complete URL from the address bar.',

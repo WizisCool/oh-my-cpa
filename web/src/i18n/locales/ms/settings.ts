@@ -145,6 +145,7 @@ export default {
   "omc.change_provider": "Tukar penyedia",
   "omc.priority_value": "Keutamaan {n}",
   "omc.weight_value": "Pemberat {n}",
+  "omc.priority_badge_hint": "Nilai yang lebih tinggi dipilih dahulu; berat terpakai hanya dalam keutamaan yang sama.",
   "omc.connect_account": "Log masuk OAuth",
   "omc.connect_provider": "Penyedia OAuth",
   "omc.connect_provider_placeholder": "Pilih penyedia untuk disambung",

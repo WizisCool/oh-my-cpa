@@ -1,0 +1,97 @@
+/* The box of a plan tag beside it: one height and one border, so the badges on a line sit as a row
+   of equals. */
+.badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-check);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Only a badge with a tooltip of its own invites the pointer to ask. */
+.badge[tabindex] {
+  cursor: help;
+}
+
+/* Block boxes, so the glyph and the figures centre by their boxes rather than by a baseline. */
+.badge > * {
+  display: block;
+}
+
+.glyph {
+  display: flex;
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* A count that explains a warning is the one badge in the warn tone, its glyph included. */
+.badge-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  color: var(--warn);
+}
+
+.badge-warn .glyph {
+  color: inherit;
+}
+
+.secondary {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* The tooltip: the fact on its first line, then either a sentence or the names, quieter. Its ground
+   is dark in both themes, so the steps are taken from its own ink rather than the page's tokens. */
+.tip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Room for a one-sentence hint on one line in Chinese. */
+  max-width: 304px;
+}
+
+.tip-title {
+  font-weight: 500;
+}
+
+.tip-hint {
+  opacity: 0.78;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.tip-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  opacity: 0.78;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.tip-items > li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tip-more {
+  opacity: 0.7;
+}

@@ -146,7 +146,9 @@ export const SearchOutlined = createIcon(Lucide.Search, 'anticon-search');
 export const SettingOutlined = createIcon(Lucide.Settings, 'anticon-setting');
 export const ShopOutlined = createIcon(Lucide.Store, 'anticon-shop');
 export const SlidersOutlined = createIcon(Lucide.SlidersHorizontal, 'anticon-sliders');
-export const StopOutlined = createIcon(Lucide.Square, 'anticon-stop');
+// The no-entry sign antd's own StopOutlined draws: an off or disabled state is a refusal, not the
+// bare square a media player's stop key uses.
+export const StopOutlined = createIcon(Lucide.Ban, 'anticon-stop');
 export const SunOutlined = createIcon(Lucide.Sun, 'anticon-sun');
 export const TimerResetOutlined = createIcon(Lucide.TimerReset, 'anticon-timer-reset');
 export const UpgradeOutlined = createIcon(Lucide.CircleArrowUp, 'anticon-upgrade');
