@@ -271,6 +271,75 @@
     "prompt": "0",
     "completion": "0"
    }
+  },
+  {
+   "id": "openai/gpt-image-2",
+   "canonical_slug": "openai/gpt-image-2-20261104",
+   "name": "OpenAI: gpt-image-2",
+   "context_length": 400000,
+   "architecture": {
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "pricing": {
+    "prompt": "0.000008",
+    "completion": "0.000008",
+    "image_output": "0.00003",
+    "input_cache_read": "0.000002"
+   }
+  },
+  {
+   "id": "openai/gpt-image-2.5-sunburst",
+   "canonical_slug": "openai/gpt-image-2.5-sunburst-20261104",
+   "name": "OpenAI: gpt-image-2.5-sunburst",
+   "context_length": 400000,
+   "architecture": {
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "pricing": {
+    "prompt": "0.000008",
+    "completion": "0.000008",
+    "image_output": "0.00003",
+    "input_cache_read": "0.000002"
+   }
+  },
+  {
+   "id": "openai/gpt-image-2.6-flare",
+   "canonical_slug": "openai/gpt-image-2.6-flare-20261104",
+   "name": "OpenAI: gpt-image-2.6-flare",
+   "context_length": 400000,
+   "architecture": {
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "pricing": {
+    "prompt": "0.000008",
+    "completion": "0.000008",
+    "image_output": "0.00003",
+    "input_cache_read": "0.000002"
+   }
+  },
+  {
+   "id": "openai/gpt-5.4-image-2",
+   "canonical_slug": "openai/gpt-5.4-image-2-20261104",
+   "name": "OpenAI: GPT-5.4 Image 2",
+   "context_length": 400000,
+   "architecture": {
+    "output_modalities": [
+     "text",
+     "image"
+    ]
+   },
+   "pricing": {
+    "prompt": "0.000008",
+    "completion": "0.000015",
+    "image_output": "0.00003",
+    "input_cache_read": "0.000002"
+   }
   }
  ]
 }

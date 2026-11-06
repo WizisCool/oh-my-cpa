@@ -524,3 +524,51 @@ func TestServiceTierLockedWithRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestImageOutputPriceSyncKeepsHistoricalCosts(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	previous := pricing.UpstreamModel{ID: "openai/gpt-image-2", PromptPricePer1M: 8, CompletionPer1M: 8, CacheReadPer1M: 2, CacheWritePer1M: 8}
+	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{previous.PriceFor("gpt-image-2", pricing.MatchExact, 1, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	oldID, err := r.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: "old-image-price", Model: "gpt-image-2",
+		TimestampMS: time.Now().UnixMilli(), InputTokens: 1000, OutputTokens: 1000, CacheReadTokens: 200}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := pricing.DecodeOpenRouter([]byte(`{"data":[{
+		"id":"openai/gpt-image-2","architecture":{"output_modalities":["image"]},
+		"pricing":{"prompt":"0.000008","completion":"0.000008","image_output":"0.00003","input_cache_read":"0.000002"}
+	}]}`))
+	if err != nil || len(models) != 1 {
+		t.Fatalf("decode image price: %+v %v", models, err)
+	}
+	if err := r.ReplaceUpstreamCatalog(ctx, models); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := r.ListUpstreamCatalog(ctx)
+	if err != nil || len(stored) != 1 || stored[0].CompletionPer1M != 30 {
+		t.Fatalf("stored catalog lost the image output rate: %+v %v", stored, err)
+	}
+	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{stored[0].PriceFor("gpt-image-2", pricing.MatchExact, 1, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	newID, err := r.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: "new-image-price", Model: "gpt-image-2",
+		TimestampMS: time.Now().UnixMilli(), InputTokens: 1000, OutputTokens: 1000, CacheReadTokens: 200}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id, nanos int64
+		rate      float64
+	}{{oldID, 14_800_000, 8}, {newID, 36_800_000, 30}} {
+		breakdown, err := r.GetUsageEventCostBreakdown(ctx, tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if breakdown.StoredNanos == nil || *breakdown.StoredNanos != tc.nanos || !breakdown.RecomputedMatches || breakdown.Version == nil || breakdown.Version.Price.CompletionPer1M != tc.rate {
+			t.Fatalf("request %d: %+v, want %d nanos at output rate %v", tc.id, breakdown, tc.nanos, tc.rate)
+		}
+	}
+}
