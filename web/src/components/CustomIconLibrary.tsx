@@ -329,7 +329,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
             ) : (
               <div className={styles['base64-input']}>
                 <label className={styles['field']}>
-                  <span className={styles['visually-hidden']}>
+                  <span className="sr-only">
                     {t('icons.base64')}
                   </span>
                   <Input.TextArea

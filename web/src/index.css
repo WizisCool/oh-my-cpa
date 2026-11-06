@@ -1237,7 +1237,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    accent text on the surface with a border edge - rather than introducing a hue, so it
    reads as one more label in the shell instead of as an alert. */
 .demo-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; }
-.app-content { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+/* The page's one scroller is also its content's containing block. An absolutely positioned element
+   with no positioned ancestor - a visually hidden label - would otherwise escape this clip and lengthen
+   the document, which the shell's `overflow: hidden` stops the reader scrolling but not a script: a
+   drag held at the window's edge would auto-scroll the whole console out of the window. */
+.app-content { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
 /* A phone has no room for a frame around the page: the panel becomes the screen. */
 @media (max-width: 900px) {
   .app-shell > .app-body { height: 100%; margin: 0; border: 0; border-radius: 0; }
