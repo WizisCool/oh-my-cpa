@@ -1196,17 +1196,12 @@ var demoFailures = []struct {
 // keeps: an upstream request id, the edge that answered and the rate-limit
 // state, all derived from values already drawn.
 func demoResponseHeaders(started time.Time, latency int64, failed bool) string {
-	headers := map[string][]string{
-		"x-request-id":                   {fmt.Sprintf("req_%012x", uint64(started.UnixMilli())^uint64(latency)*2654435761)},
-		"cf-ray":                         {fmt.Sprintf("%016x-NRT", uint64(started.UnixMilli())*31+uint64(latency))},
-		"cf-cache-status":                {"DYNAMIC"},
-		"server":                         {"cloudflare"},
-		"x-ratelimit-limit-requests":     {"500"},
-		"x-ratelimit-remaining-requests": {fmt.Sprintf("%d", 40+latency%440)},
-		"x-ratelimit-reset-requests":     {fmt.Sprintf("%ds", 1+latency%59)},
-	}
+	ms := uint64(started.UnixMilli())
+	lat := uint64(latency)
 	if failed {
-		headers["retry-after"] = []string{fmt.Sprintf("%d", 5+latency%55)}
+		return fmt.Sprintf(`{"cf-cache-status":"DYNAMIC","cf-ray":"%016x-NRT","retry-after":"%d","server":"cloudflare","x-ratelimit-limit-requests":"500","x-ratelimit-remaining-requests":"%d","x-ratelimit-reset-requests":"%ds","x-request-id":"req_%012x"}`,
+			ms*31+lat, 5+latency%55, 40+latency%440, 1+latency%59, ms^lat*2654435761)
 	}
-	return usage.EncodeResponseHeaders(usage.FilterResponseHeaders(headers))
+	return fmt.Sprintf(`{"cf-cache-status":"DYNAMIC","cf-ray":"%016x-NRT","server":"cloudflare","x-ratelimit-limit-requests":"500","x-ratelimit-remaining-requests":"%d","x-ratelimit-reset-requests":"%ds","x-request-id":"req_%012x"}`,
+		ms*31+lat, 40+latency%440, 1+latency%59, ms^lat*2654435761)
 }

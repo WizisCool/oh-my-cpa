@@ -15,6 +15,8 @@ import (
 // allowed on the operator's private network; hostname connections are checked and
 // pinned before credentials are sent. Redirects remain within the original origin.
 
+var providerEnvironmentProxy = http.ProxyFromEnvironment
+
 // hostAddressLiteral returns the IP a host string names literally, if it names one.
 func hostAddressLiteral(host string) net.IP {
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")

@@ -12,15 +12,14 @@ import (
 type structuredUsageValue struct{ details *usage.StructuredUsageDetails }
 
 func (value structuredUsageValue) Value() (driver.Value, error) {
-	details := usage.SanitizeStructuredUsage(value.details)
-	if details == nil {
-		return nil, nil
-	}
-	encoded, err := json.Marshal(details)
+	encoded, err := usage.EncodeStructuredUsage(value.details)
 	if err != nil {
 		return nil, fmt.Errorf("encode structured usage: %w", err)
 	}
-	return string(encoded), nil
+	if encoded == "" {
+		return nil, nil
+	}
+	return encoded, nil
 }
 
 func decodeStoredStructuredUsage(stored sql.NullString) (*usage.StructuredUsageDetails, error) {

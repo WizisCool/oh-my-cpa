@@ -71,13 +71,18 @@ func useProviderDNS(t *testing.T, records map[string][]net.IP) {
 		}
 	}()
 	previous := net.DefaultResolver
+	previousProxy := providerEnvironmentProxy
 	net.DefaultResolver = &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, network, server.LocalAddr().String())
 		},
 	}
-	t.Cleanup(func() { net.DefaultResolver = previous })
+	providerEnvironmentProxy = func(*http.Request) (*url.URL, error) { return nil, nil }
+	t.Cleanup(func() {
+		net.DefaultResolver = previous
+		providerEnvironmentProxy = previousProxy
+	})
 }
 
 func TestProviderHTTPHostnamePinsValidatedAddresses(t *testing.T) {

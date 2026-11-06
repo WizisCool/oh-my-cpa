@@ -1,10 +1,31 @@
 import { once } from 'node:events';
+import fs from 'node:fs';
 
 const BROWSER_SERVERS = new WeakMap();
 
+function resolveExecutablePath(browserType, explicitPath) {
+  if (explicitPath) return explicitPath;
+  const envPath = process.env.OMCPA_BROWSER || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (envPath && fs.existsSync(envPath)) return envPath;
+  try {
+    const managed = browserType.executablePath?.();
+    if (managed && fs.existsSync(managed)) return undefined;
+  } catch { /* fallback below */ }
+  for (const candidate of ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome']) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 // BrowserServer exposes the owned child process; ordinary Browser does not.
 export async function launchBrowser(browserType, options = {}) {
-  const server = await browserType.launchServer({ ...options, host: '127.0.0.1', timeout: 20_000 });
+  const executablePath = resolveExecutablePath(browserType, options.executablePath);
+  const server = await browserType.launchServer({
+    ...options,
+    ...(executablePath ? { executablePath } : {}),
+    host: '127.0.0.1',
+    timeout: 20_000,
+  });
   try {
     const browser = await browserType.connect(server.wsEndpoint(), { timeout: 20_000 });
     BROWSER_SERVERS.set(browser, server);

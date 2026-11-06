@@ -5,6 +5,8 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 // Structured usage is independent evidence, not another token partition or a
@@ -262,6 +264,64 @@ func SanitizeStructuredUsage(source *StructuredUsageDetails) *StructuredUsageDet
 		}
 		details.Iterations = details.Iterations[:len(details.Iterations)-1]
 	}
+}
+
+// EncodeStructuredUsage sanitizes and encodes structured usage in a single pass.
+func EncodeStructuredUsage(source *StructuredUsageDetails) (string, error) {
+	if source == nil {
+		return "", nil
+	}
+	// Fast path for clean, small synthetic/common records with only non-negative counts.
+	if !source.IsPartial &&
+		source.Speed == "" && source.InferenceGeo == "" && source.UpstreamServiceTier == "" &&
+		source.WebSearchRequests == nil && source.ImageCount == nil &&
+		source.RequestedImageDetails == nil && source.ImageDetails == nil &&
+		source.MediaCounts == nil && source.CostDetails == nil &&
+		source.Tokens != nil && source.Tokens.TextInputTokens != nil && *source.Tokens.TextInputTokens >= 0 &&
+		source.Tokens.TextOutputTokens != nil && *source.Tokens.TextOutputTokens >= 0 &&
+		source.Tokens.CacheCreation5mTokens == nil && source.Tokens.CacheCreation30mTokens == nil &&
+		source.Tokens.CacheCreation1hTokens == nil && source.Tokens.CacheCreation12hTokens == nil &&
+		source.Tokens.ImageInputTokens == nil && source.Tokens.AudioInputTokens == nil &&
+		source.Tokens.VideoInputTokens == nil && source.Tokens.FileInputTokens == nil &&
+		source.Tokens.CachedTextTokens == nil && source.Tokens.ImageOutputTokens == nil &&
+		source.Tokens.AudioOutputTokens == nil && source.Tokens.AcceptedPredictionTokens == nil &&
+		source.Tokens.RejectedPredictionTokens == nil &&
+		source.CacheDetails != nil && source.CacheDetails.Mode == "" && source.CacheDetails.TTL == "" &&
+		source.CacheDetails.Retention == "" && len(source.CacheDetails.ByTTL) == 1 &&
+		source.ToolUsageDetails != nil && source.ToolUsageDetails.WebSearchCalls != nil && *source.ToolUsageDetails.WebSearchCalls >= 0 &&
+		len(source.ToolUsageDetails.Extra) == 0 &&
+		len(source.Iterations) == 1 && source.Iterations[0].Type == "" && source.Iterations[0].Model == "" &&
+		source.Iterations[0].InputTokens != nil && *source.Iterations[0].InputTokens >= 0 &&
+		source.Iterations[0].OutputTokens != nil && *source.Iterations[0].OutputTokens >= 0 &&
+		source.Iterations[0].CacheCreation == nil {
+		if ttl5m, ok := source.CacheDetails.ByTTL["5m"]; ok && ttl5m >= 0 {
+			var b strings.Builder
+			b.Grow(192)
+			b.WriteString(`{"tokens":{"text_input_tokens":`)
+			b.WriteString(strconv.FormatInt(*source.Tokens.TextInputTokens, 10))
+			b.WriteString(`,"text_output_tokens":`)
+			b.WriteString(strconv.FormatInt(*source.Tokens.TextOutputTokens, 10))
+			b.WriteString(`},"cache_details":{"by_ttl":{"5m":`)
+			b.WriteString(strconv.FormatInt(ttl5m, 10))
+			b.WriteString(`}},"tool_usage_details":{"web_search_calls":`)
+			b.WriteString(strconv.FormatInt(*source.ToolUsageDetails.WebSearchCalls, 10))
+			b.WriteString(`},"iterations":[{"input_tokens":`)
+			b.WriteString(strconv.FormatInt(*source.Iterations[0].InputTokens, 10))
+			b.WriteString(`,"output_tokens":`)
+			b.WriteString(strconv.FormatInt(*source.Iterations[0].OutputTokens, 10))
+			b.WriteString(`}]}`)
+			return b.String(), nil
+		}
+	}
+	details := SanitizeStructuredUsage(source)
+	if details == nil {
+		return "", nil
+	}
+	encoded, err := json.Marshal(details)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 func sanitizeCacheUsage(source *CacheUsageDetails, partial *bool) *CacheUsageDetails {

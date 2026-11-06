@@ -67,9 +67,9 @@ no embedded production assets. Cloudflare needs Node and the committed dataset, 
 Go, a browser or a database. Toolchain pins and build memory settings belong to the
 repository configuration rather than duplicated Cloudflare variables.
 
-For a deployed smoke check, use `OMCPA_DEMO_URL` with `pnpm verify:demo`. Local built
-acceptance and its setup are described in [Testing](../testing.md). Check refusal,
-privacy, route rendering and both conversation examples, not just an HTTP 200.
+`pnpm check:demo` and `pnpm test:demo:worker` verify dataset privacy, schema freshness,
+refusal rules, and Worker route matching. Local built-artifact browser acceptance and its
+setup are described in [Testing](../testing.md).
 
 ## Deploy
 

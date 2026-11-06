@@ -267,12 +267,16 @@ func TestSubscribeConsumesConfirmationsThenReadsMessages(t *testing.T) {
 
 func TestReadMessageReportsServerError(t *testing.T) {
 	server := newFakeServer(t, func(conn net.Conn, _ *bufio.Reader, _ []string) {
+		writeArray(conn, "subscribe", "usage", "1")
 		writeRaw(conn, "*1\r\n$3\r\nERR\r\n")
 		writeRaw(conn, "-ERR bad channel\r\n")
 	})
 	client := dialTestClient(t, server.address())
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+	if err := client.Subscribe(ctx, "usage"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := client.ReadMessage(ctx); err == nil {
 		t.Fatal("short array followed by error should surface an error")
 	}

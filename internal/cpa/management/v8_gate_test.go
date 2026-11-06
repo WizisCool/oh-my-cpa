@@ -187,6 +187,8 @@ func TestProbeRejectsCatchAllAndDoesNotCacheFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	client.forgetManagementV8()
+	t.Cleanup(client.forgetManagementV8)
 	if hasV8, err := client.SupportsManagementV8(context.Background()); err != nil || hasV8 {
 		t.Fatalf("a 2xx that is not config-version 8 must not count as v8: %v %v", hasV8, err)
 	}

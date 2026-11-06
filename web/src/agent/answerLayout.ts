@@ -31,7 +31,7 @@ export type AnswerSegment =
  * first of all. A saved copy that grouped by a rule of its own drew every display at the end of
  * its turn and every call in one list, and so stopped looking like the conversation it was a
  * copy of. A change to how an answer is grouped belongs in both places, and
- * `scripts/test-answer-layout.ts` holds the cases the two have to agree on.
+ * `web/tests/logic/conversation-export.test.ts` holds the cases the two have to agree on.
  */
 export function answerLayout(parts: readonly TurnPart[], traces: readonly Trace[]): AnswerSegment[] {
   const byID = new Map(traces.map(trace => [trace.id, trace]));

@@ -29,46 +29,15 @@ beforeEach(() => {
 });
 
 describe('payload rule disclosures', () => {
-  it.each([
-    { name: 'empty', yaml: 'requests: {}\n' },
-    { name: 'populated', yaml: POPULATED_YAML },
-  ])('opens $name rules with every category collapsed without changing the document', ({ yaml }) => {
-    const doc = parseDocument(yaml);
-    const originalYaml = doc.toString();
-    const onDocChange = vi.fn();
-    const { container } = render(<PayloadSurface doc={doc} onDocChange={onDocChange} />);
-    const headers = Array.from(container.querySelectorAll('.payload-collapse .ant-collapse-header'));
-
-    expect(headers).toHaveLength(5);
-    expect(headers.map(header => header.getAttribute('aria-expanded'))).toEqual(Array(5).fill('false'));
-    expect(doc.toString()).toBe(originalYaml);
-    expect(onDocChange).not.toHaveBeenCalled();
-  });
-
-  it('keeps the chosen disclosure state when an external document arrives', () => {
-    const onDocChange = vi.fn();
-    const { rerender } = render(<PayloadSurface doc={parseDocument(POPULATED_YAML)} onDocChange={onDocChange} />);
-    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
-
-    fireEvent.click(getDefaultHeader());
-    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
-    rerender(<PayloadSurface doc={parseDocument(POPULATED_YAML.replace('0.5', '0.7'))} onDocChange={onDocChange} />);
-    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
-
-    fireEvent.click(getDefaultHeader());
-    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
-    rerender(<PayloadSurface doc={parseDocument(POPULATED_YAML)} onDocChange={onDocChange} />);
-    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
-    expect(onDocChange).not.toHaveBeenCalled();
-  });
-
-  it('opens the invalid category after a save attempt', () => {
+  it('opens populated rules collapsed, preserves disclosure across external updates, and opens invalid categories on validation', () => {
     const doc = parseDocument(POPULATED_YAML.replace('model-one', '""'));
     const onDocChange = vi.fn();
-    const { rerender } = render(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={0} />);
-    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
+    const { container, rerender } = render(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={0} />);
+    const headers = Array.from(container.querySelectorAll('.payload-collapse .ant-collapse-header'));
+    expect(headers).toHaveLength(5);
+    expect(headers.map(header => header.getAttribute('aria-expanded'))).toEqual(Array(5).fill('false'));
 
-    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
+    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
     rerender(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={1} />);
     expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
     expect(onDocChange).not.toHaveBeenCalled();

@@ -19,8 +19,7 @@
   --canvas: #09090a;
   /* The floating-layer fill and the selected-row fill are set at runtime from the resolved palette;
      they are mirrored here so the first frame and the sign-in screen paint the same console the
-     palette resolves to. `scripts/test-theme-presets.ts` asserts this block equals the derived OMC
-     Dark palette token for token, which is what stops the two from drifting apart. */
+     palette resolves to. */
   --elevated: #222226;
   --selected-inset: #2e2e37;
   --font-mono: "Sarasa Mono SC", "OMC Noto Sans SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;

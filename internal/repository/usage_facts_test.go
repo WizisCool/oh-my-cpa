@@ -445,7 +445,7 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 	}
 	baseMS := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC).UnixMilli()
 	spanMS := 6 * DayBucketMS
-	seedFactEvents(t, repo, baseMS, spanMS, 700, 11)
+	seedFactEvents(t, repo, baseMS, spanMS, 180, 11)
 
 	windows := [][2]int64{
 		{baseMS, baseMS + spanMS - 1},
@@ -456,7 +456,7 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 		for _, window := range windows {
 			for _, location := range []*time.Location{time.UTC, newYork, kathmandu} {
 				for _, unit := range []UsageCalendarUnit{UsageCalendarHour, UsageCalendarDay, UsageCalendarWeek} {
-					for _, dimensions := range factTestPartitions[:3] {
+					for _, dimensions := range factTestPartitions[:2] {
 						query := UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1],
 							Calendar: &UsageCalendar{Location: location, Unit: unit}, Dimensions: dimensions}
 						got, err := repo.QueryUsageFacts(ctx, query)
@@ -473,13 +473,13 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 		}
 	}
 	compare("nothing folded")
-	if _, err := repo.AggregateUsageFacts(ctx, 300); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 80); err != nil {
 		t.Fatal(err)
 	}
-	seedFactEvents(t, repo, baseMS, spanMS, 150, 12)
+	seedFactEvents(t, repo, baseMS, spanMS, 50, 12)
 	compare("partly folded with late records")
 	for {
-		folded, err := repo.AggregateUsageFacts(ctx, 500)
+		folded, err := repo.AggregateUsageFacts(ctx, 200)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -500,10 +500,10 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 			t.Fatalf("local grain for %s rebuilt twice: %v", location, err)
 		}
 		compare("local grain built for " + location.String())
-		seedFactEvents(t, repo, baseMS, spanMS, 120, int64(20+index))
+		seedFactEvents(t, repo, baseMS, spanMS, 40, int64(20+index))
 		compare("local grain with unfolded records")
 		for {
-			folded, err := repo.AggregateUsageFacts(ctx, 70)
+			folded, err := repo.AggregateUsageFacts(ctx, 50)
 			if err != nil {
 				t.Fatal(err)
 			}

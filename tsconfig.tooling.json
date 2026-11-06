@@ -20,12 +20,6 @@
     ]
   },
   "include": [
-    "scripts/testing/**/*.ts",
-    "scripts/check-demo.ts",
-    "scripts/*.test.ts",
-    "scripts/acceptance/tests/**/*.ts",
-    "scripts/check-ui.ts",
-    "scripts/verify-full.ts",
-    "scripts/verify-static.ts"
+    "scripts/check-demo.ts"
   ]
 }

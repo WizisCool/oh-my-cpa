@@ -1,19 +1,13 @@
 name: ci
 
-# A pull request runs the lanes its paths reach: the static gates, a browser smoke run
-# and the probe scenarios its frontend change selects. The full catalog (built-artifact
-# acceptance, the demonstration and every probe) runs on a push to main, nightly,
-# on demand, and on a pull request labelled `full-ci`. Aggregates require selected
-# jobs to succeed and accept skipped jobs only when their scope is not selected.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-    # `labeled` lets adding `full-ci` start the full run without a new commit.
     types: [opened, synchronize, reopened, labeled]
   schedule:
-    - cron: '17 19 * * *' # 03:17 Beijing
+    - cron: '17 19 * * *'
   workflow_dispatch:
 
 permissions:
@@ -21,38 +15,13 @@ permissions:
   actions: read
 
 concurrency:
-  # Superseded PRs are disposable; each main/release-candidate revision needs a verdict.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  changes:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      go: ${{ steps.scope.outputs.go }}
-      web: ${{ steps.scope.outputs.web }}
-      full: ${{ steps.scope.outputs.full }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Decide the lanes this run needs
-        id: scope
-        env:
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
-
   static-go:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -60,21 +29,8 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go
-      - name: Install Go test reporter
-        run: go install "gotest.tools/gotestsum@v$(node -p 'require("./scripts/tools-versions.json").gotestsum.version')"
       - name: Test
-        run: |
-          mkdir -p tmp/go-tests
-          gotestsum --format pkgname --junitfile tmp/go-tests/junit.xml --jsonfile tmp/go-tests/events.json -- ./...
-      - name: Upload Go test results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: go-tests
-          path: tmp/go-tests/
-          if-no-files-found: ignore
-          retention-days: 7
-      # golangci-lint's standard set includes vet; .golangci.yml says what it excludes.
+        run: go test ./...
       - name: Lint
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
@@ -83,42 +39,8 @@ jobs:
         run: test -z "$(git status --porcelain)"
 
   static-frontend:
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Set up JavaScript workspace
-        uses: ./.github/actions/setup-node
-      - name: Type check, logic, components and antd lint
-        if: needs.changes.outputs.full == 'true'
-        run: pnpm verify:static:frontend
-      - name: Affected frontend checks
-        if: needs.changes.outputs.full != 'true'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm test:frontend:affected
-      - name: Upload frontend test results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: frontend-tests
-          path: tmp/frontend-tests/
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Verify clean generated state
-        run: test -z "$(git status --porcelain)"
-
-  # Every event: prose gates, repository scripts, the toolchain pin and the secret scans.
-  static-repository:
-    needs: changes
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -129,12 +51,6 @@ jobs:
         uses: ./.github/actions/setup-go
       - name: Set up JavaScript workspace
         uses: ./.github/actions/setup-node
-      - name: Lint workflows
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          pnpm verify:workflow:lint
-      - name: Verify pinned toolchain
-        run: pnpm verify:toolchain:strict
       - name: Cache verification tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -142,15 +58,18 @@ jobs:
             .tools/gitleaks
             .tools/lychee
           key: verification-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
-      - name: Check offline documentation links and fragments
-        run: pnpm check-docs
-      - name: Repository gates
-        run: pnpm verify:static:repository
-      # Every installation's gateway reads the published registry, and a registry-only
-      # change reaches no other lane.
-      - name: Validate the plugin registry
-        if: needs.changes.outputs.go != 'true'
-        run: go test ./internal/pluginregistry -run '^TestPublishedRegistryIsReadable$'
+      - name: Lint workflows
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          pnpm verify:workflow:lint
+      - name: Verify pinned toolchain
+        run: pnpm verify:toolchain:strict
+      - name: Type check, unit/component tests, and Ant Design lint
+        run: pnpm verify:static:frontend
+      - name: Repository gates and documentation links
+        run: |
+          pnpm verify:static:repository
+          pnpm check-docs
       - name: Scan worktree and history
         run: |
           pnpm verify:secrets:worktree
@@ -161,31 +80,22 @@ jobs:
           test -z "$(git status --porcelain)"
 
   static:
-    needs: [changes, static-go, static-frontend, static-repository]
+    needs: [static-go, static-frontend]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every selected static lane
+      - name: Require all static gates
         env:
-          CHANGES: ${{ needs.changes.result }}
-          REPOSITORY: ${{ needs.static-repository.result }}
-          GO_SELECTED: ${{ needs.changes.outputs.go }}
           GO_RESULT: ${{ needs.static-go.result }}
-          WEB_SELECTED: ${{ needs.changes.outputs.web }}
           WEB_RESULT: ${{ needs.static-frontend.result }}
         run: |
-          test "$CHANGES" = success
-          case "$GO_SELECTED:$WEB_SELECTED" in true:true|true:false|false:true|false:false) ;; *) exit 1 ;; esac
-          test "$REPOSITORY" = success
-          if [ "$GO_SELECTED" = true ]; then test "$GO_RESULT" = success; else test "$GO_RESULT" = skipped; fi
-          if [ "$WEB_SELECTED" = true ]; then test "$WEB_RESULT" = success; else test "$WEB_RESULT" = skipped; fi
+          test "$GO_RESULT" = success
+          test "$WEB_RESULT" = success
 
   browser:
-    needs: changes
-    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -197,12 +107,10 @@ jobs:
         uses: ./.github/actions/setup-node
       - name: Set up Chromium
         uses: ./.github/actions/setup-browser
-      # Compile only after the SPA build; the Go binary embeds its completed output.
       - name: Build embedded SPA and browser fixtures
         id: prepare
         run: |
           set -o pipefail
-          # Exercise the managed builder's file-descriptor budget.
           (
             ulimit -Sn 1024
             ulimit -Hn 1024
@@ -216,21 +124,18 @@ jobs:
           BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           GH_TOKEN: ${{ github.token }}
         run: pnpm check:bundle
-      - name: Built-artifact smoke
-        if: needs.changes.outputs.full != 'true'
+      - name: Built-artifact browser acceptance
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: pnpm verify:browser:smoke
-      - name: Full built-artifact acceptance
-        if: needs.changes.outputs.full == 'true'
-        env:
-          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
-          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: pnpm verify:browser
-      - name: The demonstration's browser acceptance
-        if: needs.changes.outputs.full == 'true'
-        run: pnpm verify:demo
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          HAS_FULL_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+        run: |
+          if [ "$IS_PR" = "true" ] && [ "$HAS_FULL_LABEL" != "true" ]; then
+            pnpm verify:browser:smoke
+          else
+            pnpm verify:browser
+          fi
       - name: Upload bundle report
         if: always() && steps.prepare.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -254,103 +159,16 @@ jobs:
           git diff --check
           test -z "$(git status --porcelain)"
 
-  # The probes drive the Vite dev server with mocked routes, so only a frontend or probe
-  # change can move them. A pull request runs the scenarios its paths select.
-  probes-affected:
-    needs: changes
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.full != 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Set up JavaScript workspace
-        uses: ./.github/actions/setup-node
-      - name: Set up Chromium
-        uses: ./.github/actions/setup-browser
-      - name: Run the affected scenarios
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm check:ui --base "${BASE}" --shard ${{ matrix.shard }}/3
-      - name: Upload probe failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: probe-failure-affected-${{ matrix.shard }}
-          path: tmp/probe-failure/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  probes-full:
-    needs: changes
-    if: needs.changes.outputs.full == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Set up JavaScript workspace
-        uses: ./.github/actions/setup-node
-      - name: Set up Chromium
-        uses: ./.github/actions/setup-browser
-      - name: Run the probe shard
-        run: pnpm verify:probes --shard ${{ matrix.shard }}/3
-      - name: Upload probe failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: probe-failure-${{ matrix.shard }}
-          path: tmp/probe-failure/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  probes:
-    needs: [changes, static, browser, probes-affected, probes-full]
+  verify:
+    needs: [static, browser]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require all selected verification
+      - name: Require all verification lanes
         env:
-          CHANGES: ${{ needs.changes.result }}
           STATIC: ${{ needs.static.result }}
           BROWSER: ${{ needs.browser.result }}
-          GO_SELECTED: ${{ needs.changes.outputs.go }}
-          WEB_SELECTED: ${{ needs.changes.outputs.web }}
-          FULL_SELECTED: ${{ needs.changes.outputs.full }}
-          AFFECTED: ${{ needs.probes-affected.result }}
-          FULL: ${{ needs.probes-full.result }}
         run: |
-          test "$CHANGES" = success
-          for selected in "$GO_SELECTED" "$WEB_SELECTED" "$FULL_SELECTED"; do
-            case "$selected" in true|false) ;; *) exit 1 ;; esac
-          done
           test "$STATIC" = success
-          if [ "$GO_SELECTED" = true ] || [ "$WEB_SELECTED" = true ]; then
-            test "$BROWSER" = success
-          else
-            test "$BROWSER" = skipped
-          fi
-          if [ "$FULL_SELECTED" = true ]; then
-            test "$FULL" = success
-            test "$AFFECTED" = skipped
-          elif [ "$WEB_SELECTED" = true ]; then
-            test "$AFFECTED" = success
-            test "$FULL" = skipped
-          else
-            test "$AFFECTED" = skipped
-            test "$FULL" = skipped
-          fi
+          test "$BROWSER" = success

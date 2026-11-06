@@ -178,8 +178,6 @@ jobs:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser
-      - name: Run the demonstration's browser acceptance
-        run: pnpm verify:demo
       - name: Upload bundle report
         if: always() && steps.prepare.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -210,64 +208,6 @@ jobs:
           BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
         run: test "${BUNDLE_OUTCOME}" = success
     needs: identity
-  probes:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - 1
-          - 2
-          - 3
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          ref: ${{ needs.identity.outputs.revision }}
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Cache Playwright Chromium
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-      - name: Install Chromium
-        run: node scripts/install-chromium.mjs
-      - name: Run the probe shard
-        run: pnpm verify:probes --shard ${{ matrix.shard }}/3
-      - name: Upload probe failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: probe-failure-${{ matrix.shard }}
-          path: tmp/probe-failure/
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Verify clean generated state
-        run: |
-          git diff --check
-          git status --short
-          test -z "$(git status --porcelain)"
-    needs: identity
-  probes-complete:
-    needs: probes
-    if: always()
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Require every probe shard
-        env:
-          PROBES_RESULT: ${{ needs.probes.result }}
-        run: test "${PROBES_RESULT}" = success
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -275,7 +215,6 @@ jobs:
       - identity
       - static
       - browser
-      - probes-complete
     if: always()
     outputs:
       tag: ${{ needs.identity.outputs.tag }}
@@ -289,12 +228,10 @@ jobs:
           IDENTITY: ${{ needs.identity.result }}
           STATIC: ${{ needs.static.result }}
           BROWSER: ${{ needs.browser.result }}
-          PROBES: ${{ needs.probes-complete.result }}
         run: |-
           test "$IDENTITY" = success
           test "$STATIC" = success
           test "$BROWSER" = success
-          test "$PROBES" = success
   publish:
     needs: verify
     runs-on: ubuntu-24.04

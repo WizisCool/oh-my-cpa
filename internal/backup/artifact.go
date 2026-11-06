@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"testing"
 	"time"
 
 	"filippo.io/age"
@@ -50,7 +51,14 @@ type Manifest struct {
 
 type codec struct{ workFactor int }
 
-func newCodec() codec { return codec{workFactor: 18} }
+func defaultWorkFactor() int {
+	if testing.Testing() {
+		return 10
+	}
+	return 18
+}
+
+func newCodec() codec { return codec{workFactor: defaultWorkFactor()} }
 
 func validatePassphrase(passphrase string) error {
 	if len([]rune(passphrase)) < 12 || len(passphrase) > 1024 {
