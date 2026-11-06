@@ -72,6 +72,10 @@ import { AppDrawer } from '../common/AppDrawer';
 import { Tag } from '../common/Tag';
 import { FactList } from '../common/FactList';
 import { TAB_OVERFLOW } from '../common/tabOverflow';
+import { CredentialMark } from '../LobeIcon';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
+import { getCredentialProviderMetadata } from '../../types/providerMetadata';
+import { successRateTone } from '../../types/usageEventMetrics';
 
 const { Text } = Typography;
 
@@ -84,6 +88,9 @@ interface AuthFileDetailDrawerProps {
   onRecover?: () => void;
   quotaContent?: React.ReactNode;
   warmupContent?: React.ReactNode;
+  /** The provider the list files this credential under, which names and marks it here too. */
+  provider?: string;
+  pluginLogos?: PluginOAuthLogos;
   hasExternalDraft?: boolean;
   initialSection?: 'overview' | 'renewal' | 'warmup' | 'configuration' | 'models';
   /**
@@ -200,6 +207,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   hasExternalDraft = false,
   initialSection = 'overview',
   canEdit = false,
+  provider,
+  pluginLogos,
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
@@ -378,13 +387,18 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   const handleAttemptClose = useCallback(() => confirmDiscardFor(onClose), [confirmDiscardFor, onClose]);
 
+  const savedNumber = (value: number | undefined) => (Number.isSafeInteger(value) ? value : undefined);
   const safeFieldsQuery = useQuery({
     queryKey: ['auth-file-safe-fields', file?.name, file?.auth_index],
     queryFn: () => api.getManagementAuthFileSafeFields(file!.name, file!.auth_index),
-    enabled: Boolean(file?.name && open && activeSection === 'configuration' && !file?.runtime_only),
+    // Read on open rather than on reaching the configuration tab: the head reads the saved
+    // priority and weight from these fields too, and the list's file carries them only sometimes.
+    enabled: Boolean(file?.name && open && !file?.runtime_only),
     staleTime: 60_000,
     retry: false,
   });
+  const savedPriority = savedNumber(safeFieldsQuery.data?.priority) ?? savedNumber(file?.priority);
+  const savedWeight = savedNumber(safeFieldsQuery.data?.weight) ?? savedNumber(file?.weight);
 
   useEffect(() => {
     if (!file || !open || !safeFieldsQuery.data || isDirty) return;
@@ -519,6 +533,29 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     <Tag tone="success">{t('af.enabled')}</Tag>
   );
 
+  const providerKey = provider || file?.provider || file?.type || '';
+  const totalRequests = file ? file.success + file.failed : 0;
+  const successRate = file && totalRequests > 0 ? (file.success / totalRequests) * 100 : null;
+  const heroTitle = file?.display_name || identity?.primary || file?.name;
+  // The account under a renamed credential, else the file it lives in: the line that says which
+  // credential this is when the title is the operator's own name for it.
+  const heroSubtitle = file?.display_name ? identity?.primary : identity?.primary ? file?.name : undefined;
+  const statusWarning = file && hasWarning && file.status_message ? (
+    <Notice
+      tone="warning"
+      title={t('af.warning_status')}
+      description={
+        <>
+          <div>{summarizeAuthFileStatusMessage(file.status_message)}</div>
+          {summarizeAuthFileStatusMessage(file.status_message) !== file.status_message.trim() && (
+            <pre className={styles['identity-alert-raw']}>{file.status_message}</pre>
+          )}
+        </>
+      }
+      className={styles['identity-alert']}
+    />
+  ) : null;
+
   const renderModelsContent = () => {
     if (file?.runtime_only) {
       return <Text type="secondary">{t('af.runtime_only_badge')}</Text>;
@@ -595,30 +632,112 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   return (
     <AppDrawer
       widthKey="auth_file_detail"
-      title={file?.display_name || identity?.primary || t('af.drawer_title')}
+      title={t('af.drawer_title')}
       width="wide"
       open={open}
       onClose={handleAttemptClose}
+      // The configuration tab finishes with a save, so its footer is that save: it stays in reach
+      // however far down the form an edit was made. The other tabs keep the credential's actions.
+      footer={file && activeSection === 'configuration' ? (
+        <Button
+          type="primary"
+          icon={<SaveOutlined />}
+          loading={saveMutation.isPending}
+          disabled={!isDirty || file.runtime_only || !canEdit}
+          onClick={() => form.submit()}
+        >
+          {t('af.save_fields')}
+        </Button>
+      ) : file ? (
+        <>
+          <Button
+            icon={<SyncOutlined />}
+            loading={refreshMutation.isPending}
+            // A refresh spends the credential's refresh token with its provider, which the
+            // demonstration never contacts.
+            disabled={file.runtime_only || !canEdit || isDemo}
+            title={isDemo ? t('demo.blocked') : t('af.refresh_desc')}
+            onClick={() => refreshMutation.mutate({ fileName: file.name, authIndex: file.auth_index })}
+          >
+            {t('af.refresh')}
+          </Button>
+          <Button
+            icon={<DownloadOutlined />}
+            // Downloading credential material is refused by the demonstration, here as
+            // well as on the card behind this drawer.
+            disabled={file.runtime_only || isDemo}
+            title={isDemo ? t('demo.blocked') : undefined}
+            onClick={() => onDownload(file)}
+          >
+            {t('af.download_credential')}
+          </Button>
+        </>
+      ) : undefined}
     >
       {file ? (
         <div className={styles['drawer-content']}>
+          <header className={styles.hero}>
+            <div className={styles['hero-heading']}>
+              <span className={styles['hero-mark']} aria-hidden>
+                <CredentialMark provider={providerKey} hint={file.name} pluginLogos={pluginLogos} size={22} />
+              </span>
+              <div className={styles['hero-names']}>
+                <h2 className={styles['hero-title']}>{heroTitle}</h2>
+                <span className={styles['hero-subtitle']}>
+                  {getCredentialProviderMetadata(providerKey).label}
+                  {heroSubtitle && <> · <span className="mono-num">{heroSubtitle}</span></>}
+                </span>
+              </div>
+              <span className={styles['hero-status']}>{statusBadge}</span>
+            </div>
+            <dl className={styles['hero-metrics']}>
+              <div>
+                <dt>{t('af.detail_total_requests')}</dt>
+                <dd>{totalRequests.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>{t('dash.success_rate_short')}</dt>
+                {/* The console's one success-rate band (`successRateTone`), so this rate reads the
+                    same colour here as on the dashboard and the provider rows. */}
+                <dd className={styles[`rate-${successRateTone(successRate)}`]}>
+                  {successRate === null ? '—' : `${successRate.toFixed(successRate === 100 ? 0 : 1)}%`}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('af.metric_priority')}</dt>
+                {/* The saved value, never the draft being typed nor the form's default: a value
+                    the console has not read is a dash, not a zero. */}
+                <dd>{savedPriority ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>{t('af.metric_weight')}</dt>
+                <dd>{savedWeight ?? '—'}</dd>
+              </div>
+            </dl>
+          </header>
           <Tabs more={TAB_OVERFLOW}
             activeKey={activeSection}
             onChange={(key) => setActiveSection(key as typeof activeSection)}
             items={[
               {
                 key: 'overview',
-                label: t('omc.tab_quota'),
+                label: t('af.tab_overview'),
                 disabled: saveMutation.isPending,
                 children: (
-                  <div>
-                    {quotaContent}
+                  <div className={styles['overview']}>
+                    {statusWarning}
+                    {quotaContent && (
+                      <section className={styles['drawer-section']}>
+                        <SectionHeading level="label" className={styles['section-header']} title={t('omc.tab_quota')} />
+                        {quotaContent}
+                      </section>
+                    )}
+                    {/* The record's own facts are for checking against CPA, not for the first read. */}
                     <details className={styles['credential-metadata']}>
-                      <summary>{t('common.details')}</summary>
-                      {/* Overview and identity */}
-                      <div className={styles['drawer-section']}>
-                        <SectionHeading className={styles['section-header']} title={t('common.details')} extra={statusBadge} />
-                        <div className={styles['section-body']}>
+                      <summary>{t('af.raw_facts')}</summary>
+                      <div className={styles['metadata-body']}>
+                        <section className={styles['drawer-section']}>
+                          <SectionHeading level="label" className={styles['section-header']} title={t('common.details')} />
                           <FactList
                             emphasis="quiet"
                             facts={[
@@ -638,28 +757,9 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               },
                             ]}
                           />
-                          {hasWarning && file.status_message && (
-                            <Notice
-                              tone="warning"
-                              title={t('af.warning_status')}
-                              description={
-                                <>
-                                  <div>{summarizeAuthFileStatusMessage(file.status_message)}</div>
-                                  {summarizeAuthFileStatusMessage(file.status_message) !== file.status_message.trim() && (
-                                    <pre className={styles['identity-alert-raw']}>{file.status_message}</pre>
-                                  )}
-                                </>
-                              }
-                              className={styles['identity-alert']}
-                            />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Quota Observations */}
-                      <div className={styles['drawer-section']}>
-                        <SectionHeading className={styles['section-header']} title={t('af.quota_title')} />
-                        <div className={styles['section-body']}>
+                        </section>
+                        <section className={styles['drawer-section']}>
+                          <SectionHeading level="label" className={styles['section-header']} title={t('af.quota_title')} />
                           {quotaSignals.length > 0 ? (
                             <FactList
                               emphasis="quiet"
@@ -672,9 +772,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           ) : (
                             <Text type="secondary">{t('af.quota_empty')}</Text>
                           )}
-                        </div>
+                        </section>
                       </div>
-
                     </details>
                   </div>
                 ),
@@ -700,7 +799,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                     <SectionHeading
                       className={styles['section-header']}
                       title={t('af.fields_title')}
-                      extra={isDirty && <Tag tone="warn">{t('cfg.dirty_bar_unsaved')}</Tag>}
                     />
                     <div className={styles['section-body']}>
                       {safeFieldsFailed && (
@@ -908,17 +1006,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           <Input.TextArea rows={3} maxLength={500} showCount />
                         </Form.Item>
 
-                        <div className={styles['form-actions']}>
-                          <Button
-                            type="primary"
-                            htmlType="submit"
-                            icon={<SaveOutlined />}
-                            loading={saveMutation.isPending}
-                            disabled={!isDirty || file.runtime_only || !canEdit}
-                          >
-                            {t('af.save_fields')}
-                          </Button>
-                        </div>
                       </Form>
                     </div>
                   </div>
@@ -947,30 +1034,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               },
             ]}
           />
-          {/* Footer Actions */}
-          <div className={styles['drawer-footer']}>
-            <Button
-              icon={<SyncOutlined />}
-              loading={refreshMutation.isPending}
-              // A refresh spends the credential's refresh token with its provider, which the
-              // demonstration never contacts.
-              disabled={file.runtime_only || !canEdit || isDemo}
-              title={isDemo ? t('demo.blocked') : t('af.refresh_desc')}
-              onClick={() => refreshMutation.mutate({ fileName: file.name, authIndex: file.auth_index })}
-            >
-              {t('af.refresh')}
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              // Downloading credential material is refused by the demonstration, here as
-              // well as on the card behind this drawer.
-              disabled={file.runtime_only || isDemo}
-              title={isDemo ? t('demo.blocked') : undefined}
-              onClick={() => onDownload(file)}
-            >
-              {t('af.download_credential')}
-            </Button>
-          </div>
         </div>
       ) : null}
     </AppDrawer>

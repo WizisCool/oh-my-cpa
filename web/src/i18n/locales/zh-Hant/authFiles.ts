@@ -225,4 +225,8 @@ export default {
   "af.page_size_n": "{n} / 頁",
   "af.failure_details_title": "部分操作未成功",
   "af.status_toggle_label": "切換 {name} 啟用狀態",
+  "af.tab_overview": "概覽",
+  "af.raw_facts": "原始資訊",
+  "af.metric_priority": "優先級",
+  "af.metric_weight": "權重",
 } satisfies Translation<typeof source>;

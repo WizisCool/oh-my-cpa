@@ -225,4 +225,8 @@ export default {
   'af.page_size_n': '{n} / page',
   'af.failure_details_title': 'Some operations failed',
   'af.status_toggle_label': 'Toggle enable status for {name}',
+  'af.tab_overview': 'Overview',
+  'af.raw_facts': 'Raw details',
+  'af.metric_priority': 'Priority',
+  'af.metric_weight': 'Weight',
 } satisfies Translation<typeof source>;

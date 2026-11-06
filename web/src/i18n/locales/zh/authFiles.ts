@@ -222,4 +222,8 @@ export default {
   'af.page_size_n': '{n} / 页',
   'af.failure_details_title': '部分操作未成功',
   'af.status_toggle_label': '切换 {name} 启用状态',
+  'af.tab_overview': '概览',
+  'af.raw_facts': '原始信息',
+  'af.metric_priority': '优先级',
+  'af.metric_weight': '权重',
 };

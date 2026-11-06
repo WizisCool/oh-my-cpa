@@ -1,32 +1,111 @@
 .drawer-content {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Hero: which credential, whether it is healthy, and how it is scheduled ── */
+.hero {
+  padding-bottom: 8px;
+}
+
+.hero-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hero-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.hero-names {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.hero-subtitle {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.hero-status {
+  flex: none;
+  align-self: flex-start;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  margin: 20px 0 0;
+}
+
+.hero-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hero-metrics dt {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.hero-metrics dd {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-metrics dd.rate-success { color: var(--success); }
+.hero-metrics dd.rate-warn { color: var(--warn); }
+.hero-metrics dd.rate-danger { color: var(--danger); }
+
+/* ── Sections: a fill with no hairline, its name a caption inside it. Nothing within a section is
+      ruled; spacing and the enclosure carry the grouping in both modes. ── */
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .drawer-section {
-  border: 1px solid var(--border-soft);
+  padding: 14px 16px 16px;
   border-radius: var(--radius-lg);
   background: var(--surface);
-  overflow: hidden;
 }
 
 .section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--hover-inset);
-  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 12px;
 }
 
 .section-body {
-  padding: 14px;
+  min-width: 0;
 }
 
 .identity-alert {
-  margin-top: 12px;
   min-width: 0;
 }
 
@@ -41,17 +120,8 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--fg-2);
-  background: var(--hover-inset);
-  border: 1px solid var(--border-soft);
+  background: var(--bg);
   border-radius: var(--radius-xs);
-}
-
-.overview-quota {
-  margin-top: 14px;
-  padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: var(--hover-inset);
 }
 
 .field-grid {
@@ -64,16 +134,16 @@
   grid-column: 1 / -1;
 }
 
+/* The switches sit on the page's ground inside the section, one inset step rather than a box. */
 .switch-grid {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 4px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  margin-bottom: 20px;
   padding: 12px;
-  background: var(--hover-inset);
+  border-radius: var(--radius-md);
+  background: var(--bg);
 }
 
 .switch-item {
@@ -101,9 +171,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-bottom: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-soft);
+  margin: 8px 0 24px;
 }
 
 .policy-title {
@@ -145,7 +213,6 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg);
 }
@@ -167,24 +234,10 @@
   margin-left: auto;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
 
 .models-scroll {
   max-height: 280px;
   overflow-y: auto;
-}
-
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-soft);
 }
 
 @media (max-width: 720px) {
@@ -193,16 +246,30 @@
   }
 }
 
-.credential-metadata {
-  margin-top: 20px;
-  border-top: 1px solid var(--border-soft);
-  padding-top: 12px;
+@media (max-width: 640px) {
+  .hero-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+  }
+
+  .hero-metrics dd {
+    font-size: var(--text-lg);
+  }
 }
 
+/* The record's raw facts fold away under a quiet disclosure row. */
 .credential-metadata > summary {
   cursor: pointer;
-  margin-bottom: 12px;
+  padding: 4px 0;
   color: var(--fg-2);
+  font-size: var(--text-sm);
+}
+
+.metadata-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
 }
 
 /* A failed read of the safe fields sits above the fields it could not fill. */
