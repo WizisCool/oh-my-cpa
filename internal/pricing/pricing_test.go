@@ -828,3 +828,73 @@ func TestLinkedCandidatesIgnoreTheirOwnPin(t *testing.T) {
 		t.Fatalf("a link away from the automatic match was not offered it: %+v, %v", found, err)
 	}
 }
+
+func TestImageCatalogSyncPreservesOperatorPricesAndOffersAutomaticMatch(t *testing.T) {
+	ctx := context.Background()
+	for _, mode := range []string{ModeAuto, ModeLinked, ModeCustom} {
+		t.Run(mode, func(t *testing.T) {
+			store := newFakeStore("gpt-image-2")
+			catalog := loadFixtureCatalog(t)
+			chat, ok := catalog.Lookup("openai/gpt-5.4-image-2")
+			if !ok {
+				t.Fatal("chat image model missing from fixture")
+			}
+			fetcher := &fakeFetcher{catalog: NewCatalog([]UpstreamModel{chat}, catalog.FetchedAt)}
+			service := NewService(store, fetcher, nil)
+			if _, err := service.SyncOnce(ctx); err != nil {
+				t.Fatal(err)
+			}
+			switch mode {
+			case ModeLinked:
+				if _, err := service.SetModelMode(ctx, ModeChange{Model: "gpt-image-2", Mode: mode, UpstreamID: chat.ID, Multiplier: 1}); err != nil {
+					t.Fatal(err)
+				}
+			case ModeCustom:
+				if _, err := service.SetModelMode(ctx, ModeChange{Model: "gpt-image-2", Mode: mode,
+					Price: ModelPrice{PromptPricePer1M: 5, CompletionPer1M: 17}, Multiplier: 1}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fetcher.catalog = catalog
+			if _, err := service.SyncOnce(ctx); err != nil {
+				t.Fatal(err)
+			}
+			row, ok := store.price("gpt-image-2")
+			if !ok {
+				t.Fatal("image model has no price after sync")
+			}
+			switch mode {
+			case ModeAuto:
+				if row.UpstreamID != "openai/gpt-image-2" || row.CompletionPer1M != 30 || row.MatchKind != MatchExact {
+					t.Fatalf("image model did not receive its automatic image price: %+v", row)
+				}
+			case ModeLinked:
+				if row.UpstreamID != chat.ID || row.CompletionPer1M != 15 || store.links[row.Model] != chat.ID {
+					t.Fatalf("sync replaced the operator's pin: %+v", row)
+				}
+			case ModeCustom:
+				if row.Source != SourceManual || row.PromptPricePer1M != 5 || row.CompletionPer1M != 17 {
+					t.Fatalf("sync replaced custom rates: %+v", row)
+				}
+			}
+			prices, err := service.ListPrices(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			candidates, err := service.Candidates(ctx, prices)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == ModeAuto {
+				if len(candidates) != 0 {
+					t.Fatalf("automatic price has a candidate: %+v", candidates)
+				}
+				return
+			}
+			candidate, ok := candidates["gpt-image-2"]
+			if !ok || candidate.Kind != CandidateAutomatic || candidate.Model.ID != "openai/gpt-image-2" || candidate.Model.CompletionPer1M != 30 {
+				t.Fatalf("correct image price was not offered for review: %+v", candidates)
+			}
+		})
+	}
+}

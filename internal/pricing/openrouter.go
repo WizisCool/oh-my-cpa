@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,7 +16,8 @@ import (
 )
 
 // OpenRouterModelsURL is the single fixed price source. It is public, needs no
-// key, and the client never accepts an operator-supplied URL.
+// key, and the client never accepts an operator-supplied URL. Fetch includes all
+// output modalities so image generators are not omitted by the text-only default.
 const OpenRouterModelsURL = "https://openrouter.ai/api/v1/models"
 
 const (
@@ -84,7 +86,10 @@ func (c *OpenRouterClient) Fetch(ctx context.Context) (Catalog, error) {
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
 		return Catalog{}, fmt.Errorf("pricing source URL must be http(s)")
 	}
-	body, err := remotedata.Fetch(ctx, c.client, c.baseURL, "oh-my-cpa-pricing/3", upstreamMaxBytes)
+	query := parsed.Query()
+	query.Set("output_modalities", "all")
+	parsed.RawQuery = query.Encode()
+	body, err := remotedata.Fetch(ctx, c.client, parsed.String(), "oh-my-cpa-pricing/3", upstreamMaxBytes)
 	if err != nil {
 		return Catalog{}, fmt.Errorf("fetch OpenRouter prices: %w", err)
 	}
@@ -105,6 +110,9 @@ type openRouterEnvelope struct {
 		Name          string                     `json:"name"`
 		ContextLength json.Number                `json:"context_length"`
 		Pricing       map[string]json.RawMessage `json:"pricing"`
+		Architecture  struct {
+			OutputModalities []string `json:"output_modalities"`
+		} `json:"architecture"`
 	} `json:"data"`
 }
 
@@ -133,8 +141,23 @@ func DecodeOpenRouter(body []byte) ([]UpstreamModel, error) {
 		if !hasAuthor || author == "" || strings.Contains(id, ":") || author == "openrouter" || len(id) > 256 {
 			continue
 		}
+		outputs := entry.Architecture.OutputModalities
+		isImageOutput := len(outputs) == 1 && outputs[0] == "image"
+		// Other non-text modalities need their own pricing policy, not generic
+		// completion rates. Missing metadata keeps the legacy token policy.
+		if len(outputs) > 0 && !isImageOutput && !slices.Contains(outputs, "text") {
+			continue
+		}
+		completionKey := "completion"
+		// Only a pure image generator can use one image rate for all output.
+		// Mixed text/image models must retain their text completion rate.
+		if isImageOutput {
+			if _, ok := perMillion(entry.Pricing["image_output"]); ok {
+				completionKey = "image_output"
+			}
+		}
 		prompt, promptOK := perMillion(entry.Pricing["prompt"])
-		completion, completionOK := perMillion(entry.Pricing["completion"])
+		completion, completionOK := perMillion(entry.Pricing[completionKey])
 		if !promptOK || !completionOK {
 			continue
 		}
@@ -152,7 +175,7 @@ func DecodeOpenRouter(body []byte) ([]UpstreamModel, error) {
 			Author: author, ContextLength: max(contextLength, 0),
 			PromptPricePer1M: prompt, CompletionPer1M: completion, CacheReadPer1M: cacheRead, CacheWritePer1M: cacheWrite,
 		}
-		model.Tiers = CanonicalTiers(decodeOverrides(entry.Pricing["overrides"], hasCacheRead, hasCacheWrite))
+		model.Tiers = CanonicalTiers(decodeOverrides(entry.Pricing["overrides"], hasCacheRead, hasCacheWrite, completionKey))
 		if ValidateTiers(model.Tiers) != nil {
 			model.Tiers = nil
 		}
@@ -165,8 +188,9 @@ func DecodeOpenRouter(body []byte) ([]UpstreamModel, error) {
 // a prompt-token threshold and a UTC time-of-day window — and drops any other.
 // A cache rate the base price inherited from the prompt rate is inherited from
 // the tier's own prompt rate too, so a doubled long-context prompt rate is not
-// paired with the base-tier cache rate.
-func decodeOverrides(raw json.RawMessage, hasCacheRead, hasCacheWrite bool) []PriceTier {
+// paired with the base-tier cache rate. Output overrides use the base's selected
+// pricing key; an absent image override inherits the image rate, not completion.
+func decodeOverrides(raw json.RawMessage, hasCacheRead, hasCacheWrite bool, completionKey string) []PriceTier {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -189,7 +213,7 @@ func decodeOverrides(raw json.RawMessage, hasCacheRead, hasCacheWrite bool) []Pr
 			tier.UTCStart, tier.UTCEnd = &startHHMM, &endHHMM
 		}
 		tier.PromptPricePer1M = optionalPerMillion(override["prompt"])
-		tier.CompletionPer1M = optionalPerMillion(override["completion"])
+		tier.CompletionPer1M = optionalPerMillion(override[completionKey])
 		tier.CacheReadPer1M = optionalPerMillion(override["input_cache_read"])
 		tier.CacheWritePer1M = optionalPerMillion(override["input_cache_write"])
 		if tier.PromptPricePer1M != nil {
