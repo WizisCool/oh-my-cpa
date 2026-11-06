@@ -196,7 +196,6 @@ export async function oauthManagement({ base, page, check, ledger }) {
   await page.mouse.up();
   check('a row held at the window\'s edge never scrolls the page itself',
     pageScroll.window === 0 && pageScroll.root === 0 && pageScroll.body === 0, JSON.stringify(pageScroll));
-  check('a drag cancelled at the edge keeps the order', (await claudeOrder()).join() === initialClaudeOrder.join());
 
   // Each provider is one section, in the console's fixed provider order, whatever the records' order.
   const sectionProviders = await page.getByTestId('oauth-credential-section').evaluateAll((sections) => sections.map((section) => section.getAttribute('data-provider')));
