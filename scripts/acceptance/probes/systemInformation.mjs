@@ -917,11 +917,70 @@ export async function systemInformationPage({ base, page, check }) {
       }),
     });
   };
+  // A poll still in flight when the backend restarts belongs to the process that will answer it, and
+  // the new process numbers its jobs from one again. If that answer is accepted, it ends the poll for
+  // the new job - or reports the old outcome in its place - while the new job holds the write gate.
+  const crossingJob = {
+    action: 'wal_checkpoint',
+    job_id: 9,
+    running: true,
+    started_at_ms: 1790065000000,
+    finished_at_ms: 0,
+    size_before_bytes: 9_000_000,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  const crossingAdmission = { action: 'wal_checkpoint', required_bytes: 0, available_bytes: 5_000_000, allowed: true, reason: '' };
+  let releaseCrossingPolls;
+  const heldCrossingPolls = new Promise((resolve) => { releaseCrossingPolls = resolve; });
+  let crossingPolls = 0;
+  const crossingPollHandler = async (route) => {
+    crossingPolls += 1;
+    // The first answer lets the page adopt this job. Every later poll is the one that will be owed
+    // across the restart, so it is held rather than answered by the process that is going away.
+    const job = crossingPolls === 1
+      ? crossingJob
+      : { ...crossingJob, running: false, finished_at_ms: 1790065004000, size_after_bytes: 8_999_000, reclaimed_bytes: 1000, detail: 'the job the old process ran' };
+    if (crossingPolls > 1) await heldCrossingPolls;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ maintenance: job, maintenance_admission: crossingAdmission }),
+    }).catch(() => {});
+  };
+  await page.route('**/omc/api/v1/management/system/maintenance**', crossingPollHandler);
+  servedMaintenance = { ...crossingJob };
+  await refreshAll(page);
+  const crossingPollInFlight = await until(
+    async () => crossingPolls > 1,
+    { label: 'the poll that will outlive the process', timeoutMs: 10_000 },
+  ).then(() => true).catch(() => false);
+  check('a poll is in flight when the process restarts', crossingPollInFlight, `${crossingPolls} poll(s)`);
+
+  // The process restarts while that poll is held: a new start instant, and the job it admits reuses
+  // an id the page has already handled. The page learns of it the way it does in practice - its own
+  // version check re-reads `/management/system` - because "Refresh all" would also refetch the
+  // maintenance poll and cancel the very request this scenario is holding.
+  const restartVersions = baseSystemBody();
+  await page.route('**/omc/api/v1/management/system/check-updates', (route) => fulfillFixture(route, {
+    status: 200,
+    json: { omc_version: restartVersions.omc_version, cpa_version: restartVersions.cpa_version, served_from_cache: true },
+  }));
   await page.route('**/omc/api/v1/management/system/maintenance**', postRestartHandler);
-  // The process restarts: a new start instant, and the job it admits reuses an id.
   servedProcessStart = 1790070000000;
   servedMaintenance = { ...postRestartJob };
-  await refreshAll(page);
+  await page.locator('[data-testid="sys-card-versions"]').getByRole('button', { name: /Check for Updates|检查更新|Checking|正在检查/ }).first().click();
+  // Adoption is what a wrong answer would end, so the answer is held until this process's job is on
+  // screen; releasing it any earlier would let it look like the old process's own result.
+  const newProcessJobShown = await until(
+    async () => (await page.locator('[data-testid="sys-card-maintenance"] .omc-notice.is-info').count()) > 0,
+    { label: 'the restarted process\'s running job', timeoutMs: 10_000 },
+  ).then(() => true).catch(() => false);
+  check('the restarted process\'s job is shown as in progress', newProcessJobShown);
+  releaseCrossingPolls();
 
   // Refresh all leaves the earlier result on screen, so the wait names this job's own outcome.
   await until(
@@ -934,7 +993,14 @@ export async function systemInformationPage({ base, page, check }) {
     postRestartOutcome.includes('the job the restarted process ran'),
     `polls=${postRestartPolls} outcome text: ${postRestartOutcome.slice(0, 160)}`,
   );
+  check(
+    'the old process\'s delayed answer is not reported as this process\'s result',
+    !postRestartOutcome.includes('the job the old process ran'),
+    `outcome text: ${postRestartOutcome.slice(0, 160)}`,
+  );
   await page.unroute('**/omc/api/v1/management/system/maintenance**', postRestartHandler);
+  await page.unroute('**/omc/api/v1/management/system/maintenance**', crossingPollHandler);
+  await page.unroute('**/omc/api/v1/management/system/check-updates');
 
   // ── a maintenance job is admitted as started, and its outcome is its own ────
   // 202 means accepted, not done. The page must say so when it is accepted and report the

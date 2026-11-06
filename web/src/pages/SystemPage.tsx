@@ -357,7 +357,14 @@ export const SystemPage: React.FC = () => {
     setDisplayedOutcome(null);
     setDismissedOutcomeJobID(null);
     setOutcomeProcessStart(null);
-  }, [sysInfo?.runtime.started_at_ms]);
+    // A poll still in flight was sent to the process that just went away, and its answer belongs to
+    // that process's job ids. The new process numbers its jobs from one again, so the answer could
+    // otherwise pass for this process's terminal record - ending the poll for a job that is holding
+    // the write gate - or for a job that superseded it. Cancel it and let adoption start a fresh
+    // poll of the process that is answering now.
+    void queryClient.cancelQueries({ queryKey: ['management-system-maintenance'], exact: true });
+    setIsPollingMaintenance(false);
+  }, [sysInfo?.runtime.started_at_ms, queryClient]);
 
   // A running job reported by the page's own read is adopted and polled to its end: a job
   // admitted before this page was opened, or admitted elsewhere while it is open, is real work
