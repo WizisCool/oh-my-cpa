@@ -138,7 +138,7 @@ export default {
   "events.preflight": "未生成",
   "events.oauth_badge": "OAuth 授權賬號",
   "events.provider_unresolved_badge": "待確認",
-  "events.provider_unresolved": "無法讀取 provider 列表，此處顯示的是 CPA 記錄的標籤，而非您設定的 provider。",
+  "events.provider_unresolved": "未能讀取供應商列表，此處顯示 CPA 記錄的原始標籤",
   "events.preflight_hint": "預檢請求（非生成）",
   "events.non_stream_hint": "非串流返回",
   "events.transport": "傳輸方式",

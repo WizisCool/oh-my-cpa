@@ -51,7 +51,7 @@ export default {
   "orch.weight": "權重",
   "orch.weight_key": "金鑰 {n}",
   "orch.weight_named": "{name} 的權重",
-  "orch.weight_hint": "預設值為 1；設為 0 表示不分配流量。",
+  "orch.weight_hint": "流量分配相對權重",
   "orch.lens": "模型",
   "orch.lens_placeholder": "選擇模型預覽路由",
   "orch.lens_none": "暫無支援該模型的供應商或憑證。",

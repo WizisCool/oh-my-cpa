@@ -2,7 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/quota';
 
 export default {
-  'quota.reset_estimated_hint': 'The upstream time is derived from billing data rather than a verified exact reset instant',
+  'quota.reset_estimated_hint': 'Reset timestamp estimated from upstream billing cycle',
   'quota.reset_expiry_title_zoned': 'Reset credit expiries ({zone})',
   'quota.reset_grants_title_zoned': 'Claude reset grants ({zone})',
   'quota.reset_grant_remaining': '{left} of {total} left',

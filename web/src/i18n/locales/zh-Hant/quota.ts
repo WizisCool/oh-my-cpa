@@ -2,7 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/quota';
 
 export default {
-  "quota.reset_estimated_hint": "上游時間由計費資訊推導，並非已驗證的精確重設時刻",
+  "quota.reset_estimated_hint": "基於上游計費週期推導的重置時間",
   "quota.reset_expiry_title_zoned": "重設積分到期時間（{zone}）",
   "quota.reset_grants_title_zoned": "Claude 重設授權（{zone}）",
   "quota.reset_grant_remaining": "剩餘 {left}/{total}",

@@ -210,6 +210,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px 20px;
+  align-items: start;
 }
 .settings-field {
   display: flex;
@@ -224,12 +225,29 @@
   font-size: var(--text-md);
   font-weight: 500;
   color: var(--fg);
+  line-height: 1.4;
 }
 .settings-field-desc {
   font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.4;
-  margin-top: 1px;
+  margin-top: 2px;
+}
+.settings-field-switch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+.settings-field-switch-header .settings-field-label {
+  margin-bottom: 0;
+  cursor: pointer;
+}
+.settings-field-control.is-switch {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
 }
 /* Variant 2: Settings List (Toggle switches) */
 .settings-list-rows {
