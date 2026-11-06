@@ -420,8 +420,6 @@ export default {
   'events.tokens_none': '这次请求没有记录到 Token 消耗。',
   'events.token_unplaced_reasoning': '另报告推理 {count}，无法确定是否已计入输出，因此未画入上图。',
   'events.setting_tier': '服务档位',
-  'events.cause_quota': '额度已用尽',
-  'events.cause_quota_hint': '这个凭证的套餐或配额已经耗尽。等待额度重置，或改用其他凭证。',
   'events.cause_rate_limited': '被上游限流',
   'events.cause_rate_limited_hint': '请求过于频繁，上游暂时拒绝了它。稍后重试通常可以恢复。',
   'events.cause_auth': '凭证认证失败',

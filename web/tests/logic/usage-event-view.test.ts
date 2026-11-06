@@ -1000,21 +1000,22 @@ test('usage event view', () => {
   const drawn = (tokens: Partial<UsageEvent['tokens']>) => Object.fromEntries(composition(tokens).segments.map((segment) => [segment.key, segment.value]));
   assert.deepEqual(drawn({ input: 1000, cache_read: 800, output: 100, reasoning: 40, total: 1100 }), { cache_read: 800, input: 200, reasoning: 40, output: 60 });
   assert.deepEqual(drawn({ input: 200, cache_read: 800, output: 100, total: 1100 }), { cache_read: 800, input: 200, output: 100 });
+  // Cache reads beside the input count toward the total that places the reasoning.
+  assert.deepEqual(drawn({ input: 200, cache_read: 800, output: 100, reasoning: 40, total: 1100 }), { cache_read: 800, input: 200, reasoning: 40, output: 60 });
   assert.deepEqual(drawn({ input: 1000, output: 100, reasoning: 40, total: 1140 }), { input: 1000, reasoning: 40, output: 100 });
   assert.deepEqual(drawn({ input: 1000, output: 100, reasoning: 40, total: 999 }), { input: 1000, output: 100 });
   assert.equal(composition({ input: 1000, output: 100, reasoning: 40, total: 999 }).unplacedReasoning, 40);
   assert.deepEqual(tokenComposition(undefined).segments, []);
 
-  // The failure headline reads CPA's quota verdict first, then its own no-credential answer, then
-  // the upstream's status; a record with nothing to go on says so rather than guessing.
-  assert.equal(requestFailureCause({ status: 429, isQuotaExceeded: true }), 'quota');
-  assert.equal(requestFailureCause({ status: 503, code: 'auth_unavailable' }), 'unavailable');
-  assert.equal(requestFailureCause({ status: 429 }), 'rate_limited');
-  assert.equal(requestFailureCause({ status: 401 }), 'auth');
-  assert.equal(requestFailureCause({ status: 504 }), 'timeout');
-  assert.equal(requestFailureCause({ status: 502 }), 'upstream');
-  assert.equal(requestFailureCause({ status: 422 }), 'bad_request');
-  assert.equal(requestFailureCause({}), 'unknown');
+  // The failure headline reads the request's own status; a record with nothing to go on says so
+  // rather than guessing.
+  assert.equal(requestFailureCause(503), 'unavailable');
+  assert.equal(requestFailureCause(429), 'rate_limited');
+  assert.equal(requestFailureCause(401), 'auth');
+  assert.equal(requestFailureCause(504), 'timeout');
+  assert.equal(requestFailureCause(502), 'upstream');
+  assert.equal(requestFailureCause(422), 'bad_request');
+  assert.equal(requestFailureCause(undefined), 'unknown');
 
   // The badge paints a continuous scale, so the numeric rate must keep its
   // fraction while the printed reading stays rounded to one decimal.

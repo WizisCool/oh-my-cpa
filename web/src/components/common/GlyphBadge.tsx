@@ -46,7 +46,8 @@ export function GlyphBadge({ glyph, children, label, hint, items, tone, isStatic
       {hint && <div className={styles['tip-hint']}>{hint}</div>}
       {shown.length > 0 && (
         <ul className={styles['tip-items']}>
-          {shown.map((item) => <li key={item}>{item}</li>)}
+          {/* Aliases can share a model name, so the position keeps the keys apart. */}
+          {shown.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}
           {rest > 0 && <li className={styles['tip-more']}>+{rest}</li>}
         </ul>
       )}

@@ -352,11 +352,6 @@
   font-size: var(--text-sm);
   color: var(--fg-2);
 }
-.req-failure-reason {
-  margin: 6px 0 0;
-  font-size: var(--text-sm);
-  color: var(--fg);
-}
 .req-failure-body {
   margin: 10px 0 0;
   padding: 8px 12px;

@@ -423,8 +423,6 @@ export default {
   'events.tokens_none': 'No tokens were recorded for this request.',
   'events.token_unplaced_reasoning': 'A further {count} reasoning tokens were reported; whether the output already counts them is unclear, so the bar leaves them out.',
   'events.setting_tier': 'Service tier',
-  'events.cause_quota': 'Quota used up',
-  'events.cause_quota_hint': 'This credential\'s plan or quota is exhausted. Wait for it to reset, or use another credential.',
   'events.cause_rate_limited': 'Rate limited upstream',
   'events.cause_rate_limited_hint': 'Requests arrived too fast and the upstream turned this one away for now. Retrying a little later usually works.',
   'events.cause_auth': 'Credential rejected',

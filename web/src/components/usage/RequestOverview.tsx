@@ -10,7 +10,7 @@ import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
 import { formatCacheRate } from '../../theme/cacheScale';
 import { effortBadgeName, effortColor, effortStep } from '../../theme/effortScale';
-import type { UsageEventDetail, UsageEventRelatedError } from '../../types/usageEvents';
+import type { UsageEventDetail } from '../../types/usageEvents';
 import type { ResolvedProviderInfo } from '../../types/usageEventIdentity';
 import {
   eventCacheRate,
@@ -28,7 +28,6 @@ type DetailEvent = UsageEventDetail['event'];
 
 export interface RequestOverviewProps {
   event: DetailEvent;
-  errors: UsageEventRelatedError[];
   provider: ResolvedProviderInfo;
   caller?: string;
   /** The credential that answered, already masked: the OAuth account or the provider key. */
@@ -53,7 +52,6 @@ const SEGMENT_LABELS: Record<TokenSegmentKey, MessageKey> = {
  */
 export function RequestOverview({
   event,
-  errors,
   provider,
   caller,
   credential,
@@ -65,7 +63,7 @@ export function RequestOverview({
   const t = useT();
   return (
     <div className="req-overview">
-      {event.failed && <FailureSummary event={event} errors={errors} onShowDiagnostics={onShowDiagnostics} />}
+      {event.failed && <FailureSummary event={event} onShowDiagnostics={onShowDiagnostics} />}
       <section className="req-card" aria-label={t('events.summary_route')}>
         <h3 className="req-card-title">{t('events.summary_route')}</h3>
         <ol className="req-route">
@@ -112,24 +110,23 @@ function RouteNode({ icon, label, value, badge }: { icon: React.ReactNode; label
   );
 }
 
-function FailureSummary({ event, errors, onShowDiagnostics }: { event: DetailEvent; errors: UsageEventRelatedError[]; onShowDiagnostics: () => void }) {
+// Only this request's own record speaks here. The correlated errors are every failure on the same
+// credential within two minutes, so the first of them can belong to another request; they stay in
+// the diagnostics, labelled as correlated.
+function FailureSummary({ event, onShowDiagnostics }: { event: DetailEvent; onShowDiagnostics: () => void }) {
   const t = useT();
-  const first = errors[0];
-  const status = event.fail_status_code || first?.status_code;
-  const code = first?.code;
-  const body = event.fail_body || first?.body;
-  const cause = requestFailureCause({ status, code, isQuotaExceeded: first?.quota_exceeded });
+  const status = event.fail_status_code;
+  const body = event.fail_body;
+  const cause = requestFailureCause(status);
   return (
     <section className="req-failure" aria-label={t('events.error_banner_title')}>
       <div className="req-failure-head">
         <strong className="req-failure-title">{t(`events.cause_${cause}` as MessageKey)}</strong>
         <span className="req-failure-evidence">
           {status ? `HTTP ${status}` : t('events.filter_failed')}
-          {code ? ` · ${code}` : ''}
         </span>
       </div>
       <p className="req-failure-hint">{t(`events.cause_${cause}_hint` as MessageKey)}</p>
-      {first?.quota_reason && <p className="req-failure-reason">{first.quota_reason}</p>}
       {body && <pre className="req-failure-body">{body}</pre>}
       <div className="req-failure-actions">
         {body && <CopyButton showLabel text={body} label={t('events.copy_error')} />}

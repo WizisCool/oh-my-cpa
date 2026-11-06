@@ -4,7 +4,7 @@ import { App as AntdApp, Button, Dropdown } from 'antd';
 import { Switch } from '../common/Switch';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { GlyphBadge } from '../common/GlyphBadge';
-import { BoxOutlined, DeleteOutlined, EditOutlined, KeyOutlined, MoreOutlined, PictureOutlined, RenameOutlined, TagOutlined } from '../icons';
+import { BoxOutlined, DeleteOutlined, EditOutlined, ExternalLinkOutlined, KeyOutlined, MoreOutlined, PictureOutlined, RenameOutlined, TagOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';
@@ -310,8 +310,8 @@ export function ProviderTable({
     {
       title: t('pro.col_models_headers'),
       key: 'models_headers',
-      // One line of badges: the models and the keys always, the headers only where any are set, so
-      // the base fits all three.
+      // The models and the keys always, the headers only where any are set. The base fits all three
+      // on one line; counts too long for it wrap rather than run into the traffic column.
       width: columnWidth('models_headers'),
       render: (_, record) => {
         const modelCount = providerModelCount(record);
@@ -466,6 +466,7 @@ export function ProviderTable({
     const keyCount = providerKeyCount(record);
     const family = matchProviderFamily(record.family, record.protocol);
     const host = endpointHost(record.base_url);
+    const website = safeExternalURL(record.website);
     const tone = successRateTone(row?.successRate);
     const isLowRate = row !== undefined && row.total > 0 && (tone === 'warn' || tone === 'danger');
     // The same verdicts the status tiles count, so a card and the tile it falls under agree.
@@ -553,6 +554,12 @@ export function ProviderTable({
                 { key: 'edit', icon: <EditOutlined />, label: t('common.edit') },
                 { key: 'rename', icon: <RenameOutlined />, label: t('af.rename') },
                 { key: 'icon', icon: <PictureOutlined />, label: t('pro.change_icon') },
+                // On a desktop the name is the website link; the card's name opens the editor instead.
+                ...(website ? [{
+                  key: 'website',
+                  icon: <ExternalLinkOutlined />,
+                  label: <a href={website} target="_blank" rel="noopener noreferrer">{t('pro.field_website')}</a>,
+                }] : []),
                 { type: 'divider' as const },
                 { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, disabled: isDemo },
               ],

@@ -3,11 +3,11 @@ import { outputTotalWithReasoning } from './tpsCalculation';
 
 /**
  * What a failed request most likely ran into, in the operator's terms rather than the upstream's
- * status line. The cause only chooses the plain-language explanation the drawer leads with; the
- * status, code and body stay on screen beside it, so a misread cause never hides the evidence.
+ * status line, read from the request's own status. The cause only chooses the plain-language
+ * explanation the drawer leads with; the status and body stay on screen beside it, so a misread
+ * cause never hides the evidence.
  */
 export type RequestFailureCause =
-  | 'quota'
   | 'rate_limited'
   | 'auth'
   | 'forbidden'
@@ -18,19 +18,7 @@ export type RequestFailureCause =
   | 'upstream'
   | 'unknown';
 
-export interface RequestFailureEvidence {
-  status?: number | null;
-  code?: string | null;
-  isQuotaExceeded?: boolean;
-}
-
-export function requestFailureCause({ status, code, isQuotaExceeded }: RequestFailureEvidence): RequestFailureCause {
-  // CPA's own quota verdict outranks the status: a provider can answer an exhausted plan with 429,
-  // 403 or 400, and the fix is the same whichever it chose.
-  if (isQuotaExceeded) return 'quota';
-  const normalizedCode = code?.trim().toLowerCase() ?? '';
-  // CPA answers 503 before choosing a credential when none is available for the model.
-  if (normalizedCode === 'auth_unavailable') return 'unavailable';
+export function requestFailureCause(status: number | null | undefined): RequestFailureCause {
   if (!status) return 'unknown';
   if (status === 429) return 'rate_limited';
   if (status === 401) return 'auth';
@@ -79,7 +67,8 @@ export function tokenComposition(tokens: UsageEvent['tokens'] | undefined): Toke
   let unplacedReasoning = 0;
   if (reasoning > 0) {
     const scope = outputTotalWithReasoning({
-      inputTokens: input,
+      // Cache reads reported beside the input are part of the prompt the total counts.
+      inputTokens: cacheRead > input ? input + cacheRead : input,
       outputTokens: output,
       reasoningTokens: reasoning,
       totalTokens: tokens.total,

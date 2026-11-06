@@ -379,7 +379,6 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 children: (
                   <RequestOverview
                     event={event}
-                    errors={errors}
                     provider={providerInfo}
                     caller={requestGroupName(event)}
                     credential={answeringCredential}

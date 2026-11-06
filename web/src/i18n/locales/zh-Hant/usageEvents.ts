@@ -423,8 +423,6 @@ export default {
   "events.tokens_none": "這次請求沒有記錄到 Token 消耗。",
   "events.token_unplaced_reasoning": "另報告推理 {count}，無法確定是否已計入輸出，因此未畫入上圖。",
   "events.setting_tier": "服務檔位",
-  "events.cause_quota": "額度已用盡",
-  "events.cause_quota_hint": "這個憑證的方案或配額已經耗盡。等待額度重置，或改用其他憑證。",
   "events.cause_rate_limited": "被上游限流",
   "events.cause_rate_limited_hint": "請求過於頻繁，上游暫時拒絕了它。稍後重試通常可以恢復。",
   "events.cause_auth": "憑證認證失敗",

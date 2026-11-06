@@ -423,8 +423,6 @@ export default {
   "events.tokens_none": "Tiada token direkodkan untuk permintaan ini.",
   "events.token_unplaced_reasoning": "Sebanyak {count} token penaakulan lagi dilaporkan; tidak jelas sama ada output sudah mengiranya, jadi bar tidak memasukkannya.",
   "events.setting_tier": "Peringkat perkhidmatan",
-  "events.cause_quota": "Kuota habis",
-  "events.cause_quota_hint": "Pelan atau kuota kelayakan ini telah habis. Tunggu ia ditetapkan semula, atau gunakan kelayakan lain.",
   "events.cause_rate_limited": "Dihadkan kadar oleh hulu",
   "events.cause_rate_limited_hint": "Permintaan tiba terlalu cepat dan hulu menolak yang ini buat sementara. Cuba semula sebentar lagi biasanya berjaya.",
   "events.cause_auth": "Kelayakan ditolak",

@@ -75,13 +75,17 @@
     border-radius: var(--radius-md);
     background: var(--bg);
   }
+  /* A label and a count too long to share a segment wrap the count under the label, and a label
+     too long for the segment breaks between words, instead of either being cut short. */
   .stat-tile {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
+    align-content: center;
     justify-content: center;
-    gap: 6px;
+    gap: 0 6px;
     min-height: 32px;
-    padding: 0 6px;
+    padding: 0 4px;
     border: 0;
     border-radius: calc(var(--radius-md) - 2px);
     background: transparent;
@@ -96,10 +100,16 @@
   }
   .stat-tile-label {
     min-width: 0;
-    overflow: hidden;
     font-size: var(--text-xs);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.25;
+    text-align: center;
+  }
+  /* A status label keeps the segment's small type, so its word fits beside the pip. */
+  .stat-tile-label :global(.status-label) {
+    gap: 4px;
+    font-size: inherit;
+    line-height: 1.25;
+    white-space: normal;
   }
   .stat-tile-value {
     flex: none;
