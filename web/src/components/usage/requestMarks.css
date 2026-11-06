@@ -108,25 +108,3 @@
   inset: -12px 0;
   z-index: -1;
 }
-.req-overview-error-status {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 15%, transparent);
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  font-family: var(--font-mono, monospace);
-}
-.req-overview-error-body {
-  margin: 0;
-  padding: 8px 12px;
-  font-size: var(--text-xs);
-  font-family: var(--font-mono, monospace);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  max-height: 120px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}

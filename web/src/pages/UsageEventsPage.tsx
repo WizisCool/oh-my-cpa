@@ -754,11 +754,15 @@ export const UsageEventsPage: React.FC = () => {
       </section>
       <UsageEventDrawer
         credentials={credentials}
-        providerName={providerName}
         eventId={selected}
         onClose={() => setSelected(null)}
         events={events}
         onSelectEvent={setSelected}
+        providerIcons={providerIcons}
+        configuredProviders={configuredProviders}
+        pluginLogos={pluginLogos}
+        pluginTitles={pluginTitles}
+        isProviderCatalogUnknown={isProviderCatalogUnknown}
       />
       <RequestExportDialog
         open={isExportOpen}

@@ -352,7 +352,16 @@ a { color: inherit; }
 }
 /* A card is drawn on the panel's own ground and enclosed by its hairline: grouping comes from the
    enclosure, not from a second fill, so a page of cards reads as one sheet with sections on it. */
-.ant-card, .ant-table-wrapper .ant-table, .ant-drawer-section {
+.ant-card, .ant-table-wrapper .ant-table {
+  background: var(--bg);
+}
+/* A record sheet (AppDrawer) is the page continued beside it, so it draws on the page's ground.
+   Every quiet step - the soft rule, a card's fill, a row's hover - is derived against that ground;
+   on the elevated fill antd paints a sheet with, a dark palette's soft rule landed within one level
+   of the fill and vanished while a light one, whose elevated fill is the page's white, still showed.
+   The selector outranks antd's own `:where(.css-…).ant-drawer .ant-drawer-section`. Pickers that
+   open as sheets (navigation, time range, search) are summoned layers and keep the elevated fill. */
+.ant-drawer .ant-drawer-section.app-drawer {
   background: var(--bg);
 }
 .ant-modal-container { background: var(--elevated); }
@@ -1006,15 +1015,15 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 
 /* A label/value list (`FactList`). */
 .fact-list { margin: 0; }
+/* Rows are separated by their rhythm, not by rules: a label and its value already share a
+   baseline, and a ruled list read as a form to fill rather than facts to scan. */
 .fact-list-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 7px 0;
 }
-.fact-list-row:last-child { border-bottom: 0; }
 .fact-list dt { color: var(--muted); font-size: var(--text-md); }
 .fact-list dd {
   min-width: 0;

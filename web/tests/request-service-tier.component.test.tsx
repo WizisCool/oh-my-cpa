@@ -55,6 +55,7 @@ it('shows the client, outbound and response tiers separately in request details 
     <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
     <CostBreakdownView breakdown={breakdown} model="fixture-model" />
   </>);
+  fireEvent.click(await screen.findByRole('tab', { name: /^(?:Raw fields|原始字段)$/ }));
   expect(await screen.findByText(/priority.*(?:based on outbound request|按出站判断)/)).toBeTruthy();
   expect(screen.getByText(/^(?:Outbound tier|出站档位)$/)).toBeTruthy();
   expect(screen.getByTestId('cost-service-tier').textContent).toMatch(/priced from outbound request|按出站档位计价/);
@@ -65,8 +66,9 @@ it('paints the duration from its ramp in the row and drawer, and leaves TTFT in 
     <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
     <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
   </>);
+  // The row, the drawer's headline and its timing card read the same duration on the same ramp.
   const duration = await screen.findAllByText('65.00 s');
-  expect(duration).toHaveLength(2);
+  expect(duration).toHaveLength(3);
   for (const readout of duration) {
     expect(readout.style.getPropertyValue('--duration-from')).toBe('var(--timing-green)');
     expect(readout.style.getPropertyValue('--duration-to')).toBe('var(--timing-orange)');
@@ -75,10 +77,10 @@ it('paints the duration from its ramp in the row and drawer, and leaves TTFT in 
   const ttft = container.querySelector('.req-ttft-val');
   expect(ttft?.textContent).toBe('TTFT 3.00 s');
   expect(ttft?.className).not.toContain('req-timing-value');
-  fireEvent.click(screen.getByRole('tab', { name: /Performance/ }));
-  await screen.findByRole('heading', { name: usageEventMessages['events.waterfall_title'] });
   const ramps = [...document.querySelectorAll<HTMLElement>('.req-timing-value')];
   expect(ramps).toHaveLength(3);
+  // The first-token wait is drawn in its own secondary segment, never on the duration ramp.
+  expect(screen.getByText(usageEventMessages['events.timing_wait']).closest('.req-timing-value')).toBeNull();
 });
 
 it('reads structured detail in the drawer without merging observations into canonical totals or estimated costs', async () => {
@@ -95,7 +97,7 @@ it('reads structured detail in the drawer without merging observations into cano
     cost_details: { cost: 0, upstream_inference_cost: 0.0000000000001, is_byok: false, cost_in_usd_ticks: 0 },
     is_partial: true,
   } }, event => <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />);
-  fireEvent.click(await screen.findByRole('tab', { name: /Performance/ }));
+  fireEvent.click(await screen.findByRole('tab', { name: /^Usage$/ }));
   const details = within(await screen.findByRole('region', { name: 'Upstream usage details' }));
   const valueFor = (label: string) => within(details.getByText(label).parentElement!).getByRole('definition').textContent;
   expect(valueFor('Text input tokens')).toBe('0');

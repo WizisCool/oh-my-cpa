@@ -22,151 +22,13 @@
   font-variant-numeric: tabular-nums;
   margin-right: 4px;
 }
-/* Overview Error Card */
-.req-overview-error-card {
-  margin-bottom: 20px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-  border-radius: var(--radius-lg);
-}
-.req-overview-error-top {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.req-overview-error-code {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--fg);
-  font-family: var(--font-mono, monospace);
-}
-.req-overview-error-btns {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.req-overview-error-reason {
-  font-size: var(--text-sm);
-  color: var(--fg-2);
-  margin: 4px 0 8px;
-}
-/* Latency Breakdown Waterfall */
-.req-waterfall-box {
-  margin-bottom: 20px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-.req-waterfall-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.req-waterfall-header h4 {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--fg);
-}
-.req-waterfall-total {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-/* The colour of a measured duration belongs to the reading, not to the element that holds it:
-   a total carrying the ramp keeps the ramp's colour, and only an unramped one takes plain ink. */
-.req-waterfall-total:not(.req-timing-value) {
-  color: var(--fg);
-}
-.req-waterfall-track {
-  width: 100%;
-  height: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  display: flex;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-.req-waterfall-seg-ttft {
-  background: var(--accent);
-}
-.req-waterfall-seg-stream {
-  background: var(--success);
-}
-.req-waterfall-seg-total {
-  background: var(--accent);
-}
-.req-waterfall-legend {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  font-size: var(--text-xs);
-  color: var(--muted);
-}
-.req-waterfall-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.req-waterfall-pip {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-}
-.req-waterfall-pip-ttft {
-  background: var(--accent);
-}
-.req-waterfall-pip-stream {
-  background: var(--success);
-}
-.req-waterfall-pip-total {
-  background: var(--accent);
-}
-.req-waterfall-legend-item strong {
-  font-variant-numeric: tabular-nums;
-}
-.req-waterfall-legend-item strong:not(.req-timing-value) {
-  color: var(--fg);
-}
-/* Token Cards Grid */
-.req-token-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
-}
-.req-token-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-.req-token-card span {
-  font-size: var(--text-xs);
-  color: var(--muted);
-}
-.req-token-card strong {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg);
-  font-variant-numeric: tabular-nums;
-}
 .request-detail .ant-drawer-body {
   padding: 24px;
 }
+
+/* ── Hero: what was asked, whether it worked, and the four readings ── */
 .request-detail-hero {
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
 }
 .request-detail-heading {
   display: flex;
@@ -186,43 +48,342 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+.request-result {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.request-result i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.request-result.is-failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
 .request-detail-id {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 4px 10px;
+  margin-top: 8px;
   color: var(--muted);
   font-size: var(--text-sm);
-  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
-.request-detail-id span {
+.request-detail-id-text {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .request-detail-metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  padding: 22px 0;
+  margin: 20px 0 0;
 }
 .request-detail-metrics > div {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
-.request-detail-metrics span {
+.request-detail-metrics dt {
   font-size: var(--text-xs);
   color: var(--muted);
 }
-.request-detail-metrics strong {
+.request-detail-metrics dd {
+  margin: 0;
   font-size: var(--text-xl);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
+
+/* ── Overview: enclosed cards. A card is a fill with no hairline, and nothing inside one is ruled:
+      grouping comes from the enclosure and the spacing, the same in both modes. ── */
+.req-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.req-card {
+  padding: 14px 16px 16px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+.req-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.req-card-title {
+  margin: 0 0 12px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted);
+}
+.req-card-head .req-card-title {
+  margin: 0;
+}
+.req-card-reading {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.req-card-reading:not(.req-timing-value) {
+  color: var(--fg);
+}
+.req-card-note {
+  margin: 10px 0 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* The route: who asked, which provider answered, with which credential. */
+.req-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.req-route-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.req-route-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--fg-2);
+  font-size: 16px;
+}
+.req-route-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.req-route-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.req-route-text strong {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.req-route-badge {
+  flex: none;
+  align-self: flex-start;
+  padding: 0 5px;
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  color: var(--muted);
+  border-radius: var(--radius-xs);
+  background: var(--thread-field);
+}
+.req-route-link {
+  display: inline-flex;
+  color: var(--meta);
+  font-size: var(--text-xs);
+}
+
+/* A bar of parts, each a share of the whole, with its legend underneath. */
+.req-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--thread-field);
+}
+.req-bar-seg {
+  min-width: 3px;
+  height: 100%;
+}
+.req-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 10px 0 0;
+  font-size: var(--text-sm);
+}
+.req-legend > div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.req-legend dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.req-legend dd {
+  margin: 0;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.req-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+/* The wait is detail and keeps the secondary ink; the generation carries the duration's own ramp. */
+.req-bar-seg.is-wait, .req-swatch.is-wait { background: color-mix(in oklab, var(--muted) 60%, transparent); }
+.req-bar-seg.is-generate, .req-swatch.is-generate {
+  background: color-mix(in oklch, var(--duration-from, var(--accent)) var(--duration-from-share, 100%), var(--duration-to, var(--accent)));
+}
+/* Input reads in one series hue and output in another; the paler step of each is the part inside
+   it - the cache hits within the input, the reasoning within the output. Paler is toward the light
+   end in either mode (the page in light, the ink in dark), so the step never sinks into the track. */
+.request-detail { --req-pale: var(--fg); }
+:root[data-theme-mode='light'] .request-detail { --req-pale: var(--bg); }
+.req-bar-seg.is-cache_read, .req-swatch.is-cache_read { background: color-mix(in oklab, var(--series-1) 50%, var(--req-pale)); }
+.req-bar-seg.is-input, .req-swatch.is-input { background: var(--series-1); }
+.req-bar-seg.is-reasoning, .req-swatch.is-reasoning { background: color-mix(in oklab, var(--series-3) 50%, var(--req-pale)); }
+.req-bar-seg.is-output, .req-swatch.is-output { background: var(--series-3); }
+
+/* Request settings: the model as it was asked for and served, then the settings as labelled tiles. */
+.req-model-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin-bottom: 14px;
+}
+.req-model-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.req-model-step strong {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.req-model-arrow {
+  color: var(--meta);
+  font-size: var(--text-xs);
+  padding-bottom: 4px;
+}
+.req-model-substituted {
+  color: var(--warn);
+}
+.req-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+}
+.req-settings > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.req-settings dt {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.req-settings dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.req-settings-mono {
+  font-family: var(--font-mono);
+}
+.req-setting-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A failure leads the overview with what most likely happened, in words, before the evidence. */
+.req-failure {
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg));
+}
+.req-failure-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.req-failure-title {
+  font-size: var(--text-md);
+  color: var(--danger);
+}
+.req-failure-evidence {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+}
+.req-failure-hint {
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+}
+.req-failure-reason {
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.req-failure-body {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  max-height: 140px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+.req-failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ── Detail tabs ── */
 .request-detail-section {
   margin: 0 0 24px;
 }
 .request-detail-section h3 {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   font-size: var(--text-md);
 }
 .request-served-flag {
@@ -233,62 +394,34 @@
   font-size: var(--text-xs);
   border-radius: var(--radius-sm);
   color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
-.request-source-chain {
-  display: grid;
-  grid-template-columns: 1fr 14px 1fr 14px 1fr;
-  align-items: center;
-  gap: 10px;
-  margin: 4px 0 24px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-.request-source-chain > div {
-  min-width: 0;
-}
-.request-source-chain span {
-  display: block;
-  font-size: var(--text-xs);
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-.request-source-chain strong {
-  display: block;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.request-source-chain > .anticon {
-  color: var(--muted);
-  font-size: var(--text-2xs);
-}
+/* An upstream error is a card like the overview's, so diagnostics groups by enclosure too. */
 .request-error {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 .request-error header {
   display: flex;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .request-error header strong {
   color: var(--danger);
 }
 .request-error pre {
+  margin: 8px 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: var(--text-sm);
   max-height: 260px;
   overflow: auto;
-  padding: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  padding: 10px 12px;
+  background: var(--bg);
   border-radius: var(--radius-md);
 }
 @media (max-width: 640px) {
@@ -296,17 +429,21 @@
     padding: 16px;
   }
   .request-detail-metrics {
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
   }
-  .request-detail-metrics strong {
+  .request-detail-metrics dd {
     font-size: var(--text-lg);
   }
-  .request-source-chain {
-    grid-template-columns: 1fr;
+  /* A phone reads the route as steps down the card rather than squeezed across it. */
+  .req-route {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
-  .request-source-chain > .anticon {
+  .req-route-link {
+    justify-content: center;
+    width: 34px;
     transform: rotate(90deg);
-    justify-self: start;
   }
 }
 /* Response headers read as name/value pairs in two tracks: the names align so a
