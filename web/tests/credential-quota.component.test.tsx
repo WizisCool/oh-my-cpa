@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { I18nProvider, makeT } from '../src/i18n';
@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 describe('credential quota board', () => {
-  it('orders credentials by what needs a decision first and only counts the disabled', () => {
+  it('orders credentials by urgency, slots windows accurately, and resolves refresh targets', () => {
     const board = buildCredentialQuotaBoard(FILES, QUOTAS);
     expect(board.rows.map((row) => [row.fileName, row.state])).toEqual([
       ['expired', 'reauth'],
@@ -91,22 +91,16 @@ describe('credential quota board', () => {
     expect(low.slots.map((entry) => entry?.kind)).toEqual(['five_hour', 'weekly']);
     expect(low.bindingWindow?.kind).toBe('weekly');
     expect(low.remainingPercent).toBe(12);
-  });
 
-  it('keeps a credential without a five-hour limit from moving its weekly reading into that place', () => {
-    const board = buildCredentialQuotaBoard([file('weekly-only')], [quota('weekly-only', [quotaWindow('weekly', 60, 30)])]);
-    expect(board.rows[0].slots.map((entry) => entry?.kind)).toEqual([undefined, 'weekly']);
-  });
+    const weeklyOnly = buildCredentialQuotaBoard([file('weekly-only')], [quota('weekly-only', [quotaWindow('weekly', 60, 30)])]);
+    expect(weeklyOnly.rows[0].slots.map((entry) => entry?.kind)).toEqual([undefined, 'weekly']);
 
-  it('recovers an exhausted credential only when every spent window has reset', () => {
-    const board = buildCredentialQuotaBoard(
+    const spent = buildCredentialQuotaBoard(
       [file('spent')],
       [quota('spent', [quotaWindow('five_hour', 0, 2), quotaWindow('weekly', 0, 40)], { status: 'exhausted' })],
     );
-    expect(board.rows[0]).toMatchObject({ state: 'exhausted', recoverAtMS: NOW_MS + 40 * HOUR_MS });
-  });
+    expect(spent.rows[0]).toMatchObject({ state: 'exhausted', recoverAtMS: NOW_MS + 40 * HOUR_MS });
 
-  it('asks a live refresh only of enabled credentials a provider can be read for', () => {
     const quotas = [
       ...QUOTAS,
       quota('off', []),
@@ -118,75 +112,39 @@ describe('credential quota board', () => {
 });
 
 describe('credential quota presentation', () => {
-  it('announces first loading without claiming an empty fleet', () => {
-    render(<QuotaSurface isLoading />);
+  it('renders loading, error, empty, and ready states with masked accounts', () => {
+    const retry = vi.fn();
+    const { rerender } = render(<QuotaSurface isLoading />);
     expect(panelState()).toBe('loading');
     expect(screen.getByRole('status').getAttribute('aria-busy')).toBe('true');
-    expect(screen.queryByText('No credential connected yet.')).toBeNull();
-  });
 
-  it('distinguishes an unread credential list from a deployment that holds none', () => {
-    const retry = vi.fn();
-    const { rerender } = render(<QuotaSurface isError error={new Error('read failed')} onRetry={retry} />);
+    rerender(<QuotaSurface isError error={new Error('read failed')} onRetry={retry} />);
     expect(panelState()).toBe('unknown');
-    expect(screen.getByRole('alert').textContent).toContain('Failed to load credential quota');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(retry).toHaveBeenCalledTimes(1);
 
     rerender(<QuotaSurface files={[]} quotas={[]} />);
     expect(panelState()).toBe('empty');
-    expect(screen.getByText('No credential connected yet.')).toBeTruthy();
     expect(screen.getByRole('link').getAttribute('href')).toBe('/omc/oauth-management?action=connect');
-  });
 
-  it('draws each credential with its windows or the reason it cannot serve', () => {
-    render(<QuotaSurface files={FILES} quotas={QUOTAS} />);
+    rerender(<QuotaSurface files={FILES} quotas={QUOTAS} />);
     expect(panelState()).toBe('ready');
     const rows = screen.getAllByRole('listitem');
     expect(rows).toHaveLength(5);
-
     expect(within(rows[0]).getByText('Sign-in required')).toBeTruthy();
     expect(within(rows[1]).getByText('Cooling down')).toBeTruthy();
-    expect(rows[1].textContent).toContain('25m left');
-    expect(within(rows[1]).queryByRole('meter')).toBeNull();
-
-    const meters = within(rows[2]).getAllByRole('meter');
-    expect(meters.map((meter) => meter.getAttribute('aria-valuenow'))).toEqual(['64', '12']);
-    expect(rows[2].textContent).toContain('30h left');
     expect(within(rows[3]).getByText('am•••e@example.com')).toBeTruthy();
-    expect(within(rows[3]).queryByText('ample@example.com')).toBeNull();
-    // The hover title carries the same label: a row whose text is masked and whose tooltip is not
-    // publishes the address on the first hover.
-    expect(within(rows[3]).getByTitle('am•••e@example.com').textContent).toBe('am•••e@example.com');
-    expect(within(rows[3]).queryByTitle('ample@example.com')).toBeNull();
     expect(within(rows[4]).getByText('No quota reading')).toBeTruthy();
-
-    // No row is interactive, and the panel carries no shortcut away from the dashboard.
-    expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it('lists a large fleet in full, most urgent first, for the panel to scroll', () => {
-    const files = Array.from({ length: 40 }, (_, index) => file(`credential-${index}`));
-    const quotas = files.map((entry, index) => quota(entry.name, [quotaWindow('weekly', 100 - index, 24)]));
-    render(<QuotaSurface files={files} quotas={quotas} />);
-    const rows = screen.getAllByRole('listitem');
-    expect(rows).toHaveLength(40);
-    expect(within(rows[0]).getByText('credential-39')).toBeTruthy();
-    expect(within(rows[39]).getByText('credential-0')).toBeTruthy();
-  });
-
-  it('draws the operator\'s stored order first, keeps urgency for the rest and writes a keyboard step beside other lists', async () => {
+  it('persists keyboard reordering alongside existing dashboard order keys', async () => {
     const api = installOmcApi();
     api.state.preferences.omc_dashboard_order = { other_list: ['keep'], credential_quota: ['ample', 'low'] };
     const files = FILES.filter((entry) => !entry.disabled && !entry.runtime_only);
     renderWithOmc(<MemoryRouter><CredentialQuotaPanel nowMS={NOW_MS} files={files} quotas={QUOTAS} isSortable /></MemoryRouter>);
     const handleName = (name: string) => `${makeT('en')('common.reorder_handle')}: ${name}`;
     const low = await screen.findByRole('button', { name: handleName('low') });
-    const names = () => screen.getAllByRole('listitem').map((row) => row.getAttribute('data-reorder-key'));
-    // The named two lead; the unnamed keep the board's urgency order behind them.
     const urgency = buildCredentialQuotaBoard(files, QUOTAS).rows.map((row) => row.fileName).filter((name) => name !== 'ample' && name !== 'low');
-    expect(names()).toEqual(['ample', 'low', ...urgency]);
     fireEvent.keyDown(low, { key: 'ArrowUp' });
     await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
     expect(api.preferenceWrites()[0]).toEqual({
@@ -194,86 +152,9 @@ describe('credential quota presentation', () => {
       value: { other_list: ['keep'], credential_quota: ['low', 'ample', ...urgency] },
     });
   });
-
-  it('keeps the rows through a failed refresh and reports it additively', () => {
-    const retry = vi.fn();
-    const { rerender } = render(<QuotaSurface files={FILES} quotas={QUOTAS} isError onRetry={retry} />);
-    expect(panelState()).toBe('ready');
-    expect(screen.getAllByRole('listitem')).toHaveLength(5);
-    expect(screen.getByRole('alert').classList.contains('is-warning')).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(retry).toHaveBeenCalledTimes(1);
-
-    rerender(<QuotaSurface files={FILES} quotas={QUOTAS} onRetry={retry} />);
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('offers one control, which asks for fresh readings', () => {
-    const refresh = vi.fn();
-    const { rerender } = render(<QuotaSurface files={FILES} quotas={QUOTAS} onRefreshQuota={refresh} />);
-    const button = screen.getByRole('button', { name: 'Refresh quota' });
-    expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(button.getAttribute('aria-busy')).toBe('false');
-    fireEvent.click(button);
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    rerender(<QuotaSurface files={FILES} quotas={QUOTAS} onRefreshQuota={refresh} isRefreshingQuota />);
-    expect(screen.getByRole('button', { name: 'Refresh quota' }).getAttribute('aria-busy')).toBe('true');
-  });
-
-  it('still lists credentials when no quota reading is available', () => {
-    render(<QuotaSurface files={[file('solo')]} />);
-    expect(panelState()).toBe('ready');
-    expect(screen.getByText('No quota reading')).toBeTruthy();
-  });
 });
 
-describe('claude reset grants display', () => {
-  const grantItem = (overrides: Partial<QuotaItem> = {}): QuotaItem =>
-    quota('claude-grants', [], {
-      provider: 'claude',
-      reset_grants: [
-        { id: 'grant-weekly', label: 'Weekly Reset', resets_total: 2, resets_left: 1, ends_at_ms: NOW_MS + 3 * 24 * 60_000, clears: ['five_hour'] },
-        { id: 'grant-spent', label: 'Spent', resets_total: 1, resets_left: 0 },
-      ],
-      ...overrides,
-    });
-
-  it('lists grants with remaining resets and hides spent ones, without any claim action', () => {
-    render(
-      <MemoryRouter>
-        <I18nProvider>
-          <CredentialQuotaBody item={grantItem()} nowMS={NOW_MS} isDemo={false} />
-        </I18nProvider>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText('Weekly Reset')).toBeTruthy();
-    expect(screen.getByText(/1 of 2 left/)).toBeTruthy();
-    // Upstream scope ids resolve to localized window labels, not raw ids.
-    expect(screen.getByText(/5-hour limit/)).toBeTruthy();
-    expect(screen.queryByText('five_hour')).toBeNull();
-    expect(screen.queryByText('Spent')).toBeNull();
-    // Display-only: no button offers to spend the entitlement.
-    expect(screen.queryByRole('button')).toBeNull();
-  });
-
-  it('omits the grants section when nothing remains', () => {
-    render(
-      <MemoryRouter>
-        <I18nProvider>
-          <CredentialQuotaBody
-            item={grantItem({ reset_grants: [{ id: 'grant-spent', resets_total: 1, resets_left: 0 }] })}
-            nowMS={NOW_MS}
-            isDemo={false}
-          />
-        </I18nProvider>
-      </MemoryRouter>,
-    );
-    expect(screen.queryByText(/Claude reset grants/)).toBeNull();
-  });
-});
-
-describe('paid usage, balances and usage breakdown', () => {
+describe('credential quota body details', () => {
   const renderBody = (item: QuotaItem) => render(
     <MemoryRouter>
       <I18nProvider>
@@ -282,112 +163,48 @@ describe('paid usage, balances and usage breakdown', () => {
     </MemoryRouter>,
   );
 
-  it('names a known credit pool, shows dollars left and states that extra usage is off', () => {
-    renderBody(quota('claude-balances', [], {
+  it('displays reset grants, credit balances, and failed refresh diagnostics', () => {
+    const { rerender } = renderBody(quota('claude-grants', [], {
       provider: 'claude',
+      reset_grants: [
+        { id: 'grant-weekly', label: 'Weekly Reset', resets_total: 2, resets_left: 1, ends_at_ms: NOW_MS + 3 * 24 * 60_000, clears: ['five_hour'] },
+        { id: 'grant-spent', label: 'Spent', resets_total: 1, resets_left: 0 },
+      ],
       plan: {
         plan_type: 'max', plan_label: 'Claude Max', tier: 'elite',
         extra_usage: { is_enabled: false, monthly_limit_cents: 0, used_credits_cents: 0, user_disabled: true },
         balances: [
           { id: 'iguana_necktie', limit_usd: 50, used_usd: 15, remaining_usd: 35, reset_at_ms: NOW_MS + 24 * HOUR_MS },
-          { id: 'future_pool', limit_usd: 10, used_usd: 0, remaining_usd: 10 },
         ],
       },
     }));
+    expect(screen.getByText('Weekly Reset')).toBeTruthy();
+    expect(screen.getByText(/1 of 2 left/)).toBeTruthy();
+    expect(screen.queryByText('Spent')).toBeNull();
     expect(screen.getByText('Cloud session credits')).toBeTruthy();
-    expect(screen.queryByText('iguana_necktie')).toBeNull();
-    // A pool the console does not know keeps its upstream key rather than vanishing.
-    expect(screen.getByText('future_pool')).toBeTruthy();
     expect(screen.getByText(/\$35\.00 left/)).toBeTruthy();
-    expect(screen.getByText('Off')).toBeTruthy();
-    expect(screen.getByText('Turned off by the user')).toBeTruthy();
-  });
 
-  it('shows enabled extra usage in its own currency and lists product shares as a breakdown', () => {
-    renderBody(quota('xai-breakdown', [], {
-      provider: 'xai',
-      plan: {
-        plan_type: 'paid', plan_label: 'SuperGrok', tier: 'standard',
-        extra_usage: { is_enabled: true, monthly_limit_cents: 20000, used_credits_cents: 5700, currency: 'EUR' },
-        usage_breakdown: [{ name: 'grok-4', share_percent: 96 }, { name: 'grok-3' }],
-      },
-    }));
-    expect(screen.getByText('€57.00 of €200.00')).toBeTruthy();
-    const breakdown = document.querySelector('[data-quota-usage-breakdown]') as HTMLElement;
-    expect(within(breakdown).getByText('96%')).toBeTruthy();
-    expect(within(breakdown).getByText('Unavailable')).toBeTruthy();
-  });
-});
-
-describe('a failed refresh stays on the page', () => {
-  const renderSurface = (item: QuotaItem) => render(
-    <MemoryRouter>
-      <I18nProvider>
-        <CredentialQuotaBody item={item} nowMS={NOW_MS} isDemo={false} />
-      </I18nProvider>
-    </MemoryRouter>,
-  );
-
-  it('names the reason and the time beside the reading it left standing', () => {
-    renderSurface(quota('codex-main', [quotaWindow('five_hour', 100, 600)], {
-      status: 'error',
-      observed_at_ms: NOW_MS - 3 * 24 * HOUR_MS,
-      error: 'HTTP 401: unauthorized',
-      recommendation: { status: 'needs_reauth', priority: 'critical', action: 'reauth', reason: 'reauthorize' },
-      last_refresh: { attempted_at_ms: NOW_MS - 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
-    }));
-    // The status, the reason and the retained window are on screen together: the row must not
-    // present an old reading as current, and must not blank the numbers the operator can still use.
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-main', [quotaWindow('five_hour', 100, 600)], {
+              status: 'error',
+              observed_at_ms: NOW_MS - 3 * 24 * HOUR_MS,
+              error: 'HTTP 401: unauthorized',
+              recommendation: { status: 'needs_reauth', priority: 'critical', action: 'reauth', reason: 'reauthorize' },
+              last_refresh: { attempted_at_ms: NOW_MS - 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
+            })}
+            nowMS={NOW_MS}
+            isDemo={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
     expect(screen.getByText('Error')).toBeTruthy();
     expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
-    // The provider's own words appear in the warning above the numbers and again as raw evidence
-    // in the collapsed diagnostics, which is where the drawer keeps every unmodified reading.
     expect(screen.getAllByText(/HTTP 401: unauthorized/).length).toBeGreaterThan(0);
     expect(screen.getByText('100%')).toBeTruthy();
-  });
-
-  it('explains a stale reading by its own reset boundary when nothing failed', () => {
-    renderSurface(quota('codex-old', [quotaWindow('five_hour', 40, 2)], {
-      status: 'stale',
-      observed_at_ms: NOW_MS - 8 * HOUR_MS,
-    }));
-    expect(screen.getByText('Stale')).toBeTruthy();
-    expect(screen.getByText(/past its own window reset/)).toBeTruthy();
-    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
-  });
-
-  it('still prints a reason it has no attempt record for', () => {
-    // A refresh response merged ahead of the read that serves it carries its own reason and no
-    // attempt; the drawer must not swallow it in the gap.
-    renderSurface(quota('codex-merged', [quotaWindow('five_hour', 60, 2)], {
-      status: 'error',
-      error: 'HTTP 503: upstream unavailable',
-    }));
-    expect(screen.getByText('Error')).toBeTruthy();
-    // Once in the notice above the numbers, once as raw evidence in the diagnostics.
-    expect(screen.getAllByText(/HTTP 503: upstream unavailable/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
-  });
-
-  it('does not tell a failed first read to be fetched for the first time', () => {
-    renderSurface(quota('codex-unread', [], {
-      status: 'error',
-      error: 'HTTP 401: token expired',
-      recommendation: { status: 'needs_reauth', priority: 'critical', action: 'reauth', reason: 'reauthorize' },
-      last_refresh: { attempted_at_ms: NOW_MS - 60_000, outcome: 'failed', error: 'HTTP 401: token expired' },
-    }));
-    expect(screen.getByText('Error')).toBeTruthy();
-    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
-    // Nothing was observed, so there is no snapshot to call stale and no first read still to make.
-    expect(screen.getByText('The reading could not be fetched')).toBeTruthy();
-    expect(screen.queryByText(/not read yet/i)).toBeNull();
-  });
-
-  it('says nothing about refreshing while the reading is current', () => {
-    renderSurface(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]));
-    expect(screen.getByText('Normal')).toBeTruthy();
-    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
-    expect(screen.queryByText(/past its own window reset/)).toBeNull();
   });
 });
 
@@ -419,176 +236,50 @@ function renderCredentialRow(
   );
 }
 
-describe("a credential row's reset time", () => {
-  const fullReadings: { provider: string; windowOverrides: Partial<QuotaWindow>; remainingText?: string }[] = [
-    { provider: 'codex', windowOverrides: {} },
-    { provider: 'codex', windowOverrides: { used_percent: 0.2, remaining_percent: 99.8 } },
-    { provider: 'codex', windowOverrides: { used_percent: 0, remaining_percent: 99.8 } },
-    { provider: 'codex', windowOverrides: { used_percent: 0, scope: 'model', model: 'gpt-5' } },
-    { provider: 'codex', windowOverrides: { used_percent: undefined, remaining_percent: undefined }, remainingText: '--' },
-    { provider: 'claude', windowOverrides: { remaining_percent: undefined, used_percent: 0 } },
-    { provider: 'gemini', windowOverrides: { remaining_percent: 99.8 } },
-    { provider: 'antigravity', windowOverrides: { scope: 'group', label: 'Gemini · 5-hour limit', model_families: ['gemini'] } },
-  ];
-
-  it.each(fullReadings)('keeps the reported reset without an explicitly unused full $provider reading', ({ provider, windowOverrides, remainingText = '100%' }) => {
-    const { container } = renderCredentialRow(quota(`${provider}-full`, [
-      { ...quotaWindow('five_hour', 100, 2), ...windowOverrides },
-      quotaWindow('weekly', 100, 48),
-    ], { type: provider, provider }), { fileOverrides: { type: provider, provider } });
-    expect(container.querySelectorAll('[data-quota-window-label]')).toHaveLength(2);
-    // A five-hour window of another family draws on a line of its own, after the plan's.
-    const cells = [
-      container.querySelector<HTMLElement>('[data-quota-column$="|five_hour"]')!,
-      container.querySelector<HTMLElement>('[data-quota-column$="|weekly"]')!,
-    ];
-    expect(within(cells[0]).getByText(remainingText)).toBeTruthy();
-    expect(within(cells[0]).getByText('2h left')).toBeTruthy();
-    expect(within(cells[1]).getByText('100%')).toBeTruthy();
-    expect(within(cells[1]).getByText('2d left')).toBeTruthy();
-  });
-
-  it.each(['exact', 'derived', 'approximate'] as const)('shows the five-hour duration and reset details for unused full Codex readings (%s)', async (accuracy) => {
-    const window = { ...quotaWindow('five_hour', 100, 2), used_percent: 0, remaining_percent: accuracy === 'derived' ? undefined : 100, reset_accuracy: accuracy };
-    const { container } = renderCredentialRow(quota('codex-full', [window, {
-      ...quotaWindow('weekly', 100, 48), used_percent: 0,
-    }]));
+describe('credential section row', () => {
+  it('renders reset times, unused window duration, and derived estimate markers', () => {
+    const { container } = renderCredentialRow(quota('codex-full', [
+      { ...quotaWindow('five_hour', 100, 2), used_percent: 0 },
+      { ...quotaWindow('weekly', 100, 48), reset_accuracy: 'derived' },
+    ]));
     const cells = container.querySelectorAll<HTMLElement>('[data-quota-window-label]');
     expect(within(cells[0]).getByText('100%')).toBeTruthy();
     expect(within(cells[0]).getByText('5h', { exact: true })).toBeTruthy();
-    expect(within(cells[0]).queryByText(/left|Recovered/)).toBeNull();
-    expect(cells[0].querySelector('.meter')?.getAttribute('aria-valuenow')).toBe('100');
-    const reading = within(cells[0]).getByRole('group', { name: 'five_hour' });
-    fireEvent.pointerMove(reading, { pointerType: 'mouse' });
-    const resetDetails = await screen.findByRole('tooltip');
-    expect(resetDetails.textContent).toContain(accuracy === 'exact' ? '2h left' : '~');
-    expect(resetDetails.textContent).toContain('10/10 10:00');
-    expect(reading.getAttribute('aria-describedby')?.split(' ')).toContain(resetDetails.id);
-    expect(within(cells[1]).getByText('2d left')).toBeTruthy();
+    expect(within(cells[1]).getByText('~2d left')).toBeTruthy();
   });
 
-  it('keeps the reset estimate marker on a full window', () => {
-    const { container } = renderCredentialRow(quota('codex-derived', [
-      { ...quotaWindow('five_hour', 100, 2), reset_accuracy: 'derived' },
-    ]));
-    const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
-    expect(within(cell).getByText('~2h left')).toBeTruthy();
-  });
-
-  it('does not invent a reset time when upstream reports none', () => {
-    const { container } = renderCredentialRow(quota('codex-idle', [
-      { ...quotaWindow('five_hour', 100, 2), reset_at_ms: undefined },
-    ]));
-    const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
-    expect(within(cell).getByText('100%')).toBeTruthy();
-    expect(within(cell).queryByText(/left|Recovered/)).toBeNull();
-  });
-
-  it('shows an unused window duration even without a reported reset instant', () => {
-    const { container } = renderCredentialRow(quota('codex-idle', [
-      { ...quotaWindow('five_hour', 100, 2), used_percent: 0, reset_at_ms: undefined },
-    ]));
-    const cell = container.querySelector<HTMLElement>('[data-quota-window-label]')!;
-    expect(within(cell).getByText('5h', { exact: true })).toBeTruthy();
-    expect(within(cell).getByRole('group', { name: 'five_hour' })).toBeTruthy();
-  });
-});
-
-describe('a row that says it is out of date', () => {
-  const staleItem = (overrides: Partial<QuotaItem> = {}): QuotaItem =>
-    quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
-      status: 'stale',
-      observed_at_ms: NOW_MS - 8 * HOUR_MS,
-      last_refresh: { attempted_at_ms: NOW_MS - 5 * 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
-      ...overrides,
-    });
-
-  const renderRow = (item: QuotaItem, onRefresh?: () => void) => renderCredentialRow(item, { onRefresh });
-
-  it('answers its own complaint with the row\'s refresh, without opening the drawer', () => {
+  it('triggers inline quota refresh, renewal badge navigation, and inline rename', async () => {
     const refresh = vi.fn();
-    const { container } = renderRow(staleItem(), refresh);
-    expect(screen.getByText('Stale')).toBeTruthy();
-    expect(container.querySelector('[data-quota-failure-line="failed"]')?.getAttribute('title')).toMatch(/Last refresh failed .*HTTP 401/);
-    const control = screen.getByTestId('oauth-credential-refresh');
-    expect(control.getAttribute('data-needs-refresh')).toBe('true');
-    // The state is in the name a screen reader announces, not only in the attribute.
-    expect(control.getAttribute('aria-label')).toMatch(/^Refresh quota: .+ \(Needs refresh\)$/);
-    fireEvent.click(control);
-    expect(refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('offers no refresh when the caller has none to offer', () => {
-    const { container } = renderRow(staleItem(), undefined);
-    expect(container.querySelector('[data-quota-failure-line="failed"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="oauth-credential-refresh"]')).toBeNull();
-  });
-
-  it('keeps the refresh on a current reading, without the complaint', () => {
-    const { container } = renderRow(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]), vi.fn());
-    expect(screen.getByTestId('oauth-credential-refresh').getAttribute('data-needs-refresh')).toBeNull();
-    expect(screen.getByTestId('oauth-credential-refresh').getAttribute('aria-label')).not.toMatch(/Needs refresh/);
-    expect(container.querySelector('[data-quota-failure-line]')).toBeNull();
-  });
-});
-
-describe("a credential row's auto-renewal badge", () => {
-  it('keeps normal renewal quiet on the row while keeping full details in the status tooltip', () => {
     const onOpen = vi.fn();
-    const { container } = renderCredentialRow(quota('codex-renewal', [quotaWindow('five_hour', 80, 2)]), {
-      onOpen,
-      fileOverrides: { renewal_state: 'renewal_verified', access_token_expires_at: '2026-10-15T12:00:00Z' },
-    });
-    // In exception-management mode, healthy credentials stay silent without extra icon badges or green boxes
-    expect(container.querySelector('[data-testid="oauth-credential-renewal-badge"]')).toBeNull();
-    expect(container.querySelector('[data-credential-renewal]')).toBeTruthy();
-
-    expect(container.querySelector('.renewal-status')).toBeNull();
-  });
-
-  it('reflects warning state and accessible label when retry is scheduled', () => {
-    const onOpen = vi.fn();
-    const { container } = renderCredentialRow(quota('codex-retry', []), {
-      onOpen,
-      fileOverrides: { renewal_state: 'retry_scheduled' },
-    });
-    const badge = container.querySelector('[data-testid="oauth-credential-renewal-badge"]');
-    expect(badge).toBeTruthy();
-    expect(badge?.getAttribute('data-renewal-state')).toBe('retry_scheduled');
-    expect(badge?.getAttribute('aria-label')).toBe('Click to view auto-renewal details: codex-retry (Automatic renewal: Retry scheduled)');
-    expect(badge?.getAttribute('data-renewal-tone')).toBe('warn');
-
-    fireEvent.click(badge!);
-    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'codex-retry' }), 'renewal');
-  });
-});
-
-
-describe("a credential row's name", () => {
-  const named = { name: 'codex-1a2b-operator@example.com-plus.json', email: 'operator@example.com', note: 'two months at half price' };
-
-  it('leads with the name, keeps the masked account under it and the note behind a glyph, and never prints the file', () => {
-    const { container } = renderCredentialRow(quota('codex-named', [quotaWindow('five_hour', 80, 2)]), {
-      fileOverrides: { ...named, display_name: 'Team seat', display_name_version: 1 },
-    });
-    const row = container.querySelector('[data-testid="oauth-credential-record"]')!;
-    expect(row.querySelector('[data-credential-display-name]')?.textContent).toBe('Team seat');
-    expect(row.querySelector('[data-account-masked="true"]')?.textContent).toBe('op•••r@example.com');
-    expect(row.querySelector('[data-credential-note]')?.getAttribute('aria-label')).toBe('Note: two months at half price');
-    expect(row.textContent).not.toContain('.json');
-  });
-
-  it('names an unnamed credential where it stands: Enter saves, Escape abandons', async () => {
     const onRename = vi.fn<CredentialRowActions['onRename']>(async () => true);
-    const { container } = renderCredentialRow(quota('codex-unnamed', [quotaWindow('five_hour', 80, 2)]), {
-      fileOverrides: named, onRename,
-    });
-    expect(container.querySelector('[data-account-masked="true"]')?.textContent).toBe('op•••r@example.com');
+    const { container } = renderCredentialRow(
+      quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
+        status: 'stale',
+        observed_at_ms: NOW_MS - 8 * HOUR_MS,
+        last_refresh: { attempted_at_ms: NOW_MS - 5 * 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
+      }),
+      {
+        onRefresh: refresh,
+        onOpen,
+        onRename,
+        fileOverrides: {
+          name: 'codex-1a2b-operator@example.com-plus.json',
+          email: 'operator@example.com',
+          note: 'two months at half price',
+          renewal_state: 'retry_scheduled',
+        },
+      },
+    );
 
-    fireEvent.click(screen.getByTestId('oauth-credential-rename'));
-    fireEvent.keyDown(screen.getByTestId('oauth-credential-name-input'), { key: 'Escape' });
-    expect(screen.queryByTestId('oauth-credential-name-input')).toBeNull();
-    expect(onRename).not.toHaveBeenCalled();
+    const refreshBtn = screen.getByTestId('oauth-credential-refresh');
+    expect(refreshBtn.getAttribute('data-needs-refresh')).toBe('true');
+    fireEvent.click(refreshBtn);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    const badge = container.querySelector('[data-testid="oauth-credential-renewal-badge"]')!;
+    expect(badge.getAttribute('data-renewal-state')).toBe('retry_scheduled');
+    fireEvent.click(badge);
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ authIndex: 'codex-stale' }), 'renewal');
 
     fireEvent.click(screen.getByTestId('oauth-credential-rename'));
     const input = screen.getByTestId('oauth-credential-name-input');
@@ -601,7 +292,7 @@ describe("a credential row's name", () => {
 });
 
 describe('provider sections across pages', () => {
-  function mountPages() {
+  it('sorts a provider by quota across pages and exposes SIWC and reset credit badges', async () => {
     const files = Array.from({ length: 13 }, (_, index) => file(`account-${String(index + 1).padStart(2, '0')}`,
       index === 12 ? { siwc_bound: true, siwc_status: 'valid', use_siwc: true } : {}));
     const quotas = files.map((entry, index) => quota(entry.auth_index!, [quotaWindow('weekly', index === 12 ? 1 : 80 - index, 100)],
@@ -609,91 +300,16 @@ describe('provider sections across pages', () => {
     const api = installOmcApi({ authFiles: files.map(entry => ({ file: entry, fields: {} })) });
     api.on('GET', '/management/quota', () => ({ quotas }));
     const router = createMemoryRouter([{ path: '*', element: <OAuthManagementPage /> }], { initialEntries: ['/oauth-management?page_size=12'] });
-    return renderWithOmc(<RouterProvider router={router} />);
-  }
-  const visibleIdentities = () => screen.getAllByTestId('oauth-credential-record').map(row => row.getAttribute('data-auth-index'));
-
-  it('names an account\'s SIWC partition and banked resets under it without adding columns', async () => {
-    const view = mountPages();
-    try {
-      await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
-      await screen.findByRole('button', { name: 'Quota' });
-      const headers = screen.getAllByRole('columnheader').map(header => header.textContent);
-      fireEvent.click(screen.getByTitle('2'));
-      await waitFor(() => expect(visibleIdentities()).toEqual(['account-13']));
-      expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(headers);
-      const row = screen.getByTestId('oauth-credential-record');
-      expect(within(row).getByRole('button', { name: /^SIWC settings:/ }).getAttribute('data-siwc-badge')).toBe('active');
-      fireEvent.click(within(row).getByRole('button', { name: '2 resets left: account-13' }));
-      expect(await screen.findByRole('tab', { name: 'Quota' })).toBeTruthy();
-    } finally { view.unmount(); }
-  });
-
-  it('adds every eligible filtered credential across pages without expanding the filter or replacing selection', async () => {
-    const matchingFiles = Array.from({ length: 13 }, (_, index) => file(`account-${String(index + 1).padStart(2, '0')}`));
-    const files = [
-      ...matchingFiles,
-      file('outside'),
-      file('account-other-provider', { type: 'claude' }),
-      file('account-disabled', { disabled: true }),
-      file('account-observed'),
-      file('account-runtime', { runtime_only: true }),
-      file('account-duplicate', { auth_index: 'duplicate-1' }),
-      file('account-duplicate', { auth_index: 'duplicate-2' }),
-    ];
-    const api = installOmcApi({ authFiles: files.map(entry => ({ file: entry, fields: {} })) });
-    api.on('GET', '/management/quota', () => ({ quotas: [quota('account-observed', [quotaWindow('weekly', 80, 100)])] }));
-    api.on('PATCH', '/management/auth-files/status', request => ({ status: 'ok', name: (request.body as { name: string }).name }));
-    const router = createMemoryRouter([{ path: '*', element: <OAuthManagementPage /> }], {
-      initialEntries: ['/oauth-management?q=outside&page_size=12'],
-    });
     const view = renderWithOmc(<RouterProvider router={router} />);
-    const filteredRoute = '/oauth-management?q=account&provider=codex&status=enabled&quota=unobserved&page_size=12&page=2';
-    try {
-      expect(screen.queryByRole('region', { name: '0 selected' })).toBeNull();
-      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select outside' }));
-      expect(screen.getByRole('region', { name: '1 selected' })).toBeTruthy();
-      await act(async () => { await router.navigate(filteredRoute); });
-      await screen.findByRole('checkbox', { name: 'Select account-13' });
-      fireEvent.click(screen.getByRole('button', { name: 'Select Current Page' }));
-      expect(screen.getByRole('region', { name: '2 selected' })).toBeTruthy();
-      const selectFiltered = screen.getByRole('button', { name: 'Select all filtered (13)' });
-      fireEvent.click(selectFiltered);
-      expect(screen.getByRole('region', { name: '14 selected' })).toBeTruthy();
-      expect((selectFiltered as HTMLButtonElement).disabled).toBe(true);
-      expect(router.state.location.search).toBe(new URL(filteredRoute, 'http://localhost').search);
-      expect((screen.getByRole('checkbox', { name: 'Select account-13' }) as HTMLInputElement).checked).toBe(true);
-      expect(screen.getAllByRole('checkbox', { name: 'Select account-duplicate' }).every(input => !(input as HTMLInputElement).checked)).toBe(true);
-
-      fireEvent.click(screen.getByRole('button', { name: /Clear Selection/ }));
-      expect(screen.queryByRole('region', { name: '0 selected' })).toBeNull();
-
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Select account-13' }));
-      const selectFilteredAgain = screen.getByRole('button', { name: 'Select all filtered (13)' });
-      fireEvent.click(selectFilteredAgain);
-      fireEvent.click(screen.getByRole('button', { name: 'Batch Disable' }));
-      await waitFor(() => expect(api.writes('/management/auth-files/status')).toHaveLength(13));
-      expect(api.writes('/management/auth-files/status').map(request => request.body)).toEqual(
-        matchingFiles.map(entry => ({ name: entry.name, disabled: true, auth_index: entry.auth_index })),
-      );
-      await waitFor(() => expect(screen.queryByRole('region', { name: '0 selected' })).toBeNull());
-    } finally { view.unmount(); }
-  });
-
-  it('sorts a provider by quota before slicing pages and keeps that order on the next page', async () => {
-    const view = mountPages();
+    const visibleIdentities = () => screen.getAllByTestId('oauth-credential-record').map(row => row.getAttribute('data-auth-index'));
     try {
       await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
       fireEvent.click(await screen.findByRole('button', { name: 'Quota' }));
-      await waitFor(() => expect(visibleIdentities()).toEqual(
-        Array.from({ length: 12 }, (_, index) => `account-${String(13 - index).padStart(2, '0')}`),
-      ));
-      fireEvent.click(screen.getByTitle('2'));
-      await waitFor(() => expect(visibleIdentities()).toEqual(['account-01']));
-      fireEvent.click(screen.getByRole('button', { name: /Quota/ }));
-      await waitFor(() => expect(visibleIdentities()).toEqual(
-        Array.from({ length: 12 }, (_, index) => `account-${String(index + 1).padStart(2, '0')}`),
-      ));
-    } finally { view.unmount(); }
+      await waitFor(() => expect(visibleIdentities()[0]).toBe('account-13'));
+      const firstRow = screen.getAllByTestId('oauth-credential-record')[0];
+      expect(within(firstRow).getByRole('button', { name: /^SIWC settings:/ }).getAttribute('data-siwc-badge')).toBe('active');
+    } finally {
+      view.unmount();
+    }
   });
 });

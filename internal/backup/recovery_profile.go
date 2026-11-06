@@ -167,6 +167,7 @@ func writeProfileFile(path, passphrase string, profile recoveryProfile) error {
 		file.Close()
 		return err
 	}
+	recipient.SetWorkFactor(defaultWorkFactor())
 	writer, err := age.Encrypt(file, recipient)
 	if err != nil {
 		file.Close()

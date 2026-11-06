@@ -510,7 +510,7 @@ cp .env.example .env
 pnpm dev          # Air + Vite with hot reload at http://127.0.0.1:5173/
 ```
 
-Run `pnpm verify` and `pnpm check:ui` before pushing.
+Run `pnpm verify` before pushing.
 [`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup and the verification workflow.
 
 ## Security

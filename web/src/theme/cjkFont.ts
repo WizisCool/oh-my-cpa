@@ -29,7 +29,7 @@ export const CJK_STYLESHEET_URL = 'https://fonts.googleapis.com/css2?family=Noto
 /**
  * CJK ideographs (unified, extension A, compatibility, the supplementary planes) and Hangul
  * syllables: the code points the bundle leaves to this family. `scripts/font-shards.mjs`
- * holds the same list; `scripts/test-font-shards.ts` keeps them equal.
+ * holds the same list; `web/tests/logic/font-shards.test.ts` keeps them equal.
  */
 export const SERVED_RANGES: readonly (readonly [number, number])[] = [
   [0x3400, 0x4dbf], [0x4e00, 0x9fff], [0xac00, 0xd7af], [0xf900, 0xfaff], [0x20000, 0x3ffff],

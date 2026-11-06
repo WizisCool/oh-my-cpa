@@ -478,7 +478,7 @@ cp .env.example .env
 pnpm dev          # Air + Vite 热重载，地址 http://127.0.0.1:5173/
 ```
 
-推送前运行 `pnpm verify` 与 `pnpm check:ui`。环境搭建与验证流程见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+推送前运行 `pnpm verify`。环境搭建与验证流程见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ## 安全
 

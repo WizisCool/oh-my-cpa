@@ -8,7 +8,7 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": false,
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
@@ -25,5 +25,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests"],
+  "exclude": ["tests/logic"]
 }

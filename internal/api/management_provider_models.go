@@ -160,7 +160,7 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	}
 
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		Proxy: providerEnvironmentProxy,
 	}
 	if proxyStr != "" {
 		// A proxy the operator named must be the path taken: falling back to

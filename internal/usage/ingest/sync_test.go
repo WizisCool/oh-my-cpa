@@ -534,7 +534,7 @@ func TestCaptureNowRespectsAuthenticationCooldown(t *testing.T) {
 	// The first refresh fails either way: served, it reports the rejection; queued
 	// behind the start-up pass that was already rejected, it waits out the cooldown
 	// until its own deadline. The deadline only bounds that wait, so it is short.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	if _, err := runner.CaptureNow(ctx); err == nil {
 		t.Fatal("a rejected key must surface as a failed sync")
@@ -552,7 +552,7 @@ func TestCaptureNowRespectsAuthenticationCooldown(t *testing.T) {
 
 	// The collector is now in its cooldown. A second refresh must not reach CPA
 	// again; it should time out waiting rather than spend another attempt.
-	burst, cancelBurst := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	burst, cancelBurst := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancelBurst()
 	if _, err := runner.CaptureNow(burst); err == nil {
 		t.Fatal("a refresh during cooldown must not report success")

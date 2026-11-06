@@ -189,6 +189,60 @@ func (db *DB) Close() error {
 	return errors.Join(db.SQL.Close(), readOnlyErr)
 }
 
+type migrationSpec struct {
+	version int
+	name    string
+	script  string
+}
+
+var (
+	migrationsOnce    sync.Once
+	cachedMigrations  []migrationSpec
+	cachedMigrateErr  error
+	freshBootstrapMu  sync.Mutex
+	freshBootstrapSQL string
+)
+
+func loadMigrations() ([]migrationSpec, error) {
+	migrationsOnce.Do(func() {
+		entries, err := fs.ReadDir(migrations.Files, ".")
+		if err != nil {
+			cachedMigrateErr = fmt.Errorf("read migrations: %w", err)
+			return
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+		seenVersions := make(map[int]string, len(entries))
+		specs := make([]migrationSpec, 0, len(entries))
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+				continue
+			}
+			version, err := migrationVersion(entry.Name())
+			if err != nil {
+				cachedMigrateErr = err
+				return
+			}
+			if previous, exists := seenVersions[version]; exists {
+				cachedMigrateErr = fmt.Errorf("duplicate migration version %d in %q and %q", version, previous, entry.Name())
+				return
+			}
+			seenVersions[version] = entry.Name()
+			script, err := fs.ReadFile(migrations.Files, entry.Name())
+			if err != nil {
+				cachedMigrateErr = fmt.Errorf("read migration %s: %w", entry.Name(), err)
+				return
+			}
+			specs = append(specs, migrationSpec{
+				version: version,
+				name:    entry.Name(),
+				script:  string(script),
+			})
+		}
+		cachedMigrations = specs
+	})
+	return cachedMigrations, cachedMigrateErr
+}
+
 func (db *DB) Migrate(ctx context.Context) error {
 	if db == nil || db.SQL == nil {
 		return fmt.Errorf("database is not initialized")
@@ -201,53 +255,71 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
-	entries, err := fs.ReadDir(migrations.Files, ".")
+	specs, err := loadMigrations()
 	if err != nil {
-		return fmt.Errorf("read migrations: %w", err)
+		return err
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	seenVersions := make(map[int]string, len(entries))
-	pending := make([]fs.DirEntry, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+
+	appliedVersions := make(map[int]bool, len(specs))
+	rows, err := db.SQL.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+	if err != nil {
+		return fmt.Errorf("read applied migrations: %w", err)
+	}
+	for rows.Next() {
+		var v int
+		if scanErr := rows.Scan(&v); scanErr != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan applied migration: %w", scanErr)
+		}
+		appliedVersions[v] = true
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate applied migrations: %w", err)
+	}
+	_ = rows.Close()
+
+	pending := make([]migrationSpec, 0, len(specs))
+	for _, spec := range specs {
+		if db.migrateUntil > 0 && spec.version > db.migrateUntil {
 			continue
 		}
-		version, err := migrationVersion(entry.Name())
-		if err != nil {
-			return err
-		}
-		if previous, exists := seenVersions[version]; exists {
-			return fmt.Errorf("duplicate migration version %d in %q and %q", version, previous, entry.Name())
-		}
-		seenVersions[version] = entry.Name()
-		if db.migrateUntil > 0 && version > db.migrateUntil {
-			continue
-		}
-		var applied int
-		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, version).Scan(&applied); err != nil {
-			return fmt.Errorf("check migration %d: %w", version, err)
-		}
-		if applied == 0 {
-			pending = append(pending, entry)
+		if !appliedVersions[spec.version] {
+			pending = append(pending, spec)
 		}
 	}
 	if len(pending) == 0 {
 		return nil
 	}
 
+	canFastBootstrap := db.migrateUntil == 0 && db.path != "file::memory:?cache=shared" && len(appliedVersions) == 0 && isFreshEmptyDatabase(ctx, db.SQL)
+	if canFastBootstrap {
+		freshBootstrapMu.Lock()
+		bootstrapSQL := freshBootstrapSQL
+		freshBootstrapMu.Unlock()
+		if bootstrapSQL != "" {
+			tx, err := db.SQL.BeginTx(ctx, nil)
+			if err == nil {
+				if _, execErr := tx.ExecContext(ctx, bootstrapSQL); execErr == nil {
+					if commitErr := tx.Commit(); commitErr == nil {
+						return nil
+					}
+				}
+				_ = tx.Rollback()
+			}
+		}
+	}
+
 	if db.requiresMigrationBackup(ctx) {
-		if err := db.createMigrationBackup(ctx, migrationVersionMust(pending[0].Name())); err != nil {
+		if err := db.createMigrationBackup(ctx, pending[0].version); err != nil {
 			return err
 		}
 	}
-	for _, entry := range pending {
-		version, _ := migrationVersion(entry.Name())
-		script, err := fs.ReadFile(migrations.Files, entry.Name())
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
-		}
+
+	for _, spec := range pending {
+		version := spec.version
 		started := time.Now()
-		slog.InfoContext(ctx, "database migration started", "migration", version)
+		slog.DebugContext(ctx, "database migration started", "migration", version)
 		tx, err := db.SQL.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("begin migration %d: %w", version, err)
@@ -258,27 +330,92 @@ func (db *DB) Migrate(ctx context.Context) error {
 				_ = tx.Rollback()
 			}
 		}()
-		if version == 4 {
-			if err := checkJSON1(ctx, tx); err != nil {
-				return fmt.Errorf("migration %d requires SQLite JSON1: %w", version, err)
-			}
-		}
-		if _, err := tx.ExecContext(ctx, string(script)); err != nil {
-			return fmt.Errorf("apply migration %s: %w", entry.Name(), err)
-		}
-		if hook := migrationHook(version); hook != nil {
-			if err := hook(ctx, tx, db); err != nil {
-				return fmt.Errorf("govern migration %d: %w", version, err)
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, unixepoch())`, version); err != nil {
-			return fmt.Errorf("record migration %d: %w", version, err)
+		if err := db.applyMigrationSpec(ctx, tx, spec); err != nil {
+			return err
 		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration %d: %w", version, err)
 		}
 		migrationSucceeded = true
-		slog.InfoContext(ctx, "database migration completed", "migration", version, "duration", time.Since(started))
+		slog.DebugContext(ctx, "database migration completed", "migration", version, "duration", time.Since(started))
+	}
+
+	if canFastBootstrap {
+		freshBootstrapMu.Lock()
+		if freshBootstrapSQL == "" {
+			if snapshot, snapErr := buildFreshBootstrapSQL(ctx, db.SQL, specs); snapErr == nil {
+				freshBootstrapSQL = snapshot
+			}
+		}
+		freshBootstrapMu.Unlock()
+	}
+	return nil
+}
+
+func isFreshEmptyDatabase(ctx context.Context, sqlDB *sql.DB) bool {
+	var otherTables int
+	if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'`).Scan(&otherTables); err != nil {
+		return false
+	}
+	return otherTables == 0
+}
+
+func buildFreshBootstrapSQL(ctx context.Context, sqlDB *sql.DB, specs []migrationSpec) (string, error) {
+	rows, err := sqlDB.QueryContext(ctx, `
+		SELECT sql
+		FROM sqlite_master
+		WHERE sql IS NOT NULL
+		  AND name NOT LIKE 'sqlite_%'
+		  AND name <> 'schema_migrations'
+		ORDER BY CASE type
+			WHEN 'table' THEN 1
+			WHEN 'index' THEN 2
+			WHEN 'view' THEN 3
+			WHEN 'trigger' THEN 4
+			ELSE 5
+		END, rowid`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var builder strings.Builder
+	for rows.Next() {
+		var ddl string
+		if err := rows.Scan(&ddl); err != nil {
+			return "", err
+		}
+		builder.WriteString(ddl)
+		builder.WriteString(";\n")
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	builder.WriteString("INSERT INTO pricing_catalog_state (id, updated_at_ms) VALUES (1, 0);\n")
+	builder.WriteString("INSERT INTO usage_aggregation_checkpoints (name, last_usage_event_id, created_at_ms, updated_at_ms) VALUES ('facts', 0, unixepoch() * 1000, unixepoch() * 1000);\n")
+	for _, spec := range specs {
+		fmt.Fprintf(&builder, "INSERT INTO schema_migrations(version, applied_at) VALUES (%d, unixepoch());\n", spec.version)
+	}
+	return builder.String(), nil
+}
+
+func (db *DB) applyMigrationSpec(ctx context.Context, tx *sql.Tx, spec migrationSpec) error {
+	version := spec.version
+	if version == 4 {
+		if err := checkJSON1(ctx, tx); err != nil {
+			return fmt.Errorf("migration %d requires SQLite JSON1: %w", version, err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, spec.script); err != nil {
+		return fmt.Errorf("apply migration %s: %w", spec.name, err)
+	}
+	if hook := migrationHook(version); hook != nil {
+		if err := hook(ctx, tx, db); err != nil {
+			return fmt.Errorf("govern migration %d: %w", version, err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, unixepoch())`, version); err != nil {
+		return fmt.Errorf("record migration %d: %w", version, err)
 	}
 	return nil
 }

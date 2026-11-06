@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderResult } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -35,6 +35,14 @@ export function clearTestQueryClients() {
 export function renderWithOmc(ui: React.ReactNode, options: RenderOptions = {}): RenderResult & { client: QueryClient } {
   const client = options.client ?? createTestQueryClient();
   const routed = options.route === undefined ? ui : <MemoryRouter initialEntries={[options.route]}>{ui}</MemoryRouter>;
-  const tree = <QueryClientProvider client={client}><I18nProvider><AntdApp>{routed}</AntdApp></I18nProvider></QueryClientProvider>;
+  const tree = (
+    <ConfigProvider theme={{ token: { motion: false } }}>
+      <QueryClientProvider client={client}>
+        <I18nProvider>
+          <AntdApp>{routed}</AntdApp>
+        </I18nProvider>
+      </QueryClientProvider>
+    </ConfigProvider>
+  );
   return { ...render(options.isStrict ? <React.StrictMode>{tree}</React.StrictMode> : tree), client };
 }

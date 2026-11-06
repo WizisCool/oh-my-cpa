@@ -62,8 +62,7 @@ export function relativeLuminance(hex: string): number {
  * WCAG contrast ratio, 1:1 to 21:1.
  *
  * The single authority for every contrast number in the console: the derivation's own
- * label-solving loop, the editor's live readouts, and the assertions in
- * `scripts/test-theme-presets.ts` all call it, so a ratio cannot be computed two ways.
+ * label-solving loop and the editor's live readouts call it so a ratio cannot be computed two ways.
  */
 export function contrastRatio(left: string, right: string): number {
   const a = relativeLuminance(left);

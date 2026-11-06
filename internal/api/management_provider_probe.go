@@ -418,7 +418,7 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 	}
 	spec.apply(outgoing.Header, apiKey)
 
-	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	transport := &http.Transport{Proxy: providerEnvironmentProxy}
 	if proxyURL != "" {
 		// A proxy the operator named must be the path taken: falling back to
 		// a direct connection on a parse failure would silently change it.

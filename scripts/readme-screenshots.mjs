@@ -18,7 +18,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { DEMO_ROUTES } from './demo-readiness.mjs';
 import { hasDeferredFontShards, hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,10 +49,20 @@ const PHONE_SHOTS = [
 
 const WEBP_QUALITY = 0.86;
 
+const ROUTE_CONTENT_SELECTORS = {
+  '/dashboard': '.heatmap-panel .heatmap-grid',
+  '/usage/events': '.request-list',
+  '/pricing': '[data-testid="pricing-model-list"]',
+  '/insights': '[data-testid="insights-rhythm"] [data-testid="insights-hour-chart"]',
+  '/agent': '[data-testid="agent-empty"]',
+  '/oauth-management': '[data-testid="oauth-credential-record"]',
+  '/ai-providers': '.providers-page .ant-table-row',
+};
+
 function contentSelectorFor(routePath) {
-  const route = DEMO_ROUTES.find((candidate) => candidate.path === routePath);
-  if (!route) throw new Error(`no demo route for ${routePath}`);
-  return route.content;
+  const selector = ROUTE_CONTENT_SELECTORS[routePath];
+  if (!selector) throw new Error(`no demo route for ${routePath}`);
+  return selector;
 }
 
 function fileNameFor(routePath) {

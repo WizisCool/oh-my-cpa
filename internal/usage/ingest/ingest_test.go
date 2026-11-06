@@ -365,7 +365,7 @@ func TestRunnerAutoDegradesToRESPullAfterSubscribeFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runFor(t, runner, 400*time.Millisecond)
+	runFor(t, runner, 150*time.Millisecond)
 
 	if got := runner.Status().Mode; got != ModeRESPPull {
 		t.Fatalf("mode = %q, want %q after %d subscribe failures", got, ModeRESPPull, maxSubscribeFailures)

@@ -15,13 +15,15 @@ export default defineConfig({
     outputFile: { junit: 'tmp/frontend-tests/junit.xml' },
     // Heavy jsdom/antd renders compete for CPU before their assertions run. Bound
     // the pool even on an otherwise idle host, and yield when other gates share it.
-    maxWorkers: process.env.OMC_SHARED_CPU ? 1 : Math.min(2, availableParallelism()),
+    maxWorkers: process.env.OMC_SHARED_CPU ? 2 : Math.min(4, availableParallelism()),
     projects: [
       {
         test: {
           name: 'logic',
-          include: ['scripts/test-*.ts'],
+          include: ['web/tests/**/*.test.ts'],
           environment: 'node',
+          isolate: false,
+          setupFiles: ['./web/tests/setup.ts'],
         },
       },
       {
@@ -36,9 +38,10 @@ export default defineConfig({
         },
         test: {
           name: 'components',
-          include: ['web/tests/**/*.component.test.tsx', 'web/tests/**/*.contract.test.ts'],
+          include: ['web/tests/**/*.component.test.tsx'],
           environment: 'jsdom',
           environmentOptions: { jsdom: { url: 'http://localhost/' } },
+          isolate: false,
           setupFiles: ['./web/tests/setup.ts'],
         },
       },

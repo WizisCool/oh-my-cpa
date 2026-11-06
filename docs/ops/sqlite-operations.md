@@ -407,80 +407,24 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 
 ## 6. Data Retention & Periodic Maintenance
 
-1. **Usage data lifecycle**:
-   - Every table declares one lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`): `permanent`, `rolling`, `owner_bounded` or `replaced`. A migration that adds a table without declaring it fails `TestEveryTableDeclaresItsLifecycle`;
-   - **Permanent**: `usage_facts_15m` and `usage_facts_daily`, which every dashboard panel reads. They grow with distinct model/credential/key combinations per bucket, not with requests, and are never pruned;
-   - **Permanent, derived**: `usage_facts_local_daily`, the same facts per day of the OMC Time Zone, which Insights reads. It is rebuilt from `usage_facts_15m` in one transaction whenever the time zone changes, so restoring a backup or changing the zone never needs a manual step;
-   - **Rolling, request records** (default 90 days, `0` keeps everything): request records (`usage_events`), `error_events`, `ingest_gaps` and discarded payloads. The cutoff is floored to a whole UTC day;
-   - **Rolling, captured payloads** (default 7 days, `0` follows the request-record horizon): payloads in `usage_inboxes` that were decoded into a request record. They are the largest part of the database;
-   - The request-record horizon is set in OMC Settings → Data retention, and the System page's storage card shows how much of that horizon the stored records fill and the date of the oldest one. It is stored in `usage_retention_settings` (migration 051); until the console saves it, `OMCPA_USAGE_RETENTION_DAYS` applies, and once it has the stored value wins. The payload horizon is not offered in the console: it follows `OMCPA_USAGE_INBOX_RETENTION_DAYS` unless `PUT /management/system/data-retention` is given a `payload_days`. Every pass reads the setting, so a change needs no restart. Saving is audited (`system.data_retention`) and refused when the audit record cannot be written. A console sends the horizon it confirmed against, and a write whose expected horizon no longer matches is refused with `409 usage_retention_changed`, so a second console's change cannot be deleted past by a stale confirmation;
-   - The pass runs at start-up and then hourly inside `ingest.Maintenance`, in batches of 2000 rows, at most 25 full batches at a time; an unfinished pass continues on the next fold tick (`OMCPA_USAGE_AGGREGATE_INTERVAL`, default 15 seconds) so the write gate is never held for a long delete. A saved change runs a pass at once, which publishes the new horizon, and the pass that deletes below it follows a minute later;
-   - Maintenance runs whether or not usage is captured: with `OMCPA_USAGE_INGEST_MODE=off`, `OMCPA_USAGE_INGEST_ENABLED=false` or no CPA instance configured, stored records are still folded and still roll out of retention. Only the demonstration runs no maintenance;
-   - A request record is deleted only when its id is at or below the `facts` checkpoint, so nothing leaves before the permanent facts hold it. What each policy has removed, and up to which instant, is recorded in `data_lifecycle_state`;
-   - **Returning space to the disk**: the database is opened with `auto_vacuum = INCREMENTAL`. A database created by this build is incremental from the start, and every retention pass ends with `PRAGMA incremental_vacuum`, in bounded batches, so the file shrinks by what the pass deleted. A database created by an earlier build stays in `NONE` mode, where deleting only frees pages for reuse, until it is rebuilt once with the compaction under *Space Reclamation & Compaction* below; that rebuild switches it to incremental;
-   - **Upgrade note**: the request-record default was 400 days and is now 90, and decoded payloads are now kept 7 days. A deployment that sets neither variable has its older request records and payloads deleted by the passes that follow the upgrade, once the usage facts have absorbed them; dashboard statistics are unaffected. To keep the previous behaviour set `OMCPA_USAGE_RETENTION_DAYS=400` and `OMCPA_USAGE_INBOX_RETENTION_DAYS=0` before upgrading;
-   - On upgrade, migration 035 starts the facts empty and the maintenance loop folds the stored request records into them from the first id. Totals stay exact meanwhile because unfolded records are read directly; statistics for requests already deleted by an earlier retention pass cannot be recovered.
-2. **Price History (`model_price_versions`, `pricing_channel_versions`)**:
-   - Price and channel versions are append-only and are never pruned: every stored request cost references the versions it was locked against, and removing one would leave a cost that can no longer be explained. They grow with price changes, not with traffic, so their size is negligible;
-   - Migration 028 (OpenRouter pricing) rebuilds `model_prices` and `pricing_sync_state` by copying their rows verbatim with the version triggers dropped, so the upgrade mints no version and changes no recorded cost. The auto-sync interval is carried over; the models.dev sync history is not. The pre-migration backup above covers it like any other migration;
-   - Migration 029 adds the provider-membership JSON snapshot to `pricing_catalog_state`; pricing access requires it. The next complete CPA reconciliation populates existing installations. The update is additive and leaves all price versions and request locks unchanged; the normal pre-migration backup applies.
-   - Migration 031 adds `pricing_match_reviews`, the OpenRouter model an operator last answered for each custom or linked price. It is additive, holds no price and locks no cost; restoring an older copy (or losing the table's rows) only means the book announces existing matches once more.
-   - `pricing_upstream_catalog` holds the last complete OpenRouter download and is replaced whole on every successful sync; restoring an older copy only means the model picker shows an older list until the next sync.
-3. **Agent Documents (`agent_documents`, migrations 026 and 036)**:
-   - The encrypted latest Agent session and its capability operations live here; the session ciphertext is written with the same active database cipher as other protected payloads, so the key must exist to resume a conversation or read a pending operation;
-   - Sessions retain their history until reset or explicit turn replacement and are exempt from the repository's 8 MiB document bound; long conversations increase database and backup size. A terminal operation is retained for 7 days. Purging is lazy - it happens during Agent requests under a one-minute throttle - so the Agent adds no background loop and there is no separate maintenance job to schedule;
-   - Migration 036 rebuilds the table to admit the `image` kind, copying every row verbatim; the normal pre-migration backup covers it. An image attached to a message is one encrypted row, at most 5 MiB of content, retained while the conversation references it and deleted on reset. Replacing a turn reuses its images. Failed admission attempts to delete only newly written image rows; this best-effort cleanup can fail if the database is unavailable. Image storage grows with the retained conversation;
-   - Restoring this table from a backup restores conversation and operation history, but approval requires a new decision: an operation that was `executing` when the process stopped is reported as `uncertain` rather than replayed.
-4. **CPA Configuration Backups (`cpa_config_backups`, migration 030; `cpa_config_backup_settings`, migration 033)**:
-   - Before every configuration write, Oh My CPA stores CPA's `config.yaml` as it was, encrypted with the same active database cipher; without the key a copy cannot be read or restored. A write whose copy cannot be stored is refused, so a missing key or an unwritable database blocks configuration writes instead of making them unrecoverable;
-   - Migration 033 adds each copy's `layout` (`v8` or `legacy`) and `reason` (the kind of write it preceded); copies from before it are marked `legacy` / `legacy_conversion`. The upgrade is additive and covered by the normal pre-migration backup;
-   - v8 copies are kept to the retention chosen on the configuration page (default 20, between 5 and 100, the single row of `cpa_config_backup_settings`); pre-v8 copies are kept apart, the ten most recent (`CONFIG_LEGACY_BACKUP_RETENTION`). A copy identical to the gateway's newest one reuses it instead of adding one, so refused attempts cannot push older copies out. Older copies are deleted in the same transaction as the insert, and lowering the retention deletes them at once, so the table needs no maintenance job. A copy is at most 2 MiB, the largest file CPA's management API accepts;
-   - The configuration page lists the copies, takes one on demand, restores a v8 copy onto the gateway (the replaced file is kept first), downloads one and deletes one; restore, download and deletion are audited fail-closed (`config.restore_backup`, `config.reveal_backup`, `config.delete_backup`). `cpa_config_backups` is hidden from the Agent's `database_query`;
-   - Restoring these tables from a database backup restores the copies and the retention. A pre-v8 copy cannot be written back through the v8 API; putting one back on the gateway is an operator action on CPA's own file, outside Oh My CPA.
-5. **Space Reclamation & Compaction**:
-   - Large-scale historical data deletion leaves free pages inside SQLite. A database
-     still in `NONE` auto-vacuum mode (created before incremental mode) does not shrink on
-     its own until one rebuild switches it over; a large `-wal` file is normal rather than
-     a fault: WAL is reused between checkpoints rather than truncated continuously;
-   - Two actions are available, and the System Information page runs both. The console's
-     route is the safer of the two for a running deployment, because it takes the write
-     gate described in [Architecture](../architecture.md#state-and-request-lifetimes) - writers wait rather than fail, and a
-     failed write would stop the usage collector and with it the process:
-     - **WAL checkpoint** (`PRAGMA wal_checkpoint(TRUNCATE)`) moves the log's frames back
-       into the database and truncates the log. It is cheap and safe to run often. SQLite
-       reports a blocked checkpoint in the statement's own result row instead of raising
-       an error, so the page reports that outcome as *incomplete* rather than as success;
-     - **Rebuild** (`VACUUM`) releases free pages. SQLite documents that it needs as much
-       as **twice the database file** in free space while it runs, and the console measures
-       that requirement and shows it in the confirmation before the action starts. The
-       console uses a plain `VACUUM`, not `VACUUM INTO` plus a file swap: the connection
-       pool holds an open handle to the file, so replacing it underneath would need every
-       connection closed and the pool rebuilt while other goroutines still hold references
-       to it. A plain `VACUUM` copies into a temporary file and overwrites the original
-       inside an ordinary transaction, so a rebuild that is interrupted — by cancellation,
-       by its own ten-minute ceiling, or by a restart — leaves the original database intact.
-   - The same actions remain available directly through `sqlite3` when the console is not
-     reachable. Stop the application first, or accept the same waiting behaviour the gate
-     provides:
+1. **Usage data lifecycle (`internal/repository/lifecycle.go`)**:
+   - Every table declares its lifecycle in `TABLE_LIFECYCLES` (`permanent`, `rolling`, `owner_bounded` or `replaced`), enforced by `TestEveryTableDeclaresItsLifecycle`.
+   - **Permanent (`usage_facts_15m`, `usage_facts_daily`, `usage_facts_local_daily`)**: Aggregated dashboard and Insights buckets. They grow with distinct model/credential/key combinations per bucket rather than raw request volume, and are never pruned. `usage_facts_local_daily` is rebuilt from `usage_facts_15m` whenever the OMC Time Zone changes.
+   - **Rolling request records (`OMCPA_USAGE_RETENTION_DAYS`, default `90`, `0` keeps all)**: Applies to `usage_events`, `error_events`, `ingest_gaps` and discarded payloads. Editable live in **OMC Settings → Data retention** (`usage_retention_settings`). Records are pruned only after their ID is folded into the permanent `facts` checkpoint.
+   - **Rolling captured payloads (`OMCPA_USAGE_INBOX_RETENTION_DAYS`, default `7`, `0` follows request horizon)**: Applies to decoded payloads in `usage_inboxes` (the largest part of the database).
+   - **Incremental vacuum**: New databases open with `auto_vacuum = INCREMENTAL`, and each hourly retention pass ends with bounded `PRAGMA incremental_vacuum` batches to return freed pages to disk.
+2. **Append-only price history (`model_price_versions`, `pricing_channel_versions`)**:
+   - Price and channel versions are never pruned because historical request cost snapshots reference the exact version IDs they were locked against.
+3. **Encrypted Agent & Configuration documents (`agent_documents`, `cpa_config_backups`)**:
+   - Encrypted with the active database cipher. Agent sessions and attached images remain until conversation reset; terminal pending operations expire after 7 days.
+   - Before every CPA configuration write (including trusted plugin-page writes), OMC saves an encrypted copy of CPA's `config.yaml` in `cpa_config_backups` (retaining 20 v8 copies by default, configurable 5–100, plus up to 10 legacy pre-v8 copies). Writes fail closed if the backup cannot be recorded.
+4. **Space Reclamation & Compaction**:
+   - The **System Information** page offers two serialized maintenance actions that acquire the repository write gate ([Architecture](../architecture.md#state-and-request-lifetimes)):
+     - **WAL checkpoint** (`PRAGMA wal_checkpoint(TRUNCATE)`): folds committed WAL frames back into the main database file and truncates `-wal`.
+     - **Rebuild** (`VACUUM`): compacts free pages (and upgrades older `auto_vacuum = NONE` databases to `INCREMENTAL`). Requires up to twice the database file size in free disk space.
+   - When the console is offline, stop OMC first and run the same commands on the host:
      ```bash
      sqlite3 /path/to/data/oh-my-cpa.db "PRAGMA wal_checkpoint(TRUNCATE);"
      sqlite3 /path/to/data/oh-my-cpa.db "VACUUM;"
      ```
-   - A maintenance job does not survive a restart: the process running it is gone with it.
-     The console's job status is held in memory for this reason, and the page says so.
 
-### Native plugin writes
-
-Configuration-affecting trusted plugin-page native writes participate in the existing encrypted
-`cpa_config_backups` gate. A page's explicit credential is checked against the stored key before creating a
-snapshot, and snapshot failure prevents mutation. Copies use the existing retention and
-`config_changes` reason, with deduplication; no new table or migration is introduced.
-
-### Warmup scheduling records
-
-Migration 041 adds provider/credential policies, per-credential scheduling state and
-bounded request receipts, plus `quota_snapshots.warmup_json` for billing/activation
-observations. Normal full-database backups include these tables. Keep scheduling state
-and receipts together on restore: consumed or uncertain attempts must not be made new
-by selectively deleting one table. Receipts retain the newest 100 per credential; cycle
-and daily suppression live separately in the one scheduling record per credential.

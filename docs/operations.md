@@ -357,471 +357,91 @@ model still receives the rows and may use them in its answer or in a projected
 
 Open **Operate → Playground** under the configured base path. Select an existing client
 key and a call point from the live `/v1/models` directory; if no key exists, create one
-in Key management first. The page reads `GET <base>/api/v1/playground/models` and sends
-explicit turns through `POST <base>/api/v1/playground/chat`; both require the normal
-administrator session. No additional environment variable or database migration is
-required.
-
-Real requests consume quota under the selected key. Stop cancels the connection but does
-not guarantee a refund. The single latest conversation, its parameters and its attached
-images are stored as a server-side preference so a reload resumes where you left off;
-starting a new conversation discards the stored turns, and image payloads too large to
-store are redacted rather than saved. The stored target is the key's usage fingerprint,
-never the key itself, and a key or call point that no longer exists is not reselected.
-CPA and upstream logging policies still apply. PNG/JPEG/WebP inputs allow four images
-per turn, 5 MiB and 40 megapixels per image, and a 32 MiB request including history.
-Capability is not guessed from the model name.
-
-The parameter panel takes a system prompt, reasoning effort, temperature, top-p, maximum
-output tokens, a User-Agent, and a custom JSON request body. The User-Agent defaults to
-this build's own version and is sent as a header, so an upstream sees which build called
-it. The custom request body has the highest priority: its keys override the panel's
-parameters and any parameter the panel does not model passes through unchanged, but the
-resulting request is validated before it is sent, so an override cannot bypass the image
-and parameter limits. A non-streaming body is rejected, as this page reads a streamed
-answer.
+in Key management first. Real requests consume quota under the selected key. Stop cancels
+the connection; the single latest conversation and parameters are stored as a server-side
+preference (referencing the key's usage fingerprint, never the raw key).
 
 Keep reverse-proxy streaming unbuffered and its read timeout above the 15-second
-heartbeat interval. The dedicated stream can last ten minutes, with a 120-second
-upstream first-response or idle timeout. Ordinary API timeouts are unchanged. Request
-diagnostics never return credentials; copied cURL needs CPA_BASE_URL, CPA_API_KEY and
-replacement image data URLs. The public demonstration shows the page and model directory
-and offers one browser-local recorded example without inference.
+heartbeat interval. Weak connections and page refreshes reattach to the active server run
+journal (retained for 15 minutes after completion) rather than resending a model call.
 
-## Recovering Agent and Playground runs
+## Display preferences and custom icons
 
-Weak connections and page refreshes reattach to the original server task rather than
-resend a model call or workflow. Stop explicitly cancels that task; closing the page
-does not. The latest completed replay journal is retained for 15 minutes, until another
-run replaces it or OMC restarts. Agent keeps its authoritative transcript; Playground
-saves the recovered result into its existing latest-session preference. Results never
-recovered before journal expiry may be unavailable. Agent replay journals grow with output and
-have no byte ceiling or execution deadline; Playground retains its bounded journal and
-30-minute wrapper deadline (the Playground handler's 10-minute deadline still applies).
-An active Agent run therefore consumes memory until it finishes
-or is stopped, and its completed journal remains subject to the retention window above.
-
-Console-authenticated recovery endpoints under the configured API base are
-`GET /agent/runs/active`, `GET /agent/runs/{id}`, `POST /agent/runs/{id}/cancel` and
-their `/playground/runs/` counterparts. Generation POSTs carry `X-OMC-Run-ID`; clients
-without that header keep direct-stream semantics. Recovery does not grant extra
-capability permissions.
-
-## Custom provider icons
-
-Open the provider icon picker and choose **Custom** to upload a PNG/JPEG/WebP/SVG file
-or paste Base64 (with or without an image Data URL prefix). Validate the preview, save a
-name, then select the icon. Saved icons can be renamed or replaced; replacement updates
-all assignments. Deletion is available even for an icon in use: confirmation shows its
-reference count, and deleting it automatically restores affected providers to their
-default icons or placeholders. The deployment stores up to 100 static icons, each at
-most 512 KiB, with raster dimensions at most 1024 × 1024. Icons persist in SQLite and
-are covered by the usual database backup; no separate uploads directory or external
-image service is required. Plugin-owned providers retain their plugin branding. Uploads,
-edits and deletion are disabled in the public demo.
-
-The authenticated API adds `/custom-icons` (GET/POST), `/custom-icons/preview` (POST),
-`/custom-icons/{id}` (PATCH/DELETE) and `/custom-icons/{id}/content` (GET/HEAD) below
-the configured API base. Image content is not included in ordinary list or preference
-responses.
-
-## Display currency and exchange rates
-
-OMC Settings → Data display → Display currency selects one of eleven currencies:
-USD (default), CNY, EUR, JPY, GBP, HKD, SGD, MYR, KRW, AUD or CAD. Every amount
-prints one symbol flush against its number (`RM8.50`, `S$1.30`). Amounts read at two
-decimals, with trailing zeros trimmed; a fraction of a cent keeps up to four, and one
-below a ten-thousandth up to six, the finest amount the console prints. A rate — a
-per-1M token price or the 1-USD quote — keeps its own precision instead, and the price
-editor's preview keeps sub-cent detail in its sample costs so `$0.075` stays exact. The
-preference follows this deployment across browsers. Dashboard, Request Records and
-Insights convert at the latest cached rate; Cost & Usage, price editing and accounting
-remain USD. JSON exports and USD-denominated filters retain their stored units. Image
-exports follow the displayed currency.
-
-The server reads the fixed Frankfurter v2 USD-base rates endpoint every 24 hours,
-including an initial download when no attempt is cached, and keeps only the eleven
-display currencies; a snapshot missing any of them is refused like any other
-incomplete one. The refresh glyph beside the picker updates them immediately; a
-non-USD choice states its rate for 1 USD and that quote's observation date, which
-can trail the download.
-
-Rates, last-attempt/last-success times and refresh failure state live in SQLite's
-`exchange_rate_cache` and are included in normal database backups. A failed refresh
-keeps the complete last successful table, including across a restart. Refreshing does
-not rewrite historical costs; historical windows display at the latest cached rate.
-With no usable rate, non-USD display amounts remain unavailable until a successful
-update. Ordinary reads and cached conversions require no internet access; the optional
-refresh needs outbound HTTPS to `api.frankfurter.dev`, without an API key. Demo mode
-uses synthetic cached rates and never downloads them.
-
-## TPS calculation mode
-
-OMC Settings → Display chooses whether request-record and Playground TPS includes
-first-token latency. The rate describes observed output delivery, not the model's
-internal decoding clock.
-
-- **Include first-token latency (default).** TPS is total output tokens divided by total
-  latency. Known reasoning tokens remain in the output total.
-- **Exclude first-token latency.** When `exclude_ttft` is selected, TPS divides
-  output tokens by the interval from the first observable token to completion. A record
-  that reports reasoning tokens uses this denominator only when the first timestamp is
-  known to mark non-reasoning content. A Playground turn has that boundary when reasoning
-  arrives on a separate thought channel; inline reasoning shares the reply clock. A usage
-  record without reported reasoning may subtract a valid `ttft_ms`; when reasoning is
-  reported, its single timestamp does not locate the answer boundary and exclusion is
-  unavailable.
-- **Unavailable is a result.** Missing or contradictory timing and token accounting, or a
-  reasoning count that cannot be attributed to the observed interval, displays `—` with the
-  reason rather than silently switching to another denominator. There is no duration or
-  rate threshold. Choosing exclusion displays a warning that the narrower denominator can
-  make the rate unusually high.
-
-Both modes recalculate historical readouts from stored observations. The setting never
-rewrites usage or timing, and it does not change the independent TTFT readout. TPS exports
-also carry `tps_basis` and `tps_mode`.
+- **Display currency**: **OMC Settings → Data display → Display currency** converts
+  Dashboard, Request Records and Insights readouts using cached Frankfurter USD-base
+  exchange rates (`api.frankfurter.dev`, refreshed daily or on demand and persisted in
+  `exchange_rate_cache`). Cost & Usage, price editing and stored accounting remain in USD.
+- **TPS calculation mode**: **OMC Settings → Display** selects whether request-record and
+  Playground TPS includes first-token latency (default) or excludes TTFT when a non-reasoning
+  first-token boundary is known. Stored usage and timing are never rewritten.
+- **Custom provider icons**: Upload up to 100 static PNG/JPEG/WebP/SVG icons (≤ 512 KiB,
+  ≤ 1024 × 1024) in the provider icon picker. Icons persist in SQLite and are included in
+  database backups; deleting an icon restores affected providers to their default mark.
 
 ## Plugin store
 
-The plugin store reads CPA's built-in `official` registry plus the registries in
-`plugins.store-sources`. Oh My CPA's own registry
-(`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json`)
-is a managed entry: the server adds it when the source is on (the default) and restores
-it after a configuration save that removed it, so the switch is **OMC Settings →
-Plugin store** (`omc_plugin_source_enabled`), not the configuration editor
-and not the source list on the plugin settings tab. Turning it off removes the
-address on the next plugin read, install or plugin-settings save. Its entries are
-marked Oh My CPA and listed first; like every entry outside CPA's built-in registry,
-installing one requires typing the plugin id, because the confirmation is about
-running code inside the gateway.
+The plugin store reads CPA's built-in `official` registry plus `plugins.store-sources`.
+Oh My CPA's own registry is managed through **OMC Settings → Plugin store**
+(`omc_plugin_source_enabled`, on by default). Installing any plugin outside CPA's
+built-in registry requires typing the plugin ID to confirm running code inside the gateway.
 
 ## Plugin pages
 
-Installed plugin pages open through OMC's authenticated same-origin host; CPA does
-not need to be reachable from the browser. Treat installation as granting trusted
-code access, not as opening an isolated dashboard: native management responses can
-include configuration credentials. Review the plugin's source and provenance before
-installing or opening it.
-
-The host can supply the stored management key server-side when the page sends no
-credential. A key explicitly entered into a plugin page is checked instead, so an
-empty or incorrect key is not silently replaced. The model directory uses the page's
-client key and cannot borrow the management key. Plugin assets never receive an
-injected management key.
-
-Configuration-affecting calls are audited, serialized and backed up. Native plugin
-writes still follow CPA's last-write semantics: do not edit the same settings in a
-plugin while keeping an unsaved console draft. These routes are unavailable in demo
-mode and are not Agent/MCP capabilities. The exact fixed-origin, header and path
-restrictions are defined in [Architecture](architecture.md#trusted-plugin-pages).
+Installed plugin pages open through OMC's authenticated same-origin host; CPA does not
+need to be reachable from the browser. Treat installation as granting trusted code access:
+native management responses can include configuration credentials. Configuration-affecting
+calls through the Plugin Host are audited, serialized and backed up. See
+[Architecture](architecture.md#trusted-plugin-pages) for fixed-origin and header boundaries.
 
 ## Demo mode
 
 `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead
-of a CPA, so it needs no management key and no provider credential. Its storage is not
-durable — the database is deleted and rebuilt on every boot — and the server refuses
-sign-in flows, credential movement, plugin execution and plugin pages, gateway configuration writes and
-anything that would leave the process. It opens at the site root unless
-`OMCPA_BASE_PATH` says otherwise. A visitor's theme stays in their own browser:
-a demonstration is shared, so it is neither sent to the server nor read from it.
+of a CPA instance, requiring no management key or provider credentials. Its database
+(`oh-my-cpa-demo.db`) is rebuilt on every boot, and the server refuses sign-in flows,
+credential mutations, plugin execution, gateway configuration writes and outbound calls.
 
 ```bash
 pnpm build
 OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 ```
 
-This mode is what generates the public demonstration's dataset, so it stays in use even
-though the public deployment does not run it; `OMCPA_PUBLIC_URL` states that
-deployment's origin. The public demo is the same console as static assets with its API
-answered by a Cloudflare Worker from that generated dataset. See
-[the demo runbook](ops/cloudflare-demo.md) for its build and deployment procedure.
+This mode also generates the static dataset for the Cloudflare Worker deployment; see
+[the demo runbook](ops/cloudflare-demo.md).
 
 ## Available model directory
 
-The authenticated `/model-square` route reads `GET /api/v1/management/model-square`
-(relative to the deployment base path). The server uses the first nonempty configured
-client key to read CPA's live `/v1/models`; no key returns `client_key_required` (409).
-No client or upstream secret is returned. Configuration enriches only advertised IDs,
-with partial conditions for unavailable model definitions or mappings. Refresh rereads
-CPA; it does not make a paid model request.
+The `/model-square` page reads CPA's live `/v1/models` using the first configured client
+key (or returns `client_key_required` when none exists) and enriches models from the
+bundled models.dev snapshot in `internal/modelcatalog/snapshot.json`.
 
-Model specifications come from the bundled models.dev snapshot in
-`internal/modelcatalog/snapshot.json`. Run `pnpm models:sync` when preparing a release
-to update it from models.dev's canonical model data and exact source aliases, then run
-`pnpm demo:generate` and accept the Model Square API goldens (`UPDATE_GOLDEN=1`) because
-the demo response and those goldens both carry the snapshot date. The release workflow refuses a tag whose
-snapshot is more than 30 days older than the tagged commit. There is no runtime
-synchronization loop or new environment setting, and **Refresh model catalogs** rereads
-CPA without changing this snapshot. The page labels the date as the bundled snapshot's,
-shows unknown fields, and renders without browser catalog/CDN requests.
-External reference links are user-initiated navigation. Pricing remains on its existing
-OpenRouter source and is not synchronized by viewing Model Square. The page additionally
-reads the existing `GET /api/v1/pricing` and `GET /api/v1/usage/facets?preset=24h` to show
-each name's price and recent requests; if either fails, the directory still renders and
-those cells stay blank.
+When preparing a release, refresh the bundled snapshot with `pnpm models:sync`, then run
+`pnpm demo:generate` and update Model Square API goldens (`UPDATE_GOLDEN=1`). The release
+workflow rejects tags whose snapshot is more than 30 days older than the tagged commit.
 
-## OAuth model rules
+## OAuth model rules and routing
 
-Open **Model rules** in OAuth management to edit CPA's provider-wide aliases or
-model exclusions. Aliases are provider-scoped; exclusions are defaults for
-OAuth/file-backed credentials without a non-empty own `excluded_models` list.
-A non-empty credential list replaces, rather than extends, the provider's
-`oauth.excluded-models`. A missing, empty or null credential list inherits the
-current provider rules. Use the credential configuration tab to edit an override;
-clearing it restores inheritance, not unrestricted availability.
+- **Model rules**: In OAuth management, edit provider-wide model aliases or
+  `oauth.excluded-models`. A non-empty per-credential `excluded_models` list replaces
+  the provider default (requires CPA v8.0.33+); clearing the credential override restores
+  inheritance. Exclusions apply before alias mapping.
+- **Routing**: `/routing` arranges provider keys, OpenAI-compatible providers and OAuth
+  credentials into priority tiers. Applying a routing plan records an audit attempt,
+  saves an encrypted configuration backup (`routing_plan`), updates provider priorities/weights
+  and patches affected OAuth credentials against the board revision (`routing_conflict` on
+  concurrent changes).
 
-Exact exclusions and `*` patterns match case-insensitively. Provider `*` excludes
-all models only for inheriting credentials: with provider `["*"]` and credential
-`["model-b"]`, the credential uses only `["model-b"]`, so `model-a` is not blocked
-by provider `*`. Clearing that override makes the credential inherit `*` again.
-Exclusions run before alias mapping; an alias cannot restore a source hidden by
-the applicable rules. Deleting provider rules removes those defaults but leaves
-non-empty credential overrides unchanged; it does not guarantee that models are
-served again. CPA's per-credential model list is authoritative for availability.
-Disable a credential explicitly when it must stop serving.
+## Quota observation and window warmup
 
-This precedence requires **CPA v8.0.33 or later**; upgrade an older gateway before
-relying on credential overrides. OMC's general v8.0.0 Management API baseline is
-unchanged. The behavior follows CPA's [credential override change](https://github.com/router-for-me/CLIProxyAPI/commit/69d0ff8e295aea349966b16f20e2966421bfeb18).
-The upstream regression
-[`TestCodexExcludedModelsCredentialPriorityAfterPatchAndReload`](https://github.com/router-for-me/CLIProxyAPI/blob/2422c6b0f5fe16495320fa29456493874c1977a0/sdk/cliproxy/service_excluded_models_priority_test.go)
-checks immediate PATCH effects, reloads and restored inheritance after clearing.
+- **Quota refresh**: Quota observations are initiated server-side against fixed provider
+  endpoints (`internal/quota/service.go`) or CPA's plugin quota endpoint. **OMC Settings →
+  Quota** (`omc_quota_auto_refresh`) controls automatic post-reset reads and scheduled
+  sweeps, and automatically clears CPA cooldowns when all windows have room or recovery
+  times have passed. Claude quota reads serialize and respect `Retry-After` backoff; Meta
+  Muse credentials refresh only on manual request.
+- **Credential window warmup**: Configure provider defaults or per-credential overrides in
+  OAuth management's **Window warmup** tab (Off, Weekly, or Weekly + 5-hour reset mode,
+  plus optional daily warmup time). Claude warmup requires fresh evidence that
+  `extra_usage.is_enabled` is false; Codex warmup consumes quota directly. Consuming
+  requests are recorded before send, and uncertain transport/restart outcomes are never
+  automatically resent.
 
-The facade exposes GET/PATCH at `/api/v1/management/auth-files/model-aliases` and
-`/api/v1/management/auth-files/excluded-models`. An exclusion PATCH carries
-`provider` and `models`; an empty `models` array removes that provider's rules.
-The provider model catalog is read at
-`/api/v1/management/auth-files/provider-models?provider=codex`; plugin-owned
-providers read the catalog CPA's plugin host publishes (CPA v8.0.34 or later). Without a catalog, the
-editors still accept typed names. A successful write requires CPA readback;
-changes are serialized with other whole-config writes, backed up and audit logged
-(`oauth_model_alias.update` or `oauth_excluded_models.update`). Demo mode allows
-reads but refuses durable changes.
-
-## Routing
-
-The `/routing` page arranges CPA's request order. Each provider key, OpenAI-compatible
-provider and OAuth credential is a card. A tier is a set of cards that share one
-`priority`, so CPA routes to a higher tier first, and the tiers are drawn top-down.
-Inside a tier, the routing strategy divides traffic. Under fill-first, CPA's internal
-auth ID decides which card fills first, and OMC cannot see that ID. A strict A → B → C
-order therefore needs one tier per card. When an arrangement is numbered, cards whose
-tier is unchanged keep their stored priority where possible. Runtime-only credentials
-keep a fixed priority; an arrangement that cannot fit between fixed priorities is refused.
-New tiers fit within CPA's priority range, with smaller gaps near its limits.
-
-The model lens previews which tiers can serve one model, and each card's expected share
-within its tier. The preview cannot see session-affinity pins, live cooldowns or
-transport preferences, so a request may not follow it exactly. Failed model reads remain
-unknown rather than marking credentials ineligible. Aliases and exclusions
-are read-only on this page and are edited in their existing editors.
-
-Edits stay in a local draft, and leaving the page asks before discarding them.
-Applying a plan locks editing through its confirming readback. If that read fails,
-reload successfully before editing or applying again.
-
-`GET /api/v1/management/routing` returns the board and a revision computed from the
-routing-relevant fields only. `PATCH` takes that revision and only the changes. A
-changed board is refused with `routing_conflict` (409) before any write. Applying a
-plan works in this order:
-
-1. The routing audit attempt is recorded. If that fails, nothing is written.
-2. One configuration write covers provider priorities and weights together with the
-   routing settings. It takes one encrypted backup with reason `routing_plan`.
-3. Each OAuth credential is patched with its identity precondition and readback.
-   Patching stops at the first failure.
-
-CPA has no transaction across these steps, so the response reports each target as
-`applied`, `failed`, `uncertain` or `not_attempted`, and it never claims a rollback. A
-configuration backup restores only the configuration part. The Agent's
-`routing_apply` capability previews the same plan against a revision and applies it
-after approval. Demo mode allows reads and refuses the write.
-
-## Kimi international quota
-
-The `kimi-ai` connection method uses the international Kimi account system. Its
-quota observation is a server-initiated `GET` to the compiled usage endpoint
-`https://api.kimi.ai/coding/v1/usages`. Domestic Kimi
-credentials continue to use `https://api.kimi.com/coding/v1/usages`. Selection
-uses credential type, provider and file name; the console does not download the
-token to detect an account system or retry the token against the other host.
-Neither the browser nor Agent/MCP can supply an arbitrary upstream target.
-
-After a successful usage read, OMC optionally reads `/coding/v1/me` on that same
-fixed host. Only a profile with a nonempty `user_id` can supply its
-`user_level_name` as the sanitized, bounded subscription label; identity fields
-and the raw profile are not stored or returned. The international host admits
-only its usage and profile endpoints, as defined in
-[`internal/quota/service.go`](../internal/quota/service.go). A missing name,
-failed request, malformed profile or profile timeout leaves the quota windows
-intact and uses the generic Kimi label for this reading, not a previous name.
-Labels do not infer quota entitlements, and historical snapshots keep the labels
-observed at their own time.
-
-The usage document is decoded in both shapes Kimi publishes. Counted limits
-(`limits[]`, or a lone `usage` object) carry absolute usage, and the newer ratio
-pools under `usages` state a share instead: each pool's period is read from its own
-key, with the monthly Total pool the common case for a plan without a weekly limit.
-A counted limit that already describes a period wins it, because it carries the
-absolute usage a share cannot, and a pool states no counts of its own. A pool key
-naming no known period keeps its own name as an unclassified window rather than
-being filed under a period it does not describe.
-
-## Automatic quota refresh
-
-OMC Settings → Quota holds the deployment-wide automatic quota refresh policy (the
-`omc_quota_auto_refresh` preference). **Refresh after a quota resets** is on
-by default: about a minute after a window a stored reading reported has reset, that
-credential is read again once. **Scheduled quota refresh** reads every enabled credential whose reading is
-older than the interval - six hours by default, adjustable from 5 minutes to 24 hours,
-or off - including credentials nobody has read, so the first minutes after an upgrade
-read every such credential. Each automatic read is a provider request made with the credential through CPA
-(`api-call`, or the plugin's quota endpoint for a plugin credential), at most sixteen per
-minute; a failed reset-driven read is retried every ten minutes for an hour. Claude quota reads go one at a time
-on every path, because Anthropic answers a burst of usage reads with HTTP 429 for every credential in it. After a
-429, OMC sends no Claude quota read for the `Retry-After` the provider named, or at least two minutes, including a
-manual refresh, which shows the last good reading marked stale with the 429 as its reason. The refused credential
-is not read automatically again for 5 minutes, doubling with each consecutive 429 up to 30 minutes, and its next
-successful read ends the backoff. That backoff covers every automatic quota read, including
-credential warmup's evidence read and its pending confirmation, so a probe nobody is waiting
-on cannot spend another refused request; a manual refresh keeps its own rule and waits only for
-the provider pause. A Claude re-read sends only the usage request: the plan is
-re-read every six hours and the reset grants every hour, and a refused grants listing waits its
-hour without holding back the usage reads. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
-refresh, because that read exchanges a key upstream. Turning both off restores
-operator-only reads. A demonstration never runs it.
-
-Any read, manual or automatic, that shows room in every window releases a credential CPA
-still holds in cooldown, because providers can reset a quota before the recovery time they
-announced. While the policy is on, each round also releases an enabled credential whose
-recorded recovery times have all passed, including Meta and providers without a quota
-probe. Each release is logged as `CPA cooldown cleared after quota restored` or `expired
-CPA cooldown cleared` with the `auth_index`, and appears in the audit log as
-`quota.clear_cooldown.automatic`.
-
-## Meta quota and live subscription tiers
-
-A Meta Muse quota refresh requires a stored credential with a valid `dca_token`.
-OMC downloads that credential server-side and sends a fixed POST to
-`https://api.meta.ai/muse-code/key`; runtime-only files and missing DCA tokens are
-not replaced with an LLM API key. This endpoint can mint a key while reporting
-quota. OMC discards returned keys and account fields, does not update the stored
-credential, and records an attempt audit before downloading or calling it.
-Audit unavailability refuses the operation. Batch refresh trims and deduplicates
-auth indexes before auditing or exchanging keys, preserving first-seen order
-and refreshing at most ten distinct credentials. The reading includes the usage window,
-weekly window, plan name and explicit active/inactive state when supplied. Missing
-shares are unknown, not a zero-used or fully-available quota.
-
-xAI reads both CLI billing documents on `cli-chat-proxy.grok.com`: the credits
-document (`/v1/billing?format=credits`), which carries a subscription's own window
-and the period that percentage belongs to, and the metered ledger (`/v1/billing`),
-which carries the account's monthly limit and spend. A subscription account
-publishes nothing in the ledger, so both are read and the period stays atomic: a
-window and its reset come from one document, and the ledger's figures arrive beside
-it as extra usage. Subscription names come from fixed
-`/v1/user?include=subscription` and `/v1/settings` requests after a successful
-billing read, and API-key health fallback does not initiate them. Antigravity tiers
-come from the daily host's `loadCodeAssist` endpoint, with paid tier taking
-precedence over current tier. If these supplemental reads fail, usage remains
-readable: xAI keeps its billing fallback, while Antigravity shows an unknown tier
-rather than assuming Pro. New endpoints are individually allowlisted and neither
-console nor Agent/MCP accepts a caller-chosen URL.
-
-A refresh that succeeds without publishing any window is recorded as an
-`unpublished` reading rather than as a credential nobody has read, and the console
-says so with its own status and copy. Every provider's window parser can produce
-that reading, and it is what an unrecognized upstream document shape now surfaces
-as.
-
-## Credential management actions
-
-`POST /api/v1/management/auth-files/refresh` accepts `name` and `auth_index` for
-one credential. The console's selected-credential action runs bounded individual
-refreshes and reports each outcome; CPA still owns its scheduled token renewal.
-The response contains status only, never CPA's refreshed token payload.
-
-`POST /api/v1/management/auth-files/vertex-import` accepts the service-account JSON
-as its request body and an optional `location` query (CPA defaults to
-`us-central1`). A second import for the same project replaces its credential.
-The console previews the project/account and accepts files up to 64 KiB; the
-backend bounds the body with the existing 16 MiB auth-file upload limit. The
-response contains file name, project, account address and location, not key bytes
-or CPA's filesystem path. Closing the dialog invalidates an unfinished file read
-and clears its selected key; key bytes are not cached as mutation arguments.
-
-Both actions require the console session, are refused in demo mode, and must
-record an attempt audit before calling CPA. If the success audit fails after CPA
-has completed the action, the successful action remains successful; the audit
-failure is logged without tokens or uploaded key material.
-
-## Public demonstration conversations
-
-The public demonstration's Agent and Playground offer one browser-local recorded example
-each. Send/retry/cancel do not invoke a provider or write the Worker. Other questions are
-refused. The demo security boundary still refuses server-side writes.
-
-## Credential window warmup
-
-Configure provider defaults from OAuth management's Warmup settings, or a complete
-credential override from its Window warmup tab. Reset mode is Off, Weekly, or Weekly and five-hour.
-Daily warmup defaults off with 06:00 as its editable time in the effective OMC timezone.
-Choose an available model; Claude's available Haiku models are listed first. Changing a
-model never silently selects a replacement. Saving an enabled policy authorizes automatic
-attempts once the applicable billing and window checks permit them; a first manual activation
-is not required. Warm up now remains an optional, separately confirmed consuming action.
-Previously enabled policies begin participating on the next scheduler round after upgrade,
-including credentials with no prior activation observation; defaults remain off.
-
-Claude warmup requires a fresh usage read confirming `extra_usage.is_enabled` is false.
-Codex warmup does not depend on credit status: each short request consumes quota and
-may incur charges, including when credit status is unknown or paid usage is available.
-OMC does not change upstream billing settings or redeem a reset credit to make warmup eligible. A zero reading with
-an active fixed boundary is not an idle window. Model-scoped Sonnet, Opus and Fable
-limits can pause the selected family without blocking unrelated Haiku. Fable evidence
-accepts the legacy `iguana_necktie` (unless it carries dollar amounts, which make it the
-cloud session credit pool) or modern model-scoped `limits`; malformed modern
-evidence, including a present non-array or null `limits` field, remains unknown rather
-than falling back to an apparently available legacy limit.
-
-The background loop checks once per minute, with bounded four-way rounds of 16, and
-reuses stored quota observations targeted for refresh every five minutes. A round whose windows
-are already active stores the observation it reconciled and sends nothing, not even another
-quota read; a consuming request still reads fresh evidence immediately before it is sent. Daily starts
-missed by more than one hour are not replayed. If starting now would overlap the next
-daily time, reset-driven requests wait, including weekly triggers. Changing the OMC
-zone changes future calendar decisions, not stored instants.
-
-The credential section shows a cost notice for Codex and paid-fallback evidence for Claude.
-No activation observed is a neutral historical fact; missing Claude billing evidence pauses
-requests. Current reasons distinguish active windows, missing quota and Claude billing refusals. An unsupported response pauses automatic requests for the selected
-model until a confirmed recheck succeeds or an available replacement model is explicitly
-selected. Rechecks still obey unresolved-outcome suppression. Manual actions report an outcome
-through a toast; sent requests also update the durable last result in the Window warmup tab.
-Warm up now opens its confirmation on both HTTP and HTTPS deployments. Switching tabs or
-saving credential fields keeps a separate warmup draft open.
-
-A consuming request is recorded before it is sent. If pre-send revalidation refuses the
-request, its provisional cycle and daily identities are restored. A temporary startup
-recovery failure is logged and retried on later minute checks, not left stopped until restart. Activated, pending, skipped, failed,
-executing and uncertain outcomes are distinct. After a pending completion only quota
-reads are repeated; transport timeouts and restart-abandoned requests are uncertain
-and are not automatically resent. Definite rate-limit refusals get at most three
-retries after one, five and fifteen minutes, each preceded by fresh eligibility checks.
-Policy and execution records are included in normal SQLite backups. The latest 100
-receipts per credential are kept alongside the durable cycle and daily suppression.
-
-API routes under the configured API prefix:
-
-- `GET/PUT /management/quota/warmup/settings`: provider policy and revision.
-- `GET/PUT /management/quota/warmup/credentials/{authIndex}`: effective policy and state.
-- `POST /management/quota/warmup/credentials/{authIndex}/run`: confirmed, revision-bound
-  manual request with caller-stable `request_id`. Reuse that id only to recover its
-  original receipt; never retry an uncertain result with a new id.
-
-These are authenticated, typed projections, not a generic request proxy. Writes require
-confirmation and the current revision; no URL, prompt, request body or secret can be
-supplied. The public demonstration refuses consuming and policy-write routes.
-
-Warmup round ordering is oldest observation first. Fleets exceeding a round's capacity
-remain queued rather than increasing concurrency or skipping protection.

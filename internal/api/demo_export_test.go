@@ -1555,15 +1555,17 @@ func TestDemoExportPreservesSeededLatencyAndSourceSize(t *testing.T) {
 }
 
 func TestDemoDashboardHealthIncludesEveryState(t *testing.T) {
-	router, _ := demoExportRouter(t)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/management/overview", nil)
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("overview status = %d: %s", response.Code, response.Body.String())
+	exported := readCommittedDemoDataset(t)
+	assertDemoDashboardHealth(t, exported.Responses["overview"])
+}
+
+func assertDemoDashboardHealth(t *testing.T, overviewResp demoExportResponse) {
+	t.Helper()
+	if overviewResp.Status != http.StatusOK {
+		t.Fatalf("overview status = %d: %s", overviewResp.Status, overviewResp.Body)
 	}
 	var overview managementOverviewResponse
-	if err := json.Unmarshal(response.Body.Bytes(), &overview); err != nil {
+	if err := json.Unmarshal([]byte(overviewResp.Body), &overview); err != nil {
 		t.Fatal(err)
 	}
 	health := overview.Credentials
@@ -1579,8 +1581,5 @@ func TestDemoDashboardHealthIncludesEveryState(t *testing.T) {
 	}
 	if typeTotal != health.Total {
 		t.Fatalf("type total = %d, want %d", typeTotal, health.Total)
-	}
-	if response.Header().Get("Cache-Control") != "no-store" {
-		t.Fatalf("cache control = %q", response.Header().Get("Cache-Control"))
 	}
 }

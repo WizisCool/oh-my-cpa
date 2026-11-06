@@ -176,7 +176,7 @@ func RedactText(value string, knownSecrets ...string) string {
 	if strings.ContainsAny(value, ":=") {
 		value = keyValueSecretPattern.ReplaceAllString(value, `${1}`+RedactedValue)
 	}
-	if strings.ContainsAny(value, "-_") {
+	if hasAPIKeyPrefixCandidate(value) {
 		value = apiKeyPrefixPattern.ReplaceAllString(value, RedactedValue)
 	}
 	if strings.Contains(value, "://") {
@@ -188,6 +188,14 @@ func RedactText(value string, knownSecrets ...string) string {
 		})
 	}
 	return stripControl(value)
+}
+
+func hasAPIKeyPrefixCandidate(value string) bool {
+	return strings.Contains(value, "sk-") ||
+		strings.Contains(value, "pk-") ||
+		strings.Contains(value, "pat-") ||
+		strings.Contains(value, "gh") ||
+		strings.Contains(value, "xox")
 }
 
 // containsASCIIFold reports whether value contains word, which must be lower-case ASCII

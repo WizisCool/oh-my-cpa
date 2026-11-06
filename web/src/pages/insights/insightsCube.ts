@@ -8,7 +8,7 @@
  * a regrouping answer on the frame it was asked, and what keeps every panel describing one snapshot -
  * a key's rank and colour cannot differ between two panels that read the same rows.
  *
- * Pure: no React, no DOM. `scripts/test-insights-cube.ts` holds its claims.
+ * Pure: no React, no DOM. `web/tests/logic/insights-cube.test.ts` holds its claims.
  */
 
 import type { InsightsCompareWindow, InsightsCubeResponse, InsightsKey, InsightsWindow } from '../../types/insights';

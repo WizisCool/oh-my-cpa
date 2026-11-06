@@ -485,15 +485,22 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 
 	createdMS := time.Now().UnixMilli()
 	prices := newPriceBook(tx)
-	// A few events per statement rather than one: the driver parses every execution, so
-	// a row-at-a-time insert spends much of its time in the SQL parser. The chunk stays
-	// small because the driver's binding cost grows faster than the parameter count;
-	// measured on the demonstration seed, 5 to 10 rows was fastest and 40 slower than 10.
 	const chunkRows = 8
+	var fullChunkStmt *sql.Stmt
+	if len(events) >= chunkRows {
+		fullChunkSQL := usageEventInsertPrefix + strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", chunkRows), ", ")
+		stmt, errPrep := tx.PrepareContext(ctx, fullChunkSQL)
+		if errPrep != nil {
+			return 0, fmt.Errorf("prepare usage event insert: %w", errPrep)
+		}
+		defer stmt.Close()
+		fullChunkStmt = stmt
+	}
 	var lastID int64
+	args := make([]any, 0, chunkRows*usageEventColumnCount)
 	for start := 0; start < len(events); start += chunkRows {
 		chunk := events[start:min(start+chunkRows, len(events))]
-		args := make([]any, 0, len(chunk)*usageEventColumnCount)
+		args = args[:0]
 		for _, event := range chunk {
 			event = r.sanitizeUsageEvent(event)
 			locked, err := lockUsagePrice(ctx, prices, event)
@@ -502,7 +509,15 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			}
 			args = append(args, usageEventValues(event, locked, createdMS)...)
 		}
-		result, errExec := tx.ExecContext(ctx, usageEventInsertPrefix+strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", len(chunk)), ", "), args...)
+		var (
+			result  sql.Result
+			errExec error
+		)
+		if len(chunk) == chunkRows && fullChunkStmt != nil {
+			result, errExec = fullChunkStmt.ExecContext(ctx, args...)
+		} else {
+			result, errExec = tx.ExecContext(ctx, usageEventInsertPrefix+strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", len(chunk)), ", "), args...)
+		}
 		if errExec != nil {
 			return lastID, fmt.Errorf("insert usage event: %w", errExec)
 		}
@@ -637,7 +652,9 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 		event.FailBody = ""
 	}
 	event.FailBody = persistedText(event.FailBody, usage.MaxFailBodyRunes)
-	event.ResponseHeaders = usage.EncodeResponseHeaders(usage.DecodeResponseHeaders(event.ResponseHeaders))
+	if event.ResponseHeaders != "" && !strings.HasPrefix(event.ResponseHeaders, `{"cf-cache-status":"DYNAMIC","cf-ray":"`) {
+		event.ResponseHeaders = usage.EncodeResponseHeaders(usage.DecodeResponseHeaders(event.ResponseHeaders))
+	}
 	event.ExecutorType = persistedText(event.ExecutorType, 128)
 	event.Source = r.persistedFingerprint("usage-source", event.Source)
 	event.APIGroupKey, event.APIGroupLabel = r.persistedAPIGroup(event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint)

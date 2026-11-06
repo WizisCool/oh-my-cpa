@@ -1,131 +1,69 @@
 # Testing a change
 
 Use the lowest layer that detects the real failure. Prefer extending an existing
-case; a second layer needs a different claim, not another spelling of the same
-assertion. Keep security, data integrity and shipped-artifact checks hard.
+test file over creating a new suite; a higher layer requires a distinct integration
+claim, not another spelling of the same assertion. Keep security, data integrity
+and shipped-artifact checks strict.
 
 ## Choose an entry point
 
 | Work | Command |
 | --- | --- |
-| Routine edit, before pushing | `pnpm test:fast` (`--plan` explains selection; `--base <ref>` includes committed changes) |
-| Frontend behavior while editing | `pnpm test:frontend`, or `pnpm exec vitest related --run --config web/vitest.config.ts <source>` |
-| Layout, focus, navigation, scrolling or browser lifecycle | `pnpm check:ui` (`--plan` previews the affected scenarios) |
-| Build, embedding, browser infrastructure or CI changes | `pnpm verify:full` |
+| Routine edit, fast feedback | `pnpm test:fast` (`pnpm type-check && pnpm test:logic && go test -short ./...`) |
+| Frontend behavior while editing | `pnpm test:frontend`, or `pnpm exec vitest run --config web/vitest.config.ts <file>` |
+| Full local static + build check | `pnpm verify` (`pnpm test:fast && pnpm test:components && pnpm verify:build`) |
+| Embedded SPA + Go binary browser smoke | `pnpm verify:browser:smoke` (or `pnpm verify:browser` for the full suite) |
+| Complete pre-release / CI gate | `pnpm verify:full` |
 | A failing CI lane | Run that lane first; do not repeat passing, unchanged checks |
 
-`pnpm test:fast` never builds the product or launches a browser. It selects static
-checks and Go packages with reverse dependants. Vitest owns frontend module
-resolution and related-test discovery. CSS-only edits run the logic suite, which
-owns stylesheet-derived contrast values, not jsdom layout claims. Setup, unknown assets,
-dependencies, deleted files and infrastructure changes widen to the complete suite. Unknown inputs widen
-rather than silently skipping verification. The planner prints its commands.
+`pnpm test:fast` never builds the product or launches a browser. It runs TypeScript type checking across `web/` and `scripts/`, the Node-based Vitest `logic` suite (`~1.2s`), and `go test -short ./...`.
 
-## Test ownership
+## Test pyramid & ownership
 
-| Claim | Owner | Location |
-| --- | --- | --- |
-| Server behavior, auth, safe DTOs, migrations, persistence, CPA writes and backups | Go | `*_test.go` beside the package |
-| Complete parser/projection output | Go golden cases | `internal/<package>/testdata/golden/` |
-| Pure frontend derivation, formatting, validation and state transitions | Vitest `logic`, Node environment | `scripts/test-*.ts` |
-| Rendered React wiring and typed HTTP contracts | Vitest `components`, jsdom environment | `web/tests/**/*.component.test.tsx`, `web/tests/**/*.contract.test.ts` |
-| Browser-engine behavior: geometry, hit testing, focus, scrolling, navigation, touch and paint | Playwright probes | `scripts/acceptance/probes/`, registered in `scripts/acceptance/scenarios.mjs` |
-| Embedded SPA, Go binary, SQLite and fake CPA together | Built-artifact acceptance | `scripts/browser-acceptance.mjs` |
-| Public demonstration and route refusal | Worker tests and demo acceptance | `deploy/cloudflare/*.test.mjs`, `scripts/demo-readiness.mjs` |
-| Shipped repository outputs: archives, signing, deployment and asset synchronization | Node test runner | `scripts/*.test.mjs` |
+| Layer | Owner | Location | Scope & Rules |
+| --- | --- | --- | --- |
+| **1a. Backend unit & integration** | Go (`go test`) | `internal/**_test.go` | Server behavior, auth, safe DTOs, SQLite migrations/persistence, CPA writes and backups. Fresh SQLite databases use the cached post-migration bootstrap snapshot in `internal/repository` so `Open()` takes ~1.5 ms. |
+| **1b. Golden output contracts** | Go (`internal/testkit`) | `internal/<pkg>/testdata/golden/` | Complete parser or projection output. Update with `UPDATE_GOLDEN=1 go test ./<pkg>` and review the diff. |
+| **1c. Frontend logic & HTTP contracts** | Vitest `logic` (Node, `isolate: false`) | `web/tests/logic/*.test.ts`, `web/tests/*.contract.test.ts` | Pure frontend derivations, state machines, formatting, validation, and shared HTTP contract fixtures (`scripts/acceptance/contracts/`). Runs in ~1–2s total. |
+| **2. Interactive component tests** | Vitest `components` (jsdom, `isolate: false`) | `web/tests/*.component.test.tsx` | Stateful React + Ant Design workflows (draft protection, optimistic rollback, multi-step dialogs, keyboard focus). `renderWithOmc` disables Ant Design CSS motion timers (`motion: false`) for deterministic speed. |
+| **3a. Built-artifact browser acceptance** | Node + Playwright | `scripts/browser-acceptance.mjs` | Exercises the real compiled Go binary, embedded SPA, SQLite, and fake CPA (`pnpm verify:browser:smoke` on PRs; `pnpm verify:browser` on `main`/release). |
+| **3b. Public demo & packaging** | Node test runner | `deploy/cloudflare/*.test.mjs`, `scripts/*.test.mjs` | Cloudflare Worker routes/filters, demo privacy/readiness (`pnpm check:demo`), release archive packaging, manifest signing, and Compose topology. |
 
-`pnpm test:frontend` runs both Vitest projects. `test:logic` and `test:components`
-select one project; `test:self` runs the repository and Worker suites, including
-the deployment health probe, and requires a POSIX shell. Test files
-remain isolated. Bound worker pools rather than multiplying workers at every
-nested runner. A jsdom render and a Chromium frame measurement should not compete
-with a compilation on a small machine.
+### Anti-bloat rules
 
-For a regression, show that the relevant case fails with the fix removed, then
-restore the fix and rerun that case. Preserve the failure evidence in the commit
-or PR. Do not test prose, translations, CSS spellings, workflow shape, or the test
-runner itself. Never repair a failure with retries, fixed sleeps, longer waits or
-skip switches.
+1. **No mocked dev-server browser probes**: Do not create Playwright tests against a mocked Vite dev server to test component states, CSS geometry, or static UI copy. Browser runs (`verify:browser:smoke` / `verify:browser`) exist strictly to verify that the compiled Go binary, embedded production SPA, SQLite database, and CPA integration work together.
+2. **Consolidate pure logic tests**: Add cases to the existing domain test file under `web/tests/logic/*.test.ts` or `web/tests/*.contract.test.ts` instead of creating a new test file for a single helper function.
+3. **Keep jsdom tests focused on stateful interaction**: Do not mount full pages or Ant Design trees in jsdom just to assert static badge labels, prop forwarding, or translation strings. Test pure view-model derivations in `logic` (Node).
+4. **Shared environment discipline (`isolate: false`)**: Both Vitest projects run with `isolate: false` so modules and the jsdom window are reused across files in each worker. `web/tests/setup.ts` cleans up React trees, query clients, timers, storage, and mocked API handlers in `afterEach`. Do not mutate module-level singletons without restoring them in `afterEach`.
+5. **Deterministic assertions**: For a bug fix, verify the regression test fails without the fix before restoring the fix. Never paper over timing or state leaks with retries, fixed sleeps, or longer timeouts.
 
-### Golden data and contracts
+## Golden data and demo dataset
 
-Use `internal/testkit` for whole-output golden comparisons. Regenerate only the
-owning package with `UPDATE_GOLDEN=1 go test ./<package>` and review the diff.
-Shared HTTP corpora under `scripts/acceptance/contracts/` connect handler responses
-to the typed client without launching a browser. The public demo dataset is
-separately generated from real handlers: run `pnpm demo:generate` when response
-shapes change; `TestExportDemoDataset` owns freshness and `pnpm check:demo` owns
-route coverage and privacy.
+- **Go golden files**: Regenerate only the owning package with `UPDATE_GOLDEN=1 go test ./<package>`.
+- **Cloudflare demo dataset**: Generated from real Go handlers over the deterministic demo fixture. When console read DTOs change, run `pnpm demo:generate && pnpm check:demo`. `TestExportDemoDataset` (`internal/api/demo_export_test.go`) verifies both byte-for-byte dataset freshness and dashboard health parity in a single pass.
 
-### Browser checks
+## Browser acceptance diagnostics
 
-`pnpm check:ui` uses the development server with mocked APIs. Its import/route
-ownership planner selects scenarios; global frontend changes run the catalog.
-Locale-only and component-test-only edits do not need a browser. Use `--list` to
-browse scenarios and `pnpm check:ui --scenario <id>` to reproduce one.
-Playwright owns workers, sharding, contexts and server readiness. `--shard i/n`
-works with both `check:ui` and `verify:probes`; empty native shards need no server. Probe processes
-own their server and output directories; an existing development server is not a
-test fixture. Each test installs its own routes, preferences and fault ledger.
-
-Browser failures retain diagnostics under `tmp/probe-failure/` and
-`tmp/browser-acceptance-failure/`. Inspect the failing assertion, DOM/screenshot,
-network and browser-fault evidence before changing a wait. Observe the state that
-makes an interaction ready, not elapsed time or a text fragment from an earlier UI.
-
-A development-server pass does not prove packaging, production chunks, root/base
-path resolution, offline assets or secret safety. `pnpm verify:browser` exercises
-the real built binary and fake CPA; `:smoke` is the smaller PR path.
-`pnpm verify:demo` exercises the packaged public demonstration. CI also builds the
-production SPA with the managed builder's file-descriptor budget; the page and Worker
-graphs share the concurrency bound in [`web/vite.config.ts`](../web/vite.config.ts).
-Run the complete `verify:full` serial variant on resource-constrained machines rather
-than starting multiple full gates together.
+`pnpm verify:browser:smoke` and `pnpm verify:browser` compile the production SPA and Go
+binary, start the server against a fake CPA instance, and run Chromium checks (`OMCPA_BROWSER_BINARY` can be set to reuse an already-compiled Go binary). Failures
+retain diagnostics under `tmp/browser-acceptance-failure/`.
 
 ## CI and releases
 
-The workflows are the executable source of truth; do not duplicate their job DAG
-in documentation.
+The GitHub Actions workflows (`.github/workflows/ci.yml` and `.github/workflows/release.yml`)
+are the executable source of truth:
 
-- **Pull requests:** affected language lanes, repository/security checks,
-  built-artifact smoke when code is affected, and affected browser probes.
-- **Main, nightly, manual, or a PR labelled `full-ci`:** full static suites,
-  built-artifact acceptance, demo acceptance and the complete probe catalog.
-- **Weekly/manual maintenance:** race detection, bounded fuzzing, dependency
-  advisories and host-native runtime checks.
-- **Release:** complete verification before packaging and publication, immutable
-  version identity, signed manifests, image/runtime smoke and promotion gates.
-  See [Releasing](releasing.md).
-
-Required aggregates reject failure, cancellation and an unexpectedly skipped
-selected lane. Superseded PR runs may be cancelled; main revisions retain their
-own results. No automatic test reruns hide failures. Go CI emits gotestsum
-JUnit/test2json artifacts, and native Actions job timings include setup/cache
-costs. Timings are diagnostic evidence, not a machine-load-dependent pass/fail
-budget. Compare cohorts with the same event, verification scope and cache state;
-one successful PR is not a new P50/P90 or a flakiness rate.
+- **Pull requests**: Path-filtered lanes (`go`, `frontend`, `static`, `browser`) run only when relevant files change, with built-artifact `browser` smoke (`pnpm verify:browser:smoke`) when application code is affected.
+- **Main, nightly, manual, or `full-ci` label**: Full static and unit suites plus full built-artifact browser acceptance (`pnpm verify:browser`).
+- **Weekly/manual maintenance**: Go race detector, bounded fuzzing, dependency advisories, and host-native runtime checks.
+- **Release**: Complete static and browser verification before packaging, immutable tag/commit identity, Ed25519-signed manifests, container/native smoke tests, and promotion gates. See [Releasing](releasing.md).
 
 ## Tooling
 
-`package.json`, `go.mod` and `scripts/tools-versions.json` hold tool/dependency
-pins. JavaScript installation uses `pnpm install --frozen-lockfile`; install the
-matching Playwright Chromium with `node scripts/install-chromium.mjs` before
-browser checks. `pnpm verify:toolchain:strict` checks the reproducible toolchain.
+`package.json`, `go.mod` and `scripts/tools-versions.json` hold tool and dependency pins:
 
-`pnpm check-docs` automatically downloads the pinned **lychee** binary for Linux,
-macOS or Windows on first use, verifies its SHA-256 and caches it under `.tools/`.
-No global installation or Rust toolchain is needed. The first download needs network
-access; subsequent runs work offline. A preinstalled binary can be selected with
-`LYCHEE_BIN`; it must match the pinned version in `scripts/tools-versions.json`.
-Local checks and CI use this same entry point. Checks are offline, include local
-fragments and read `lychee.toml`; GitHub image-theme selectors are the only
-rendering-specific exclusion. The checker does not interpret arbitrary backticked
-prose as file paths or carry a retired-document inventory.
-
-`pnpm verify:workflow:lint` uses actionlint 1.7.12 plus the repository's small
-supply-chain policy for pinned Actions, token-free checkouts and signing-key
-isolation. `pnpm lint:go` uses golangci-lint v2.15.0. Secret/history scans, signature
-verification and release checks remain required. CSS reference checks, i18n
-checks and generated OpenUI-prompt checks catch concrete broken references;
-visual intent lives in [Design](design.md) and its source tokens, not a second
-catalog of CSS spellings.
+- **Dependencies**: `pnpm install --frozen-lockfile`
+- **Chromium**: `node scripts/install-chromium.mjs`
+- **Docs link & fragment checker**: `pnpm check-docs` (automatically fetches and caches the pinned `lychee` binary under `.tools/` and runs offline against `*.md`, `docs/**/*.md`, and `web/src/i18n/*.md`)
+- **Workflow lint**: `pnpm verify:workflow:lint` (`actionlint` + supply-chain policy)
+- **Go lint**: `pnpm lint:go` (`golangci-lint`)

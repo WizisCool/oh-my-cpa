@@ -15,6 +15,10 @@ const clearTestQueryClients = isBrowserEnvironment
 // no test caused. Nothing a test asserts can depend on a timer that outlives its file.
 const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
 if (isBrowserEnvironment) {
+  const nativeGetComputedStyle = window.getComputedStyle.bind(window);
+  window.getComputedStyle = ((elt: Element, _pseudoElt?: string | null) =>
+    nativeGetComputedStyle(elt)) as typeof window.getComputedStyle;
+
   const schedule = globalThis.setTimeout;
   globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
     const handle = schedule(() => {

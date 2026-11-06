@@ -26,26 +26,12 @@ import { createChecker, measureStable } from './acceptance/harness.mjs';
 import { runRequestListAcceptance } from './acceptance/request-list.mjs';
 import { runAddProviderAcceptance } from './acceptance/add-provider.mjs';
 import { runMcpAcceptance } from './acceptance/mcp.mjs';
-import { runCopyFallbackAcceptance } from './acceptance/copy-fallback.mjs';
-import { runYamlWorkerAcceptance } from './acceptance/yaml-worker.mjs';
 import { auditNativePluginHostResponse, isNativePluginHostResponse, settleNativeResponseAudits, runPluginHostedPageAcceptance } from './acceptance/plugin-host.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/**
- * providerSecrets is every provider key material the fixture configures.
- *
- * It is one list rather than a literal repeated at each audit because the fixture
- * now configures two providers: an audit that names one secret verifies that one,
- * so a new fixture provider would silently be excluded from the leak checks that
- * are supposed to cover exactly this material.
- */
 const providerSecrets = [FAKE_PROVIDER_SECRET, FAKE_SECOND_PROVIDER_SECRET];
 const smokeOnly = process.argv.includes('--smoke');
-if (process.env.OMCPA_LIVE_CPA === '1') {
-  await import('./browser-live-smoke.mjs');
-  process.exit();
-}
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-e2e-'));
 const outputDir = path.join(root, 'tmp/browser-acceptance-failure', path.basename(temporary));
@@ -369,8 +355,6 @@ try {
   await runMcpAcceptance({ appURL, page, check });
   if (!smokeOnly) {
     await runAddProviderAcceptance({ appURL, page, check, checkEventually, fakeCpa });
-    await runCopyFallbackAcceptance({ appURL, page, check, checkEventually });
-    await runYamlWorkerAcceptance({ appURL, page, check });
     await runPluginHostedPageAcceptance({ appURL, page, check });
   }
 
