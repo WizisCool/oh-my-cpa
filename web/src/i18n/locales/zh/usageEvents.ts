@@ -135,7 +135,7 @@ export default {
   'events.preflight': '未生成',
   'events.oauth_badge': 'OAuth 授权账号',
   'events.provider_unresolved_badge': '待确认',
-  'events.provider_unresolved': '未能读取 provider 列表，此处显示的是 CPA 记录的标签，不是您配置的 provider。',
+  'events.provider_unresolved': '未能读取提供商列表，此处显示 CPA 记录的原始标签',
   'events.preflight_hint': '预检请求（非生成）',
   'events.non_stream_hint': '非流式返回',
   'events.transport': '传输方式',

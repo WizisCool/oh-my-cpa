@@ -132,7 +132,7 @@ export default {
   "omc.font_category_mono": "Monoruang",
   "omc.font_category_handwriting": "Tulisan tangan",
   "omc.font_cjk": "Cina",
-  "omc.font_error_invalid": "Bukan fail fon yang boleh digunakan; WOFF2, WOFF, TTF dan OTF disokong",
+  "omc.font_error_invalid": "Format fon tidak disokong; menyokong WOFF2, WOFF, TTF, dan OTF",
   "omc.font_error_too_large": "Fon terlalu besar",
   "omc.font_error_limit": "Pustaka fon penuh; padam satu fon dahulu",
   "omc.font_error_family": "Nama keluarga fon tidak boleh digunakan",

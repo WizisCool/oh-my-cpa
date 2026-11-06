@@ -1,5 +1,5 @@
 export default {
-  'quota.reset_estimated_hint': '上游时间是从计费信息推导的，不是已验证的精确重置时刻',
+  'quota.reset_estimated_hint': '基于上游计费周期推导的重置时间',
   'quota.reset_expiry_title_zoned': '重置积分到期时间（{zone}）',
   'quota.reset_grants_title_zoned': 'Claude 重置授权（{zone}）',
   'quota.reset_grant_remaining': '剩余 {left}/{total}',

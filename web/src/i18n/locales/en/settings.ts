@@ -132,7 +132,7 @@ export default {
   'omc.font_category_mono': 'Monospace',
   'omc.font_category_handwriting': 'Handwriting',
   'omc.font_cjk': 'Chinese',
-  'omc.font_error_invalid': 'Not a usable font file; WOFF2, WOFF, TTF and OTF are supported',
+  'omc.font_error_invalid': 'Unsupported font format; supports WOFF2, WOFF, TTF, and OTF',
   'omc.font_error_too_large': 'The font is too large',
   'omc.font_error_limit': 'The font library is full; delete a font first',
   'omc.font_error_family': 'The family name cannot be used',

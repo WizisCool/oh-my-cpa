@@ -70,9 +70,17 @@ not a legal disclaimer, an architecture manual, or an agent safety cushion.
    - A hint should typically be 1 concise sentence (maximum 2 short sentences).
    - Chinese copy should generally not exceed 40–50 characters.
    - Secondary copy must never dominate the vertical height or draw more visual attention than the control itself.
-4. **No negative preemption.** Do not write what something is *not* unless users regularly mistake it
-   for something destructive (e.g. "清空列表将恢复继承当前提供商规则" is complete and clean; adding "并非解除所有限制"
-   is redundant defensive clutter).
+4. **No negative preemption and defensive case enumeration.**
+   - Do not write what something is *not* ("不是xxx") unless users regularly and dangerously mistake it
+     for something destructive (e.g. "清空列表将恢复继承当前提供商规则" is complete and clean; adding "并非解除所有限制"
+     is redundant defensive clutter). State positive ownership directly (e.g. "CPA 运行时文件路径" rather than "不是Oh My CPA的路径").
+   - Do not enumerate obvious default/empty fallback states ("为空时xxx，为xx时xxx", "0 为默认").
+     Let placeholders, control defaults, and unit labels carry ordinary fallbacks. When a special sentinel value
+     carries non-obvious semantics (e.g. `0` meaning "unlimited" rather than "zero"), convey that through the
+     placeholder (e.g. `0（无限制）`) or a concise positive caption.
+5. **Omission is preferred over redundancy.** If the field's label, placeholder, unit, or picker options
+   are already self-explanatory (e.g. "端口", "TLS 证书路径", "调试模式", "启用连接池"), omit the subtitle entirely.
+   Retain secondary copy only when it provides genuine value that prevents real operator ambiguity.
 
 ### Bad vs Good Examples
 
@@ -80,6 +88,21 @@ not a legal disclaimer, an architecture manual, or an agent safety cushion.
   > 以逗号或换行分隔模型 ID。非空列表会替代提供商禁用规则（包括 *）。清空列表将恢复继承当前提供商规则，并非解除所有限制。此优先级要求 CPA v8.0.33 或更高版本；依赖凭据覆盖前请先升级旧网关。
 - **Good (Direct & actionable):**
   > 以逗号或换行分隔模型 ID；非空列表会替代提供商禁用规则（包括 *），清空列表将恢复继承当前提供商规则。
+
+- **Bad (Defensive "不是xxx" & internal filesystem trivia):**
+  > CPA运行环境中的文件路径，不是Oh My CPA的路径；留空使用<auth-dir>/kv.db。
+- **Good (State positive identity; placeholder shows default):**
+  > CPA 运行时文件路径 *(Placeholder: `<auth-dir>/kv.db`)*
+
+- **Bad (Verbose "为空时xxx，为xx时xxx" & redundant command):**
+  > 允许提供转发客户端 IP 请求头的代理 IP 或 CIDR；为空时不信任转发头。修改后需重启
+- **Good (Calm statement of capability with required action):**
+  > 允许提供客户端真实 IP 请求头的代理 IP 或 CIDR（重启网关生效）
+
+- **Bad (Redundant caption restating label):**
+  > 端口 — 服务监听的 TCP 端口号
+- **Good (Self-explanatory label, omit subtitle):**
+  > 端口 *(No subtitle needed)*
 
 - **Bad (Anxious disclaimers):**
   > 注意：此操作具有较高风险，可能导致已有的鉴权配置失效并影响线上业务，请确保已做好配置备份后再行修改。

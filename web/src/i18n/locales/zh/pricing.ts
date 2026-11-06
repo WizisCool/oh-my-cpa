@@ -140,7 +140,7 @@ export default {
   'pricing.editor.lane_tiers_placeholder': '如 priority、fast',
   'pricing.editor.lane_remove': '移除此服务等级价格',
   'pricing.editor.lane_unnamed': '未命名',
-  'pricing.editor.lane_context_hint': '仅在此服务等级生效的上下文分档费率（不与标准分档叠加），未设置时沿用该等级基础价格。',
+  'pricing.editor.lane_context_hint': '当前服务等级生效的上下文分档费率',
   'pricing.editor.lane_blank_hint': '留空表示与此等级价格相同',
   'pricing.editor.tier_error_service': '请填写 1 到 8 个服务等级名称（字母、数字、. _ -，不能是 auto），且每个名称只能属于一组价格',
   'pricing.editor.preview_service_tier': '按服务等级',

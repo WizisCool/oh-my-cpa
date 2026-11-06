@@ -132,7 +132,7 @@ export default {
   "omc.font_category_mono": "等寬",
   "omc.font_category_handwriting": "手寫",
   "omc.font_cjk": "中文",
-  "omc.font_error_invalid": "不是可用的字型檔案，支援 WOFF2、WOFF、TTF 與 OTF",
+  "omc.font_error_invalid": "不支援的字型格式，僅支援 WOFF2、WOFF、TTF 與 OTF",
   "omc.font_error_too_large": "字型檔案過大",
   "omc.font_error_limit": "字型庫已滿，請先刪除不用的字型",
   "omc.font_error_family": "字型名稱不可用",

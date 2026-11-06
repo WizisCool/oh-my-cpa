@@ -143,7 +143,7 @@ export default {
   "pricing.editor.lane_tiers_placeholder": "如 priority、fast",
   "pricing.editor.lane_remove": "移除此服務等級價格",
   "pricing.editor.lane_unnamed": "未命名",
-  "pricing.editor.lane_context_hint": "僅在此服務等級生效的上下文分檔費率（不與標準分檔疊加），未設定時沿用該等級基礎價格。",
+  "pricing.editor.lane_context_hint": "當前服務等級生效的上下文分檔費率",
   "pricing.editor.lane_blank_hint": "留空表示與此等級價格相同",
   "pricing.editor.tier_error_service": "請填寫 1 到 8 個服務等級名稱（字母、數字、. _ -，不能是 auto），且每個名稱只能屬於一組價格",
   "pricing.editor.preview_service_tier": "依服務等級",
