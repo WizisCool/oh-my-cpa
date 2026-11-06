@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -26,6 +27,7 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		AuthIndex:     boundedText(file.AuthIndex, managementAuthFileNameLimit),
 		Type:          boundedText(firstNonEmpty(file.Type, file.Provider), managementAuthFileFieldLimit),
 		Provider:      boundedText(file.Provider, managementAuthFileFieldLimit),
+		OAuthProvider: projectOAuthEntryIdentifier(file.OAuthProvider),
 		Status:        boundedText(file.Status, managementAuthFileFieldLimit),
 		StatusMessage: boundedText(security.RedactText(file.StatusMessage), managementAuthFileFieldLimit),
 		Disabled:      file.Disabled,
@@ -58,6 +60,17 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		})
 	}
 	return result
+}
+
+// projectOAuthEntryIdentifier passes a credential's login entry only in the
+// form a login entry identifier takes, so the browser can match it against the
+// entries plugins declare; anything else reads as no entry.
+func projectOAuthEntryIdentifier(raw string) string {
+	identifier := strings.ToLower(strings.TrimSpace(raw))
+	if len(identifier) > managementAuthFileFieldLimit || !oauthProviderPattern.MatchString(identifier) {
+		return ""
+	}
+	return identifier
 }
 
 func projectAuthModels(models []management.AuthModel) []managementAuthFileModel {

@@ -52,6 +52,7 @@ type managementAuthFileResponse struct {
 	AuthIndex         string                                `json:"auth_index,omitempty"`
 	Type              string                                `json:"type,omitempty"`
 	Provider          string                                `json:"provider,omitempty"`
+	OAuthProvider     string                                `json:"oauth_provider,omitempty"`
 	Status            string                                `json:"status,omitempty"`
 	StatusMessage     string                                `json:"status_message,omitempty"`
 	Disabled          bool                                  `json:"disabled"`

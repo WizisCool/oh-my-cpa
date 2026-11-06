@@ -157,7 +157,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	"quota":{"observed_at":"2026-01-01T00:00:00Z","signals":{"state":"ok"}},"model_quotas":{"claude-sonnet":{"signals":{"state":"throttled"}}},
 	"priority":5,"weight":3,"note":"primary","created_at":"2026-01-01T00:00:00Z","updated_at":1767225600,"last_refresh":null,
 	"path":"/var/cpa/secrets/claude.json","account":"REFRESH_TOKEN_SECRET","metadata":{"refresh_token":"REFRESH_TOKEN_SECRET"}},
-	{"name":"a-missing.json","provider":"gemini","status":"failed","runtime_only":true}]}`
+	{"name":"a-missing.json","provider":"gemini","oauth_provider":" Harbor-CN ","status":"failed","runtime_only":true}]}`
 	runtimePriority := 5
 	runtimeWeight := 3
 	runtimeNote := "primary"
@@ -241,7 +241,9 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	if listed.Total != 2 || len(listed.Files) != 2 {
 		t.Fatalf("listed = %#v", listed)
 	}
-	if listed.Files[0].Name != "a-missing.json" || !listed.Files[0].RuntimeOnly {
+	// The login entry reaches the console in the form plugins declare entries in, so it can be
+	// matched against them; the other file reports none and the field stays absent.
+	if listed.Files[0].Name != "a-missing.json" || !listed.Files[0].RuntimeOnly || listed.Files[0].OAuthProvider != "harbor-cn" || listed.Files[1].OAuthProvider != "" {
 		t.Fatalf("first file = %#v", listed.Files[0])
 	}
 	claude := listed.Files[1]
@@ -837,6 +839,12 @@ func TestAuthFileProjectionTruncatesDeterministically(t *testing.T) {
 	for index := 0; index < 70; index++ {
 		signals[fmt.Sprintf("signal-%02d", index)] = index
 	}
+	for raw, want := range map[string]string{" Harbor-CN ": "harbor-cn", "harbor-intl": "harbor-intl", "harbor cn": "", "../harbor": "", "": ""} {
+		if got := projectOAuthEntryIdentifier(raw); got != want {
+			t.Fatalf("projectOAuthEntryIdentifier(%q) = %q, want %q", raw, got, want)
+		}
+	}
+
 	quota := projectQuota(map[string]any{"signals": signals})
 	if quota == nil || len(quota.Signals) != 64 {
 		t.Fatalf("signals = %#v, want 64 entries", quota)
