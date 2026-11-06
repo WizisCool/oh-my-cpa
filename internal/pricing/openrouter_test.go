@@ -72,10 +72,14 @@ func TestOpenRouterClientFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("output_modalities") != "all" || r.URL.Query().Get("source") != "test" {
+			http.Error(w, "missing all-modality filter or existing query parameter", http.StatusBadRequest)
+			return
+		}
 		_, _ = w.Write(body)
 	}))
 	defer server.Close()
-	catalog, err := NewOpenRouterClientWithTransport(server.Client().Transport, server.URL).Fetch(context.Background())
+	catalog, err := NewOpenRouterClientWithTransport(server.Client().Transport, server.URL+"?source=test").Fetch(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,6 +110,9 @@ func TestMatchOpenRouter(t *testing.T) {
 		{"claude-opus-5.5", "anthropic/claude-opus-5.5", MatchExact},
 		{"anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5", MatchExact},
 		{"openai:gpt-6-sol", "openai/gpt-6-sol", MatchExact},
+		{"gpt-image-2", "openai/gpt-image-2", MatchExact},
+		{"gpt-image-2.5-sunburst", "openai/gpt-image-2.5-sunburst", MatchExact},
+		{"gpt-image-2.6-flare", "openai/gpt-image-2.6-flare", MatchExact},
 		{"claude-opus-5.5-20260921", "anthropic/claude-opus-5.5", MatchCanonical},
 		{"claude-opus-5-5", "anthropic/claude-opus-5.5", MatchNormalized},
 		// Different word order in the canonical slug: the date-stripped id wins.
@@ -187,5 +194,80 @@ func TestReasoningSuggestionPrefersResolvedCanonicalBase(t *testing.T) {
 		if matched, ok := catalog.MatchModel(name); ok {
 			t.Fatalf("effort must stay a suggestion: %+v", matched)
 		}
+	}
+}
+
+func TestDecodeOpenRouterImageOutput(t *testing.T) {
+	for _, tc := range []struct {
+		name, modalities, rates string
+		wantOutput              float64
+		wantSkipped             bool
+	}{
+		{"image output rate", `["image"]`, `"completion":"0.000008","image_output":"0.00003"`, 30, false},
+		{"image rate without completion", `["image"]`, `"image_output":"0.00003"`, 30, false},
+		{"missing image rate", `["image"]`, `"completion":"0.000008"`, 8, false},
+		{"explicit zero image rate", `["image"]`, `"completion":"0.000008","image_output":"0"`, 0, false},
+		{"invalid image rate", `["image"]`, `"completion":"0.000008","image_output":"-1"`, 8, false},
+		{"mixed output retains text rate", `["image","text"]`, `"completion":"0.000015","image_output":"0.00003"`, 15, false},
+		{"text output retains completion", `["text"]`, `"completion":"0.000008","image_output":"0.00003"`, 8, false},
+		{"legacy modality metadata", `null`, `"completion":"0.000008","image_output":"0.00003"`, 8, false},
+		{"unsupported audio output", `["audio"]`, `"completion":"0","audio_output":"0.01"`, 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(`{"data":[{"id":"openai/image-model","architecture":{"output_modalities":` + tc.modalities + `},"pricing":{"prompt":"0.000008","input_cache_read":"0.000002",` + tc.rates + `}}]}`)
+			models, err := DecodeOpenRouter(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantSkipped {
+				if len(models) != 0 {
+					t.Fatalf("unsupported output received a token price: %+v", models)
+				}
+				return
+			}
+			if len(models) != 1 {
+				t.Fatalf("want one priced model, got %+v", models)
+			}
+			model := models[0]
+			if model.CompletionPer1M != tc.wantOutput || model.PromptPricePer1M != 8 || model.CacheReadPer1M != 2 {
+				t.Fatalf("rates: %+v, want output %v with input 8 and cache read 2", model, tc.wantOutput)
+			}
+		})
+	}
+}
+
+func TestDecodeOpenRouterImageOutputTiers(t *testing.T) {
+	models, err := DecodeOpenRouter([]byte(`{"data":[{
+		"id":"openai/image-model","architecture":{"output_modalities":["image"]},
+		"pricing":{"prompt":"0.000008","completion":"0.000008","image_output":"0.00003","overrides":[
+			{"min_prompt_tokens":100,"completion":"0.000016","image_output":"0.00006"},
+			{"min_prompt_tokens":200,"completion":"0.000024"},
+			{"min_prompt_tokens":300,"image_output":"0"}
+		]}
+	}]}`))
+	if err != nil || len(models) != 1 {
+		t.Fatalf("decode image tiers: %+v %v", models, err)
+	}
+	price := models[0].PriceFor("image-model", MatchExact, 1, 0)
+	for _, tc := range []struct {
+		input int64
+		rate  float64
+	}{{0, 30}, {100, 60}, {200, 30}, {300, 0}} {
+		quote, err := Quote(price, 1, Tokens{Input: tc.input, Output: 1000}, 0, "")
+		if err != nil || quote.Buckets[1].RatePer1M != tc.rate {
+			t.Fatalf("input %d: quote %+v %v, want output rate %v", tc.input, quote, err, tc.rate)
+		}
+	}
+}
+
+func TestImageModelDoesNotMatchChatImageSibling(t *testing.T) {
+	catalog := loadFixtureCatalog(t)
+	chat, ok := catalog.Lookup("openai/gpt-5.4-image-2")
+	if !ok {
+		t.Fatal("chat image model missing from fixture")
+	}
+	withoutImage := NewCatalog([]UpstreamModel{chat}, time.Now())
+	if match, ok := withoutImage.MatchModel("gpt-image-2"); ok {
+		t.Fatalf("image generator matched a chat model: %+v", match)
 	}
 }

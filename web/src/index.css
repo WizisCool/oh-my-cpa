@@ -2581,7 +2581,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .terminal-page-heading:not(:has(> :not(.terminal-title))) { position: absolute; }
   .terminal-page-head .terminal-subtitle,
   .terminal-page-head [class*="summary-strip"] { margin-top: 0; }
-  .terminal-page-head:not(:has(.terminal-page-actions, .request-actions, .terminal-page-heading > :not(.terminal-title))) { display: contents; }
+  /* Loading heads keep their box so the placeholder title retains its padding and body spacing. */
+  .terminal-page-head:not(.placeholder-page-head):not(:has(.terminal-page-actions, .request-actions, .terminal-page-heading > :not(.terminal-title))) { display: contents; }
   .terminal-page-stack { gap: 12px; }
   .terminal-page-stack > .terminal-page-head { margin-bottom: 0; }
   .terminal-title, .config-toolbar-left .terminal-title { font-size: 18px; }
