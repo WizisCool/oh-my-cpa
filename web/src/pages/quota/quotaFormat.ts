@@ -1,6 +1,6 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
-import type { QuotaItem } from '../../types/quota';
+import type { QuotaItem, QuotaMetric } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
@@ -159,6 +159,39 @@ export function quotaResetText(
 }
 
 /** A quota amount in its own currency; USD keeps the console's magnitude-aware format. */
+/**
+ * A plugin summary figure as its plugin means it: money only when the plugin names the currency
+ * (a guessed one would print the amount in the wrong money), a percentage, or a count with its unit.
+ */
+export function formatQuotaMetric(metric: QuotaMetric): string {
+  if (metric.format === 'currency' && metric.currency) return formatQuotaMoney(metric.value, metric.currency);
+  if (metric.format === 'percent') return `${Math.round(metric.value * 10) / 10}%`;
+  const figure = metric.value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return metric.unit ? `${figure} ${metric.unit}` : figure;
+}
+
+/**
+ * The payload a plugin reading was built from, as diagnostic lines: each bucket's standing in the
+ * plugin's own words, then its summary. Empty for a reading that carries neither, which is every
+ * built-in provider's, whose diagnostics are the upstream signals instead.
+ */
+export function quotaPayloadSummary(item: Pick<QuotaItem, 'windows' | 'plan'>): Array<[label: string, value: string]> {
+  const windows = item.windows ?? [];
+  const metrics = item.plan?.metrics ?? [];
+  if (!windows.some((window) => window.description) && metrics.length === 0) return [];
+  return [
+    ...windows.map((window): [string, string] => [
+      window.label,
+      [
+        quotaRemainingText(window),
+        window.description,
+        window.reset_at_ms ? new Date(window.reset_at_ms).toISOString() : '',
+      ].filter(Boolean).join(' · '),
+    ]),
+    ...metrics.map((metric): [string, string] => [`summary.${metric.key || metric.label}`, formatQuotaMetric(metric)]),
+  ];
+}
+
 export function formatQuotaMoney(amount: number | undefined, currency?: string): string {
   if (amount == null || !Number.isFinite(amount)) return '—';
   if (!currency || currency === 'USD') return formatUsd(amount);

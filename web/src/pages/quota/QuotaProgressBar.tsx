@@ -19,6 +19,8 @@ interface QuotaProgressBarProps {
   resetLabel?: string;
   resetAccuracy?: 'exact' | 'derived' | 'approximate';
   showPercent?: boolean;
+  /** The provider's own words for the window's standing, printed under the bar. */
+  description?: string;
   /** The window's recorded usage and estimated capacity, when the estimate applies to it. */
   capacity?: Pick<QuotaWindow, 'usage' | 'capacity' | 'capacity_unavailable'>;
 }
@@ -34,6 +36,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   resetLabel,
   resetAccuracy = 'exact',
   showPercent = true,
+  description,
   capacity,
 }) => {
   const t = useT();
@@ -92,6 +95,10 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
           label={hasData ? resolvedLabel || t('quota.col_windows') : undefined}
         />
       </div>
+
+      {description && (
+        <div className={styles['window-description']} title={description} data-quota-description="true">{description}</div>
+      )}
 
       {capacityReading && (
         <div

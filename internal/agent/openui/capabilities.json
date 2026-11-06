@@ -4024,6 +4024,9 @@
                     "reset_accuracy": {
                       "type": "string"
                     },
+                    "description": {
+                      "type": "string"
+                    },
                     "model_families": {
                       "type": [
                         "null",
@@ -4342,6 +4345,9 @@
                 ]
               },
               "reset_accuracy": {
+                "type": "string"
+              },
+              "description": {
                 "type": "string"
               },
               "model_families": {

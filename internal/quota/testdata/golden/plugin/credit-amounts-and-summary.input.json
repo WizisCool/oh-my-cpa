@@ -1,0 +1,19 @@
+{
+  "why": "A plugin's amounts travel only in each bucket's description and in its summary; both reach the reading.",
+  "now_ms": 0,
+  "body": {
+    "subscription": { "plan": "personal_standard", "tierName": "Harbor" },
+    "summary": [
+      { "key": "credits", "label": "Credits", "value": 100, "unit": "credits", "format": "number" }
+    ],
+    "groups": [
+      {
+        "displayName": "Harbor",
+        "buckets": [
+          { "window": "Credits", "remainingFraction": 1, "description": "100 / 100 credits left" },
+          { "window": "Add-on credits", "remainingFraction": 1, "description": "50 / 50 credits left" }
+        ]
+      }
+    ]
+  }
+}

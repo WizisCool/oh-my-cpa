@@ -4,7 +4,7 @@ import { Button } from 'antd';
 import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { formatGmtOffsetLabel, formatObservedAgo, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey } from './quotaFormat';
+import { formatGmtOffsetLabel, formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey, quotaPayloadSummary } from './quotaFormat';
 import { QuotaProgressBar } from './QuotaProgressBar';
 import { orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
@@ -55,6 +55,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   const extraUsage = item.plan?.extra_usage;
   const balances = item.plan?.balances ?? [];
   const usageBreakdown = item.plan?.usage_breakdown ?? [];
+  const metrics = item.plan?.metrics ?? [];
   const creditRows = (item.reset_credits?.credits ?? [])
     .filter((credit) => credit.expires_at_ms)
     .sort((left, right) => (left.expires_at_ms ?? 0) - (right.expires_at_ms ?? 0));
@@ -74,7 +75,10 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
     ...(item.quota?.signals ?? {}),
     ...(item.raw_signals ?? {}),
   };
+  // A plugin publishes no upstream signals; what it sent is the diagnostic it has.
+  const payloadSummary = quotaPayloadSummary(item);
   const hasDiagnostics = Object.keys(rawSignals).length > 0
+    || payloadSummary.length > 0
     || Object.keys(item.model_quotas ?? {}).length > 0
     || Boolean(item.error)
     || Boolean(item.last_refresh);
@@ -118,6 +122,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           resetAtMS={window.reset_at_ms}
           resetLabel={window.reset_label}
           resetAccuracy={window.reset_accuracy}
+          description={window.description}
           capacity={window}
         />,
       );
@@ -167,7 +172,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         />
       ) : null}
 
-      {(item.plan?.plan_label || item.plan?.expires_at_ms || creditBalanceText || item.reset_credits || extraUsage) && (
+      {(item.plan?.plan_label || item.plan?.expires_at_ms || creditBalanceText || item.reset_credits || extraUsage || metrics.length > 0) && (
         <div className={styles['meta-row']}>
           {item.plan?.plan_label && (
             <span className={styles['meta-item']}>
@@ -228,6 +233,12 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
               )}
             </span>
           )}
+          {metrics.map((metric, index) => (
+            <span className={styles['meta-item']} key={`${metric.key}-${index}`} data-quota-metric={metric.key}>
+              <span className={styles['meta-label']}>{metric.label}</span>
+              <span className={styles['meta-value']}>{formatQuotaMetric(metric)}</span>
+            </span>
+          ))}
           {item.reset_credits && (
             <span className={styles['meta-item']}>
               <span className={styles['meta-label']}>{t('quota.col_reset_count')}</span>
@@ -372,6 +383,12 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           {Object.entries(rawSignals).map(([key, value]) => (
             <div className={styles['diagnostic-line']} key={`signal-${key}`}>
               <span className={styles['meta-label']}>{key}</span>
+              <span className="mono-num">{value}</span>
+            </div>
+          ))}
+          {payloadSummary.map(([label, value], index) => (
+            <div className={styles['diagnostic-line']} key={`payload-${index}`} data-quota-payload-line="true">
+              <span className={styles['meta-label']}>{label}</span>
               <span className="mono-num">{value}</span>
             </div>
           ))}

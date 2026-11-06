@@ -8,6 +8,7 @@ import { useT, type TFunc } from '../../i18n';
 import { LoadFailure, useToast } from '../feedback';
 import { LoadingRegion, Placeholder } from '../common/Placeholder';
 import { RefreshButton } from '../common/RefreshButton';
+import { Tooltip } from '../common/Tooltip';
 import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { CredentialMark } from '../LobeIcon';
@@ -98,7 +99,12 @@ const QuotaWindowMeter: React.FC<{ window: QuotaWindow }> = ({ window }) => {
   const label = windowShortLabel(window, t);
   return (
     <span className="quota-window">
-      <span className="quota-window-label" title={window.label}>{label}</span>
+      {/* The panel keeps one compact line per credential; a plugin's own words for what is left
+          (its only amounts) ride in the shared hint, which touch and keyboard focus reach too,
+          rather than widening the row. */}
+      <Tooltip title={<>{window.label}{window.description && <div>{window.description}</div>}</>}>
+        <span className="quota-window-label" tabIndex={0}>{label}</span>
+      </Tooltip>
       <span
         className="quota-window-track"
         role="meter"

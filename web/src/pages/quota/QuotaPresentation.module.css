@@ -129,6 +129,18 @@
 /* What is left of the window sits at the start and its whole size at the end - before an
    estimate, what was recorded and why there is none yet. On a narrow Drawer the two wrap onto
    their own lines instead of truncating a figure. */
+/* A plugin's own words for the window, one line under the bar; the title has the rest. */
+.window-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .capacity-row {
   display: flex;
   flex-wrap: wrap;

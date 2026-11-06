@@ -127,6 +127,13 @@ func antigravityBucketIdentityOrder(window string) int {
 
 // ParseAntigravityUsage parses Antigravity quota response and returns normalized windows.
 func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]QuotaWindow, error) {
+	return parseGroupedQuota(raw, nowMS, serverOffsetMS, false)
+}
+
+// parseGroupedQuota reads the groups-of-buckets shape Antigravity and plugin
+// quotas share. A plugin's bucket description is its only carrier of amounts,
+// so plugin readings keep it; the built-in reader's presentation is unchanged.
+func parseGroupedQuota(raw []byte, nowMS int64, serverOffsetMS int64, isKeepingDescriptions bool) ([]QuotaWindow, error) {
 	var payload RawAntigravityPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, fmt.Errorf("invalid antigravity payload: %w", err)
@@ -229,6 +236,10 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 				}
 			}
 
+			description := ""
+			if isKeepingDescriptions {
+				description = pluginDisplayText(bucket.Description, maxPluginDescriptionRunes)
+			}
 			windows = append(windows, QuotaWindow{
 				ID:               fmt.Sprintf("ag_%s_%s", gName, bucketID),
 				Label:            fullLabel,
@@ -240,6 +251,7 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 				ResetLabel:       resetLabel,
 				PeriodHours:      &periodHours,
 				ResetAccuracy:    "exact",
+				Description:      description,
 			})
 		}
 	}

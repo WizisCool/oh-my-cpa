@@ -8,6 +8,7 @@ import {
   describeQuotaCapacity,
   formatEstimatedUsd,
 } from '../../src/pages/quota/quotaCapacity.ts';
+import { formatQuotaMetric, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
 
 const t = ((key: string, params?: Record<string, unknown>) =>
   params ? `${key}(${Object.values(params).join(',')})` : key) as TFunc;
@@ -62,4 +63,26 @@ test('before an estimate the recorded usage stays beside the step that starts on
   assert.equal(describeQuotaCapacity({ capacity_unavailable: 'no_reading' }, 'en-compact', t), null);
   assert.equal(describeQuotaCapacity({}, 'en-compact', t), null);
   assert.equal(compactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
+});
+
+// A plugin's amounts arrive as its own words and its summary figures, never as usage/capacity.
+test('a plugin summary figure reads as its plugin means it', () => {
+  assert.equal(formatQuotaMetric({ key: 'credits', label: 'Credits', value: 1250000, unit: 'credits', format: 'number' }), '1,250,000 credits');
+  assert.equal(formatQuotaMetric({ key: 'spend', label: 'Spend', value: 12.5, format: 'currency', currency: 'EUR' }), '€12.50');
+  // Without a named currency a currency figure stays a number: a guessed one would be wrong money.
+  assert.equal(formatQuotaMetric({ key: 'odd', label: 'Odd', value: 3, format: 'currency' }), '3');
+  assert.equal(formatQuotaMetric({ key: 'left', label: 'Left', value: 42.25, format: 'percent' }), '42.3%');
+});
+
+test('a plugin reading lists what it was built from; a built-in reading lists nothing', () => {
+  const windows = [
+    { id: 'a', label: 'Harbor · Credits', scope: 'group' as const, remaining_percent: 100, description: '100 / 100 credits left' },
+    { id: 'b', label: 'Harbor · 5h', scope: 'group' as const, remaining_percent: 40, reset_at_ms: Date.UTC(2026, 10, 7, 12) },
+  ];
+  assert.deepEqual(quotaPayloadSummary({ windows, plan: { plan_type: 'unknown', plan_label: '', tier: 'unknown', metrics: [{ key: 'credits', label: 'Credits', value: 100, unit: 'credits' }] } }), [
+    ['Harbor · Credits', '100% · 100 / 100 credits left'],
+    ['Harbor · 5h', '40% · 2026-11-07T12:00:00.000Z'],
+    ['summary.credits', '100 credits'],
+  ]);
+  assert.deepEqual(quotaPayloadSummary({ windows: [{ id: 'c', label: '5h', scope: 'standard', remaining_percent: 70 }] }), []);
 });

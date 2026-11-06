@@ -17,6 +17,10 @@ type QuotaWindow struct {
 	ResetLabel       string   `json:"reset_label,omitempty"`
 	PeriodHours      *float64 `json:"period_hours,omitempty"`
 	ResetAccuracy    string   `json:"reset_accuracy,omitempty"` // "exact", "derived", "approximate"
+	// Description is the provider's own words for the window's standing, such as
+	// "183 / 2,000 credits left". A plugin bucket publishes its amounts only here,
+	// so it is the one figure a plugin window has beside its percentage.
+	Description string `json:"description,omitempty"`
 
 	ModelFamilies []string `json:"model_families,omitempty"`
 	// Reset evidence survives snapshot retention until this scheduled cycle ends.
@@ -106,6 +110,20 @@ type QuotaPlan struct {
 	Balances []QuotaBalance `json:"balances,omitempty"`
 	// UsageBreakdown splits the plan's shared usage by product.
 	UsageBreakdown []QuotaUsageShare `json:"usage_breakdown,omitempty"`
+	// Metrics are the figures a plugin publishes beside its windows (its quota
+	// summary), in the order it lists them.
+	Metrics []QuotaMetric `json:"metrics,omitempty"`
+}
+
+// QuotaMetric is one figure of a plugin's quota summary, such as its credit
+// balance. Format says how Value reads ("number", "currency", "percent").
+type QuotaMetric struct {
+	Key      string  `json:"key"`
+	Label    string  `json:"label"`
+	Value    float64 `json:"value"`
+	Unit     string  `json:"unit,omitempty"`
+	Format   string  `json:"format,omitempty"`
+	Currency string  `json:"currency,omitempty"`
 }
 
 // QuotaCredits is a prepaid credit balance, or the statement that credits are
