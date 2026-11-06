@@ -193,6 +193,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
 
   return (
     <AppDrawer
+      widthKey="plugin_config"
       open={plugin !== null}
       onClose={requestClose}
       width="wide"

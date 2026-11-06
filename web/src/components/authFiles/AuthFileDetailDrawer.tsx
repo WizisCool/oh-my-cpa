@@ -594,6 +594,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   return (
     <AppDrawer
+      widthKey="auth_file_detail"
       title={file?.display_name || identity?.primary || t('af.drawer_title')}
       width="wide"
       open={open}

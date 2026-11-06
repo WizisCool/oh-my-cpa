@@ -977,6 +977,7 @@ export const SystemPage: React.FC = () => {
           logs are identical in shape and a reader who opened one must be able to tell which
           one they are looking at. */}
       <AppDrawer
+        widthKey="changelog"
         open={expandedProduct !== null}
         onClose={closeChangelog}
         width="wide"

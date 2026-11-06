@@ -81,6 +81,8 @@ export default {
   "common.refresh": "Muat semula",
   "common.cancel": "Batal",
   "common.close": "Tutup",
+  "common.drawer_resize": "Ubah saiz panel",
+  "common.drawer_width": "Lebar panel {px} piksel",
   "common.back": "Kembali",
   "common.confirm": "Sahkan",
   "common.delete": "Padam",

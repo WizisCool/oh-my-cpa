@@ -177,7 +177,7 @@ export function WarmupSettingsDrawer({ open, onClose }: { open: boolean; onClose
     modal.confirm({ title: t('warmup.confirm_settings'), content: t('warmup.confirm_settings_desc'), okText: t('common.save'), cancelText: t('common.cancel'),
       onOk: () => saveMutation.mutateAsync({ policy: selectedPolicy, revision }) });
   };
-  return <AppDrawer open={open} onClose={attemptClose} title={t('warmup.settings')} destroyOnHidden
+  return <AppDrawer widthKey="warmup_settings" open={open} onClose={attemptClose} title={t('warmup.settings')} destroyOnHidden
     footer={<Space><Button onClick={() => setDraft(undefined)} disabled={!isDirty || saveMutation.isPending}>{t('common.cancel')}</Button>
       <Button type="primary" onClick={save} loading={saveMutation.isPending} disabled={!isDirty || !canSaveWarmupPolicy(policy) || isDemoMode()}>{t('common.save')}</Button></Space>}>
     <Tabs more={TAB_OVERFLOW} activeKey={provider} items={[{ key: 'codex', label: 'Codex', disabled: isDirty || saveMutation.isPending }, { key: 'claude', label: 'Claude', disabled: isDirty || saveMutation.isPending }]}

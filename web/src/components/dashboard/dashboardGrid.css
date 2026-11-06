@@ -12,6 +12,8 @@
    widget off at another. The row track and the gap here are the model's `DASHBOARD_ROW_PX` and
    `DASHBOARD_GAP_PX`. */
 .dashboard-grid {
+  /* A widget hidden while the board is arranged is lifted out of the grid to fade where it stood. */
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: minmax(24px, auto);

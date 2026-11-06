@@ -40,6 +40,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { glideWhileSorting, useSortableMotion } from '../../hooks/useSortableMotion';
+import { AnimatePresence, INSTANT, MotionScope, m, useIsPresent, useSpringTransition } from '../../motion';
 
 export interface DashboardBoardProps {
   layout: DashboardLayout;
@@ -102,6 +103,12 @@ const OVERLAY_MODIFIERS = [withinTheBoard];
  * widget the reflow moved glides there from where it was. The widget itself follows the pointer,
  * whole and at its own size, and the place it will land stays open as an outline. The drop commits
  * the order already on screen, so nothing moves when the hand lets go.
+ *
+ * Every other change to the arrangement - a resize, a step earlier or later, hiding or restoring a
+ * widget - reflows the board too, and the widgets the reflow moved glide there as well (Motion's
+ * layout animation, position only: a widget is never scaled to its old size). A hidden widget fades
+ * out where it stood while the rest close up; a restored one fades in as they make room. Only an
+ * arrangement being edited moves: a board read normally takes its places as its data arrives.
  */
 export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditing, isPhone, renderWidget, onChange }) => {
   const t = useT();
@@ -272,7 +279,10 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
       <DndContext sensors={sensors} collisionDetection={underThePointer} measuring={MEASURE} onDragStart={handleStart} onDragMove={handleMove} onDragOver={handleMove} onDragEnd={handleEnd} onDragCancel={endDrag}>
       <SortableContext items={ordered.map((item) => item.id)} strategy={REFLOW} disabled={!isEditing || isPhone}>
       {isEditing && <span className="sr-only" aria-live="polite" data-testid="dashboard-size-announcement">{sizeAnnouncement}</span>}
+      <MotionScope features="layout">
       <div className="dashboard-grid" data-testid="dashboard-board">
+        {/* `custom` tells a leaving widget whether it left an arrangement being edited. */}
+        <AnimatePresence initial={false} mode="popLayout" custom={isEditing}>
         {ordered.map((item, index) => {
           const spec = dashboardWidgetSpec(item.id);
           const content = renderWidget(item.id);
@@ -282,6 +292,9 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
             <SortableCell
               key={item.id}
               id={item.id}
+              isEditing={isEditing}
+              // dnd-kit draws the glides of a drag itself; Motion takes every other reflow.
+              canGlide={isEditing && dragId === null}
               className={clsx('dashboard-cell', isEditing && styles['cell'], dragId === item.id && styles['is-placeholder'], resizing?.id === item.id && styles['is-resizing'])}
               rows={item.rows}
               data-widget={item.id}
@@ -380,10 +393,12 @@ export const DashboardBoard: React.FC<DashboardBoardProps> = ({ layout, isEditin
             </SortableCell>
           );
         })}
+        </AnimatePresence>
         {isEditing && shown.length === 0 && (
           <div className={styles['board-empty']}>{t('dash.layout.all_hidden')}</div>
         )}
       </div>
+      </MotionScope>
       </SortableContext>
       <DragOverlay dropAnimation={null} modifiers={OVERLAY_MODIFIERS}>
         {dragged ? (
@@ -417,14 +432,47 @@ interface CellHandle {
   onPointerDown?: React.PointerEventHandler;
 }
 
-/** One widget's cell: the node the board sorts, with its handle's wiring for the toolbar it draws. */
-function SortableCell({ id, rows, children, ...attributes }: Omit<React.HTMLAttributes<HTMLDivElement>, 'children' | 'id'> & {
+type SortableCellProps = Omit<React.HTMLAttributes<HTMLDivElement>,
+  'children' | 'id' | 'onAnimationStart' | 'onDrag' | 'onDragStart' | 'onDragEnd'> & {
   id: DashboardWidgetId;
   rows: number;
+  /** The arrangement is being edited, so the widget's coming and going is animated. */
+  isEditing: boolean;
+  /** The widget glides to a place a reflow gave it; off while a drag draws its own glides. */
+  canGlide: boolean;
   children: (handle: CellHandle) => React.ReactNode;
-} & Record<`data-${string}`, string | number | undefined>) {
+} & Record<`data-${string}`, string | number | undefined>;
+
+const CELL_SHOWN = { opacity: 1 };
+
+/**
+ * One widget's cell: the node the board sorts, with its handle's wiring for the toolbar it draws.
+ * It forwards its node because the board's presence lifts a leaving cell out of the grid by it.
+ */
+const SortableCell = React.forwardRef<HTMLDivElement, SortableCellProps>(function SortableCell({ id, rows, isEditing, canGlide, children, ...attributes }, forwardedRef) {
+  const settle = useSpringTransition('settle');
+  const leave = useSpringTransition('leave');
+  // Kept by identity across renders: a fresh target would read to Motion as a new one and pull
+  // against a leaving cell's exit.
+  const variants = React.useMemo(() => ({
+    hidden: (isEdited: boolean) => ({ opacity: 0, transition: isEdited ? leave : INSTANT }),
+  }), [leave]);
   const motion = useSortableMotion();
   const { setNodeRef, setActivatorNodeRef, listeners, transform, transition } = useSortable({ id, animateLayoutChanges: glideWhileSorting, ...motion });
+  // A leaving widget is no longer on the board: it is not counted as one, and its controls take no
+  // input for the moment it fades.
+  const isPresent = useIsPresent();
+  const node = React.useRef<HTMLDivElement | null>(null);
+  const ref = React.useCallback((element: HTMLDivElement | null) => {
+    node.current = element;
+    setNodeRef(element);
+    if (typeof forwardedRef === 'function') forwardedRef(element);
+    else if (forwardedRef) forwardedRef.current = element;
+  }, [setNodeRef, forwardedRef]);
+  // A widget restored while it fades comes back present, and takes input again.
+  React.useEffect(() => {
+    node.current?.toggleAttribute('inert', !isPresent);
+  }, [isPresent]);
   // Only the glide's offset is drawn: a reflow that changed the widget's row also changes its size,
   // and scaling the widget to its old size would stretch its content for the length of the glide.
   const style = {
@@ -434,11 +482,24 @@ function SortableCell({ id, rows, children, ...attributes }: Omit<React.HTMLAttr
       : {}),
   } as React.CSSProperties;
   return (
-    <div {...attributes} ref={setNodeRef} style={style}>
+    <m.div
+      {...attributes}
+      data-widget={isPresent ? attributes['data-widget'] : undefined}
+      aria-hidden={isPresent ? undefined : true}
+      ref={ref}
+      style={style}
+      layout={canGlide ? 'position' : false}
+      custom={isEditing}
+      variants={variants}
+      initial={isEditing ? 'hidden' : false}
+      animate={CELL_SHOWN}
+      exit="hidden"
+      transition={settle}
+    >
       {children({ ref: setActivatorNodeRef, onPointerDown: listeners?.onPointerDown as React.PointerEventHandler | undefined })}
-    </div>
+    </m.div>
   );
-}
+});
 
 type ResizeAxis = 'x' | 'y' | 'xy';
 

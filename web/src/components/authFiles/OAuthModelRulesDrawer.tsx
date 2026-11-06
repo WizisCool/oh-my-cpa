@@ -427,6 +427,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
 
   return (
     <AppDrawer
+      widthKey="oauth_model_rules"
       data-testid="oauth-model-rules-drawer"
       title={t('af.rules_title')}
       width="wide"

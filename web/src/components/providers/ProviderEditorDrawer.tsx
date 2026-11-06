@@ -257,6 +257,7 @@ export function ProviderEditorDrawer({
   return (
 
       <AppDrawer
+        widthKey="provider_editor"
         title={t(editingProvider ? 'pro.editor_edit_title' : 'pro.editor_add_title', {
           family: familyDisplayNames[formFamily] || formFamily,
         })}

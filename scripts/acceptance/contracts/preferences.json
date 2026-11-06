@@ -24,6 +24,7 @@
     "omc_nav_hidden",
     "omc_nav_order",
     "omc_sidebar_collapsed",
+    "omc_drawer_widths",
     "omc_dashboard_layout",
     "omc_dashboard_order",
     "dashboard_provider_order",

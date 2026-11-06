@@ -1,4 +1,4 @@
-import { until } from '../harness.mjs';
+import { pastDeadline, until } from '../harness.mjs';
 
 /**
  * The dashboard arrangement: the operator orders, sizes and hides the dashboard's widgets, and the
@@ -231,4 +231,94 @@ export async function dashboardLayout({ base, page, check }) {
   const restored = await order();
   check('Restore default puts back the catalog order and every widget',
     restored.join(',') === initial.join(','), restored.join(','));
+
+  // With motion on, the widgets a change moved glide to their new places at their own size, and a
+  // hidden widget fades where it stood while it is already off the board.
+  // Turned on the way an operator does, with the console's own setting, which outranks the system's.
+  preferences.omc_reduced_motion = 'off';
+  await open();
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'false');
+  await arrange();
+  const [first, second] = restored;
+  const stepping = sampleBoard(page, [first, second]);
+  await cell(first).getByRole('button', { name: /^Move later/ }).click();
+  const stepped = await stepping;
+  const xs = (id) => stepped.map((frame) => frame.cells[id]?.x).filter((x) => x !== undefined);
+  const widths = (id) => stepped.map((frame) => frame.cells[id]?.width).filter((width) => width !== undefined);
+  check('a widget a step moves glides to its new place', glides(xs(first)), JSON.stringify(xs(first).map(Math.round)));
+  check('the widget it passes glides the other way', glides(xs(second)), JSON.stringify(xs(second).map(Math.round)));
+  check('a gliding widget keeps its size', [first, second].every((id) => Math.max(...widths(id)) - Math.min(...widths(id)) < 1),
+    JSON.stringify([first, second].map((id) => [Math.min(...widths(id)), Math.max(...widths(id))].map(Math.round))));
+
+  const hiding = sampleBoard(page, [first, second]);
+  await page.locator(`[data-widget-hide="${second}"]`).click();
+  const hid = await hiding;
+  const fades = hid.map((frame) => frame.leavingOpacity).filter((opacity) => opacity !== null);
+  check('a hidden widget fades where it stood', fades.some((opacity) => opacity > 0.05 && opacity < 0.95), JSON.stringify(fades.map((opacity) => opacity.toFixed(2))));
+  const afterHide = hid.filter((frame) => frame.restorable.includes(second));
+  check('a fading widget is already off the board', afterHide.length > 0 && afterHide.every((frame) => !frame.ids.includes(second)));
+  check('the widget beside it glides into the space', glides(hid.map((frame) => frame.cells[first]?.x).filter((x) => x !== undefined)));
+
+  // A drag still draws its own glides with motion on, and the drop lands where the hand let go.
+  const [lead, , third] = (await order()).filter(Boolean);
+  await cell(third).locator('[data-drag-handle]').dragTo(cell(lead), { targetPosition: { x: 8, y: 40 }, steps: 12 });
+  await until(async () => (await order())[0] === third, { label: 'the dragged widget to lead the board' });
+  const landed = await cell(third).boundingBox();
+  await pastDeadline(300);
+  const rested = await cell(third).boundingBox();
+  check('with motion on, a dropped widget stays where it landed',
+    Math.abs(landed.x - rested.x) < 1 && Math.abs(landed.y - rested.y) < 1, JSON.stringify({ landed, rested }));
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByTestId('dashboard-layout-tray').waitFor({ state: 'detached' });
+  delete preferences.omc_reduced_motion;
+}
+
+/**
+ * The board on every animation frame for half a second, from now: the box of each named widget,
+ * the widgets on the board in reading order, the opacity of a widget fading away, and which of the
+ * named widgets the tray offers to restore.
+ */
+function sampleBoard(page, ids) {
+  return page.evaluate((names) => new Promise((resolve) => {
+    const samples = [];
+    const start = performance.now();
+    let changedAt = null;
+    const tick = () => {
+      const board = document.querySelector('[data-testid="dashboard-board"]');
+      const cells = {};
+      for (const name of names) {
+        const box = board?.querySelector(`:scope > [data-widget="${name}"]`)?.getBoundingClientRect();
+        if (box) cells[name] = { x: box.x, width: box.width };
+      }
+      const leaving = board?.querySelector(':scope > .dashboard-cell[aria-hidden="true"]');
+      samples.push({
+        cells,
+        ids: [...(board?.querySelectorAll(':scope > [data-widget]') ?? [])].map((node) => node.dataset.widget),
+        leavingOpacity: leaving ? Number(getComputedStyle(leaving).opacity) : null,
+        restorable: names.filter((name) => document.querySelector(`[data-widget-restore="${name}"]`)),
+      });
+      // The window opens on the first frame the board changes, not when sampling starts: on a busy
+      // machine the click can land late enough to cut the motion short.
+      const sample = samples.at(-1);
+      const first = samples[0];
+      if (changedAt === null && (sample.ids.join() !== first.ids.join() || sample.leavingOpacity !== null
+        || names.some((name) => Math.abs((sample.cells[name]?.x ?? 0) - (first.cells[name]?.x ?? 0)) > 0.5))) {
+        changedAt = performance.now();
+      }
+      const now = performance.now();
+      if ((changedAt === null || now - changedAt < 500) && now - start < 3000) requestAnimationFrame(tick);
+      else resolve(samples);
+    };
+    tick();
+  }), ids);
+}
+
+/** Moved, and through at least three places between where it started and where it settled. */
+function glides(positions) {
+  if (positions.length < 4) return false;
+  const [from, to] = [positions[0], positions.at(-1)];
+  if (Math.abs(to - from) < 8) return false;
+  const low = Math.min(from, to) + 1;
+  const high = Math.max(from, to) - 1;
+  return positions.filter((x) => x > low && x < high).length >= 3;
 }

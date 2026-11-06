@@ -89,6 +89,7 @@ export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose })
 
   return (
     <AppDrawer
+      widthKey="log_file"
       width="wide"
       open={isOpen}
       onClose={onClose}

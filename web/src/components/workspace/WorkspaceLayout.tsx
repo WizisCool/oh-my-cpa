@@ -110,6 +110,7 @@ export function WorkspaceLayout({ testId, title, actions, notices, aside, childr
       </div>
       {isNarrow && (
         <AppDrawer
+          widthKey="workspace_aside"
           title={aside.title}
           width="narrow"
           open={aside.isOpen}
