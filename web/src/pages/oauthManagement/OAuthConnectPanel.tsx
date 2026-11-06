@@ -125,6 +125,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
 
   return (
     <AppDrawer
+      widthKey="oauth_connect"
       title={t(target ? 'recovery.recover' : 'omc.connect_account')}
       width="wide"
       open={open}

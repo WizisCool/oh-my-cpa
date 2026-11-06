@@ -418,6 +418,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
 
   return (
     <AppDrawer
+      widthKey="request_filters"
       className={clsx('req-filter-drawer', styles['drawer'])}
       title={t('events.advanced_filters')}
       open={open}

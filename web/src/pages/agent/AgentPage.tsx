@@ -709,6 +709,7 @@ export function AgentPage() {
             {isHero && examples}
           </main>
           <AppDrawer
+            widthKey={`agent_${shownViewRef.current}`}
             title={t(DRAWER_TITLES[shownViewRef.current])}
             open={!!drawerView}
             onClose={closeDrawer}

@@ -173,6 +173,13 @@
      comes to rest. Only hand-driven moves use it; reduced motion zeroes it with every transition. */
   --motion-spring: 360ms;
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  /* A side sheet arrives on a spring launched at speed - the kind of motion its dragged edge
+     settles with - baked into `linear()`: it is moving from the first frame and eases to rest with
+     no overshoot. It leaves on a curve gentle at both ends, so it neither jerks away nor slams off. */
+  --motion-sheet-in: 250ms;
+  --ease-sheet-in: linear(0, 0.265, 0.462, 0.608, 0.716, 0.794, 0.852, 0.893, 0.924, 0.945, 0.961, 0.972, 0.98, 0.986, 0.99, 0.993, 1);
+  --motion-sheet-out: 180ms;
+  --ease-sheet-out: cubic-bezier(0.45, 0, 0.2, 1);
 }
 
 :root[data-theme-mode='light'] {
@@ -762,6 +769,57 @@ a { color: inherit; }
   gap: 8px;
   margin-inline-start: auto;
 }
+
+/* DrawerResizeHandle (components/common/DrawerResizeHandle.tsx): a hit zone straddling the panel's
+   leading edge along its whole height, and the grip, which is that edge's own hairline swelling
+   where the pointer has settled (elasticEdge.ts). It is drawn right over the 1px border and fades
+   into it at both ends, so it reads as the edge giving under the hand, not a part laid on it. */
+.app-drawer-resize {
+  position: absolute;
+  inset-block: 0;
+  left: -12px;
+  z-index: 2;
+  width: 24px;
+  /* antd's wrapper passes pointers through to the mask; only its section takes them back. */
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* The resize cursor arrives with the grip, not before it (elasticEdge.ts arms both at once). */
+.app-drawer-resize[data-armed] { cursor: ew-resize; }
+.app-drawer-resize-grip {
+  position: absolute;
+  top: 0;
+  /* The hit zone's centre is the panel's outer edge; the border's 1px runs half a pixel in. */
+  left: calc(50% + 0.5px);
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+.app-drawer-resize-ink {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 0;
+}
+.app-drawer-resize-grip { color: color-mix(in oklab, var(--muted) 70%, var(--border)); }
+/* The ring encloses the swell, which a keyboard visit puts at the edge's middle. */
+.app-drawer-resize:focus-visible { box-shadow: none !important; }
+.app-drawer-resize:focus-visible::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 72px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--accent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* While a drag holds the edge, the cursor stays a resize cursor over whatever it crosses and the
+   panel's text cannot be selected by the sweep. */
+.ant-drawer-content-wrapper:has(> .app-drawer-resize[data-dragging]) { user-select: none; }
 
 /* SectionHeading (components/common/SectionHeading.tsx): one head at three weights. The frame
    around it - padding, a rule, a tinted strip - is the caller's; the type is not. */
@@ -1445,14 +1503,20 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 :root[data-theme-switching] *::after {
   transition: none !important;
 }
-/* A side sheet decelerates into place and accelerates away, rather than antd's symmetric `ease`:
-   it arrives under the reader's attention and leaves out of it. */
-.ant-drawer-content-wrapper[class*="-enter-active"],
-.ant-drawer-content-wrapper[class*="-appear-active"],
-.ant-drawer-mask[class*="-enter-active"],
-.ant-drawer-mask[class*="-appear-active"] { transition-timing-function: var(--ease-out) !important; }
-.ant-drawer-content-wrapper[class*="-leave-active"],
-.ant-drawer-mask[class*="-leave-active"] { transition-timing-function: cubic-bezier(0.4, 0, 1, 1) !important; }
+/* A side sheet springs into place and glides away (`--ease-sheet-*`); its mask fades on the same
+   clock so the two read as one movement. Reduced motion keeps its own zeroed durations. */
+:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-enter-active"],
+:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-appear-active"],
+:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-enter-active"],
+:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-appear-active"] {
+  transition-duration: var(--motion-sheet-in) !important;
+  transition-timing-function: var(--ease-sheet-in) !important;
+}
+:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-leave-active"],
+:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-leave-active"] {
+  transition-duration: var(--motion-sheet-out) !important;
+  transition-timing-function: var(--ease-sheet-out) !important;
+}
 /* A palette change cross-fades the whole page (ThemeContext's `withCrossFade`). */
 ::view-transition-old(root),
 ::view-transition-new(root) {

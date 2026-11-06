@@ -262,6 +262,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
 
   return (
     <AppDrawer
+      widthKey="request_detail"
       title={drawerTitle}
       width="wide"
       open={eventId != null}

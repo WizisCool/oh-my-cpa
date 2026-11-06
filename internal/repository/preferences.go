@@ -85,6 +85,11 @@ const (
 	// PreferenceSidebarCollapsed remembers the desktop rail independently of the transient phone drawer.
 	PreferenceSidebarCollapsed = "omc_sidebar_collapsed"
 
+	// PreferenceDrawerWidths maps a side panel's width key to the width in pixels the operator
+	// dragged it to. It records the width asked for; the console clamps it to the window when it
+	// draws the panel, so a narrower window does not overwrite a wide monitor's choice.
+	PreferenceDrawerWidths = "omc_drawer_widths"
+
 	// PreferenceDashboardLayout is the dashboard's widget arrangement: every widget the console
 	// knows, in reading order, with its width and whether it is hidden. A widget a later release
 	// adds is missing from an older document, and the console places and shows it by default.

@@ -1,4 +1,4 @@
-import { until } from '../harness.mjs';
+import { pastDeadline, until } from '../harness.mjs';
 
 /**
  * Probes for the provider console: the icon picker's stacking against the open
@@ -554,4 +554,137 @@ export async function customIconLibrary({ base, page, check }) {
   check("deletion also clears a provider drawer's unsaved icon selection", await draftArtwork.locator('img[src*="/custom-icons/"]').count() === 0);
   await page.keyboard.press('Escape');
   await picker.waitFor({ state: 'hidden' });
+}
+
+/**
+ * A side panel's leading edge can be dragged: the edge stays under the pointer inside its bounds,
+ * gives at most a short rubber band past them and springs back on release, and the width it was
+ * let go at is the one the panel reopens at after a reload. Pointer capture, layout and the frame
+ * loop are the engine's, so only a browser can say the edge does not trail the pointer.
+ */
+export async function drawerResize({ base, page, check }) {
+  // Probes run with reduced motion; the rubber band and the grip's bend are the motion under test.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const openEditor = async () => {
+    await page.goto(`${base}/ai-providers`, { waitUntil: 'domcontentloaded' });
+    await page.locator('.providers-page').waitFor({ timeout: 20_000 });
+    await page.locator('.providers-page').getByRole('button', { name: /Edit|编辑/i }).first().click({ timeout: 10_000 });
+    await page.locator('.ant-drawer-open .app-drawer-resize').waitFor({ state: 'attached', timeout: 10_000 });
+    // The sheet slides in on a transform; the edge is measured once it has arrived.
+    await until(() => page.evaluate(() => {
+      const wrapper = document.querySelector('.ant-drawer-open .ant-drawer-content-wrapper');
+      return wrapper && getComputedStyle(wrapper).transform === 'none';
+    }), { label: 'drawer settled' });
+  };
+  const read = () => page.evaluate(() => {
+    const wrapper = document.querySelector('.ant-drawer-open .ant-drawer-content-wrapper');
+    const handle = wrapper.querySelector('.app-drawer-resize');
+    const rect = wrapper.getBoundingClientRect();
+    return {
+      width: rect.width,
+      left: rect.left,
+      top: rect.top,
+      height: rect.height,
+      opacity: Number(getComputedStyle(wrapper.querySelector('.app-drawer-resize-grip')).opacity),
+      cursor: getComputedStyle(handle).cursor,
+      grip: (() => { const r = wrapper.querySelector('.app-drawer-resize-ink').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })(),
+      path: wrapper.querySelector('.app-drawer-resize-ink').getAttribute('d') ?? '',
+      max: Number(handle.getAttribute('aria-valuemax')),
+      min: Number(handle.getAttribute('aria-valuemin')),
+    };
+  });
+  /** The grip's control point x minus its endpoints' x: how far the curve bows, signed. */
+  const bow = (path) => {
+    const numbers = path.match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+    return numbers.length >= 6 ? numbers[2] - numbers[0] : 0;
+  };
+
+  await openEditor();
+  const start = await read();
+  check('a closed edge draws no grip', start.opacity === 0, `opacity ${start.opacity}`);
+  const y = start.top + start.height / 2;
+  // Crossing the edge on the way somewhere else is not a visit to it.
+  await page.mouse.move(start.left - 80, y);
+  await page.mouse.move(start.left + 80, y, { steps: 4 });
+  await pastDeadline(Date.now() + 500);
+  const passed = await read();
+  check('crossing the edge in passing draws no grip and keeps the cursor', passed.opacity === 0 && passed.cursor !== 'ew-resize',
+    `opacity ${passed.opacity}, cursor ${passed.cursor}`);
+  await page.mouse.move(start.left - 40, y);
+  await page.mouse.move(start.left, y);
+  await until(async () => (await read()).opacity > 0.99, { label: 'grip shown on hover' });
+  const shown = await read();
+  check('the resize cursor arrives with the grip', shown.cursor === 'ew-resize', shown.cursor);
+  check('the grip is the border swelling, centred on the edge', Math.abs(shown.grip.x - shown.left) <= 2,
+    `${shown.grip.x.toFixed(1)} vs edge ${shown.left.toFixed(1)}`);
+  // The whole edge resizes, so the swell sits where the pointer is, not at a fixed middle.
+  const high = start.top + start.height / 4;
+  await page.mouse.move(start.left, high, { steps: 8 });
+  await until(async () => Math.abs((await read()).grip.y - high) < 2, { label: 'swell follows the pointer along the edge' });
+  await page.mouse.move(start.left, y, { steps: 8 });
+  await until(async () => Math.abs((await read()).grip.y - y) < 2, { label: 'swell returns with the pointer' });
+
+  await page.mouse.down();
+  let x = start.left;
+  let worstLag = 0;
+  let isBentLeft = false;
+  for (let i = 0; i < 12; i += 1) {
+    x -= 12;
+    await page.mouse.move(x, y);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    const now = await read();
+    worstLag = Math.max(worstLag, Math.abs(now.left - x));
+    if (bow(now.path) < -0.5) isBentLeft = true;
+  }
+  check('inside its bounds the edge stays under the pointer', worstLag <= 1.5, `worst lag ${worstLag.toFixed(2)}px`);
+  check('a leftward drag bows the grip to the left', isBentLeft);
+
+  // Far past the widest the window allows: the panel gives at most the rubber band.
+  await page.mouse.move(0, y, { steps: 6 });
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  const pulled = await read();
+  check('past its ceiling the panel gives at most 15px', pulled.width > pulled.max && pulled.width <= pulled.max + 15.5,
+    `${pulled.width.toFixed(1)}px against ${pulled.max}px`);
+  await page.mouse.up();
+  await until(async () => Math.abs((await read()).width - pulled.max) < 0.5, { label: 'spring back to the ceiling' });
+
+  // Moving away hides the grip, after a pause.
+  await page.mouse.move(start.left + 300, y);
+  await until(async () => (await read()).opacity === 0, { label: 'grip hidden after leaving' });
+
+  // Escape during a drag puts the edge back and leaves the panel open.
+  const before = await read();
+  await page.mouse.move(before.left, y);
+  await page.mouse.down();
+  await page.mouse.move(before.left + 200, y, { steps: 4 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await until(async () => Math.abs((await read()).width - before.width) < 0.5, { label: 'escape restores the width' });
+  check('escape during a drag keeps the panel open', await page.locator('.ant-drawer-open').count() === 1);
+
+  await openEditor();
+  const reopened = await read();
+  check('a reloaded console reopens the panel at the width it was let go at', Math.abs(reopened.width - pulled.max) < 0.5,
+    `${reopened.width.toFixed(1)}px, expected ${pulled.max}px`);
+
+  // A click on the edge restores the opening width, and the console remembers that too.
+  await page.mouse.move(reopened.left, y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await until(async () => Math.abs((await read()).width - start.width) < 0.5, { label: 'click restores the default width' });
+  await openEditor();
+  check('a reset panel reopens at its opening width', Math.abs((await read()).width - start.width) < 0.5);
+
+  // Reduced motion keeps the gesture but drops the rubber band: the edge stops at its bound.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'true');
+  const still = await read();
+  await page.mouse.move(still.left, y);
+  await page.mouse.down();
+  await page.mouse.move(0, y, { steps: 6 });
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  const held = await read();
+  check('with reduced motion the edge stops at its bound and the grip stays straight',
+    Math.abs(held.width - held.max) < 0.5 && bow(held.path) === 0, `${held.width.toFixed(1)}px, bow ${bow(held.path)}`);
+  await page.mouse.up();
 }

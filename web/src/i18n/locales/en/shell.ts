@@ -81,6 +81,8 @@ export default {
   'common.refresh': 'Refresh',
   'common.cancel': 'Cancel',
   'common.close': 'Close',
+  'common.drawer_resize': 'Resize panel',
+  'common.drawer_width': 'Panel width {px} pixels',
   'common.back': 'Back',
   'common.confirm': 'Confirm',
   'common.delete': 'Delete',

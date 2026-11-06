@@ -295,6 +295,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
 
   return (
     <AppDrawer
+      widthKey="price_editor"
       title={title}
       open={isOpen}
       onClose={onClose}

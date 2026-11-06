@@ -488,6 +488,7 @@ export const ModelSquarePage: React.FC = () => {
       <Pager className={styles['pagination']} page={currentPage} pageSize={PAGE_SIZE} total={entries.length} onChange={setPage} />
     </>}
     <AppDrawer
+      widthKey="model_details"
       title={selected?.identity ?? ''}
       extra={selected && <CopyButton text={selected.identity} label={t('models.copy_model')} />}
       open={selected !== undefined}

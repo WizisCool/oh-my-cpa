@@ -519,6 +519,7 @@ export const ApiKeysPage: React.FC = () => {
       {/* One editor for both of a key's editable parts: the secret CPA authenticates it with,
           and the name this console shows it by. It is a side panel, as the provider editor is. */}
       <AppDrawer
+        widthKey="api_key_editor"
         title={isEditing ? t('keys.modal_title_edit') : t('keys.modal_title_add')}
         open={editor.isOpen}
         onClose={closeEditor}

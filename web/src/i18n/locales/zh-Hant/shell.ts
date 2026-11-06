@@ -81,6 +81,8 @@ export default {
   "common.refresh": "重新整理",
   "common.cancel": "取消",
   "common.close": "關閉",
+  "common.drawer_resize": "調整面板寬度",
+  "common.drawer_width": "面板寬度 {px} 像素",
   "common.back": "返回",
   "common.confirm": "確定",
   "common.delete": "刪除",

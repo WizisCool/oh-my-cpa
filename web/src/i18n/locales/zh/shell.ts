@@ -78,6 +78,8 @@ export default {
   'common.refresh': '刷新',
   'common.cancel': '取消',
   'common.close': '关闭',
+  'common.drawer_resize': '调整面板宽度',
+  'common.drawer_width': '面板宽度 {px} 像素',
   'common.back': '返回',
   'common.confirm': '确定',
   'common.delete': '删除',

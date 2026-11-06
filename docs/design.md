@@ -78,7 +78,10 @@ all — has to say the name is unconfirmed instead of saving it.
 Use the shared page, panel, toolbar, field, empty-state, drawer, dialog and
 confirmation primitives before creating another page-local version. A dialog
 (`AppModal`) holds one task that ends where the reader started; on a phone it is a
-bottom sheet. A drawer shows or edits one record beside the page. Keep semantic HTML, labels,
+bottom sheet. A drawer shows or edits one record beside the page; on a desktop its
+leading edge drags to resize it and a click restores the opening width. The width is a
+server preference per `widthKey`, so panels that show the same kind of thing share one.
+Keep semantic HTML, labels,
 focus management and accessible names when adapting a library component. Number fields
 use [`NumberInput`](../web/src/components/common/NumberInput.tsx): the wheel steps the
 field under the pointer by its own step and bounds, without a click.

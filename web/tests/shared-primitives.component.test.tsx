@@ -18,6 +18,7 @@ import { PageHeader } from '../src/components/common/PageHeader';
 import { SummaryStrip } from '../src/components/common/SummaryStrip';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { renderWithOmc } from './support/render';
+import { installOmcApi } from './support/omcApi';
 
 describe('SearchInput', () => {
   it('is named by its label, shows it as the placeholder, and reports text rather than events', () => {
@@ -94,13 +95,12 @@ describe('AppDrawer', () => {
   beforeEach(() => { window.localStorage.setItem('omc-lang', 'en'); });
 
   it('names its close control and lays the footer out as two slots', () => {
+    installOmcApi();
     const onClose = vi.fn();
-    render(
-      <I18nProvider>
-        <AppDrawer open title="Edit price" onClose={onClose} footerStart="Applies to new requests" footer={<button type="button">Save</button>}>
-          body
-        </AppDrawer>
-      </I18nProvider>,
+    renderWithOmc(
+      <AppDrawer open widthKey="price" title="Edit price" onClose={onClose} footerStart="Applies to new requests" footer={<button type="button">Save</button>}>
+        body
+      </AppDrawer>,
     );
     expect(document.querySelector('.app-drawer-footer-start')?.textContent).toBe('Applies to new requests');
     expect(document.querySelector('.app-drawer-footer-actions button')?.textContent).toBe('Save');
@@ -111,20 +111,43 @@ describe('AppDrawer', () => {
   });
 
   it('keeps showing what it showed while open as it closes, though the caller has cleared it', () => {
-    const view = (record: string | null) => (
-      <I18nProvider>
-        <AppDrawer open={record !== null} title={record} footer={record && <button type="button">Copy {record}</button>}>
+    installOmcApi();
+    let select!: (record: string | null) => void;
+    const Host = () => {
+      const [record, setRecord] = React.useState<string | null>('request 42');
+      select = setRecord;
+      return (
+        <AppDrawer open={record !== null} widthKey="record" title={record} footer={record && <button type="button">Copy {record}</button>}>
           {record && <p>Body of {record}</p>}
         </AppDrawer>
-      </I18nProvider>
-    );
-    const { rerender } = render(view('request 42'));
+      );
+    };
+    renderWithOmc(<Host />);
 
-    rerender(view(null));
+    act(() => select(null));
 
     expect(screen.getByText('Body of request 42')).toBeTruthy();
     expect(document.querySelector('.ant-drawer-title')?.textContent).toBe('request 42');
     expect(document.querySelector('.app-drawer-footer-actions button')?.textContent).toBe('Copy request 42');
+  });
+
+  it('remembers a dragged width per panel within the window\'s bounds, and forgets it on a click', async () => {
+    // jsdom's window is 1024px wide: a medium panel may grow until 248px of the page is left.
+    const omc = installOmcApi({ preferences: { omc_drawer_widths: { audit: 700 } } });
+    renderWithOmc(<AppDrawer open widthKey="price" title="Edit price">body</AppDrawer>);
+    const edge = await screen.findByRole('separator', { name: 'Resize panel' });
+    expect(edge.getAttribute('aria-valuemax')).toBe('776');
+    expect(edge.getAttribute('aria-valuemin')).toBe('360');
+
+    fireEvent.keyDown(edge, { key: 'Home' });
+    await waitFor(() => expect(omc.preferenceWrites()).toEqual([
+      { key: 'omc_drawer_widths', value: { audit: 700, price: 776 } },
+    ]));
+    expect(edge.getAttribute('aria-valuetext')).toBe('Panel width 776 pixels');
+
+    // Enter is the keyboard's click on the edge.
+    fireEvent.keyDown(edge, { key: 'Enter' });
+    await waitFor(() => expect(omc.preferenceWrites().at(-1)).toEqual({ key: 'omc_drawer_widths', value: { audit: 700 } }));
   });
 });
 

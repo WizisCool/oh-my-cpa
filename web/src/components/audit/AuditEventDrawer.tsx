@@ -123,6 +123,7 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
 
   return (
     <AppDrawer
+      widthKey="audit_event"
       title={title}
       open={isOpen}
       onClose={onClose}

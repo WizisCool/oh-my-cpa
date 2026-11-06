@@ -54,6 +54,7 @@ export const KeyDetailDrawer: React.FC<KeyDetailDrawerProps> = ({
 
   return (
     <AppDrawer
+      widthKey="key_detail"
       open={keyId !== null}
       onClose={onClose}
       width="medium"

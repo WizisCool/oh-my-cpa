@@ -139,6 +139,7 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
         </Button>
       </div>
       <AppDrawer
+        widthKey="database_backups"
         open={isOpen}
         width="medium"
         title={

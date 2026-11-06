@@ -66,7 +66,7 @@ import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
 import { requestListTouch } from './probes/requestListTouch.mjs';
 import { oauthWindowWarmup, oauthManagement, oauthVertexImport, oauthModelRules, oauthTokenCapacity, oauthAuthorizationOutcomes, oauthWorkspaceScale, oauthPluginConnections, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
-import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
+import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker, drawerResize } from './probes/providerConsole.mjs';
 import { routePreloading } from './probes/routePreloading.mjs';
 import { systemInformationNarrow, systemInformationPage, systemVersionFeedback, systemHealthAnomalies, systemUpdateIndicator, systemFixtures } from './probes/systemInformation.mjs';
 import { SYSTEM_UPDATER_CONTRACT } from './system-updater-fixture.mjs';
@@ -279,6 +279,18 @@ export const SCENARIOS = [
     run: iconPickerStacking,
   },
   {
+    id: 'drawer-resize',
+    // Frame-by-frame motion needs an uncontended browser; sibling contexts can drop frames.
+    shouldRunAlone: true,
+    name: 'a side panel\'s edge follows the pointer, rubber-bands past its bounds and reopens at its width',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+      ],
+    },
+    run: drawerResize,
+  },
+  {
     id: 'provider-icon-pick',
     name: 'the icon picked for a provider is the mark its row draws',
     options: {
@@ -334,6 +346,8 @@ export const SCENARIOS = [
     // the arrangement editor on top of it: the board, the editor and the stored document are three
     // renderings of one choice that no component test can see agree.
     id: 'dashboard-layout',
+    // Frame-by-frame motion needs an uncontended browser; sibling contexts can drop frames.
+    shouldRunAlone: true,
     name: 'the operator orders, sizes and hides dashboard widgets, and the board keeps the arrangement',
     options: {
       routes: [
@@ -920,6 +934,8 @@ export const SCENARIOS = [
   },
   {
     id: 'routing-board',
+    // Frame-by-frame motion needs an uncontended browser; sibling contexts can drop frames.
+    shouldRunAlone: true,
     name: 'a dragged card opens a tier of its own and the model lens walks the new order',
     options: { routes: routingBoardFixtures() },
     run: routingBoard,
