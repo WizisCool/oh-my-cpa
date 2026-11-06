@@ -606,7 +606,7 @@ export async function drawerResize({ base, page, check }) {
   // Crossing the edge on the way somewhere else is not a visit to it.
   await page.mouse.move(start.left - 80, y);
   await page.mouse.move(start.left + 80, y, { steps: 4 });
-  await pastDeadline(Date.now() + 500);
+  await pastDeadline(500);
   const passed = await read();
   check('crossing the edge in passing draws no grip and keeps the cursor', passed.opacity === 0 && passed.cursor !== 'ew-resize',
     `opacity ${passed.opacity}, cursor ${passed.cursor}`);

@@ -264,7 +264,7 @@ export async function dashboardLayout({ base, page, check }) {
   await cell(third).locator('[data-drag-handle]').dragTo(cell(lead), { targetPosition: { x: 8, y: 40 }, steps: 12 });
   await until(async () => (await order())[0] === third, { label: 'the dragged widget to lead the board' });
   const landed = await cell(third).boundingBox();
-  await pastDeadline(Date.now() + 300);
+  await pastDeadline(300);
   const rested = await cell(third).boundingBox();
   check('with motion on, a dropped widget stays where it landed',
     Math.abs(landed.x - rested.x) < 1 && Math.abs(landed.y - rested.y) < 1, JSON.stringify({ landed, rested }));

@@ -469,8 +469,9 @@ const SortableCell = React.forwardRef<HTMLDivElement, SortableCellProps>(functio
     if (typeof forwardedRef === 'function') forwardedRef(element);
     else if (forwardedRef) forwardedRef.current = element;
   }, [setNodeRef, forwardedRef]);
+  // A widget restored while it fades comes back present, and takes input again.
   React.useEffect(() => {
-    if (!isPresent) node.current?.setAttribute('inert', '');
+    node.current?.toggleAttribute('inert', !isPresent);
   }, [isPresent]);
   // Only the glide's offset is drawn: a reflow that changed the widget's row also changes its size,
   // and scaling the widget to its old size would stretch its content for the length of the glide.

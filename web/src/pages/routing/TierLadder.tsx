@@ -195,15 +195,13 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
     const data = over?.data.current as DropData | undefined;
     if (!current || !over || !data) return;
     if (data.kind === 'gap') {
-      move.arm();
-      onMove(current.key, data);
+      move.during(() => onMove(current.key, data));
       return;
     }
     const tierId = tierOf(current.tiers, current.key);
     if (!tierId) return;
     if (tierId !== current.origin) {
-      move.arm();
-      onMove(current.key, { kind: 'tier', tierId });
+      move.during(() => onMove(current.key, { kind: 'tier', tierId }));
     }
     order.arrange(current.tiers);
   };
@@ -219,8 +217,8 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
   const move = useLocalMove(drawn);
   const arranging: TierLadderProps = {
     ...props,
-    onStep: (key, direction) => { move.arm(); props.onStep(key, direction); },
-    onSplit: (key, side) => { move.arm(); props.onSplit(key, side); },
+    onStep: (key, direction) => move.during(() => props.onStep(key, direction)),
+    onSplit: (key, side) => move.during(() => props.onSplit(key, side)),
   };
   const dragged = drag ? members.get(drag.key) : undefined;
   const isDragging = Boolean(drag);
@@ -367,9 +365,10 @@ function useFold() {
 
 /**
  * Whether the tiers drawn now are the result of a move the operator just made here. A move is armed
- * just before it is handed up, in the same event, so the next render either draws that move or
- * brings none - a move refused or changing nothing. The arm lasts that one render either way: left
- * standing, it would claim the next change that arrived from elsewhere, a reload or an applied plan.
+ * only while it is handed up: the page takes it in the same event, and React draws an update made in
+ * a discrete event before the event's microtasks run, so the render that draws the move still sees
+ * the arm. A move the page refuses renders nothing, and the arm is gone before anything else can
+ * render - left standing, it would claim the next change from elsewhere, a reload or an applied plan.
  */
 function useLocalMove(tiers: readonly RoutingTier[]) {
   const isArmed = React.useRef(false);
@@ -379,7 +378,14 @@ function useLocalMove(tiers: readonly RoutingTier[]) {
     drawnTiers.current = tiers;
     isArmed.current = false;
   });
-  return { isMove, arm: () => { isArmed.current = true; } };
+  return {
+    isMove,
+    during: (handUp: () => void) => {
+      isArmed.current = true;
+      handUp();
+      queueMicrotask(() => { isArmed.current = false; });
+    },
+  };
 }
 
 const TierBand: React.FC<{
