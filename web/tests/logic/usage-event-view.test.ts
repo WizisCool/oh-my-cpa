@@ -12,8 +12,9 @@ import {
   EVENT_FILTER_KEYS,
   hasExplicitEventQuery,
 } from '../../src/types/usageEventQuery.ts';
+import { targetIdentity } from '../../src/components/dashboard/routing/routingIdentity.ts';
 import { EVENT_AUTO_REFRESH_MS } from '../../src/types/usageEventCadence.ts';
-import { pluginMultiPortalKeys, pluginOAuthProviderLogos } from '../../src/types/pluginOAuthProviders.ts';
+import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import {
   DEFAULT_USAGE_EVENTS_VIEW,
   USAGE_EVENTS_VIEW_PREFERENCE,
@@ -117,6 +118,39 @@ test('request provider artwork follows the credential issuing portal', () => {
     'a reused index cannot borrow another provider’s portal');
   assert.equal(resolve(event, indexCredentialFiles([files[1], { ...files[0], auth_index: 'cn' }])).logo, globalLogo,
     'an ambiguous credential index cannot choose either portal');
+});
+
+test('request and live routing names follow the declared issuing portal, with family fallback', () => {
+  const plugins = [{
+    id: 'buddy', supports_oauth: true, enabled: false, metadata: { name: 'Buddy' },
+    oauth_providers: ['workbuddy', 'workbuddy-ai'],
+    oauth_provider_entries: [
+      { identifier: 'workbuddy', name: 'Workbuddy' },
+      { identifier: 'workbuddy-ai', name: 'Workbuddy AI', logo: 'https://cdn.example.test/workbuddy-ai.svg' },
+    ],
+  }];
+  const files = [
+    { name: 'ai.json', auth_index: 'ai', provider: 'workbuddy', type: 'workbuddy', oauth_provider: ' Workbuddy-AI ' },
+    { name: 'legacy.json', auth_index: 'legacy', provider: 'workbuddy', type: 'workbuddy' },
+    { name: 'unknown.json', auth_index: 'unknown', provider: 'workbuddy', type: 'workbuddy', oauth_provider: 'undeclared' },
+  ];
+  const credentials = indexCredentialFiles(files);
+  const pluginTitles = pluginOAuthProviderTitles(plugins);
+  const pluginLogos = pluginOAuthProviderLogos(plugins);
+  const multiPortalKeys = pluginMultiPortalKeys(plugins);
+  const event = { provider: 'workbuddy', auth_type: 'oauth', auth_index: 'ai' } as UsageEvent;
+  const resolve = (record: UsageEvent, portals = multiPortalKeys) =>
+    resolveProviderInfo(record, credentials, {}, [], pluginLogos, false, pluginTitles, portals);
+
+  assert.equal(resolve(event).title, 'Workbuddy AI');
+  assert.equal(resolve(event).logo, 'https://cdn.example.test/workbuddy-ai.svg');
+  assert.equal(resolve({ ...event, auth_type: undefined }).title, 'Workbuddy AI');
+  assert.equal(targetIdentity(event, { credentials, providerIcons: {}, pluginLogos, pluginTitles, multiPortalKeys }).title, 'Workbuddy AI');
+  assert.equal(resolve({ ...event, auth_index: 'legacy' }).title, 'Workbuddy');
+  assert.equal(resolve({ ...event, auth_index: 'unknown' }).title, 'Workbuddy');
+  assert.equal(resolve(event, new Set()).title, 'Workbuddy');
+  assert.equal(resolveProviderInfo(event, credentials, {}, [], pluginLogos, false, undefined, multiPortalKeys).title, 'Codebuddy',
+    'a portal without published naming metadata keeps the credential-family fallback');
 });
 
 test('usage event view', () => {

@@ -312,6 +312,23 @@ test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
   assert.equal(catalogOnly.logo, undefined, 'an unusable mark leaves the catalog mark, never a plugin logo');
 });
 
+test('portal titles stay distinct when their identifiers share a credential-family alias', () => {
+  const titles = pluginOAuthProviderTitles([{
+    id: 'buddy', supports_oauth: true, enabled: false,
+    oauth_providers: ['codebuddy', 'workbuddy', 'workbuddy-ai'],
+    metadata: { name: 'Buddy' },
+    oauth_provider_entries: [
+      { identifier: 'codebuddy', name: 'CodeBuddy' },
+      { identifier: 'workbuddy', name: 'Workbuddy' },
+      { identifier: 'workbuddy-ai', name: 'Workbuddy AI' },
+    ],
+  }]);
+  assert.equal(providerDisplayName('codebuddy', titles), 'CodeBuddy');
+  assert.equal(providerDisplayName(' Workbuddy ', titles), 'Workbuddy');
+  assert.equal(providerDisplayName('workbuddy-ai', titles), 'Workbuddy AI');
+  assert.equal(providerDisplayName('buddy', titles), 'Buddy');
+});
+
 test('credentials keep the name their plugin\'s login card gives the provider', () => {
   const titles = pluginOAuthProviderTitles([
     // Switching a plugin off keeps its credentials, so it keeps naming them.
