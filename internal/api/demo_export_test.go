@@ -438,6 +438,23 @@ func TestExportDemoDataset(t *testing.T) {
 	}
 
 	assertDemoQuotaCapacityExamples(t, normalised, seededAt.UnixMilli())
+	var notices SystemUpdatesDTO
+	var store struct {
+		Plugins []StorePluginItemDTO `json:"plugins"`
+	}
+	if err := json.Unmarshal([]byte(normalised["system-updates"].Body), &notices); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(normalised["plugin-store"].Body), &store); err != nil {
+		t.Fatal(err)
+	}
+	hasPluginUpdate := false
+	for _, plugin := range store.Plugins {
+		hasPluginUpdate = hasPluginUpdate || plugin.Installed && plugin.UpdateAvailable
+	}
+	if !hasPluginUpdate || notices.PluginUpdateAvailable != hasPluginUpdate {
+		t.Fatal("the demo's plugin update reminder must agree with the installed store updates")
+	}
 
 	encoded, err := encodeDemoExport(demoExportResponses{
 		ReferenceMS: seededAt.UnixMilli(),
@@ -986,6 +1003,7 @@ func demoExportRouter(t *testing.T) (http.Handler, time.Time) {
 	)
 	handler.SetPricing(pricingService)
 	handler.SetRelease(releaseService)
+	handler.CheckPluginUpdates(context.Background())
 	// The service log is the fixture's rather than this process's: the export's own
 	// log names loopback ports and runs at the wall clock, so it would differ on
 	// every run and describe the export rather than a deployment.

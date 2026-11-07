@@ -87,8 +87,8 @@ type Handler struct {
 	fontInstaller     *fontasset.GoogleInstaller
 	fontInstallerErr  error
 	fontInstallerOnce sync.Once
-	// pluginIdentities remembers the name and logo each installed plugin is listed under
-	// in the store, for a plugin CPA has not loaded and so reports by id alone.
+	// pluginIdentities remembers installed plugins' store identities and update observations.
+	// Plugins CPA has not loaded borrow their identity from this same snapshot.
 	pluginIdentities *pluginIdentityCache
 	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
 	// the token-activity grid, the dashboard's all-time window, quota reads and the price book's

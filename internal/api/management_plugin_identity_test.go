@@ -38,7 +38,7 @@ func TestPluginIdentityFillsAnUnregisteredPluginFromTheStore(t *testing.T) {
 	cache := newPluginIdentityCache()
 
 	plugins := []management.PluginItem{
-		{ID: "codebuddy", Enabled: false},
+		{ID: "codebuddy", Path: "plugins/codebuddy.so", Enabled: false},
 		{ID: "logger", Registered: true, Logo: "https://example.com/logger.png", Metadata: &management.PluginMetadata{Name: "Logger", Version: "1.0.0"}},
 	}
 	cache.fill(context.Background(), client, plugins)
@@ -58,7 +58,7 @@ func TestPluginIdentityFillsAnUnregisteredPluginFromTheStore(t *testing.T) {
 	}
 
 	// The cache answers the next list without reading the store again.
-	again := []management.PluginItem{{ID: "codebuddy"}}
+	again := []management.PluginItem{{ID: "codebuddy", Path: "plugins/codebuddy.so"}}
 	cache.fill(context.Background(), client, again)
 	if reads.Load() != 1 || again[0].Metadata == nil || again[0].Metadata.Name != "CodeBuddy" {
 		t.Fatalf("second fill: reads = %d, metadata = %#v", reads.Load(), again[0].Metadata)
@@ -91,17 +91,17 @@ func TestPluginIdentityDoesNotReadTheStoreOnEveryPollForAnUnlistedPlugin(t *test
 
 func TestPluginIdentityRemembersTheStorePageAndSkipsCompletePlugins(t *testing.T) {
 	cache := newPluginIdentityCache()
-	cache.remember([]management.StorePluginItem{
+	cache.remember(management.PluginStore{Plugins: []management.StorePluginItem{
 		{ID: "codebuddy", Name: "CodeBuddy (mirror)", Installed: true, InstallSourceStatus: "different"},
 		{ID: "codebuddy", Name: "CodeBuddy", Installed: true, InstallSourceStatus: "matched", Logo: "data:image/png;base64,AAAA"},
 		{ID: "limiter", Name: "Rate Limiter", Installed: false},
-	})
+	}})
 	if _, ok := cache.entries["limiter"]; ok {
 		t.Fatal("a plugin that is not installed was remembered")
 	}
 
 	// No client: a complete list must not need one, and a cached identity must not either.
-	plugins := []management.PluginItem{{ID: "codebuddy"}}
+	plugins := []management.PluginItem{{ID: "codebuddy", Path: "plugins/codebuddy.so"}}
 	cache.fill(context.Background(), nil, plugins)
 	if plugins[0].Metadata == nil || plugins[0].Metadata.Name != "CodeBuddy" {
 		t.Fatalf("metadata = %#v, want the listing CPA installed from", plugins[0].Metadata)
@@ -128,8 +128,8 @@ func TestPluginIdentityRemembersTheStorePageAndSkipsCompletePlugins(t *testing.T
 	} {
 		t.Run(source.name, func(t *testing.T) {
 			cache := newPluginIdentityCache()
-			cache.remember([]management.StorePluginItem{{ID: "catalog-logo", Name: "Catalog name", Installed: source.installed, InstallSourceStatus: source.status, Logo: source.logo}})
-			plugins := []management.PluginItem{{ID: "catalog-logo"}}
+			cache.remember(management.PluginStore{Plugins: []management.StorePluginItem{{ID: "catalog-logo", Name: "Catalog name", Installed: source.installed, InstallSourceStatus: source.status, Logo: source.logo}}})
+			plugins := []management.PluginItem{{ID: "catalog-logo", Path: "plugins/catalog-logo.so"}}
 			cache.fill(context.Background(), nil, plugins)
 			projected := projectPluginItems(plugins, false)[0]
 			if projected.Logo != source.want || projected.Metadata != nil && projected.Metadata.Logo != "" {
@@ -149,14 +149,14 @@ func TestPluginIdentityRetriesWhenTheCachedEntryCannotFillTheGap(t *testing.T) {
 	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	cache.now = func() time.Time { return now }
 	// A listing with a name but no logo: the plugin's missing logo is still an open gap.
-	cache.remember([]management.StorePluginItem{{ID: "limiter", Name: "Rate Limiter", Author: "acme", InstalledVersion: "1.0.0", Installed: true}})
+	cache.remember(management.PluginStore{Plugins: []management.StorePluginItem{{ID: "limiter", Name: "Rate Limiter", Author: "acme", InstalledVersion: "1.0.0", Installed: true}}})
 
-	cache.fill(context.Background(), client, []management.PluginItem{{ID: "limiter"}})
+	cache.fill(context.Background(), client, []management.PluginItem{{ID: "limiter", Path: "plugins/limiter.so"}})
 	if reads.Load() != 0 {
 		t.Fatalf("store reads = %d within the retry interval, want 0", reads.Load())
 	}
 	now = now.Add(pluginIdentityRetryInterval)
-	cache.fill(context.Background(), client, []management.PluginItem{{ID: "limiter"}})
+	cache.fill(context.Background(), client, []management.PluginItem{{ID: "limiter", Path: "plugins/limiter.so"}})
 	if reads.Load() != 1 {
 		t.Fatalf("store reads = %d after the retry interval, want 1: a cached entry without the logo must not end the search", reads.Load())
 	}
@@ -164,13 +164,58 @@ func TestPluginIdentityRetriesWhenTheCachedEntryCannotFillTheGap(t *testing.T) {
 
 func TestPluginIdentityFillsAMissingAuthorAndVersion(t *testing.T) {
 	cache := newPluginIdentityCache()
-	cache.remember([]management.StorePluginItem{{ID: "codebuddy", Name: "CodeBuddy", Author: "tencent", InstalledVersion: "0.2.1", Installed: true, Logo: "data:image/png;base64,AAAA"}})
-	plugins := []management.PluginItem{{ID: "codebuddy", Logo: "https://example.com/own.png", Metadata: &management.PluginMetadata{Name: "CodeBuddy"}}}
+	cache.remember(management.PluginStore{Plugins: []management.StorePluginItem{{ID: "codebuddy", Name: "CodeBuddy", Author: "tencent", InstalledVersion: "0.2.1", Installed: true, Logo: "data:image/png;base64,AAAA"}}})
+	plugins := []management.PluginItem{{ID: "codebuddy", Path: "plugins/codebuddy.so", Logo: "https://example.com/own.png", Metadata: &management.PluginMetadata{Name: "CodeBuddy"}}}
 	cache.fill(context.Background(), nil, plugins)
 	if plugins[0].Metadata.Author != "tencent" || plugins[0].Metadata.Version != "0.2.1" {
 		t.Fatalf("metadata = %#v, want the store's author and version", plugins[0].Metadata)
 	}
 	if plugins[0].Logo != "https://example.com/own.png" {
 		t.Fatalf("logo = %q, want the plugin's own", plugins[0].Logo)
+	}
+}
+
+func TestPluginUpdateObservationsRespectInstalledSource(t *testing.T) {
+	for _, source := range []struct {
+		status     string
+		wantUpdate bool
+	}{
+		{status: "matched", wantUpdate: false},
+		{status: "different", wantUpdate: true},
+	} {
+		t.Run(source.status, func(t *testing.T) {
+			cache := newPluginIdentityCache()
+			cache.remember(management.PluginStore{Plugins: []management.StorePluginItem{
+				{ID: "logger", Name: "Original", SourceID: "official", InstallSourceStatus: "matched", Installed: true, UpdateAvailable: true},
+			}})
+			cache.remember(management.PluginStore{
+				Plugins: []management.StorePluginItem{
+					{ID: "logger", Name: "Replacement", SourceID: "mirror", InstallSourceStatus: source.status, Installed: true},
+				},
+				SourceErrors: []management.PluginStoreSourceError{{SourceID: "official", Message: "unavailable"}},
+			})
+			if got := cache.hasPendingUpdates(); got != source.wantUpdate {
+				t.Fatalf("update reminder = %v, want %v for %s source", got, source.wantUpdate, source.status)
+			}
+		})
+	}
+}
+
+func TestPluginUpdateObservationsDropRemovedCopies(t *testing.T) {
+	for _, plugins := range [][]management.PluginItem{
+		{},
+		{{ID: "logger", Configured: true}},
+	} {
+		cache := newPluginIdentityCache()
+		cache.remember(management.PluginStore{Plugins: []management.StorePluginItem{
+			{ID: "logger", Name: "Logger", SourceID: "official", Installed: true, UpdateAvailable: true},
+		}})
+		cache.fill(context.Background(), nil, plugins)
+		cache.remember(management.PluginStore{SourceErrors: []management.PluginStoreSourceError{
+			{SourceID: "official", Message: "unavailable"},
+		}})
+		if cache.hasPendingUpdates() {
+			t.Fatalf("removed copy still has an update reminder; live plugins = %#v", plugins)
+		}
 	}
 }

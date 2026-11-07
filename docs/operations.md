@@ -68,7 +68,7 @@ a message naming the variable.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OMCPA_UPDATE_CHECK_ENABLED` | `true` | The six-hourly release sweep |
+| `OMCPA_UPDATE_CHECK_ENABLED` | `true` | The background release and plugin-update checks |
 | `OMCPA_UPDATE_CHECK_ON_PAGE_LOAD` | `true` | The check the System Information page makes when opened |
 | `OMCPA_OMC_REPO` / `OMCPA_CPA_REPO` | `WizisCool/oh-my-cpa` / `router-for-me/CLIProxyAPI` | `owner/name` the checks read, for a fork |
 | `OMCPA_DEMO_MODE` | `false` | Serve the console from the built-in fixture; see [Demo mode](#demo-mode) |
@@ -191,6 +191,11 @@ request of its own, so it appears once a sweep or a check has found the release;
 console re-reads that answer hourly. **Ignore this version** on the product's row clears the
 dot for that one release and is remembered by the deployment, not the browser; pressing it
 again restores the reminder, and a later release is flagged regardless.
+
+The background sweep also checks installed plugins through CPA's store, once at startup
+and every six hours. The **Plugin Management** entry uses the same amber dot for available
+plugin updates. The installed-plugins page enables a separate store query after its
+list contains plugins. Installation or removal refreshes the reminder.
 
 The header's GitHub link shows the project's star count, read by the server from the same
 host and held in memory. It costs at most one request an hour: the sweep refreshes it, and

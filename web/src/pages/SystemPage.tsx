@@ -55,7 +55,6 @@ import { DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
 import { StorageFootprint } from './SystemPage/StorageFootprint';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
-import type { SystemUpdatesResponse } from '../types/system';
 import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { AppDrawer } from '../components/common/AppDrawer';
@@ -506,11 +505,9 @@ export const SystemPage: React.FC = () => {
       queryClient.setQueryData<SystemInfoResponse>(['management-system-info'], (previous) => previous ? {
         ...previous, omc_version: outcome.omc_version, cpa_version: outcome.cpa_version,
       } : previous);
-      // The shell's indicator reads the same answers on its own, slower cadence; handing it
-      // this result keeps the navigation from contradicting the card it sits beside.
-      queryClient.setQueryData<SystemUpdatesResponse>(UPDATE_STATUS_QUERY_KEY, {
-        omc_version: outcome.omc_version, cpa_version: outcome.cpa_version,
-      });
+      // Re-read the shared observations so plugin state stays server-owned even if
+      // the shell's initial read failed or has not completed yet.
+      void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
       if (shouldNotify) {
         const summary = summarizeUpdateCheck([outcome.omc_version, outcome.cpa_version], outcome.served_from_cache);
         if (summary.kind === 'failed' || summary.kind === 'partial') {

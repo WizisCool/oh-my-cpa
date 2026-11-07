@@ -301,12 +301,13 @@ export interface SystemUpdaterResponse {
 }
 
 /**
- * Both products' stored version answers, read by the shell for its update indicator.
+ * Stored system and plugin update observations, read by the shell for its indicators.
  *
  * The read never checks: it reports what the background sweep or the page's own check last
  * found, so the shell can ask on every page without spending a feed request.
  */
 export interface SystemUpdatesResponse {
+  plugin_update_available: boolean;
   omc_version: SystemProductVersion;
   cpa_version: SystemProductVersion;
 }

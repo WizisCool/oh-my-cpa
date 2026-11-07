@@ -10,7 +10,7 @@ import (
 )
 
 /**
- * The name and mark an installed plugin is known by, when CPA cannot say.
+ * The last observed identity and update availability of each installed plugin.
  *
  * CPA reports a plugin's metadata - its name, author, version and logo - only once the
  * host has loaded it. A plugin that is installed but disabled, or waiting for a restart,
@@ -43,10 +43,13 @@ const (
 
 // pluginIdentity is what a store listing says about one installed plugin.
 type pluginIdentity struct {
-	Name    string
-	Author  string
-	Version string
-	Logo    string
+	Name            string
+	Author          string
+	Version         string
+	Logo            string
+	HasUpdate       bool
+	SourceID        string
+	IsSourceMatched bool
 }
 
 type pluginIdentityCache struct {
@@ -66,40 +69,109 @@ func newPluginIdentityCache() *pluginIdentityCache {
 // remember records the installed entries of a store listing. Artwork follows the same rule as
 // every other surface, so an installed plugin CPA reports without a mark still gets the one the
 // registry publishes for it.
-func (c *pluginIdentityCache) remember(plugins []management.StorePluginItem) {
+func (c *pluginIdentityCache) remember(store management.PluginStore) {
 	if c == nil {
 		return
 	}
 	next := make(map[string]pluginIdentity)
-	for _, plugin := range plugins {
+	for _, plugin := range store.Plugins {
 		id := strings.TrimSpace(plugin.ID)
 		if id == "" || !plugin.Installed || len(next) >= maxPluginIdentityEntries {
 			continue
 		}
 		identity := pluginIdentity{
-			Name:    strings.TrimSpace(plugin.Name),
-			Author:  strings.TrimSpace(plugin.Author),
-			Version: strings.TrimSpace(plugin.InstalledVersion),
-			Logo:    projectPluginLogo(plugin.Logo),
+			Name:            strings.TrimSpace(plugin.Name),
+			Author:          strings.TrimSpace(plugin.Author),
+			Version:         strings.TrimSpace(plugin.InstalledVersion),
+			Logo:            projectPluginLogo(plugin.Logo),
+			HasUpdate:       plugin.UpdateAvailable,
+			SourceID:        plugin.SourceID,
+			IsSourceMatched: plugin.InstallSourceStatus == "matched",
 		}
 		// Two registries may list the same installed id. The copy CPA says it was installed
 		// from describes the file on disk; otherwise the first listing with a name stands.
-		if existing, ok := next[id]; ok && existing.Name != "" && plugin.InstallSourceStatus != "matched" {
+		if existing, ok := next[id]; ok && existing.Name != "" && !identity.IsSourceMatched {
 			continue
 		}
 		next[id] = identity
 	}
 	c.mu.Lock()
+	// A registry outage does not withdraw the last known update from that source.
+	for _, failure := range store.SourceErrors {
+		if failure.SourceID == "" {
+			continue
+		}
+		for id, entry := range c.entries {
+			if entry.SourceID != failure.SourceID {
+				continue
+			}
+			current, hasCurrent := next[id]
+			if current.IsSourceMatched || !hasCurrent && len(next) >= maxPluginIdentityEntries {
+				continue
+			}
+			next[id] = entry
+		}
+	}
 	c.entries = next
 	c.lastAttempt = c.now()
 	c.mu.Unlock()
+}
+
+// hasPendingUpdates reports the last observed state without reading CPA or a registry.
+func (c *pluginIdentityCache) hasPendingUpdates() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, entry := range c.entries {
+		if entry.HasUpdate {
+			return true
+		}
+	}
+	return false
+}
+
+// forget withdraws an observation after the installed copy changes.
+func (c *pluginIdentityCache) forget(id string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.entries, id)
+}
+
+// retainInstalled uses local files and running registrations as the authority for
+// removal. A registry outage cannot tell an uninstalled copy from an unavailable listing.
+func (c *pluginIdentityCache) retainInstalled(plugins []management.PluginItem) {
+	if c == nil {
+		return
+	}
+	installed := make(map[string]struct{}, len(plugins))
+	for _, plugin := range plugins {
+		if plugin.Path != "" || plugin.Registered {
+			installed[strings.TrimSpace(plugin.ID)] = struct{}{}
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for id := range c.entries {
+		if _, exists := installed[id]; !exists {
+			delete(c.entries, id)
+		}
+	}
 }
 
 // fill completes the identity of every plugin CPA reported without one. It reads the store
 // through the client only when a gap remains that the cache cannot close and the last read
 // is older than the retry interval; a failed read leaves the plugins as they were.
 func (c *pluginIdentityCache) fill(ctx context.Context, client *management.Client, plugins []management.PluginItem) {
-	if c == nil || !c.hasGaps(plugins) {
+	if c == nil {
+		return
+	}
+	c.retainInstalled(plugins)
+	if !c.hasGaps(plugins) {
 		return
 	}
 	if c.hasUnknown(plugins) && client != nil {
@@ -133,7 +205,7 @@ func (c *pluginIdentityCache) refresh(ctx context.Context, client *management.Cl
 		c.mu.Unlock()
 		return
 	}
-	c.remember(store.Plugins)
+	c.remember(store)
 }
 
 // hasGaps reports whether any plugin is missing a name, author, version or logo.
