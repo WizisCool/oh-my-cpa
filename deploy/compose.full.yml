@@ -10,10 +10,10 @@ services:
     expose:
       - "8317"
     volumes:
-      - ${CPA_CONFIG_PATH:-../cpa/config.yaml}:/CLIProxyAPI/config.yaml
-      - ${CPA_AUTH_PATH:-../cpa/auths}:/root/.cli-proxy-api
-      - ${CPA_LOG_PATH:-../cpa/logs}:/CLIProxyAPI/logs
-      - ${CPA_PLUGIN_PATH:-../cpa/plugins}:/CLIProxyAPI/plugins
+      - ${CPA_CONFIG_PATH:-./config.yaml}:/CLIProxyAPI/config.yaml
+      - ${CPA_AUTH_PATH:-./auths}:/root/.cli-proxy-api
+      - ${CPA_LOG_PATH:-./logs}:/CLIProxyAPI/logs
+      - ${CPA_PLUGIN_PATH:-./plugins}:/CLIProxyAPI/plugins
     healthcheck:
       # The CPA image is Debian without wget or curl, so the probe speaks HTTP through
       # bash's /dev/tcp. /healthz needs no management key, unlike the management routes.
@@ -38,7 +38,7 @@ services:
   oh-my-cpa:
     image: ${OMCPA_IMAGE:-wiziscool/oh-my-cpa:latest}
     container_name: ${OMCPA_CONTAINER_NAME:-oh-my-cpa}
-    user: "10001:10001"
+    user: ${OMCPA_USER:-10001:10001}
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -47,24 +47,20 @@ services:
     depends_on:
       cpa:
         condition: service_healthy
-    expose:
-      - "8080"
     environment:
       TZ: ${TZ:-UTC}
-      OMCPA_LISTEN_ADDR: ":8080"
       OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/}
       OMCPA_DATA_DIR: /data
       OMCPA_CPA_BASE_URL: http://cpa:8317
-      OMCPA_CPA_USAGE_ADDR: cpa:8317
       OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?set CPA_MANAGEMENT_KEY}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?set OMCPA_MASTER_KEY}
-      OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:-http://127.0.0.1:8080}
+      OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:-}
       OMCPA_TRUSTED_PROXY_CIDRS: ${OMCPA_TRUSTED_PROXY_CIDRS:-}
       OMCPA_USAGE_INGEST_MODE: ${OMCPA_USAGE_INGEST_MODE:-auto}
       OMCPA_UPDATE_CHECK_ENABLED: ${OMCPA_UPDATE_CHECK_ENABLED:-true}
       OMCPA_UPDATE_CHECK_ON_PAGE_LOAD: ${OMCPA_UPDATE_CHECK_ON_PAGE_LOAD:-true}
     volumes:
-      - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
+      - ${OMCPA_DATA_PATH:-oh-my-cpa-data}:/data
     restart: unless-stopped
     networks:
       - oh-my-cpa
@@ -92,6 +88,9 @@ services:
     restart: unless-stopped
     networks:
       - oh-my-cpa
+
+volumes:
+  oh-my-cpa-data:
 
 networks:
   oh-my-cpa:

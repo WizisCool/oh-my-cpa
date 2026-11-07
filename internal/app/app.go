@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/api"
@@ -71,12 +73,13 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	if cfg.DatabasePath == "" {
 		return nil, errors.New("database path is required")
 	}
+	dataDir := effectiveDataDir(cfg)
 	if err := os.MkdirAll(filepath.Dir(cfg.DatabasePath), 0o700); err != nil {
-		return nil, err
+		return nil, wrapDataDirError(dataDir, err)
 	}
 	lock, err := backup.LockDatabase(cfg.DatabasePath)
 	if err != nil {
-		return nil, err
+		return nil, wrapDataDirError(dataDir, err)
 	}
 	cipher, err := crypto.New(cfg.MasterKey)
 	if err != nil {
@@ -131,8 +134,9 @@ func newResolvedApp(ctx context.Context, cfg config.Config, logger *slog.Logger)
 // and the self-hosted path share it entirely; the only difference between them is
 // where the configuration came from.
 func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, error) {
-	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create data directory: %w", err)
+	dataDir := effectiveDataDir(cfg)
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create data directory: %w", wrapDataDirError(dataDir, err))
 	}
 	if cfg.MasterKey == "" {
 		return nil, errors.New("OMCPA_MASTER_KEY is required")
@@ -168,10 +172,10 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		}
 	}
 	db, err := repository.Open(ctx, cfg.DatabasePath,
-		repository.WithMigrationBackup(cipher, filepath.Join(cfg.DataDir, "backups"), 5),
+		repository.WithMigrationBackup(cipher, filepath.Join(dataDir, "backups"), 5),
 	)
 	if err != nil {
-		return nil, err
+		return nil, wrapDataDirError(dataDir, err)
 	}
 	repo := repository.New(db)
 	if err := repo.LoadTimezone(ctx); err != nil {
@@ -444,6 +448,35 @@ func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler 
 	return pipeline, nil
 }
 
+func effectiveDataDir(cfg config.Config) string {
+	if cfg.DataDir != "" {
+		return cfg.DataDir
+	}
+	return filepath.Dir(cfg.DatabasePath)
+}
+
+func wrapDataDirError(dir string, err error) error {
+	if err != nil && errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("data directory %s is not writable by uid:gid %d:%d: %w", dir, os.Geteuid(), os.Getegid(), err)
+	}
+	return err
+}
+
+func wrapListenError(addr string, err error) error {
+	if err != nil && isAddressInUse(err) {
+		return fmt.Errorf("listen on %s (set OMCPA_LISTEN_ADDR to change the process listen address): %w", addr, err)
+	}
+	return err
+}
+
+func isAddressInUse(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "address already in use") || strings.Contains(message, "only one usage of each socket address")
+}
+
 func (a *App) Handler() http.Handler {
 	return a.handler.Router()
 }
@@ -457,10 +490,14 @@ func (a *App) Run(ctx context.Context) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	listener, err := net.Listen("tcp", a.cfg.ListenAddr)
+	if err != nil {
+		return wrapListenError(a.cfg.ListenAddr, err)
+	}
+	a.logger.Info("HTTP server listening", "addr", listener.Addr().String(), "base_path", a.cfg.BasePath)
 	serverErrors := make(chan error, 1)
 	go func() {
-		a.logger.Info("HTTP server listening", "addr", a.cfg.ListenAddr, "base_path", a.cfg.BasePath)
-		serverErrors <- a.httpServer.ListenAndServe()
+		serverErrors <- a.httpServer.Serve(listener)
 	}()
 
 	// Background loops run under a context this function owns, so every way out -

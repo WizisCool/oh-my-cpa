@@ -108,62 +108,15 @@ password is CPA's management key.
 | Scenario | Method |
 | --- | --- |
 | CPA is not deployed yet | [New install](#new-install) |
-| CPA is deployed with Docker Compose | [CLIProxyAPI is already installed](#cliproxyapi-is-already-installed) |
-| CPA is deployed another way | [Standalone](#standalone) |
+| CPA is already deployed | [CLIProxyAPI is already installed](#cliproxyapi-is-already-installed) |
 
 #### New install
 
-Save the following as `compose.yml` in a new directory:
-
-```yaml
-services:
-  cli-proxy-api:
-    image: eceasy/cli-proxy-api:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8317:8317"
-    environment:
-      MANAGEMENT_PASSWORD: ${CPA_MANAGEMENT_KEY:?}
-    volumes:
-      - ./config.yaml:/CLIProxyAPI/config.yaml
-      - ./auths:/root/.cli-proxy-api
-      - ./logs:/CLIProxyAPI/logs
-      - ./plugins:/CLIProxyAPI/plugins
-
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    depends_on:
-      - cli-proxy-api
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
-```
-
-In that directory, download CPA's starter configuration, generate the two keys and start
-both services:
+Deploys CPA, OMC and the console updater together in a new directory:
 
 ```bash
+mkdir -p oh-my-cpa && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml
 printf 'CPA_MANAGEMENT_KEY=%s\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env
 chmod 600 .env
@@ -176,104 +129,44 @@ to CPA at `http://127.0.0.1:8317`.
 
 #### CLIProxyAPI is already installed
 
-Add the services under `services:` in the Compose file that runs CPA, and merge
-`oh-my-cpa-data:` into the top-level `volumes:` key if one exists. `cli-proxy-api` is
-the service name in CPA's own Compose file; replace it if the service is named
-differently.
+Deploys OMC and the updater beside an existing CPA without modifying or restarting CPA:
 
-```yaml
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
+```bash
+mkdir -p oh-my-cpa && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
+printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+cat >> .env <<'EOF'
+OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key, not the hash in config.yaml>'
+EOF
+chmod 600 .env
 ```
 
-Add two lines to `.env` in the same directory:
+Edit `.env` to replace `<CPA plaintext management key, not the hash in config.yaml>` (keep single quotes if the key contains `$`, escaping any literal `'` as `\'`), set `OMCPA_CPA_BASE_URL` for where CPA runs, and start:
 
-```dotenv
-OMCPA_CPA_MANAGEMENT_KEY=<CPA's management key in plaintext, not the hash in config.yaml>
-OMCPA_MASTER_KEY=<output of: openssl rand -hex 32>
+```bash
+docker compose up -d
 ```
 
-Add the `oh-my-cpa-updater` service from the snippet as well to update from the console.
-Run `docker compose up -d oh-my-cpa oh-my-cpa-updater`, which leaves the CPA container
-running as it is.
+| Where CPA runs | `.env` setting |
+| --- | --- |
+| Same host, listening on all interfaces | `OMCPA_CPA_BASE_URL=http://host.docker.internal:8317` (default above) |
+| Another Docker Compose project | `OMCPA_CPA_BASE_URL=http://<CPA service or container>:8317`, plus `OMCPA_NETWORK_NAME=<CPA network>` and `OMCPA_NETWORK_EXTERNAL=true` (or [add to CPA's Compose file](docs/install.md#add-to-the-existing-compose-file)) |
+| Another machine | `OMCPA_CPA_BASE_URL=https://<CPA host>:8317` (or its private network URL) |
+| Same host, `127.0.0.1` only | Use the [native executable](#install-a-native-executable) |
+
 Open **`http://127.0.0.1:8080/`** and sign in with the management key.
 
-#### Standalone
+Common `.env` adjustments (no `compose.yml` edits needed; run `docker compose up -d` to apply):
 
-Save the following as `compose.yml` in a new directory. `OMCPA_CPA_BASE_URL` is CPA's
-address as seen from inside the container: the value below reaches a CPA on the same
-machine that listens on all interfaces, and [reaching CPA](docs/install.md#reaching-cpa)
-lists the other cases.
-
-```yaml
-services:
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://host.docker.internal:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
-```
-
-Create `.env` in the same directory:
-
-```dotenv
-OMCPA_CPA_MANAGEMENT_KEY=<CPA's management key in plaintext, not the hash in config.yaml>
-OMCPA_MASTER_KEY=<output of: openssl rand -hex 32>
-```
-
-Run `docker compose up -d`, then open **`http://127.0.0.1:8080/`** and sign in with
-the management key.
+| Need | `.env` setting |
+| --- | --- |
+| Port `8080` is already in use | `OMCPA_BIND=127.0.0.1:18317` (changes only the host port; keep container port `8080`) |
+| Store data in `./oh-my-cpa-data` | `OMCPA_DATA_PATH=./oh-my-cpa-data` and `OMCPA_USER=<host uid:gid>` (for example `1000:1000`, after `mkdir -p -m 700 ./oh-my-cpa-data`; set before first start, as changing `OMCPA_DATA_PATH` later opens a new empty directory without moving existing volume data—see [SQLite operations](docs/ops/sqlite-operations.md)) |
+| Serve behind an HTTPS reverse proxy | Proxy to `127.0.0.1:8080` (for example Caddy `reverse_proxy 127.0.0.1:8080`; UI and API share one port) and set `OMCPA_PUBLIC_URL=https://...` |
 
 ### Updating
 
-With the `oh-my-cpa-updater` service in place, **System Information** in the console shows
+With `oh-my-cpa-updater` in place, **System Information** in the console shows
 **Update now** beside a newer release of Oh My CPA or CLIProxyAPI. The updater pulls the
 image, replaces the container with its settings, volumes and networks unchanged, and
 restores the previous container if the new one does not start.
@@ -305,15 +198,14 @@ for configuration, permissions and upgrades.
 > Back up `.env`. `OMCPA_MASTER_KEY` encrypts the database, and the data cannot be read
 > without it.
 
-`oh-my-cpa-updater` mounts the Docker socket, which amounts to control of Docker on that
-host. Console updates are turned off by deleting the service from the Compose file and
-removing its running container with `docker rm -f oh-my-cpa-updater`; Compose leaves a
-container whose service was deleted running. Updates are then applied with
-`docker compose pull && docker compose up -d`.
+`oh-my-cpa-updater` is the only container that mounts `/var/run/docker.sock`, which
+amounts to control of Docker on that host; `oh-my-cpa` itself stays non-root and
+read-only. Console updates are turned off by deleting `oh-my-cpa-updater` from
+`compose.yml` and removing its running container with `docker rm -f oh-my-cpa-updater`.
+Updates are then applied with `docker compose pull && docker compose up -d`.
 
-The [installation guide](docs/install.md) covers the hardened Compose files published
-with each release, remote access, HTTPS, building from source, upgrades and
-troubleshooting.
+The [installation guide](docs/install.md) covers remote access, HTTPS, host bind-mount
+permissions, building from source, upgrades and troubleshooting.
 
 ## Features
 
@@ -446,8 +338,12 @@ trusted agents and serve the console over HTTPS before connecting one remotely.
 | `OMCPA_CPA_BASE_URL` | required | CPA's address |
 | `OMCPA_CPA_MANAGEMENT_KEY` | required | CPA's management key, and the console's sign-in password |
 | `OMCPA_MASTER_KEY` | required | At-rest encryption key (`openssl rand -hex 32`) |
+| `OMCPA_BIND` | `127.0.0.1:8080` | Docker host address mapped to the console |
+| `OMCPA_LISTEN_ADDR` | `:8080` | Process listen address (for native installs) |
+| `OMCPA_DATA_PATH` | `oh-my-cpa-data` | Docker volume name or host directory path |
+| `OMCPA_USER` | `10001:10001` | Container `uid:gid` |
+| `OMCPA_DATA_DIR` | `./data` | Directory of the SQLite database (`/data` in the container image) |
 | `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root |
-| `OMCPA_DATA_DIR` | `./data` | Directory of the SQLite database; the Compose files set `/data` |
 | `OMCPA_PUBLIC_URL` | unset | The address browsers use; `https://` marks the session cookie `Secure` |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | Ingest mode (`auto`, `subscribe`, `resp_pull`, `http_pull`, or `off`) |
 | `OMCPA_USAGE_RETENTION_DAYS` | `90` | Days request records are kept, `0` for all; OMC Settings → Data retention overrides it. Dashboard statistics are permanent |
