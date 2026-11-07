@@ -1,5 +1,7 @@
-# Dependencies
-node_modules/
+# Dependencies. No trailing slash: a symlink named `node_modules`, which a review or agent
+# worktree uses to borrow another checkout's install, is not a directory and slipped past the
+# directory-only pattern once, taking a dangling link to CI.
+node_modules
 .pnpm-store/
 
 # Generated from @lobehub/icons-static-svg by scripts/sync-lobe-icons.mjs. A build that is
