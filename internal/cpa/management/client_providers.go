@@ -331,10 +331,8 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 	return snapshot, nil
 }
 
-// Two waves of credential reads are enough to enrich small installations without a
-// per-account network cost on larger ones; one credential is one unit of that
-// budget, whatever it costs to describe. Unknown membership remains explicitly
-// partial.
+// Two waves are enough to enrich small installations without a per-account
+// network cost on larger ones; unknown membership remains explicitly partial.
 const MODEL_PROVENANCE_READ_LIMIT = 8
 
 // ListConfiguredModelProvenance bounds credential lookups for read-only enrichment.
@@ -428,7 +426,10 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 					continue
 				}
 				needsModels := len(file.Models) == 0
-				needsAliases := !file.RuntimeOnly && file.Name != ""
+				// Credential aliases are read only for the catalog that replaces persisted
+				// membership. The bounded provenance read enriches a display and would
+				// otherwise spend its budget on a credential file per page load.
+				needsAliases := maxModelReads < 0 && !file.RuntimeOnly && file.Name != ""
 				// A reported list is membership the gateway already answered for, so it
 				// survives a budget that has no room for the optional alias read.
 				if !needsModels {

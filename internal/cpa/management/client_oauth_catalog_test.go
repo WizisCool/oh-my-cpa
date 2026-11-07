@@ -161,7 +161,7 @@ func TestOAuthCatalogKeepsReportedModelsWhenTheReadBudgetIsSpent(t *testing.T) {
 	// exhausted enrichment budget may drop the optional alias read but never the
 	// models themselves.
 	files := []AuthFile{}
-	for index := range MODEL_PROVENANCE_READ_LIMIT {
+	for index := range MODEL_PROVENANCE_READ_LIMIT + 1 {
 		files = append(files, AuthFile{Name: fmt.Sprintf("scale-%d.json", index), Provider: "grok"})
 	}
 	files = append(files, AuthFile{Name: "inline.json", Provider: "grok", Models: []AuthModel{{ID: "inline-model"}}})
