@@ -57,6 +57,9 @@ func TestOAuthAliasCatalogLocksUpstreamPrices(t *testing.T) {
 						models = append(models, map[string]string{"id": OAUTH_UPSTREAM_MODEL})
 					}
 					_ = json.NewEncoder(writer).Encode(map[string]any{"models": models})
+				case request.URL.Path == "/v8/management/credentials/download":
+					// The credential states no aliases of its own, so only the provider's rule applies.
+					_, _ = writer.Write([]byte(`{"name":"antigravity.json"}`))
 				case request.URL.Path == "/v0/management/openai-compatibility":
 					_, _ = writer.Write([]byte(`{"openai-compatibility":[]}`))
 				case request.URL.Path == "/v8/management/config/oauth/model-alias":

@@ -271,6 +271,19 @@ type ConfiguredModelProvider struct {
 	ExcludedModels []string
 }
 
+// configuredModelFamily names the family a credential belongs to: CPA's own
+// provider label when the gateway reports one, else its type.
+func configuredModelFamily(file AuthFile) string {
+	family := strings.ToLower(strings.TrimSpace(file.Provider))
+	if family == "" {
+		family = strings.ToLower(strings.TrimSpace(file.Type))
+	}
+	if family == "" {
+		family = "unknown"
+	}
+	return family
+}
+
 // ListPricingModelIDs includes the upstreams OAuth usage records are billed under,
 // without adding those hidden names to the provider's client-visible Models.
 func (provider ConfiguredModelProvider) ListPricingModelIDs() []string {
@@ -385,21 +398,26 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 			if file.Disabled {
 				continue
 			}
-			var aliasErr error
-			aliases, aliasErr = c.OAuthModelAliases(ctx)
+			stored, aliasErr := c.OAuthModelAliases(ctx)
 			if aliasErr != nil {
 				errs = append(errs, fmt.Errorf("oauth model aliases: %w", aliasErr))
+			} else {
+				aliases = stored
 			}
 			hasOAuthAliases = aliasErr == nil
 			break
 		}
-		oauthAliases = aliases
 		// Credential membership can vary with account tier and routing rules, so a
 		// fetched list only describes that credential, never its entire family.
 		resolved := make([][]AuthModel, len(authResp.Files))
+		credentialRules := make([][]OAuthModelAlias, len(authResp.Files))
 		failures := make([]error, len(authResp.Files))
-		modelReads := 0
-		hasSkippedModels := false
+		aliasFailures := make([]error, len(authResp.Files))
+		reads := 0
+		hasSkippedReads := false
+		exhausted := func() bool {
+			return ctx.Err() != nil || (maxModelReads >= 0 && reads >= maxModelReads)
+		}
 		for start := 0; start < len(authResp.Files); start += 4 {
 			var wg sync.WaitGroup
 			for i := start; i < min(start+4, len(authResp.Files)); i++ {
@@ -407,57 +425,93 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 				if file.Disabled {
 					continue
 				}
-				if len(file.Models) > 0 {
+				needsModels := len(file.Models) == 0
+				// Credential aliases are read only for the catalog that replaces persisted
+				// membership. The bounded provenance read enriches a display and would
+				// otherwise spend its budget on a credential file per page load.
+				needsAliases := maxModelReads < 0 && !file.RuntimeOnly && file.Name != ""
+				// A reported list is membership the gateway already answered for, so it
+				// survives a budget that has no room for the optional alias read.
+				if !needsModels {
 					resolved[i] = file.Models
+				}
+				if !needsModels && !needsAliases {
 					continue
 				}
-				if file.Name == "" {
+				if needsModels && file.Name == "" {
 					failures[i] = errors.New("auth file is missing its model identity")
 					continue
 				}
-				if ctx.Err() != nil || (maxModelReads >= 0 && modelReads >= maxModelReads) {
-					hasSkippedModels = true
+				// One credential is one unit of the read budget, however many reads it
+				// takes to describe it.
+				if exhausted() {
+					hasSkippedReads = true
 					continue
 				}
-				modelReads++
+				reads++
+				if needsModels {
+					wg.Add(1)
+					go func(i int, name string) {
+						defer wg.Done()
+						models, err := c.AuthFileModels(ctx, name)
+						if err != nil {
+							// Named here rather than at the aggregate, because this is the only
+							// place the file the failure belongs to is still in hand.
+							failures[i] = fmt.Errorf("auth-file %q models: %w", name, err)
+							return
+						}
+						resolved[i] = models
+					}(i, file.Name)
+				}
+				// A credential's own aliases are resolved before its provider's, and
+				// they exist only in the credential file. A credential that cannot be
+				// read is a failed source: publishing without it would prune the hidden
+				// upstream and its rate, so the snapshot is refused instead.
+				if !needsAliases {
+					continue
+				}
 				wg.Add(1)
 				go func(i int, name string) {
 					defer wg.Done()
-					models, err := c.AuthFileModels(ctx, name)
+					rules, err := c.CredentialModelAliases(ctx, name)
 					if err != nil {
-						// Named here rather than at the aggregate, because this is the only
-						// place the file the failure belongs to is still in hand.
-						failures[i] = fmt.Errorf("auth-file %q models: %w", name, err)
+						aliasFailures[i] = fmt.Errorf("auth-file %q model aliases: %w", name, err)
 						return
 					}
-					resolved[i] = models
+					credentialRules[i] = rules
 				}(i, file.Name)
 			}
 			wg.Wait()
 		}
-		if hasSkippedModels {
+		if hasSkippedReads {
+			// A skipped read leaves route provenance unknown, which is what the
+			// partial snapshot reports. The pricing catalog never reaches this: its
+			// exhaustive read has no budget and only cancels.
 			if err := ctx.Err(); err != nil {
 				errs = append(errs, err)
 			} else {
-				errs = append(errs, errors.New("credential model discovery limit reached"))
+				errs = append(errs, errors.New("credential discovery limit reached"))
 			}
 		}
+		oauthAliases = aliases
 		for i, models := range resolved {
 			if failures[i] != nil {
 				errs = append(errs, failures[i])
 				continue
 			}
+			if aliasFailures[i] != nil {
+				errs = append(errs, aliasFailures[i])
+				continue
+			}
 			file := authResp.Files[i]
-			family := strings.ToLower(strings.TrimSpace(file.Provider))
-			if family == "" {
-				family = strings.ToLower(strings.TrimSpace(file.Type))
-			}
-			if family == "" {
-				family = "unknown"
-			}
+			family := configuredModelFamily(file)
 			if file.Disabled {
 				continue
 			}
+			// Credential rules lead the provider's list because CPA resolves them first,
+			// and they stay this credential's own: a rule another credential of the
+			// family stores must not retarget this one's call point.
+			rules := append(slices.Clone(credentialRules[i]), aliases[family]...)
 			identities := make([]string, 0, len(models))
 			routes := make([]ConfiguredModelRoute, 0, len(models))
 			for _, model := range models {
@@ -466,7 +520,7 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 					continue
 				}
 				target := callPoint
-				for _, alias := range aliases[family] {
+				for _, alias := range rules {
 					if strings.EqualFold(alias.Alias, callPoint) {
 						target = alias.Name
 						break

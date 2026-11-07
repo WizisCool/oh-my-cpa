@@ -2,7 +2,9 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -315,27 +317,57 @@ func sanitizeOAuthModelAliases(stored map[string][]OAuthModelAlias) map[string][
 		if provider == "" || out[provider] != nil {
 			continue
 		}
-		seen := map[string]bool{}
-		var clean []OAuthModelAlias
-		for _, entry := range stored[rawProvider] {
-			name, alias := strings.TrimSpace(entry.Name), strings.TrimSpace(entry.Alias)
-			if name == "" || alias == "" || strings.EqualFold(name, alias) || seen[strings.ToLower(alias)] {
-				continue
-			}
-			seen[strings.ToLower(alias)] = true
-			clean = append(clean, OAuthModelAlias{
-				Name:         name,
-				Alias:        alias,
-				Fork:         entry.Fork,
-				DisplayName:  strings.TrimSpace(entry.DisplayName),
-				ForceMapping: entry.ForceMapping, OpenAPI: entry.OpenAPI,
-			})
-		}
-		if len(clean) > 0 {
+		if clean := sanitizeOAuthModelAliasList(stored[rawProvider]); len(clean) > 0 {
 			out[provider] = clean
 		}
 	}
 	return out
+}
+
+// sanitizeOAuthModelAliasList applies that same cleanup to one alias list, which
+// is the shape a single credential stores.
+func sanitizeOAuthModelAliasList(entries []OAuthModelAlias) []OAuthModelAlias {
+	seen := map[string]bool{}
+	var clean []OAuthModelAlias
+	for _, entry := range entries {
+		name, alias := strings.TrimSpace(entry.Name), strings.TrimSpace(entry.Alias)
+		if name == "" || alias == "" || strings.EqualFold(name, alias) || seen[strings.ToLower(alias)] {
+			continue
+		}
+		seen[strings.ToLower(alias)] = true
+		clean = append(clean, OAuthModelAlias{
+			Name:         name,
+			Alias:        alias,
+			Fork:         entry.Fork,
+			DisplayName:  strings.TrimSpace(entry.DisplayName),
+			ForceMapping: entry.ForceMapping, OpenAPI: entry.OpenAPI,
+		})
+	}
+	return clean
+}
+
+// CredentialModelAliases reads the aliases CPA resolves for one credential
+// before its provider's rules. They exist only in the credential file: the
+// management list does not project them, and no endpoint answers for them. The
+// file is downloaded for this read alone, so only the alias metadata is decoded
+// and the credential's own material is dropped with the buffer.
+func (c *Client) CredentialModelAliases(ctx context.Context, name string) ([]OAuthModelAlias, error) {
+	data, _, err := c.DownloadAuthFile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		for i := range data {
+			data[i] = 0
+		}
+	}()
+	var document struct {
+		ModelAliases []OAuthModelAlias `json:"model_aliases"`
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		return nil, fmt.Errorf("decode credential model aliases: %w", err)
+	}
+	return sanitizeOAuthModelAliasList(document.ModelAliases), nil
 }
 
 // PatchOAuthModelAliases replaces one provider's alias list, and removes the
