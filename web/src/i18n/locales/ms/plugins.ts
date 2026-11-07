@@ -80,7 +80,7 @@ export default {
   "plugin.check_updates_none": "Semua pemalam yang dipasang adalah terkini",
   "plugin.check_updates_failed": "Tidak dapat membaca kedai pemalam untuk menyemak kemas kini",
   "plugin.update_to": "Kemas kini ke {version}",
-  "plugin.update_label": "Kemas kini {name}",
+  "plugin.update_label_to": "Kemas kini {name} ke {version}",
   "plugin.manage": "Urus",
   "plugin.install_title": "Pasang “{name}”",
   "plugin.update_title": "Kemas kini “{name}”",

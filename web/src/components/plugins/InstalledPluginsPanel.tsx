@@ -288,7 +288,7 @@ export function InstalledPluginsPanel({
                             icon={<UpgradeOutlined />}
                             disabled={isDemo || isDeleting || isStoreInstallBlocked(listing) !== undefined}
                             onClick={() => setUpdating(listing)}
-                            aria-label={t('plugin.update_label', { name })}
+                            aria-label={t('plugin.update_label_to', { name, version: formatPluginVersion(listing.version) })}
                             data-testid="plugin-row-update"
                           >
                             {t('plugin.update_to', { version: formatPluginVersion(listing.version) })}

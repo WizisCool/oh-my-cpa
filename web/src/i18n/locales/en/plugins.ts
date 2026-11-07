@@ -80,7 +80,7 @@ export default {
   'plugin.check_updates_none': 'All installed plugins are up to date',
   'plugin.check_updates_failed': 'Could not read the plugin store to check for updates',
   'plugin.update_to': 'Update to {version}',
-  'plugin.update_label': 'Update {name}',
+  'plugin.update_label_to': 'Update {name} to {version}',
   'plugin.manage': 'Manage',
   'plugin.install_title': 'Install “{name}”',
   'plugin.update_title': 'Update “{name}”',

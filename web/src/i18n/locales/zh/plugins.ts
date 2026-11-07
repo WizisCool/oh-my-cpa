@@ -77,7 +77,7 @@ export default {
   'plugin.check_updates_none': '已安装的插件均为最新版本',
   'plugin.check_updates_failed': '无法读取插件商店，未能检查更新',
   'plugin.update_to': '更新至 {version}',
-  'plugin.update_label': '更新 {name}',
+  'plugin.update_label_to': '更新 {name} 至 {version}',
   'plugin.manage': '管理',
   'plugin.install_title': '安装「{name}」',
   'plugin.update_title': '更新「{name}」',

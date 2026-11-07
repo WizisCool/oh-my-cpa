@@ -80,7 +80,7 @@ export default {
   "plugin.check_updates_none": "已安裝的外掛皆為最新版本",
   "plugin.check_updates_failed": "無法讀取外掛商店，未能檢查更新",
   "plugin.update_to": "更新至 {version}",
-  "plugin.update_label": "更新 {name}",
+  "plugin.update_label_to": "更新 {name} 至 {version}",
   "plugin.manage": "管理",
   "plugin.install_title": "安裝「{name}」",
   "plugin.update_title": "更新「{name}」",
