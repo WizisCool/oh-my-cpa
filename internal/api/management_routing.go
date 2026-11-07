@@ -34,6 +34,7 @@ type routingMemberDTO struct {
 	Kind          string             `json:"kind"`
 	ID            string             `json:"id"`
 	Family        string             `json:"family"`
+	OAuthProvider string             `json:"oauth_provider,omitempty"`
 	Name          string             `json:"name"`
 	Prefix        string             `json:"prefix,omitempty"`
 	Priority      int                `json:"priority"`
@@ -106,7 +107,7 @@ func projectRoutingBoard(board operations.RoutingBoard) routingBoardDTO {
 			weights = append(weights, routingWeightDTO{Index: weight.Index, AuthIndex: weight.AuthIndex, Weight: weight.Weight})
 		}
 		dto.Members = append(dto.Members, routingMemberDTO{
-			Key: member.Key, Kind: member.Kind, ID: member.ID, Family: member.Family, Name: member.Name,
+			Key: member.Key, Kind: member.Kind, ID: member.ID, Family: member.Family, OAuthProvider: member.OAuthProvider, Name: member.Name,
 			Prefix: member.Prefix, Priority: member.Priority, Weights: weights, KeyCount: member.KeyCount,
 			IsDisabled: member.IsDisabled, IsUnavailable: member.IsUnavailable, IsRuntimeOnly: member.IsRuntimeOnly,
 		})
@@ -210,9 +211,10 @@ func (h *Handler) readRoutingBoard(ctx context.Context, client *management.Clien
 			}
 			members = append(members, operations.RoutingMember{
 				Key: operations.RoutingKey(operations.ROUTING_MEMBER_CREDENTIAL, file.Name), Kind: operations.ROUTING_MEMBER_CREDENTIAL,
-				ID:     file.Name,
-				Family: strings.ToLower(firstNonEmpty(file.Provider, file.Type)),
-				Name:   boundedText(firstNonEmpty(displayNames[file.Name], file.Label, file.Name), managementAuthFileFieldLimit),
+				ID:            file.Name,
+				Family:        strings.ToLower(firstNonEmpty(file.Provider, file.Type)),
+				OAuthProvider: projectOAuthEntryIdentifier(file.OAuthProvider),
+				Name:          boundedText(firstNonEmpty(displayNames[file.Name], file.Label, file.Name), managementAuthFileFieldLimit),
 				// CPA reports no priority as absent, which it runs as 0.
 				Priority:      file.Priority,
 				Weights:       []operations.RoutingWeight{{Index: 0, AuthIndex: file.AuthIndex, Weight: file.Weight}},

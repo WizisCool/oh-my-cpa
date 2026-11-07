@@ -32,6 +32,8 @@ export interface RoutingMember {
   kind: RoutingMemberKind;
   id: string;
   family: string;
+  /** The login portal that issued this credential; separate from its routing family. */
+  oauth_provider?: string;
   name: string;
   prefix?: string;
   priority: number;

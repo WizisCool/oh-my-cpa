@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../types/providerIcons';
-import { usePluginOAuthLogos, usePluginOAuthTitles } from './usePluginOAuthLogos';
+import { usePluginOAuthLogos, usePluginOAuthTitles, usePluginMultiPortalKeys } from './usePluginOAuthLogos';
 
 const selectIcons = (preferences: Record<string, unknown>) => parseProviderIcons(preferences[PROVIDER_ICONS_PREFERENCE]);
 
@@ -22,6 +22,7 @@ export function useProviderBranding() {
   const { data: providerIcons = EMPTY_PROVIDER_ICONS } = useQuery({ queryKey: ['preferences'], queryFn: api.getPreferences, select: selectIcons, staleTime: Infinity, meta: { silent: true } });
   const pluginLogos = usePluginOAuthLogos();
   const pluginTitles = usePluginOAuthTitles();
+  const multiPortalKeys = usePluginMultiPortalKeys();
   // Positional ids can have moved in the editor since another route read the catalog.
   const providers = useQuery({ queryKey: ['management-providers-sanitized'], queryFn: () => api.getManagementProviders(false), staleTime: 0 });
   const { data, isFetching, isError, refetch } = providers;
@@ -31,10 +32,11 @@ export function useProviderBranding() {
     providerIcons,
     pluginLogos,
     pluginTitles,
+    multiPortalKeys,
     providersByID,
     configuredProviders: data?.providers,
     isProviderCatalogUnproven,
     isProviderCatalogUnknown: isProviderCatalogUnproven || isFetching,
     refetchProviders: refetch,
-  }), [providerIcons, pluginLogos, pluginTitles, providersByID, data, isProviderCatalogUnproven, isFetching, refetch]);
+  }), [providerIcons, pluginLogos, pluginTitles, multiPortalKeys, providersByID, data, isProviderCatalogUnproven, isFetching, refetch]);
 }

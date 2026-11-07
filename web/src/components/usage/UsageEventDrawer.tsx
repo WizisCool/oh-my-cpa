@@ -72,6 +72,7 @@ export interface UsageEventDrawerProps {
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos?: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   pluginTitles?: ReadonlyMap<string, string>;
   isProviderCatalogUnknown?: boolean;
 }
@@ -85,6 +86,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   providerIcons,
   configuredProviders,
   pluginLogos,
+  multiPortalKeys,
   pluginTitles,
   isProviderCatalogUnknown,
 }) => {
@@ -152,7 +154,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     />
   );
   const providerInfo = event
-    ? resolveProviderInfo(event, credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown, pluginTitles)
+    ? resolveProviderInfo(event, credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown, pluginTitles, multiPortalKeys)
     : undefined;
   // The overview names the credential the way the list's provider cell does: an OAuth account,
   // else the provider key that answered, else whatever identifies the credential at all.

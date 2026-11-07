@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import {
   pluginOAuthProviderLogos,
   pluginOAuthProviderTitles,
+  pluginMultiPortalKeys,
   pluginOwnsProvider,
   type PluginOAuthLogos,
 } from '../types/pluginOAuthProviders';
@@ -34,6 +35,11 @@ export function usePluginOAuthTitles(): ReadonlyMap<string, string> {
   });
 
   return useMemo(() => pluginOAuthProviderTitles(data?.plugins), [data]);
+}
+
+export function usePluginMultiPortalKeys(): ReadonlySet<string> {
+  const { data } = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000 });
+  return useMemo(() => pluginMultiPortalKeys(data?.plugins), [data]);
 }
 
 export function usePluginProviderOwnership(providerKeys: readonly (string | undefined)[], isEnabled: boolean) {

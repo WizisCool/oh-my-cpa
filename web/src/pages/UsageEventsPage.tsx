@@ -331,6 +331,7 @@ export const UsageEventsPage: React.FC = () => {
   const {
     providerIcons,
     pluginLogos,
+    multiPortalKeys,
     pluginTitles,
     configuredProviders,
     isProviderCatalogUnproven,
@@ -345,8 +346,8 @@ export const UsageEventsPage: React.FC = () => {
   // Records resolve by runtime credential index, not a projected positional id.
   // A routine catalog refetch does not withdraw an identity already resolved.
   const renderFacetMark = React.useMemo(
-    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown: isProviderCatalogUnproven }),
-    [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnproven],
+    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, isProviderCatalogUnknown: isProviderCatalogUnproven }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, isProviderCatalogUnproven],
   );
 
   /**
@@ -717,6 +718,7 @@ export const UsageEventsPage: React.FC = () => {
                     providerIcons={providerIcons}
                     configuredProviders={configuredProviders}
                     pluginLogos={pluginLogos}
+                    multiPortalKeys={multiPortalKeys}
                     pluginTitles={pluginTitles}
                     isProviderCatalogUnknown={isProviderCatalogUnproven}
                     onOpen={setSelected}
@@ -762,6 +764,7 @@ export const UsageEventsPage: React.FC = () => {
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
         pluginLogos={pluginLogos}
+        multiPortalKeys={multiPortalKeys}
         pluginTitles={pluginTitles}
         isProviderCatalogUnknown={isProviderCatalogUnproven}
       />
@@ -774,6 +777,7 @@ export const UsageEventsPage: React.FC = () => {
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
         pluginLogos={pluginLogos}
+        multiPortalKeys={multiPortalKeys}
         pluginTitles={pluginTitles}
         isProviderUnproven={isProviderCatalogUnproven}
         onRetryProviders={() => void refetchProviders()}

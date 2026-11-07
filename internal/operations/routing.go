@@ -56,13 +56,14 @@ type RoutingWeight struct {
 }
 
 type RoutingMember struct {
-	Key      string `json:"key"`
-	Kind     string `json:"kind"`
-	ID       string `json:"id"`
-	Family   string `json:"family"`
-	Name     string `json:"name"`
-	Prefix   string `json:"prefix,omitempty"`
-	Priority int    `json:"priority"`
+	Key           string `json:"key"`
+	Kind          string `json:"kind"`
+	ID            string `json:"id"`
+	Family        string `json:"family"`
+	OAuthProvider string `json:"oauth_provider,omitempty"`
+	Name          string `json:"name"`
+	Prefix        string `json:"prefix,omitempty"`
+	Priority      int    `json:"priority"`
 	// Weights holds one entry per key whose weight can be edited.
 	Weights []RoutingWeight `json:"weights"`
 	// KeyCount is every key the member schedules, including keys in a legacy

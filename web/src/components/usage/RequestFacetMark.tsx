@@ -19,6 +19,7 @@ export interface FacetMarkSources {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   /** An option's mark is only a placeholder until the provider catalog read settles. */
   isProviderCatalogUnknown?: boolean;
 }
@@ -44,6 +45,8 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
       sources.configuredProviders,
       sources.pluginLogos,
       sources.isProviderCatalogUnknown,
+      undefined,
+      sources.multiPortalKeys,
     );
     return <ProviderBrandIcon mark={provider} size={MARK_SIZE} />;
   };

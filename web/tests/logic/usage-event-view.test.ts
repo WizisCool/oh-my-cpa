@@ -13,6 +13,7 @@ import {
   hasExplicitEventQuery,
 } from '../../src/types/usageEventQuery.ts';
 import { EVENT_AUTO_REFRESH_MS } from '../../src/types/usageEventCadence.ts';
+import { pluginMultiPortalKeys, pluginOAuthProviderLogos } from '../../src/types/pluginOAuthProviders.ts';
 import {
   DEFAULT_USAGE_EVENTS_VIEW,
   USAGE_EVENTS_VIEW_PREFERENCE,
@@ -84,6 +85,39 @@ import { cacheScaleMix, formatCacheRate, MAX_CACHE_RATE } from '../../src/theme/
 import { DURATION_SCALE_MAX_MS, durationScaleMix, durationScalePosition } from '../../src/theme/durationScale.ts';
 import { twoStopMix } from '../../src/theme/twoStopMix.ts';
 import { test } from 'vitest';
+
+test('request provider artwork follows the credential issuing portal', () => {
+  const globalLogo = 'https://cdn.example.test/qoder.svg';
+  const cnLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22qoder-cn%22/%3E';
+  const plugins = [{
+    id: 'omc-qoder-oauth', supports_oauth: true, enabled: false,
+    oauth_providers: ['qoder', 'qoder-cn'], logo: globalLogo,
+    oauth_provider_entries: [{ identifier: 'qoder-cn', name: 'Qoder CN', logo: cnLogo }],
+  }];
+  const pluginLogos = pluginOAuthProviderLogos(plugins);
+  const multiPortalKeys = pluginMultiPortalKeys(plugins);
+  const files = [
+    { name: 'global.json', auth_index: 'global', provider: 'qoder', type: 'qoder', oauth_provider: 'qoder' },
+    { name: 'cn.json', auth_index: 'cn', provider: 'qoder', type: 'qoder', oauth_provider: ' Qoder-CN ' },
+    { name: 'legacy.json', auth_index: 'legacy', provider: 'qoder', type: 'qoder' },
+  ];
+  const credentials = indexCredentialFiles(files);
+  const event = { provider: 'qoder', auth_type: 'oauth', auth_index: 'cn' } as UsageEvent;
+  const resolve = (record: UsageEvent, index = credentials, portals = multiPortalKeys) =>
+    resolveProviderInfo(record, index, {}, [], pluginLogos, false, undefined, portals);
+
+  assert.equal(resolve(event).logo, cnLogo);
+  assert.equal(resolve({ ...event, auth_index: 'global' }).logo, globalLogo);
+  assert.equal(resolve({ ...event, auth_index: 'legacy' }).logo, globalLogo);
+  assert.equal(resolve(event, credentials, new Set()).logo, globalLogo);
+  assert.equal(resolve(event, indexCredentialFiles([{ ...files[1], oauth_provider: 'undeclared' }])).logo, globalLogo);
+  assert.equal(resolve({ ...event, auth_type: undefined }).logo, cnLogo,
+    'credential facets retain the portal without an event auth type or account address');
+  assert.equal(resolve({ ...event, provider: 'unrelated' }).logo, undefined,
+    'a reused index cannot borrow another provider’s portal');
+  assert.equal(resolve(event, indexCredentialFiles([files[1], { ...files[0], auth_index: 'cn' }])).logo, globalLogo,
+    'an ambiguous credential index cannot choose either portal');
+});
 
 test('usage event view', () => {
   const read = (input: string) => readEventQuery(new URLSearchParams(input));

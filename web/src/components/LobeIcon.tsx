@@ -35,8 +35,14 @@ export function ProviderMark({ provider, sources, ...props }: Omit<ProviderBrand
   return <ProviderBrandIcon mark={resolveProviderMark(provider, sources)} {...props} />;
 }
 
-export function CredentialMark({ provider, hint, pluginLogos, ...props }: Omit<ProviderBrandIconProps, 'mark'> & { provider: string; hint?: string; pluginLogos?: ProviderBrandSources['pluginLogos'] }) {
-  return <ProviderBrandIcon mark={resolveCredentialMark(provider, hint, pluginLogos)} {...props} />;
+export function CredentialMark({ provider, hint, pluginLogos, oauthProvider, multiPortalKeys, ...props }: Omit<ProviderBrandIconProps, 'mark'> & {
+  provider: string;
+  hint?: string;
+  pluginLogos?: ProviderBrandSources['pluginLogos'];
+  oauthProvider?: string;
+  multiPortalKeys?: ReadonlySet<string>;
+}) {
+  return <ProviderBrandIcon mark={resolveCredentialMark(provider, hint, pluginLogos, { oauthProvider, multiPortalKeys })} {...props} />;
 }
 
 function PluginAwareBrandIcon(props: ProviderBrandIconProps) {

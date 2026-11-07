@@ -51,6 +51,7 @@ export interface RequestRowProps {
   configuredProviders?: ProviderLookupEntry[];
   /** Logos published by installed plugins, keyed by the OAuth provider they register. */
   pluginLogos?: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   /** Titles plugins give the OAuth providers they register. */
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
@@ -70,6 +71,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     providerIcons = {},
     configuredProviders = [],
     pluginLogos = {},
+    multiPortalKeys,
     pluginTitles,
     isProviderCatalogUnknown = false,
     onOpen,
@@ -114,6 +116,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       pluginLogos,
       isProviderCatalogUnknown,
       pluginTitles,
+      multiPortalKeys,
     );
 
     // Which of the provider's keys answered this request. The server resolves it

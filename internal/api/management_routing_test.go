@@ -171,6 +171,43 @@ func readRoutingBoardReply(t *testing.T, client *http.Client, baseURL string) ro
 	return board
 }
 
+func TestRoutingBoardPreservesCredentialOAuthPortalIdentity(t *testing.T) {
+	fixture := newRoutingFixtureCPA()
+	fixture.files = []map[string]any{
+		{"name": "qoder-global.json", "provider": "qoder", "oauth_provider": "Qoder"},
+		{"name": "qoder-cn.json", "provider": "qoder", "oauth_provider": " Qoder-CN "},
+		{"name": "qoder-legacy.json", "provider": "qoder"},
+		{"name": "qoder-invalid.json", "provider": "qoder", "oauth_provider": "bad/portal"},
+	}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/routing")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("board status = %d body %s", response.StatusCode, payload)
+	}
+	var board struct {
+		Members []map[string]any `json:"members"`
+	}
+	if err := json.Unmarshal(payload, &board); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"qoder-global.json": "qoder", "qoder-cn.json": "qoder-cn"}
+	for _, member := range board.Members {
+		id, _ := member["id"].(string)
+		portal, hasPortal := member["oauth_provider"]
+		if expected, ok := want[id]; ok {
+			if member["family"] != "qoder" || portal != expected {
+				t.Fatalf("credential %q lost its family or portal: %+v", id, member)
+			}
+			delete(want, id)
+		} else if hasPortal {
+			t.Fatalf("member %q must omit an absent or invalid portal: %+v", id, member)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing credentials: %v", want)
+	}
+}
+
 func patchRoutingPlan(t *testing.T, client *http.Client, baseURL string, plan map[string]any) (*http.Response, []byte) {
 	t.Helper()
 	body, err := json.Marshal(plan)

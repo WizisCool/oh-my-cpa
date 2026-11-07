@@ -32,6 +32,7 @@ export interface ProviderBrandIdentity {
 export interface ProviderBrandSources {
   providerIcons?: Record<string, string>;
   pluginLogos?: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   /** Titles plugins give the OAuth providers they register, as `providerDisplayName` reads them. */
   pluginTitles?: ReadonlyMap<string, string>;
   providersByID?: ReadonlyMap<string, ProviderBrandIdentity>;
@@ -95,8 +96,17 @@ export function resolveRecordedProviderMark(providerKey: string, displayName: st
 }
 
 /** An account label is a hint, not a provider-instance id on which to apply an override. */
-export function resolveCredentialMark(provider: string, hint?: string, pluginLogos?: PluginOAuthLogos, aliases: readonly string[] = []): BrandMark & { iconId: string } {
-  const providerKeys = [provider, ...aliases];
+export function resolveCredentialMark(provider: string, hint?: string, pluginLogos?: PluginOAuthLogos, options: {
+  aliases?: readonly string[];
+  oauthProvider?: string;
+  multiPortalKeys?: ReadonlySet<string>;
+} = {}): BrandMark & { iconId: string } {
+  // A declared issuing portal selects its own logo; the credential family remains the fallback.
+  const portal = (options.oauthProvider ?? '').trim().toLowerCase();
+  const providerKeys = [
+    ...(portal !== provider && options.multiPortalKeys?.has(portal) ? [portal] : []),
+    provider, ...(options.aliases ?? []),
+  ];
   const iconId = credentialProviderIconId(provider, hint);
   return { iconId, fallbackIconId: iconId, logo: resolveLogo(providerKeys, pluginLogos), providerKeys };
 }
