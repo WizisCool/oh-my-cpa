@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -43,7 +45,12 @@ type pluginMockState struct {
 	nativeReads           int
 	handler               *Handler
 	// hasBareInstall lists a second plugin that is installed but has no settings.
-	hasBareInstall bool
+	hasBareInstall   bool
+	storeResponse    string
+	pluginsResponse  string
+	storeReads       int
+	storeUnavailable bool
+	storeFailureBody string
 }
 
 type pluginRouteCall struct {
@@ -147,6 +154,10 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			state.routeCalls = append(state.routeCalls, pluginRouteCall{method: request.Method, path: path})
 			_, _ = writer.Write([]byte(`{"secret":"raw-core-document"}`))
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
+			if state.pluginsResponse != "" {
+				_, _ = writer.Write([]byte(state.pluginsResponse))
+				return
+			}
 			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","oauth_providers":["logger-oauth"," Logger-Secondary ","logger-oauth","bad/path"],"oauth_provider_entries":[{"identifier":" LOGGER-Oauth ","name":"Logger Portal","logo":"https://example.com/portal.png"},{"identifier":"logger-secondary"},{"identifier":"logger-oauth","name":"Duplicate","logo":"https://example.com/other.png"},{"identifier":"bad/path","name":"Bad","logo":"https://example.com/bad.png"}],"supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level","default":"info"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
 			if state.hasBareInstall {
 				list = strings.Replace(list, `"plugins":[`, `"plugins":[{"id":"installed","path":"/srv/cpa/plugins/installed.so","registered":true},`, 1)
@@ -199,6 +210,16 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			state.deleted = id
 			_, _ = writer.Write([]byte(`{"status":"deleted","id":"` + id + `","path":"/srv/cpa/plugins/logger.so","file_deleted":true,"configured_removed":true,"restart_required":false}`))
 		case path == "/v8/management/plugins/store" && request.Method == http.MethodGet:
+			state.storeReads++
+			if state.storeUnavailable {
+				writer.WriteHeader(http.StatusBadGateway)
+				_, _ = writer.Write([]byte(state.storeFailureBody))
+				return
+			}
+			if state.storeResponse != "" {
+				_, _ = writer.Write([]byte(state.storeResponse))
+				return
+			}
 			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"plugins","sources":[{"id":"official","name":"official","url":"https://registry.example/plugins.json"},{"id":"source-abc","name":"mirror.example","url":"https://mirror.example/registry.json"}],"source_errors":[{"source_id":"source-def","source_name":"down.example","source_url":"https://down.example/r.json","message":"fetch registry: 503"}],"plugins":[{"store_id":"official/limiter","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"limiter","name":"Rate Limiter","description":"Token buckets","author":"router-for-me","version":"1.2.0","repository":"router-for-me/limiter","install_type":"github_release","auth_required":false,"auth_configured":false,"platforms":[{"goos":"linux","goarch":"amd64"}],"logo":"https://cdn.example/limiter.png","homepage":"javascript:alert(1)","license":"MIT","tags":["network","limits"],"locales":{"zh-CN":{"name":"限流器 &amp; 保护","description":"&lt;b&gt;限制请求&lt;/b&gt;","author":"发布者 &#39;名字&#39;","homepage":"https://limiter.example/zh?a=1&amp;b=2","license":"许可 &quot;MIT&quot;","tags":["网络 &amp; 限流","&amp;lt;tag&amp;gt;"],"repository":"https://evil.example/repo","source_id":"evil","auth_configured":true,"token":"must-not-leak"},"zh-Hant":{"description":"限制請求","homepage":"java&#115;cript:alert(1)"}},"installed":false,"installed_version":"","path":"","configured":false,"registered":false,"enabled":false,"effective_enabled":false,"update_available":false},{"store_id":"official/deepseek-search","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"deepseek-search","name":"DeepSeek Search","author":"karuboniru","version":"0.1.0","repository":"karuboniru/deepseek-search","install_type":"github_release","installed":false},{"store_id":"source-abc/limiter","source_id":"source-abc","source_name":"mirror.example","source_url":"https://mirror.example/registry.json","id":"limiter","name":"Rate Limiter","author":"someone","version":"1.2.0","repository":"router-for-me/limiter","homepage":"https://limiter.example","installed":false}]}`))
 		case strings.HasPrefix(path, "/v8/management/plugins/store/") && strings.HasSuffix(path, "/install"):
 			parts := strings.Split(path, "/")
@@ -845,5 +866,114 @@ func TestProjectStorePluginLocalesAreBounded(t *testing.T) {
 	projected = projectStorePlugin(management.StorePluginItem{Locales: locales}).Locales
 	if len(projected) != pluginListLimit || projected["en-x-000"].Name != "Name" || projected["en-x-064"].Name != "" {
 		t.Fatalf("locale map is not deterministically bounded: %#v", projected)
+	}
+}
+
+func TestPluginUpdateReminderUsesTheObservedStore(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+	readReminder := func(want bool) {
+		t.Helper()
+		state.mu.Lock()
+		reads := state.storeReads
+		state.mu.Unlock()
+		resp, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/system/updates", "")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("reminder status = %d: %s", resp.StatusCode, body)
+		}
+		var response map[string]any
+		if err := json.Unmarshal(body, &response); err != nil {
+			t.Fatal(err)
+		}
+		if response["plugin_update_available"] != want {
+			t.Fatalf("plugin update reminder = %#v, want %v", response["plugin_update_available"], want)
+		}
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		if state.storeReads != reads {
+			t.Fatal("reading the reminder fetched the plugin store")
+		}
+	}
+	readReminder(false)
+	state.handler.pluginIdentities.remember(management.PluginStore{Plugins: []management.StorePluginItem{
+		{ID: "logger", Name: "Logger", Installed: true, UpdateAvailable: true, InstallSourceStatus: "matched"},
+		{ID: "logger", Name: "Other registry", Installed: true, InstallSourceStatus: "different"},
+	}})
+	readReminder(true)
+	state.handler.pluginIdentities.remember(management.PluginStore{Plugins: []management.StorePluginItem{
+		{ID: "logger", Name: "Logger", Installed: true},
+		{ID: "available", UpdateAvailable: true},
+	}})
+	readReminder(false)
+
+	state.mu.Lock()
+	state.storeResponse = `{"plugins":[{"id":"logger","name":"Logger","source_id":"official","installed":true,"update_available":true,"installed_version":"1.0.0","version":"1.2.0"}]}`
+	writesBefore := state.configPuts
+	state.mu.Unlock()
+	state.handler.CheckPluginUpdates(context.Background())
+	readReminder(true)
+	state.mu.Lock()
+	storeReads, configWrites := state.storeReads, state.configPuts
+	state.storeUnavailable = true
+	state.storeFailureBody = `{"error":"registry unavailable","message":"Bearer synthetic-registry-secret"}`
+	state.mu.Unlock()
+	if storeReads != 1 || configWrites != writesBefore {
+		t.Fatalf("background check: store reads = %d, config writes = %d, want 1 and %d", storeReads, configWrites, writesBefore)
+	}
+	var logs bytes.Buffer
+	state.handler.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	state.handler.CheckPluginUpdates(context.Background())
+	if !strings.Contains(logs.String(), "plugin update check failed") || !strings.Contains(logs.String(), "CPA returned HTTP 502") {
+		t.Fatal("background failure log must retain the operation and upstream status")
+	}
+	if strings.Contains(logs.String(), "synthetic-registry-secret") {
+		t.Fatal("background failure log exposed an upstream credential")
+	}
+	readReminder(true)
+	state.mu.Lock()
+	state.storeUnavailable = false
+	state.storeResponse = `{"plugins":[{"id":"logger","name":"Mirror","source_id":"mirror","installed":true,"update_available":false,"install_source_status":"different"}],"source_errors":[{"source_id":"official","message":"unavailable"}]}`
+	state.mu.Unlock()
+	state.handler.CheckPluginUpdates(context.Background())
+	readReminder(true)
+
+	state.mu.Lock()
+	state.storeResponse = `{"plugins":[{"id":"logger","name":"Replacement","source_id":"mirror","installed":true,"update_available":false,"install_source_status":"matched"}],"source_errors":[{"source_id":"official","message":"unavailable"}]}`
+	state.mu.Unlock()
+	state.handler.CheckPluginUpdates(context.Background())
+	readReminder(false)
+
+	state.handler.pluginIdentities.remember(management.PluginStore{Plugins: []management.StorePluginItem{
+		{ID: "logger", Name: "Logger", SourceID: "official", Installed: true, UpdateAvailable: true},
+	}})
+	state.mu.Lock()
+	state.pluginsResponse = `{"plugins":[]}`
+	state.storeUnavailable = true
+	state.mu.Unlock()
+	state.handler.CheckPluginUpdates(context.Background())
+	readReminder(false)
+
+	state.mu.Lock()
+	state.pluginsResponse = ""
+	state.storeUnavailable = false
+	state.storeResponse = `{"plugins":[{"id":"logger","name":"Logger","installed":true,"update_available":false}]}`
+	state.mu.Unlock()
+	resp, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/plugin-store", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("store read: %d %s", resp.StatusCode, body)
+	}
+	readReminder(false)
+
+	for _, action := range []struct{ method, path, body string }{
+		{http.MethodPost, "/management/plugin-store/logger/install", `{}`},
+		{http.MethodDelete, "/management/plugins/logger", ""},
+	} {
+		state.handler.pluginIdentities.remember(management.PluginStore{Plugins: []management.StorePluginItem{
+			{ID: "logger", Installed: true, UpdateAvailable: true},
+		}})
+		resp, body := doJSON(t, client, action.method, baseURL+"/omc/api/v1"+action.path, action.body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: %d %s", action.path, resp.StatusCode, body)
+		}
+		readReminder(false)
 	}
 }

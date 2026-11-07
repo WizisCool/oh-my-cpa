@@ -542,7 +542,7 @@ func TestZeroOutboundRequestsInDemoMode(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := service.Run(ctx, time.Hour); err != nil {
+	if err := service.Run(ctx, time.Hour, func(context.Context) { t.Error("a cancelled sweep ran its companion") }); err != nil {
 		t.Fatalf("sweep loop returned %v on a cancelled context", err)
 	}
 	if stub.callCount() != 0 {
@@ -1264,5 +1264,35 @@ func TestSuccessfulEmptyFeedEstablishesNoReleases(t *testing.T) {
 	}
 	if status.Comparison.Why != ReasonNoReleases || status.CheckedAtMS == nil || status.CheckError != "" {
 		t.Fatalf("expected a successfully observed empty feed: %+v", status)
+	}
+}
+
+func TestSweepRunsCompanionObservationAfterReleaseFailures(t *testing.T) {
+	service, stub := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusBadGateway)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	if err := service.Run(ctx, time.Nanosecond, func(ctx context.Context) {
+		calls++
+		if ctx.Err() != nil {
+			t.Error("companion ran after cancellation")
+		}
+		if calls == 1 {
+			if stub.callCount() != 0 {
+				t.Error("startup companion waited for the external release sweep")
+			}
+			return
+		}
+		if stub.callCount() == 0 {
+			t.Error("periodic companion ran without the release sweep")
+		}
+		cancel()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("companion checks = %d, want startup plus one sweep", calls)
 	}
 }

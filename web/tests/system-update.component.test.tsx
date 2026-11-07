@@ -4,6 +4,7 @@ import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup, UPDATER_INSTALL_COMMAND } from '../src/pages/SystemPage/UpdateControls';
 import { UPDATER_QUERY_KEY, useConsoleUpdate, type UpdateOutcome } from '../src/pages/SystemPage/useConsoleUpdate';
+import { UPDATE_STATUS_REFRESH_MS, usePendingUpdates } from '../src/hooks/useUpdateNotice';
 import { deriveUpdateOffer } from '../src/pages/SystemPage/versionPresentation';
 import type { SystemProductVersion } from '../src/types/system';
 import { createSystemUpdaterFixture, SYSTEM_UPDATER_CONTRACT } from '../../scripts/acceptance/system-updater-fixture.mjs';
@@ -99,4 +100,35 @@ it('offers the install command only to a deployment that can use it', async () =
   expect(setup.textContent).toContain(UPDATER_INSTALL_COMMAND);
   expect(screen.queryByTestId('sys-apply-update')).toBeNull();
   absent.close();
+});
+
+it('automatically refreshes plugin update observations on the shared notice interval', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  try {
+    const server = installOmcApi();
+    let hasPluginUpdate = false;
+    server.on('GET', '/management/system/updates', () => ({
+      omc_version: { ...VERSION, state: 'up_to_date' },
+      cpa_version: { ...VERSION, product: 'cpa', state: 'up_to_date' },
+      plugin_update_available: hasPluginUpdate,
+    }));
+    function Reminders() {
+      const { hasPluginUpdate: hasUpdate } = usePendingUpdates();
+      return <output data-testid="plugin-update-notice">{String(hasUpdate)}</output>;
+    }
+    const surface = renderWithOmc(<Reminders />);
+    await waitFor(() => expect(server.requests.filter(request => request.path === '/management/system/updates')).toHaveLength(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByTestId('plugin-update-notice').textContent).toBe('false');
+    hasPluginUpdate = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(UPDATE_STATUS_REFRESH_MS); });
+    await waitFor(() => expect(screen.getByTestId('plugin-update-notice').textContent).toBe('true'));
+    hasPluginUpdate = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(UPDATE_STATUS_REFRESH_MS); });
+    await waitFor(() => expect(screen.getByTestId('plugin-update-notice').textContent).toBe('false'));
+    expect(server.requests.every(request => request.method === 'GET')).toBe(true);
+    surface.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });

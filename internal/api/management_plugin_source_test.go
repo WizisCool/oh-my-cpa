@@ -152,6 +152,8 @@ func (f *managedSourceCPA) serve(writer http.ResponseWriter, request *http.Reque
 		}
 		f.sources = append([]string(nil), settings.StoreSources...)
 		_, _ = writer.Write([]byte(`{"status":"ok"}`))
+	case request.Method == http.MethodGet && path == "/plugins":
+		_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"plugins","plugins":[]}`))
 	case request.Method == http.MethodGet && path == "/plugins/store":
 		f.reads++
 		sources := []map[string]any{{

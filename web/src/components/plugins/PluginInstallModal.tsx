@@ -11,6 +11,7 @@ import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { Notice } from '../feedback';
 import { AppModal } from '../common/AppModal';
+import { UPDATE_STATUS_QUERY_KEY } from '../../hooks/useUpdateNotice';
 
 interface PluginInstallModalProps {
   entry: StorePluginItem | null;
@@ -64,6 +65,7 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
       }
       void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
       void queryClient.invalidateQueries({ queryKey: ['management-plugin-store'] });
+      void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
       onClose();
     },
     onError: (err: unknown) => {

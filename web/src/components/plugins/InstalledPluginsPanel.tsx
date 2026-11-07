@@ -21,7 +21,7 @@ import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
-import { ToolButton } from '../common/ToolButton';
+import { UPDATE_STATUS_QUERY_KEY } from '../../hooks/useUpdateNotice';
 
 const INSTALLED_STATE_LABELS: Record<InstalledStateFilter, MessageKey> = {
   all: 'plugin.filter_all',
@@ -92,8 +92,7 @@ export function InstalledPluginsPanel({
     stopped: plugins.filter((plugin) => matchesInstalledState(plugin, 'stopped')).length,
   }), [plugins]);
 
-  // The store is read on request rather than with the list: CPA fetches every registry to
-  // answer it, which is slow and rate limited. The outcome is a toast; the rows carry the result.
+  // Manual checks report their outcome; automatic checks only update the rows and navigation.
   const checkUpdates = async () => {
     const listings = await onCheckUpdates();
     if (!listings) {
@@ -108,6 +107,7 @@ export function InstalledPluginsPanel({
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
     void queryClient.invalidateQueries({ queryKey: ['management-plugin-store'] });
+    void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
   };
 
   const enabledMutation = useMutation({
@@ -169,7 +169,16 @@ export function InstalledPluginsPanel({
 
   return (
     <div data-plugin-panel="installed">
-      <Toolbar>
+      <Toolbar end={(
+        <Button
+          icon={<PackageSearchOutlined />}
+          loading={isCheckingUpdates}
+          onClick={() => void checkUpdates()}
+          data-testid="plugin-check-updates"
+        >
+          {t('plugin.check_updates')}
+        </Button>
+      )}>
         <SearchInput
           className={styles.search}
           value={query}
@@ -185,13 +194,6 @@ export function InstalledPluginsPanel({
             value,
             label: `${t(INSTALLED_STATE_LABELS[value])} ${stateCounts[value]}`,
           }))}
-        />
-        <ToolButton
-          icon={<PackageSearchOutlined />}
-          label={t('plugin.check_updates')}
-          loading={isCheckingUpdates}
-          onClick={() => void checkUpdates()}
-          data-testid="plugin-check-updates"
         />
       </Toolbar>
 

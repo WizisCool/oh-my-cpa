@@ -869,11 +869,14 @@ const CheckFloor = 15 * time.Minute
 // the sweep itself - two products twice a day is eight requests.
 const SweepInterval = 6 * time.Hour
 
-// Run sweeps until the context ends.
+// Run observes the companion at startup and after each release sweep.
 //
-// The first sweep is delayed rather than run at start-up so that a restart loop
-// cannot turn into a request loop against a rate-limited endpoint.
-func (s *Service) Run(ctx context.Context, interval time.Duration) error {
+// The companion uses upstream-owned caches. Direct release-feed checks are delayed
+// until the first interval so restarting OMC cannot repeatedly spend their budget.
+func (s *Service) Run(ctx context.Context, interval time.Duration, observeCompanion func(context.Context)) error {
+	if observeCompanion != nil && ctx.Err() == nil {
+		observeCompanion(ctx)
+	}
 	if interval <= 0 {
 		interval = SweepInterval
 	}
@@ -885,6 +888,9 @@ func (s *Service) Run(ctx context.Context, interval time.Duration) error {
 			return nil
 		case <-timer.C:
 			s.CheckAll(ctx)
+			if observeCompanion != nil && ctx.Err() == nil {
+				observeCompanion(ctx)
+			}
 			timer.Reset(interval)
 		}
 	}

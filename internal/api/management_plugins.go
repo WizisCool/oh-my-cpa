@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -288,6 +290,8 @@ func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request
 		return
 	}
 
+	h.pluginIdentities.forget(pluginID)
+
 	_ = h.recordAudit(request, "plugin.delete", "plugin", target, "success", map[string]any{
 		"file_deleted":       result.FileDeleted,
 		"configured_removed": result.ConfiguredRemoved,
@@ -321,21 +325,11 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	store, err := client.PluginStore(request.Context())
+	store, err := h.readPluginStore(request.Context(), client, isOMCSourceEnabled)
 	if err != nil {
 		writePluginFacadeError(writer, err)
 		return
 	}
-	if !isOMCSourceEnabled {
-		// A demonstration cannot write its fixture, so its fixed catalogue still
-		// lists the registry after the switch is turned off; the response withholds it
-		// instead. A deployment does not reach this with entries to drop: the
-		// reconciliation either removed the source before CPA was read or failed the
-		// read.
-		dropOMCPluginSource(&store)
-	}
-
-	h.pluginIdentities.remember(store.Plugins)
 
 	projected := projectStorePlugins(store.Plugins, h.cfg.IsDemoMode)
 	writeJSON(writer, http.StatusOK, map[string]any{
@@ -420,6 +414,8 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 
+	h.pluginIdentities.forget(pluginID)
+
 	_ = h.recordAudit(request, "plugin.install", "plugin_store", target, "success", map[string]any{"version": boundedText(result.Version, 128)})
 
 	writeJSON(writer, http.StatusOK, map[string]any{
@@ -430,4 +426,51 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 		"plugins_enabled":  result.PluginsEnabled,
 		"restart_required": result.RestartRequired,
 	})
+}
+
+// CheckPluginUpdates observes CPA's store on the shared release-check schedule.
+// It only reads: source reconciliation remains an audited, request-owned operation.
+func (h *Handler) CheckPluginUpdates(ctx context.Context) {
+	if err := h.observePluginUpdates(ctx); err != nil && ctx.Err() == nil {
+		h.logger.Warn("plugin update check failed", "error", security.RedactText(err.Error()))
+	}
+}
+
+func (h *Handler) observePluginUpdates(ctx context.Context) error {
+	instance, err := h.repo.GetInstance(ctx, defaultInstanceID())
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	client, err := h.clientForInstance(ctx, instance)
+	if err != nil {
+		return err
+	}
+	isSourceEnabled, err := h.pluginSourceEnabled(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = h.readPluginStore(ctx, client, isSourceEnabled)
+	return err
+}
+
+// readPluginStore shares manual and scheduled observation. The installed list is
+// read first so removal stays authoritative even when registry reads fail.
+func (h *Handler) readPluginStore(ctx context.Context, client *management.Client, isSourceEnabled bool) (management.PluginStore, error) {
+	list, err := client.PluginList(ctx)
+	if err != nil {
+		return management.PluginStore{}, err
+	}
+	h.pluginIdentities.retainInstalled(list.Plugins)
+	store, err := client.PluginStore(ctx)
+	if err != nil {
+		return management.PluginStore{}, err
+	}
+	if !isSourceEnabled {
+		dropOMCPluginSource(&store)
+	}
+	h.pluginIdentities.remember(store)
+	return store, nil
 }

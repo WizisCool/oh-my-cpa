@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button, Segmented } from 'antd';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { UPDATE_STATUS_QUERY_KEY } from '../hooks/useUpdateNotice';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useT } from '../i18n';
@@ -44,12 +45,12 @@ function isPluginTab(value: string | null): value is PluginTab {
  * `/plugins/settings`), so the navigation can list the store beside the installed plugins
  * and either can be linked to; `?plugin=<id>` opens that plugin's settings.
  *
- * The store is only read once its tab is opened: reading it makes CPA fetch every
- * registry, which is slow and rate limited, and the installed list must not wait on it.
- * Once read, it also supplies the descriptions and links the installed list shows.
+ * Store metadata and update availability load independently of the installed list,
+ * so a slow registry does not delay the plugins themselves.
  */
 export const PluginsPage: React.FC = () => {
   const t = useT();
+  const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,7 +67,6 @@ export const PluginsPage: React.FC = () => {
     navigate(`${TAB_PATHS[isPluginTab(legacyTab) ? legacyTab : 'installed']}${query ? `?${query}` : ''}`, { replace: true });
   }, [legacyTab, navigate, searchParams]);
 
-  const [hasVisitedStore, setHasVisitedStore] = React.useState(tab === 'store');
   const [configuring, setConfiguring] = React.useState<PluginItem | null>(null);
 
   const pluginsQuery = useQuery({
@@ -75,14 +75,14 @@ export const PluginsPage: React.FC = () => {
     staleTime: 15000,
   });
 
-  React.useEffect(() => {
-    if (tab === 'store') setHasVisitedStore(true);
-  }, [tab]);
-
   const storeQuery = useQuery({
     queryKey: ['management-plugin-store'],
-    queryFn: api.getPluginStore,
-    enabled: hasVisitedStore,
+    queryFn: async () => {
+      const store = await api.getPluginStore();
+      void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+      return store;
+    },
+    enabled: tab === 'store' || (tab === 'installed' && !!pluginsQuery.data?.plugins.length),
     staleTime: 5 * 60_000,
   });
 
@@ -111,9 +111,7 @@ export const PluginsPage: React.FC = () => {
     // every render and is deliberately not a trigger.
   }, [requestedPlugin, pluginsQuery.data]);
 
-  // Checking for updates is reading the store; it stays read for this visit once asked.
   const checkUpdates = async () => {
-    setHasVisitedStore(true);
     const result = await storeQuery.refetch();
     return result.isSuccess ? storeListingsByPluginId(result.data.plugins) : null;
   };

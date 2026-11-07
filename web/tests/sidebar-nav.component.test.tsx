@@ -6,6 +6,7 @@ import { AppLayout } from '../src/components/common/AppLayout';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { SidebarNavSettings } from '../src/components/settings/SidebarNavSettings';
 import { buildNavGroups } from '../src/components/common/navigation';
+import { UPDATE_STATUS_QUERY_KEY } from '../src/hooks/useUpdateNotice';
 import { LOCKED_NAV_KEYS, applyNavOrder, retainVisibleGroups } from '../src/types/sidebarNav';
 
 let api: OmcApi;
@@ -107,4 +108,33 @@ describe('desktop sidebar preference', () => {
     await act(async () => { read.release(); });
     await waitFor(() => expect((screen.getByRole('button', { name: 'Expand sidebar' }) as HTMLButtonElement).disabled).toBe(false));
   });
+});
+
+it('keeps plugin and system update reminders independent as observations change', async () => {
+  api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
+  let hasPluginUpdate = true;
+  api.on('GET', '/management/system/updates', () => ({
+    omc_version: { product: 'omc', state: 'update_available', latest_version: 'v1.1.0' },
+    cpa_version: { product: 'cpa', state: 'up_to_date' },
+    plugin_update_available: hasPluginUpdate,
+  }));
+  const surface = renderWithOmc(<ThemeProvider><AppLayout /></ThemeProvider>, { route: '/dashboard', isStrict: true });
+  const dot = (route: string) => surface.container.querySelector(`[data-route-path="${route}"] [data-testid="nav-update-dot"]`);
+  await waitFor(() => {
+    expect(dot('/system')).not.toBeNull();
+    expect(dot('/plugins')).not.toBeNull();
+  });
+  expect(dot('/plugins/store')).toBeNull();
+
+  hasPluginUpdate = false;
+  await act(async () => { await surface.client.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY }); });
+  await waitFor(() => expect(dot('/plugins')).toBeNull());
+  expect(dot('/system')).not.toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+  await screen.findByRole('button', { name: 'Expand sidebar' });
+  hasPluginUpdate = true;
+  await act(async () => { await surface.client.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY }); });
+  await waitFor(() => expect(dot('/plugins')).not.toBeNull());
+  expect(dot('/system')).not.toBeNull();
 });

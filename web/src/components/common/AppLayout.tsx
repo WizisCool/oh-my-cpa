@@ -57,9 +57,6 @@ function routeViewKey(pathname: string): string {
   return pathname === '/plugins' || pathname.startsWith('/plugins/') ? '/plugins' : pathname;
 }
 
-/** The page that answers "is there a newer version", and so the entry an available update marks. */
-const UPDATE_NOTICE_ROUTE = '/system';
-
 /**
  * The entry's icon with the update dot on its corner.
  *
@@ -75,8 +72,8 @@ function flagIcon(icon: React.ReactNode): React.ReactNode {
   );
 }
 
-function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: boolean, hasPendingUpdate: boolean): NavItem[] {
-  const isFlagged = (entry: NavEntry) => hasPendingUpdate && entry.key === UPDATE_NOTICE_ROUTE;
+function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: boolean, pendingUpdateRoutes: ReadonlySet<string>): NavItem[] {
+  const isFlagged = (entry: NavEntry) => pendingUpdateRoutes.has(entry.key);
   const iconFor = (entry: NavEntry) => (isFlagged(entry) ? flagIcon(entry.icon) : entry.icon);
   if (isCollapsed) {
     return navGroups.flatMap((group) => group.items).map((entry) => {
@@ -195,8 +192,14 @@ export const AppLayout: React.FC = () => {
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
   const currentLabel = currentEntry ? navEntryLabel(currentEntry, t) : t('common.management');
   useDocumentTitle(currentLabel);
-  const hasPendingUpdate = usePendingUpdates().length > 0;
-  const menuItems = React.useMemo(() => buildMenuItems(visibleNavGroups, t, !isMobile && isCollapsed, hasPendingUpdate), [visibleNavGroups, t, isMobile, isCollapsed, hasPendingUpdate]);
+  const { products: pendingProducts, hasPluginUpdate } = usePendingUpdates();
+  const hasSystemUpdate = pendingProducts.length > 0;
+  const menuItems = React.useMemo(() => {
+    const pendingRoutes = new Set<string>();
+    if (hasSystemUpdate) pendingRoutes.add('/system');
+    if (hasPluginUpdate) pendingRoutes.add('/plugins');
+    return buildMenuItems(visibleNavGroups, t, !isMobile && isCollapsed, pendingRoutes);
+  }, [visibleNavGroups, t, isMobile, isCollapsed, hasSystemUpdate, hasPluginUpdate]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);

@@ -47,13 +47,13 @@ export function useUpdateDismissals() {
 }
 
 /**
- * The products the shell should flag as having a newer release.
+ * The system products and installed plugins the shell should flag as having updates.
  *
- * Empty until both the version answers and the dismissals have been read: drawing the
+ * System notices wait until both the version answers and the dismissals have been read: drawing the
  * indicator first and withdrawing it once a dismissal loads would flash a reminder the
  * operator already declined.
  */
-export function usePendingUpdates(): ReleaseProduct[] {
+export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpdate: boolean } {
   // A failed read is not retried or reported: the indicator is a hint on a page that
   // states the same thing in full.
   const { data } = useQuery({
@@ -66,7 +66,10 @@ export function usePendingUpdates(): ReleaseProduct[] {
   });
   const { dismissals, isLoaded } = useUpdateDismissals();
   return React.useMemo(
-    () => (data && isLoaded ? listPendingUpdates([data.omc_version, data.cpa_version], dismissals) : []),
+    () => ({
+      products: data && isLoaded ? listPendingUpdates([data.omc_version, data.cpa_version], dismissals) : [],
+      hasPluginUpdate: data?.plugin_update_available === true,
+    }),
     [data, dismissals, isLoaded],
   );
 }

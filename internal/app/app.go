@@ -260,6 +260,7 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		// local, so populating it here costs no request.
 		releaseService.CheckAll(ctx)
 		handler.SetRelease(releaseService)
+		handler.CheckPluginUpdates(ctx)
 	} else {
 		releaseService, err = release.New(release.Options{
 			Repository:    repo,
@@ -557,7 +558,7 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
-	// The release sweep is best-effort in the same way and for the same reason: a
+	// Release and plugin updates share one best-effort sweep: a
 	// version that was not checked is stale information, not a broken deployment.
 	// OMCPA_UPDATE_CHECK_ENABLED=false switches it off while leaving the page's own
 	// check and the manual button working, because those are an operator asking a
@@ -569,7 +570,7 @@ func (a *App) Run(ctx context.Context) error {
 	if a.release != nil && a.cfg.Release.Enabled && !a.cfg.IsDemoMode {
 		go func() {
 			a.logger.Info("release check sweep started", "interval", a.cfg.Release.Interval.String())
-			if err := a.release.Run(runCtx, a.cfg.Release.Interval); err != nil {
+			if err := a.release.Run(runCtx, a.cfg.Release.Interval, a.handler.CheckPluginUpdates); err != nil {
 				a.logger.Warn("release check sweep stopped", "error", err)
 			}
 		}()

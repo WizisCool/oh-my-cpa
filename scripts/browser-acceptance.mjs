@@ -358,6 +358,25 @@ try {
     await runPluginHostedPageAcceptance({ appURL, page, check });
   }
 
+  // The installed page observes updates without a manual check. Replacing that
+  // installed copy must withdraw both its row action and the shared navigation reminder.
+  await page.goto(`${appURL}/plugins`, { waitUntil: 'domcontentloaded' });
+  const loggerRow = page.locator('[data-plugin-id="fixture-logger"]');
+  const updateAction = loggerRow.getByTestId('plugin-row-update');
+  const pluginReminder = page.locator('[data-route-path="/plugins"] [data-testid="nav-update-dot"]');
+  await checkEventually('installed plugins discover available updates automatically', () => updateAction.isVisible());
+  await checkEventually('plugin navigation shows the observed update', () => pluginReminder.isVisible());
+  const storeReadsBefore = fakeCpa.requests.filter(request => request.path === '/v8/management/plugins/store').length;
+  await page.getByTestId('plugin-check-updates').click();
+  await checkEventually('manual plugin checks reread the gateway store',
+    () => fakeCpa.requests.filter(request => request.path === '/v8/management/plugins/store').length > storeReadsBefore);
+  await updateAction.click();
+  const updateDialog = page.getByRole('dialog');
+  await updateDialog.getByRole('button', { name: /^(更新|Update)$/ }).click();
+  await checkEventually('updating a plugin withdraws its navigation reminder', () => pluginReminder.count().then(count => count === 0));
+  await checkEventually('updated installed rows show the new version', async () =>
+    await updateAction.count() === 0 && (await loggerRow.textContent()).includes('v1.1.0'));
+
   await Promise.all(nativeResponseAudits);
 
   await context.clearCookies();
