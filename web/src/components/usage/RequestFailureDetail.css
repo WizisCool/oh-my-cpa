@@ -13,7 +13,7 @@
 .request-failure-detail .req-overview-error-status {
   font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--danger);
+  color: var(--fg);
   background: color-mix(in srgb, var(--danger) 15%, transparent);
   padding: 1px 6px;
   border-radius: var(--radius-xs);
