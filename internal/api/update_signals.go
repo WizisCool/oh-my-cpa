@@ -13,6 +13,9 @@ const MAX_UPDATE_SUBSCRIBERS = 64
 // ErrTooManyUpdateSubscribers is returned when MAX_UPDATE_SUBSCRIBERS are attached.
 var ErrTooManyUpdateSubscribers = errors.New("too many live update readers")
 
+// ErrUpdateSignalsClosed is returned once the console's update streams are closed for shutdown.
+var ErrUpdateSignalsClosed = errors.New("update streams are closed")
+
 // updateSignals tells open consoles that the stored update observations moved.
 //
 // It carries no data, only the fact that something changed: a reader re-reads the stored
@@ -22,17 +25,26 @@ var ErrTooManyUpdateSubscribers = errors.New("too many live update readers")
 type updateSignals struct {
 	mutex       sync.Mutex
 	subscribers map[chan struct{}]struct{}
+	// done closes when the streams are closed for shutdown; nil until the first subscriber.
+	done     chan struct{}
+	isClosed bool
 }
 
 // Subscribe attaches a reader. The returned function detaches it and is safe to call twice.
 func (s *updateSignals) Subscribe() (<-chan struct{}, func(), error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if s.isClosed {
+		return nil, nil, ErrUpdateSignalsClosed
+	}
 	if len(s.subscribers) >= MAX_UPDATE_SUBSCRIBERS {
 		return nil, nil, ErrTooManyUpdateSubscribers
 	}
 	if s.subscribers == nil {
 		s.subscribers = make(map[chan struct{}]struct{})
+	}
+	if s.done == nil {
+		s.done = make(chan struct{})
 	}
 	signal := make(chan struct{}, 1)
 	s.subscribers[signal] = struct{}{}
@@ -67,4 +79,39 @@ func (h *Handler) NotifyUpdateObservations() {
 		return
 	}
 	h.updateSignals.Publish()
+}
+
+// Done closes when the streams are closed for shutdown. It is captured after a successful
+// Subscribe, so it is never nil for a reader.
+func (s *updateSignals) Done() <-chan struct{} {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.done
+}
+
+// Close ends every open stream and refuses new readers.
+//
+// It is called before the HTTP server shuts down, because Shutdown waits for active
+// connections to go idle and an event stream never does: without this, one open console tab
+// holds the shutdown until its deadline and the process reports a shutdown error.
+func (s *updateSignals) Close() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.isClosed {
+		return
+	}
+	s.isClosed = true
+	if s.done == nil {
+		s.done = make(chan struct{})
+	}
+	close(s.done)
+}
+
+// CloseUpdateStreams ends the console's open update streams and refuses new ones. It is part of
+// the shutdown sequence, before the HTTP server stops accepting and waits for connections.
+func (h *Handler) CloseUpdateStreams() {
+	if h == nil {
+		return
+	}
+	h.updateSignals.Close()
 }

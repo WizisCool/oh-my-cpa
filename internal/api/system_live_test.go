@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -122,5 +123,52 @@ func TestSystemLiveRefusesReadersPastTheLimit(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), ErrTooManyUpdateSubscribers.Error()) {
 		t.Fatalf("body = %s, want the reader-limit error", recorder.Body.String())
+	}
+}
+
+// TestSystemLiveEndsWhenTheStreamsClose pins the shutdown contract: Shutdown waits for active
+// connections to go idle, and an event stream never does on its own, so one open console tab
+// would otherwise hold the process until the shutdown deadline.
+func TestSystemLiveEndsWhenTheStreamsClose(t *testing.T) {
+	handler := &Handler{release: &storedRelease{runningVersions: map[string]string{}}}
+	server := httptest.NewServer(http.HandlerFunc(handler.systemLive))
+	defer server.Close()
+
+	response, err := (&http.Client{Timeout: 5 * time.Second}).Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	reader := bufio.NewReader(response.Body)
+	for {
+		line, errRead := reader.ReadString('\n')
+		if errRead != nil {
+			t.Fatalf("reading the stream: %v", errRead)
+		}
+		if line == "\n" {
+			break
+		}
+	}
+
+	ended := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, response.Body)
+		close(ended)
+	}()
+	handler.CloseUpdateStreams()
+	select {
+	case <-ended:
+	case <-time.After(2 * time.Second):
+		t.Fatal("closing the update streams did not end the open stream")
+	}
+}
+
+func TestSystemLiveRefusesReadersAfterClose(t *testing.T) {
+	handler := &Handler{release: &storedRelease{runningVersions: map[string]string{}}}
+	handler.CloseUpdateStreams()
+	recorder := httptest.NewRecorder()
+	handler.systemLive(recorder, httptest.NewRequest(http.MethodGet, "/omc/api/v1/management/system/live", nil))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 once the streams are closed", recorder.Code)
 	}
 }

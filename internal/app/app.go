@@ -646,6 +646,8 @@ func (a *App) Run(ctx context.Context) error {
 	defer cancel()
 	a.handler.CloseBrowserRuns()
 	a.handler.CloseUpdateWatchers()
+	// Event streams never go idle, so they are ended before Shutdown waits on connections.
+	a.handler.CloseUpdateStreams()
 	select {
 	case <-dataRefreshDone:
 	case <-shutdownContext.Done():
@@ -687,6 +689,7 @@ func (a *App) Close() error {
 	}
 	a.handler.CloseBrowserRuns()
 	a.handler.CloseUpdateWatchers()
+	a.handler.CloseUpdateStreams()
 	// The fixture listens on a loopback socket, so it has to be closed with the
 	// database it describes.
 	if a.upstream != nil {

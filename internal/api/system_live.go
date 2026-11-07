@@ -36,7 +36,7 @@ func (h *Handler) systemLive(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	signals, unsubscribe, err := h.updateSignals.Subscribe()
-	if errors.Is(err, ErrTooManyUpdateSubscribers) {
+	if errors.Is(err, ErrTooManyUpdateSubscribers) || errors.Is(err, ErrUpdateSignalsClosed) {
 		writeError(writer, http.StatusServiceUnavailable, err.Error())
 		return
 	}
@@ -68,9 +68,13 @@ func (h *Handler) systemLive(writer http.ResponseWriter, request *http.Request) 
 	defer heartbeat.Stop()
 	lifetime := time.NewTimer(SYSTEM_LIVE_LIFETIME)
 	defer lifetime.Stop()
+	// Captured after Subscribe, so a shutdown that starts now closes this reader's channel too.
+	shutdown := h.updateSignals.Done()
 	for {
 		select {
 		case <-request.Context().Done():
+			return
+		case <-shutdown:
 			return
 		case <-lifetime.C:
 			return
