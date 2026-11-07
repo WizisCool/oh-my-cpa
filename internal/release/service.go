@@ -71,6 +71,11 @@ type Service struct {
 	// bookkeepingBudget overrides `bookkeepingTimeout` for tests, which need to exercise a fetch
 	// slower than the budget without waiting the budget out.
 	bookkeepingBudget time.Duration
+	// sweepTick overrides `SweepTick` for tests, which need to exercise the schedule without
+	// waiting a minute for the loop's next wake.
+	sweepTick time.Duration
+	// onOutcome reports that a check recorded its result; nil in a service nobody subscribed to.
+	onOutcome func()
 	// singlePageByProduct records whether the cached index came from a one-page read.
 	// A validator only describes the page it came from, so a conditional request is
 	// only safe while the cached snapshot was that single page.
@@ -89,6 +94,13 @@ type Options struct {
 	// Client overrides the feed source. Tests point it at a stub server and the
 	// demonstration at its fixture; production leaves it nil for the GitHub client.
 	Client FeedSource
+	// TokenSource resolves the GitHub token the reads carry, or an empty string for an
+	// anonymous read. It is used only when Client is nil.
+	TokenSource TokenSource
+	// OnOutcome is called after a check records its result, so an open console can re-read the
+	// stored answer instead of waiting for its next poll. It runs after the write, never instead
+	// of it, and must not block.
+	OnOutcome func()
 }
 
 // New builds the service.
@@ -107,7 +119,7 @@ func New(options Options) (*Service, error) {
 	}
 	client := options.Client
 	if client == nil {
-		client = NewClient()
+		client = NewClient(options.TokenSource)
 	}
 	products := make([]Product, 0, 2)
 	for _, candidate := range []Product{
@@ -129,6 +141,7 @@ func New(options Options) (*Service, error) {
 		repository:          options.Repository,
 		client:              client,
 		logger:              logger,
+		onOutcome:           options.OnOutcome,
 		products:            products,
 		bodies:              make(map[string]map[string]string, len(products)),
 		etags:               make(map[string]string, len(products)),
@@ -296,6 +309,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 		if recordErr != nil {
 			s.logger.Warn("could not record release check failure", "product", product.Key, "error", recordErr)
 		}
+		s.outcome()
 		return Comparison{}, true, safe
 	}
 
@@ -325,6 +339,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 		if err != nil {
 			return fail(err)
 		}
+		s.outcome()
 		return s.comparisonFor(ctx, product.Key, ""), true, nil
 	}
 
@@ -361,7 +376,16 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	// can never describe an index the database does not have.
 	s.setBodies(product.Key, bodies, feed.ETag, feed.PageCount <= 1)
 	s.setTruncated(product.Key, feed.Truncated)
+	s.outcome()
 	return s.comparisonFor(ctx, product.Key, ""), true, nil
+}
+
+// outcome reports that a check recorded its result. It is called after the write, so a reader
+// that re-reads on the signal finds the new answer rather than the one it replaced.
+func (s *Service) outcome() {
+	if s.onOutcome != nil {
+		s.onOutcome()
+	}
 }
 
 // bookkeepingTimeout returns the budget for one bookkeeping phase.
@@ -861,37 +885,71 @@ const bookkeepingTimeout = 10 * time.Second
 // most, and re-learning the same error spends the budget twice over.
 const CheckFloor = 15 * time.Minute
 
-// SweepInterval is how often the background check runs.
+// SweepInterval is the schedule of a deployment that never chose one.
 //
-// Six hours is a deliberate compromise for a self-hosted deployment: frequent
-// enough that a release is noticed the same day, rare enough that the
-// unauthenticated GitHub budget of sixty requests per hour is never a concern from
-// the sweep itself - two products twice a day is eight requests.
-const SweepInterval = 6 * time.Hour
+// One hour keeps a self-hosted deployment within an hour of a published release while
+// staying far inside the unauthenticated GitHub budget of sixty requests per hour: a sweep
+// reads up to two pages for each product and refreshes the star count, so five at most. An
+// operator changes the schedule in OMC Settings; this is what the loop uses when no stored
+// interval can be read. It is derived from the preference's own default so the two cannot
+// disagree about what "hourly by default" means.
+const SweepInterval = time.Duration(DefaultUpdateCheckIntervalMinutes) * time.Minute
 
-// Run observes the companion at startup and after each release sweep.
+// SweepTick is the resolution of the schedule.
 //
-// The companion uses upstream-owned caches. Direct release-feed checks are delayed
-// until the first interval so restarting OMC cannot repeatedly spend their budget.
-func (s *Service) Run(ctx context.Context, interval time.Duration, observeCompanion func(context.Context)) error {
+// The loop wakes this often and sweeps once the interval it is given has elapsed. That is
+// what lets a settings change apply without a restart, because the interval is read again on
+// every wake; a wake with nothing due costs one preference read.
+const SweepTick = time.Minute
+
+// Run observes the companion at startup and then sweeps on the interval the policy reports.
+//
+// The policy is consulted on every tick rather than once, because the interval is an
+// operator's setting and a change made in the console must reach a running process. A policy
+// that reports nothing usable falls back to SweepInterval.
+//
+// The companion uses upstream-owned caches. Direct release-feed checks are delayed until the
+// first interval so restarting OMC cannot repeatedly spend their budget.
+func (s *Service) Run(ctx context.Context, interval func() time.Duration, observeCompanion func(context.Context)) error {
 	if observeCompanion != nil && ctx.Err() == nil {
 		observeCompanion(ctx)
 	}
-	if interval <= 0 {
-		interval = SweepInterval
-	}
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
+	last := time.Now()
+	ticker := time.NewTicker(s.tick())
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-timer.C:
+		case now := <-ticker.C:
+			if now.Sub(last) < s.sweepInterval(interval) {
+				continue
+			}
+			last = now
 			s.CheckAll(ctx)
 			if observeCompanion != nil && ctx.Err() == nil {
 				observeCompanion(ctx)
 			}
-			timer.Reset(interval)
 		}
 	}
+}
+
+// tick is SweepTick, overridable so a test can exercise the schedule in milliseconds.
+func (s *Service) tick() time.Duration {
+	if s.sweepTick > 0 {
+		return s.sweepTick
+	}
+	return SweepTick
+}
+
+// sweepInterval asks the policy for the current schedule, falling back to the default when it
+// reports nothing usable: a schedule nobody can honour is still a reason to keep checking.
+func (s *Service) sweepInterval(policy func() time.Duration) time.Duration {
+	if policy == nil {
+		return SweepInterval
+	}
+	if interval := policy(); interval > 0 {
+		return interval
+	}
+	return SweepInterval
 }

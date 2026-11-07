@@ -434,6 +434,9 @@ func (h *Handler) CheckPluginUpdates(ctx context.Context) {
 	if err := h.observePluginUpdates(ctx); err != nil && ctx.Err() == nil {
 		h.logger.Warn("plugin update check failed", "error", security.RedactText(err.Error()))
 	}
+	// The reminder is derived from this observation, so an open console re-reads it even when
+	// the store could not be read: a failure changes the answer too.
+	h.NotifyUpdateObservations()
 }
 
 func (h *Handler) observePluginUpdates(ctx context.Context) error {

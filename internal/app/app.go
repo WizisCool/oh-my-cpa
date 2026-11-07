@@ -267,6 +267,12 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 			Logger:        logger,
 			OMCRepository: cfg.Release.OMCRepository,
 			CPARepository: cfg.Release.CPARepository,
+			// The token is the gateway's own `server.github-token`, so a deployment
+			// configures GitHub once. The handler reads and caches it.
+			TokenSource: handler.ReleaseToken,
+			// A recorded outcome tells open consoles to re-read the stored answer, so the
+			// update indicators follow the sweep instead of its next poll.
+			OnOutcome: handler.NotifyUpdateObservations,
 		})
 		if err != nil {
 			db.Close()
@@ -569,8 +575,18 @@ func (a *App) Run(ctx context.Context) error {
 	// exactly one loop, the HTTP server.
 	if a.release != nil && a.cfg.Release.Enabled && !a.cfg.IsDemoMode {
 		go func() {
-			a.logger.Info("release check sweep started", "interval", a.cfg.Release.Interval.String())
-			if err := a.release.Run(runCtx, a.cfg.Release.Interval, a.handler.CheckPluginUpdates); err != nil {
+			// The schedule is the deployment's stored preference, read on every tick so a
+			// change in OMC Settings applies to the running process. An unreadable store keeps
+			// the documented hourly default rather than stopping the loop.
+			interval := func() time.Duration {
+				raw, isStored, err := a.repo.GetPreference(runCtx, repository.PreferenceUpdateCheck)
+				if err != nil {
+					return release.SweepInterval
+				}
+				return release.ResolveUpdateCheckSettings(raw, isStored).Interval()
+			}
+			a.logger.Info("release check sweep started", "interval", interval().String())
+			if err := a.release.Run(runCtx, interval, a.handler.CheckPluginUpdates); err != nil {
 				a.logger.Warn("release check sweep stopped", "error", err)
 			}
 		}()

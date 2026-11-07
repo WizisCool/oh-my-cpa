@@ -40,6 +40,17 @@ beforeEach(() => {
   if (!isBrowserEnvironment) return;
   window.localStorage.setItem('omc-lang', 'en');
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  // jsdom has no event streams, and the console opens one from the shell and from pages that
+  // show live usage. A source that never signals is exactly "no live data", which every reader
+  // already handles with its polling fallback; without it the constructor throws on every mount
+  // and the attempt itself becomes the slowest thing in a long test.
+  vi.stubGlobal('EventSource', class {
+    static readonly CLOSED = 2;
+    readyState = 0;
+    addEventListener() {}
+    removeEventListener() {}
+    close() {}
+  });
   if (!window.matchMedia) {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: false, media: query, onchange: null, addListener() {}, removeListener() {},

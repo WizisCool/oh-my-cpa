@@ -641,6 +641,11 @@
       "content_type": "application/json; charset=utf-8",
       "body": "{\"environment_payload_days\":0,\"environment_request_record_days\":0,\"last_pass_at_ms\":null,\"max_days\":3650,\"next_pass_at_ms\":null,\"oldest_request_record_ms\":1735173977567,\"payload_days\":0,\"policies\":[],\"request_record_days\":0,\"scheduled\":false,\"source\":\"environment\",\"storage\":{\"auto_vacuum\":\"incremental\",\"free_page_bytes\":0}}"
     },
+    "system-live": {
+      "status": 204,
+      "content_type": "",
+      "body": ""
+    },
     "system-maintenance": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",

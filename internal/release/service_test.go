@@ -24,6 +24,12 @@ var releaseServiceCounter atomic.Uint64
 // newTestService builds a service against a stub GitHub API.
 func newTestService(t *testing.T, handler http.HandlerFunc) (*Service, *stubGitHub) {
 	t.Helper()
+	return newTestServiceWithToken(t, "", handler)
+}
+
+// newTestServiceWithToken builds the same service with a configured GitHub token.
+func newTestServiceWithToken(t *testing.T, token string, handler http.HandlerFunc) (*Service, *stubGitHub) {
+	t.Helper()
 	stub := &stubGitHub{handler: handler}
 	server := httptest.NewServer(stub)
 	stub.server = server
@@ -36,11 +42,17 @@ func newTestService(t *testing.T, handler http.HandlerFunc) (*Service, *stubGitH
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
+	// A token source is only wired when the test configured one: an empty source is the
+	// anonymous read, which is what most of these tests exercise.
+	var tokenSource TokenSource
+	if token != "" {
+		tokenSource = func(context.Context) string { return token }
+	}
 	service, err := New(Options{
 		Repository:    repository.New(db),
 		OMCRepository: "WizisCool/oh-my-cpa",
 		CPARepository: "router-for-me/CLIProxyAPI",
-		Client:        NewClientWithTransport(server.Client().Transport, server.URL),
+		Client:        NewClientWithTransport(server.Client().Transport, server.URL, tokenSource),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -55,8 +67,10 @@ type stubGitHub struct {
 	// test reads the recorded requests from its own, so the recording is genuinely shared state
 	// rather than a value only one goroutine touches.
 	mutex sync.Mutex
-	// conditional records, per request in order, whether it carried a validator. That
-	// is the operator's rate-limit budget: GitHub does not charge for a 304.
+	// conditional records, per request in order, whether it carried a validator. An
+	// unauthenticated conditional request still spends a request from the shared budget, so
+	// the validator saves the body rather than the budget; what it buys is not re-downloading
+	// notes that have not changed.
 	conditional []bool
 }
 
@@ -343,6 +357,53 @@ func TestFailedCheckKeepsThePreviousIndexAndReportsWhy(t *testing.T) {
 	}
 }
 
+// TestASweepResumesAfterARateLimit pins that an exhausted GitHub budget describes one
+// attempt rather than a state: the next sweep reads the feed again and publishes what it
+// finds. A limit that disabled later checks would turn an hour of shared-address traffic
+// into a deployment that never notices a release again.
+func TestASweepResumesAfterARateLimit(t *testing.T) {
+	var rateLimited atomic.Bool
+	rateLimited.Store(true)
+	service, stub := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		if rateLimited.Load() {
+			writer.Header().Set("X-RateLimit-Limit", "60")
+			writer.Header().Set("X-RateLimit-Remaining", "0")
+			writer.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		writeJSON(t, writer, []Release{{Tag: "v7.3.12", Body: "notes", PublishedAt: "2026-09-21T14:43:42Z"}})
+	})
+	ctx := context.Background()
+
+	// The sweep's own entry point, so this covers the loop and not only a manual read.
+	service.CheckAll(ctx)
+	status, err := service.Status(ctx, ProductCPA, "v7.3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.CheckError == "" {
+		t.Fatal("a rate-limited sweep recorded no reason")
+	}
+
+	rateLimited.Store(false)
+	before := stub.callCount()
+	service.CheckAll(ctx)
+	if stub.callCount() <= before {
+		t.Fatal("the sweep stopped reading the feed after a rate limit")
+	}
+	status, err = service.Status(ctx, ProductCPA, "v7.3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LatestVersion != "v7.3.12" {
+		t.Fatalf("latest after recovery = %q, want v7.3.12", status.LatestVersion)
+	}
+	if status.CheckError != "" {
+		t.Fatalf("the recovered check kept the previous failure: %q", status.CheckError)
+	}
+}
+
 func TestCheckFailureDoesNotEraseTheOtherProduct(t *testing.T) {
 	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
 		// The gateway's feed fails; Oh My CPA's succeeds. They have separate sources
@@ -408,7 +469,7 @@ func TestConditionalRequestAvoidsSpendingQuotaButOnlyWhileBodiesAreHeld(t *testi
 		Repository:    service.repository,
 		OMCRepository: "WizisCool/oh-my-cpa",
 		CPARepository: "router-for-me/CLIProxyAPI",
-		Client:        NewClientWithTransport(stub.serverTransport(), stub.serverURL()),
+		Client:        NewClientWithTransport(stub.serverTransport(), stub.serverURL(), nil),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -531,7 +592,7 @@ func TestZeroOutboundRequestsInDemoMode(t *testing.T) {
 	service, err := New(Options{
 		Repository:    repository.New(db),
 		CPARepository: "router-for-me/CLIProxyAPI",
-		Client:        NewClientWithTransport(server.Client().Transport, server.URL),
+		Client:        NewClientWithTransport(server.Client().Transport, server.URL, nil),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -542,7 +603,7 @@ func TestZeroOutboundRequestsInDemoMode(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := service.Run(ctx, time.Hour, func(context.Context) { t.Error("a cancelled sweep ran its companion") }); err != nil {
+	if err := service.Run(ctx, func() time.Duration { return time.Hour }, func(context.Context) { t.Error("a cancelled sweep ran its companion") }); err != nil {
 		t.Fatalf("sweep loop returned %v on a cancelled context", err)
 	}
 	if stub.callCount() != 0 {
@@ -840,7 +901,7 @@ func TestTheFloorStopsRepeatedChecksFromSpendingTheBudget(t *testing.T) {
 	}
 
 	// And the sweep is not subject to it: the background loop exists to notice releases, and
-	// it runs every six hours, far outside any floor.
+	// it runs hourly, far outside any floor.
 	if _, err := service.CheckNow(ctx, ProductCPA); err != nil {
 		t.Fatal(err)
 	}
@@ -1273,8 +1334,9 @@ func TestSweepRunsCompanionObservationAfterReleaseFailures(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	service.sweepTick = time.Nanosecond
 	calls := 0
-	if err := service.Run(ctx, time.Nanosecond, func(ctx context.Context) {
+	if err := service.Run(ctx, func() time.Duration { return time.Nanosecond }, func(ctx context.Context) {
 		calls++
 		if ctx.Err() != nil {
 			t.Error("companion ran after cancellation")
@@ -1294,5 +1356,146 @@ func TestSweepRunsCompanionObservationAfterReleaseFailures(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("companion checks = %d, want startup plus one sweep", calls)
+	}
+}
+
+// TestTheSweepFollowsTheIntervalPolicyWithoutARestart pins that the schedule is read on every
+// tick: an operator who changes it in OMC Settings must not have to restart the process, and an
+// hour-long policy must keep the loop quiet until the hour has passed.
+func TestTheSweepFollowsTheIntervalPolicyWithoutARestart(t *testing.T) {
+	service, stub := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writeJSON(t, writer, []Release{{Tag: "v7.3.11", Body: "notes", PublishedAt: "2026-09-21T14:43:42Z"}})
+	})
+	service.sweepTick = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var policyCalls atomic.Int64
+	var isHourly atomic.Bool
+	isHourly.Store(true)
+	policy := func() time.Duration {
+		policyCalls.Add(1)
+		if isHourly.Load() {
+			return time.Hour
+		}
+		return time.Nanosecond
+	}
+	go func() { _ = service.Run(ctx, policy, func(context.Context) {}) }()
+
+	waitUntil(t, func() bool { return policyCalls.Load() >= 3 })
+	if reads := stub.callCount(); reads != 0 {
+		t.Fatalf("an hourly policy swept %d times before the hour passed", reads)
+	}
+
+	// The stored interval changes while the loop is running, which is what the settings write
+	// does. The next tick must act on it.
+	isHourly.Store(false)
+	waitUntil(t, func() bool { return stub.callCount() > 0 })
+}
+
+// TestTheReleaseReadsCarryTheConfiguredToken pins where the token goes, and that an
+// unconfigured deployment sends nothing: the header is the only place the token may appear.
+func TestTheReleaseReadsCarryTheConfiguredToken(t *testing.T) {
+	const token = "ghp_example_token"
+	headers := make(chan string, 8)
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		headers <- request.Header.Get("Authorization")
+		writeJSON(t, writer, []Release{{Tag: "v7.3.11", PublishedAt: "2026-09-21T14:43:42Z"}})
+	}
+	service, _ := newTestServiceWithToken(t, token, handler)
+	ctx := context.Background()
+	if _, err := service.CheckNow(ctx, ProductCPA); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-headers; got != "Bearer "+token {
+		t.Fatalf("feed authorization = %q, want the configured token", got)
+	}
+	// The star count comes from the same budget, so it carries the same credential.
+	service.Stargazers(ctx, true)
+	if got := <-headers; got != "Bearer "+token {
+		t.Fatalf("star count authorization = %q, want the configured token", got)
+	}
+
+	anonymous, _ := newTestService(t, handler)
+	if _, err := anonymous.CheckNow(ctx, ProductCPA); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-headers; got != "" {
+		t.Fatalf("authorization without a configured token = %q, want none", got)
+	}
+}
+
+// waitUntil gives a loop under test a bounded window, so a scheduling defect fails the test
+// instead of hanging it.
+func waitUntil(t *testing.T, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("condition was not met before the deadline")
+}
+
+// TestACheckedOutcomeNotifiesTheConsole pins the signal the update indicators subscribe to: it
+// fires after the stored answer changed, success or failure, so a reader that re-reads on it
+// finds the new answer rather than the one it replaced.
+func TestACheckedOutcomeNotifiesTheConsole(t *testing.T) {
+	failing := atomic.Bool{}
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		if failing.Load() {
+			writer.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		writeJSON(t, writer, []Release{{Tag: "v7.3.11", Body: "notes", PublishedAt: "2026-09-21T14:43:42Z"}})
+	})
+	var outcomes atomic.Int64
+	service.onOutcome = func() { outcomes.Add(1) }
+	ctx := context.Background()
+
+	if _, err := service.CheckNow(ctx, ProductCPA); err != nil {
+		t.Fatal(err)
+	}
+	if got := outcomes.Load(); got != 1 {
+		t.Fatalf("outcomes after a successful check = %d, want 1", got)
+	}
+
+	failing.Store(true)
+	if _, err := service.CheckNow(ctx, ProductCPA); err == nil {
+		t.Fatal("a failing check reported success")
+	}
+	if got := outcomes.Load(); got != 2 {
+		t.Fatalf("outcomes after a failed check = %d, want 2", got)
+	}
+}
+
+// TestARejectedTokenIsReportedAsSuch pins the failure mode that the token reuse introduced: the
+// token belongs to the gateway's configuration, so a revoked one must not read as a generic
+// upstream error. An anonymous 401 keeps the generic reason, because there is no field to point
+// the operator at.
+func TestARejectedTokenIsReportedAsSuch(t *testing.T) {
+	unauthorized := func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusUnauthorized)
+	}
+	service, _ := newTestServiceWithToken(t, "ghp_revoked", unauthorized)
+	ctx := context.Background()
+	_, err := service.CheckNow(ctx, ProductCPA)
+	if err == nil || !strings.Contains(err.Error(), "server.github-token") {
+		t.Fatalf("error = %v, want one naming the rejected token", err)
+	}
+
+	anonymous, _ := newTestService(t, unauthorized)
+	if _, err := anonymous.CheckNow(ctx, ProductCPA); err == nil || strings.Contains(err.Error(), "server.github-token") {
+		t.Fatalf("error without a token = %v, want the generic status", err)
+	}
+
+	// The star count shares the credential and the same explanation.
+	stargazerServer := httptest.NewServer(http.HandlerFunc(unauthorized))
+	t.Cleanup(stargazerServer.Close)
+	client := NewClientWithTransport(stargazerServer.Client().Transport, stargazerServer.URL, func(context.Context) string { return "ghp_revoked" })
+	if _, err := client.FetchStargazers(ctx, ProjectRepository); err == nil || !strings.Contains(err.Error(), "server.github-token") {
+		t.Fatalf("star count error = %v, want one naming the rejected token", err)
 	}
 }

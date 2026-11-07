@@ -86,6 +86,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/system/releases', 'system-releases'],
   ['/api/v1/management/system/repository', 'system-repository'],
   ['/api/v1/management/system/updates', 'system-updates'],
+  ['/api/v1/management/system/live', 'system-live'],
   ['/api/v1/management/system/updater', 'system-updater'],
   ['/api/v1/management/system/maintenance', 'system-maintenance'],
   ['/api/v1/management/system/data-retention', 'system-data-retention'],

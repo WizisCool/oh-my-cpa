@@ -30,6 +30,7 @@ export function createPreferenceFixture({ serverTimezone = PREFERENCE_CONTRACT.s
       }
     }
     if (key === 'omc_quota_auto_refresh' && !isQuotaAutoRefreshDocument(value)) return respond(400, { error: 'invalid_quota_auto_refresh' });
+    if (key === 'omc_update_check' && !isUpdateCheckDocument(value)) return respond(400, { error: 'invalid_update_check' });
     if (key === 'omc_plugin_source_enabled' && typeof value !== 'boolean') return respond(400, { error: 'the plugin source preference must be true or false' });
     if (key === 'omc_sidebar_collapsed' && typeof value !== 'boolean') return respond(400, { error: 'the sidebar collapsed preference must be true or false' });
     // Credential/custom-icon reference validation remains in Go and each relevant
@@ -47,4 +48,13 @@ function isQuotaAutoRefreshDocument(value) {
   if (keys.length !== 2 || keys[0] !== 'interval_minutes' || keys[1] !== 'refresh_on_reset') return false;
   const minutes = value.interval_minutes;
   return Number.isInteger(minutes) && (minutes === 0 || (minutes >= 5 && minutes <= 1440)) && typeof value.refresh_on_reset === 'boolean';
+}
+
+/** The server's strict shape for the scheduled update check (`release.ParseUpdateCheckSettings`). */
+function isUpdateCheckDocument(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length !== 1 || keys[0] !== 'interval_minutes') return false;
+  const minutes = value.interval_minutes;
+  return Number.isInteger(minutes) && minutes >= 15 && minutes <= 1440;
 }

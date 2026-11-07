@@ -48,12 +48,24 @@ describe('the dataset the demonstration is served from', () => {
 
   it('answers every response with a success', () => {
     // An error captured at export time would be served to a visitor as data.
-    // The one deliberate exception is the live usage stream, which the export captures as
-    // the gateway's demonstration mode answers it; the Worker streams its own instead.
+    // Two deliberate exceptions are captured as the gateway's demonstration mode answers them:
+    // the live usage stream, which the Worker streams itself, and the update stream, which the
+    // demonstration console never opens because it polls the captured answers.
+    const capturedAsNoContent = new Set(['usage-live', 'system-live']);
     for (const [name, response] of Object.entries(DATASET.responses)) {
-      const expected = name === 'usage-live' ? 204 : 200;
+      const expected = capturedAsNoContent.has(name) ? 204 : 200;
       assert.equal(response.status, expected, `${name} was captured as ${response.status}`);
     }
+  });
+
+  it('answers the update stream with the captured 204', async () => {
+    // The demonstration console keeps polling, so it never opens this stream; the route still
+    // answers what the dataset captured rather than throwing on a body a 204 cannot carry.
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const response = await worker.fetch(request('/api/v1/management/system/live'), env);
+    assert.equal(response.status, 204);
+    assert.equal(await response.text(), '');
   });
 
   it('streams live usage signals in the gateway\'s framing', async () => {
@@ -262,6 +274,7 @@ describe('routing', () => {
       '/api/v1/management/logs',
       '/api/v1/management/plugins',
       '/api/v1/management/plugins/settings',
+      '/api/v1/management/system/live',
       '/api/v1/management/plugins/usage-exporter/config',
       '/api/v1/management/plugin-store',
       '/api/v1/management/config',

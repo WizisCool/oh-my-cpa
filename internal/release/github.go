@@ -130,6 +130,12 @@ func (r RateLimit) Exhausted() bool { return r.Limit > 0 && r.Remaining <= 0 }
 // unauthenticated budget for this address is spent.
 var ErrRateLimited = errors.New("the GitHub API rate limit for this address is exhausted")
 
+// TokenSource returns the GitHub token to use for a read, or an empty string to read
+// anonymously. It is a function because the token belongs to the deployment's gateway
+// configuration and is resolved (and cached) by the caller: this package neither stores it nor
+// knows where it lives.
+type TokenSource func(ctx context.Context) string
+
 // Client reads release feeds from the fixed GitHub API host.
 //
 // The transport is the process default, which honours HTTP_PROXY and HTTPS_PROXY
@@ -143,17 +149,34 @@ type Client struct {
 	// baseURL exists for tests, which point it at an httptest server. Production
 	// always uses the constant host.
 	baseURL string
+	// token is the deployment's GitHub token, sent as a bearer credential. Nil or empty is
+	// the ordinary case: sixty requests an hour without one, five thousand with.
+	token TokenSource
 }
 
 // NewClient returns a client for the fixed GitHub API host.
-func NewClient() *Client {
-	return &Client{httpClient: &http.Client{Timeout: requestTimeout, CheckRedirect: restrictRedirects("")}}
+func NewClient(token TokenSource) *Client {
+	return &Client{httpClient: &http.Client{Timeout: requestTimeout, CheckRedirect: restrictRedirects("")}, token: token}
 }
 
 // NewClientWithTransport returns a client using the supplied transport and base
 // URL. It exists for tests; the production host constant is not reached through it.
-func NewClientWithTransport(transport http.RoundTripper, baseURL string) *Client {
-	return &Client{httpClient: &http.Client{Timeout: requestTimeout, Transport: transport, CheckRedirect: restrictRedirects(baseURL)}, baseURL: baseURL}
+func NewClientWithTransport(transport http.RoundTripper, baseURL string, token TokenSource) *Client {
+	return &Client{httpClient: &http.Client{Timeout: requestTimeout, Transport: transport, CheckRedirect: restrictRedirects(baseURL)}, baseURL: baseURL, token: token}
+}
+
+// authorize attaches the token when the source has one. The header is the only place it
+// appears: it is never logged, stored, or included in an error, which is what keeps a
+// configured token from reaching the console or the audit trail.
+func (c *Client) authorize(ctx context.Context, request *http.Request) {
+	if c.token == nil {
+		return
+	}
+	value := strings.TrimSpace(c.token(ctx))
+	if value == "" {
+		return
+	}
+	request.Header.Set("Authorization", "Bearer "+value)
 }
 
 // restrictRedirects refuses a redirect that leaves the intended origin.
@@ -233,6 +256,7 @@ func (c *Client) fetchPage(ctx context.Context, repository, etag string, page in
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("User-Agent", userAgent)
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	c.authorize(ctx, request)
 	if page == 1 && strings.TrimSpace(etag) != "" {
 		request.Header.Set("If-None-Match", strings.TrimSpace(etag))
 	}
@@ -255,6 +279,11 @@ func (c *Client) fetchPage(ctx context.Context, repository, etag string, page in
 		return Feed{}, fmt.Errorf("release feed refused the request: status %d", response.StatusCode)
 	case response.StatusCode == http.StatusNotFound:
 		return Feed{}, fmt.Errorf("release feed has no repository %q", repository)
+	case response.StatusCode == http.StatusUnauthorized && request.Header.Get("Authorization") != "":
+		// The token belongs to the gateway's configuration, so the operator has to be told which
+		// one to look at: without this, a revoked token reads as a plain upstream failure and the
+		// deployment silently stops noticing releases.
+		return Feed{}, errors.New("release feed rejected the configured GitHub token: check server.github-token on the configuration panel")
 	case response.StatusCode < 200 || response.StatusCode >= 300:
 		return Feed{}, fmt.Errorf("release feed answered status %d", response.StatusCode)
 	}

@@ -909,7 +909,18 @@ func TestPluginUpdateReminderUsesTheObservedStore(t *testing.T) {
 	state.storeResponse = `{"plugins":[{"id":"logger","name":"Logger","source_id":"official","installed":true,"update_available":true,"installed_version":"1.0.0","version":"1.2.0"}]}`
 	writesBefore := state.configPuts
 	state.mu.Unlock()
+	// The reminder is derived from this observation, so an open console must re-read it.
+	signals, unsubscribe, err := state.handler.updateSignals.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(unsubscribe)
 	state.handler.CheckPluginUpdates(context.Background())
+	select {
+	case <-signals:
+	default:
+		t.Fatal("a plugin observation did not notify open consoles")
+	}
 	readReminder(true)
 	state.mu.Lock()
 	storeReads, configWrites := state.storeReads, state.configPuts

@@ -1,6 +1,8 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { systemLiveChannel } from '../api/systemLive';
+import { isDemoMode } from '../types/demoMode';
 import type { ReleaseProduct } from '../types/system';
 import {
   NO_UPDATE_DISMISSALS,
@@ -16,9 +18,11 @@ export const UPDATE_STATUS_QUERY_KEY = ['system-updates'] as const;
 /**
  * How often an open console re-reads the stored version answers.
  *
- * The server looks for releases every six hours; this only decides how soon a tab that stays
- * open learns what that sweep found. The read costs no feed request, so it is hourly rather
- * than matched to the sweep, which would let a tab trail a new release by a second interval.
+ * The server sweeps for releases on the configured interval (hourly by default); this only
+ * decides how soon a tab that stays open learns what that sweep found when the live stream is
+ * not open. The read costs no feed
+ * request, so re-reading on the same period keeps an open tab from trailing the sweep by a
+ * second interval.
  */
 export const UPDATE_STATUS_REFRESH_MS = 60 * 60 * 1000;
 
@@ -56,6 +60,7 @@ export function useUpdateDismissals() {
 export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpdate: boolean } {
   // A failed read is not retried or reported: the indicator is a hint on a page that
   // states the same thing in full.
+  const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: UPDATE_STATUS_QUERY_KEY,
     queryFn: api.getSystemUpdates,
@@ -64,6 +69,19 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
     retry: false,
     meta: { silent: true },
   });
+  // The sweep writes the observations with no browser waiting on it, so the stream is what
+  // keeps the indicator current. The interval above stays as the fallback for a deployment that
+  // answers 204 (a demonstration) or while the stream is down. `ready` is a signal too: a tab
+  // returning from the background or reconnecting after the stream's own lifetime re-reads once,
+  // so an open console reads the stored answer a few times an hour rather than once.
+  // The public demonstration serves no stream at all, so it does not ask for one.
+  const isDemo = isDemoMode();
+  React.useEffect(() => {
+    if (isDemo) return undefined;
+    return systemLiveChannel().subscribe({
+      onSignal: () => { void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY }); },
+    });
+  }, [isDemo, queryClient]);
   const { dismissals, isLoaded } = useUpdateDismissals();
   return React.useMemo(
     () => ({
