@@ -168,7 +168,7 @@ func (f *managedSourceCPA) serve(writer http.ResponseWriter, request *http.Reque
 			plugins = append(plugins, managedStoreEntry(
 				pluginregistry.SourceID(pluginregistry.OMCSourceURL)+"/usage-digest",
 				pluginregistry.SourceID(pluginregistry.OMCSourceURL), "raw.githubusercontent.com", pluginregistry.OMCSourceURL,
-				"usage-digest", "Usage digest", "0.3.0", "WizisCool/omc-plugin-usage-digest",
+				"usage-digest", "Usage digest", "0.3.0", "omc-community/omc-plugin-usage-digest",
 			))
 		}
 		_ = json.NewEncoder(writer).Encode(map[string]any{
@@ -255,6 +255,12 @@ func TestPluginStoreAddsTheManagedSource(t *testing.T) {
 	}
 	if store.Plugins[1].IsOMC || !store.Plugins[1].IsOfficial {
 		t.Fatalf("second entry = %#v, want the official one after it", store.Plugins[1])
+	}
+	// Whether the typed confirmation is waived rides on this flag, so its wire value is pinned:
+	// the managed registry's own organization reads as Oh My CPA's, the vendor's does not.
+	if !store.Plugins[0].IsOMCRepository || store.Plugins[1].IsOMCRepository {
+		t.Fatalf("is_omc_repository = %v, %v; want true for omc-community, false for router-for-me",
+			store.Plugins[0].IsOMCRepository, store.Plugins[1].IsOMCRepository)
 	}
 	if len(store.Sources) != 2 || store.Sources[1].Name != pluginregistry.OMCSourceName || !store.Sources[1].IsOMC || store.Sources[0].IsOMC {
 		t.Fatalf("sources = %#v, want the managed registry renamed", store.Sources)

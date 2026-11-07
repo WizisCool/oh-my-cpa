@@ -219,4 +219,6 @@ export default {
   'plugin.omc_community_section_desc': '由社区作者维护、经 Oh My CPA 收录。',
   'plugin.filter_label': '安装状态',
   'plugin.clear_filters': '清除筛选',
+  'plugin.state_filter_label': '运行状态',
+  'plugin.source_empty': '此插件源暂无插件',
 };

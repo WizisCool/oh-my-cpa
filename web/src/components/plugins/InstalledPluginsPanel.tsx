@@ -179,6 +179,7 @@ export function InstalledPluginsPanel({
         <Segmented
           className={styles['store-filters']}
           value={stateFilter}
+          aria-label={t('plugin.state_filter_label')}
           onChange={(value) => setStateFilter(value as InstalledStateFilter)}
           options={(['all', 'running', 'stopped'] as const).map((value) => ({
             value,

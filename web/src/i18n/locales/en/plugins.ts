@@ -222,4 +222,6 @@ export default {
   'plugin.omc_community_section_desc': 'Maintained by community authors and curated by Oh My CPA.',
   'plugin.filter_label': 'Install state',
   'plugin.clear_filters': 'Clear filters',
+  'plugin.state_filter_label': 'Running state',
+  'plugin.source_empty': 'This source lists no plugins',
 } satisfies Translation<typeof source>;

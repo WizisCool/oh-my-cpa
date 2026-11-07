@@ -222,4 +222,6 @@ export default {
   "plugin.omc_community_section_desc": "Diselenggara oleh pengarang komuniti dan dipilih oleh Oh My CPA.",
   "plugin.filter_label": "Status pemasangan",
   "plugin.clear_filters": "Kosongkan penapis",
+  "plugin.state_filter_label": "Status berjalan",
+  "plugin.source_empty": "Sumber ini tidak menyenaraikan pemalam",
 } satisfies Translation<typeof source>;

@@ -222,4 +222,6 @@ export default {
   "plugin.omc_community_section_desc": "由社群作者維護、經 Oh My CPA 收錄。",
   "plugin.filter_label": "安裝狀態",
   "plugin.clear_filters": "清除篩選",
+  "plugin.state_filter_label": "執行狀態",
+  "plugin.source_empty": "此外掛來源暫無外掛",
 } satisfies Translation<typeof source>;

@@ -174,7 +174,8 @@ it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and
   const curated: StorePluginItem = { ...own, store_id: 'omc/curated', id: 'curated', name: 'Curated', is_omc_repository: false, repository_url: 'https://github.com/author/curated' };
   const server = installOmcApi({ preferences: { omc_plugin_source_enabled: true } });
   server.on('POST', `/management/plugin-store/${own.id}/install`, () => ({ status: 'ok', id: own.id, version: own.version, plugins_enabled: true }));
-  const omcStore: PluginStoreResponse = { ...store, sources: [omcSource], plugins: [curated, own, entry] };
+  const emptySource = { id: 'empty', name: 'empty.example', url: 'https://empty.example/registry.json', is_official: false, is_omc: false };
+  const omcStore: PluginStoreResponse = { ...store, sources: [omcSource, emptySource], plugins: [curated, own, entry] };
   const { container, unmount } = renderWithOmc(<ThemeProvider><PluginStorePanel store={omcStore} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
   const showcase = await waitFor(() => container.querySelector<HTMLElement>('[data-store-source="omc"]')!);
   // Only the plugins Oh My CPA maintains are featured; the ones it curates sit with the other catalogues.
@@ -194,6 +195,11 @@ it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and
   fireEvent.click(within(dialog).getByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.install') }));
   await waitFor(() => expect(server.writes('/install')).toHaveLength(1));
   expect(server.writes('/install')[0]).toMatchObject({ body: { source_id: 'omc' } });
+
+  // A chosen source that lists nothing says so rather than leaving the page blank.
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: t('plugin.facet_label') }));
+  fireEvent.click((await screen.findAllByText('empty.example')).at(-1)!);
+  expect(await screen.findByText(t('plugin.source_empty'))).toBeTruthy();
 
   // A chosen source stays chosen when a search leaves none of its plugins, even one another source matches.
   fireEvent.mouseDown(screen.getByRole('combobox', { name: t('plugin.facet_label') }));

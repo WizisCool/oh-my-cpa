@@ -242,7 +242,10 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
         </section>
       ))}
 
-      {isNarrowed && isEmpty && <EmptyState className={styles.empty} title={t('plugin.search_empty')} />}
+      {/* Oh My CPA's section says it is empty itself; any other chosen source has no section to. */}
+      {isEmpty && (isNarrowed || (activeSection !== undefined && activeSection.kind !== 'omc')) && (
+        <EmptyState className={styles.empty} title={isNarrowed ? t('plugin.search_empty') : t('plugin.source_empty')} />
+      )}
 
       <PluginInstallModal
         entry={installing}
