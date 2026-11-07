@@ -36,6 +36,10 @@ const (
 	// document does not name follows the named ones, so an added credential needs no rewrite.
 	PreferenceCredentialOrder = "omc_credential_order"
 
+	// PreferencePluginOrder stores installed plugin IDs in display order, independent of
+	// the gateway's plugin loading order.
+	PreferencePluginOrder = "omc_plugin_order"
+
 	// PreferenceRoutingCardOrder is the routing board's display order of the members inside each
 	// tier: a member key mapped to a rank, as a decimal string. Provider members are keyed by
 	// "provider:" and their positional id, so the document is re-keyed with the other provider

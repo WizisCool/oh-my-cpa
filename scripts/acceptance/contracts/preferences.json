@@ -13,6 +13,7 @@
     "usage_events_columns",
     "oauth_management_view_v1",
     "omc_credential_order",
+    "omc_plugin_order",
     "routing_card_order",
     "omc_timezone",
     "omc_token_style",
