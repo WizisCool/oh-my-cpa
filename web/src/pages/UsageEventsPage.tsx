@@ -333,7 +333,6 @@ export const UsageEventsPage: React.FC = () => {
     pluginLogos,
     pluginTitles,
     configuredProviders,
-    isProviderCatalogUnknown,
     isProviderCatalogUnproven,
     refetchProviders,
   } = useProviderBranding();
@@ -343,9 +342,11 @@ export const UsageEventsPage: React.FC = () => {
     () => createProviderNameResolver(configuredProviders, pluginTitles),
     [configuredProviders, pluginTitles],
   );
+  // Records resolve by runtime credential index, not a projected positional id.
+  // A routine catalog refetch does not withdraw an identity already resolved.
   const renderFacetMark = React.useMemo(
-    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown }),
-    [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown],
+    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown: isProviderCatalogUnproven }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnproven],
   );
 
   /**
@@ -717,7 +718,7 @@ export const UsageEventsPage: React.FC = () => {
                     configuredProviders={configuredProviders}
                     pluginLogos={pluginLogos}
                     pluginTitles={pluginTitles}
-                    isProviderCatalogUnknown={isProviderCatalogUnknown}
+                    isProviderCatalogUnknown={isProviderCatalogUnproven}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
                     isChecked={selection.has(event.id)}
@@ -762,7 +763,7 @@ export const UsageEventsPage: React.FC = () => {
         configuredProviders={configuredProviders}
         pluginLogos={pluginLogos}
         pluginTitles={pluginTitles}
-        isProviderCatalogUnknown={isProviderCatalogUnknown}
+        isProviderCatalogUnknown={isProviderCatalogUnproven}
       />
       <RequestExportDialog
         open={isExportOpen}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -283,6 +285,76 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 	client := signedInClient(t, appServer.URL+"/omc/api/auth/login", "management-secret-value")
 
 	return providerTestFixture{client: client, baseURL: appServer.URL, state: state, handler: handler}
+}
+
+func TestManagementProviderListsReadConcurrentlyInRegistryOrder(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	// Hold the first family open until every independent runtime list has started.
+	// A serial reader cannot reach the other families and fails at the deadline.
+	started := make(chan string, len(providerConfigFamilies)+1)
+	release := make(chan struct{})
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		path := strings.TrimPrefix(request.URL.Path, "/v0/management/")
+		if path == openAICompatibilityFamily || strings.HasSuffix(path, "-api-key") {
+			family := strings.TrimSuffix(path, "-api-key")
+			started <- family
+			if family == "codex" {
+				select {
+				case <-release:
+				case <-request.Context().Done():
+					return
+				}
+			}
+			if family == openAICompatibilityFamily {
+				_, _ = writer.Write([]byte(`{"openai-compatibility":[{"name":"relay","base-url":"https://relay.test","api-key-entries":[{"api-key":"fixture-relay","auth-index":"relay-index"}]}]}`))
+			} else {
+				_ = json.NewEncoder(writer).Encode(map[string]any{path: []map[string]any{{"api-key": "fixture-" + family, "auth-index": family + "-index", "base-url": "https://relay.test"}}})
+			}
+			return
+		}
+		_, _ = writer.Write([]byte(`[]`))
+	}))
+	defer cpaServer.Close()
+	defer cancel()
+	client, err := management.NewClient(cpaServer.URL, "fixture-management-key", 5*time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result := make(chan []ProviderItemDTO, 1)
+	go func() { result <- fixture.handler.readProviderItems(ctx, client) }()
+	families := make(map[string]bool)
+	for len(families) < len(providerConfigFamilies)+1 {
+		select {
+		case family := <-started:
+			families[family] = true
+		case <-ctx.Done():
+			t.Fatalf("provider lists waited for the blocked codex read; started only %v", families)
+		}
+	}
+	close(release)
+
+	select {
+	case items := <-result:
+		var ids, want []string
+		for _, item := range items {
+			ids = append(ids, item.ID)
+			if item.Family != openAICompatibilityFamily && item.AuthIndex != item.Family+"-index" {
+				t.Fatalf("runtime identity lost for %s: %+v", item.ID, item)
+			}
+		}
+		for _, spec := range providerConfigFamilies {
+			want = append(want, spec.IDPrefix+"0")
+		}
+		want = append(want, openAICompatIDPrefix+"0")
+		if !slices.Equal(ids, want) {
+			t.Fatalf("provider order = %v, want %v", ids, want)
+		}
+	case <-ctx.Done():
+		t.Fatal("provider list did not finish after releasing codex")
+	}
 }
 
 func TestManagementProvidersEndpoints(t *testing.T) {

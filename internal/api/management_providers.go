@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -278,25 +279,30 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 	customNames := h.loadProviderNames(ctx)
 	customWebsites := h.loadProviderWebsites(ctx)
 
-	// Config API-key families are walked from the registry rather than repeated
-	// per family; the declared order is what the provider list follows.
-	for _, spec := range providerConfigFamilies {
-		entries, err := client.EditableConfigAPIKeys(ctx, spec.Family)
-		if err != nil {
-			// Pool metadata is optional to this list. Keep the family visible from
-			// CPA's runtime view when only the stored-group read failed; provider
-			// writes still require the editable read and refuse to overwrite it.
-			if entries, err = client.ConfigAPIKeys(ctx, spec.Family); err != nil {
-				continue
+	// Each family is independent and needs two upstream reads. Read them alongside
+	// the compatibility list, then join by registry position so gateway latency
+	// does not accumulate and completion order cannot reorder positional ids.
+	familyItems := make([][]ProviderItemDTO, len(providerConfigFamilies))
+	var reads sync.WaitGroup
+	for index, spec := range providerConfigFamilies {
+		reads.Go(func() {
+			entries, err := client.EditableConfigAPIKeys(ctx, spec.Family)
+			if err != nil {
+				// Pool metadata is optional to this list. Keep the family visible from
+				// CPA's runtime view when only the stored-group read failed; provider
+				// writes still require the editable read and refuse to overwrite it.
+				if entries, err = client.ConfigAPIKeys(ctx, spec.Family); err != nil {
+					return
+				}
+				// The runtime read carries effective pool values, not the stored
+				// group/key ownership. Omit them rather than presenting an inherited
+				// value as this key's override.
+				for index := range entries {
+					entries[index].ConnectionPool = nil
+				}
 			}
-			// The runtime read carries effective pool values, not the stored
-			// group/key ownership. Omit them rather than presenting an inherited
-			// value as this key's override.
-			for index := range entries {
-				entries[index].ConnectionPool = nil
-			}
-		}
-		items = append(items, configKeyProviderItems(spec, entries, customNames)...)
+			familyItems[index] = configKeyProviderItems(spec, entries, customNames)
+		})
 	}
 
 	entries, err := client.EditableOpenAICompatibility(ctx)
@@ -312,6 +318,10 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 			}
 			entries, err = runtime.Entries, nil
 		}
+	}
+	reads.Wait()
+	for _, family := range familyItems {
+		items = append(items, family...)
 	}
 	if err == nil {
 		for i, entry := range entries {

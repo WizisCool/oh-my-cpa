@@ -52,6 +52,30 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await skewedPage.close();
   }
 
+  // Returning through SPA navigation reuses the catalog while a fresh real server
+  // read is held. Request identities must remain resolved throughout that read.
+  await page.waitForFunction(() => document.querySelectorAll('.request-row .req-badge-unresolved').length === 0);
+  await page.locator('[data-route-path="/logs"]').first().click();
+  await page.locator('.logs-page').waitFor({ state: 'visible', timeout: 15_000 });
+  let releaseCatalog;
+  const catalogGate = new Promise((resolve) => { releaseCatalog = resolve; });
+  const catalogRead = page.waitForRequest('**/api/v1/management/providers', { timeout: 15_000 });
+  const holdCatalog = async (route) => {
+    await catalogGate;
+    await route.fallback();
+  };
+  await page.route('**/api/v1/management/providers', holdCatalog);
+  try {
+    await page.locator('[data-route-path="/usage/events"]').first().click();
+    await catalogRead;
+    await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15_000 });
+    const unresolvedCount = await page.locator('.request-row .req-badge-unresolved').count();
+    check('returning to request records keeps cached provider identities during a catalog refresh', unresolvedCount === 0, `unconfirmed rows=${unresolvedCount}`);
+  } finally {
+    releaseCatalog();
+    await page.unroute('**/api/v1/management/providers', holdCatalog);
+  }
+
   // ---- which of the provider's keys answered ----
   // The fixture carries one record answered by a credential the fake CPA
   // configures, and one whose auth index nothing claims. The first must print the
