@@ -59,6 +59,40 @@ func TestClassifyRejectsLooseControlLookalikes(t *testing.T) {
 	}
 }
 
+func TestDecodeEventFailureClassification(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		failed bool
+		code   string
+		want   FailureCode
+	}{
+		{"request scoped", true, "request_scoped", FailureRequestScoped},
+		{"stream truncated", true, "stream_truncated", FailureStreamTruncated},
+		{"absent", true, "", ""},
+		{"unknown", true, "future_classification", ""},
+		{"body is not classification", true, "request_scoped extra", ""},
+		{"success", false, "request_scoped", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			codeField := ""
+			if test.code != "" {
+				codeField = fmt.Sprintf(`,"code":%q`, test.code)
+			}
+			raw := fmt.Sprintf(`{"request_id":"classification","failed":%t,"fail":{"status_code":400,"body":"request_scoped"%s}}`, test.failed, codeField)
+			event, err := DecodeEvent(raw, "default", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if event.FailCode != test.want {
+				t.Fatalf("failure code = %q, want %q", event.FailCode, test.want)
+			}
+			if event.Failed != test.failed || (test.failed && (event.FailStatusCode != 400 || event.FailBody != "request_scoped")) {
+				t.Fatalf("classification changed request evidence: %+v", event)
+			}
+		})
+	}
+}
+
 func TestDecodeEventBoundsFailureBody(t *testing.T) {
 	body := strings.Repeat("x", MaxFailBodyRunes+500)
 	event, err := DecodeEvent(`{"request_id":"req-big","failed":true,"fail":{"status_code":999,"body":"`+body+`"}}`, "default", time.Now())

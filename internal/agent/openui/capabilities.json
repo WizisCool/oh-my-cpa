@@ -6181,7 +6181,7 @@
   },
   {
     "name": "requests_get",
-    "description": "Read one request's safe accounting metadata; excludes raw logs and network identity.",
+    "description": "Read one request's safe accounting metadata and explicit failure classification; excludes raw logs and network identity.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -6948,6 +6948,12 @@
             }
           },
           "additionalProperties": false
+        },
+        "fail_status_code": {
+          "type": "integer"
+        },
+        "fail_code": {
+          "type": "string"
         }
       },
       "required": [

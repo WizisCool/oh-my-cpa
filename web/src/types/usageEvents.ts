@@ -133,9 +133,13 @@ export interface UsageEventResponseHeader {
   value: string;
 }
 
+export type RequestFailureCode = 'request_scoped' | 'stream_truncated';
+
 export interface UsageEventDetail {
   event: UsageEvent & {
     endpoint?: string;
+    /** CPA's explicit request-level classification; absent means unknown. */
+    fail_code?: RequestFailureCode;
     /** The upstream's own error body for a failed request; single-record view only. */
     fail_body?: string;
     /** The diagnostic part of the upstream's response headers, sorted by name.

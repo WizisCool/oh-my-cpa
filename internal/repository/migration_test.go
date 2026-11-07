@@ -15,6 +15,43 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/migrations"
 )
 
+func TestFailureCodeMigrationLeavesHistoricalClassificationUnknown(t *testing.T) {
+	ctx := context.Background()
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	db, err := Open(ctx, filepath.Join(directory, "failure-upgrade.db"), withMigrationsUntil(57),
+		WithMigrationBackup(cipher, filepath.Join(directory, "backups"), 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+		(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, created_at, updated_at)
+		VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO usage_events
+		(instance_id, event_key, api_group_key, request_id, failed, fail_status_code, fail_body, timestamp_ms, created_at_ms)
+		VALUES ('default', 'historical-failure', '', 'historical-failure', 1, 400, 'request_scoped', 1234, 2345)`); err != nil {
+		t.Fatal(err)
+	}
+	db.migrateUntil = 0
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var code, body string
+	var status int
+	if err := db.SQL.QueryRowContext(ctx, `SELECT fail_code, fail_status_code, fail_body FROM usage_events`).Scan(&code, &status, &body); err != nil {
+		t.Fatal(err)
+	}
+	if code != "" || status != 400 || body != "request_scoped" {
+		t.Fatalf("historical evidence changed: %q %d %q", code, status, body)
+	}
+}
+
 func TestMigration004SanitizesHistoricalData(t *testing.T) {
 	cipher, err := crypto.New("01234567890123456789012345678901")
 	if err != nil {

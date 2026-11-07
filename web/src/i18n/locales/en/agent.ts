@@ -318,7 +318,7 @@ export default {
   'agent.capability.requests_cost_breakdown': 'Explain a request\'s cost',
   'agent.capability.requests_cost_breakdown.description': 'Reads one recorded request\'s pricing status, stored amount, the price and channel versions it locked, the tier that governed it and each token bucket\'s rate.',
   'agent.capability.requests_get': 'Inspect a request',
-  'agent.capability.requests_get.description': 'Reads one request\'s safe accounting metadata, without raw logs or network identity.',
+  'agent.capability.requests_get.description': 'Reads one request\'s safe accounting metadata and explicit failure classification.',
   'agent.capability.requests_list': 'Browse requests',
   'agent.capability.requests_list.description': 'Pages through filtered request metadata; use usage aggregation for large analyses.',
   'agent.capability.system_health': 'Check system health',

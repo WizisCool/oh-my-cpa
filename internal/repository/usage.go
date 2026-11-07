@@ -443,11 +443,11 @@ const usageEventInsertPrefix = `
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
 			stream, channel_version_id, price_tier, response_model, model_substituted,
-			fail_status_code, fail_body, response_headers, access_provider, is_native_key,
+			fail_status_code, fail_body, fail_code, response_headers, access_provider, is_native_key,
 			billed_service_tier, billed_service_tier_source, token_accounting, structured_usage
 		) VALUES `
 
-const usageEventColumnCount = 51
+const usageEventColumnCount = 52
 
 var usageEventPlaceholders = "(" + strings.TrimSuffix(strings.Repeat("?, ", usageEventColumnCount), ", ") + ")"
 
@@ -463,7 +463,7 @@ func usageEventValues(event usage.Event, locked lockedPrice, createdMS int64) []
 		event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
 		event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
 		locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
-		event.FailStatusCode, event.FailBody, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey),
+		event.FailStatusCode, event.FailBody, event.FailCode, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey),
 		locked.serviceTier, locked.serviceTierSource, encodeTokenAccounting(event.Accounting), structuredUsageValue{details: event.StructuredUsage},
 	}
 }
@@ -648,8 +648,10 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	if !event.Failed || event.FailStatusCode < 100 || event.FailStatusCode > 599 {
 		event.FailStatusCode = 0
 	}
+	event.FailCode = usage.NormalizeFailureCode(event.FailCode)
 	if !event.Failed {
 		event.FailBody = ""
+		event.FailCode = ""
 	}
 	event.FailBody = persistedText(event.FailBody, usage.MaxFailBodyRunes)
 	if event.ResponseHeaders != "" && !strings.HasPrefix(event.ResponseHeaders, `{"cf-cache-status":"DYNAMIC","cf-ray":"`) {

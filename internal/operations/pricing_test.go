@@ -307,29 +307,52 @@ func TestRequestDetailsExposeStructuredEvidenceOnlyOnSingleReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	event, err := usage.DecodeEvent(`{"request_id":"structured-agent","tokens":{"input_tokens":3,"total_tokens":3,"audio_input_tokens":0},"tool_usage_details":{"web_search_calls":0},"iterations":[{"output_tokens":0}],"cost_details":{"cost":0,"is_byok":false},"image_details":{"size":"1024x1024"}}`, "default", now)
+	event, err := usage.DecodeEvent(`{"request_id":"structured-agent","failed":true,"fail":{"status_code":400,"code":"request_scoped","body":"Use the Images API; api_key=sk-fixture-private"},"tokens":{"input_tokens":3,"total_tokens":3,"audio_input_tokens":0},"tool_usage_details":{"web_search_calls":0},"iterations":[{"output_tokens":0}],"cost_details":{"cost":0,"is_byok":false},"image_details":{"size":"1024x1024"}}`, "default", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
+	codes := map[string]usage.FailureCode{
+		"request": usage.FailureRequestScoped, "stream": usage.FailureStreamTruncated,
+		"absent": "", "unknown": "future_classification", "success": usage.FailureRequestScoped,
+	}
+	var events []usage.Event
+	for name, code := range codes {
+		copy := event
+		copy.EventKey, copy.RequestID, copy.FailCode = name, name, code
+		copy.Failed = name != "success"
+		events = append(events, copy)
+	}
+	if _, err := store.Repo.InsertUsageEvents(context.Background(), events); err != nil {
 		t.Fatal(err)
 	}
-	page, err := store.Repo.ListUsageEvents(context.Background(), repository.UsageEventFilter{Limit: 1})
-	if err != nil || len(page.Items) != 1 {
+	page, err := store.Repo.ListUsageEvents(context.Background(), repository.UsageEventFilter{Limit: 10})
+	if err != nil || len(page.Items) != len(events) {
 		t.Fatalf("list: %+v %v", page, err)
 	}
 	for _, adapter := range []string{"agent", "mcp"} {
 		principal := capability.Principal{ID: "administrator", Adapter: adapter, IsAdmin: true}
-		result, err := executor.Invoke(context.Background(), principal, "requests_get", json.RawMessage(fmt.Sprintf(`{"id":%d}`, page.Items[0].ID)), "")
-		if err != nil || result.Status != "success" {
-			t.Fatalf("%s detail: %+v %v", adapter, result, err)
+		for _, row := range page.Items {
+			result, err := executor.Invoke(context.Background(), principal, "requests_get", json.RawMessage(fmt.Sprintf(`{"id":%d}`, row.ID)), "")
+			if err != nil || result.Status != "success" {
+				t.Fatalf("%s detail: %+v %v", adapter, result, err)
+			}
+			var detail RequestDetail
+			if err := json.Unmarshal(result.Data, &detail); err != nil || !reflect.DeepEqual(detail.StructuredUsage, event.StructuredUsage) {
+				t.Fatalf("%s structured evidence: %s %v", adapter, result.Data, err)
+			}
+			wantCode, wantStatus := codes[row.RequestID], 400
+			if row.RequestID == "unknown" || row.RequestID == "success" {
+				wantCode = ""
+			}
+			if row.RequestID == "success" {
+				wantStatus = 0
+			}
+			if detail.FailCode != wantCode || detail.FailStatusCode != wantStatus || strings.Contains(string(result.Data), "fail_body") || strings.Contains(string(result.Data), "sk-fixture-private") {
+				t.Fatalf("%s failure evidence for %s: %s", adapter, row.RequestID, result.Data)
+			}
 		}
-		var detail RequestDetail
-		if err := json.Unmarshal(result.Data, &detail); err != nil || !reflect.DeepEqual(detail.StructuredUsage, event.StructuredUsage) {
-			t.Fatalf("%s structured evidence: %s %v", adapter, result.Data, err)
-		}
-		result, err = executor.Invoke(context.Background(), principal, "requests_list", json.RawMessage(`{}`), "")
-		if err != nil || result.Status != "success" || strings.Contains(string(result.Data), "structured_usage") {
+		result, err := executor.Invoke(context.Background(), principal, "requests_list", json.RawMessage(`{}`), "")
+		if err != nil || result.Status != "success" || strings.Contains(string(result.Data), "structured_usage") || strings.Contains(string(result.Data), "fail_code") || strings.Contains(string(result.Data), "fail_body") || strings.Contains(string(result.Data), "fail_status_code") {
 			t.Fatalf("%s list expanded detail: %+v %v", adapter, result, err)
 		}
 	}

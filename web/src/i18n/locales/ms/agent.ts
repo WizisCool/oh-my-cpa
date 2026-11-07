@@ -318,7 +318,7 @@ export default {
   "agent.capability.requests_cost_breakdown": "Jelaskan kos permintaan",
   "agent.capability.requests_cost_breakdown.description": "Membaca status harga satu permintaan yang direkodkan, jumlah tersimpan, versi harga dan saluran yang dikunci, peringkat yang terpakai dan kadar setiap kumpulan token.",
   "agent.capability.requests_get": "Periksa permintaan",
-  "agent.capability.requests_get.description": "Membaca metadata perakaunan selamat satu permintaan, tanpa log mentah atau identiti rangkaian.",
+  "agent.capability.requests_get.description": "Membaca metadata perakaunan selamat dan pengelasan kegagalan yang jelas bagi satu permintaan.",
   "agent.capability.requests_list": "Semak imbas permintaan",
   "agent.capability.requests_list.description": "Menyemak imbas metadata permintaan yang ditapis secara berhalaman; gunakan agregat penggunaan untuk analisis besar.",
   "agent.capability.system_health": "Semak kesihatan sistem",

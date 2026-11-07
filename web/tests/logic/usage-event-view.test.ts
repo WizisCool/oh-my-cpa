@@ -1007,8 +1007,8 @@ test('usage event view', () => {
   assert.equal(composition({ input: 1000, output: 100, reasoning: 40, total: 999 }).unplacedReasoning, 40);
   assert.deepEqual(tokenComposition(undefined).segments, []);
 
-  // The failure headline reads the request's own status; a record with nothing to go on says so
-  // rather than guessing.
+  // Request-local classification takes precedence over status; diagnostics can also resolve
+  // a classification without an HTTP status and leave unknown codes untranslated.
   assert.equal(requestFailureCause(503), 'unavailable');
   assert.equal(requestFailureCause(429), 'rate_limited');
   assert.equal(requestFailureCause(401), 'auth');
@@ -1016,6 +1016,18 @@ test('usage event view', () => {
   assert.equal(requestFailureCause(502), 'upstream');
   assert.equal(requestFailureCause(422), 'bad_request');
   assert.equal(requestFailureCause(undefined), 'unknown');
+  assert.equal(requestFailureCause(400), 'bad_request');
+  assert.equal(requestFailureCause(400, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(401, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(429, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(undefined, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(undefined, 'stream_truncated'), 'stream_truncated');
+  assert.equal(requestFailureCause(200, 'stream_truncated'), 'stream_truncated');
+  assert.equal(requestFailureCause(502, 'stream_truncated'), 'stream_truncated');
+  assert.equal(requestFailureCause(400, 'future_classification'), 'bad_request');
+  assert.equal(requestFailureCause(undefined, 'future_classification'), 'unknown');
+  assert.equal(requestFailureCause(undefined, ''), 'unknown');
+  assert.equal(requestFailureCause(401, ''), 'auth');
 
   // The badge paints a continuous scale, so the numeric rate must keep its
   // fraction while the printed reading stays rounded to one decimal.

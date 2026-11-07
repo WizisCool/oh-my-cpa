@@ -272,13 +272,52 @@ func TestStreamFlagSurvivesPersistence(t *testing.T) {
 	}
 }
 
+func TestFailureClassificationPersistenceAllowlist(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	for _, test := range []struct {
+		name   string
+		failed bool
+		code   usage.FailureCode
+		want   usage.FailureCode
+	}{
+		{"request-scoped", true, usage.FailureRequestScoped, usage.FailureRequestScoped},
+		{"stream-truncated", true, usage.FailureStreamTruncated, usage.FailureStreamTruncated},
+		{"absent", true, "", ""},
+		{"unknown", true, "future_classification", ""},
+		{"success", false, usage.FailureRequestScoped, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			event := usage.Event{InstanceID: "default", EventKey: test.name, RequestID: test.name,
+				Failed: test.failed, FailCode: test.code, FailStatusCode: 400, FailBody: "request_scoped"}
+			if _, err := repo.InsertUsageEvents(ctx, []usage.Event{event}); err != nil {
+				t.Fatal(err)
+			}
+			page, err := repo.ListUsageEvents(ctx, UsageEventFilter{Limit: 1})
+			if err != nil || len(page.Items) != 1 {
+				t.Fatalf("list: %+v %v", page, err)
+			}
+			detail, err := repo.GetUsageEvent(ctx, page.Items[0].ID)
+			if err != nil || detail.FailCode != test.want || detail.Failed != test.failed {
+				t.Fatalf("stored classification: %+v %v, want %q", detail, err, test.want)
+			}
+			if !test.failed && (detail.FailStatusCode != 0 || detail.FailBody != "") {
+				t.Fatalf("success kept failure evidence: %+v", detail)
+			}
+			if page.Items[0].FailCode != "" {
+				t.Fatalf("list expanded failure detail: %+v", page.Items[0])
+			}
+		})
+	}
+}
+
 // TestFailureDetailSurvivesIngestAndPersistence walks a failed record through
 // decode and insert: the status and the upstream body are what make a failure
 // diagnosable once CPA no longer holds a log file for it.
 func TestFailureDetailSurvivesIngestAndPersistence(t *testing.T) {
 	repo := usageTestRepository(t)
 	raw := `{"request_id":"fixture-failed-1","failed":true,"model":"fixture-model","timestamp":"2026-10-01T00:00:00Z",` +
-		`"fail":{"status_code":502,"body":"{\"error\":{\"code\":\"server_is_overloaded\"}}"},` +
+		`"fail":{"status_code":502,"code":"stream_truncated","body":"{\"error\":{\"code\":\"server_is_overloaded\"}}"},` +
 		`"response_headers":{"Cf-Ray":["fixture-ray-NRT"],"Set-Cookie":["fixture=1"],"Date":["now"]}}`
 	event, err := usage.DecodeEvent(raw, "default", time.Now())
 	if err != nil {
@@ -288,25 +327,25 @@ func TestFailureDetailSurvivesIngestAndPersistence(t *testing.T) {
 	succeeded := event
 	succeeded.EventKey, succeeded.RequestID, succeeded.Failed = "fixture-ok-1", "fixture-ok-1", false
 	succeeded.TimestampMS++
-	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event, succeeded}); err != nil {
-		t.Fatalf("insert usage events: %v", err)
+	if _, err := repo.CommitUsageDecoded(context.Background(), []UsageDecoded{{Event: event}, {Event: succeeded}}); err != nil {
+		t.Fatalf("commit usage events: %v", err)
 	}
 	page, err := repo.ListUsageEvents(context.Background(), UsageEventFilter{Limit: 5})
 	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("list usage events: %v (%d rows)", err, len(page.Items))
 	}
-	if ok := page.Items[0]; ok.FailStatusCode != 0 || ok.FailBody != "" {
+	if ok := page.Items[0]; ok.FailStatusCode != 0 || ok.FailBody != "" || ok.FailCode != "" {
 		t.Fatalf("successful row carries failure detail: %d %q", ok.FailStatusCode, ok.FailBody)
 	}
 	// The list names the status; it does not read the body.
-	if failed := page.Items[1]; failed.FailStatusCode != 502 || failed.FailBody != "" {
+	if failed := page.Items[1]; failed.FailStatusCode != 502 || failed.FailBody != "" || failed.FailCode != "" {
 		t.Fatalf("list failure = %d %q, want the status alone", failed.FailStatusCode, failed.FailBody)
 	}
 	detail, err := repo.GetUsageEvent(context.Background(), page.Items[1].ID)
 	if err != nil {
 		t.Fatalf("get usage event: %v", err)
 	}
-	if detail.FailStatusCode != 502 || detail.FailBody != `{"error":{"code":"server_is_overloaded"}}` {
+	if detail.FailStatusCode != 502 || detail.FailCode != usage.FailureStreamTruncated || detail.FailBody != `{"error":{"code":"server_is_overloaded"}}` {
 		t.Fatalf("stored failure = %d %q", detail.FailStatusCode, detail.FailBody)
 	}
 	// The header snapshot is read by the single-record view alone, already filtered.
