@@ -11,45 +11,61 @@ import (
 	"time"
 )
 
-const recoveryCredentialFixture = `{"id":"runtime-codex-id","name":"codex.json","auth_index":"idx-1","provider":"codex","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"sign_in_required","access_token_expires_at":"2026-11-02T01:00:00+01:00","next_refresh_after":"2026-11-01T01:00:00Z","adopted":true,"inference_verified":false,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"OPAQUE-SECRET https://provider.test/?code=PRIVATE-CODE","access_token":"OPAQUE-SECRET"},"next_action":"sign_in","recovery_hint":"OPAQUE-SECRET","renewal_event":{"account":"OPAQUE-SECRET"},"refresh_token":"OPAQUE-SECRET"}`
+const recoveryCredentialFixture = `{"id":"runtime-codex-id","name":"codex.json","auth_index":"idx-1","provider":"codex","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"sign_in_required","access_token_expires_at":"2026-11-02T01:00:00+01:00","next_refresh_after":"2026-11-01T01:00:00Z","adopted":true,"inference_verified":false,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"OPAQUE-SECRET https://provider.test/?code=PRIVATE-CODE","access_token":"OPAQUE-SECRET","failure_stage":"PRIVATE-STAGE","receipt":"PRIVATE-RECEIPT","journal":{"refresh_token":"OPAQUE-SECRET"}},"next_action":"sign_in","recovery_hint":"OPAQUE-SECRET","renewal_event":{"account":"OPAQUE-SECRET"},"refresh_token":"OPAQUE-SECRET"}`
 
 func TestCredentialRecoveryProjectionAndVerification(t *testing.T) {
-	client, base, recorder := startAuthFilesTestServer(t, "management-secret-value", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/v8/management/credentials":
-			fmt.Fprintf(w, `{"files":[%s,{"name":"old.json","auth_index":"old","provider":"codex"}]}`, recoveryCredentialFixture)
-		case "/v8/management/credentials/verify":
-			fmt.Fprintf(w, `{"status":"ok","verified":true,"credential":%s,"access_token":"OPAQUE-SECRET"}`, recoveryCredentialFixture)
-		default:
-			http.NotFound(w, r)
-		}
-	})
-	endpoint := base + "/omc/api/v1/management/auth-files"
-	response, raw := doJSON(t, client, http.MethodGet, endpoint, "")
-	var output struct {
-		Files []map[string]any `json:"files"`
-	}
-	if err := json.Unmarshal(raw, &output); err != nil || response.StatusCode != 200 {
-		t.Fatalf("list: %d %s", response.StatusCode, raw)
-	}
-	file := output.Files[0]
-	if file["requires_sign_in"] != true || file["renewal_state"] != "sign_in_required" || file["inference_verified"] != false || file["access_token_expires_at"] != "2026-11-02T00:00:00Z" {
-		t.Fatalf("missing recovery evidence: %s", raw)
-	}
-	if _, present := output.Files[1]["requires_sign_in"]; present {
-		t.Fatal("missing evidence on old CPA was reported as healthy")
-	}
-	if strings.Contains(string(raw), "OPAQUE-SECRET") || strings.Contains(string(raw), "PRIVATE-CODE") {
-		t.Fatalf("unsafe recovery projection: %s", raw)
-	}
-	response, raw = doJSON(t, client, http.MethodPost, endpoint+"/verify", `{"name":"codex.json","auth_index":"idx-1"}`)
-	if response.StatusCode != 200 || !strings.Contains(string(raw), `"verified":true`) || strings.Contains(string(raw), "OPAQUE-SECRET") || strings.Contains(string(raw), "credential") {
-		t.Fatalf("verify outcome: %d %s", response.StatusCode, raw)
-	}
-	response, raw = doJSON(t, client, http.MethodPost, endpoint+"/verify", `{"name":"codex.json","auth_index":"stale"}`)
-	if response.StatusCode != 404 || recorder.count(http.MethodPost, "/v8/management/credentials/verify") != 1 {
-		t.Fatalf("stale verification target: %d %s", response.StatusCode, raw)
+	for _, test := range []struct{ code, wantCode string }{
+		{"invalid_grant", "invalid_grant"},
+		{"refresh_outcome_unknown", "refresh_outcome_unknown"},
+		{"new_provider_error", "refresh_failed"},
+		{"refresh_outcome_unknown OPAQUE-SECRET", "refresh_failed"},
+	} {
+		t.Run(test.code, func(t *testing.T) {
+			fixture := strings.Replace(recoveryCredentialFixture, `"code":"invalid_grant","http_status":401`, fmt.Sprintf(`"code":%q,"http_status":502`, test.code), 1)
+			client, base, recorder := startAuthFilesTestServer(t, "management-secret-value", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v8/management/credentials":
+					fmt.Fprintf(w, `{"files":[%s,{"name":"old.json","auth_index":"old","provider":"codex"}]}`, fixture)
+				case "/v8/management/credentials/verify":
+					fmt.Fprintf(w, `{"status":"ok","verified":true,"credential":%s,"access_token":"OPAQUE-SECRET"}`, fixture)
+				default:
+					http.NotFound(w, r)
+				}
+			})
+			endpoint := base + "/omc/api/v1/management/auth-files"
+			response, raw := doJSON(t, client, http.MethodGet, endpoint, "")
+			var output struct {
+				Files []map[string]any `json:"files"`
+			}
+			if err := json.Unmarshal(raw, &output); err != nil || response.StatusCode != 200 {
+				t.Fatalf("list: %d %s", response.StatusCode, raw)
+			}
+			file := output.Files[0]
+			refreshError, ok := file["refresh_error"].(map[string]any)
+			if !ok || len(refreshError) != 2 || refreshError["code"] != test.wantCode || refreshError["http_status"] != float64(502) {
+				t.Fatalf("refresh error projection: %s", raw)
+			}
+			if file["requires_sign_in"] != true || file["renewal_state"] != "sign_in_required" || file["inference_verified"] != false || file["access_token_expires_at"] != "2026-11-02T00:00:00Z" {
+				t.Fatalf("missing recovery evidence: %s", raw)
+			}
+			if _, present := output.Files[1]["requires_sign_in"]; present {
+				t.Fatal("missing evidence on old CPA was reported as healthy")
+			}
+			for _, private := range []string{"OPAQUE-SECRET", "PRIVATE-CODE", "PRIVATE-STAGE", "PRIVATE-RECEIPT", `"message"`, `"failure_stage"`, `"receipt"`, `"journal"`, `"refresh_token"`} {
+				if strings.Contains(string(raw), private) {
+					t.Fatalf("unsafe recovery projection: %s", raw)
+				}
+			}
+			response, raw = doJSON(t, client, http.MethodPost, endpoint+"/verify", `{"name":"codex.json","auth_index":"idx-1"}`)
+			if response.StatusCode != 200 || !strings.Contains(string(raw), `"verified":true`) || strings.Contains(string(raw), "OPAQUE-SECRET") || strings.Contains(string(raw), "credential") {
+				t.Fatalf("verify outcome: %d %s", response.StatusCode, raw)
+			}
+			response, raw = doJSON(t, client, http.MethodPost, endpoint+"/verify", `{"name":"codex.json","auth_index":"stale"}`)
+			if response.StatusCode != 404 || recorder.count(http.MethodPost, "/v8/management/credentials/verify") != 1 {
+				t.Fatalf("stale verification target: %d %s", response.StatusCode, raw)
+			}
+		})
 	}
 }
 

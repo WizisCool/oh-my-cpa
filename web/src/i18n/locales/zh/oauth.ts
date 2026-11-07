@@ -7,6 +7,7 @@ export default {
   "recovery.detail_awaiting": "首次自动刷新成功后即可确认续期正常。",
   "recovery.detail_retry": "上次自动刷新失败，CPA 会自动重试。",
   "recovery.detail_unknown": "尚未观察到自动刷新。",
+  "recovery.refresh_outcome_unknown_hint": "刷新结果尚未确定，可在此重新登录此凭证原有账号以获取新的授权。",
   "recovery.progress": "恢复进度",
   "recovery.inference_hint": "发送一次最小请求确认模型可用，会消耗 token。",
   "recovery.verify_now": "验证",

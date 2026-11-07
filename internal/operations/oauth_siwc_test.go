@@ -16,43 +16,68 @@ import (
 )
 
 func TestAgentCredentialReadProjectsSafeLifecycleSummariesOnly(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v8/management/config/config-version" {
-			fmt.Fprint(w, "8")
-			return
-		}
-		fmt.Fprint(w, `{"files":[{"name":"codex.json","provider":"codex","siwc_bind_supported":true,"use_siwc":true,"siwc_status":"invalid","siwc_bound":true,"siwc_expires_at":"2026-10-21T00:00:00Z","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"loaded","adopted":true,"inference_verified":true,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"SYNTHETIC-TOKEN"},"metadata":{"siwc":{"access_token":"SYNTHETIC-TOKEN"}}}]}`)
-	}))
-	defer server.Close()
-	client, err := management.NewClient(server.URL, "synthetic-management", time.Second, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cipher, err := crypto.New("01234567890123456789012345678901")
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := &Service{Cipher: cipher, Client: func(context.Context) (*management.Client, error) { return client, nil }}
-	registry := capability.NewRegistry()
-	if err := service.registerOAuth(registry); err != nil {
-		t.Fatal(err)
-	}
-	definition, err := registry.Lookup("oauth_credentials_list", capability.Principal{Adapter: "agent", IsAdmin: true})
-	if err != nil {
-		t.Fatal("credential read missing")
-	}
-	value, err := definition.Execute(context.Background(), json.RawMessage(`{}`), "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, _ := json.Marshal(value)
-	for _, field := range []string{`"requires_sign_in":true`, `"renewal_state":"sign_in_required"`, `"recovery_stage":"loaded"`, `"inference_verified":true`, `"renewal_verified":false`, `"code":"invalid_grant"`} {
-		if !strings.Contains(string(body), field) {
-			t.Fatalf("missing lifecycle field %s: %s", field, body)
-		}
-	}
-	if !strings.Contains(string(body), `"siwc_status":"invalid"`) || !strings.Contains(string(body), `"siwc_bind_supported":true`) || !strings.Contains(string(body), `"siwc_bound":true`) || !strings.Contains(string(body), `"use_siwc":true`) || !strings.Contains(string(body), `"siwc_expires_at":"2026-10-21T00:00:00Z"`) || strings.Contains(string(body), "SYNTHETIC-TOKEN") {
-		t.Fatalf("credential projection: %s", body)
+	for _, test := range []struct{ code, wantCode string }{
+		{"invalid_grant", "invalid_grant"},
+		{"refresh_outcome_unknown", "refresh_outcome_unknown"},
+		{"new_provider_error", "refresh_failed"},
+		{"refresh_outcome_unknown SYNTHETIC-TOKEN", "refresh_failed"},
+	} {
+		t.Run(test.code, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/v8/management/config/config-version" {
+					fmt.Fprint(w, "8")
+					return
+				}
+				fmt.Fprintf(w, `{"files":[{"name":"codex.json","provider":"codex","siwc_bind_supported":true,"use_siwc":true,"siwc_status":"invalid","siwc_bound":true,"siwc_expires_at":"2026-10-21T00:00:00Z","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"loaded","adopted":true,"inference_verified":true,"renewal_verified":false,"refresh_error":{"code":%q,"http_status":502,"message":"SYNTHETIC-TOKEN","receipt":"PRIVATE-RECEIPT","journal":{"access_token":"SYNTHETIC-TOKEN"}},"metadata":{"siwc":{"access_token":"SYNTHETIC-TOKEN"}}}]}`, test.code)
+			}))
+			defer server.Close()
+			client, err := management.NewClient(server.URL, "synthetic-management", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cipher, err := crypto.New("01234567890123456789012345678901")
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := &Service{Cipher: cipher, Client: func(context.Context) (*management.Client, error) { return client, nil }}
+			registry := capability.NewRegistry()
+			if err := service.registerOAuth(registry); err != nil {
+				t.Fatal(err)
+			}
+			for _, adapter := range []string{"agent", "mcp"} {
+				t.Run(adapter, func(t *testing.T) {
+					definition, err := registry.Lookup("oauth_credentials_list", capability.Principal{Adapter: adapter, IsAdmin: true})
+					if err != nil {
+						t.Fatal("credential read missing")
+					}
+					value, err := definition.Execute(context.Background(), json.RawMessage(`{}`), "", "")
+					if err != nil {
+						t.Fatal(err)
+					}
+					credentials, ok := value.(Credentials)
+					if !ok || len(credentials.Items) != 1 || credentials.Items[0].RefreshError == nil || credentials.Items[0].RefreshError.Code != test.wantCode || credentials.Items[0].RefreshError.HTTPStatus != 502 {
+						t.Fatalf("refresh error projection: %+v", value)
+					}
+					body, err := json.Marshal(value)
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, private := range []string{"SYNTHETIC-TOKEN", "PRIVATE-RECEIPT", `"message"`, `"receipt"`, `"journal"`, `"access_token"`} {
+						if strings.Contains(string(body), private) {
+							t.Fatalf("private diagnostic %s in credential read: %s", private, body)
+						}
+					}
+					for _, field := range []string{`"requires_sign_in":true`, `"renewal_state":"sign_in_required"`, `"recovery_stage":"loaded"`, `"inference_verified":true`, `"renewal_verified":false`, fmt.Sprintf(`"code":%q`, test.wantCode), `"http_status":502`} {
+						if !strings.Contains(string(body), field) {
+							t.Fatalf("missing lifecycle field %s: %s", field, body)
+						}
+					}
+					if !strings.Contains(string(body), `"siwc_status":"invalid"`) || !strings.Contains(string(body), `"siwc_bind_supported":true`) || !strings.Contains(string(body), `"siwc_bound":true`) || !strings.Contains(string(body), `"use_siwc":true`) || !strings.Contains(string(body), `"siwc_expires_at":"2026-10-21T00:00:00Z"`) || strings.Contains(string(body), "SYNTHETIC-TOKEN") {
+						t.Fatalf("credential projection: %s", body)
+					}
+				})
+			}
+		})
 	}
 }
 

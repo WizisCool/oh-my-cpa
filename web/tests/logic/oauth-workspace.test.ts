@@ -694,6 +694,37 @@ test('renewal evidence stays independent of healthy quota, SIWC and inference', 
   assert.equal(renewalKind(file({ inference_verified: true, adopted: true })), 'unknown');
 });
 
+test('an unresolved refresh has specific guidance without changing independent evidence', () => {
+  const unresolved = file({
+    requires_sign_in: true,
+    renewal_state: 'sign_in_required',
+    refresh_error: { code: 'refresh_outcome_unknown', http_status: 502 },
+    access_token_expires_at: '2026-11-08T00:00:00Z',
+    siwc_status: 'valid',
+    adopted: true,
+    inference_verified: true,
+    renewal_verified: false,
+  });
+  const [record] = buildOAuthWorkspaceProjection([unresolved], [quota()], choices).records;
+  assert.equal(renewalDetail(record.file), 'recovery.refresh_outcome_unknown_hint');
+  assert.equal(renewalLabel(record.file), 'recovery.sign_in_required');
+  assert.equal(renewalKind(record.file), 'reauth');
+  assert.equal(renewalTone(record.file), 'warn');
+  assert.equal(record.quotaCondition, 'healthy');
+  assert.equal(record.file.access_token_expires_at, unresolved.access_token_expires_at);
+  assert.equal(record.file.inference_verified, true);
+  assert.equal(record.file.renewal_verified, false);
+
+  const diagnosticOnly = file({ refresh_error: unresolved.refresh_error });
+  assert.equal(renewalDetail(diagnosticOnly), 'recovery.refresh_outcome_unknown_hint');
+  assert.equal(renewalKind(diagnosticOnly), 'unknown');
+  assert.equal(renewalLabel(diagnosticOnly), 'recovery.unknown');
+  assert.equal(renewalTone(diagnosticOnly), 'neutral');
+  for (const code of ['refresh_failed', 'invalid_grant', 'new_provider_error']) {
+    assert.equal(renewalDetail(file({ requires_sign_in: true, refresh_error: { code } })), 'recovery.sign_in_hint');
+  }
+});
+
 test('a section keeps one plan shape together, richest first, unread last', () => {
   const group = (name: string, hours: number): QuotaWindow => ({ id: `ag_${name}_${hours}`, label: `${name} · ${hours}h`, scope: 'group', period_hours: hours, remaining_percent: 90 });
   const pro = (name: string) => quotaRecord(name, [group('Gemini Models', 5), group('Gemini Models', 168), group('Claude and GPT models', 5), group('Claude and GPT models', 168), group('Gemini 4 Argon', 168)]);

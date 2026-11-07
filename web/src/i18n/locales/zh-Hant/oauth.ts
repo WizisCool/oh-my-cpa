@@ -10,6 +10,7 @@ export default {
   "recovery.detail_awaiting": "首次自動重新整理成功後即可確認續期正常。",
   "recovery.detail_retry": "上次自動重新整理失敗，CPA 會自動重試。",
   "recovery.detail_unknown": "尚未觀察到自動重新整理。",
+  "recovery.refresh_outcome_unknown_hint": "重新整理結果尚未確定，可在此重新登入此憑證原有帳戶以取得新的授權。",
   "recovery.progress": "復原進度",
   "recovery.inference_hint": "傳送一次最小請求確認模型可用，會消耗 token。",
   "recovery.verify_now": "驗證",

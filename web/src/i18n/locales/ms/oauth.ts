@@ -10,6 +10,7 @@ export default {
   "recovery.detail_awaiting": "Pembaharuan disahkan selepas penyegaran automatik pertama berjaya.",
   "recovery.detail_retry": "Penyegaran automatik terakhir gagal; CPA akan mencuba semula.",
   "recovery.detail_unknown": "Belum ada penyegaran automatik yang diperhatikan.",
+  "recovery.refresh_outcome_unknown_hint": "Hasil penyegaran belum dapat dipastikan; log masuk semula dengan akaun asal kelayakan ini untuk mendapatkan kebenaran baharu.",
   "recovery.progress": "Kemajuan pemulihan",
   "recovery.inference_hint": "Menghantar satu permintaan minimum untuk mengesahkan model menjawab; menggunakan token.",
   "recovery.verify_now": "Sahkan",
