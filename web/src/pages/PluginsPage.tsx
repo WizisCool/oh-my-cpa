@@ -68,6 +68,7 @@ export const PluginsPage: React.FC = () => {
   }, [legacyTab, navigate, searchParams]);
 
   const [configuring, setConfiguring] = React.useState<PluginItem | null>(null);
+  const [isCheckingUpdates, setIsCheckingUpdates] = React.useState(false);
 
   const pluginsQuery = useQuery({
     queryKey: ['management-plugins'],
@@ -112,8 +113,14 @@ export const PluginsPage: React.FC = () => {
   }, [requestedPlugin, pluginsQuery.data]);
 
   const checkUpdates = async () => {
-    const result = await storeQuery.refetch();
-    return result.isSuccess ? storeListingsByPluginId(result.data.plugins) : null;
+    // Registry invalidation also follows plugin writes; only an explicit check owns this spinner.
+    setIsCheckingUpdates(true);
+    try {
+      const result = await storeQuery.refetch();
+      return result.isSuccess ? storeListingsByPluginId(result.data.plugins) : null;
+    } finally {
+      setIsCheckingUpdates(false);
+    }
   };
 
   const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
@@ -198,7 +205,7 @@ export const PluginsPage: React.FC = () => {
             onBrowseStore={() => selectTab('store')}
             onOpenSettings={() => selectTab('settings')}
             onCheckUpdates={checkUpdates}
-            isCheckingUpdates={storeQuery.isFetching}
+            isCheckingUpdates={isCheckingUpdates}
           />
         </Panel>
       )}

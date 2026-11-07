@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { makeT, useI18n, type Lang } from '../src/i18n';
 import { PluginStorePanel } from '../src/components/plugins/PluginStorePanel';
@@ -9,6 +9,7 @@ import type { PluginItem, PluginStoreResponse, StorePluginItem } from '../src/ty
 import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { ThemeProvider } from '../src/theme/ThemeContext';
+import { PluginsPage } from '../src/pages/PluginsPage';
 
 const entry: StorePluginItem = {
   store_id: 'registry-source/stable-plugin', source_id: 'registry-source', source_name: 'Publisher registry',
@@ -165,6 +166,55 @@ it('checks for updates on request and updates a plugin from its installed row', 
   fireEvent.click(within(dialog).getByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.update') }));
   await waitFor(() => expect(server.writes('/install')).toHaveLength(1));
   expect(server.writes('/install')[0]).toMatchObject({ body: { source_id: entry.source_id } });
+});
+
+it('keeps background registry refresh separate from a manually requested update check', async () => {
+  const server = installOmcApi({ plugins: [installed] });
+  server.on('GET', '/management/plugin-store', () => store);
+  server.on('PATCH', `/management/plugins/${installed.id}/enabled`, (_request, state) => {
+    state.plugins = [{ ...installed, enabled: false, effective_enabled: false }];
+    return { status: 'ok' };
+  });
+  const automatic = server.hold('GET', '/management/plugin-store');
+  renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
+  await automatic.arrived;
+  const check = screen.getByTestId('plugin-check-updates');
+  expect(check.classList.contains('ant-btn-loading')).toBe(false);
+  await act(async () => automatic.release());
+
+  const refresh = server.hold('GET', '/management/plugin-store');
+  fireEvent.click(screen.getByRole('switch', { name: makeT('en')('plugin.toggle_label', { name: 'Runtime name' }) }));
+  await refresh.arrived;
+  expect(check.classList.contains('ant-btn-loading')).toBe(false);
+  await act(async () => refresh.release());
+
+  const manual = server.hold('GET', '/management/plugin-store');
+  fireEvent.click(check);
+  await manual.arrived;
+  await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(true));
+  await act(async () => manual.release());
+  await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(false));
+});
+
+it('persists plugin moves across filters and remounts without changing gateway order', async () => {
+  const plugins = [installed, { ...installed, id: 'hidden', metadata: { name: 'Hidden' } }, { ...installed, id: 'last', metadata: { name: 'Runtime last' } }];
+  const server = installOmcApi({ preferences: { omc_plugin_order: { installed: plugins.map((plugin) => plugin.id) } } });
+  const panel = <InstalledPluginsPanel plugins={plugins} catalog={new Map()} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => null} isCheckingUpdates={false} />;
+  const { container, unmount } = renderWithOmc(panel);
+  const rows = () => [...container.querySelectorAll('[data-plugin-id]')].map((row) => row.getAttribute('data-plugin-id'));
+  const label = `${makeT('en')('common.reorder_handle')}: Runtime last`;
+  await screen.findByRole('button', { name: label });
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Runtime' } });
+  expect(rows()).toEqual([installed.id, 'last']);
+  fireEvent.keyDown(screen.getByRole('button', { name: label }), { key: 'ArrowUp' });
+  await waitFor(() => expect(server.preferenceWrites()).toEqual([{ key: 'omc_plugin_order', value: { installed: ['last', installed.id, 'hidden'] } }]));
+  expect(rows()).toEqual(['last', installed.id]);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
+  expect(rows()).toEqual(['last', installed.id, 'hidden']);
+  expect(server.writes().every((request) => request.path.startsWith('/preferences/'))).toBe(true);
+  unmount();
+  const remount = renderWithOmc(panel);
+  await waitFor(() => expect([...remount.container.querySelectorAll('[data-plugin-id]')].map((row) => row.getAttribute('data-plugin-id'))).toEqual(['last', installed.id, 'hidden']));
 });
 
 it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and turns the source back on in place', async () => {
