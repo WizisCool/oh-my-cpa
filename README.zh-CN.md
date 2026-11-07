@@ -198,7 +198,7 @@ Linux 和 FreeBSD 的 amd64、arm64 可执行文件。每个压缩包内嵌控�
 - **客户端密钥**：创建、命名与吊销网关 API Key，名称会出现在请求记录与筛选项中。
 - **模型目录**：直接从上游提供商拉取模型列表。
 - **操练场**：用文本与图片调试任意已路由的模型，支持流式多轮对话与请求诊断。
-- **插件**：已安装插件、插件商店、类型化配置表单，以及兼容 CPA 原生管理接口和模型目录的可信插件页面。信任边界见[运维文档](docs/operations.md#plugin-pages)。
+- **插件**：已安装插件、内置连接 [OMC Community 软件源](https://github.com/omc-community/omc-plugins) 的插件商店、类型化配置表单，以及兼容 CPA 原生管理接口和模型目录的可信插件页面。信任边界见[运维文档](docs/operations.md#plugin-pages)。
 
 </details>
 
@@ -304,6 +304,17 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 提交密钥或完成 OAuth 登录：发起的变更会返回一个链接，在控制台中打开即可批准。管理密钥等同于管理员权限，只应接入可信的 Agent；
 远程接入前应先为控制台启用 HTTPS。
 能力清单与权限规则见 [`docs/agent-capabilities.md`](docs/agent-capabilities.md)。
+
+## 生态与插件
+
+Oh My CPA 默认连接 [OMC Community](https://github.com/omc-community) 社区生态，支持一键发现、安装和更新官方提供商插件及社区扩展。
+
+- **OMC Community 社区主页**：可在 [github.com/omc-community](https://github.com/omc-community) 浏览官方维护的提供商集成、辅助工具与社区贡献插件。
+- **软件源订阅地址**：控制台开箱默认订阅 [`omc-community/omc-plugins`](https://github.com/omc-community/omc-plugins)。支持在 CPA `config.yaml` 或控制台设置中按需订阅聚合总源或拆分源：
+  - **聚合总源**（默认）：`https://raw.githubusercontent.com/omc-community/omc-plugins/main/registry.json`
+  - **官方维护源**：`https://raw.githubusercontent.com/omc-community/omc-plugins/main/official.json`
+  - **社区贡献源**：`https://raw.githubusercontent.com/omc-community/omc-plugins/main/community.json`
+- **插件贡献与开发**：插件收录规范、自动化校验与提交流程见 [omc-community/omc-plugins](https://github.com/omc-community/omc-plugins)。
 
 ## 配置
 

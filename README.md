@@ -217,7 +217,7 @@ permissions, building from source, upgrades and troubleshooting.
 - **Client keys**: create, name and revoke gateway API keys. Names appear in request records and filters.
 - **Model catalog**: pull model lists straight from upstream providers.
 - **Playground**: test any routed model with text and images, streamed multi-turn answers and request diagnostics.
-- **Plugins**: installed plugins, a plugin store, typed settings forms, and trusted plugin pages with native CPA management/model-directory compatibility. See [the trust boundary](docs/operations.md#plugin-pages).
+- **Plugins**: installed plugins, a plugin store connected to the [OMC Community registry](https://github.com/omc-community/omc-plugins), typed settings forms, and trusted plugin pages with native CPA management/model-directory compatibility. See [the trust boundary](docs/operations.md#plugin-pages).
 
 </details>
 
@@ -330,6 +330,17 @@ operation, submit a secret or complete an OAuth sign-in, and the prepared change
 link that opens its approval in the console. The management key is administrator-equivalent, so connect only
 trusted agents and serve the console over HTTPS before connecting one remotely.
 [`docs/agent-capabilities.md`](docs/agent-capabilities.md) is the contract.
+
+## Ecosystem & Plugins
+
+Oh My CPA connects out of the box to the [OMC Community](https://github.com/omc-community) ecosystem to discover, install, and update plugins and provider extensions.
+
+- **OMC Community Hub**: Discover officially maintained providers, companion tools, and community extensions at [github.com/omc-community](https://github.com/omc-community).
+- **Plugin Registry Sources**: The console subscribes by default to [`omc-community/omc-plugins`](https://github.com/omc-community/omc-plugins). Operators can subscribe to the aggregated source or split lists in CPA's `config.yaml` or OMC Settings:
+  - **Aggregated Source** (Default): `https://raw.githubusercontent.com/omc-community/omc-plugins/main/registry.json`
+  - **Officially Maintained**: `https://raw.githubusercontent.com/omc-community/omc-plugins/main/official.json`
+  - **Community Contributed**: `https://raw.githubusercontent.com/omc-community/omc-plugins/main/community.json`
+- **Contributing Plugins**: Plugin submission guidelines, validation suites, and catalog templates are hosted at [omc-community/omc-plugins](https://github.com/omc-community/omc-plugins).
 
 ## Configuration
 
