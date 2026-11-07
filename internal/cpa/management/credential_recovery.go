@@ -47,7 +47,7 @@ func (s CredentialRecoverySummary) SafeRecoverySummary() CredentialRecoverySumma
 		safe := *s.RefreshError
 		// Codes are a closed vocabulary, not an arbitrary provider error or token.
 		switch safe.Code {
-		case "invalid_grant", "refresh_token_reused", "refresh_token_expired", "refresh_token_invalidated", "token_expired", "invalid_rapt", "invalid_refresh_token", "refresh_failed":
+		case "invalid_grant", "refresh_token_reused", "refresh_token_expired", "refresh_token_invalidated", "token_expired", "invalid_rapt", "invalid_refresh_token", "refresh_outcome_unknown", "refresh_failed":
 		default:
 			safe.Code = "refresh_failed"
 		}

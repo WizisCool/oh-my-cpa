@@ -10,6 +10,7 @@ export default {
   "recovery.detail_awaiting": "Renewal is confirmed after the first successful automatic refresh.",
   "recovery.detail_retry": "The last automatic refresh failed; CPA will retry.",
   "recovery.detail_unknown": "No automatic refresh has been observed yet.",
+  "recovery.refresh_outcome_unknown_hint": "The refresh result is unresolved; sign in again with this credential’s original account to obtain a new grant.",
   "recovery.progress": "Recovery progress",
   "recovery.inference_hint": "Sends one minimal request to confirm the model answers; uses tokens.",
   "recovery.verify_now": "Verify",

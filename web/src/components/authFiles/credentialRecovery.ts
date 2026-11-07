@@ -33,8 +33,9 @@ export function renewalLabel(file: ManagementAuthFile): MessageKey {
   return RENEWAL_LABELS[file.renewal_state as keyof typeof RENEWAL_LABELS] ?? 'recovery.unknown';
 }
 
-/** What the renewal state means for the operator, as one sentence under its label. */
+/** What the renewal evidence means for the operator, as one sentence under its label. */
 export function renewalDetail(file: ManagementAuthFile): MessageKey {
+  if (file.refresh_error?.code === 'refresh_outcome_unknown') return 'recovery.refresh_outcome_unknown_hint';
   if (file.requires_sign_in || file.renewal_state === 'sign_in_required' || file.renewal_state === 'expired_sign_in_required') return 'recovery.sign_in_hint';
   return RENEWAL_DETAILS[file.renewal_state as keyof typeof RENEWAL_DETAILS] ?? 'recovery.detail_unknown';
 }
