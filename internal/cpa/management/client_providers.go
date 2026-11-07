@@ -414,6 +414,7 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 		resolved := make([][]AuthModel, len(authResp.Files))
 		credentialRules := make([][]OAuthModelAlias, len(authResp.Files))
 		failures := make([]error, len(authResp.Files))
+		aliasFailures := make([]error, len(authResp.Files))
 		reads := 0
 		hasSkippedReads := false
 		exhausted := func() bool {
@@ -462,9 +463,9 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 					}(i, file.Name)
 				}
 				// A credential's own aliases are resolved before its provider's, and
-				// they exist only in the credential file. A file that cannot be read
-				// leaves that credential's hidden upstream unpriced instead of freezing
-				// the whole catalog, so this read never fails the snapshot.
+				// they exist only in the credential file. A credential that cannot be
+				// read is a failed source: publishing without it would prune the hidden
+				// upstream and its rate, so the snapshot is refused instead.
 				if !needsAliases {
 					continue
 				}
@@ -473,6 +474,7 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 					defer wg.Done()
 					rules, err := c.CredentialModelAliases(ctx, name)
 					if err != nil {
+						aliasFailures[i] = fmt.Errorf("auth-file %q model aliases: %w", name, err)
 						return
 					}
 					credentialRules[i] = rules
@@ -494,6 +496,10 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 		for i, models := range resolved {
 			if failures[i] != nil {
 				errs = append(errs, failures[i])
+				continue
+			}
+			if aliasFailures[i] != nil {
+				errs = append(errs, aliasFailures[i])
 				continue
 			}
 			file := authResp.Files[i]

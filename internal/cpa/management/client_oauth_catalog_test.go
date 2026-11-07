@@ -52,10 +52,13 @@ func TestOAuthCatalogAppliesCredentialModelAliases(t *testing.T) {
 		download string
 		// downloads overrides the payload for named credentials, so a sibling can
 		// state no aliases of its own.
-		downloads  map[string]string
-		status     int
-		wantModels map[string]string
-		wantRoutes []ConfiguredModelRoute
+		downloads map[string]string
+		status    int
+		// wantRefused asserts the snapshot is refused, so the last complete catalog
+		// and its rates stay published.
+		wantRefused bool
+		wantModels  map[string]string
+		wantRoutes  []ConfiguredModelRoute
 	}{
 		{
 			name: "credential alias", provider: `{}`, download: credentialFile, status: http.StatusOK,
@@ -79,10 +82,10 @@ func TestOAuthCatalogAppliesCredentialModelAliases(t *testing.T) {
 			wantRoutes: []ConfiguredModelRoute{{CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash-sg"}, {CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash"}},
 		},
 		{
-			// An unreadable credential file must not freeze every other price.
+			// An unreadable credential file is a failed source: publishing without it
+			// would prune the hidden upstream and retire its rate.
 			name: "unreadable credential file", provider: `{}`, download: `{"error":"unavailable"}`, status: http.StatusServiceUnavailable,
-			wantModels: map[string]string{"deepseek-v4.1-flash": "deepseek-v4.1-flash"},
-			wantRoutes: []ConfiguredModelRoute{{CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash"}},
+			wantRefused: true,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -118,6 +121,12 @@ func TestOAuthCatalogAppliesCredentialModelAliases(t *testing.T) {
 				t.Fatal(err)
 			}
 			snapshot, err := client.ListConfiguredModelSnapshot(context.Background())
+			if test.wantRefused {
+				if err == nil || snapshot.Models != nil {
+					t.Fatalf("published a catalog without the credential's aliases: %+v, %v", snapshot, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("credential aliases failed the catalog: %v", err)
 			}
