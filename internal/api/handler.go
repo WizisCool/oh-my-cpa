@@ -90,6 +90,12 @@ type Handler struct {
 	// pluginIdentities remembers installed plugins' store identities and update observations.
 	// Plugins CPA has not loaded borrow their identity from this same snapshot.
 	pluginIdentities *pluginIdentityCache
+	// releaseToken is the gateway's GitHub token, read from its configuration for Oh My CPA's own
+	// release and star-count reads and held for a few minutes.
+	releaseToken releaseTokenCache
+	// updateSignals tells open consoles that the stored update observations moved, so the
+	// navigation's update indicators follow the sweep instead of its next poll.
+	updateSignals updateSignals
 	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
 	// the token-activity grid, the dashboard's all-time window, quota reads and the price book's
 	// recent traffic. Nil means the wall
@@ -382,6 +388,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/system/releases", h.getSystemReleases)
 				v1.Get("/management/system/repository", h.getSystemRepository)
 				v1.Get("/management/system/updates", h.getSystemUpdates)
+				v1.Get("/management/system/live", h.systemLive)
 				v1.Post("/management/system/check-updates", h.postSystemCheckUpdates)
 				v1.Get("/management/system/updater", h.getSystemUpdater)
 				v1.Post("/management/system/updater/apply", h.postSystemUpdaterApply)

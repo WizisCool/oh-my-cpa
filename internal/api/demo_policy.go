@@ -226,6 +226,9 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/system/releases", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/system/repository", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/system/updates", demoAllow, ""},
+	// The live stream answers 204 in the demonstration rather than opening a stream; its console
+	// keeps the polling interval.
+	{http.MethodGet, "/api/v1/management/system/live", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/system/check-updates", demoRefuse, "checking for updates is disabled: it would call the GitHub API"},
 
 	// Console updates. The read answers "disabled" because a demonstration builds no

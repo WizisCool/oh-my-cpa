@@ -34,6 +34,7 @@
     "agent_target",
     "update_dismissals",
     "omc_quota_auto_refresh",
+    "omc_update_check",
     "omc_plugin_source_enabled",
     "omc_display_currency"
   ],
@@ -547,6 +548,42 @@
       "response": {
         "key": "omc_display_currency",
         "value": "USD"
+      }
+    },
+    {
+      "id": "update-check-invalid",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_update_check",
+      "body": "{\"interval_minutes\":5}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_update_check"
+      }
+    },
+    {
+      "id": "update-check-unknown-field",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_update_check",
+      "body": "{\"interval_minutes\":60,\"refresh_on_reset\":true}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_update_check"
+      }
+    },
+    {
+      "id": "update-check-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_update_check",
+      "body": "{\"interval_minutes\":360}",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_update_check",
+        "value": {
+          "interval_minutes": 360
+        }
       }
     }
   ],

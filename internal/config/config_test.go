@@ -300,9 +300,6 @@ func TestReleaseCheckConfigReportsAMalformedSwitch(t *testing.T) {
 	if !cfg.Release.Enabled {
 		t.Fatal("checking must be ON when the switch is unset, which is the documented default")
 	}
-	if cfg.Release.Interval != DefaultReleaseInterval {
-		t.Fatalf("interval = %v, want %v", cfg.Release.Interval, DefaultReleaseInterval)
-	}
 	if cfg.Release.OMCRepository != DefaultOMCRepository || cfg.Release.CPARepository != DefaultCPARepository {
 		t.Fatalf("sources = %q / %q, want the documented defaults", cfg.Release.OMCRepository, cfg.Release.CPARepository)
 	}

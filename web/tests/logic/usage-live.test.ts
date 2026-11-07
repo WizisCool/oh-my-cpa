@@ -8,10 +8,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
+import { UNAVAILABLE_RETRY_MS } from '../../src/api/liveChannel.ts';
 import {
   createLiveReadPolicy,
   createUsageLiveChannel,
-  UNAVAILABLE_RETRY_MS,
   type UsageLiveSignal,
   type UsageLiveState,
 } from '../../src/api/usageLive.ts';

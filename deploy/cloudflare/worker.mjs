@@ -244,6 +244,11 @@ function serve(entry, nowMs, url) {
     // A body that is not JSON is served as captured. There are none today; this keeps
     // a future binary response from being corrupted by the walk.
   }
+  // A null-body status cannot carry one: the Fetch spec refuses a body on 204/205/304, and the
+  // dataset holds those captures as an empty string.
+  if (entry.status === 204 || entry.status === 205 || entry.status === 304) {
+    return new Response(null, { status: entry.status, headers: JSON_HEADERS });
+  }
   return new Response(body, {
     status: entry.status,
     headers: { ...JSON_HEADERS, 'Content-Type': entry.content_type },

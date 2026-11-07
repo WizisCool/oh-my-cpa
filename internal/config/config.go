@@ -93,8 +93,6 @@ type ReleaseConfig struct {
 	// cannot become a way to make the server fetch an arbitrary address.
 	OMCRepository string
 	CPARepository string
-	// Interval is the background sweep period.
-	Interval time.Duration
 }
 
 // Default release sources. The gateway default is the upstream the project is built
@@ -103,10 +101,6 @@ type ReleaseConfig struct {
 const (
 	DefaultOMCRepository = "WizisCool/oh-my-cpa"
 	DefaultCPARepository = "router-for-me/CLIProxyAPI"
-	// DefaultReleaseInterval is six hours: often enough to notice a release the same
-	// day, rare enough that the unauthenticated GitHub budget of sixty requests per
-	// hour is never at risk from the sweep itself.
-	DefaultReleaseInterval = 6 * time.Hour
 )
 
 // DemoModeEnv is the switch that turns a self-hosted deployment into the public
@@ -326,7 +320,6 @@ func loadReleaseConfig() (ReleaseConfig, error) {
 		AutoCheck:     autoCheck,
 		OMCRepository: envOr("OMCPA_OMC_REPO", DefaultOMCRepository),
 		CPARepository: envOr("OMCPA_CPA_REPO", DefaultCPARepository),
-		Interval:      DefaultReleaseInterval,
 	}, nil
 }
 

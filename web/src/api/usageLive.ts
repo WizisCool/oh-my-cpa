@@ -1,4 +1,5 @@
 import { getAppConfig } from '../types/config';
+import { createLiveChannel, type ChannelDeps, type LiveChannelState } from './liveChannel';
 
 /**
  * The live usage channel: one server-sent event stream per tab that says "stored
@@ -9,39 +10,15 @@ import { getAppConfig } from '../types/config';
  * the next read returns everything past the reader's boundary. That keeps this
  * module free of any knowledge of what a page shows.
  *
- * States:
- * - `connecting`: opening, or the browser is reconnecting after a drop or after the
- *   server ended the stream's lifetime. Readers keep their fallback poll.
- * - `live`: the stream is open. Readers rely on signals and stop polling.
- * - `unavailable`: the server answered without a stream - 204 when the deployment
- *   has no collector (ingestion off, demonstration mode), or 503 at the reader
- *   limit. EventSource does not retry a non-200 answer, so this module retries after
- *   `UNAVAILABLE_RETRY_MS`; readers poll meanwhile.
- *
- * The stream is closed while the tab is hidden and reopened when it is shown: a
- * hidden reader spends a server slot on nobody. Reopening emits `ready`, which every
- * reader treats as a signal, so a tab returning from the background catches up.
+ * The reconnect, visibility and refusal behaviour is `createLiveChannel`'s; this module names
+ * the event and keeps the read policy that turns signals into reads.
  */
-export type UsageLiveState = 'connecting' | 'live' | 'unavailable';
+export type UsageLiveState = LiveChannelState;
 export type UsageLiveSignal = 'ready' | 'usage';
-
-export const UNAVAILABLE_RETRY_MS = 30_000;
-
-/** EventSource.CLOSED, spelled out so the logic suite runs where EventSource does not exist. */
-const EVENT_SOURCE_CLOSED = 2;
 
 interface Listener {
   onSignal: (signal: UsageLiveSignal) => void;
   onState?: (state: UsageLiveState) => void;
-}
-
-interface ChannelDeps {
-  createSource: (url: string) => EventSource;
-  url: () => string;
-  isVisible: () => boolean;
-  onVisibilityChange: (handler: () => void) => () => void;
-  setTimer: (handler: () => void, ms: number) => unknown;
-  clearTimer: (timer: unknown) => void;
 }
 
 /**
@@ -50,92 +27,15 @@ interface ChannelDeps {
  * browser.
  */
 export function createUsageLiveChannel(deps: ChannelDeps) {
-  const listeners = new Set<Listener>();
-  let source: EventSource | null = null;
-  let state: UsageLiveState = 'connecting';
-  let retryTimer: unknown = null;
-  let detachVisibility: (() => void) | null = null;
-
-  const setState = (next: UsageLiveState) => {
-    if (next === state) return;
-    state = next;
-    for (const listener of listeners) listener.onState?.(next);
-  };
-  const signal = (kind: UsageLiveSignal) => {
-    for (const listener of listeners) listener.onSignal(kind);
-  };
-
-  const close = () => {
-    if (retryTimer !== null) {
-      deps.clearTimer(retryTimer);
-      retryTimer = null;
-    }
-    if (source) {
-      source.close();
-      source = null;
-    }
-  };
-
-  const open = () => {
-    if (source || retryTimer !== null || listeners.size === 0 || !deps.isVisible()) return;
-    setState('connecting');
-    let opened: EventSource;
-    try {
-      opened = deps.createSource(deps.url());
-    } catch {
-      setState('unavailable');
-      retryTimer = deps.setTimer(() => { retryTimer = null; open(); }, UNAVAILABLE_RETRY_MS);
-      return;
-    }
-    source = opened;
-    opened.addEventListener('ready', () => {
-      if (source !== opened) return;
-      setState('live');
-      signal('ready');
-    });
-    opened.addEventListener('usage', () => {
-      if (source !== opened) return;
-      signal('usage');
-    });
-    opened.addEventListener('error', () => {
-      if (source !== opened) return;
-      // CONNECTING means the browser is already retrying (a dropped connection,
-      // or the server ending the stream's lifetime). CLOSED means it gave up: the
-      // answer was not a stream, so retrying is this module's job.
-      if (opened.readyState === EVENT_SOURCE_CLOSED) {
-        source = null;
-        setState('unavailable');
-        retryTimer = deps.setTimer(() => { retryTimer = null; open(); }, UNAVAILABLE_RETRY_MS);
-      } else {
-        setState('connecting');
-      }
-    });
-  };
-
-  const handleVisibility = () => {
-    if (deps.isVisible()) open();
-    else {
-      close();
-      setState('connecting');
-    }
-  };
-
+  const channel = createLiveChannel({ ...deps, eventName: 'usage' });
   return {
-    subscribe(listener: Listener): () => void {
-      listeners.add(listener);
-      listener.onState?.(state);
-      if (!detachVisibility) detachVisibility = deps.onVisibilityChange(handleVisibility);
-      open();
-      return () => {
-        if (!listeners.delete(listener)) return;
-        if (listeners.size > 0) return;
-        close();
-        detachVisibility?.();
-        detachVisibility = null;
-        state = 'connecting';
-      };
+    subscribe(listener: Listener) {
+      return channel.subscribe({
+        onSignal: (signal) => listener.onSignal(signal as UsageLiveSignal),
+        onState: listener.onState,
+      });
     },
-    getState: () => state,
+    getState: channel.getState,
   };
 }
 

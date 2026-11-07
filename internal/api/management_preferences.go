@@ -13,6 +13,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 )
@@ -55,6 +56,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceAgentTarget:            true,
 	repository.PreferenceUpdateDismissals:       true,
 	repository.PreferenceQuotaAutoRefresh:       true,
+	repository.PreferenceUpdateCheck:            true,
 	repository.PreferenceOMCPluginSource:        true,
 }
 
@@ -147,6 +149,14 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 	if key == repository.PreferenceQuotaAutoRefresh {
 		if _, err := quota.ParseAutoRefreshSettings(body); err != nil {
 			writeError(writer, http.StatusBadRequest, quota.ErrInvalidAutoRefreshSettings.Error())
+			return
+		}
+	}
+	// The update check interval decides how often the sweep spends GitHub requests, so it is
+	// held to the same rule.
+	if key == repository.PreferenceUpdateCheck {
+		if _, err := release.ParseUpdateCheckSettings(body); err != nil {
+			writeError(writer, http.StatusBadRequest, release.ErrInvalidUpdateCheckSettings.Error())
 			return
 		}
 	}

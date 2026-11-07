@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { UPDATE_STAGE_ORDER, deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from '../../src/pages/SystemPage/versionPresentation.ts';
 import { isUpdateDismissed, listPendingUpdates, parseUpdateDismissals, withDismissal } from '../../src/utils/updateDismissals.ts';
 import type { SystemProductVersion, SystemUpdateJob, SystemUpdaterResponse } from '../../src/types/system.ts';
+import { DEFAULT_UPDATE_CHECK, parseUpdateCheck } from '../../src/types/updateCheck.ts';
 
 function createVersion(overrides: Partial<SystemProductVersion> = {}): SystemProductVersion {
   return {
@@ -167,4 +168,27 @@ test('a running update reports the step it has reached, in the order the updater
     kind: 'running', stage: 'pulling', stageKey: 'sys.update_stage.pulling',
   });
   assert.deepEqual([...UPDATE_STAGE_ORDER], ['pulling', 'stopping', 'starting', 'verifying']);
+});
+
+
+test('the scheduled update check keeps an interval the sweep can honour and ignores the rest', () => {
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 360 }), { interval_minutes: 360 });
+  // A document a newer build wrote keeps its known field; the server's write validation is
+  // strict, so this is the read path only.
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 60, future_field: true }), { interval_minutes: 60 });
+  for (const raw of [
+    undefined,
+    null,
+    {},
+    [60],
+    { interval_minutes: 14 },
+    { interval_minutes: 1441 },
+    { interval_minutes: '60' },
+    { interval_minutes: 60.5 },
+  ]) {
+    assert.equal(parseUpdateCheck(raw), undefined);
+  }
+  // Parity with `release.DefaultUpdateCheckSettings`, which is what a deployment that never
+  // chose an interval actually runs.
+  assert.deepEqual(DEFAULT_UPDATE_CHECK, { interval_minutes: 60 });
 });

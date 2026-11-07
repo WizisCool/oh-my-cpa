@@ -67,6 +67,7 @@ func (c *Client) FetchStargazers(ctx context.Context, repository string) (int64,
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("User-Agent", userAgent)
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	c.authorize(ctx, request)
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
@@ -78,6 +79,11 @@ func (c *Client) FetchStargazers(ctx context.Context, repository string) (int64,
 		if limit := rateLimitFrom(response.Header); limit.Exhausted() {
 			return 0, fmt.Errorf("%w (resets %s)", ErrRateLimited, resetDescription(limit))
 		}
+	}
+	if response.StatusCode == http.StatusUnauthorized && request.Header.Get("Authorization") != "" {
+		// Same rule as the release feed: name the configuration field, because a revoked token
+		// would otherwise read as an ordinary upstream failure.
+		return 0, errors.New("star count read rejected the configured GitHub token: check server.github-token on the configuration panel")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return 0, fmt.Errorf("repository read answered status %d", response.StatusCode)

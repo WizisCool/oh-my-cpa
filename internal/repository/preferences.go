@@ -128,6 +128,13 @@ const (
 	// credentials are read, made from the console that shows the readings.
 	PreferenceQuotaAutoRefresh = "omc_quota_auto_refresh"
 
+	// PreferenceUpdateCheck is the deployment-wide scheduled update check interval. The server
+	// reads it: the sweep consults it on every tick, so a change takes effect without a
+	// restart. A preference rather than environment configuration because it is an operator's
+	// running decision about how often this deployment spends GitHub requests, made from the
+	// console that shows what they found.
+	PreferenceUpdateCheck = "omc_update_check"
+
 	// PreferenceOMCPluginSource is whether Oh My CPA's own plugin registry is listed in
 	// the plugin store. The server reads it: the store reconciles CPA's
 	// `plugins.store-sources` with it, which is what keeps the registry present without

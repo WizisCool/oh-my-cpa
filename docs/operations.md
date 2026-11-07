@@ -180,20 +180,26 @@ semantics.
 The System Information page reports the running and published versions of both Oh My
 CPA and your gateway. It reads release metadata from `api.github.com` only — fixed host,
 no operator-supplied URL — following `HTTP_PROXY`/`HTTPS_PROXY` like the price sync
-does. A sweep runs every six hours; opening the page and the **Check for updates**
-button also check, subject to a fifteen-minute floor per product — inside it the answer
-comes from the stored index and the message says so, because the feed is one shared
-per-address budget.
+does. A sweep runs on the interval chosen in OMC Settings → Update checks — hourly by
+default, adjustable from fifteen minutes to a day; opening the page and the
+**Check for updates** button also check, subject to a fifteen-minute floor per product —
+inside it the answer comes from the stored index and the message says so, because the feed
+is one shared per-address budget. A refused read — including a 429 — is reported on the page
+and the next sweep asks again: an exhausted budget delays a release notice, it never ends
+the checks.
 
 When either product has a newer published release, the **System Information** entry in
 the navigation carries a small amber dot. It reflects the stored answer and costs no
-request of its own, so it appears once a sweep or a check has found the release; an open
-console re-reads that answer hourly. **Ignore this version** on the product's row clears the
+request of its own, so it appears once a sweep or a check has found the release. An open
+console subscribes to a signal-only stream (`/management/system/live`) that says the stored
+answer changed, re-reads once whenever the stream opens again (a tab returning from the
+background, or the stream's five-minute lifetime ending), and keeps an hourly re-read as the
+fallback for a deployment whose stream is unavailable. **Ignore this version** on the product's row clears the
 dot for that one release and is remembered by the deployment, not the browser; pressing it
 again restores the reminder, and a later release is flagged regardless.
 
 The background sweep also checks installed plugins through CPA's store, once at startup
-and every six hours. The **Plugin Management** entry uses the same amber dot for available
+and on the same interval. The **Plugin Management** entry uses the same amber dot for available
 plugin updates. The installed-plugins page enables a separate store query after its
 list contains plugins. Installation or removal refreshes the reminder.
 
@@ -212,7 +218,12 @@ with its reason and the time it was attempted.
 when it is opened, which is what an air-gapped or test deployment wants, since a page
 visit is not an operator asking a question. The **Check for updates** button works
 either way. GitHub's unauthenticated budget is 60 requests per hour for the address
-making them, and the page says so when a check is refused for that reason. Release notes
+making them, and the page says so when a check is refused for that reason. The checks use the
+gateway's own GitHub token — Configuration → Access & Auth → GitHub token
+(`server.github-token`) — so a deployment configures GitHub once and both processes benefit:
+a token raises that budget to 5,000 and exempts conditional requests from it. OMC reads it
+from the gateway's configuration, holds it in memory, and never returns it to a browser.
+Release notes
 are held in memory rather than stored, so after a restart the page names the versions
 and links to the source while the notes themselves are unavailable.
 
