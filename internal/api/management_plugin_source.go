@@ -117,7 +117,11 @@ func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *h
 	if err != nil {
 		return false, err
 	}
-	if slices.ContainsFunc(settings.StoreSources, isOMCPluginStoreURL) == enabled {
+	// The old address was inserted by OMC, not by the operator. Retire it even
+	// when the current address already agrees with the source switch.
+	sources := configyaml.StoreSourcesWith(settings.StoreSources, pluginregistry.LegacyOMCSourceURL, false)
+	sources = configyaml.StoreSourcesWith(sources, pluginregistry.OMCSourceURL, enabled)
+	if slices.Equal(settings.StoreSources, sources) {
 		return enabled, nil
 	}
 
@@ -125,7 +129,6 @@ func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *h
 	if auditErr := h.recordAudit(request, "plugin.source", "config", "plugins.store-sources", "attempt", details); auditErr != nil {
 		return false, errPluginSourceAuditUnavailable
 	}
-	sources := configyaml.StoreSourcesWith(settings.StoreSources, pluginregistry.OMCSourceURL, enabled)
 	change := management.ConfigChange{Path: []string{"plugins", "store-sources"}, Value: sources}
 	if len(sources) == 0 {
 		// An empty list is how CPA spells "none": the key itself is removed.

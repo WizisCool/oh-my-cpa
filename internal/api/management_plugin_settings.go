@@ -83,7 +83,7 @@ type putPluginSettingsRequest struct {
 func projectPluginSettings(revision string, settings configyaml.PluginSettings, omcSourceEnabled bool) PluginSettingsDTO {
 	storeSources := make([]string, 0, len(settings.StoreSources))
 	for _, source := range boundedPluginList(settings.StoreSources) {
-		if !isOMCPluginStoreURL(source) {
+		if !isOMCPluginStoreURL(source) && source != pluginregistry.LegacyOMCSourceURL {
 			storeSources = append(storeSources, source)
 		}
 	}
@@ -126,6 +126,13 @@ func (h *Handler) getPluginSettings(writer http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
+	// Settings may be the first plugin page opened after an upgrade. Reconcile
+	// before reading its revision so a retired source cannot become editable.
+	omcSourceEnabled, err := h.reconcileOMCPluginSource(request.Context(), request, client)
+	if err != nil {
+		writePluginSourceError(writer, err, false)
+		return
+	}
 	rawYAML, err := client.ConfigYAML(request.Context())
 	if err != nil {
 		writeCPAFacadeError(writer, err)
@@ -134,11 +141,6 @@ func (h *Handler) getPluginSettings(writer http.ResponseWriter, request *http.Re
 	settings, err := configyaml.ReadPluginSettings(rawYAML)
 	if err != nil {
 		writePluginSettingsUnreadable(writer, err)
-		return
-	}
-	omcSourceEnabled, err := h.omcPluginSourceEnabled(request.Context())
-	if err != nil {
-		h.pluginSourceReadError(writer, err)
 		return
 	}
 	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(rawYAML), settings, omcSourceEnabled))
@@ -167,8 +169,8 @@ func validatePluginSettings(req putPluginSettingsRequest) (configyaml.PluginSett
 		}
 		// The managed registry is not a source the operator edits: it is present
 		// exactly when its switch is on, so a submitted copy is absorbed instead of
-		// being stored a second time.
-		if isOMCPluginStoreURL(source) {
+		// being stored a second time. Stale clients may still submit the retired URL.
+		if isOMCPluginStoreURL(source) || source == pluginregistry.LegacyOMCSourceURL {
 			continue
 		}
 		if !isRegistryURL(source) {

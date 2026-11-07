@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +27,8 @@ const managedSourceStoredYAML = `config-version: 8
 plugins:
     enabled: true
 `
+
+const legacyOMCSourceURL = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"
 
 // managedSourceCPA is a gateway whose store-source list is the thing under test: the
 // configuration view is rendered from it, the store catalogue is derived from it, and
@@ -264,6 +267,61 @@ func TestPluginStoreAddsTheManagedSource(t *testing.T) {
 	}
 }
 
+func TestPluginSourceMigrationRemovesTheLegacyRegistry(t *testing.T) {
+	const first = "https://plugins.example/registry.json"
+	const second = "https://raw.githubusercontent.com/operator/plugins/main/registry.json"
+	cases := []struct {
+		name    string
+		sources []string
+		enabled bool
+		want    []string
+	}{
+		{name: "legacy only", sources: []string{legacyOMCSourceURL}, enabled: true, want: []string{pluginregistry.OMCSourceURL}},
+		{name: "legacy and custom sources", sources: []string{first, "  " + legacyOMCSourceURL + "  ", second, legacyOMCSourceURL}, enabled: true, want: []string{first, second, pluginregistry.OMCSourceURL}},
+		{name: "both addresses already present", sources: []string{first, pluginregistry.OMCSourceURL, legacyOMCSourceURL, second}, enabled: true, want: []string{first, pluginregistry.OMCSourceURL, second}},
+		{name: "legacy only with switch off", sources: []string{legacyOMCSourceURL}},
+		{name: "both addresses with switch off", sources: []string{first, legacyOMCSourceURL, pluginregistry.OMCSourceURL, second}, want: []string{first, second}},
+	}
+	for _, endpoint := range []string{"plugin-store", "plugins/settings"} {
+		for _, testCase := range cases {
+			t.Run(endpoint+"/"+testCase.name, func(t *testing.T) {
+				gateway := &managedSourceCPA{sources: slices.Clone(testCase.sources)}
+				client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+				setManagedSourcePreference(t, repo, testCase.enabled)
+
+				response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/"+endpoint)
+				if response.StatusCode != http.StatusOK {
+					t.Fatalf("%s: status %d body %s", endpoint, response.StatusCode, body)
+				}
+				if got := gateway.sourceList(); !slices.Equal(got, testCase.want) {
+					t.Fatalf("stored sources = %q, want %q", got, testCase.want)
+				}
+				if endpoint == "plugins/settings" {
+					var settings PluginSettingsDTO
+					if err := json.Unmarshal(body, &settings); err != nil {
+						t.Fatal(err)
+					}
+					wantEditable := slices.DeleteFunc(slices.Clone(testCase.want), isOMCPluginStoreURL)
+					if !slices.Equal(settings.StoreSources, wantEditable) || settings.OMCSourceEnabled != testCase.enabled {
+						t.Fatalf("settings = %+v, want editable sources %q and switch %t", settings, wantEditable, testCase.enabled)
+					}
+					if settings.Revision != gateway.revision() {
+						t.Fatalf("settings revision = %q, want the migrated document's %q", settings.Revision, gateway.revision())
+					}
+				}
+				backups := listConfigBackupsForTest(t, client, baseURL)
+				if len(backups.Backups) != 1 || backups.Backups[0].Reason != "plugin_settings" {
+					t.Fatalf("backups = %+v, want one pre-migration copy", backups.Backups)
+				}
+				response, body = getJSON(t, client, baseURL+"/omc/api/v1/management/"+endpoint)
+				if response.StatusCode != http.StatusOK || len(gateway.recordedWrites()) != 1 {
+					t.Fatalf("second read: status %d body %s writes %q, want no repeated migration", response.StatusCode, body, gateway.recordedWrites())
+				}
+			})
+		}
+	}
+}
+
 // Switching the source off removes it from the gateway's file and from the catalogue;
 // switching it back on restores both.
 func TestPluginStoreFollowsTheManagedSourceSwitch(t *testing.T) {
@@ -323,7 +381,7 @@ func TestPluginSettingsKeepTheManagedSourceOutOfTheEditableList(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{
 		"revision":      settings.Revision,
 		"enabled":       true,
-		"store_sources": []string{"https://plugins.example/registry.json", pluginregistry.OMCSourceURL},
+		"store_sources": []string{"https://plugins.example/registry.json", pluginregistry.OMCSourceURL, legacyOMCSourceURL},
 		"store_auth":    []any{},
 	})
 	if err != nil {
@@ -366,7 +424,7 @@ func TestPluginSettingsDoNotRestoreASwitchedOffManagedSource(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{
 		"revision":      settings.Revision,
 		"enabled":       true,
-		"store_sources": []string{"https://plugins.example/registry.json"},
+		"store_sources": []string{"https://plugins.example/registry.json", legacyOMCSourceURL, pluginregistry.OMCSourceURL},
 		"store_auth":    []any{},
 	})
 	putResponse, putBody := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/plugins/settings", string(payload))

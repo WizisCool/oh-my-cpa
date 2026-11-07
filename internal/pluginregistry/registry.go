@@ -16,6 +16,9 @@ import (
 const (
 	// OMCSourceURL is where CPA reads Oh My CPA's plugin registry.
 	OMCSourceURL = "https://raw.githubusercontent.com/omc-community/omc-plugins/main/registry.json"
+	// LegacyOMCSourceURL was managed by OMC before the registry moved to its own
+	// repository. Reconciliation removes it from existing gateway configurations.
+	LegacyOMCSourceURL = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"
 	// OMCSourceName is what the console calls the registry. CPA derives a source's
 	// name from the URL's host, which for a raw GitHub address says nothing about
 	// who publishes it.

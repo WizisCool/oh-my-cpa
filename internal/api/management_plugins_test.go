@@ -521,13 +521,14 @@ func TestPluginSettingsRoundTrip(t *testing.T) {
 	state.mu.Lock()
 	writes := append([]string(nil), state.configWrites...)
 	state.mu.Unlock()
-	// One PATCH of the three keys the page owns: `dir` and `configs` are never
+	// After the initial read reconciles the managed source, the save uses one
+	// PATCH of the three keys the page owns: `dir` and `configs` are never
 	// written, only the variable the rule's type reads is sent, the source list is
 	// de-duplicated, and the managed Oh My CPA registry is put back because its
 	// switch is on.
 	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json","https://raw.githubusercontent.com/omc-community/omc-plugins/main/registry.json"]}}`
-	if len(writes) != 1 || writes[0] != want {
-		t.Fatalf("writes = %q\nwant %q", writes, want)
+	if len(writes) != 2 || writes[1] != want {
+		t.Fatalf("writes = %q\nwant a source reconciliation followed by %q", writes, want)
 	}
 
 	// The stale revision is now refused rather than overwriting the save above.
