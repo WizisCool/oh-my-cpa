@@ -67,6 +67,14 @@ it('logs in from a plugin with a management page, completes polling and keeps na
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     expect(session().status).toBe('success');
 
+    const failureReason = 'no active GLM Coding Plan or ZCode gift plan';
+    server.on('GET', '/management/oauth/status', () => ({ status: 'error', message: failureReason }));
+    await act(async () => { fireEvent.click(start()!); });
+    expect(session().status).toBe('waiting');
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(session()).toMatchObject({ status: 'error', polling: false, error: failureReason });
+    expect(surface.baseElement.textContent).toContain(failureReason);
+
     shouldFail = true;
     await act(async () => { fireEvent.click(start()!); });
     expect(session().status).toBe('error');
