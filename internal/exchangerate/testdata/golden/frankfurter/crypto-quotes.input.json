@@ -1,0 +1,113 @@
+{
+  "why": "Frankfurter v2 blends non-ISO instruments (4-letter crypto quotes such as AAVE, USDC, HBAR) into the USD feed. Dropping them must still publish every display currency instead of failing the whole snapshot.",
+  "body": [
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "AAVE",
+      "rate": 0.0076554
+    },
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "HBAR",
+      "rate": 14.8132
+    },
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "LINK",
+      "rate": 0.092211
+    },
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "USDC",
+      "rate": 1.0003
+    },
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "USDT",
+      "rate": 1.0016
+    },
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "BTC",
+      "rate": 0.000012891
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "USD",
+      "rate": 1
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "CNY",
+      "rate": 6.6636
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "EUR",
+      "rate": 0.89153
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "JPY",
+      "rate": 158.18
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "GBP",
+      "rate": 0.74417
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "HKD",
+      "rate": 7.8466
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "SGD",
+      "rate": 1.2789
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "MYR",
+      "rate": 4.0537
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "KRW",
+      "rate": 1351.97
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "AUD",
+      "rate": 1.4414
+    },
+    {
+      "date": "2026-11-08",
+      "base": "USD",
+      "quote": "CAD",
+      "rate": 1.4
+    },
+    {
+      "date": "2026-11-06",
+      "base": "USD",
+      "quote": "PLN",
+      "rate": 3.9342
+    }
+  ]
+}
