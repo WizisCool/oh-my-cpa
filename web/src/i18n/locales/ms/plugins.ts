@@ -33,7 +33,6 @@ export default {
   "plugin.badge_not_registered": "Tidak berdaftar",
   "plugin.badge_auth_provider": "Penyedia pengesahan",
   "plugin.badge_quota": "Kuota",
-  "plugin.badge_update_to": "Kemas kini ke {version}",
   "plugin.badge_official": "Rasmi CPA",
   "plugin.badge_official_source": "Komuniti CPA",
   "plugin.badge_omc": "Rasmi OMC",

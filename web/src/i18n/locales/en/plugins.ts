@@ -33,7 +33,6 @@ export default {
   'plugin.badge_not_registered': 'Not registered',
   'plugin.badge_auth_provider': 'Auth provider',
   'plugin.badge_quota': 'Quota',
-  'plugin.badge_update_to': 'Update to {version}',
   'plugin.badge_official': 'CPA Official',
   'plugin.badge_official_source': 'CPA Community',
   'plugin.badge_omc': 'OMC Official',

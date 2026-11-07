@@ -30,7 +30,6 @@ export default {
   'plugin.badge_not_registered': '未注册',
   'plugin.badge_auth_provider': '认证提供方',
   'plugin.badge_quota': '配额',
-  'plugin.badge_update_to': '可更新至 {version}',
   'plugin.badge_official': 'CPA 官方',
   'plugin.badge_official_source': 'CPA 社区',
   'plugin.badge_omc': 'OMC 官方',
