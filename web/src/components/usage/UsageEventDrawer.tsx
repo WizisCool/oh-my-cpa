@@ -49,6 +49,7 @@ import {
   requestTransport,
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
+import { requestFailureCause } from '../../types/requestDetailSummary';
 import { CostBreakdownView } from '../pricing/CostBreakdownView';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
@@ -116,6 +117,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     enabled: eventId != null,
   });
   const event = result.data?.event;
+  const failureCause = requestFailureCause(undefined, event?.fail_code);
   const identity = event ? resolveCredential(event, credentials) : undefined;
   // The credential's readable label. It is the same projection the list prints, so an
   // account and any file name built from it are masked here too; the export is the one
@@ -431,7 +433,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                             <header>
                               <strong>{event.fail_status_code ? `HTTP ${event.fail_status_code}` : t('events.filter_failed')}</strong>
                             </header>
-                            {event.fail_code && fields([[t('events.error_code'), value(event.fail_code)]])}
+                            {event.fail_code && fields([[
+                              t('events.error_code'),
+                              failureCause === 'unknown'
+                                ? event.fail_code
+                                : `${t(`events.cause_${failureCause}`)} (${event.fail_code})`,
+                            ]])}
                             {event.fail_body
                               ? <pre>{event.fail_body}</pre>
                               : <p className="request-detail-note">{t('events.fail_no_body')}</p>}
