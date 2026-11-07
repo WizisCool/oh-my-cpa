@@ -55,7 +55,10 @@ func readHTMLDocument(arguments string) (string, error) {
 	var input HTMLInput
 	decoder := json.NewDecoder(strings.NewReader(arguments))
 	decoder.DisallowUnknownFields()
-	if len(arguments) > MAX_HTML_DOCUMENT_BYTES*6+1024 || decoder.Decode(&input) != nil {
+	if len(arguments) > MAX_HTML_DOCUMENT_BYTES*6+1024 {
+		return "", refuse("html must be a nonempty document of at most %d bytes", MAX_HTML_DOCUMENT_BYTES)
+	}
+	if decoder.Decode(&input) != nil {
 		return "", refuse("arguments must be {\"html\": \"<complete HTML document>\"}")
 	}
 	if strings.TrimSpace(input.HTML) == "" || len(input.HTML) > MAX_HTML_DOCUMENT_BYTES {

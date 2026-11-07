@@ -72,7 +72,7 @@ export function HTMLSurface({ argumentsText, isStreaming }: HTMLSurfaceProps) {
           <CodeBody code={source} lang="html" isStreaming={isStreaming} />
         )}
       </CodeFrame>
-      <AppModal open={isExpanded} onCancel={() => setIsExpanded(false)} title={title} size="wide" footer={null}>
+      <AppModal open={isExpanded} onCancel={() => setIsExpanded(false)} title={title} size="wide" footer={null} destroyOnHidden>
         <SandboxedDocument document={source} title={title} height="70vh" testID="agent-html-expanded" />
       </AppModal>
     </div>

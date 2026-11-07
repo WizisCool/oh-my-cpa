@@ -92,6 +92,18 @@ func TestPresentHTMLAcceptsADocumentWhoseEscapingOutgrowsIt(t *testing.T) {
 	}
 }
 
+// TestPresentHTMLNamesASizeRefusalAsOne: an oversized payload is a size violation, not a
+// malformed call, so the model is told to shorten the document rather than to change its shape.
+func TestPresentHTMLNamesASizeRefusalAsOne(t *testing.T) {
+	oversized := `{"html":"x"}` + strings.Repeat(" ", MAX_HTML_DOCUMENT_BYTES*6+2048)
+	if result := presentHTML(oversized); result.Status != "error" || !strings.Contains(result.Detail, "at most") {
+		t.Fatalf("oversized payload reported as %+v", result)
+	}
+	if result := presentHTML(`{"document":"x"}`); !strings.Contains(result.Detail, "arguments must be") {
+		t.Fatalf("malformed call reported as %+v", result)
+	}
+}
+
 // TestPresentHTMLRefusesAMalformedDocument: the document is the answer, so a call the console could
 // not draw comes back as a refusal the model can repair rather than an empty frame.
 func TestPresentHTMLRefusesAMalformedDocument(t *testing.T) {
