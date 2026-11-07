@@ -409,7 +409,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	if storeData.Total != len(storeData.Plugins) {
 		t.Fatalf("store total = %d, want the projected count %d", storeData.Total, len(storeData.Plugins))
 	}
-	if len(storeData.Sources) != 2 || storeData.Sources[0]["is_official"] != true || storeData.Sources[1]["is_official"] != false {
+	if len(storeData.Sources) != 2 || storeData.Sources[0]["is_official"] != true || storeData.Sources[1]["is_official"] != false || storeData.Sources[1]["is_omc"] != false {
 		t.Fatalf("sources = %#v, want the official registry marked", storeData.Sources)
 	}
 	if len(storeData.SourceErrors) != 1 || storeData.SourceErrors[0]["source_name"] != "down.example" {
@@ -419,7 +419,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	assertDeclaredKeys(t, "store plugin", official, []string{
 		"store_id", "source_id", "source_name", "id", "name", "description", "author", "version",
 		"repository_url", "homepage", "license", "tags", "locales", "logo", "install_type", "platforms",
-		"is_official", "is_official_repository", "is_omc", "auth_required", "auth_configured", "installed", "installed_version",
+		"is_official", "is_official_repository", "is_omc", "is_omc_repository", "auth_required", "auth_configured", "installed", "installed_version",
 		"install_source_status", "effective_enabled", "update_available",
 	})
 	locales, _ := official["locales"].(map[string]any)
@@ -793,6 +793,16 @@ func TestOfficialPluginRepositoryIsReadFromTheParsedPath(t *testing.T) {
 	} {
 		if got := isOfficialPluginRepository(scenario.repository); got != scenario.want {
 			t.Errorf("isOfficialPluginRepository(%q) = %v, want %v", scenario.repository, got, scenario.want)
+		}
+	}
+	// Oh My CPA's own plugins are read by the same rule against its own organization.
+	for repository, want := range map[string]bool{
+		"https://github.com/omc-community/omc-zcode-oauth":          true,
+		"https://github.com/Yorick-Ryu/cpa-plugin-codex-candy-eval": false,
+		"https://github.com/omc-community/../Yorick-Ryu/candy-eval": false,
+	} {
+		if got := isGitHubRepositoryOf(repository, omcPluginOwner); got != want {
+			t.Errorf("isGitHubRepositoryOf(%q, omc) = %v, want %v", repository, got, want)
 		}
 	}
 }

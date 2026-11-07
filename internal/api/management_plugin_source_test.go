@@ -256,7 +256,7 @@ func TestPluginStoreAddsTheManagedSource(t *testing.T) {
 	if store.Plugins[1].IsOMC || !store.Plugins[1].IsOfficial {
 		t.Fatalf("second entry = %#v, want the official one after it", store.Plugins[1])
 	}
-	if len(store.Sources) != 2 || store.Sources[1].Name != pluginregistry.OMCSourceName {
+	if len(store.Sources) != 2 || store.Sources[1].Name != pluginregistry.OMCSourceName || !store.Sources[1].IsOMC || store.Sources[0].IsOMC {
 		t.Fatalf("sources = %#v, want the managed registry renamed", store.Sources)
 	}
 

@@ -45,6 +45,9 @@ const (
 	// browser resolves elsewhere cannot pass.
 	officialPluginOwner          = "router-for-me"
 	officialPluginRepositoryHost = "github.com"
+	// omcPluginOwner is the GitHub organization Oh My CPA maintains its own plugins in.
+	// Its registry also lists community authors' plugins, which stay in their own accounts.
+	omcPluginOwner = "omc-community"
 )
 
 var pluginLocaleKey = regexp.MustCompile(`^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$`)
@@ -114,6 +117,7 @@ type PluginStoreSourceDTO struct {
 	Name       string `json:"name"`
 	URL        string `json:"url"`
 	IsOfficial bool   `json:"is_official"`
+	IsOMC      bool   `json:"is_omc"`
 }
 
 type PluginStoreSourceErrorDTO struct {
@@ -152,6 +156,7 @@ type StorePluginItemDTO struct {
 	IsOfficial           bool                            `json:"is_official"`
 	IsOfficialRepository bool                            `json:"is_official_repository"`
 	IsOMC                bool                            `json:"is_omc"`
+	IsOMCRepository      bool                            `json:"is_omc_repository"`
 	AuthRequired         bool                            `json:"auth_required"`
 	AuthConfigured       bool                            `json:"auth_configured"`
 	Installed            bool                            `json:"installed"`
@@ -352,6 +357,7 @@ func projectPluginStoreSources(sources []management.PluginStoreSource) []PluginS
 			Name:       name,
 			URL:        boundedText(source.URL, pluginTextLimit),
 			IsOfficial: strings.EqualFold(strings.TrimSpace(source.ID), officialPluginSourceID),
+			IsOMC:      isOMCPluginStoreURL(source.URL),
 		})
 	}
 	return result
@@ -437,6 +443,7 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		IsOfficial:           isOfficialStoreSource(plugin.SourceID),
 		IsOfficialRepository: isOfficialPluginRepository(repositoryURL),
 		IsOMC:                isOMC,
+		IsOMCRepository:      isGitHubRepositoryOf(repositoryURL, omcPluginOwner),
 		AuthRequired:         plugin.AuthRequired,
 		AuthConfigured:       plugin.AuthConfigured,
 		Installed:            plugin.Installed,
@@ -513,12 +520,18 @@ func isOfficialStoreSource(sourceID string) bool {
 // vendor repository that the operator's browser opens under another owner - and this
 // answer is what waives the typed-id confirmation.
 func isOfficialPluginRepository(repositoryURL string) bool {
+	return isGitHubRepositoryOf(repositoryURL, officialPluginOwner)
+}
+
+// isGitHubRepositoryOf reports whether a repository URL names a repository of owner on
+// GitHub, read from the parsed path rather than as a prefix.
+func isGitHubRepositoryOf(repositoryURL, owner string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(repositoryURL))
 	if err != nil || !strings.EqualFold(parsed.Scheme, "https") || !strings.EqualFold(parsed.Hostname(), officialPluginRepositoryHost) {
 		return false
 	}
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if len(segments) < 2 || !strings.EqualFold(segments[0], officialPluginOwner) {
+	if len(segments) < 2 || !strings.EqualFold(segments[0], owner) {
 		return false
 	}
 	for _, segment := range segments {
