@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Dropdown } from 'antd';
+import { Button, Dropdown, Segmented } from 'antd';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,11 +9,11 @@ import { useI18n, useT } from '../../i18n';
 import { selectInstalledPluginMetadata } from '../../types/pluginStoreMetadata';
 import type { PluginItem, StorePluginItem } from '../../types/plugin';
 import { safeExternalURL } from '../../utils/externalUrl';
-import { StatusLabel } from '../common/StatusLabel';
-import { filterInstalledPlugins, isStoreInstallBlocked } from './pluginStoreLogic';
+import { filterInstalledPlugins, isStoreInstallBlocked, matchesInstalledState, storePluginOrigin, type InstalledStateFilter } from './pluginStoreLogic';
+import type { MessageKey } from '../../i18n/catalog';
 import { PluginInstallModal } from './PluginInstallModal';
 import { waitForPluginRuntime } from './pluginRuntime';
-import { formatPluginVersion, PluginLogo, PluginMeta } from './PluginParts';
+import { formatPluginVersion, PluginLogo, PluginMeta, PluginOriginBadge, PluginStateLabel } from './PluginParts';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
@@ -22,6 +22,12 @@ import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
 import { ToolButton } from '../common/ToolButton';
+
+const INSTALLED_STATE_LABELS: Record<InstalledStateFilter, MessageKey> = {
+  all: 'plugin.filter_all',
+  running: 'plugin.filter_running',
+  stopped: 'plugin.filter_stopped',
+};
 
 interface InstalledPluginsPanelProps {
   plugins: PluginItem[];
@@ -63,6 +69,7 @@ export function InstalledPluginsPanel({
   const toast = useToast();
   const queryClient = useQueryClient();
   const [query, setQuery] = React.useState('');
+  const [stateFilter, setStateFilter] = React.useState<InstalledStateFilter>('all');
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
   const [updating, setUpdating] = React.useState<StorePluginItem | null>(null);
   const moreButtonRefs = React.useRef(new Map<string, HTMLElement>());
@@ -75,7 +82,15 @@ export function InstalledPluginsPanel({
     if (previousDeleteId && !pendingDeleteId) moreButtonRefs.current.get(previousDeleteId)?.focus();
   }, [pendingDeleteId]);
 
-  const visible = React.useMemo(() => filterInstalledPlugins(plugins, query, catalog, lang), [plugins, query, catalog, lang]);
+  const visible = React.useMemo(
+    () => filterInstalledPlugins(plugins, query, catalog, lang).filter((plugin) => matchesInstalledState(plugin, stateFilter)),
+    [plugins, query, catalog, lang, stateFilter],
+  );
+  const stateCounts = React.useMemo(() => ({
+    all: plugins.length,
+    running: plugins.filter((plugin) => matchesInstalledState(plugin, 'running')).length,
+    stopped: plugins.filter((plugin) => matchesInstalledState(plugin, 'stopped')).length,
+  }), [plugins]);
 
   // The store is read on request rather than with the list: CPA fetches every registry to
   // answer it, which is slow and rate limited. The outcome is a toast; the rows carry the result.
@@ -161,6 +176,16 @@ export function InstalledPluginsPanel({
           onChange={setQuery}
           label={t('plugin.search_installed')}
         />
+        <Segmented
+          className={styles['store-filters']}
+          value={stateFilter}
+          aria-label={t('plugin.state_filter_label')}
+          onChange={(value) => setStateFilter(value as InstalledStateFilter)}
+          options={(['all', 'running', 'stopped'] as const).map((value) => ({
+            value,
+            label: `${t(INSTALLED_STATE_LABELS[value])} ${stateCounts[value]}`,
+          }))}
+        />
         <ToolButton
           icon={<PackageSearchOutlined />}
           label={t('plugin.check_updates')}
@@ -176,6 +201,8 @@ export function InstalledPluginsPanel({
         <div className={styles['installed-list']}>
           {visible.map((plugin) => {
             const listing = catalog.get(plugin.id);
+            // Only the registry that supplied the installed copy can say whose code it is.
+            const provenance = listing?.install_source_status === 'matched' ? listing : undefined;
             const metadata = selectInstalledPluginMetadata(plugin, listing, lang);
             const name = metadata.name;
             const logo = plugin.logo || plugin.metadata?.logo || listing?.logo;
@@ -200,15 +227,6 @@ export function InstalledPluginsPanel({
                 aria-haspopup="menu"
               />
             );
-            const stateLabel = plugin.effective_enabled
-              ? <StatusLabel tone="success">{t('plugin.state_running')}</StatusLabel>
-              : plugin.enabled
-                ? (
-                  <Tooltip title={!isPluginSystemEnabled ? t('plugin.state_waiting_system') : t('plugin.state_waiting_register')}>
-                    <span><StatusLabel tone="warn">{t('plugin.state_waiting')}</StatusLabel></span>
-                  </Tooltip>
-                )
-                : <StatusLabel tone="neutral">{t('plugin.state_disabled')}</StatusLabel>;
             return (
               <article key={plugin.id} className={styles['installed-row']} data-plugin-id={plugin.id}>
                 <PluginLogo logo={logo} />
@@ -216,7 +234,8 @@ export function InstalledPluginsPanel({
                   <div className={styles['installed-title']}>
                     <span className={styles['installed-name']}>{name}</span>
                     <span className={styles.badges}>
-                      {stateLabel}
+                      <PluginStateLabel plugin={plugin} isPluginSystemEnabled={isPluginSystemEnabled} />
+                      {provenance && <PluginOriginBadge origin={storePluginOrigin(provenance)} />}
                       {!plugin.registered && <span className={styles.badge}>{t('plugin.badge_not_registered')}</span>}
                       {plugin.supports_oauth && <span className={styles.badge}>{t('plugin.badge_auth_provider')}</span>}
                       {plugin.supports_quota && <span className={styles.badge}>{t('plugin.badge_quota')}</span>}

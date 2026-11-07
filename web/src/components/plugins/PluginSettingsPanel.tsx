@@ -3,7 +3,6 @@ import { Button, Checkbox, Input, Select } from 'antd';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
 import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -24,6 +23,8 @@ import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
 import { Panel } from '../common/Panel';
 import { Tooltip } from '../common/Tooltip';
+import { BrandArtwork } from '../common/BrandArtwork';
+import { useOmcPluginSource } from '../../hooks/useOmcPluginSource';
 
 interface SettingsDraft {
   enabled: boolean;
@@ -56,8 +57,8 @@ interface PluginSettingsPanelProps {
 
 /**
  * The plugin system's host settings, which live in CPA's configuration file: the global
- * switch, the third-party registries the store reads, and the authentication rules for
- * registries and artifacts that need credentials.
+ * switch, the registries the store reads, and the authentication rules for registries
+ * and artifacts that need credentials.
  *
  * The save writes only these keys, against the revision the page loaded, so a change made
  * on the configuration page in the meantime is reported as a conflict rather than lost.
@@ -66,7 +67,6 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
   const t = useT();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const settingsQuery = useQuery({
     queryKey: ['management-plugin-settings'],
@@ -212,10 +212,21 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
 
       <Panel>
         <section className={styles['settings-section']}>
+          <SectionHeading as="h2" title={t('plugin.settings_sources')} description={t('plugin.settings_sources_desc')} />
+          <div className={styles['source-list']}>
+            <OmcSourceRow url={settingsQuery.data?.omc_source_url} isDemo={isDemo} />
+            <div className={styles['source-fixed']} data-plugin-official-source>
+              <span className={styles['source-fixed-mark']} aria-hidden="true"><SafetyCertificateOutlined /></span>
+              <span className={styles['source-fixed-text']}>
+                <span className={styles['source-fixed-label']}>{t('plugin.settings_official_source')}</span>
+              </span>
+              <span className={styles['source-fixed-state']}>{t('plugin.settings_source_always_on')}</span>
+            </div>
+          </div>
           <SectionHeading
-            as="h2"
-            title={t('plugin.settings_sources')}
-            description={t('plugin.settings_sources_desc')}
+            level="label"
+            title={t('plugin.settings_custom_sources')}
+            count={current.sources.length}
             extra={(
               <Button
                 size="small"
@@ -227,49 +238,42 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
               </Button>
             )}
           />
-          <div className={styles['source-list']}>
-            <div className={styles['source-fixed']} data-plugin-official-source>
-              <SafetyCertificateOutlined />
-              <span className={styles['source-fixed-label']}>{t('plugin.settings_official_source')}</span>
-            </div>
-            <div className={styles['source-fixed']} data-plugin-omc-source>
-              <SafetyCertificateOutlined />
-              <span className={styles['source-fixed-label']}>{t('plugin.settings_omc_source')}</span>
-              <Button type="link" size="small" className={styles['source-fixed-action']} onClick={() => navigate('/omc-settings')}>
-                {t('plugin.settings_omc_source_open')}
-              </Button>
-            </div>
-            {current.sources.map((source, index) => {
-              const issue = issueFor((candidate) => (candidate.kind === 'source-url' || candidate.kind === 'source-duplicate') && candidate.index === index);
-              return (
-                <div key={index} className={styles['source-row']}>
-                  <div>
-                    <Input
-                      value={source}
-                      disabled={isDemo}
-                      placeholder="https://example.com/cliproxy-plugins/registry.json"
-                      status={issue ? 'error' : undefined}
-                      onChange={(event) => update({ sources: current.sources.map((value, position) => (position === index ? event.target.value : value)) })}
-                      aria-label={t('plugin.settings_source_label', { n: index + 1 })}
-                    />
-                    {issue && (
-                      <div className={styles['field-error']}>
-                        {issue.kind === 'source-url' ? t('plugin.settings_source_invalid') : t('plugin.settings_source_duplicate')}
-                      </div>
-                    )}
+          {current.sources.length === 0 ? (
+            <EmptyState size="compact" title={t('plugin.settings_custom_sources_empty')} />
+          ) : (
+            <div className={styles['source-list']}>
+              {current.sources.map((source, index) => {
+                const issue = issueFor((candidate) => (candidate.kind === 'source-url' || candidate.kind === 'source-duplicate') && candidate.index === index);
+                return (
+                  <div key={index} className={styles['source-row']}>
+                    <div>
+                      <Input
+                        value={source}
+                        disabled={isDemo}
+                        placeholder="https://example.com/cliproxy-plugins/registry.json"
+                        status={issue ? 'error' : undefined}
+                        onChange={(event) => update({ sources: current.sources.map((value, position) => (position === index ? event.target.value : value)) })}
+                        aria-label={t('plugin.settings_source_label', { n: index + 1 })}
+                      />
+                      {issue && (
+                        <div className={styles['field-error']}>
+                          {issue.kind === 'source-url' ? t('plugin.settings_source_invalid') : t('plugin.settings_source_duplicate')}
+                        </div>
+                      )}
+                    </div>
+                    <Tooltip title={t('common.delete')}>
+                      <Button
+                        icon={<DeleteOutlined />}
+                        disabled={isDemo}
+                        onClick={() => update({ sources: current.sources.filter((_, position) => position !== index) })}
+                        aria-label={t('plugin.settings_remove_source', { n: index + 1 })}
+                      />
+                    </Tooltip>
                   </div>
-                  <Tooltip title={t('common.delete')}>
-                    <Button
-                      icon={<DeleteOutlined />}
-                      disabled={isDemo}
-                      onClick={() => update({ sources: current.sources.filter((_, position) => position !== index) })}
-                      aria-label={t('plugin.settings_remove_source', { n: index + 1 })}
-                    />
-                  </Tooltip>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </Panel>
 
@@ -409,6 +413,37 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
           </Button>
         </Tooltip>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Oh My CPA's registry, with its switch in place. The switch is the console's own
+ * preference rather than part of this form's draft: it applies at once, as it does in OMC
+ * settings, and the server adds or removes the address from CPA's list on its next read.
+ */
+function OmcSourceRow({ url, isDemo }: { url?: string; isDemo: boolean }) {
+  const t = useT();
+  const toast = useToast();
+  const source = useOmcPluginSource();
+  const toggle = async (enabled: boolean) => {
+    const outcome = await source.setEnabled(enabled);
+    if (outcome.ok) toast.success(enabled ? t('plugin.omc_source_on_success') : t('plugin.omc_source_off_success'));
+  };
+  return (
+    <div className={`${styles['source-fixed']} ${styles['source-fixed-omc']}`} data-plugin-omc-source>
+      <span className={styles['source-fixed-mark']} aria-hidden="true"><BrandArtwork shape="mark" height={16} /></span>
+      <span className={styles['source-fixed-text']}>
+        <span className={styles['source-fixed-label']}>{t('plugin.settings_omc_source')}</span>
+        {url && <span className={styles['source-url']}>{url}</span>}
+      </span>
+      <Switch
+        checked={source.isEnabled}
+        disabled={isDemo || !source.isLoaded}
+        title={isDemo ? t('demo.blocked') : undefined}
+        onChange={(enabled) => void toggle(enabled)}
+        aria-label={t('plugin.settings_omc_source')}
+      />
     </div>
   );
 }

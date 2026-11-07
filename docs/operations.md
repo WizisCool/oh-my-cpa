@@ -382,9 +382,12 @@ journal (retained for 15 minutes after completion) rather than resending a model
 ## Plugin store
 
 The plugin store reads CPA's built-in `official` registry plus `plugins.store-sources`.
-Oh My CPA's own registry is managed through **OMC Settings → Plugin store**
-(`omc_plugin_source_enabled`, on by default). Installing any plugin outside CPA's
-built-in registry requires typing the plugin ID to confirm running code inside the gateway.
+Oh My CPA's own registry is managed through **OMC Settings → Plugin store** or the
+plugin sources list (`omc_plugin_source_enabled`, on by default). Both first-party
+registries also list community code, so the console names each entry by who listed it
+and who maintains its repository: a first-party registry's own publisher (`omc-community`
+for Oh My CPA, `router-for-me` for CPA) installs after one confirmation; every other entry
+requires typing the plugin ID to confirm running code inside the gateway.
 
 ## Plugin pages
 

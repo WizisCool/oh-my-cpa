@@ -561,8 +561,15 @@ func pluginStoreCatalog() []storePluginEntry {
 		// whose entries it pins above every other registry's.
 		{id: "usage-digest", name: "Usage digest", version: "0.3.0", author: "oh-my-cpa",
 			description: "Posts a daily spend and request summary for this console to a webhook.",
-			repository:  "WizisCool/omc-plugin-usage-digest", license: "MIT",
+			repository:  "omc-community/omc-usage-digest", license: "MIT",
 			tags: []string{"observability", "digest"}, logo: fixtureLogo("UD", "#0369A1"),
+			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL)},
+		// The registry also curates community plugins, whose code stays in the author's
+		// own account; the console marks them apart from the ones Oh My CPA maintains.
+		{id: "model-bench", name: "Model bench", version: "0.2.0", author: "bench-lab",
+			description: "Runs a fixed reasoning set against a model and keeps the scores for comparison.",
+			repository:  "bench-lab/cpa-model-bench", license: "MIT",
+			tags: []string{"evaluation"}, logo: fixtureLogo("MB", "#7C3AED"),
 			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL)},
 	}
 }

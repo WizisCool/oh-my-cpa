@@ -221,17 +221,123 @@
   border-right: 1px solid var(--border-soft);
 }
 
-/* ── store cards ───────────────────────────────────────────────────────── */
+/* ── store ─────────────────────────────────────────────────────────────── */
 
 .store-notice {
   margin-top: 12px;
+}
+
+.store {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Oh My CPA's registry is the store's featured section: one enclosure, washed with ink and
+   lit from the top edge with the accent, its cards set on the page colour inside it. */
+.showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 140px),
+    color-mix(in srgb, var(--fg) 2.5%, transparent);
+}
+
+.showcase-head {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.showcase-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.showcase-heading {
+  min-width: 0;
+}
+
+.showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.source-select {
+  min-width: 168px;
+}
+
+.filter-option {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filter-option-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.store-filters .filter-option {
+  gap: 6px;
+}
+
+.tag-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.tag-filter:hover,
+.tag-filter:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.show-all {
+  padding-inline: 4px;
+}
+
+.store-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.source-url {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
 }
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
-  margin-top: 12px;
 }
 
 .store-card {
@@ -263,6 +369,20 @@
 .card-head .logo {
   width: 48px;
   height: 48px;
+}
+
+.store-card-featured {
+  gap: 12px;
+  padding: 16px;
+}
+
+.store-card-featured .card-head {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.store-card-featured .card-head .logo {
+  width: 56px;
+  height: 56px;
 }
 
 .card-title {
@@ -326,6 +446,19 @@
   line-height: 20px;
 }
 
+/* A card's tag narrows the store to its kind. */
+.tag-button {
+  border: 0;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.tag-button:hover,
+.tag-button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
+}
+
 .card-footer {
   display: flex;
   align-items: center;
@@ -348,6 +481,25 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.install-identity {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.install-identity .logo {
+  width: 44px;
+  height: 44px;
+}
+
+.install-description {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.6;
 }
 
 .install-version-row {
@@ -417,32 +569,53 @@
 }
 
 .source-fixed {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 5px 11px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-size: var(--text-sm);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 2.5%, transparent);
 }
 
-/* The row is one line: the label gives way when the panel narrows, the glyph and the
-   link keep their box. */
-.source-fixed > :global(.anticon) {
-  flex: none;
+.source-fixed-omc {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
+    color-mix(in srgb, var(--fg) 2.5%, transparent);
+}
+
+.source-fixed-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--success);
+}
+
+.source-fixed-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .source-fixed-label {
-  min-width: 0;
   overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.source-fixed-action {
-  margin-left: auto;
-  flex: none;
+.source-fixed-state {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 
 .field-error {
@@ -515,24 +688,39 @@
 
 /* ── config drawer ─────────────────────────────────────────────────────── */
 
-.config-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.config-hero {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
   margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--fg) 2.5%, transparent);
 }
 
-.config-identity {
+.config-hero .logo {
+  width: 52px;
+  height: 52px;
+}
+
+.config-hero-main {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.config-identity .logo {
-  width: 36px;
-  height: 36px;
+.config-hero-name {
+  color: var(--fg);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.config-mode-head {
+  margin-bottom: 8px;
 }
 
 .config-section {
@@ -556,9 +744,13 @@
   border-top: 0;
 }
 
+/* A changed field reads as a washed row, never an edge stripe. */
 .config-field-changed {
-  border-left: 2px solid var(--accent);
+  margin: 0 -8px;
+  padding-right: 8px;
   padding-left: 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .config-field-label {
@@ -665,8 +857,31 @@
     justify-content: flex-start;
   }
 
-  .card-grid {
+  .card-grid,
+  .showcase-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .showcase {
+    padding: 12px;
+  }
+
+  .source-select {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .config-hero {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .config-hero .logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .config-hero-links {
+    grid-column: 1 / -1;
   }
 
   .rule-grid,

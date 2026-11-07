@@ -17,6 +17,10 @@ import {
   storeInstallConfirmToken,
   storeListingsByPluginId,
   storePluginOrigin,
+  storeSections,
+  storeSectionPreview,
+  STORE_SECTION_PREVIEW,
+  matchesInstalledState,
   validatePluginSettingsDraft,
 } from '../../src/components/plugins/pluginStoreLogic.ts';
 import type { PluginConfigField, PluginItem, StorePluginItem } from '../../src/types/plugin.ts';
@@ -154,7 +158,7 @@ test('plugin config', () => {
   function entry(overrides: Partial<StorePluginItem>): StorePluginItem {
     return {
       store_id: 'official/x', source_id: 'official', source_name: 'official', id: 'x', name: 'X', tags: [], platforms: [],
-      is_official: true, is_official_repository: true, is_omc: false, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
+      is_official: true, is_official_repository: true, is_omc: false, is_omc_repository: false, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
       update_available: false, ...overrides,
     };
   }
@@ -249,20 +253,57 @@ test('plugin config', () => {
       entry({ is_official_repository: false }),
       entry({ is_official: false }),
       entry({ is_official: false, is_official_repository: false }),
+      entry({ is_official: false, is_omc: true, is_omc_repository: true }),
       entry({ is_official: false, is_omc: true }),
     ].map(storePluginOrigin),
-    ['official', 'official-source', 'third-party', 'third-party', 'omc'],
+    ['official', 'official-source', 'third-party', 'third-party', 'omc', 'omc-community'],
   );
-  // Only the vendor's own code from the vendor's own registry installs without an
-  // acknowledgement; every other origin's warning block is what the operator types into.
+  // Only a first-party registry's own publisher's code installs without an acknowledgement;
+  // every other origin's warning block is what the operator types into.
   assert.deepEqual(
-    (['omc', 'official', 'official-source', 'third-party'] as const).map((origin) => STORE_INSTALL_WARNINGS[origin]?.title ?? null),
+    (['omc', 'omc-community', 'official', 'official-source', 'third-party'] as const).map((origin) => STORE_INSTALL_WARNINGS[origin]?.title ?? null),
     [
-      'plugin.omc_plugin_title',
+      null,
+      'plugin.omc_community_plugin_title',
       null,
       'plugin.official_source_plugin_title',
       'plugin.third_party_title',
     ],
+  );
+  // The store opens with the plugins Oh My CPA maintains; the ones it curates sit after CPA's
+  // registry, with the other catalogues. A registry that failed to read keeps a section to say so in.
+  const omcOwn = entry({ store_id: 'omc/own', source_id: 'omc', id: 'own', is_official: false, is_omc: true, is_omc_repository: true });
+  const omcCurated = entry({ store_id: 'omc/curated', source_id: 'omc', id: 'curated', is_official: false, is_omc: true });
+  const mirrorEntry = entry({ store_id: 'mirror/m', source_id: 'mirror', id: 'm', is_official: false });
+  const sections = storeSections({
+    plugins_enabled: true, plugins_dir: 'plugins', total: 4,
+    sources: [
+      { id: 'official', name: 'official', url: 'https://o/r.json', is_official: true, is_omc: false },
+      { id: 'mirror', name: 'mirror.example', url: 'https://m/r.json', is_official: false, is_omc: false },
+      { id: 'omc', name: 'Oh My CPA', url: 'https://omc/r.json', is_official: false, is_omc: true },
+    ],
+    source_errors: [{ source_id: 'down', source_name: 'down.example', source_url: 'https://d/r.json', message: '503' }],
+    plugins: [],
+  }, [STORE[0], mirrorEntry, omcCurated, omcOwn]);
+  assert.deepEqual(
+    sections.map((section) => [section.kind, section.sourceId, section.entries.map((item) => item.id), section.error ?? null]),
+    [
+      ['omc', 'omc', ['own'], null],
+      ['official', 'official', ['limiter'], null],
+      ['omc-community', 'omc#community', ['curated'], null],
+      ['custom', 'mirror', ['m'], null],
+      ['custom', 'down', [], '503'],
+    ],
+  );
+  // A long registry shows its first cards while the whole store is in view, all of them once chosen.
+  const longSection = { kind: 'custom' as const, sourceId: 'long', name: 'long', entries: Array.from({ length: STORE_SECTION_PREVIEW + 2 }, (_, index) => entry({ id: `p${index}` })) };
+  assert.equal(storeSectionPreview(longSection, true).length, STORE_SECTION_PREVIEW);
+  assert.equal(storeSectionPreview(longSection, false).length, STORE_SECTION_PREVIEW + 2);
+  // A tag narrows to the entries carrying it as the card shows it, in any case.
+  assert.deepEqual(filterStorePlugins(STORE, '', 'all', 'en', 'Network').map((item) => item.store_id), ['official/limiter']);
+  assert.deepEqual(
+    (['running', 'stopped'] as const).map((state) => [multiPortalPlugin, { ...multiPortalPlugin, effective_enabled: false }].filter((plugin) => matchesInstalledState(plugin, state)).length),
+    [1, 1],
   );
   assert.equal(storeInstallConfirmToken(entry({ id: 'deepseek-search' })), 'deepseek-search');
 

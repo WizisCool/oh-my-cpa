@@ -8,8 +8,10 @@ import { useNavigate } from 'react-router-dom';
 import { AppstoreOutlined, ClearOutlined, UndoOutlined } from '../icons';
 import { SecretInput } from '../common/SecretInput';
 import { api, describeError } from '../../api/client';
-import { useT } from '../../i18n';
-import { pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
+import { useI18n, useT } from '../../i18n';
+import type { PluginConfigField, PluginItem, StorePluginItem } from '../../types/plugin';
+import { selectInstalledPluginMetadata } from '../../types/pluginStoreMetadata';
+import { storePluginOrigin } from './pluginStoreLogic';
 import { PluginConfigEditor } from './PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual, pluginConfigSummary } from './pluginConfig';
 import {
@@ -26,7 +28,7 @@ import {
   type PluginFieldDraft,
   type PluginFieldError,
 } from './pluginConfigForm';
-import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
+import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta, PluginOriginBadge, PluginStateLabel } from './PluginParts';
 import { collectPluginPages } from './pluginPages';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
@@ -39,6 +41,9 @@ type EditorMode = 'form' | 'json';
 
 interface PluginConfigDrawerProps {
   plugin: PluginItem | null;
+  /** The plugin's store listing, once the store has been read; it supplies the description and provenance. */
+  listing?: StorePluginItem;
+  isPluginSystemEnabled: boolean;
   isDemo: boolean;
   onClose: () => void;
 }
@@ -56,8 +61,9 @@ interface PluginConfigDrawerProps {
  * Switching views carries the draft across, and a view that does not parse cannot be
  * left, so an edit is never silently dropped.
  */
-export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDrawerProps) {
+export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isDemo, onClose }: PluginConfigDrawerProps) {
   const t = useT();
+  const { lang } = useI18n();
   const { modal } = AntdApp.useApp();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -177,7 +183,11 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
     updateField(field.name, pluginFieldDraftFromValue(field, source[field.name], isSet));
   };
 
-  const name = plugin ? pluginDisplayName(plugin) : '';
+  const metadata = plugin ? selectInstalledPluginMetadata(plugin, listing, lang) : undefined;
+  const name = metadata?.name ?? '';
+  const version = formatPluginVersion(plugin?.metadata?.version || listing?.installed_version);
+  // Only the registry that supplied the installed copy can say whose code it is.
+  const provenance = listing?.install_source_status === 'matched' ? listing : undefined;
   const pages = React.useMemo(() => (plugin ? collectPluginPages([plugin]) : []), [plugin]);
   const installRecord = mode === 'form' ? readPluginInstallRecord(base) : undefined;
   const openPage = (route: string) => {
@@ -221,23 +231,23 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
     >
       {plugin && (
         <div data-plugin-config={plugin.id}>
-          <div className={styles['config-head']}>
-            <div className={styles['config-identity']}>
-              <PluginLogo logo={plugin.logo || plugin.metadata?.logo} />
-              <div>
-                <div className={styles['installed-name']}>{name}</div>
-                <PluginMeta items={[plugin.id, formatPluginVersion(plugin.metadata?.version), plugin.metadata?.author]} />
+          <header className={styles['config-hero']} data-plugin-config-identity>
+            <PluginLogo logo={plugin.logo || plugin.metadata?.logo || listing?.logo} />
+            <div className={styles['config-hero-main']}>
+              <div className={styles['installed-title']}>
+                <span className={styles['config-hero-name']}>{name}</span>
+                <span className={styles.badges}>
+                  <PluginStateLabel plugin={plugin} isPluginSystemEnabled={isPluginSystemEnabled} />
+                  {provenance && <PluginOriginBadge origin={storePluginOrigin(provenance)} />}
+                </span>
               </div>
+              <PluginMeta items={[<span key="id" className={styles['plugin-id']}>{plugin.id}</span>, version && <span key="v" className={styles['meta-strong']}>{version}</span>, metadata?.author]} />
+              {metadata?.description && <p className={styles.description}>{metadata.description}</p>}
             </div>
-            <Segmented
-              value={mode}
-              onChange={(value) => switchMode(value as EditorMode)}
-              options={[
-                { value: 'form', label: t('plugin.config_mode_form') },
-                { value: 'json', label: t('plugin.config_mode_json') },
-              ]}
-            />
-          </div>
+            <span className={styles['config-hero-links']}>
+              <PluginLinks repositoryURL={plugin.repository_url || listing?.repository_url} homepage={metadata?.homepage} />
+            </span>
+          </header>
 
           {pages.length > 0 && (
             <div className={styles['config-pages']} data-plugin-config-pages>
@@ -251,6 +261,22 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
               </span>
             </div>
           )}
+
+          <SectionHeading
+            className={styles['config-mode-head']}
+            title={t('plugin.config_heading')}
+            extra={(
+              <Segmented
+                size="small"
+                value={mode}
+                onChange={(value) => switchMode(value as EditorMode)}
+                options={[
+                  { value: 'form', label: t('plugin.config_mode_form') },
+                  { value: 'json', label: t('plugin.config_mode_json') },
+                ]}
+              />
+            )}
+          />
 
           {!configQuery.isError && (configQuery.isLoading || !draft || seededFor.current !== plugin.id) ? (
             <ParagraphPlaceholder rows={6} />

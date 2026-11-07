@@ -1,11 +1,15 @@
 import React from 'react';
 
-import { ExternalLinkOutlined, GithubOutlined } from '../icons';
+import { ExternalLinkOutlined, GithubOutlined, InfoCircleOutlined, PuzzleOutlined, SafetyCertificateOutlined, WarningOutlined } from '../icons';
 import { useT } from '../../i18n';
+import { BrandArtwork } from '../common/BrandArtwork';
 import { PluginIcon } from './PluginIcon';
+import type { StorePluginOrigin } from './pluginStoreLogic';
 import { safeExternalURL } from '../../utils/externalUrl';
 import styles from './Plugins.module.css';
 import { Tooltip } from '../common/Tooltip';
+import { StatusLabel } from '../common/StatusLabel';
+import type { PluginItem } from '../../types/plugin';
 
 interface PluginLogoProps {
   logo?: string;
@@ -70,4 +74,47 @@ export function formatPluginVersion(version: string | undefined): string {
   const trimmed = (version ?? '').trim();
   if (!trimmed) return '';
   return /^v\d/i.test(trimmed) ? trimmed : `v${trimmed}`;
+}
+
+/**
+ * Where a listed plugin comes from, as one mark. Its five states keep two facts apart that
+ * the operator would otherwise have to infer: which registry listed the entry, and whether
+ * that registry's publisher maintains the code. `official-source` and `omc-community` are
+ * the cases that otherwise read as first-party - a first-party catalogue, a community
+ * author's repository.
+ */
+export function PluginOriginBadge({ origin }: { origin: StorePluginOrigin }) {
+  const t = useT();
+  switch (origin) {
+    case 'omc':
+      return (
+        <span className={`${styles.badge} ${styles['badge-accent']}`} data-plugin-origin={origin}>
+          <BrandArtwork shape="mark" height={11} />{t('plugin.badge_omc')}
+        </span>
+      );
+    case 'omc-community':
+      return <span className={styles.badge} data-plugin-origin={origin}><PuzzleOutlined />{t('plugin.badge_omc_community')}</span>;
+    case 'official':
+      return <span className={`${styles.badge} ${styles['badge-success']}`} data-plugin-origin={origin}><SafetyCertificateOutlined />{t('plugin.badge_official')}</span>;
+    case 'official-source':
+      return <span className={styles.badge} data-plugin-origin={origin}><InfoCircleOutlined />{t('plugin.badge_official_source')}</span>;
+    default:
+      return <span className={`${styles.badge} ${styles['badge-warn']}`} data-plugin-origin={origin}><WarningOutlined />{t('plugin.badge_third_party')}</span>;
+  }
+}
+
+/**
+ * Whether a plugin runs, in words: "enabled" alone is not what an operator needs, since a
+ * plugin can be switched on and still not run while the plugin system is off or the host
+ * has not registered it.
+ */
+export function PluginStateLabel({ plugin, isPluginSystemEnabled }: { plugin: PluginItem; isPluginSystemEnabled: boolean }) {
+  const t = useT();
+  if (plugin.effective_enabled) return <StatusLabel tone="success">{t('plugin.state_running')}</StatusLabel>;
+  if (!plugin.enabled) return <StatusLabel tone="neutral">{t('plugin.state_disabled')}</StatusLabel>;
+  return (
+    <Tooltip title={isPluginSystemEnabled ? t('plugin.state_waiting_register') : t('plugin.state_waiting_system')}>
+      <span><StatusLabel tone="warn">{t('plugin.state_waiting')}</StatusLabel></span>
+    </Tooltip>
+  );
 }

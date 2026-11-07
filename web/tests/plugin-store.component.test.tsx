@@ -8,13 +8,14 @@ import { storeListingsByPluginId } from '../src/components/plugins/pluginStoreLo
 import type { PluginItem, PluginStoreResponse, StorePluginItem } from '../src/types/plugin';
 import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
+import { ThemeProvider } from '../src/theme/ThemeContext';
 
 const entry: StorePluginItem = {
   store_id: 'registry-source/stable-plugin', source_id: 'registry-source', source_name: 'Publisher registry',
   id: 'stable-plugin', name: 'Base name', description: 'Base description', author: 'Base author',
   homepage: 'https://publisher.example', repository_url: 'https://github.com/publisher/stable-plugin',
   license: 'MIT', tags: ['base-tag'], platforms: ['linux/arm64'], version: '1.2.3',
-  is_official: false, is_official_repository: false, is_omc: false,
+  is_official: false, is_official_repository: false, is_omc: false, is_omc_repository: false,
   auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
   locales: {
     'zh-CN': { name: '简体标题 & 保护', description: '<b>简体描述 & 保护</b>', author: '简体作者', homepage: 'https://publisher.example/zh?a=1&b=2', tags: ['简体标签 & 保护', '&lt;tag&gt;'] },
@@ -44,7 +45,7 @@ function Catalog() {
 it('updates catalog display, search and an open confirmation without changing installation identity', async () => {
   const server = installOmcApi();
   server.on('POST', `/management/plugin-store/${entry.id}/install`, () => ({ status: 'ok', id: entry.id, version: entry.version, plugins_enabled: true }));
-  const { container } = renderWithOmc(<Catalog />);
+  const { container } = renderWithOmc(<ThemeProvider><Catalog /></ThemeProvider>);
   const storePanel = await waitFor(() => {
     const panel = container.querySelector<HTMLElement>('[data-plugin-panel="store"]');
     expect(panel).not.toBeNull();
@@ -164,4 +165,55 @@ it('checks for updates on request and updates a plugin from its installed row', 
   fireEvent.click(within(dialog).getByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.update') }));
   await waitFor(() => expect(server.writes('/install')).toHaveLength(1));
   expect(server.writes('/install')[0]).toMatchObject({ body: { source_id: entry.source_id } });
+});
+
+it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and turns the source back on in place', async () => {
+  const t = makeT('en');
+  const omcSource = { id: 'omc', name: 'Oh My CPA', url: 'https://omc.example/registry.json', is_official: false, is_omc: true };
+  const own: StorePluginItem = { ...entry, store_id: 'omc/own', source_id: 'omc', source_name: 'Oh My CPA', id: 'own', name: 'Own', locales: undefined, is_omc: true, is_omc_repository: true, repository_url: 'https://github.com/omc-community/own' };
+  const curated: StorePluginItem = { ...own, store_id: 'omc/curated', id: 'curated', name: 'Curated', is_omc_repository: false, repository_url: 'https://github.com/author/curated' };
+  const server = installOmcApi({ preferences: { omc_plugin_source_enabled: true } });
+  server.on('POST', `/management/plugin-store/${own.id}/install`, () => ({ status: 'ok', id: own.id, version: own.version, plugins_enabled: true }));
+  const emptySource = { id: 'empty', name: 'empty.example', url: 'https://empty.example/registry.json', is_official: false, is_omc: false };
+  const omcStore: PluginStoreResponse = { ...store, sources: [omcSource, emptySource], plugins: [curated, own, entry] };
+  const { container, unmount } = renderWithOmc(<ThemeProvider><PluginStorePanel store={omcStore} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
+  const showcase = await waitFor(() => container.querySelector<HTMLElement>('[data-store-source="omc"]')!);
+  // Only the plugins Oh My CPA maintains are featured; the ones it curates sit with the other catalogues.
+  expect([...showcase.querySelectorAll('[data-plugin-id]')].map((card) => card.getAttribute('data-plugin-id'))).toEqual(['own']);
+  const curatedSection = container.querySelector<HTMLElement>('[data-store-source="omc-community"]')!;
+  expect(curatedSection.querySelector('[data-plugin-id="curated"]')).not.toBeNull();
+
+  fireEvent.click(within(curatedSection.querySelector<HTMLElement>('[data-plugin-id="curated"]')!).getByRole('button', { name: t('plugin.install') }));
+  let dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByPlaceholderText('curated')).toBeTruthy();
+  fireEvent.click(within(dialog).getByRole('button', { name: (name) => name.replace(/\s/g, '') === t('common.cancel').replace(/\s/g, '') }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  fireEvent.click(within(showcase.querySelector<HTMLElement>('[data-plugin-id="own"]')!).getByRole('button', { name: t('plugin.install') }));
+  dialog = await screen.findByRole('dialog');
+  expect(within(dialog).queryByRole('textbox')).toBeNull();
+  fireEvent.click(within(dialog).getByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.install') }));
+  await waitFor(() => expect(server.writes('/install')).toHaveLength(1));
+  expect(server.writes('/install')[0]).toMatchObject({ body: { source_id: 'omc' } });
+
+  // A chosen source that lists nothing says so rather than leaving the page blank.
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: t('plugin.facet_label') }));
+  fireEvent.click((await screen.findAllByText('empty.example')).at(-1)!);
+  expect(await screen.findByText(t('plugin.source_empty'))).toBeTruthy();
+
+  // A chosen source stays chosen when a search leaves none of its plugins, even one another source matches.
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: t('plugin.facet_label') }));
+  // The open list repeats the label after the card's badge; the option is the last copy.
+  fireEvent.click((await screen.findAllByText(t('plugin.badge_omc_community'))).at(-1)!);
+  await waitFor(() => expect(container.querySelector('[data-store-source="omc"]')).toBeNull());
+  fireEvent.change(within(container).getAllByRole('textbox')[0], { target: { value: 'Base name' } });
+  expect(await screen.findByText(t('plugin.search_empty'))).toBeTruthy();
+  expect(container.querySelector('[data-store-id]')).toBeNull();
+
+  // Switched off, the section offers the switch rather than sending the operator elsewhere.
+  unmount();
+  server.state.preferences.omc_plugin_source_enabled = false;
+  renderWithOmc(<ThemeProvider><PluginStorePanel store={{ ...store, plugins: [entry] }} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.omc_source_enable').replace(/\s/g, '') }));
+  await waitFor(() => expect(server.preferenceWrites()).toEqual([{ key: 'omc_plugin_source_enabled', value: true }]));
 });
