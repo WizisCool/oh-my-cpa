@@ -90,6 +90,14 @@ operator questions use their declared waiting/answer path. Reference-backed resu
 avoid copying large tables into every model round. Keep the full approved result on
 the server and pass bounded projections where needed.
 
+`present_openui` draws an interface; `present_html` draws a page the operator asked for
+as a document - a drawing, a diagram, a small interactive page. A page is rendered in a
+frame with an opaque origin that loads no remote assets and cannot read the console, so
+its styles, scripts and images must be inline. Both calls change nothing, and both are
+kept with the turn so a follow-up can refine what was drawn. A whole HTML or SVG document
+that arrives as answer text is offered as a page too, but stays code until the reader
+asks for it.
+
 ## Connecting external clients
 
 Streamable HTTP is served at `<console URL>/api/mcp`, including the deployment's base

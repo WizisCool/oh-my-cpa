@@ -650,7 +650,7 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 				// The answer itself changes nothing and is checked here; everything else is the
 				// executor's.
 				if contains(offered, call.Function.Name) {
-					trace.Result = presentOpenUI(call.Function.Arguments)
+					trace.Result = presentDisplay(call.Function.Name, call.Function.Arguments)
 				} else {
 					result, err := r.Executor.Invoke(ctx, PRINCIPAL, call.Function.Name, json.RawMessage(call.Function.Arguments), conversation.ID)
 					if err != nil {

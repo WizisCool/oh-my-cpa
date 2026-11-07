@@ -1,40 +1,15 @@
 import React from 'react';
 import XMarkdown from '@ant-design/x-markdown';
-import { CodeHighlighter } from '@ant-design/x';
+import { Button } from 'antd';
 import { clsx } from 'clsx';
 import { safeMarkdownComponents } from '../common/safeMarkdownComponents';
+import { CodeBody } from '../common/CodeBody';
 import { CodeFrame } from '../common/CodeFrame';
+import { SandboxedDocument } from '../common/SandboxedDocument';
+import { CodeOutlined, EyeOutlined } from '../icons';
+import { useI18n } from '../../i18n';
+import { isHTMLDocument } from '../../agent/htmlDocument';
 import styles from './Workspace.module.css';
-
-/**
- * The languages a fenced block is highlighted in, keyed by every name a model commonly writes.
- *
- * An allowlist rather than whatever the fence says: the highlighter loads each grammar as its own
- * chunk named after the fence, so a streaming fence (`js`, then `jso`, then `json`) or a made-up
- * name would each attempt a load. Anything else is shown as plain monospaced text, which is what
- * an unknown language is.
- */
-const LANGUAGE_ALIASES: Record<string, string> = {
-  json: 'json', jsonc: 'json',
-  bash: 'bash', sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash',
-  yaml: 'yaml', yml: 'yaml',
-  javascript: 'javascript', js: 'javascript', mjs: 'javascript', jsx: 'jsx',
-  typescript: 'typescript', ts: 'typescript', tsx: 'tsx',
-  python: 'python', py: 'python',
-  go: 'go', golang: 'go',
-  rust: 'rust', rs: 'rust',
-  java: 'java',
-  sql: 'sql',
-  diff: 'diff', patch: 'diff',
-  markdown: 'markdown', md: 'markdown',
-  http: 'http',
-  toml: 'toml',
-  ini: 'ini',
-  dockerfile: 'docker', docker: 'docker',
-};
-
-/** Token classes, not inline colours, so the code takes the resolved palette rather than a light theme. */
-const HIGHLIGHT_PROPS = { useInlineStyles: false } as const;
 
 interface CodeProps {
   className?: string;
@@ -53,22 +28,37 @@ function textOf(children: React.ReactNode): string {
 /**
  * A fenced block: its language, a copy action, and the code.
  *
- * A block still being streamed is drawn as plain text and highlighted once its fence closes. The
- * grammar re-tokenises the whole block on every change, and a block that grows a line at a time
- * would otherwise be re-highlighted on every publish tick for text the reader cannot use yet.
+ * A whole HTML or SVG document is also a page, so it offers the page: the model sometimes answers
+ * with the document as text instead of calling `present_html`, and the drawing is what was asked
+ * for. It stays code until the reader asks, so a transcript is not changed by what it contains.
  */
 export function CodeBlock({ lang, children, streamStatus }: CodeProps) {
+  const { t } = useI18n();
+  const [showsPage, setShowsPage] = React.useState(false);
   const code = textOf(children).replace(/\n$/, '');
   const name = (lang ?? '').trim().toLowerCase();
-  const language = streamStatus === 'loading' ? undefined : LANGUAGE_ALIASES[name];
+  const isDocument = streamStatus !== 'loading' && (name === '' || name === 'html' || name === 'htm' || name === 'svg') && isHTMLDocument(code);
   return (
-    <CodeFrame code={code} label={name || 'text'} className={styles['code-block']}>
-      {language ? (
-        <CodeHighlighter lang={language} header={false} highlightProps={HIGHLIGHT_PROPS} className={styles['code-body']}>
-          {code}
-        </CodeHighlighter>
+    <CodeFrame
+      code={code}
+      label={name || 'text'}
+      className={styles['code-block']}
+      actions={isDocument && (
+        <Button
+          size="small"
+          type="text"
+          icon={showsPage ? <CodeOutlined /> : <EyeOutlined />}
+          onClick={() => setShowsPage(page => !page)}
+          data-testid="markdown-document-view"
+        >
+          {showsPage ? t('agent.html.code') : t('agent.html.preview')}
+        </Button>
+      )}
+    >
+      {showsPage ? (
+        <SandboxedDocument document={code} title={t('agent.html.frame_title')} />
       ) : (
-        <pre className={styles['code-body']}><code>{code}</code></pre>
+        <CodeBody code={code} lang={name} isStreaming={streamStatus === 'loading'} />
       )}
     </CodeFrame>
   );

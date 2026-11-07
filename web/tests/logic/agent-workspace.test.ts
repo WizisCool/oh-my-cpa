@@ -38,6 +38,7 @@ import type { AgentEvent } from '../../src/agent/protocol.ts';
 import { readSSE } from '../../src/agent/sse.ts';
 import { exportFileName } from '../../src/agent/export.ts';
 import { agentThreadMessages, appendMessageText, mergeLiveTurn, storedMessages, toolCallPart, turnMessageStatus } from '../../src/pages/agent/thread.ts';
+import { fencedDocument, htmlOf, isHTMLDocument } from '../../src/agent/htmlDocument.ts';
 import { test } from 'vitest';
 
 test('agent workspace', async () => {
@@ -496,6 +497,26 @@ test('agent workspace', async () => {
     const resumed = applyAgentEvent(frame, parseAgentEvent(JSON.stringify({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'recovered', delta: 'Done' }))!);
     assert.equal(resumed.retry, undefined);
     assert.equal(resumed.parts.at(-1)?.content, 'Done');
+  });
+
+  check('a drawn page carries its document, and only a whole document is drawn', () => {
+    const source = '<!doctype html><html><body><svg></svg></body></html>';
+    const page = toolCallPart({ id: 'p', name: 'present_html', arguments: JSON.stringify({ html: source }), result: { status: 'success', data: { displayed: true } } }, false);
+    assert.deepEqual(page.args, { html: source });
+    assert.equal(htmlOf('{"html":"<!doctype html><html><body>'), '<!doctype html><html><body>', 'a streaming document is read as far as it arrived');
+    assert.equal(htmlOf('{"html":"<!doctype html><html><body><svg>\\'), '<!doctype html><html><body><svg>', 'a split escape is dropped rather than shown');
+    assert.equal(htmlOf('{"document":"x"}'), '');
+    assert.equal(isHTMLDocument(source), true);
+    assert.equal(isHTMLDocument('<svg viewBox="0 0 8 8"></svg>'), true);
+    assert.equal(isHTMLDocument('<div class="fragment"></div>'), false, 'a fragment is not a page');
+    // The policy has to precede everything the document could load, even when a comment names a
+    // head first, and the prefixed doctype is what keeps the frame in standards mode.
+    const headed = fencedDocument('<!doctype html><html><head><title>x</title></head><body></body></html>');
+    assert.match(headed, /^<!doctype html><meta http-equiv="Content-Security-Policy"/);
+    assert.match(headed, /connect-src 'none'/);
+    assert.match(headed, /script-src 'unsafe-inline'/);
+    const smuggled = fencedDocument('<!-- <head> --><link rel="stylesheet" href="https://example.com/x.css"><p>hi</p>');
+    assert.ok(smuggled.indexOf('<meta http-equiv="Content-Security-Policy"') < smuggled.indexOf('<link'), 'the policy comes before the first load');
   });
 
   check('context overflow and upstream rejection have distinct localized reasons', () => {

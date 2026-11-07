@@ -1,0 +1,7 @@
+/* The document paints its own surface; the frame contributes only the boundary. */
+.frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}

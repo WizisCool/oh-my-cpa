@@ -115,15 +115,16 @@ export interface AgentInterrupt {
 }
 
 /**
- * The official OpenUI assistant-ui tools: `present_openui` is the answer itself and
- * `prompt_openui` a form the turn waits on. The console declares `present_openui` on every run - it
- * renders OpenUI - and the server offers `prompt_openui` alongside it.
+ * The Agent's display tools: `present_openui` is an interface the console draws, `present_html` a
+ * page it draws in a sandboxed frame. The console declares both on every run, and the server
+ * offers the OpenUI form tool alongside them.
  */
 export const PRESENT_OPENUI = 'present_openui';
+export const PRESENT_HTML = 'present_html';
 export const PROMPT_OPENUI = 'prompt_openui';
 /** The console's own question tool: `ask_question` is answered in a panel, never drawn by a model. */
 export const ASK_QUESTION = 'ask_question';
-export const DECLARED_TOOLS = [PRESENT_OPENUI] as const;
+export const DECLARED_TOOLS = [PRESENT_OPENUI, PRESENT_HTML] as const;
 
 export function isOpenUITool(name: string): boolean {
   return name === PRESENT_OPENUI || name === PROMPT_OPENUI;
@@ -137,5 +138,5 @@ export const RETIRED_DISPLAY_TOOLS: readonly string[] = ['render_view', 'render_
 
 /** A call that drew rather than read or changed anything. */
 export function isPresentationTool(name: string): boolean {
-  return name === PRESENT_OPENUI || RETIRED_DISPLAY_TOOLS.includes(name);
+  return name === PRESENT_OPENUI || name === PRESENT_HTML || RETIRED_DISPLAY_TOOLS.includes(name);
 }
