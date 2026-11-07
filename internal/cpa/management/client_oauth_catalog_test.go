@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,6 +37,137 @@ func newOAuthCatalogClient(t *testing.T, files, aliases string, aliasStatus int)
 		t.Fatal(err)
 	}
 	return client, aliasReads
+}
+
+func TestOAuthCatalogAppliesCredentialModelAliases(t *testing.T) {
+	// A credential's own aliases live only in its file, which the management list
+	// does not project. Without them the hidden upstream is never billable, and a
+	// price for the model CPA actually reports cannot be saved.
+	const defaultFiles = `[{"name":"workbuddy.json","provider":"workbuddy","models":[{"id":"deepseek-v4.1-flash"}]}]`
+	const credentialFile = `{"access":"secret","model_aliases":[{"name":"deepseek-v4.1-flash-sg","alias":"deepseek-v4.1-flash","display-name":"deepseek-v4.1-flash","force-mapping":true}]}`
+	for _, test := range []struct {
+		name     string
+		files    string
+		provider string
+		download string
+		// downloads overrides the payload for named credentials, so a sibling can
+		// state no aliases of its own.
+		downloads  map[string]string
+		status     int
+		wantModels map[string]string
+		wantRoutes []ConfiguredModelRoute
+	}{
+		{
+			name: "credential alias", provider: `{}`, download: credentialFile, status: http.StatusOK,
+			wantModels: map[string]string{"deepseek-v4.1-flash": "deepseek-v4.1-flash-sg", "deepseek-v4.1-flash-sg": "deepseek-v4.1-flash-sg"},
+			wantRoutes: []ConfiguredModelRoute{{CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash-sg"}},
+		},
+		{
+			// Credential rules are resolved first, so they win a shared call point.
+			name: "credential alias before provider alias", provider: `{"workbuddy":[{"name":"deepseek-v4.1-pro","alias":"deepseek-v4.1-flash"}]}`, download: credentialFile, status: http.StatusOK,
+			wantModels: map[string]string{"deepseek-v4.1-flash": "deepseek-v4.1-flash-sg", "deepseek-v4.1-flash-sg": "deepseek-v4.1-flash-sg"},
+			wantRoutes: []ConfiguredModelRoute{{CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash-sg"}},
+		},
+		{
+			// A rule one credential stores never retargets its sibling's call point.
+			name: "sibling credential keeps its own target",
+			files: `[{"name":"aliased.json","provider":"workbuddy","models":[{"id":"deepseek-v4.1-flash"}]},` +
+				`{"name":"plain.json","provider":"workbuddy","models":[{"id":"deepseek-v4.1-flash"}]}]`,
+			provider: `{}`, download: credentialFile, status: http.StatusOK,
+			downloads:  map[string]string{"plain.json": `{}`},
+			wantModels: map[string]string{"deepseek-v4.1-flash": "", "deepseek-v4.1-flash-sg": "deepseek-v4.1-flash-sg"},
+			wantRoutes: []ConfiguredModelRoute{{CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash-sg"}, {CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash"}},
+		},
+		{
+			// An unreadable credential file must not freeze every other price.
+			name: "unreadable credential file", provider: `{}`, download: `{"error":"unavailable"}`, status: http.StatusServiceUnavailable,
+			wantModels: map[string]string{"deepseek-v4.1-flash": "deepseek-v4.1-flash"},
+			wantRoutes: []ConfiguredModelRoute{{CallPoint: "deepseek-v4.1-flash", UpstreamModel: "deepseek-v4.1-flash"}},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			files := test.files
+			if files == "" {
+				files = defaultFiles
+			}
+			server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				switch request.URL.Path {
+				case "/v8/management/credentials":
+					_, _ = writer.Write([]byte(`{"files":` + files + `}`))
+				case "/v8/management/credentials/download":
+					name := request.URL.Query().Get("name")
+					if name == "" {
+						t.Error("downloaded an unnamed credential")
+					}
+					payload, overridden := test.downloads[name]
+					if !overridden {
+						payload = test.download
+					}
+					writer.WriteHeader(test.status)
+					_, _ = writer.Write([]byte(payload))
+				case "/v8/management/config/oauth/model-alias":
+					_, _ = writer.Write([]byte(test.provider))
+				default:
+					_, _ = writer.Write([]byte(`{}`))
+				}
+			}))
+			t.Cleanup(server.Close)
+			client, err := NewClient(server.URL, "fixture-key", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := client.ListConfiguredModelSnapshot(context.Background())
+			if err != nil {
+				t.Fatalf("credential aliases failed the catalog: %v", err)
+			}
+			if !reflect.DeepEqual(snapshot.Models, test.wantModels) {
+				t.Fatalf("catalog=%v, want=%v", snapshot.Models, test.wantModels)
+			}
+			if len(snapshot.Providers) != 1 {
+				t.Fatalf("providers=%+v", snapshot.Providers)
+			}
+			provider := snapshot.Providers[0]
+			if !reflect.DeepEqual(provider.Routes, test.wantRoutes) {
+				t.Fatalf("routes=%+v, want=%+v", provider.Routes, test.wantRoutes)
+			}
+			if !reflect.DeepEqual(provider.Models, []string{"deepseek-v4.1-flash"}) {
+				t.Fatalf("invented callable upstream: %+v", provider.Models)
+			}
+			wantPricing := []string{"deepseek-v4.1-flash"}
+			for _, route := range test.wantRoutes {
+				if route.UpstreamModel != route.CallPoint {
+					wantPricing = append(wantPricing, route.UpstreamModel)
+				}
+			}
+			if !reflect.DeepEqual(provider.ListPricingModelIDs(), slices.Compact(wantPricing)) {
+				t.Fatalf("pricing membership=%v, want=%v", provider.ListPricingModelIDs(), wantPricing)
+			}
+		})
+	}
+}
+
+func TestOAuthCatalogKeepsReportedModelsWhenTheReadBudgetIsSpent(t *testing.T) {
+	// A reported model list is membership the gateway already answered for, so an
+	// exhausted enrichment budget may drop the optional alias read but never the
+	// models themselves.
+	files := []AuthFile{}
+	for index := range MODEL_PROVENANCE_READ_LIMIT {
+		files = append(files, AuthFile{Name: fmt.Sprintf("scale-%d.json", index), Provider: "grok"})
+	}
+	files = append(files, AuthFile{Name: "inline.json", Provider: "grok", Models: []AuthModel{{ID: "inline-model"}}})
+	encoded, err := json.Marshal(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, _ := newOAuthCatalogClient(t, string(encoded), `{}`, http.StatusOK)
+	snapshot, err := client.ListConfiguredModelProvenance(context.Background())
+	if err == nil {
+		t.Fatal("an exhausted budget must stay partial")
+	}
+	if snapshot.Models["inline-model"] != "inline-model" {
+		t.Fatalf("exhausted budget discarded reported membership: %v", snapshot.Models)
+	}
 }
 
 func TestOAuthCatalogRetainsBillableUpstreamModels(t *testing.T) {
