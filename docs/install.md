@@ -6,8 +6,8 @@ image is **`wiziscool/oh-my-cpa`** on Docker Hub, for `linux/amd64` and `linux/a
 
 | Scenario | Method |
 | --- | --- |
-| CPA is not deployed yet | [New install (`compose.full.yml`)](#new-install) |
-| CPA runs on the host, in another Docker project, or on another machine | [Standalone (`compose.omc.yml`)](#standalone) |
+| CPA is not deployed yet | [New install](#new-install) |
+| CPA runs on the host, in another Docker project, or on another machine | [Standalone](#standalone) |
 | CPA is deployed with Docker Compose and you prefer one Compose file | [Add to the existing Compose file](#add-to-the-existing-compose-file) |
 | Run without Docker on macOS, Windows, Linux or FreeBSD on amd64/arm64 | [Native executable](#native-executable) |
 | Explicit source build, or no published native asset matches the host OS/architecture | [Build from source](#from-source) |

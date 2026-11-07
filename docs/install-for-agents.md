@@ -48,8 +48,8 @@ the v8 management API and the existing plaintext management key.
 
 | Situation | Procedure |
 | --- | --- |
-| CPA is not installed | [New install (`compose.full.yml`)](install.md#new-install) |
-| Existing CPA reachable from a separate container (host, another Docker network, or remote) | [Standalone (`compose.omc.yml`)](install.md#standalone) |
+| CPA is not installed | [New install](install.md#new-install) |
+| Existing CPA reachable from a separate container (host, another Docker network, or remote) | [Standalone](install.md#standalone) |
 | Existing editable CPA Compose project where one file is preferred | [Add to Compose](install.md#add-to-the-existing-compose-file) |
 | Host-loopback CPA (`127.0.0.1:8317`), or Docker unavailable | [Native executable](install.md#native-executable) |
 | Explicit source request or unsupported native target | [From source](install.md#from-source) |
