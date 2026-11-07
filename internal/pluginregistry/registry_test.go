@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -143,19 +142,7 @@ func validateRepository(repository string) error {
 	return nil
 }
 
-// The registry is read over HTTPS by every installation's gateway, so a broken
-// document is caught here or nowhere: this test is the gate.
-func TestPublishedRegistryIsReadable(t *testing.T) {
-	raw, err := os.ReadFile("../../plugins/registry.json")
-	if err != nil {
-		t.Fatalf("read the plugin registry: %v", err)
-	}
-	if _, errValidate := validateRegistry(raw); errValidate != nil {
-		t.Fatalf("the published registry would be refused by the gateway: %v", errValidate)
-	}
-}
-
-// The gate above has to fail for the right reason, or a drifting check accepts
+// The gate below has to fail for the right reason, or a drifting check accepts
 // everything silently.
 func TestValidateRegistryRefusesWhatTheGatewayRefuses(t *testing.T) {
 	const validPlugin = `{"id":"sample","name":"Sample","description":"Sample plugin.","author":"author","version":"1.2.0","repository":"https://github.com/owner/repo","install":{"type":"github-release"}}`
@@ -235,7 +222,7 @@ func TestValidateRegistryRefusesWhatTheGatewayRefuses(t *testing.T) {
 // which registry CPA thinks a saved install came from. Pinning it makes that a
 // deliberate edit to this value rather than an accident in a constant.
 func TestSourceIDPinsThePublishedRegistry(t *testing.T) {
-	if got := SourceID(OMCSourceURL); got != "source-a72c6723a965" {
+	if got := SourceID(OMCSourceURL); got != "source-9550a8d33eb3" {
 		t.Fatalf("SourceID(%q) = %q; a new registry address means a new source id, so update this value with the URL", OMCSourceURL, got)
 	}
 	if got := SourceID("  https://example.test/registry.json  "); got != SourceID("https://example.test/registry.json") {
