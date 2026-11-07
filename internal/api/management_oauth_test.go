@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
@@ -33,6 +34,7 @@ type oauthCPAState struct {
 	startBody        map[string]any
 	startStatus      int
 	startResponse    string
+	statusResponse   map[string]string
 }
 
 func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *repository.Repository) {
@@ -88,6 +90,10 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 				reqState = request.URL.Query().Get("session_id")
 			}
 			state.lastStatusState = reqState
+			if state.statusResponse != nil {
+				_ = json.NewEncoder(writer).Encode(state.statusResponse)
+				return
+			}
 			// A session whose browser auto-callback already finished the
 			// exchange reports completed, so the facade can reconcile a
 			// repeated manual submission.
@@ -179,6 +185,101 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 	client := signedInClient(t, appServer.URL+"/omc/api/auth/login", "management-secret-value")
 
 	return client, appServer.URL, state, repo
+}
+
+func TestOAuthStatusFailureMessage(t *testing.T) {
+	client, baseURL, state, _ := startOAuthTestServer(t)
+	for _, test := range []struct {
+		name     string
+		upstream map[string]string
+		status   string
+		message  string
+	}{
+		{
+			name:     "plugin failure reason",
+			upstream: map[string]string{"status": "error", "error": "no active GLM Coding Plan or ZCode gift plan"},
+			status:   "error", message: "no active GLM Coding Plan or ZCode gift plan",
+		},
+		{
+			name:     "account diagnostic remains actionable",
+			upstream: map[string]string{"status": "error", "error": "account has no active plan"},
+			status:   "error", message: "account has no active plan",
+		},
+		{
+			name:     "message takes precedence",
+			upstream: map[string]string{"status": "error", "message": "  missing login response field  ", "error": "other failure"},
+			status:   "error", message: "missing login response field",
+		},
+		{
+			name:     "blank message falls back to error",
+			upstream: map[string]string{"status": "error", "message": " \t ", "error": "  HTTP 401 code 1001  "},
+			status:   "error", message: "HTTP 401 code 1001",
+		},
+		{
+			name:     "failure alias",
+			upstream: map[string]string{"status": " Failed ", "error": "plan required"},
+			status:   "error", message: "plan required",
+		},
+		{
+			name:     "no reason retains frontend fallback",
+			upstream: map[string]string{"status": "error", "message": " ", "error": "\t"},
+			status:   "error",
+		},
+		{
+			name:     "success omits upstream text",
+			upstream: map[string]string{"status": "success", "message": "private account", "error": "private code"},
+			status:   "ok",
+		},
+		{
+			name:     "pending omits upstream text",
+			upstream: map[string]string{"status": "pending", "message": "private account", "error": "private code"},
+			status:   "wait",
+		},
+		{
+			name:     "redacts OAuth material and account details",
+			upstream: map[string]string{"status": "error", "error": `access_token=fixture-token; code="fixture-code"; state=fixture-state; session_id=fixture-session; account_id=fixture-account; person@example.test; https://user:pass@callback.example.test/path?code=fixture-url-code&state=fixture-url-state ; Bearer fixture-bearer`},
+			status:   "error", message: `access_token=[redacted]; code=[redacted]; state=[redacted]; session_id=[redacted]; account_id=[redacted]; [redacted]; https://callback.example.test/path ; Bearer [redacted]`,
+		},
+		{
+			name:     "redacts echoed session identity",
+			upstream: map[string]string{"status": "error", "error": "flow fixture-oauth-state failed"},
+			status:   "error", message: "flow [redacted] failed",
+		},
+		{
+			name:     "bounded Unicode reason",
+			upstream: map[string]string{"status": "error", "error": strings.Repeat("套餐缺失", 100)},
+			status:   "error", message: strings.Repeat("套餐缺失", 75),
+		},
+		{
+			name:     "redaction precedes truncation",
+			upstream: map[string]string{"status": "error", "error": strings.Repeat("x", 280) + " access_token=" + strings.Repeat("s", 100)},
+			status:   "error", message: strings.Repeat("x", 280) + " access_token=[redac",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			state.mu.Lock()
+			state.statusResponse = test.upstream
+			state.mu.Unlock()
+			response, raw := getJSON(t, client, baseURL+"/omc/api/v1/management/oauth/status?state=fixture-oauth-state")
+			if response.StatusCode != http.StatusOK || response.Header.Get("Cache-Control") != "no-store" {
+				t.Fatalf("poll OAuth status = %d headers %v body %s", response.StatusCode, response.Header, raw)
+			}
+			var got map[string]string
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Fatal(err)
+			}
+			wantFields := 1
+			if test.message != "" {
+				wantFields++
+			}
+			if len(got) != wantFields || got["status"] != test.status || got["message"] != test.message {
+				t.Fatalf("OAuth status = %s, want status %q message %q", raw, test.status, test.message)
+			}
+			if !utf8.ValidString(got["message"]) || utf8.RuneCountInString(got["message"]) > 300 {
+				t.Fatalf("failure message is not bounded UTF-8: %q", got["message"])
+			}
+		})
+	}
 }
 
 func TestOAuthFlowLifecycle(t *testing.T) {

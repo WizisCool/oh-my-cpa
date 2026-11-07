@@ -12,7 +12,13 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
-var oauthProviderPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+var (
+	oauthProviderPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+	// OAuth errors can contain callback parameters and account-mismatch details
+	// that the general credential redactor does not recognize.
+	oauthFailureSecretPattern = regexp.MustCompile(`(?i)(\b(?:code|state|session[_-]?id|account(?:[_-]?id)?|email)["']?[ \t]*[:=][ \t]*|\bwrong account[ \t]+)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)`)
+	oauthFailureEmailPattern  = regexp.MustCompile(`(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b`)
+)
 
 // OAuthProviderDTO is the facade's view of a built-in authorization. It is a
 // projection of the CPA contract registry: the provider table lives next to the
@@ -197,9 +203,22 @@ func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Reque
 	if status == "ok" && h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
-	// Upstream failure text can quote callback codes or account details. The
-	// browser already owns translated status copy; no provider text is needed.
-	writeJSON(writer, http.StatusOK, map[string]any{"status": status})
+	payload := map[string]any{"status": status}
+	if status == "error" {
+		if message := sanitizeOAuthFailureMessage(firstNonEmpty(resp.Message, resp.Error), token); message != "" {
+			payload["message"] = message
+		}
+	}
+	writeJSON(writer, http.StatusOK, payload)
+}
+
+func sanitizeOAuthFailureMessage(message, token string) string {
+	message = security.RedactText(message, token)
+	message = oauthFailureSecretPattern.ReplaceAllString(message, `${1}`+security.RedactedValue)
+	message = oauthFailureEmailPattern.ReplaceAllString(message, security.RedactedValue)
+	// Redact the complete text before bounding it so a cut cannot expose part
+	// of a credential or split a multi-byte character.
+	return boundedText(message, 300)
 }
 
 type oauthCallbackRequest struct {

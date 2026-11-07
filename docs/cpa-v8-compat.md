@@ -44,6 +44,11 @@ waiting, including another provider's attempt. CPA still owns login execution an
 account matching. Targeted recovery for credentials owned by plugins with a
 registered page remains unavailable.
 
+Terminal OAuth failures retain CPA's actionable reason as a sanitized message of at
+most 300 Unicode characters. Credential-bearing forms, callback parameters, session
+identity and email addresses are redacted before truncation. Successful and pending
+status reads carry only the normalized status.
+
 Plugin-store translations are optional publisher metadata, not a plugin page's
 language or installation identity. The [locale projection](../internal/api/management_plugin_projection.go)
 decodes CPA's HTML entities once before bounding the allowlisted text and validating
