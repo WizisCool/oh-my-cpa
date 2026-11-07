@@ -169,13 +169,6 @@ function countValues(values: string[]): Map<string, number> {
   return counts;
 }
 
-/**
- * Canonicalizes only known aliases. Unknown provider keys stay untouched because
- * inventing a family for them would make an unrelated credential share a filter.
- * A credential issued through one portal of a multi-portal plugin is filed under that
- * portal, which carries its own name and logo; without a reported portal it stays
- * under its type, as on a gateway that does not report one.
- */
 export function resolveAuthorizationProviderId(
   displayProvider: string,
   choices: OAuthProviderChoice[],

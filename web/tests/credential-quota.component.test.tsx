@@ -8,6 +8,7 @@ import {
   type CredentialQuotaPanelProps,
 } from '../src/components/dashboard/CredentialQuota';
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
+import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { App as AntdApp } from 'antd';
 import { CredentialSection, type CredentialRowActions } from '../src/pages/oauthManagement/CredentialSection';
@@ -109,6 +110,19 @@ describe('credential quota board', () => {
     expect(credentialQuotaRefreshTargets(FILES, quotas)).toEqual(['ample', 'low', 'cooling', 'expired']);
     expect(credentialQuotaRefreshTargets([file('twin'), file('twin')], [quota('twin', [])])).toEqual([]);
   });
+
+  it('carries the portal that issued a credential, so the row draws its mark over the plugin logo', () => {
+    const portalLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22harbor-cn%22/%3E';
+    const pluginLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22harbor%22/%3E';
+    const issued = file('harbor-cn-account', { type: 'harbor', oauth_provider: 'Harbor-CN' });
+    // The row model has to carry the issuing portal, because the artwork resolver only walks
+    // the keys it is handed: dropping it here is what drew the plugin's own logo.
+    const row = buildCredentialQuotaBoard([issued], [], new Set(['harbor', 'harbor-cn'])).rows[0];
+    expect(row.credential).toMatchObject({ provider: 'harbor-cn', family: 'harbor' });
+    expect(resolveCredentialMark(row.credential, { harbor: pluginLogo, 'harbor-cn': portalLogo }).logo).toBe(portalLogo);
+    // A gateway that reports no portal keeps the family's artwork.
+    expect(buildCredentialQuotaBoard([file('plain', { type: 'harbor' })], []).rows[0].credential).toMatchObject({ provider: 'harbor' });
+  });
 });
 
 describe('credential quota presentation', () => {
@@ -135,26 +149,6 @@ describe('credential quota presentation', () => {
     expect(within(rows[1]).getByText('Cooling down')).toBeTruthy();
     expect(within(rows[3]).getByText('am•••e@example.com')).toBeTruthy();
     expect(within(rows[4]).getByText('No quota reading')).toBeTruthy();
-  });
-
-  it('draws the portal that issued a credential instead of the whole plugin', () => {
-    const portalLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22harbor-cn%22/%3E';
-    const pluginLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22harbor%22/%3E';
-    const portals = new Set(['harbor', 'harbor-cn']);
-    const issued = file('harbor-cn-account', { type: 'harbor', oauth_provider: 'Harbor-CN' });
-    // The row model has to carry the issuing portal, because the artwork resolver only walks
-    // the keys it is handed: dropping it here is what drew the plugin's own logo.
-    expect(buildCredentialQuotaBoard([issued], [], portals).rows[0].credential).toMatchObject({ provider: 'harbor-cn', family: 'harbor' });
-
-    const { container } = render(
-      <QuotaSurface
-        files={[issued]}
-        quotas={[]}
-        multiPortalKeys={portals}
-        pluginLogos={{ harbor: pluginLogo, 'harbor-cn': portalLogo }}
-      />,
-    );
-    expect(container.querySelector('.quota-row-icon')?.getAttribute('src')).toBe(portalLogo);
   });
 
   it('persists keyboard reordering alongside existing dashboard order keys', async () => {
