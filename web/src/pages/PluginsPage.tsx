@@ -45,8 +45,8 @@ function isPluginTab(value: string | null): value is PluginTab {
  * `/plugins/settings`), so the navigation can list the store beside the installed plugins
  * and either can be linked to; `?plugin=<id>` opens that plugin's settings.
  *
- * Store metadata and update availability load independently of the installed list,
- * so a slow registry does not delay the plugins themselves.
+ * The installed tab enables a separate store query after its list contains plugins,
+ * so registry reads never block the installed list.
  */
 export const PluginsPage: React.FC = () => {
   const t = useT();

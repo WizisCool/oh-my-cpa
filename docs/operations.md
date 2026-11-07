@@ -194,8 +194,8 @@ again restores the reminder, and a later release is flagged regardless.
 
 The background sweep also checks installed plugins through CPA's store, once at startup
 and every six hours. The **Plugin Management** entry uses the same amber dot for available
-plugin updates. Opening the installed-plugins page checks the store independently of the
-installed list, and installation or removal refreshes the reminder.
+plugin updates. The installed-plugins page enables a separate store query after its
+list contains plugins. Installation or removal refreshes the reminder.
 
 The header's GitHub link shows the project's star count, read by the server from the same
 host and held in memory. It costs at most one request an hour: the sweep refreshes it, and
