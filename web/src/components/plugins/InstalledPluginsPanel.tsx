@@ -262,11 +262,6 @@ export function InstalledPluginsPanel({
                           {!plugin.registered && <span className={styles.badge}>{t('plugin.badge_not_registered')}</span>}
                           {plugin.supports_oauth && <span className={styles.badge}>{t('plugin.badge_auth_provider')}</span>}
                           {plugin.supports_quota && <span className={styles.badge}>{t('plugin.badge_quota')}</span>}
-                          {listing?.update_available && (
-                            <span className={`${styles.badge} ${styles['badge-accent']}`}>
-                              {t('plugin.badge_update_to', { version: formatPluginVersion(listing.version) })}
-                            </span>
-                          )}
                         </span>
                       </div>
                       {name !== plugin.id && <span className={styles['plugin-id']}>{plugin.id}</span>}
@@ -284,21 +279,22 @@ export function InstalledPluginsPanel({
                   <div className={styles['installed-actions']}>
                     {isPhone && <RowContextHandle name={name} variant="inline" />}
                     <div className="row-actions">
-                      <span className={styles['update-cell']}>
-                        {listing?.update_available && (
-                          <Tooltip title={isDemo ? t('demo.blocked') : isStoreInstallBlocked(listing) === 'auth' ? t('plugin.auth_required_hint') : t('plugin.update_to', { version: formatPluginVersion(listing.version) })}>
-                            <Button
-                              size="small"
-                              className="row-action-btn"
-                              icon={<UpgradeOutlined />}
-                              disabled={isDemo || isDeleting || isStoreInstallBlocked(listing) !== undefined}
-                              onClick={() => setUpdating(listing)}
-                              aria-label={t('plugin.update_label', { name })}
-                              data-testid="plugin-row-update"
-                            />
-                          </Tooltip>
-                        )}
-                      </span>
+                      {listing?.update_available && (
+                        <Tooltip title={isDemo ? t('demo.blocked') : isStoreInstallBlocked(listing) === 'auth' ? t('plugin.auth_required_hint') : undefined}>
+                          <Button
+                            type="text"
+                            size="small"
+                            className={styles['update-button']}
+                            icon={<UpgradeOutlined />}
+                            disabled={isDemo || isDeleting || isStoreInstallBlocked(listing) !== undefined}
+                            onClick={() => setUpdating(listing)}
+                            aria-label={t('plugin.update_label_to', { name, version: formatPluginVersion(listing.version) })}
+                            data-testid="plugin-row-update"
+                          >
+                            {t('plugin.update_to', { version: formatPluginVersion(listing.version) })}
+                          </Button>
+                        </Tooltip>
+                      )}
                       <Tooltip title={t('plugin.configure')}>
                         <Button
                           size="small"

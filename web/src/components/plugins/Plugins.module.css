@@ -213,16 +213,41 @@
 
 .installed-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.update-cell {
-  display: inline-flex;
-  flex: none;
-  width: 28px;
-  height: 28px;
+/* The cluster may wrap, so the actions inside it must too: a long release label would otherwise
+   push the row past the viewport instead of moving to a line of its own. */
+.installed-actions :global(.row-actions) {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* An available update is an action, so it sits in the action cluster rather than adding a chip
+   to the name line. It is set in the warning ink the navigation reminder uses and takes the same
+   height as the icon controls beside it; a fill would make one row's button outweigh the list. */
+.update-button.update-button {
+  height: auto;
+  min-height: 28px;
+  max-width: 100%;
+  padding-inline: 6px;
+  color: var(--warn) !important;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.update-button.update-button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--warn) 10%, transparent) !important;
+  color: var(--warn) !important;
+}
+
+.update-button.update-button:disabled {
+  color: var(--meta) !important;
 }
 
 .switch-cell {

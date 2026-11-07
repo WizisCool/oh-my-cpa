@@ -158,7 +158,7 @@ it('checks for updates on request and updates a plugin from its installed row', 
   fireEvent.click(screen.getByRole('button', { name: t('plugin.check_updates') }));
   expect(await screen.findByText(t('plugin.check_updates_found', { n: 1 }))).toBeTruthy();
   expect(checks).toBe(1);
-  fireEvent.click(await screen.findByRole('button', { name: t('plugin.update_label', { name: 'Runtime name' }) }));
+  fireEvent.click(await screen.findByRole('button', { name: t('plugin.update_label_to', { name: 'Runtime name', version: 'v1.3.0' }) }));
   const dialog = await screen.findByRole('dialog');
   expect(dialog.textContent).toContain(t('plugin.update_title', { name: 'Base name' }));
   // Updating replaces executable code, so a third-party plugin still asks for its id.
