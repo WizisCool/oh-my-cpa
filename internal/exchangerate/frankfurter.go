@@ -68,12 +68,18 @@ func DecodeFrankfurter(body []byte) ([]Rate, error) {
 	rates := make([]Rate, 0, len(rows))
 	seen := make(map[string]bool, len(rows))
 	for _, row := range rows {
+		// Frankfurter v2 blends non-ISO instruments (crypto and metals such as
+		// AAVE or USDC) into the same USD feed. They can never be a display
+		// currency, so drop them instead of failing every other conversion.
+		if row.Quote != "USD" && !IsDisplayCurrency(row.Quote) {
+			continue
+		}
 		_, dateErr := time.Parse(time.DateOnly, row.Date)
 		if row.Base != "USD" || !IsCurrency(row.Quote) || dateErr != nil || row.Rate <= 0 || math.IsNaN(row.Rate) || math.IsInf(row.Rate, 0) || seen[row.Quote] || (row.Quote == "USD" && row.Rate != 1) {
 			return nil, fmt.Errorf("invalid Frankfurter rate")
 		}
 		seen[row.Quote] = true
-		if row.Quote != "USD" && IsDisplayCurrency(row.Quote) {
+		if row.Quote != "USD" {
 			rates = append(rates, Rate{Currency: row.Quote, Rate: row.Rate, Date: row.Date})
 		}
 	}
