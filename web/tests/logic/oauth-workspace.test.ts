@@ -7,7 +7,6 @@ import {
   buildOAuthWorkspaceProjection,
   buildQuotaRefreshTargets,
   consumeOneShotIntent,
-  canonicalDisplayProviderKey,
   filterOAuthWorkspaceRecords,
   legacyOAuthManagementRedirect,
   matchesQuotaFilter,
@@ -18,6 +17,7 @@ import {
   updateWorkspaceSearch,
   workspaceProviderOptions,
 } from '../../src/pages/oauthManagement/oauthWorkspaceLogic.ts';
+import { canonicalDisplayProviderKey } from '../../src/types/credentialIdentity.ts';
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../../src/pages/oauthProviderLogic.ts';
 import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';

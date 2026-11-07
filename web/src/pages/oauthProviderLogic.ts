@@ -395,7 +395,7 @@ export function pluginOAuthProviderChoices(
         id: providerId,
         flow: 'plugin',
         pluginPageRoute,
-        ...resolveCredentialMark(providerId, title, logos),
+        ...resolveCredentialMark({ provider: providerId, hint: title }, logos),
         title: t('oauth.plugin_title', { name: title }),
         description: t('oauth.plugin_hint', { name: title }),
         loginLabel: t('oauth.plugin_login', { name: title }),

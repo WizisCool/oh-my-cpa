@@ -1,4 +1,5 @@
 import { resolveCredentialMark, resolveProviderMark, resolveRecordedProviderMark, type BrandMark } from './brandMark';
+import { credentialBrandIdentity } from './credentialIdentity';
 import type { PluginOAuthLogos } from './pluginOAuthProviders';
 import { knownProviderDisplayName, providerDisplayName } from './providerMetadata';
 import type {
@@ -269,11 +270,10 @@ export function resolveProviderInfo(
     // the cell before it does.
     const fileType = file?.type?.toLowerCase() === 'oauth' ? '' : file?.type;
     const providerFamily = (file?.provider || fileType || event.provider || file?.type || 'oauth').toLowerCase();
-    const mark = resolveCredentialMark(providerFamily, file?.name, pluginLogos, {
-      aliases: [file?.provider, file?.type, event.provider].filter((key): key is string => Boolean(key)),
-      oauthProvider: file?.oauth_provider,
-      multiPortalKeys,
-    });
+    // The portal that issued the credential is part of its identity, resolved here with the
+    // record that carries it rather than left for each surface to re-derive.
+    const identity = credentialBrandIdentity(providerFamily, file, multiPortalKeys, [file?.provider, fileType, event.provider]);
+    const mark = resolveCredentialMark(identity, pluginLogos);
     const account = file?.email || file?.project_id;
     const credIdentity = resolveCredential(event, credentials);
     const fileName = credIdentity.displayName || credIdentity.name || event.source || '';
@@ -284,7 +284,7 @@ export function resolveProviderInfo(
     // beside it.
     // The name follows the same declared issuing portal as the artwork; legacy credentials
     // and portals without naming metadata retain the credential-family label.
-    const displayProvider = mark.providerKeys?.[0] || providerFamily;
+    const displayProvider = identity.provider;
     const providerLabel = knownProviderDisplayName(displayProvider, pluginTitles) || providerDisplayName(providerFamily, pluginTitles);
     // The account is the one display value masking must reach here: the API-key half
     // of the same line is already a server-side mask, and a request record carries no

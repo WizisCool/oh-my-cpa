@@ -9,7 +9,7 @@ import { LoadFailure, useToast } from '../feedback';
 import { LoadingRegion, Placeholder } from '../common/Placeholder';
 import { RefreshButton } from '../common/RefreshButton';
 import { Tooltip } from '../common/Tooltip';
-import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
+import { usePluginMultiPortalKeys, usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { CredentialMark } from '../LobeIcon';
 import {
@@ -150,7 +150,7 @@ const CredentialQuotaRowView: React.FC<QuotaRowProps> = ({ row, nowMS, pluginLog
     >
       {reorder && !isPhone && <ReorderHandle {...reorder.handle} name={row.primary} />}
       <CredentialMark
-        provider={row.provider} hint={row.fileName} pluginLogos={pluginLogos}
+        credential={row.credential} pluginLogos={pluginLogos}
         size={16}
         className="quota-row-icon"
       />
@@ -210,6 +210,8 @@ const SortableQuotaList: React.FC<{ rows: CredentialQuotaRow[]; nowMS: number; p
 
 export interface CredentialQuotaPanelProps {
   pluginLogos?: PluginOAuthLogos;
+  /** The login portals multi-portal plugins declare; a credential issued by one draws that portal. */
+  multiPortalKeys?: ReadonlySet<string>;
   /** Absent until the credential list has been read once. */
   files?: ManagementAuthFile[];
   /** Absent when no quota reading is available; the rows then say so rather than vanish. */
@@ -249,6 +251,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
   quotas,
   nowMS,
   pluginLogos,
+  multiPortalKeys,
   isLoading = false,
   isError = false,
   error,
@@ -259,7 +262,10 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
   className,
 }) => {
   const t = useT();
-  const board = React.useMemo(() => (files ? buildCredentialQuotaBoard(files, quotas ?? []) : null), [files, quotas]);
+  const board = React.useMemo(
+    () => (files ? buildCredentialQuotaBoard(files, quotas ?? [], multiPortalKeys) : null),
+    [files, multiPortalKeys, quotas],
+  );
   const state = resolveCredentialQuotaPanelState(board, isLoading);
 
   return (
@@ -353,6 +359,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
  */
 export const CredentialQuota: React.FC = () => {
   const pluginLogos = usePluginOAuthLogos();
+  const multiPortalKeys = usePluginMultiPortalKeys();
   const filesQuery = useQuery({
     queryKey: [CREDENTIAL_FILES_QUERY_KEY],
     queryFn: () => api.getManagementAuthFiles(),
@@ -421,6 +428,7 @@ export const CredentialQuota: React.FC = () => {
     <CredentialQuotaPanel
       isSortable
       pluginLogos={pluginLogos}
+      multiPortalKeys={multiPortalKeys}
       onRefreshQuota={() => void refreshQuota()}
       isRefreshingQuota={isRefreshingQuota}
       files={filesQuery.data?.files}

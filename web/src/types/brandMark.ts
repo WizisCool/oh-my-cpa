@@ -1,3 +1,4 @@
+import type { CredentialBrandIdentity } from './credentialIdentity';
 import { customIconID, resolveProviderArtwork, type CustomIcon } from './customIcons';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from './lobeIconCatalog';
 import { credentialProviderIconId } from './providerMetadata';
@@ -95,20 +96,23 @@ export function resolveRecordedProviderMark(providerKey: string, displayName: st
   };
 }
 
-/** An account label is a hint, not a provider-instance id on which to apply an override. */
-export function resolveCredentialMark(provider: string, hint?: string, pluginLogos?: PluginOAuthLogos, options: {
-  aliases?: readonly string[];
-  oauthProvider?: string;
-  multiPortalKeys?: ReadonlySet<string>;
-} = {}): BrandMark & { iconId: string } {
-  // A declared issuing portal selects its own logo; the credential family remains the fallback.
-  const portal = (options.oauthProvider ?? '').trim().toLowerCase();
-  const providerKeys = [
-    ...(portal !== provider && options.multiPortalKeys?.has(portal) ? [portal] : []),
-    provider, ...(options.aliases ?? []),
-  ];
-  const iconId = credentialProviderIconId(provider, hint);
-  return { iconId, fallbackIconId: iconId, logo: resolveLogo(providerKeys, pluginLogos), providerKeys };
+/**
+ * A credential's artwork, from an identity that already names the portal which issued it.
+ *
+ * Deciding which brand a credential belongs to is `credentialBrandIdentity`'s job, in the
+ * projection that holds the credential; this only walks the keys that identity proves. An
+ * account label is a hint, not a provider-instance id on which to apply an override.
+ */
+export function resolveCredentialMark(identity: CredentialBrandIdentity, pluginLogos?: PluginOAuthLogos): BrandMark & { iconId: string } {
+  const providerKeys = [...new Set([identity.provider, identity.family, ...(identity.aliases ?? [])]
+    .filter((key): key is string => Boolean(key)))];
+  const iconId = credentialProviderIconId(identity.provider, identity.hint);
+  // A portal key the brand catalog does not name still draws its family's mark, so a plugin
+  // that publishes no artwork of its own is never left on the neutral placeholder.
+  const fallbackIconId = identity.family && identity.family !== identity.provider
+    ? credentialProviderIconId(identity.family, identity.hint)
+    : iconId;
+  return { iconId, fallbackIconId, logo: resolveLogo(providerKeys, pluginLogos), providerKeys };
 }
 
 export interface MarkArtwork {

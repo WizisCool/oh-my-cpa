@@ -4,6 +4,7 @@ import { useCustomIcons } from '../hooks/useCustomIcons';
 import { usePluginProviderOwnership } from '../hooks/usePluginOAuthLogos';
 import { customIconID, resolveProviderArtwork, type CustomIcon } from '../types/customIcons';
 import { resolveMarkArtworks, resolveProviderMark, resolveCredentialMark, type ProviderBrandIdentity, type ProviderBrandSources, type BrandMark } from '../types/brandMark';
+import type { CredentialBrandIdentity } from '../types/credentialIdentity';
 import { MarkArtwork } from './common/MarkArtwork';
 import { CloudServerOutlined } from './icons';
 
@@ -35,14 +36,17 @@ export function ProviderMark({ provider, sources, ...props }: Omit<ProviderBrand
   return <ProviderBrandIcon mark={resolveProviderMark(provider, sources)} {...props} />;
 }
 
-export function CredentialMark({ provider, hint, pluginLogos, oauthProvider, multiPortalKeys, ...props }: Omit<ProviderBrandIconProps, 'mark'> & {
-  provider: string;
-  hint?: string;
+/**
+ * A credential's mark, from an identity that already names the portal which issued it.
+ *
+ * Portal canonicalization happens in the projection that holds the credential, so a surface
+ * cannot draw the whole plugin's logo for a credential one of its portals issued.
+ */
+export function CredentialMark({ credential, pluginLogos, ...props }: Omit<ProviderBrandIconProps, 'mark'> & {
+  credential: CredentialBrandIdentity;
   pluginLogos?: ProviderBrandSources['pluginLogos'];
-  oauthProvider?: string;
-  multiPortalKeys?: ReadonlySet<string>;
 }) {
-  return <ProviderBrandIcon mark={resolveCredentialMark(provider, hint, pluginLogos, { oauthProvider, multiPortalKeys })} {...props} />;
+  return <ProviderBrandIcon mark={resolveCredentialMark(credential, pluginLogos)} {...props} />;
 }
 
 function PluginAwareBrandIcon(props: ProviderBrandIconProps) {

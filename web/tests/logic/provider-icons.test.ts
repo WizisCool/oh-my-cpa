@@ -19,6 +19,7 @@ import {
   pluginMultiPortalKeys,
 } from '../../src/types/pluginOAuthProviders.ts';
 import { resolveProviderMark, resolveProviderPickerIcon, resolveCredentialMark, resolveMarkArtworks } from '../../src/types/brandMark';
+import { credentialBrandIdentity, credentialPortalKey } from '../../src/types/credentialIdentity';
 import { modelMarkIconId } from '../../src/types/modelSquare';
 import type { CustomIcon } from '../../src/types/customIcons';
 import type { PluginItem } from '../../src/types/plugin.ts';
@@ -283,16 +284,19 @@ test('routing credentials use the issuing OAuth portal mark while preserving the
   }];
   const logos = pluginOAuthProviderLogos(plugins);
   const multiPortalKeys = pluginMultiPortalKeys(plugins);
-  const mark = (oauthProvider?: string) => resolveCredentialMark('qoder', 'My account', logos, { oauthProvider, multiPortalKeys });
+  const identity = (oauthProvider?: string) => credentialBrandIdentity('qoder', { name: 'My account', oauth_provider: oauthProvider }, multiPortalKeys);
+  const mark = (oauthProvider?: string) => resolveCredentialMark(identity(oauthProvider), logos);
 
+  assert.equal(credentialPortalKey({ oauth_provider: ' Qoder-CN ' }, multiPortalKeys), 'qoder-cn');
   assert.equal(mark('qoder').logo, INLINE_LOGO);
   assert.equal(mark(' Qoder-CN ').logo, cnLogo);
   assert.deepEqual(mark('qoder-cn').providerKeys, ['qoder-cn', 'qoder']);
   assert.equal(mark().logo, INLINE_LOGO);
   assert.equal(mark('undeclared').logo, INLINE_LOGO);
-  assert.equal(resolveCredentialMark('qoder', undefined, logos, { oauthProvider: 'qoder-cn' }).logo, INLINE_LOGO);
-  assert.equal(resolveCredentialMark('qoder', undefined, { qoder: INLINE_LOGO }, { oauthProvider: 'qoder-cn', multiPortalKeys }).logo, INLINE_LOGO);
-  assert.equal(resolveCredentialMark('codex', undefined, logos, { oauthProvider: 'qoder-cn', multiPortalKeys: new Set() }).iconId, 'Codex');
+  // A gateway that reports no portals, or publishes no artwork for one, keeps the family's mark.
+  assert.equal(resolveCredentialMark(credentialBrandIdentity('qoder', { oauth_provider: 'qoder-cn' }), logos).logo, INLINE_LOGO);
+  assert.equal(resolveCredentialMark(identity('qoder-cn'), { qoder: INLINE_LOGO }).logo, INLINE_LOGO);
+  assert.equal(resolveCredentialMark(credentialBrandIdentity('codex', { oauth_provider: 'qoder-cn' }, new Set()), logos).iconId, 'Codex');
 });
 
 test('quota provider identity connects a multi-portal plugin to its credential mark without adding login choices', () => {
@@ -304,7 +308,7 @@ test('quota provider identity connects a multi-portal plugin to its credential m
   assert.deepEqual(pluginOAuthProviderIds(plugin), ['zcode-zai', 'zcode-bigmodel']);
   assert.ok(pluginOAuthProviderKeys(plugin).includes('zcode'));
   const logos = pluginOAuthProviderLogos([plugin]);
-  assert.equal(resolveCredentialMark('zcode', undefined, logos).logo, logo);
+  assert.equal(resolveCredentialMark({ provider: 'zcode' }, logos).logo, logo);
 });
 
 test('pluginOAuthLogoFor: lookup is case and pad insensitive, and misses are empty', () => {
@@ -332,7 +336,7 @@ test('a connection keeps its selected mark across surfaces without relabelling O
   assert.equal(resolveProviderMark(provider, sources).iconId, 'OpenCode');
   assert.equal(resolveProviderMark({ ...provider, id: 'codex-1' }, sources).iconId, 'DeepSeek');
   assert.equal(resolveProviderMark({ ...provider, name: 'Other connection' }, sources).iconId, 'OpenCode');
-  assert.equal(resolveCredentialMark('codex', 'Opencode Go').iconId, 'Codex');
+  assert.equal(resolveCredentialMark({ provider: 'codex', hint: 'Opencode Go' }).iconId, 'Codex');
   const unknown = { family: 'openai-compatibility', name: 'zz-unidentified-relay' };
   assert.equal(resolveProviderMark(unknown).iconId, '');
   assert.equal(resolveProviderPickerIcon(unknown), 'OpenAI');

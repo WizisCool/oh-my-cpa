@@ -51,7 +51,7 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
         <Space size={6} align="center">
           <span className={styles['tab-icon']}>
             {!isAll ? (
-              <CredentialMark provider={provider} hint={label} pluginLogos={pluginLogos} size={15} />
+              <CredentialMark credential={{ provider, hint: label }} pluginLogos={pluginLogos} size={15} />
             ) : (
               <AppstoreOutlined style={{ fontSize: 14, color: isActive ? 'var(--fg)' : 'var(--meta)' }} />
             )}

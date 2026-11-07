@@ -1,4 +1,5 @@
-import { matchesStatusFilter, providerOf, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
+import { matchesStatusFilter, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
+import { canonicalDisplayProviderKey } from '../../types/credentialIdentity';
 import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { OAUTH_PROVIDER_PATTERN } from '../../types/pluginOAuthProviders';
@@ -166,25 +167,6 @@ function countValues(values: string[]): Map<string, number> {
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   return counts;
-}
-
-/**
- * Canonicalizes only known aliases. Unknown provider keys stay untouched because
- * inventing a family for them would make an unrelated credential share a filter.
- * A credential issued through one portal of a multi-portal plugin is filed under that
- * portal, which carries its own name and logo; without a reported portal it stays
- * under its type, as on a gateway that does not report one.
- */
-export function canonicalDisplayProviderKey(
-  file: ManagementAuthFile,
-  quota?: QuotaItem,
-  multiPortalKeys: ReadonlySet<string> = NO_PORTAL_KEYS,
-): string {
-  const portal = normalizedKey(file.oauth_provider);
-  if (portal && multiPortalKeys.has(portal)) return portal;
-  const observed = providerOf(file) !== 'unknown' ? providerOf(file) : normalizedKey(quota?.provider) || 'unknown';
-  const metadata = getCredentialProviderMetadata(observed);
-  return metadata.id || observed || 'unknown';
 }
 
 export function resolveAuthorizationProviderId(

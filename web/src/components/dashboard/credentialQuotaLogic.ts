@@ -1,3 +1,4 @@
+import { credentialBrandIdentity, credentialProviderFamily, type CredentialBrandIdentity } from '../../types/credentialIdentity';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../../types/quota';
 import { credentialTitle } from '../../types/usageEventIdentity';
@@ -126,7 +127,8 @@ export interface CredentialQuotaRow {
   fileName: string;
   /** The masked account when the credential names one, otherwise its file name. */
   primary: string;
-  provider: string;
+  /** The issuing portal over the credential family, so the row draws the brand that issued it. */
+  credential: CredentialBrandIdentity;
   state: CredentialQuotaState;
   /** The credential's own model family in two fixed places: the short limit, then the long one. */
   slots: [QuotaWindow?, QuotaWindow?];
@@ -182,7 +184,11 @@ function resolveRecovery(state: CredentialQuotaState, item: QuotaItem | undefine
  * the operator's own decision and are only counted; the runtime entries CPA lists for configured
  * API keys are not subscriptions and carry no quota, so they are left to the provider table.
  */
-export function buildCredentialQuotaBoard(files: ManagementAuthFile[], quotas: QuotaItem[]): CredentialQuotaBoard {
+export function buildCredentialQuotaBoard(
+  files: ManagementAuthFile[],
+  quotas: QuotaItem[],
+  multiPortalKeys?: ReadonlySet<string>,
+): CredentialQuotaBoard {
   const quotaByAuthIndex = new Map<string, QuotaItem>();
   for (const item of quotas) {
     if (item.auth_index && !quotaByAuthIndex.has(item.auth_index)) quotaByAuthIndex.set(item.auth_index, item);
@@ -213,7 +219,7 @@ export function buildCredentialQuotaBoard(files: ManagementAuthFile[], quotas: Q
       key: file.auth_index || file.name,
       fileName: file.name,
       primary: credentialLabel(file),
-      provider: (file.type || file.provider || 'unknown').trim().toLowerCase(),
+      credential: credentialBrandIdentity(credentialProviderFamily(file), file, multiPortalKeys),
       state,
       slots,
       bindingWindow,

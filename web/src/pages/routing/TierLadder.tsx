@@ -23,6 +23,7 @@ import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import { ProviderMark, CredentialMark } from '../../components/LobeIcon';
 import { type ProviderBrandSources } from '../../types/brandMark';
+import { credentialBrandIdentity } from '../../types/credentialIdentity';
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { ToolButton } from '../../components/common/ToolButton';
 import { StatusLabel } from '../../components/common/StatusLabel';
@@ -472,8 +473,9 @@ const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember
       <HolderOutlined className={styles['card-grip']} aria-hidden="true" />
       {member.kind === 'provider'
         ? <ProviderMark provider={member} sources={branding} size={20} />
-        : <CredentialMark provider={member.family} hint={member.name} oauthProvider={member.oauth_provider}
-            multiPortalKeys={branding.multiPortalKeys} pluginLogos={branding.pluginLogos} size={20} />}
+        : <CredentialMark
+            credential={credentialBrandIdentity(member.family, { name: member.name, oauth_provider: member.oauth_provider }, branding.multiPortalKeys)}
+            pluginLogos={branding.pluginLogos} size={20} />}
       <span className={styles['card-text']}>
         <span className={styles['card-name']}>{member.name}</span>
         <span className={styles['card-sub']}>
