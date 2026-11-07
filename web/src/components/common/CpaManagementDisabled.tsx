@@ -25,7 +25,7 @@ export const CpaManagementDisabled: React.FC = () => {
         extra={(
           <div className="cpa-blocked-steps">
             <Typography.Paragraph>{t('shell.cpa_management_disabled_config')}</Typography.Paragraph>
-            <CodeFrame code={CPA_MANAGEMENT_SNIPPET} label="yaml" />
+            <CodeFrame code={CPA_MANAGEMENT_SNIPPET} label="yaml" lang="yaml" />
             <Typography.Paragraph type="secondary">{t('shell.cpa_management_disabled_lift')}</Typography.Paragraph>
           </div>
         )}

@@ -2,7 +2,8 @@ import { splitAttachedFiles } from './attachments';
 import type { AttachedFile } from './attachments';
 import type { AppendMessage, ThreadMessageLike } from '@assistant-ui/react';
 import type { RunFrame } from '../../agent/runReducer';
-import { ASK_QUESTION, isOpenUITool, PROMPT_OPENUI } from '../../agent/types';
+import { ASK_QUESTION, isOpenUITool, PRESENT_HTML, PROMPT_OPENUI } from '../../agent/types';
+import { htmlOf } from '../../agent/htmlDocument';
 import type { Conversation, Presentation, Trace, Turn, TurnPart } from '../../agent/types';
 import { programOf } from '../../agent/openui/program';
 import { getAppConfig } from '../../types/config';
@@ -94,6 +95,7 @@ export function toolCallPart(trace: Trace, isOpen: boolean): ToolCallPart {
   // a panel or a drawn form, never allowed or denied.
   const isQuestion = trace.name === PROMPT_OPENUI || trace.name === ASK_QUESTION;
   const isOpenUI = isOpenUITool(trace.name);
+  const isPage = trace.name === PRESENT_HTML;
   const isFailed = FAILED_STATUSES.has(trace.result.status);
   const result = isOpenUI && trace.result.status === 'success' ? trace.result.data : trace.result;
   return {
@@ -101,7 +103,7 @@ export function toolCallPart(trace: Trace, isOpen: boolean): ToolCallPart {
     toolCallId: trace.id,
     toolName: trace.name,
     argsText: trace.arguments ?? '',
-    args: (isOpenUI ? { ui: programOf(trace.arguments) } : parseArguments(trace.arguments)) as ToolCallPart['args'],
+    args: (isOpenUI ? { ui: programOf(trace.arguments) } : isPage ? { html: htmlOf(trace.arguments) } : parseArguments(trace.arguments)) as ToolCallPart['args'],
     // A call waiting on the operator has no result yet: it stays `requires-action` until decided.
     ...(isRunning || isPending ? {} : { result, isError: isFailed }),
     ...(trace.started_at_ms ? { timing: { startedAt: trace.started_at_ms, ...(trace.ended_at_ms ? { completedAt: trace.ended_at_ms } : {}) } } : {}),

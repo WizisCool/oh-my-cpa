@@ -1120,6 +1120,24 @@
   box-sizing: border-box;
 }
 
+/* A page the model drew takes the wide lane: a drawing is read at the size it was composed for.
+   Its frame is the answer, and the document itself stays one click away in the head. */
+.html-surface {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.html-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: 24px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 /* Follow-up questions are the answer's offer to continue, so they read as OMC's own suggestion
    chips - one line of quiet pills - rather than the library's full-width ruled list. Scoped to the
    Agent's interface wrapper: the Playground draws no OpenUI answer, and the console's own chip

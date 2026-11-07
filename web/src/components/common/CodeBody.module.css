@@ -1,0 +1,73 @@
+/* The frame supplies the border and the head; this is the code surface inside it. */
+.code-body {
+  display: block;
+  max-height: 480px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.code-body code {
+  font: inherit;
+}
+
+/* The syntax theme is the palette's ink, not a colour family of its own: names and keywords take
+   the accent, values stay text, and quiet tokens step down the text ladder. The semantic hues are
+   not borrowed - a string is not a success.
+   The selectors are highlight.js's own prefixed classes, so an application class can never style a
+   token by accident. */
+.code-body :global(.hljs-comment),
+.code-body :global(.hljs-quote) {
+  color: var(--meta);
+  font-style: italic;
+}
+
+.code-body :global(.hljs-keyword),
+.code-body :global(.hljs-selector-tag),
+.code-body :global(.hljs-selector-class),
+.code-body :global(.hljs-selector-id),
+.code-body :global(.hljs-selector-attr),
+.code-body :global(.hljs-selector-pseudo),
+.code-body :global(.hljs-tag),
+.code-body :global(.hljs-name),
+.code-body :global(.hljs-built_in),
+.code-body :global(.hljs-title),
+.code-body :global(.hljs-section),
+.code-body :global(.hljs-property),
+.code-body :global(.hljs-attr),
+.code-body :global(.hljs-attribute) {
+  color: var(--accent);
+}
+
+.code-body :global(.hljs-string),
+.code-body :global(.hljs-regexp),
+.code-body :global(.hljs-char),
+.code-body :global(.hljs-template-tag) {
+  color: var(--fg);
+}
+
+.code-body :global(.hljs-number),
+.code-body :global(.hljs-literal),
+.code-body :global(.hljs-variable),
+.code-body :global(.hljs-symbol),
+.code-body :global(.hljs-bullet),
+.code-body :global(.hljs-constant) {
+  color: var(--fg-2);
+}
+
+.code-body :global(.hljs-punctuation),
+.code-body :global(.hljs-operator),
+.code-body :global(.hljs-meta) {
+  color: var(--muted);
+}
+
+.code-body :global(.hljs-addition) { color: var(--success); }
+.code-body :global(.hljs-deletion) { color: var(--danger); }
