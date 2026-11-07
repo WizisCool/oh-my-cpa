@@ -25,7 +25,7 @@ MCP · 可视化 · 管理
 **[Live Demo](https://omc-demo.junze.dev)** ·
 [安装](#安装) ·
 [功能特性](#功能特性) ·
-[智能体与 MCP](#智能体与-mcp) ·
+[生态与插件](#生态与插件) ·
 [文档](#文档) ·
 [English](README.md)
 
@@ -237,73 +237,6 @@ Linux 和 FreeBSD 的 amd64、arm64 可执行文件。每个压缩包内嵌控�
 - **个性化**：四种界面语言、可自定义配色的浅色与深色主题、界面与等宽字体（内置字体，或上传、从 Google Fonts 安装后由控制台自身提供的字体库）、部署时区，以及 K/M/B 或 万/亿 数字单位。
 
 </details>
-
-## 智能体与 MCP
-
-**控制台内：**在 `/agent` 页面，由 CPA 路由的模型回答问题并操作控制台：
-用量与请求分析、提供商、OAuth、配额、客户端密钥、配置与定价。读操作直接执行；
-变更先在服务端生成，在控制台点击「允许」后才执行。密钥、令牌与 OAuth 授权不会进入模型上下文。
-回答可以混合文字与随生成逐步出现的无边框交互组件，包括本地筛选器、计算器、图解和图表。
-组件沿用控制台的视觉风格；需要新数据或操作的后续请求，仍通过可审阅的对话流程处理。
-
-**外部 Agent：**同一套能力通过 MCP 在 `<控制台地址>/api/mcp` 提供（Streamable HTTP），
-其他机器上的 Agent 凭地址和作为 Bearer 令牌的 CPA 管理密钥即可远程接入，Agent 一侧无需安装任何程序。
-`/agent` 页面顶部的「外部接入」入口给出当前部署的实际地址和可直接复制的配置。
-
-Claude Code：
-
-```bash
-claude mcp add --transport http oh-my-cpa https://cpa.example.com/api/mcp \
-  --header "Authorization: Bearer $OMCPA_CPA_MANAGEMENT_KEY"
-```
-
-Codex（`~/.codex/config.toml`）：
-
-```toml
-[mcp_servers.oh-my-cpa]
-url = "https://cpa.example.com/api/mcp"
-bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
-```
-
-以 JSON 配置的客户端，例如 Cursor：
-
-```json
-{
-  "mcpServers": {
-    "oh-my-cpa": {
-      "url": "https://cpa.example.com/api/mcp",
-      "headers": { "Authorization": "Bearer <CPA 管理密钥>" }
-    }
-  }
-}
-```
-
-<details>
-<summary>仅支持 stdio 的客户端</summary>
-
-二进制自带 stdio 桥接进程，由它转发到控制台：
-
-```json
-{
-  "mcpServers": {
-    "oh-my-cpa": {
-      "command": "/path/to/oh-my-cpa",
-      "args": ["mcp"],
-      "env": {
-        "OMCPA_SERVER_URL": "https://cpa.example.com",
-        "OMCPA_CPA_MANAGEMENT_KEY": "<CPA 管理密钥>"
-      }
-    }
-  }
-}
-```
-
-</details>
-
-外部 Agent 可以直接读取状态和执行低风险写入（如显示名称、偏好设置）。其余变更只能发起，不能批准操作、
-提交密钥或完成 OAuth 登录：发起的变更会返回一个链接，在控制台中打开即可批准。管理密钥等同于管理员权限，只应接入可信的 Agent；
-远程接入前应先为控制台启用 HTTPS。
-能力清单与权限规则见 [`docs/agent-capabilities.md`](docs/agent-capabilities.md)。
 
 ## 生态与插件
 
