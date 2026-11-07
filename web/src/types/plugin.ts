@@ -84,6 +84,8 @@ export interface PluginStoreSource {
   name: string;
   url: string;
   is_official: boolean;
+  /** Oh My CPA's own registry; decided by the server from the URL. */
+  is_omc: boolean;
 }
 
 export interface PluginStoreSourceError {
@@ -128,6 +130,8 @@ export interface StorePluginItem {
   is_official_repository: boolean;
   /** From Oh My CPA's own registry, which the console keeps configured; also decided by the server. */
   is_omc: boolean;
+  /** The entry's repository is in Oh My CPA's own organization; decided by the server. */
+  is_omc_repository: boolean;
   auth_required: boolean;
   auth_configured: boolean;
   installed: boolean;

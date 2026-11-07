@@ -5,8 +5,8 @@ import { api, apiErrorCode, describeError } from '../../api/client';
 import { useI18n, useT } from '../../i18n';
 import { selectStorePluginMetadata } from '../../types/pluginStoreMetadata';
 import type { StorePluginItem } from '../../types/plugin';
-import { STORE_INSTALL_WARNINGS, storeInstallConfirmToken, storePluginOrigin } from './pluginStoreLogic';
-import { formatPluginVersion, PluginMeta } from './PluginParts';
+import { STORE_INSTALL_WARNINGS, storeInstallConfirmToken, storePluginOrigin, storeSourceLabel } from './pluginStoreLogic';
+import { formatPluginVersion, PluginLogo, PluginMeta, PluginOriginBadge } from './PluginParts';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { Notice } from '../feedback';
@@ -20,9 +20,10 @@ interface PluginInstallModalProps {
 }
 
 /**
- * The install confirmation. It names the source, offers the newest release or a named
- * one, and for a third-party plugin asks for the plugin id to be typed: running someone
- * else's code in the gateway should take more than one click.
+ * The install confirmation. It names the plugin and whose code it is, offers the newest
+ * release or a named one, and for a plugin its listing registry does not maintain asks for
+ * the plugin id to be typed: running someone else's code in the gateway should take more
+ * than one click.
  */
 export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSettings }: PluginInstallModalProps) {
   const t = useT();
@@ -91,7 +92,8 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
   const isVersionValid = versionMode === 'latest' || /^v?[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/.test(version.trim());
   // The warning block carries the only confirmation input, so its presence is the gate.
   const isConfirmed = !warning || confirmation.trim() === token;
-  const name = selectStorePluginMetadata(entry, lang).name || entry.id;
+  const metadata = selectStorePluginMetadata(entry, lang);
+  const name = metadata.name || entry.id;
 
   return (
     <AppModal
@@ -107,17 +109,23 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
       destroyOnHidden
     >
       <div className={styles['install-body']}>
-        <PluginMeta
-          items={[
-            t('plugin.from_source', {
-              source: entry.is_omc
-                ? t('plugin.source_omc')
-                : entry.is_official ? t('plugin.source_official') : entry.source_name,
-            }),
-            entry.install_type,
-            entry.platforms.length > 0 && t('plugin.platforms', { platforms: entry.platforms.join(', ') }),
-          ]}
-        />
+        <div className={styles['install-identity']} data-plugin-install-identity>
+          <PluginLogo logo={entry.logo} />
+          <div className={styles['card-title']}>
+            <span className={styles.badges}>
+              <PluginOriginBadge origin={origin} />
+              <span className={styles['plugin-id']}>{entry.id}</span>
+            </span>
+            <PluginMeta
+              items={[
+                metadata.author,
+                t('plugin.from_source', { source: storeSourceLabel(entry, t) }),
+                entry.platforms.length > 0 && t('plugin.platforms', { platforms: entry.platforms.join(', ') }),
+              ]}
+            />
+          </div>
+        </div>
+        {metadata.description && <p className={styles['install-description']}>{metadata.description}</p>}
         {!isPluginSystemEnabled && <Notice tone="warning" title={t('plugin.installed_while_disabled')} />}
         <div>
           <div className={styles['setting-label']}>{t('plugin.version_label')}</div>

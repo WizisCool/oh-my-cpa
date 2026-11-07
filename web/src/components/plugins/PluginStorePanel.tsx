@@ -1,58 +1,42 @@
 import React from 'react';
-import { Button, Segmented } from 'antd';
+import { Button, Segmented, Select } from 'antd';
 import { ListLoading } from '../common/PageLoading';
-import {
-  DownloadOutlined,
-  InfoCircleOutlined,
-  LockOutlined,
-  PuzzleOutlined,
-  SafetyCertificateOutlined,
-  SettingOutlined,
-  UpgradeOutlined,
-  WarningOutlined,
-} from '../icons';
+import { CloseOutlined, DownloadOutlined, GithubOutlined, LockOutlined, SettingOutlined, TagOutlined, UpgradeOutlined } from '../icons';
 import { useI18n, useT } from '../../i18n';
 import { selectStorePluginMetadata } from '../../types/pluginStoreMetadata';
 import type { PluginStoreResponse, StorePluginItem } from '../../types/plugin';
+import { useOmcPluginSource } from '../../hooks/useOmcPluginSource';
 import {
   filterStorePlugins,
   isStoreInstallBlocked,
   PLUGIN_STORE_FILTERS,
   storeFilterCounts,
   storePluginOrigin,
+  storeSectionPreview,
+  storeSections,
+  STORE_SECTION_PREVIEW,
   type PluginStoreFilter,
+  type StoreSection,
 } from './pluginStoreLogic';
-import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
+import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta, PluginOriginBadge } from './PluginParts';
 import { PluginInstallModal } from './PluginInstallModal';
 import styles from './Plugins.module.css';
-import { Notice } from '../feedback';
+import { Notice, useToast } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
+import { SectionHeading } from '../common/SectionHeading';
+import { BrandArtwork } from '../common/BrandArtwork';
+import { Count } from '../common/Count';
+import { FilterDisclosure } from '../common/FilterDisclosure';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
 
-/**
- * The card's origin mark. Its four states keep two facts apart that the operator would
- * otherwise have to infer: which registry listed the entry, and whether the gateway
- * vendor publishes its code. `official-source` is the case that otherwise reads as
- * third-party - the vendor's catalogue, a community author's repository.
- */
-function StoreOriginBadge({ entry }: { entry: StorePluginItem }) {
-  const t = useT();
-  switch (storePluginOrigin(entry)) {
-    case 'omc':
-      return <span className={`${styles.badge} ${styles['badge-accent']}`}><PuzzleOutlined />{t('plugin.badge_omc')}</span>;
-    case 'official':
-      return <span className={`${styles.badge} ${styles['badge-success']}`}><SafetyCertificateOutlined />{t('plugin.badge_official')}</span>;
-    case 'official-source':
-      return <span className={styles.badge}><InfoCircleOutlined />{t('plugin.badge_official_source')}</span>;
-    default:
-      return <span className={`${styles.badge} ${styles['badge-warn']}`}><WarningOutlined />{t('plugin.badge_third_party')}</span>;
-  }
-}
+/** Where Oh My CPA's registry is maintained and where plugins are submitted to it. */
+const OMC_PLUGIN_REGISTRY_URL = 'https://github.com/omc-community/omc-plugins';
 
 interface PluginStorePanelProps {
   store: PluginStoreResponse | undefined;
@@ -63,25 +47,39 @@ interface PluginStorePanelProps {
 }
 
 /**
- * The plugin store: every registry CPA is configured with, as cards.
+ * The plugin store: one section per registry CPA reads.
  *
- * Installing a plugin runs its code inside the gateway, so the card says two things
- * before anything else: which registry listed the entry, and whose code it names. Oh My
- * CPA's own registry is marked and pinned above the others; the built-in registry with
- * the vendor's repository is the only combination that installs without acknowledging
- * the code by typing the plugin's id.
+ * It is laid out for a long catalogue: with the whole store in view each registry shows
+ * its first cards and a way to the rest, the source switch narrows to one registry, and a
+ * card's tag narrows to its kind.
+ *
+ * Oh My CPA's own registry opens the store as its featured section: its plugins are built
+ * for this console, and the plugins its organization maintains install without the typed
+ * acknowledgement, as the gateway vendor's own do. The other registries follow, each under
+ * its own name, so the source of every card is the section it sits in. Installing a plugin
+ * runs its code inside the gateway, so each card still says whose code it is.
  */
 export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSettings }: PluginStorePanelProps) {
   const t = useT();
   const { lang } = useI18n();
+  const isPhone = useIsPhoneViewport();
   const [query, setQuery] = React.useState('');
   const [filter, setFilter] = React.useState<PluginStoreFilter>('all');
+  const [tag, setTag] = React.useState<string | undefined>();
+  const [facet, setFacet] = React.useState<string>(ALL_SOURCES);
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set());
   const [installing, setInstalling] = React.useState<StorePluginItem | null>(null);
 
   const entries = React.useMemo(() => store?.plugins ?? [], [store]);
   const counts = React.useMemo(() => storeFilterCounts(entries), [entries]);
-  const visible = React.useMemo(() => filterStorePlugins(entries, query, filter, lang), [entries, query, filter, lang]);
+  const visible = React.useMemo(() => filterStorePlugins(entries, query, filter, lang, tag), [entries, query, filter, lang, tag]);
+  const sections = React.useMemo(() => storeSections(store, visible), [store, visible]);
+  // Every source the store has, whatever a search leaves of it: a narrowed-away source stays chosen.
+  const allSections = React.useMemo(() => storeSections(store, entries), [store, entries]);
+  const isNarrowed = query.trim() !== '' || filter !== 'all' || tag !== undefined;
+  // A registry that is no longer read cannot stay chosen.
+  const activeFacet = facet === ALL_SOURCES || allSections.some((section) => section.sourceId === facet) ? facet : ALL_SOURCES;
+  const isWholeStore = activeFacet === ALL_SOURCES && !isNarrowed;
 
   const toggleDescription = (storeId: string) => {
     setExpanded((current) => {
@@ -102,70 +100,149 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
     available: t('plugin.filter_available'),
     updates: t('plugin.filter_updates'),
   };
+  const sectionTitle = (section: StoreSection) => {
+    if (section.kind === 'omc') return t('plugin.omc_section_title');
+    if (section.kind === 'omc-community') return t('plugin.omc_community_section_title');
+    return section.kind === 'official' ? t('plugin.source_official') : section.name;
+  };
+
+  const sourceLabel = (section: StoreSection) => {
+    if (section.kind === 'omc') return t('plugin.badge_omc');
+    if (section.kind === 'omc-community') return t('plugin.badge_omc_community');
+    return section.kind === 'official' ? t('plugin.source_official') : section.name;
+  };
+
+  const activeSection = allSections.find((section) => section.sourceId === activeFacet);
+  const activeLabels = [
+    activeSection ? sourceLabel(activeSection) : '',
+    filter !== 'all' ? filterLabels[filter] : '',
+    tag ?? '',
+  ].filter(Boolean);
+  const clearFilters = () => {
+    setQuery('');
+    setFilter('all');
+    setTag(undefined);
+    setFacet(ALL_SOURCES);
+  };
+
+  const isChosen = (section: StoreSection) => activeFacet === ALL_SOURCES || activeFacet === section.sourceId;
+  const omcSection = sections.find((section) => section.kind === 'omc');
+  const isOmcShown = activeFacet === ALL_SOURCES ? (!isNarrowed || (omcSection?.entries.length ?? 0) > 0) : omcSection !== undefined && isChosen(omcSection);
+  const otherSections = sections.filter((section) => (
+    section.kind !== 'omc' && isChosen(section) && (section.entries.length > 0 || (!isNarrowed && section.error))
+  ));
+  const cardProps = (entry: StorePluginItem) => ({
+    entry,
+    isExpanded: expanded.has(entry.store_id),
+    isDemo,
+    onToggleDescription: () => toggleDescription(entry.store_id),
+    onInstall: () => setInstalling(entry),
+    onManage: () => onManage(entry.id),
+    onSelectTag: (selected: string) => setTag(selected),
+  });
+  const showAll = (section: StoreSection) => (
+    isWholeStore && section.entries.length > STORE_SECTION_PREVIEW ? (
+      <Button type="link" size="small" className={styles['show-all']} onClick={() => setFacet(section.sourceId)}>
+        {t('plugin.section_show_all', { n: section.entries.length })}
+      </Button>
+    ) : undefined
+  );
+  const isEmpty = (activeFacet === ALL_SOURCES ? visible.length : sections.find((section) => section.sourceId === activeFacet)?.entries.length ?? 0) === 0;
 
   return (
-    <div data-plugin-panel="store">
-      <Notice
-        className={styles['store-notice']}
-        tone="info"
-        icon={<SafetyCertificateOutlined />}
-        title={t('plugin.store_notice_title')}
-        description={t('plugin.store_notice_desc')}
-      />
-
-      {(store?.source_errors.length ?? 0) > 0 && (
-        <Notice
-          className={styles['store-notice']}
-          tone="warning"
-          title={t('plugin.source_errors_title')}
-          description={(
-            <ul>
-              {store?.source_errors.map((sourceError) => (
-                <li key={sourceError.source_id || sourceError.source_url}>
-                  <strong>{sourceError.source_name || sourceError.source_url}</strong>: {sourceError.message}
-                </li>
-              ))}
-            </ul>
-          )}
-          action={<Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
-        />
-      )}
-
-      <Toolbar className={styles['toolbar-spaced']}>
+    <div className={styles.store} data-plugin-panel="store">
+      <Toolbar>
         <SearchInput
           className={styles.search}
           value={query}
           onChange={setQuery}
           label={t('plugin.search_store')}
         />
-        <Segmented
-          className={styles['store-filters']}
-          value={filter}
-          onChange={(value) => setFilter(value as PluginStoreFilter)}
-          options={PLUGIN_STORE_FILTERS.map((value) => ({
-            value,
-            label: `${filterLabels[value]} ${counts[value]}`,
-          }))}
-        />
+        <FilterDisclosure activeLabel={activeLabels.join(' · ')}>
+          {allSections.length > 1 && (
+            <Select
+              className={styles['source-select']}
+              value={activeFacet}
+              onChange={(value: string) => setFacet(value)}
+              aria-label={t('plugin.facet_label')}
+              popupMatchSelectWidth={false}
+              options={[
+                { value: ALL_SOURCES, label: <FilterOption label={t('plugin.facet_all')} count={visible.length} /> },
+                ...allSections.map((section) => ({
+                  value: section.sourceId,
+                  label: (
+                    <FilterOption
+                      label={sourceLabel(section)}
+                      count={sections.find((candidate) => candidate.sourceId === section.sourceId)?.entries.length ?? 0}
+                      isOmc={section.kind === 'omc'}
+                    />
+                  ),
+                })),
+              ]}
+            />
+          )}
+          {isPhone ? (
+            <Select
+              className={styles['source-select']}
+              value={filter}
+              onChange={(value: PluginStoreFilter) => setFilter(value)}
+              aria-label={t('plugin.filter_label')}
+              options={PLUGIN_STORE_FILTERS.map((value) => ({ value, label: <FilterOption label={filterLabels[value]} count={counts[value]} /> }))}
+            />
+          ) : (
+            <Segmented
+              className={styles['store-filters']}
+              value={filter}
+              onChange={(value) => setFilter(value as PluginStoreFilter)}
+              aria-label={t('plugin.filter_label')}
+              options={PLUGIN_STORE_FILTERS.map((value) => ({
+                value,
+                label: <span className={styles['filter-option']}>{filterLabels[value]}<Count size="small">{counts[value]}</Count></span>,
+              }))}
+            />
+          )}
+          {tag && (
+            <button type="button" className={styles['tag-filter']} onClick={() => setTag(undefined)} aria-label={t('plugin.tag_filter_clear', { tag })}>
+              <TagOutlined />{tag}<CloseOutlined />
+            </button>
+          )}
+          {(isNarrowed || activeFacet !== ALL_SOURCES) && (
+            <Button type="link" size="small" className={styles['show-all']} onClick={clearFilters}>
+              {t('plugin.clear_filters')}
+            </Button>
+          )}
+        </FilterDisclosure>
       </Toolbar>
 
-      {visible.length === 0 ? (
-        <EmptyState className={styles.empty} title={entries.length === 0 ? t('plugin.store_empty') : t('plugin.search_empty')} />
-      ) : (
-        <div className={styles['card-grid']}>
-          {visible.map((entry) => (
-            <StoreCard
-              key={entry.store_id || `${entry.source_id}/${entry.id}`}
-              entry={entry}
-              isExpanded={expanded.has(entry.store_id)}
-              isDemo={isDemo}
-              onToggleDescription={() => toggleDescription(entry.store_id)}
-              onInstall={() => setInstalling(entry)}
-              onManage={() => onManage(entry.id)}
-            />
-          ))}
-        </div>
+      {isOmcShown && (
+        <OmcShowcase section={omcSection} isDemo={isDemo} shouldHideEmpty={isNarrowed || sections.some((section) => section.kind === 'omc-community' && section.entries.length > 0)} onOpenSettings={onOpenSettings} extra={omcSection && showAll(omcSection)}>
+          {omcSection && storeSectionPreview(omcSection, isWholeStore).map((entry) => <StoreCard key={storeCardKey(entry)} isFeatured {...cardProps(entry)} />)}
+        </OmcShowcase>
       )}
+
+      {otherSections.map((section) => (
+        <section key={section.sourceId} className={styles['store-section']} data-store-source={section.kind}>
+          <SectionHeading
+            as="h2"
+            title={sectionTitle(section)}
+            count={section.entries.length}
+            description={section.kind === 'official'
+              ? undefined
+              : section.kind === 'omc-community'
+                ? t('plugin.omc_community_section_desc')
+                : <span className={styles['source-url']}>{section.url}</span>}
+            extra={showAll(section)}
+          />
+          {section.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} />}
+          {section.entries.length > 0 && (
+            <div className={styles['card-grid']}>
+              {storeSectionPreview(section, isWholeStore).map((entry) => <StoreCard key={storeCardKey(entry)} {...cardProps(entry)} />)}
+            </div>
+          )}
+        </section>
+      ))}
+
+      {isNarrowed && isEmpty && <EmptyState className={styles.empty} title={t('plugin.search_empty')} />}
 
       <PluginInstallModal
         entry={installing}
@@ -177,19 +254,123 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
   );
 }
 
+const ALL_SOURCES = '*';
+
+/** A filter choice with the number of plugins it leaves, set apart at the trailing edge. */
+function FilterOption({ label, count, isOmc = false }: { label: string; count: number; isOmc?: boolean }) {
+  return (
+    <span className={styles['filter-option']}>
+      <span className={styles['filter-option-label']}>
+        {isOmc && <BrandArtwork shape="mark" height={12} />}
+        {label}
+      </span>
+      <Count size="small">{count}</Count>
+    </span>
+  );
+}
+
+const storeCardKey = (entry: StorePluginItem) => entry.store_id || `${entry.source_id}/${entry.id}`;
+
+function SourceErrorNotice({ message, onOpenSettings }: { message: string; onOpenSettings: () => void }) {
+  const t = useT();
+  return (
+    <Notice
+      tone="warning"
+      title={t('plugin.source_error_title')}
+      description={message}
+      action={<Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
+    />
+  );
+}
+
+interface OmcShowcaseProps {
+  section: StoreSection | undefined;
+  isDemo: boolean;
+  /** No "lists nothing" line: a search narrowed it, or the registry's curated half has entries. */
+  shouldHideEmpty: boolean;
+  onOpenSettings: () => void;
+  /** A control for the whole section, beside the registry link. */
+  extra?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+/**
+ * Oh My CPA's registry, set apart at the top of the store. While the registry is switched
+ * off the section stays, offering the switch itself: it is the source this console ships
+ * with, and turning it back on should not take a trip to another page.
+ */
+function OmcShowcase({ section, isDemo, shouldHideEmpty, onOpenSettings, extra, children }: OmcShowcaseProps) {
+  const t = useT();
+  const toast = useToast();
+  const source = useOmcPluginSource();
+  const [isEnabling, setIsEnabling] = React.useState(false);
+  const isSourceOff = source.isLoaded && !source.isEnabled;
+
+  const enable = async () => {
+    setIsEnabling(true);
+    const outcome = await source.setEnabled(true);
+    setIsEnabling(false);
+    if (outcome.ok) toast.success(t('plugin.omc_source_on_success'));
+  };
+
+  return (
+    <section className={styles.showcase} data-store-source="omc">
+      <div className={styles['showcase-head']}>
+        <span className={styles['showcase-mark']} aria-hidden="true"><BrandArtwork shape="mark" height={22} /></span>
+        <SectionHeading
+          as="h2"
+          className={styles['showcase-heading']}
+          title={t('plugin.omc_section_title')}
+          count={section?.entries.length}
+          description={t('plugin.omc_section_desc')}
+          extra={(
+            <span className={styles['card-links']}>
+              {extra}
+              <Tooltip title={t('plugin.omc_registry_open')}>
+                <a className={styles['icon-link']} href={OMC_PLUGIN_REGISTRY_URL} target="_blank" rel="noreferrer noopener" aria-label={t('plugin.omc_registry_open')}>
+                  <GithubOutlined />
+                </a>
+              </Tooltip>
+            </span>
+          )}
+        />
+      </div>
+      {isSourceOff ? (
+        <EmptyState size="compact" title={t('plugin.omc_source_off')}>
+          <Tooltip title={isDemo ? t('demo.blocked') : undefined}>
+            <Button type="primary" disabled={isDemo} loading={isEnabling} onClick={() => void enable()} data-testid="plugin-omc-source-enable">
+              {t('plugin.omc_source_enable')}
+            </Button>
+          </Tooltip>
+        </EmptyState>
+      ) : (
+        <>
+          {section?.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} />}
+          {(section?.entries.length ?? 0) > 0
+            ? <div className={styles['showcase-grid']}>{children}</div>
+            : !section?.error && !shouldHideEmpty && <EmptyState size="compact" title={t('plugin.omc_section_empty')} />}
+        </>
+      )}
+    </section>
+  );
+}
+
 interface StoreCardProps {
   entry: StorePluginItem;
+  isFeatured?: boolean;
   isExpanded: boolean;
   isDemo: boolean;
   onToggleDescription: () => void;
   onInstall: () => void;
   onManage: () => void;
+  onSelectTag: (tag: string) => void;
 }
 
-function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, onManage }: StoreCardProps) {
+function StoreCard({ entry, isFeatured = false, isExpanded, isDemo, onToggleDescription, onInstall, onManage, onSelectTag }: StoreCardProps) {
   const t = useT();
   const { lang } = useI18n();
   const metadata = selectStorePluginMetadata(entry, lang);
+  const origin = storePluginOrigin(entry);
   const blocked = isStoreInstallBlocked(entry);
   const isFromOtherSource = entry.installed && entry.install_source_status === 'different';
   const isUpdate = entry.installed && entry.update_available;
@@ -199,19 +380,31 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
   const description = metadata.description?.trim() ?? '';
   const isLong = description.length > DESCRIPTION_CLAMP_CHARS;
   const actionTitle = isDemo ? t('demo.blocked') : blocked === 'auth' ? t('plugin.auth_required_hint') : undefined;
+  // Inside Oh My CPA's section every entry is tagged with the project's name; the tag says nothing there.
+  const tags = isFeatured ? metadata.tags.filter((tag) => !/^(omc|oh[- ]?my[- ]?cpa)$/i.test(tag)) : metadata.tags;
 
   return (
-    <article className={styles['store-card']} data-store-id={entry.store_id} data-plugin-id={entry.id} data-store-origin={storePluginOrigin(entry)}>
+    <article
+      className={`${styles['store-card']} ${isFeatured ? styles['store-card-featured'] : ''}`}
+      data-store-id={entry.store_id}
+      data-plugin-id={entry.id}
+      data-store-origin={origin}
+    >
       <div className={styles['card-head']}>
         <PluginLogo logo={entry.logo} />
         <div className={styles['card-title']}>
           <span className={styles['card-name']} title={metadata.name || entry.id}>{metadata.name || entry.id}</span>
-          <span className={styles['plugin-id']}>{entry.id}</span>
+          <PluginMeta
+            items={[
+              version && <span className={styles['meta-strong']}>{version}</span>,
+              metadata.author && t('plugin.by_author', { author: metadata.author }),
+            ]}
+          />
         </div>
       </div>
 
       <span className={styles.badges}>
-        <StoreOriginBadge entry={entry} />
+        <PluginOriginBadge origin={origin} />
         {isUpdate ? (
           <span className={`${styles.badge} ${styles['badge-accent']}`}>{t('plugin.badge_update')}</span>
         ) : entry.installed ? (
@@ -237,22 +430,13 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
         <p className={`${styles['card-description']} ${styles['card-description-muted']}`}>{t('plugin.no_description')}</p>
       )}
 
-      <PluginMeta
-        items={[
-          version && <span className={styles['meta-strong']}>{version}</span>,
-          metadata.author && t('plugin.by_author', { author: metadata.author }),
-          metadata.license,
-          entry.source_name && t('plugin.from_source', {
-            source: entry.is_omc
-              ? t('plugin.source_omc')
-              : entry.is_official ? t('plugin.source_official') : entry.source_name,
-          }),
-        ]}
-      />
-
-      {metadata.tags.length > 0 && (
+      {tags.length > 0 && (
         <div className={styles.tags}>
-          {metadata.tags.map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
+          {tags.map((tag) => (
+            <button key={tag} type="button" className={`${styles.tag} ${styles['tag-button']}`} onClick={() => onSelectTag(tag)} aria-label={t('plugin.tag_filter_apply', { tag })}>
+              {tag}
+            </button>
+          ))}
         </div>
       )}
 

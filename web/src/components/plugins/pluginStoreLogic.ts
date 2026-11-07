@@ -6,6 +6,7 @@ import type {
   PluginStoreAuthRule,
   PluginStoreAuthTarget,
   PluginStoreAuthType,
+  PluginStoreResponse,
   StorePluginItem,
 } from '../../types/plugin';
 
@@ -18,19 +19,25 @@ function matchesQuery(haystack: Array<string | undefined>, query: string): boole
   return haystack.some((value) => (value ?? '').toLowerCase().includes(query));
 }
 
-/** The store entries a search and a filter chip leave, in the registry's own order. */
+/**
+ * The store entries a search, a filter chip and a tag leave, in the registry's own order.
+ * The tag is compared as the card shows it, in the console's language, without case.
+ */
 export function filterStorePlugins(
   entries: readonly StorePluginItem[],
   query: string,
   filter: PluginStoreFilter,
   lang: Lang,
+  tag?: string,
 ): StorePluginItem[] {
   const needle = query.trim().toLowerCase();
+  const wantedTag = tag?.trim().toLowerCase();
   return entries.filter((entry) => {
     if (filter === 'installed' && !entry.installed) return false;
     if (filter === 'available' && entry.installed) return false;
     if (filter === 'updates' && !(entry.installed && entry.update_available)) return false;
     const metadata = selectStorePluginMetadata(entry, lang);
+    if (wantedTag && !metadata.tags.some((candidate) => candidate.trim().toLowerCase() === wantedTag)) return false;
     return matchesQuery(
       [entry.id, metadata.name, metadata.description, metadata.author, entry.source_name, ...metadata.tags],
       needle,
@@ -68,17 +75,26 @@ export function filterInstalledPlugins(
   });
 }
 
+/** Whether an installed plugin runs; one switched on that the host has not loaded counts as stopped. */
+export type InstalledStateFilter = 'all' | 'running' | 'stopped';
+
+export function matchesInstalledState(plugin: PluginItem, filter: InstalledStateFilter): boolean {
+  if (filter === 'running') return plugin.effective_enabled;
+  if (filter === 'stopped') return !plugin.effective_enabled;
+  return true;
+}
+
 /**
  * The store listing that describes each installed plugin, by plugin id.
  *
  * CPA's installed list carries what the plugin registered - name, version, author - but
  * not the description, tags or homepage a registry publishes, so an installed card
  * borrows them from the store when the store has been read. When two registries list
- * the same id, the one the plugin was installed from wins, then the official one.
+ * the same id, the one the plugin was installed from wins, then Oh My CPA's, then the official one.
  */
 export function storeListingsByPluginId(entries: readonly StorePluginItem[] | undefined): Map<string, StorePluginItem> {
   const listings = new Map<string, StorePluginItem>();
-  const rank = (entry: StorePluginItem) => (entry.install_source_status === 'matched' ? 2 : 0) + (entry.is_official ? 1 : 0);
+  const rank = (entry: StorePluginItem) => (entry.install_source_status === 'matched' ? 4 : 0) + (entry.is_omc ? 2 : 0) + (entry.is_official ? 1 : 0);
   for (const entry of entries ?? []) {
     const existing = listings.get(entry.id);
     if (!existing || rank(entry) > rank(existing)) listings.set(entry.id, entry);
@@ -95,14 +111,15 @@ export function isStoreInstallBlocked(entry: StorePluginItem): 'auth' | undefine
  * Where a store entry stands, from two facts the server reports separately: which
  * registry listed it and whose code its repository holds.
  *
- * `official` is the only combination whose code the gateway vendor publishes itself.
- * The official registry is a catalogue, and most of what it lists lives in the authors'
- * own repositories, so a listing alone never reads as reviewed code.
+ * Both first-party registries are catalogues as well as publishers: Oh My CPA's lists
+ * the plugins it maintains in its own organization beside community plugins it curates,
+ * and CPA's lists community authors' repositories beside the vendor's. Only a first-party
+ * registry naming its own publisher's code reads as that publisher's plugin.
  */
-export type StorePluginOrigin = 'omc' | 'official' | 'official-source' | 'third-party';
+export type StorePluginOrigin = 'omc' | 'omc-community' | 'official' | 'official-source' | 'third-party';
 
 export function storePluginOrigin(entry: StorePluginItem): StorePluginOrigin {
-  if (entry.is_omc) return 'omc';
+  if (entry.is_omc) return entry.is_omc_repository ? 'omc' : 'omc-community';
   if (!entry.is_official) return 'third-party';
   return entry.is_official_repository ? 'official' : 'official-source';
 }
@@ -121,11 +138,83 @@ export interface StoreInstallWarning {
 }
 
 export const STORE_INSTALL_WARNINGS: Record<StorePluginOrigin, StoreInstallWarning | undefined> = {
-  omc: { title: 'plugin.omc_plugin_title', description: 'plugin.omc_plugin_desc' },
+  omc: undefined,
+  'omc-community': { title: 'plugin.omc_community_plugin_title', description: 'plugin.omc_community_plugin_desc' },
   official: undefined,
   'official-source': { title: 'plugin.official_source_plugin_title', description: 'plugin.official_source_plugin_desc' },
   'third-party': { title: 'plugin.third_party_title', description: 'plugin.third_party_desc' },
 };
+
+/**
+ * One registry's part of the store: Oh My CPA's own plugins first, then CPA's built-in
+ * registry, then the community plugins Oh My CPA curates, then the others in the order
+ * they are configured.
+ *
+ * Oh My CPA's registry is split in two because its two halves are not the same promise:
+ * the plugins its organization maintains are the console's featured set, while the ones
+ * it curates are community code and sit with the other catalogues. A section exists for
+ * every registry the store read or failed to read, so a registry that lists nothing, or
+ * could not be read, still has a place to say so.
+ */
+export interface StoreSection {
+  kind: 'omc' | 'official' | 'omc-community' | 'custom';
+  /** Unique per section; Oh My CPA's curated half carries its registry's id with a suffix. */
+  sourceId: string;
+  name: string;
+  url?: string;
+  entries: StorePluginItem[];
+  error?: string;
+}
+
+const CURATED_SUFFIX = '#community';
+
+export function storeSections(store: PluginStoreResponse | undefined, entries: readonly StorePluginItem[]): StoreSection[] {
+  const sections = new Map<string, StoreSection>();
+  const kindOf = (isOMC: boolean, isOfficial: boolean): StoreSection['kind'] => (isOMC ? 'omc' : isOfficial ? 'official' : 'custom');
+  const sectionFor = (sourceId: string, seed: () => Omit<StoreSection, 'entries' | 'sourceId'>) => {
+    let section = sections.get(sourceId);
+    if (!section) {
+      section = { sourceId, entries: [], ...seed() };
+      sections.set(sourceId, section);
+    }
+    return section;
+  };
+  for (const source of store?.sources ?? []) {
+    sectionFor(source.id, () => ({ kind: kindOf(source.is_omc, source.is_official), name: source.name, url: source.url }));
+  }
+  for (const failure of store?.source_errors ?? []) {
+    const section = sectionFor(failure.source_id || failure.source_url, () => ({
+      kind: 'custom',
+      name: failure.source_name || failure.source_url,
+      url: failure.source_url,
+    }));
+    section.error = failure.message;
+  }
+  for (const entry of entries) {
+    if (storePluginOrigin(entry) === 'omc-community') {
+      const home = sections.get(entry.source_id);
+      sectionFor(`${entry.source_id}${CURATED_SUFFIX}`, () => ({ kind: 'omc-community', name: entry.source_name, url: home?.url })).entries.push(entry);
+      continue;
+    }
+    sectionFor(entry.source_id, () => ({ kind: kindOf(entry.is_omc, entry.is_official), name: entry.source_name })).entries.push(entry);
+  }
+  const kindOrder: Record<StoreSection['kind'], number> = { omc: 0, official: 1, 'omc-community': 2, custom: 3 };
+  return [...sections.values()].sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]);
+}
+
+/** How many cards a registry shows while the whole store is in view; the rest are a click away. */
+export const STORE_SECTION_PREVIEW = 6;
+
+/** The cards one section shows: all of them once its registry is chosen or a search narrows the store. */
+export function storeSectionPreview(section: StoreSection, isWholeStore: boolean): StorePluginItem[] {
+  return isWholeStore ? section.entries.slice(0, STORE_SECTION_PREVIEW) : section.entries;
+}
+
+/** The registry an entry was listed by, as the console names it. */
+export function storeSourceLabel(entry: StorePluginItem, t: (key: 'plugin.source_omc' | 'plugin.source_official') => string): string {
+  if (entry.is_omc) return t('plugin.source_omc');
+  return entry.is_official ? t('plugin.source_official') : entry.source_name;
+}
 
 /** The text an operator retypes to confirm an install that needs acknowledging: the plugin id. */
 export function storeInstallConfirmToken(entry: StorePluginItem): string {

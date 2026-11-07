@@ -215,7 +215,13 @@ export const PluginsPage: React.FC = () => {
       )}
       {tab === 'settings' && <PluginSettingsPanel isDemo={isDemo} />}
 
-      <PluginConfigDrawer plugin={configuring} isDemo={isDemo} onClose={() => setConfiguring(null)} />
+      <PluginConfigDrawer
+        plugin={configuring}
+        listing={configuring ? catalog.get(configuring.id) : undefined}
+        isPluginSystemEnabled={isSystemEnabled}
+        isDemo={isDemo}
+        onClose={() => setConfiguring(null)}
+      />
     </div>
   );
 };
