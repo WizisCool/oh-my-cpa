@@ -1,0 +1,52 @@
+[
+  {
+    "currency": "AUD",
+    "rate": 1.4414,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "CAD",
+    "rate": 1.4,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "CNY",
+    "rate": 6.6636,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "EUR",
+    "rate": 0.89153,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "GBP",
+    "rate": 0.74417,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "HKD",
+    "rate": 7.8466,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "JPY",
+    "rate": 158.18,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "KRW",
+    "rate": 1351.97,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "MYR",
+    "rate": 4.0537,
+    "date": "2026-11-08"
+  },
+  {
+    "currency": "SGD",
+    "rate": 1.2789,
+    "date": "2026-11-08"
+  }
+]
