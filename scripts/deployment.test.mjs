@@ -14,12 +14,16 @@ function validateTopology(document, isFullStack) {
   assert.equal(console.image, '${OMCPA_IMAGE:-wiziscool/oh-my-cpa:latest}');
   assert.deepEqual(console.ports, ['${OMCPA_BIND:-127.0.0.1:8080}:8080']);
   assert.equal(console.read_only, true);
-  assert.equal(console.user, '10001:10001');
+  assert.equal(console.user, '${OMCPA_USER:-10001:10001}');
+  assert.equal(console.environment.OMCPA_LISTEN_ADDR, undefined, 'The binary and image healthcheck already own the :8080 default');
+  assert.equal(console.environment.OMCPA_PUBLIC_URL, '${OMCPA_PUBLIC_URL:-}');
   assert.equal(console.environment.OMCPA_TRUSTED_PROXY_CIDRS, '${OMCPA_TRUSTED_PROXY_CIDRS:-}');
   assert.equal(console.environment.OMCPA_USAGE_INGEST_MODE, '${OMCPA_USAGE_INGEST_MODE:-auto}');
   assert.equal(console.environment.OMCPA_VERSION, undefined);
   assert.equal(console.healthcheck, undefined, 'The image owns its canonical health probe');
-  assert.equal(console.volumes.length, 1, 'Installers must not need to mount helper scripts');
+  assert.deepEqual(console.volumes, ['${OMCPA_DATA_PATH:-oh-my-cpa-data}:/data']);
+  assert.ok(document.volumes && Object.prototype.hasOwnProperty.call(document.volumes, 'oh-my-cpa-data'),
+    'Both Compose files must declare the named volume so first-time installs need no host mkdir or chown');
   // The socket is the updater's alone, and the updater has nothing else: no port a host or
   // another network could reach, no data volume, no capability.
   const updater = document.services['oh-my-cpa-updater'];
@@ -36,6 +40,12 @@ function validateTopology(document, isFullStack) {
   if (isFullStack) {
     assert.equal(document.services.cpa.image, '${CPA_IMAGE:-eceasy/cli-proxy-api:latest}');
     assert.deepEqual(document.services.cpa.ports, ['${CPA_BIND:-127.0.0.1:8317}:8317']);
+    assert.deepEqual(document.services.cpa.volumes, [
+      '${CPA_CONFIG_PATH:-./config.yaml}:/CLIProxyAPI/config.yaml',
+      '${CPA_AUTH_PATH:-./auths}:/root/.cli-proxy-api',
+      '${CPA_LOG_PATH:-./logs}:/CLIProxyAPI/logs',
+      '${CPA_PLUGIN_PATH:-./plugins}:/CLIProxyAPI/plugins',
+    ]);
     assert.equal(console.depends_on.cpa.condition, 'service_healthy');
   } else {
     assert.deepEqual(console.extra_hosts, ['host.docker.internal:host-gateway']);
@@ -43,12 +53,18 @@ function validateTopology(document, isFullStack) {
   }
 }
 
-test('Compose files install latest images through loopback and preserve collection choice', () => {
+test('Compose files install latest images through loopback, default to named volume storage and preserve collection choice', () => {
   validateTopology(readDeployment('compose.full.yml'), true);
   validateTopology(readDeployment('compose.omc.yml'), false);
   const broken = readDeployment('compose.full.yml');
   broken.services['oh-my-cpa'].ports = ['0.0.0.0:8080:8080'];
   assert.throws(() => validateTopology(broken, true));
+  const missingNamedVolume = readDeployment('compose.omc.yml');
+  delete missingNamedVolume.volumes;
+  assert.throws(() => validateTopology(missingNamedVolume, false));
+  const rootConsole = readDeployment('compose.full.yml');
+  rootConsole.services['oh-my-cpa'].user = '0:0';
+  assert.throws(() => validateTopology(rootConsole, true));
   for (const mutate of [
     (updater) => { updater.ports = ['8090:8090']; },
     (updater) => { updater.cap_drop = []; },

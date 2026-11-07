@@ -41,19 +41,21 @@ export async function verifyDockerImage(image, version) {
   assert.equal(metadata.Config.User, '10001:10001');
   assert.equal(metadata.Config.Labels['org.opencontainers.image.version'], version);
   const secret = randomBytes(24).toString('hex');
-  // The first case omits OMCPA_BASE_PATH entirely so the image's own default is
-  // exercised. The explicit paths prove that an existing deployment keeps its
-  // configured mount through an image update.
+  // The first case omits OMCPA_BASE_PATH, OMCPA_LISTEN_ADDR and OMCPA_DATA_DIR so
+  // the image's own defaults are exercised. The explicit paths prove that an existing
+  // deployment keeps its configured mount and listen port through an image update.
   for (const [rawPath, listenPort] of [[null, '8080'], ['/omc', '8080'], ['/tools/omc/', '8081']]) {
     const volume = `omc-release-${randomBytes(6).toString('hex')}`;
     const since = new Date().toISOString();
     let container;
     try {
       executeDocker('volume', 'create', volume);
-      const pathEnvironment = rawPath === null ? [] : ['-e', `OMCPA_BASE_PATH=${rawPath}`];
+      const explicitEnvironment = rawPath === null
+        ? []
+        : ['-e', `OMCPA_LISTEN_ADDR=:${listenPort}`, '-e', `OMCPA_BASE_PATH=${rawPath}`, '-e', 'OMCPA_DATA_DIR=/data'];
       container = executeDocker('create', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
         '--health-interval=1s', '--health-start-period=1s', '-p', `127.0.0.1::${listenPort}`, '-v', `${volume}:/data`,
-        '-e', `OMCPA_LISTEN_ADDR=:${listenPort}`, ...pathEnvironment, '-e', 'OMCPA_DATA_DIR=/data',
+        ...explicitEnvironment,
         '-e', `OMCPA_MASTER_KEY=${randomBytes(32).toString('hex')}`,
         '-e', 'OMCPA_CPA_BASE_URL=http://127.0.0.1:1', '-e', `OMCPA_CPA_MANAGEMENT_KEY=${secret}`,
         '-e', 'OMCPA_USAGE_INGEST_MODE=off', '-e', 'OMCPA_UPDATE_CHECK_ENABLED=false',

@@ -48,6 +48,7 @@ COPY --from=runtime-data --chown=10001:10001 /data/ /data/
 COPY --from=server /out/oh-my-cpa /usr/local/bin/oh-my-cpa
 COPY deploy/base-path.sh /usr/local/bin/omc-base-path
 COPY deploy/healthcheck.sh /usr/local/bin/omc-healthcheck
+ENV OMCPA_DATA_DIR=/data
 USER 10001:10001
 VOLUME ["/data"]
 EXPOSE 8080

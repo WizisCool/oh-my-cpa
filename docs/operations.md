@@ -38,9 +38,9 @@ a message naming the variable.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `OMCPA_VERSION` | embedded stable tag; `v0.1.0-dev` for untagged source builds | Optional display/User-Agent version override; does not change the installed build |
-| `OMCPA_LISTEN_ADDR` | `:8080` | Listen address |
+| `OMCPA_LISTEN_ADDR` | `:8080` | Process listen address (`deploy/native.env.example` sets `127.0.0.1:8080`; Docker bridge deployments change host port via `OMCPA_BIND` instead) |
 | `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root; a configured sub-path is normalised without a trailing slash |
-| `OMCPA_DATA_DIR` | `./data` | Directory holding `oh-my-cpa.db`. Local disk only |
+| `OMCPA_DATA_DIR` | `/data` (image) / `./data` (binary) | Directory holding `oh-my-cpa.db`. Local disk only |
 | `OMCPA_PUBLIC_URL` | unset | The address browsers use. An `https://` value marks the session cookie `Secure` |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | unset | Comma-separated CIDRs of reverse proxies whose forwarding headers may be trusted for login throttling |
 | `TZ` | system zone | Server calendar; see [Time zone](#time-zone) |
@@ -121,8 +121,9 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   also route `/robots.txt` to OMC.
 - **Container image**: Compose pulls `wiziscool/oh-my-cpa:latest` from Docker Hub by
   default; the full-stack CPA image also defaults to `:latest`. Pin `OMCPA_IMAGE` to the desired version or digest; updates recreate only
-  OMC with its existing data and master key. The image runs as uid/gid `10001:10001`,
-  includes its own health probe and needs no mounted deployment scripts. A health
+  OMC with its existing data and master key. The image runs as non-root uid/gid `10001:10001`
+  by default (overridable via `OMCPA_USER` in the supplied Compose files when matching a
+  host bind mount), includes its own health probe and needs no mounted deployment scripts. A health
   result of `degraded` keeps the container healthy but does not establish CPA access.
 - **Existing CPA and panels**: OMC-only Compose can attach to an existing external
   Docker network. It does not replace the gateway or other panels; collection ownership

@@ -100,64 +100,20 @@ https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/docs/install-for-agen
 环境要求：Docker Engine（含 Compose 插件），CLIProxyAPI v8.0.0 及以上。
 命令按 Linux 或 macOS 终端编写，需要 `curl` 与 `openssl`。控制台的登录密码是 CPA 的管理密钥。
 
+每个版本都会发布两份正式 Compose 编排文件，默认包含 `oh-my-cpa-updater` 在线更新服务，以非 root 用户 `10001:10001`、只读根文件系统运行 OMC，并默认把 SQLite 数据库保存在 `oh-my-cpa-data` Docker 命名卷中（首次安装无需手动 `mkdir` 或 `chown`）：
+
 | 安装场景 | 方案 |
 | --- | --- |
-| 尚未部署 CPA | [全新安装](#全新安装) |
-| CPA 由 Docker Compose 部署 | [已经安装了 CLIProxyAPI](#已经安装了-cliproxyapi) |
-| CPA 以其他方式部署 | [独立部署](#独立部署) |
+| 尚未部署 CPA | [全新安装（`compose.full.yml`）](#全新安装) |
+| 已经部署了 CPA（宿主机、Docker 容器或其他机器） | [已经安装了 CLIProxyAPI（`compose.omc.yml`）](#已经安装了-cliproxyapi) |
 
 #### 全新安装
 
-新建一个目录，将以下内容保存为 `compose.yml`：
-
-```yaml
-services:
-  cli-proxy-api:
-    image: eceasy/cli-proxy-api:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8317:8317"
-    environment:
-      MANAGEMENT_PASSWORD: ${CPA_MANAGEMENT_KEY:?}
-    volumes:
-      - ./config.yaml:/CLIProxyAPI/config.yaml
-      - ./auths:/root/.cli-proxy-api
-      - ./logs:/CLIProxyAPI/logs
-      - ./plugins:/CLIProxyAPI/plugins
-
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    depends_on:
-      - cli-proxy-api
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
-```
-
-在该目录下载 CPA 的初始配置，生成两个密钥，并启动两个服务：
+一次部署 CPA + OMC + 更新器：
 
 ```bash
+mkdir -p oh-my-cpa && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml
 printf 'CPA_MANAGEMENT_KEY=%s\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env
 chmod 600 .env
@@ -169,94 +125,56 @@ docker compose up -d
 
 #### 已经安装了 CLIProxyAPI
 
-在运行 CPA 的编排文件的 `services:` 下添加以下服务；文件已有顶层 `volumes:` 时，
-将 `oh-my-cpa-data:` 并入其中。`cli-proxy-api` 是 CPA 官方编排文件中的服务名，服务名不同时替换为实际名称。
+在已有 CPA 旁独立部署 OMC + 更新器，不修改、不重启现有 CPA：
 
-```yaml
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
+```bash
+mkdir -p oh-my-cpa && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
+cat > .env <<EOF
+OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
+OMCPA_CPA_MANAGEMENT_KEY=<CPA 管理密钥的明文，而非 config.yaml 中的 bcrypt 哈希>
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+EOF
+chmod 600 .env
+docker compose up -d
 ```
 
-在同一目录的 `.env` 中添加两行：
+按 CPA 的运行位置在 `.env` 中设置连接方式：
+- **CPA 运行在同一台宿主机且监听全部网卡**：保持 `OMCPA_CPA_BASE_URL=http://host.docker.internal:8317`
+- **CPA 运行在另一个 Docker Compose 项目中**：在 `.env` 中设置 `OMCPA_CPA_BASE_URL=http://<CPA服务名或容器名>:8317`、`OMCPA_NETWORK_NAME=<CPA所在Docker网络名>` 和 `OMCPA_NETWORK_EXTERNAL=true`（无需改动 CPA 原有的 `compose.yml`；若希望写进同一个编排文件，见 [`docs/install.md`](docs/install.md#add-to-the-existing-compose-file)）
+- **CPA 在宿主机仅监听 `127.0.0.1`**：容器无法直接访问宿主机回环网卡，请使用[原生可执行文件](#安装原生可执行文件)
 
-```dotenv
-OMCPA_CPA_MANAGEMENT_KEY=<CPA 管理密钥的明文，而非 config.yaml 中的哈希>
-OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
-```
+访问 **`http://127.0.0.1:8080/`**，以管理密钥登录。若 `/api/healthz` 显示 `degraded`，请在 CPA 的 `config.yaml` 中开启 `management.allow-remote: true`（详见[连接 CPA](docs/install.md#reaching-cpa)）。
 
-需要在控制台更新时，一并添加片段中的 `oh-my-cpa-updater` 服务。
-执行 `docker compose up -d oh-my-cpa oh-my-cpa-updater`，CPA 容器保持原样运行，不会重启。
-访问 **`http://127.0.0.1:8080/`**，以管理密钥登录。
+#### 常见调整（直接写在 `.env`）
 
-#### 独立部署
-
-新建一个目录，将以下内容保存为 `compose.yml`。`OMCPA_CPA_BASE_URL` 是从容器内部访问 CPA 的地址：
-下面的值适用于 CPA 在同一台机器上并监听所有网卡的情况，其他情况见[连接 CPA](docs/install.md#reaching-cpa)。
-
-```yaml
-services:
-  oh-my-cpa:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    environment:
-      OMCPA_BASE_PATH: /
-      OMCPA_CPA_BASE_URL: http://host.docker.internal:8317
-      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
-      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
-      OMCPA_DATA_DIR: /data
-    volumes:
-      - oh-my-cpa-data:/data
-
-  oh-my-cpa-updater:
-    image: wiziscool/oh-my-cpa:latest
-    restart: unless-stopped
-    command: ["updater", "serve"]
-    user: "0:0"
-    read_only: true
-    cap_drop: [ALL]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  oh-my-cpa-data:
-```
-
-在同一目录创建 `.env`：
-
-```dotenv
-OMCPA_CPA_MANAGEMENT_KEY=<CPA 管理密钥的明文，而非 config.yaml 中的哈希>
-OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
-```
-
-执行 `docker compose up -d`，然后访问 **`http://127.0.0.1:8080/`**，以管理密钥登录。
+- **宿主机 `8080` 端口被占用（修改端口）**：
+  常规 Docker 桥接部署只需在 `.env` 中修改宿主机映射端口（例如改为 `18317`）：
+  ```dotenv
+  OMCPA_BIND=127.0.0.1:18317
+  ```
+  **请保持容器侧端口 `:8080` 不变**（即 `${OMCPA_BIND:-127.0.0.1:8080}:8080`）：容器拥有独立的网络命名空间，OMC 在容器内默认监听 `:8080`，内置健康检查也探测容器内的 `:8080`。如果直接把 `ports:` 右侧改掉而未同步改 `OMCPA_LISTEN_ADDR`，会导致端口转发不通，且 `docker compose ps` 仍会显示镜像 `EXPOSE 8080` 的标记。（若使用原生可执行文件或 `network_mode: host`，则直接设置 `OMCPA_LISTEN_ADDR=127.0.0.1:18317`。）
+- **将数据放在当前目录（`./oh-my-cpa-data`）与权限说明**：
+  默认使用 `oh-my-cpa-data` 命名卷（自动继承镜像内 `/data` 的 `10001:10001` 属主，开箱即用）。若为了方便备份或迁移希望挂载宿主机目录 `./oh-my-cpa-data`，由于 `oh-my-cpa` 容器出于安全边界以非 root 运行（默认 `10001:10001`，不挂载 Docker socket），以下两种方式任选其一即可避免权限报错（无需进容器查 `/etc/passwd`）：
+  - **方式一：让容器以当前宿主机用户身份运行（推荐，无需 `sudo chown`）**
+    ```bash
+    mkdir -p ./oh-my-cpa-data && chmod 700 ./oh-my-cpa-data
+    printf 'OMCPA_DATA_PATH=./oh-my-cpa-data\nOMCPA_USER=%s:%s\n' "$(id -u)" "$(id -g)" >> .env
+    ```
+    （请勿将 `OMCPA_USER` 设为 `0:0`；只有 `oh-my-cpa-updater` 因访问 Docker socket 需要 `0:0`。）
+  - **方式二：保持容器默认 `10001:10001` 用户，修改宿主机目录属主**
+    ```bash
+    mkdir -p ./oh-my-cpa-data && sudo chown -R 10001:10001 ./oh-my-cpa-data && chmod 700 ./oh-my-cpa-data
+    echo "OMCPA_DATA_PATH=./oh-my-cpa-data" >> .env
+    ```
+- **反向代理（Caddy / Nginx）**：
+  OMC 将前端页面与 `/api/*` 后端打包在同一个二进制与端口（默认 `127.0.0.1:8080`，若改了 `OMCPA_BIND` 则对应新端口），**只需反代这一个端口，无需像前后端分离面板那样拆成两部分反代**。Caddy 配置只需一行：
+  ```caddyfile
+  omc.example.com {
+      reverse_proxy 127.0.0.1:8080
+  }
+  ```
+  通过 HTTPS 反代访问时，在 `.env` 中补充 `OMCPA_PUBLIC_URL=https://omc.example.com` 与 `OMCPA_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`。Nginx 及子路径配置见[反向代理指南](docs/install.md#reverse-proxy)。
 
 ### 更新
 
@@ -269,8 +187,7 @@ OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
 docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
 ```
 
-该命令添加 `oh-my-cpa-updater` 容器，并同时把 Oh My CPA 升级到当前版本。`docker rm -f oh-my-cpa-updater`
-可将其移除。镜像固定为版本标签时，控制台不会改动它。各种情况及手动更新方式见[升级](docs/install.md#upgrading)（英文）。
+手动更新命令、固定版本标签，以及旧版 `deploy/compose.*.yml`（使用 `../oh-my-cpa-data` 宿主目录）替换编排文件时的路径保留说明见[升级指南](docs/install.md#upgrading)。
 
 ### 安装原生可执行文件
 
@@ -284,11 +201,9 @@ Linux 和 FreeBSD 的 amd64、arm64 可执行文件。每个压缩包内嵌控�
 > [!IMPORTANT]
 > 备份 `.env`。`OMCPA_MASTER_KEY` 是数据库的加密密钥，丢失后数据无法读取。
 
-`oh-my-cpa-updater` 挂载了 Docker socket，等同于拥有该主机上 Docker 的控制权。关闭控制台更新需从编排文件中删除该服务，
-并用 `docker rm -f oh-my-cpa-updater` 删除正在运行的容器（仅删除服务定义时，Compose 不会停止已运行的容器）。
-之后通过 `docker compose pull && docker compose up -d` 更新。
+只有 `oh-my-cpa-updater` 挂载了 `/var/run/docker.sock`（等同于拥有该主机上 Docker 的控制权）；`oh-my-cpa` 主服务本身不挂载 Docker socket，且保持非 root 与只读根文件系统。若希望关闭控制台在线更新并改为手动更新，可从 `compose.yml` 中删除 `oh-my-cpa-updater` 服务，并用 `docker rm -f oh-my-cpa-updater` 删除已运行的容器，之后通过 `docker compose pull && docker compose up -d` 更新。
 
-发布版的加固编排文件、远程访问、HTTPS、源码构建、升级与排障见[安装指南](docs/install.md)（英文）。
+完整的安装验证、反向代理、源码构建、升级与排障说明见[安装指南](docs/install.md)（英文）。
 
 ## 功能特性
 
@@ -412,10 +327,14 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `OMCPA_CPA_BASE_URL` | 必填 | CPA 的地址 |
-| `OMCPA_CPA_MANAGEMENT_KEY` | 必填 | CPA 管理密钥，同时是控制台登录密码 |
+| `OMCPA_CPA_MANAGEMENT_KEY` | 必填 | CPA 管理密钥，同时是控制台登录密码（`compose.full.yml` 中使用 `CPA_MANAGEMENT_KEY`） |
 | `OMCPA_MASTER_KEY` | 必填 | 静态加密密钥（`openssl rand -hex 32`） |
+| `OMCPA_BIND` | `127.0.0.1:8080` | Docker 宿主机映射地址 `[ip:]port`，对应容器内 `8080` 端口（`compose.full.yml` / `compose.omc.yml`） |
+| `OMCPA_LISTEN_ADDR` | `:8080` | 进程实际监听地址（原生可执行文件或 `network_mode: host` 时直接生效） |
+| `OMCPA_DATA_PATH` | `oh-my-cpa-data` | 默认使用 Docker 命名卷；也可设为宿主机目录如 `./oh-my-cpa-data`（`compose.full.yml` / `compose.omc.yml`） |
+| `OMCPA_USER` | `10001:10001` | 运行 `oh-my-cpa` 容器的非 root `uid:gid`（`compose.full.yml` / `compose.omc.yml`） |
+| `OMCPA_DATA_DIR` | `/data`（镜像）/ `./data`（原生） | 进程内 SQLite 数据库所在目录 |
 | `OMCPA_BASE_PATH` | `/` | URL 前缀；默认在根路径提供控制台 |
-| `OMCPA_DATA_DIR` | `./data` | SQLite 数据库所在目录；编排文件中设为 `/data` |
 | `OMCPA_PUBLIC_URL` | 未设置 | 浏览器访问的地址；为 `https://` 时会话 Cookie 带 `Secure` 标记 |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | 用量采集模式，设为 `off` 时关闭用量采集 |
 | `OMCPA_USAGE_RETENTION_DAYS` | `90` | 请求记录保留天数，`0` 为全部保留；可在 OMC 设置 → 数据保留中修改。仪表盘统计永久保留 |
