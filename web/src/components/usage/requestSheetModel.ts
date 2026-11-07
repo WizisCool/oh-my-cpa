@@ -179,6 +179,7 @@ export interface RequestSheetInput {
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos?: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   /** Titles plugins give the OAuth providers they register. */
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
@@ -211,6 +212,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       input.pluginLogos,
       input.isProviderCatalogUnknown,
       input.pluginTitles,
+      input.multiPortalKeys,
     );
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);

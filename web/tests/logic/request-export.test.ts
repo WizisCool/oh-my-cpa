@@ -13,8 +13,31 @@ import { buildRequestExport, REQUEST_EXPORT_SCHEMA } from '../../src/components/
 import { buildRequestSheet, sheetStrings } from '../../src/components/usage/requestSheetModel.ts';
 import { modelMarkIconId } from '../../src/types/modelSquare.ts';
 import { indexCredentialFiles } from '../../src/types/usageEventIdentity.ts';
+import { pluginMultiPortalKeys, pluginOAuthProviderLogos } from '../../src/types/pluginOAuthProviders.ts';
 import type { UsageEvent } from '../../src/types/usageEvents.ts';
 import { test } from 'vitest';
+
+test('request image export uses the same issuing portal artwork as the request row', () => {
+  const globalLogo = 'https://cdn.example.test/qoder.svg';
+  const cnLogo = 'https://cdn.example.test/qoder-cn.svg';
+  const plugins = [{
+    id: 'qoder-plugin', supports_oauth: true, oauth_providers: ['qoder', 'qoder-cn'], logo: globalLogo,
+    oauth_provider_entries: [{ identifier: 'qoder-cn', logo: cnLogo }],
+  }];
+  const credentials = indexCredentialFiles([
+    { name: 'cn.json', auth_index: 'cn', provider: 'qoder', type: 'qoder', oauth_provider: 'qoder-cn' },
+  ]);
+  const event = {
+    id: 1, timestamp_ms: 1_700_000_000_000, provider: 'qoder', auth_type: 'oauth', auth_index: 'cn',
+    model: 'example-model', tokens: { input: 1, output: 1, total: 2 },
+  } as UsageEvent;
+  const sheet = buildRequestSheet({
+    rows: [event], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key,
+    tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,
+    pluginLogos: pluginOAuthProviderLogos(plugins), multiPortalKeys: pluginMultiPortalKeys(plugins),
+  });
+  assert.equal(sheet.rows[0].cells.provider.mark?.logo, cnLogo);
+});
 
 test('request export', () => {
   const rows = [5, 4, 3, 2, 1].map((id) => ({ id, timestamp_ms: id * 1000 }));

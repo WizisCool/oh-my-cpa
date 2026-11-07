@@ -163,14 +163,15 @@ export function RoutingPanel() {
   const {
     providerIcons,
     pluginLogos,
+    multiPortalKeys,
     pluginTitles,
     configuredProviders,
     isProviderCatalogUnknown,
   } = useProviderBranding();
   const credentials = React.useMemo(() => indexCredentialFiles(authFiles.data?.files || []), [authFiles.data]);
   const sources = React.useMemo<IdentitySources>(
-    () => ({ credentials, providerIcons, configuredProviders, pluginLogos, pluginTitles, isProviderCatalogUnknown }),
-    [credentials, providerIcons, configuredProviders, pluginLogos, pluginTitles, isProviderCatalogUnknown],
+    () => ({ credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderCatalogUnknown }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderCatalogUnknown],
   );
 
   const isLive = liveState === 'live';

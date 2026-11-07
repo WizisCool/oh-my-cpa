@@ -44,6 +44,7 @@ export interface RequestExportDialogProps {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   /** Titles plugins give the OAuth providers they register. */
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a provider name is a placeholder. */
@@ -77,6 +78,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   providerIcons,
   configuredProviders,
   pluginLogos,
+  multiPortalKeys,
   pluginTitles,
   isProviderUnproven = false,
   onRetryProviders,
@@ -119,13 +121,14 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             providerIcons,
             configuredProviders,
             pluginLogos,
+            multiPortalKeys,
             pluginTitles,
             isProviderCatalogUnknown: isProviderUnproven,
           })
         : null,
     [
       open, isImage, rows, masks, colWidths, t, tokenStyle, currency, tpsMode, modelView, showModelIcons,
-      credentials, providerIcons, configuredProviders, pluginLogos, pluginTitles, isProviderUnproven,
+      credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderUnproven,
     ],
   );
   // A program has no use for the image's row cap, so the document holds the whole selection.
@@ -140,11 +143,12 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             credentials,
             configuredProviders,
             pluginLogos,
+            multiPortalKeys,
             pluginTitles,
             isProviderCatalogUnknown: isProviderUnproven,
           })
         : null,
-    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, pluginTitles, isProviderUnproven],
+    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderUnproven],
   );
   const jsonPreview = React.useMemo(
     () =>

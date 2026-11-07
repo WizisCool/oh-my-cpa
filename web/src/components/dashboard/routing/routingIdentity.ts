@@ -13,6 +13,7 @@ export interface IdentitySources {
   providerIcons: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   pluginLogos: PluginOAuthLogos;
+  multiPortalKeys?: ReadonlySet<string>;
   /** Titles plugins give the OAuth providers they register. */
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog could not be read, so a recorded name is a placeholder, not a verdict. */
@@ -42,6 +43,7 @@ export function targetIdentity(event: UsageEvent, sources: IdentitySources): Tar
     sources.pluginLogos,
     sources.isProviderCatalogUnknown,
     sources.pluginTitles,
+    sources.multiPortalKeys,
   );
   const credential = info.isOAuth
     ? info.credential ?? ''

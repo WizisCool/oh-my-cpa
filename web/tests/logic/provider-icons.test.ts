@@ -16,6 +16,7 @@ import {
   pluginOAuthProviderIds,
   pluginOAuthProviderKeys,
   pluginOAuthProviderLogos,
+  pluginMultiPortalKeys,
 } from '../../src/types/pluginOAuthProviders.ts';
 import { resolveProviderMark, resolveProviderPickerIcon, resolveCredentialMark, resolveMarkArtworks } from '../../src/types/brandMark';
 import { modelMarkIconId } from '../../src/types/modelSquare';
@@ -268,6 +269,30 @@ test('pluginOAuthProviderLogos: a portal mark wins for its own key, the plugin m
   }]);
   assert.equal(pluginOAuthLogoFor(portalOnly, 'zcode-zai'), INLINE_LOGO);
   assert.equal(pluginOAuthLogoFor(portalOnly, 'zcode'), undefined);
+});
+
+test('routing credentials use the issuing OAuth portal mark while preserving the family fallback', () => {
+  const cnLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22qoder-cn%22/%3E';
+  const plugins: PluginItem[] = [{
+    id: 'omc-qoder-oauth', enabled: false, effective_enabled: false, supports_oauth: true,
+    oauth_providers: ['qoder', 'qoder-cn'], logo: INLINE_LOGO,
+    oauth_provider_entries: [
+      { identifier: 'qoder', name: 'Qoder', logo: INLINE_LOGO },
+      { identifier: 'qoder-cn', name: 'Qoder CN', logo: cnLogo },
+    ],
+  }];
+  const logos = pluginOAuthProviderLogos(plugins);
+  const multiPortalKeys = pluginMultiPortalKeys(plugins);
+  const mark = (oauthProvider?: string) => resolveCredentialMark('qoder', 'My account', logos, { oauthProvider, multiPortalKeys });
+
+  assert.equal(mark('qoder').logo, INLINE_LOGO);
+  assert.equal(mark(' Qoder-CN ').logo, cnLogo);
+  assert.deepEqual(mark('qoder-cn').providerKeys, ['qoder-cn', 'qoder']);
+  assert.equal(mark().logo, INLINE_LOGO);
+  assert.equal(mark('undeclared').logo, INLINE_LOGO);
+  assert.equal(resolveCredentialMark('qoder', undefined, logos, { oauthProvider: 'qoder-cn' }).logo, INLINE_LOGO);
+  assert.equal(resolveCredentialMark('qoder', undefined, { qoder: INLINE_LOGO }, { oauthProvider: 'qoder-cn', multiPortalKeys }).logo, INLINE_LOGO);
+  assert.equal(resolveCredentialMark('codex', undefined, logos, { oauthProvider: 'qoder-cn', multiPortalKeys: new Set() }).iconId, 'Codex');
 });
 
 test('quota provider identity connects a multi-portal plugin to its credential mark without adding login choices', () => {

@@ -472,7 +472,8 @@ const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember
       <HolderOutlined className={styles['card-grip']} aria-hidden="true" />
       {member.kind === 'provider'
         ? <ProviderMark provider={member} sources={branding} size={20} />
-        : <CredentialMark provider={member.family} hint={member.name} pluginLogos={branding.pluginLogos} size={20} />}
+        : <CredentialMark provider={member.family} hint={member.name} oauthProvider={member.oauth_provider}
+            multiPortalKeys={branding.multiPortalKeys} pluginLogos={branding.pluginLogos} size={20} />}
       <span className={styles['card-text']}>
         <span className={styles['card-name']}>{member.name}</span>
         <span className={styles['card-sub']}>

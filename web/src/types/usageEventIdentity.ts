@@ -11,6 +11,8 @@ export type CredentialFile = {
   auth_index?: string;
   provider?: string;
   type?: string;
+  /** The login portal reported by the credential, separate from its provider family. */
+  oauth_provider?: string;
   email?: string;
   project_id?: string;
   /** The operator's own name for the credential, kept by Oh My CPA. */
@@ -253,12 +255,13 @@ export function resolveProviderInfo(
   isProviderCatalogUnknown = false,
   /** Titles plugins give the OAuth providers they register. */
   pluginTitles?: ReadonlyMap<string, string>,
+  multiPortalKeys?: ReadonlySet<string>,
 ): ResolvedProviderInfo {
   const file = matchingCredential(event, credentials);
   const isOAuth =
     event.auth_type?.toLowerCase() === 'oauth' ||
     file?.type?.toLowerCase() === 'oauth' ||
-    Boolean(file?.email || file?.project_id);
+    Boolean(file?.oauth_provider || file?.email || file?.project_id);
 
   if (isOAuth) {
     // A credential file may say only that it is an OAuth file. That is how it
@@ -266,7 +269,11 @@ export function resolveProviderInfo(
     // the cell before it does.
     const fileType = file?.type?.toLowerCase() === 'oauth' ? '' : file?.type;
     const providerFamily = (file?.provider || fileType || event.provider || file?.type || 'oauth').toLowerCase();
-    const mark = resolveCredentialMark(providerFamily, file?.name, pluginLogos, [file?.provider, file?.type, event.provider].filter((key): key is string => Boolean(key)));
+    const mark = resolveCredentialMark(providerFamily, file?.name, pluginLogos, {
+      aliases: [file?.provider, file?.type, event.provider].filter((key): key is string => Boolean(key)),
+      oauthProvider: file?.oauth_provider,
+      multiPortalKeys,
+    });
     const account = file?.email || file?.project_id;
     const credIdentity = resolveCredential(event, credentials);
     const fileName = credIdentity.displayName || credIdentity.name || event.source || '';
