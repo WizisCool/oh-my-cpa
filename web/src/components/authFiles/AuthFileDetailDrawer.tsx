@@ -679,7 +679,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           <header className={styles.hero}>
             <div className={styles['hero-heading']}>
               <span className={styles['hero-mark']} aria-hidden>
-                <CredentialMark provider={providerKey} hint={file.name} pluginLogos={pluginLogos} size={22} />
+                <CredentialMark credential={{ provider: providerKey, hint: file.name }} pluginLogos={pluginLogos} size={22} />
               </span>
               <div className={styles['hero-names']}>
                 <h2 className={styles['hero-title']}>{heroTitle}</h2>

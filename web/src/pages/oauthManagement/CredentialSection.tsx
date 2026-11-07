@@ -180,7 +180,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
       <header className={styles.head}>
         <div className={styles['head-info']}>
           <span className={styles['head-icon']}>
-            <CredentialMark provider={section.provider} pluginLogos={pluginLogos} size={18} />
+            <CredentialMark credential={{ provider: section.provider }} pluginLogos={pluginLogos} size={18} />
           </span>
           <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
           <Tag size="small">{t('omc.section_count', { n: section.records.length })}</Tag>

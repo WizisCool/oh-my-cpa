@@ -77,7 +77,7 @@ const ProviderIdentity: React.FC<{
   pluginTitles?: ReadonlyMap<string, string>;
 }> = ({ provider, pluginLogos, pluginTitles }) => (
   <span className={styles['provider-identity']} data-testid="oauth-model-rules-provider-identity" data-provider={provider}>
-    <CredentialMark provider={provider} pluginLogos={pluginLogos} size={18} />
+    <CredentialMark credential={{ provider }} pluginLogos={pluginLogos} size={18} />
     <span className={styles['provider-option-name']}>{providerDisplayName(provider, pluginTitles)}</span>
   </span>
 );

@@ -1,3 +1,4 @@
+import { credentialProviderFamily } from '../../types/credentialIdentity';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 
 export const HEALTHY_STATUS_MESSAGES = new Set([
@@ -66,9 +67,8 @@ export function isAuthFileHealthy(file: ManagementAuthFile): boolean {
   return !isAuthFileDisabled(file) && !isAuthFileProblem(file);
 }
 
-export function providerOf(file: ManagementAuthFile): string {
-  return (file.type || file.provider || 'unknown').trim().toLowerCase();
-}
+/** The credential family, before the issuing portal is considered; one rule, shared. */
+export const providerOf = credentialProviderFamily;
 
 /** The longest credential name the server stores, in Unicode code points. */
 export const MAX_CREDENTIAL_NAME_LENGTH = 64;
