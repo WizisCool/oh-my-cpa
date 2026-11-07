@@ -14,14 +14,12 @@ func sectionNames(sections []PromptSection) string {
 	return strings.Join(names, ",")
 }
 
-// ownPromptBytes is the size of OMC's own sections: everything but the generated OpenUI
-// instructions, which are the official library's and are bounded separately.
+// ownPromptBytes is the size of OMC's own sections: the generated OpenUI instructions are the
+// official library's and are bounded separately, wherever a section carries them.
 func ownPromptBytes(context PromptContext) int {
 	size := 0
 	for _, section := range promptSections(context) {
-		if section.Text != openUI.Instructions {
-			size += len(section.Text) + 2
-		}
+		size += len(strings.Replace(section.Text, openUI.Instructions, "", 1)) + 2
 	}
 	return size
 }
@@ -101,12 +99,29 @@ func TestPromptAsksForAReadableAnswer(t *testing.T) {
 	}
 }
 
+// TestPromptTeachesHTMLOnlyToAConsoleThatDrawsPages: a console that declared the page tool is
+// told how to use it, and one that did not is never told to call it.
+func TestPromptTeachesHTMLOnlyToAConsoleThatDrawsPages(t *testing.T) {
+	drawn := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: htmlConsole})
+	if !strings.Contains(drawn, PRESENT_HTML) || !strings.Contains(drawn, "no network access") {
+		t.Fatalf("the page prompt does not teach present_html: %s", presentationRules(htmlConsole))
+	}
+	interfaceOnly := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: openUIConsole})
+	if strings.Contains(interfaceOnly, PRESENT_HTML) {
+		t.Fatal("an interface-only console was told to call present_html")
+	}
+	text := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: htmlConsole, Present: PRESENT_TEXT})
+	if strings.Contains(text, PRESENT_HTML) || !strings.Contains(text, "Markdown tables") {
+		t.Fatalf("a text-only turn was told to call present_html: %s", presentationRules(presentedTools(htmlConsole, PRESENT_TEXT)))
+	}
+}
+
 // TestPromptFitsItsBudget: OMC's own sections fit their per-round budget in the fullest context a
 // console can ask for, and the generated OpenUI instructions stay near the size they were adopted at.
 // Growth past either is a change to look at, not a limit a running turn meets.
 func TestPromptFitsItsBudget(t *testing.T) {
 	for style := range TOKEN_STYLES {
-		context := PromptContext{AnchorMS: 1, Model: strings.Repeat("m", 512), ReasoningEffort: "xhigh", TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: style, DisplayTools: openUIConsole}
+		context := PromptContext{AnchorMS: 1, Model: strings.Repeat("m", 512), ReasoningEffort: "xhigh", TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: style, DisplayTools: htmlConsole}
 		if size := ownPromptBytes(context); size > MAX_PROMPT_BYTES {
 			t.Fatalf("OMC's sections are %d bytes against %d", size, MAX_PROMPT_BYTES)
 		}

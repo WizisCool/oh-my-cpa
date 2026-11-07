@@ -51,10 +51,16 @@ var presentations = map[string]string{
 
 // presentedTools is the display tools a turn is offered under the presentation it was asked for.
 func presentedTools(declared []string, present string) []string {
-	if present == PRESENT_TEXT || !contains(declared, PRESENT_OPENUI) {
+	if present == PRESENT_TEXT {
 		return nil
 	}
-	return []string{PRESENT_OPENUI}
+	tools := make([]string, 0, 2)
+	for _, name := range []string{PRESENT_OPENUI, PRESENT_HTML} {
+		if contains(declared, name) {
+			tools = append(tools, name)
+		}
+	}
+	return tools
 }
 
 // PromptSection is one titled block of the system prompt.
@@ -155,13 +161,20 @@ func askRule(displayTools []string) string {
 }
 
 // presentationRules says how to shape an answer: the official OpenUI instructions when the console
-// renders OpenUI, Markdown otherwise. The two never both apply, so a model is never told to call a
-// tool it was not given.
+// renders OpenUI, Markdown otherwise, and how a page the operator asked for as a document is drawn.
+// A rule is stated only for a tool the model was given, so it is never told to call one it does not
+// have.
 func presentationRules(displayTools []string) string {
+	rules := make([]string, 0, 2)
 	if contains(displayTools, PRESENT_OPENUI) {
-		return openUI.Instructions
+		rules = append(rules, openUI.Instructions)
+	} else {
+		rules = append(rules, "Lead with the answer; keep it short and use headings only for long answers. Present small comparisons as short Markdown tables and summarise larger results instead of listing them.")
 	}
-	return "Lead with the answer; keep it short and use headings only for long answers. Present small comparisons as short Markdown tables and summarise larger results instead of listing them."
+	if contains(displayTools, PRESENT_HTML) {
+		rules = append(rules, "When the operator asks for a page itself - a drawing, a diagram, an HTML or SVG document, a small interactive page - the answer is that document: build one complete document and call present_html with it, rather than an OpenUI program or the document written into the answer. Inline its styles, scripts and images (data: URLs), because the frame has no network access.")
+	}
+	return strings.Join(rules, " ")
 }
 
 // SystemPrompt joins the sections into the text the model receives.

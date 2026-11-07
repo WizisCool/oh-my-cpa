@@ -166,7 +166,9 @@ func buildCompletedTurnMessages(turn Turn, registry *capability.Registry) []gate
 	}
 	var presented []Trace
 	for _, trace := range turn.Traces {
-		if (trace.Name == PRESENT_OPENUI || trace.Name == PROMPT_OPENUI) && trace.Result.Status == "success" {
+		// A display call is resent so a follow-up can refine what was drawn; a retired display
+		// tool's call is not, because nothing renders it any more.
+		if (trace.Name == PRESENT_OPENUI || trace.Name == PRESENT_HTML || trace.Name == PROMPT_OPENUI) && trace.Result.Status == "success" {
 			presented = append(presented, trace)
 		}
 	}

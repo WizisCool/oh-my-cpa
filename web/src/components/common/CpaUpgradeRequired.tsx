@@ -29,7 +29,7 @@ export const CpaUpgradeRequired: React.FC = () => {
         extra={(
           <div className="cpa-blocked-steps">
             <Typography.Paragraph>{t('shell.cpa_v8_required_compose')}</Typography.Paragraph>
-            <CodeFrame code={command} label="shell" />
+            <CodeFrame code={command} label="shell" lang="bash" />
             <Typography.Paragraph type="secondary">{t('shell.cpa_v8_required_config')}</Typography.Paragraph>
           </div>
         )}

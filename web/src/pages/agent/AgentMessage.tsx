@@ -10,7 +10,7 @@ import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { agentSnapshot } from '../../agent/conversationSnapshot';
 import { useConversationExport } from '../../components/workspace/useConversationExport';
-import { isOpenUITool, PRESENT_OPENUI, PROMPT_OPENUI } from '../../agent/types';
+import { isOpenUITool, PRESENT_HTML, PRESENT_OPENUI, PROMPT_OPENUI } from '../../agent/types';
 import { isProgramText } from '../../agent/openui/program';
 import type { Turn } from '../../agent/types';
 import { useI18n } from '../../i18n';
@@ -23,6 +23,7 @@ import { formatBytes } from '../../utils/format';
 import { useAgentView } from './tools/AgentViewContext';
 import { ToolFallback } from './tools/registry';
 import { OpenUIText, OpenUISurface } from './tools/openui';
+import { HTMLSurface } from './tools/html';
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import styles from './AgentPage.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
@@ -95,6 +96,7 @@ const GROUP_BY = groupPartByType({
   reasoning: ['group-chain'],
   'tool-call': ['group-chain'],
   [`tool-call:${PRESENT_OPENUI}`]: [],
+  [`tool-call:${PRESENT_HTML}`]: [],
   [`tool-call:${PROMPT_OPENUI}`]: [],
 });
 
@@ -257,10 +259,12 @@ export function AgentAssistantMessage() {
   const turn = custom.turn;
   const isLive = !!custom.isLive;
   const failure = turn?.code && turn.code !== 'cancelled' ? turn.code : '';
-  // A message that draws an interface takes the page's wide lane; one that only speaks stays in
-  // the reading lane, which is what keeps a paragraph from stretching across a monitor.
+  // A message that draws an interface or a page takes the page's wide lane; one that only speaks
+  // stays in the reading lane, which is what keeps a paragraph from stretching across a monitor.
   const hasInterface = useAuiState(state => state.message.parts.some(part => (
-    part.type === 'text' ? isProgramText(part.text) : part.type === 'tool-call' && isOpenUITool(part.toolName) && !part.isError
+    part.type === 'text'
+      ? isProgramText(part.text)
+      : part.type === 'tool-call' && !part.isError && (isOpenUITool(part.toolName) || part.toolName === PRESENT_HTML)
   )));
   return (
     <MessagePrimitive.Root className={workspace['message']} data-role="assistant" data-wide={hasInterface || undefined}>
@@ -283,6 +287,11 @@ export function AgentAssistantMessage() {
               case 'reasoning':
                 return <div className={styles['prose']}><ReasoningBlock text={part.text} isThinking={part.status.type === 'running'} /></div>;
               case 'tool-call': {
+                // A page is the answer itself: drawn where the model wrote it, and a call the
+                // console refused stays a call row, which is where its code and detail are read.
+                if (part.toolName === PRESENT_HTML && !part.isError) {
+                  return <HTMLSurface argumentsText={part.argsText} isStreaming={part.status.type === 'running'} />;
+                }
                 // A refused program is a call row, which is where its code and detail are read.
                 if (isOpenUITool(part.toolName) && !part.isError && part.toolUI) {
                   const answer = formAnswer(part);

@@ -18,6 +18,8 @@ import (
 
 // The Agent answers in OpenUI: the model writes an OpenUI Lang program into the official
 // assistant-ui integration's tools, and the console renders it with the official OpenUI renderer.
+// A page the operator asked for as a document is the other display tool (`present_html`), which
+// shares this file's machinery: a call that changes nothing and, alone, ends the turn.
 //
 //   - present_openui is the answer itself. It changes nothing, so it never reaches the executor: the
 //     runtime checks the program's size, records the call, and a round that called only it ends
@@ -91,13 +93,7 @@ var RETIRED_PRESENTATION_TOOLS = map[string]bool{"render_ui": true, "render_view
 
 // isPresentationCall reports whether a stored trace drew rather than read or changed anything.
 func isPresentationCall(name string) bool {
-	return name == PRESENT_OPENUI || RETIRED_PRESENTATION_TOOLS[name]
-}
-
-// DisplayToolNames is the set of display tools a run request may declare: what the console says it
-// can draw. A console that declares none gets the Markdown prompt.
-func DisplayToolNames() map[string]bool {
-	return map[string]bool{PRESENT_OPENUI: true}
+	return name == PRESENT_OPENUI || name == PRESENT_HTML || RETIRED_PRESENTATION_TOOLS[name]
 }
 
 func openUIParameters() *jsonschema.Schema {
@@ -107,14 +103,6 @@ func openUIParameters() *jsonschema.Schema {
 		Required:             []string{"ui"},
 		AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 	}
-}
-
-// DisplayToolDeclarations projects the declared display tools into the model's tool list.
-func DisplayToolDeclarations(declared []string) []gateway.AgentTool {
-	if !contains(declared, PRESENT_OPENUI) {
-		return nil
-	}
-	return []gateway.AgentTool{{Type: "function", Function: gateway.ToolDefinition{Name: PRESENT_OPENUI, Description: openUI.PresentDescription, Parameters: openUIParameters()}}}
 }
 
 func contains(values []string, value string) bool {
@@ -165,15 +153,15 @@ func presentOpenUI(arguments string) capability.Result {
 	return capability.Result{Status: "success", Data: json.RawMessage(`{"displayed":true}`)}
 }
 
-// isFinalPresentation ends a presentation-only round once its programs have been accepted for
+// isFinalPresentation ends a presentation-only round once its displays have been accepted for
 // delivery. Rendering happens in the browser; this is not a rendering acknowledgement. A round
-// that also read something, or whose program was refused, needs another round.
+// that also read something, or whose display was refused, needs another round.
 func isFinalPresentation(turn *Turn, calls []gateway.ToolCall) bool {
 	if len(calls) == 0 {
 		return false
 	}
 	for _, call := range calls {
-		if call.Function.Name != PRESENT_OPENUI {
+		if !isPresentationCall(call.Function.Name) {
 			return false
 		}
 		index := -1
