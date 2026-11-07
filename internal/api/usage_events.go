@@ -678,6 +678,9 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"x_forwarded_for":              row.XForwardedFor,
 		"user_agent":                   row.UserAgent,
 	}
+	if code := usage.NormalizeFailureCode(row.FailCode); row.Failed && code != "" {
+		detail["fail_code"] = code
+	}
 	if details := projectStructuredUsage(row.StructuredUsage); details != nil {
 		detail["structured_usage"] = details
 	}

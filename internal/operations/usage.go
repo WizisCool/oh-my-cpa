@@ -156,6 +156,8 @@ func projectRequest(row repository.UsageEventRow) RequestItem {
 type RequestDetail struct {
 	RequestItem
 	StructuredUsage *usage.StructuredUsageDetails `json:"structured_usage,omitempty"`
+	FailStatusCode  int                           `json:"fail_status_code,omitempty"`
+	FailCode        usage.FailureCode             `json:"fail_code,omitempty"`
 }
 
 type RequestPage struct {
@@ -196,11 +198,14 @@ func (s *Service) registerUsage(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	if err := read(registry, "requests_get", "Read one request's safe accounting metadata; excludes raw logs and network identity.", func(ctx context.Context, input struct {
+	if err := read(registry, "requests_get", "Read one request's safe accounting metadata and explicit failure classification; excludes raw logs and network identity.", func(ctx context.Context, input struct {
 		ID int64 `json:"id"`
 	}) (RequestDetail, error) {
 		row, err := s.Repo.GetUsageEvent(ctx, input.ID)
-		return RequestDetail{RequestItem: projectRequest(row), StructuredUsage: usage.SanitizeStructuredUsage(row.StructuredUsage)}, err
+		return RequestDetail{
+			RequestItem: projectRequest(row), StructuredUsage: usage.SanitizeStructuredUsage(row.StructuredUsage),
+			FailStatusCode: row.FailStatusCode, FailCode: row.FailCode,
+		}, err
 	}); err != nil {
 		return err
 	}

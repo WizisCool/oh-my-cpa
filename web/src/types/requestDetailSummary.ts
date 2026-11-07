@@ -3,11 +3,13 @@ import { outputTotalWithReasoning } from './tpsCalculation';
 
 /**
  * What a failed request most likely ran into, in the operator's terms rather than the upstream's
- * status line, read from the request's own status. The cause only chooses the plain-language
- * explanation the drawer leads with; the status and body stay on screen beside it, so a misread
+ * status line, read from the request's own explicit classification or status. The cause chooses
+ * the plain-language explanation the drawer leads with; the status and body stay beside it, so a misread
  * cause never hides the evidence.
  */
 export type RequestFailureCause =
+  | 'request_scoped'
+  | 'stream_truncated'
   | 'rate_limited'
   | 'auth'
   | 'forbidden'
@@ -18,7 +20,8 @@ export type RequestFailureCause =
   | 'upstream'
   | 'unknown';
 
-export function requestFailureCause(status: number | null | undefined): RequestFailureCause {
+export function requestFailureCause(status: number | null | undefined, code?: string | null): RequestFailureCause {
+  if (code === 'request_scoped' || code === 'stream_truncated') return code;
   if (!status) return 'unknown';
   if (status === 429) return 'rate_limited';
   if (status === 401) return 'auth';

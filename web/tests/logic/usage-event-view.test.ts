@@ -1016,6 +1016,16 @@ test('usage event view', () => {
   assert.equal(requestFailureCause(502), 'upstream');
   assert.equal(requestFailureCause(422), 'bad_request');
   assert.equal(requestFailureCause(undefined), 'unknown');
+  assert.equal(requestFailureCause(400), 'bad_request');
+  assert.equal(requestFailureCause(400, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(401, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(429, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(undefined, 'request_scoped'), 'request_scoped');
+  assert.equal(requestFailureCause(200, 'stream_truncated'), 'stream_truncated');
+  assert.equal(requestFailureCause(502, 'stream_truncated'), 'stream_truncated');
+  assert.equal(requestFailureCause(400, 'future_classification'), 'bad_request');
+  assert.equal(requestFailureCause(undefined, 'future_classification'), 'unknown');
+  assert.equal(requestFailureCause(401, ''), 'auth');
 
   // The badge paints a continuous scale, so the numeric rate must keep its
   // fraction while the printed reading stays rounded to one decimal.

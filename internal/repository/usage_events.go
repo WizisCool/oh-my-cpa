@@ -210,6 +210,8 @@ type UsageEventRow struct {
 	// the body: a list page would otherwise read hundreds of bodies it never shows.
 	FailStatusCode int    `json:"fail_status_code,omitempty"`
 	FailBody       string `json:"fail_body,omitempty"`
+	// FailCode is loaded only by the single-record read, like the body.
+	FailCode usage.FailureCode `json:"fail_code,omitempty"`
 	// ResponseHeaders is the stored upstream header snapshot. Only the
 	// single-record read loads it.
 	ResponseHeaders string `json:"-"`
@@ -474,7 +476,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
-		       e.response_model, e.model_substituted, e.fail_status_code, e.fail_body, e.response_headers,
+		       e.response_model, e.model_substituted, e.fail_status_code, e.fail_body, e.fail_code, e.response_headers,
 		       e.access_provider, e.is_native_key, e.token_accounting, e.structured_usage
 		FROM usage_events e
 		LEFT JOIN (
@@ -494,7 +496,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
-		&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &row.FailBody, &row.ResponseHeaders,
+		&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &row.FailBody, &row.FailCode, &row.ResponseHeaders,
 		&row.AccessProvider, &isNativeKey, &accounting, &structuredUsage)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, ErrNotFound

@@ -318,7 +318,7 @@ export default {
   "agent.capability.requests_cost_breakdown": "解釋請求費用",
   "agent.capability.requests_cost_breakdown.description": "讀取一個已記錄請求的計價狀態、已存金額、鎖定的價格與渠道版本、生效的分級以及各類 Token 的費率。",
   "agent.capability.requests_get": "查看單一請求",
-  "agent.capability.requests_get.description": "讀取一個請求的安全計費中繼資料，不含原始日誌與網路身分。",
+  "agent.capability.requests_get.description": "讀取單一請求的安全計費中繼資料與明確的失敗分類。",
   "agent.capability.requests_list": "瀏覽請求紀錄",
   "agent.capability.requests_list.description": "分頁瀏覽篩選後的請求中繼資料；大範圍分析請用用量彙總。",
   "agent.capability.system_health": "檢查系統健康",

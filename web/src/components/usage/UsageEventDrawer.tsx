@@ -424,13 +424,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                   // answered, the headers it answered with, what the credential was
                   // doing around then, who asked, and last the raw log.
                   <>
-                    {event.failed && (event.fail_status_code || event.fail_body)
+                    {event.failed && (event.fail_code || event.fail_status_code || event.fail_body)
                       ? section(
                           t('events.fail_reason'),
                           <article className="request-error">
                             <header>
                               <strong>{event.fail_status_code ? `HTTP ${event.fail_status_code}` : t('events.filter_failed')}</strong>
                             </header>
+                            {event.fail_code && fields([[t('events.error_code'), value(event.fail_code)]])}
                             {event.fail_body
                               ? <pre>{event.fail_body}</pre>
                               : <p className="request-detail-note">{t('events.fail_no_body')}</p>}

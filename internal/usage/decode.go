@@ -146,8 +146,28 @@ type Payload struct {
 // FailDetail is how CPA reports why a request failed. A successful record
 // carries status 200 and no body; an older CPA build carries neither.
 type FailDetail struct {
-	StatusCode int    `json:"status_code"`
-	Body       string `json:"body"`
+	StatusCode int         `json:"status_code"`
+	Body       string      `json:"body"`
+	Code       FailureCode `json:"code,omitempty"`
+}
+
+// FailureCode is an allowlisted classification published on a CPA usage record.
+type FailureCode string
+
+const (
+	FailureRequestScoped   FailureCode = "request_scoped"
+	FailureStreamTruncated FailureCode = "stream_truncated"
+)
+
+// NormalizeFailureCode keeps only CPA classifications with known request semantics.
+// Unknown values carry no attribution evidence and must not become free-text storage.
+func NormalizeFailureCode(code FailureCode) FailureCode {
+	switch code {
+	case FailureRequestScoped, FailureStreamTruncated:
+		return code
+	default:
+		return ""
+	}
 }
 
 // MaxFailBodyRunes bounds the stored upstream error body. Provider errors
@@ -196,6 +216,8 @@ type Event struct {
 	// for a record whose CPA published no failure detail.
 	FailStatusCode int
 	FailBody       string
+	// FailCode is explicit request-level attribution, never credential health.
+	FailCode FailureCode
 	// ResponseHeaders is the diagnostic part of the upstream's response headers
 	// in its stored form (EncodeResponseHeaders); empty when none were kept.
 	ResponseHeaders     string
@@ -297,22 +319,22 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 	}
 	event.ResponseModel = boundedSafe(payload.ResponseModel, 256)
 	event.ModelSubstituted = isServedModelSubstituted(event.Model, event.ModelAlias, event.ResponseModel)
-	event.FailStatusCode, event.FailBody = failDetail(payload)
+	event.FailStatusCode, event.FailBody, event.FailCode = failDetail(payload)
 	event.ResponseHeaders = responseHeadersFromPayload(payload.ResponseHeaders)
 	return event, nil
 }
 
 // failDetail keeps CPA's failure only for a failed record: CPA stamps status
 // 200 on every success, which would otherwise read as a recorded outcome.
-func failDetail(payload Payload) (int, string) {
+func failDetail(payload Payload) (int, string, FailureCode) {
 	if !payload.Failed {
-		return 0, ""
+		return 0, "", ""
 	}
 	statusCode := payload.Fail.StatusCode
 	if statusCode < 100 || statusCode > 599 {
 		statusCode = 0
 	}
-	return statusCode, boundedSafe(payload.Fail.Body, MaxFailBodyRunes)
+	return statusCode, boundedSafe(payload.Fail.Body, MaxFailBodyRunes), NormalizeFailureCode(payload.Fail.Code)
 }
 
 // ErrorPayload is one CPA credential error notification.

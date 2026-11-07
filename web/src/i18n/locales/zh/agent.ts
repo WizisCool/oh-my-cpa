@@ -315,7 +315,7 @@ export default {
   'agent.capability.requests_cost_breakdown': '解释请求费用',
   'agent.capability.requests_cost_breakdown.description': '读取一个已记录请求的计价状态、已存金额、锁定的价格与渠道版本、生效的分档以及各类 Token 的费率。',
   'agent.capability.requests_get': '查看单个请求',
-  'agent.capability.requests_get.description': '读取一个请求的安全计费元数据，不含原始日志与网络身份。',
+  'agent.capability.requests_get.description': '读取单个请求的安全计费元数据与明确的失败分类。',
   'agent.capability.requests_list': '浏览请求记录',
   'agent.capability.requests_list.description': '分页浏览筛选后的请求元数据；大范围分析请用用量汇总。',
   'agent.capability.system_health': '检查系统健康',

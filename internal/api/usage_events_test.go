@@ -561,6 +561,7 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	now := time.Now().UTC()
 	event := eventFor("overloaded", now.Add(-time.Minute), usage.TokenStats{}, true)
 	event.FailStatusCode = 502
+	event.FailCode = usage.FailureRequestScoped
 	event.FailBody = `{"error":{"code":"server_is_overloaded"}}`
 	event.ResponseHeaders = `{"cf-ray":"fixture-ray-NRT","set-cookie":"fixture=1"}`
 	event.AccessProvider = "config-inline"
@@ -591,7 +592,7 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	}
 	if strings.Contains(string(payload), "server_is_overloaded") || strings.Contains(string(payload), "fail_body") ||
 		strings.Contains(string(payload), "response_headers") || strings.Contains(string(payload), "access_provider") ||
-		strings.Contains(string(payload), "is_native_key") || strings.Contains(string(payload), "structured_usage") {
+		strings.Contains(string(payload), "is_native_key") || strings.Contains(string(payload), "structured_usage") || strings.Contains(string(payload), "fail_code") {
 		t.Fatalf("list leaked the upstream error body: %s", payload)
 	}
 	response, payload = getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, list.Items[0].ID))
@@ -600,6 +601,7 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	}
 	var detail struct {
 		Event struct {
+			FailCode        usage.FailureCode             `json:"fail_code"`
 			FailStatusCode  int                           `json:"fail_status_code"`
 			FailBody        string                        `json:"fail_body"`
 			ResponseHeaders []usage.ResponseHeader        `json:"response_headers"`
@@ -617,11 +619,36 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	if detail.Event.AccessProvider != "config-inline" || !detail.Event.IsNativeKey {
 		t.Fatalf("detail access = (%q, %v), want (config-inline, true)", detail.Event.AccessProvider, detail.Event.IsNativeKey)
 	}
-	if detail.Event.FailStatusCode != 502 || detail.Event.FailBody != event.FailBody {
+	if detail.Event.FailStatusCode != 502 || detail.Event.FailCode != usage.FailureRequestScoped || detail.Event.FailBody != event.FailBody {
 		t.Fatalf("detail failure = %d %q", detail.Event.FailStatusCode, detail.Event.FailBody)
 	}
 	if len(detail.Event.ResponseHeaders) != 1 || detail.Event.ResponseHeaders[0] != (usage.ResponseHeader{Name: "cf-ray", Value: "fixture-ray-NRT"}) {
 		t.Fatalf("detail headers = %v, want the filtered snapshot", detail.Event.ResponseHeaders)
+	}
+}
+
+func TestUsageEventDetailFailureClassificationAllowlist(t *testing.T) {
+	for _, test := range []struct {
+		code usage.FailureCode
+		want usage.FailureCode
+	}{
+		{usage.FailureRequestScoped, usage.FailureRequestScoped},
+		{usage.FailureStreamTruncated, usage.FailureStreamTruncated},
+		{"", ""},
+		{"future_classification", ""},
+	} {
+		row := repository.UsageEventRow{Failed: true, FailCode: test.code, FailStatusCode: 400, FailBody: "request_scoped"}
+		detail := projectUsageEventDetail(row, "")
+		got, hasCode := detail["fail_code"]
+		if hasCode != (test.want != "") || (hasCode && got != test.want) {
+			t.Fatalf("project code %q = %v (%v), want %q", test.code, got, hasCode, test.want)
+		}
+		if detail["fail_status_code"] != 400 || detail["fail_body"] != row.FailBody {
+			t.Fatalf("failure evidence changed: %+v", detail)
+		}
+	}
+	if detail := projectUsageEventDetail(repository.UsageEventRow{FailCode: usage.FailureRequestScoped}, ""); detail["fail_code"] != nil {
+		t.Fatalf("success projected failure code: %+v", detail)
 	}
 }
 

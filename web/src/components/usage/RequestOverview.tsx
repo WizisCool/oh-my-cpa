@@ -117,7 +117,7 @@ function FailureSummary({ event, onShowDiagnostics }: { event: DetailEvent; onSh
   const t = useT();
   const status = event.fail_status_code;
   const body = event.fail_body;
-  const cause = requestFailureCause(status);
+  const cause = requestFailureCause(status, event.fail_code);
   return (
     <section className="req-failure" aria-label={t('events.error_banner_title')}>
       <div className="req-failure-head">
