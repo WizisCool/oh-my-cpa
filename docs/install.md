@@ -15,6 +15,8 @@ image is **`wiziscool/oh-my-cpa`** on Docker Hub, for `linux/amd64` and `linux/a
 A coding agent can run the same steps from
 [`docs/install-for-agents.md`](install-for-agents.md).
 
+<a id="release-compose-files"></a>
+
 The Docker methods need Docker Engine with the Compose plugin. The commands assume a
 Linux or macOS shell with `curl` and `openssl`. Each release publishes two official
 Compose files in `deploy/` and as release assets:
@@ -96,20 +98,22 @@ and any other management panel are not modified or restarted.
 
 2. Create `.env` with a generated `OMCPA_MASTER_KEY`, CPA's reachable URL and CPA's
    existing plaintext management key (the key typed to sign in, not the bcrypt hash in
-   `config.yaml`):
+   `config.yaml`). Wrap `OMCPA_CPA_MANAGEMENT_KEY` in single quotes in `.env` so Docker
+   Compose does not treat `$` in the key as variable interpolation (escape any literal `'`
+   as `\'`):
 
    ```bash
-   cat > .env <<EOF
-   OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
-   OMCPA_CPA_MANAGEMENT_KEY=<CPA plaintext management key>
-   OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+   printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+   cat >> .env <<'EOF'
+   OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key>'
    EOF
    chmod 600 .env
    ```
 
-   Set `OMCPA_CPA_BASE_URL` (and network variables if CPA runs in another Docker project)
-   according to [Reaching CPA](#reaching-cpa). If CPA's clock is not UTC, add
-   `TZ=<CPA's time zone>` to `.env` so both agree on daily boundaries.
+   Edit `.env` to replace `<CPA plaintext management key>`, and set `OMCPA_CPA_BASE_URL`
+   (plus network variables if CPA runs in another Docker project) according to
+   [Reaching CPA](#reaching-cpa). If CPA's clock is not UTC, add `TZ=<CPA's time zone>` to
+   `.env` so both agree on daily boundaries.
 
 3. Start OMC and the updater:
 
@@ -171,6 +175,7 @@ under the top-level `volumes:` key:
       OMCPA_CPA_BASE_URL: ${OMCPA_CPA_BASE_URL:-http://cli-proxy-api:8317}
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
+      OMCPA_USAGE_INGEST_MODE: ${OMCPA_USAGE_INGEST_MODE:-auto}
       OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:-}
       OMCPA_TRUSTED_PROXY_CIDRS: ${OMCPA_TRUSTED_PROXY_CIDRS:-}
     volumes:
@@ -197,16 +202,20 @@ volumes:
 `cli-proxy-api` is the service name in CPA's official Compose file; if your CPA service
 has another name, set `OMCPA_CPA_BASE_URL=http://<cpa-service-name>:8317` in `.env`.
 
-Append `OMCPA_MASTER_KEY` and CPA's plaintext management key to `.env` in the Compose
-directory (`>>` preserves existing lines):
+Append `OMCPA_MASTER_KEY` and CPA's plaintext management key (single-quoted in `.env` so
+`$` is not expanded) to `.env` in the Compose directory (`>>` preserves existing lines):
 
 ```bash
-cat >> .env <<EOF
-OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-OMCPA_CPA_MANAGEMENT_KEY=<CPA plaintext management key>
+printf 'OMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+cat >> .env <<'EOF'
+OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key>'
 EOF
 chmod 600 .env
 ```
+
+Edit `.env` to replace `<CPA plaintext management key>` (and add
+`OMCPA_USAGE_INGEST_MODE=off` if another management panel already drains CPA's Redis usage
+queue; see [Other management panels](#other-management-panels)).
 
 Start only the new services so the running CPA container is not recreated or restarted:
 
@@ -223,6 +232,8 @@ talk to the same CPA management API, so provider or configuration changes made i
 appear in the other. OMC does not import another panel's local history or settings. If
 another consumer already drains CPA's Redis usage queue, coordinate usage collection mode
 (`OMCPA_USAGE_INGEST_MODE`) so two consumers do not compete for `RPOP`/`BLPOP` records.
+
+<a id="settings"></a>
 
 ## Ports, storage and common settings
 
@@ -245,7 +256,7 @@ Compose reads `.env` from the directory containing `compose.yml`. Relative host 
 | `OMCPA_BIND` | `127.0.0.1:8080` | Docker host `[ip:]port` mapped to container port `8080` (for example `127.0.0.1:18317` when `8080` is occupied on the host) |
 | `CPA_BIND` | `127.0.0.1:8317` | Docker host `[ip:]port` mapped to CPA container port `8317` (`compose.full.yml` only) |
 | `OMCPA_DATA_PATH` | `oh-my-cpa-data` | Named Docker volume by default, or a host directory path such as `./oh-my-cpa-data` |
-| `OMCPA_USER` | `10001:10001` | Non-root `uid:gid` running the `oh-my-cpa` container |
+| `OMCPA_USER` | `10001:10001` | Non-root `uid:gid` running the `oh-my-cpa` container (requires a writable host directory in `OMCPA_DATA_PATH`; the default named volume is owned by `10001:10001`) |
 | `TZ` | `UTC` (Docker) / OS zone (native) | Server calendar for daily statistics; match CPA's time zone (for example `Asia/Shanghai`) |
 | `OMCPA_PUBLIC_URL` | empty | External browser origin (for example `https://omc.example.com`). An `https://` URL marks the session cookie `Secure` |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | empty | Comma-separated reverse-proxy IPs/CIDRs trusted for `X-Forwarded-For` client IP throttling |
@@ -290,7 +301,8 @@ change depends on how OMC runs:
    the health check, Docker forwards traffic to an unlistening container port while
    `docker compose ps` still shows `8080/tcp` from the image's `EXPOSE 8080` metadata.
 
-2. **Native executable or `network_mode: host`**:
+2. **Native executable** (or a custom `network_mode: host` container that passes
+   `OMCPA_LISTEN_ADDR` in `environment:`):
    There is no Docker port mapping layer. Set `OMCPA_LISTEN_ADDR` in `.env`:
 
    ```dotenv
@@ -306,7 +318,8 @@ When you change the host port (for example to `18317`), update:
 By default, both Compose files set `volumes: - ${OMCPA_DATA_PATH:-oh-my-cpa-data}:/data`.
 When `OMCPA_DATA_PATH` is unset, Docker uses the `oh-my-cpa-data` named volume and copies
 the image's `/data` ownership (`10001:10001`, mode `0700`) on first creation. No host
-directory setup is needed.
+directory setup is needed. Because the named volume is owned by `10001:10001` with mode
+`0700`, keep the default `OMCPA_USER` (`10001:10001`) when using `oh-my-cpa-data`.
 
 If you prefer to keep the SQLite database in a host directory next to `compose.yml` (for
 example `./oh-my-cpa-data`), set `OMCPA_DATA_PATH` in `.env`:
@@ -323,7 +336,7 @@ not start as `root` to `chown` files. Choose one of two ways so the container's 
 - **Option A — Run the container as your current host user (no `sudo chown` needed)**:
 
   ```bash
-  mkdir -p ./oh-my-cpa-data && chmod 700 ./oh-my-cpa-data
+  mkdir -p -m 700 ./oh-my-cpa-data
   printf 'OMCPA_DATA_PATH=./oh-my-cpa-data\nOMCPA_USER=%s:%s\n' "$(id -u)" "$(id -g)" >> .env
   ```
 
@@ -332,9 +345,8 @@ not start as `root` to `chown` files. Choose one of two ways so the container's 
 - **Option B — Keep the default `10001:10001` container user and set directory ownership**:
 
   ```bash
-  mkdir -p ./oh-my-cpa-data
+  mkdir -p -m 700 ./oh-my-cpa-data
   sudo chown -R 10001:10001 ./oh-my-cpa-data
-  chmod 700 ./oh-my-cpa-data
   echo "OMCPA_DATA_PATH=./oh-my-cpa-data" >> .env
   ```
 
@@ -393,12 +405,15 @@ server {
 }
 ```
 
-When serving over HTTPS behind a reverse proxy, add the public URL and proxy CIDR in
-`.env` and recreate `oh-my-cpa`:
+When serving over HTTPS behind a reverse proxy, add the public URL and the proxy peer
+IP/CIDR that OMC sees on the incoming TCP connection in `.env` and recreate `oh-my-cpa`
+(in Docker bridge mode, requests from a host proxy arrive from the Docker bridge gateway
+IP rather than `127.0.0.1`; `127.0.0.1/32,::1/128` applies when the proxy and OMC share
+the same network namespace, such as a native install):
 
 ```dotenv
 OMCPA_PUBLIC_URL=https://omc.example.com
-OMCPA_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
+OMCPA_TRUSTED_PROXY_CIDRS=<proxy-peer-ip-or-cidr>
 ```
 
 Check the root through the proxy:
@@ -550,10 +565,10 @@ healthy is not enough: OMC stays up, with `"status":"degraded"`, when it cannot 
 
 | Symptom | Layer & Cause | Fix |
 | --- | --- | --- |
-| `docker compose up` fails with `Bind for 127.0.0.1:8080 failed: port is already allocated` | **Docker host port mapping**: another process or container on the host already uses `8080` | Set `OMCPA_BIND=127.0.0.1:18317` (or `CPA_BIND` for `8317`) in `.env`. Keep the container side `:8080` unchanged |
+| `docker compose up` fails with `Bind for 127.0.0.1:8080 failed: port is already allocated` | **Docker host port mapping**: another process or container on the host already uses `8080` | Set `OMCPA_BIND=127.0.0.1:18317` in `.env` (or `CPA_BIND=127.0.0.1:18318` if CPA's `8317` is taken). Keep the container side `:8080` unchanged |
 | Container runs and `docker compose ps` shows `8080/tcp`, but browser cannot connect after editing `ports:` | **Container vs. host port mismatch**: the right-hand side of `ports:` was changed away from `:8080` while OMC still listens on `:8080` inside the container | Keep `ports: - ${OMCPA_BIND:-127.0.0.1:8080}:8080` and change only `OMCPA_BIND` in `.env` |
-| OMC log reports `listen on ... (set OMCPA_LISTEN_ADDR to change the process listen address): ... address already in use` | **Process listener namespace**: native binary or `network_mode: host` container shares the host network stack where `:8080` is occupied | Set `OMCPA_LISTEN_ADDR=127.0.0.1:18317` in `.env` |
-| OMC log reports `data directory /data is not writable by uid:gid ...: permission denied` | **Host bind-mount ownership mismatch**: `OMCPA_DATA_PATH` points to a host directory not writable by the container's runtime `uid:gid` (`OMCPA_USER`, default `10001:10001`) | Use the default `oh-my-cpa-data` named volume, or set `OMCPA_USER=$(id -u):$(id -g)` in `.env`, or `sudo chown -R 10001:10001 <dir>` (see [Storage and permissions](#storage-and-permissions)) |
+| OMC log reports `listen on ... (set OMCPA_LISTEN_ADDR to change the process listen address): ... address already in use` | **Process listener namespace**: native binary (or a custom `network_mode: host` container) shares the host network stack where `:8080` is occupied | Set `OMCPA_LISTEN_ADDR=127.0.0.1:18317` in `.env` (for a custom `network_mode: host` container, also pass `OMCPA_LISTEN_ADDR` in `environment:`) |
+| OMC log reports `data directory /data is not writable by uid:gid ...: permission denied` | **Data directory ownership mismatch**: `OMCPA_DATA_PATH` points to a host directory not writable by `OMCPA_USER` (default `10001:10001`), or `OMCPA_USER` was changed while still using the `10001:10001`-owned named volume | Keep the default `oh-my-cpa-data` volume with `OMCPA_USER=10001:10001`, or for a host directory write numeric `OMCPA_USER=<uid>:<gid>` to `.env` or `sudo chown -R 10001:10001 <dir>` (see [Storage and permissions](#storage-and-permissions)) |
 | CPA fails to start and `config.yaml` is a directory | `config.yaml` did not exist before the first `docker compose up` | Stop the stack, remove the `config.yaml/` directory, download `cpa.config.example.yaml` to `config.yaml`, and start again |
 | `status` is `degraded` (`cpa_connected: false`) | Wrong `OMCPA_CPA_BASE_URL` or `OMCPA_CPA_MANAGEMENT_KEY`, or CPA refuses remote management | Check [Reaching CPA](#reaching-cpa) and enable `management.allow-remote: true` in CPA's `config.yaml` if needed |
 | Sign-in succeeds, then immediately asks to sign in again | `OMCPA_PUBLIC_URL` starts with `https://` (marking the session cookie `Secure`), but the browser connects over plain `http://` | Leave `OMCPA_PUBLIC_URL` empty for local HTTP access, or access the console through your `https://` reverse proxy |

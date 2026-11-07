@@ -128,16 +128,18 @@ docker compose up -d
 ```bash
 mkdir -p oh-my-cpa && cd oh-my-cpa
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
-cat > .env <<EOF
-OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
-OMCPA_CPA_MANAGEMENT_KEY=<CPA 管理密钥的明文，而非 config.yaml 中的哈希>
-OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+cat >> .env <<'EOF'
+OMCPA_CPA_MANAGEMENT_KEY='<CPA 管理密钥的明文，而非 config.yaml 中的哈希>'
 EOF
 chmod 600 .env
-docker compose up -d
 ```
 
-按 CPA 的运行位置设置 `.env` 中的连接地址：
+编辑 `.env`，将 `<CPA 管理密钥的明文，而非 config.yaml 中的哈希>` 替换为实际密钥（若密钥含 `$` 请保留外层单引号，字面量 `'` 写作 `\'`），按 CPA 运行位置调整 `OMCPA_CPA_BASE_URL` 后启动：
+
+```bash
+docker compose up -d
+```
 
 | CPA 运行位置 | `.env` 配置 |
 | --- | --- |
@@ -148,12 +150,12 @@ docker compose up -d
 
 访问 **`http://127.0.0.1:8080/`**，以管理密钥登录。
 
-常见 `.env` 调整（无需改动 `compose.yml`）：
+常见 `.env` 调整（无需改动 `compose.yml`，修改后执行 `docker compose up -d` 生效）：
 
 | 需求 | `.env` 配置 |
 | --- | --- |
 | `8080` 端口被占用 | `OMCPA_BIND=127.0.0.1:18317`（只改宿主机映射端口，容器内保持 `:8080`） |
-| 数据存放在 `./oh-my-cpa-data` | `OMCPA_DATA_PATH=./oh-my-cpa-data` 与 `OMCPA_USER=<宿主机 uid:gid>`（如 `1000:1000`，需先 `mkdir -p ./oh-my-cpa-data`） |
+| 数据存放在 `./oh-my-cpa-data` | `OMCPA_DATA_PATH=./oh-my-cpa-data` 与 `OMCPA_USER=<宿主机 uid:gid>`（如 `1000:1000`，需先 `mkdir -p -m 700 ./oh-my-cpa-data`；请在首次启动前设置，启动后再改会切换到新空目录而不会自动迁移原数据卷，迁移见[数据库备份与恢复手册](docs/ops/sqlite-operations.md)） |
 | 配置 HTTPS 反向代理 | 反代指向 `127.0.0.1:8080`（如 Caddy `reverse_proxy 127.0.0.1:8080`，前后端同端口无需拆分），并设置 `OMCPA_PUBLIC_URL=https://...` |
 
 ### 更新
@@ -311,7 +313,7 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 | `OMCPA_CPA_MANAGEMENT_KEY` | 必填 | CPA 管理密钥，同时是控制台登录密码 |
 | `OMCPA_MASTER_KEY` | 必填 | 静态加密密钥（`openssl rand -hex 32`） |
 | `OMCPA_BIND` | `127.0.0.1:8080` | Docker 宿主机映射地址 |
-| `OMCPA_LISTEN_ADDR` | `:8080` | 进程监听地址（原生部署或 `network_mode: host` 改端口时使用） |
+| `OMCPA_LISTEN_ADDR` | `:8080` | 进程监听地址（原生部署改端口时使用） |
 | `OMCPA_DATA_PATH` | `oh-my-cpa-data` | Docker 数据卷名或宿主机目录路径 |
 | `OMCPA_USER` | `10001:10001` | 容器运行 `uid:gid` |
 | `OMCPA_DATA_DIR` | `./data` | SQLite 数据库所在目录（容器镜像内为 `/data`） |

@@ -73,10 +73,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	if cfg.DatabasePath == "" {
 		return nil, errors.New("database path is required")
 	}
-	dataDir := cfg.DataDir
-	if dataDir == "" {
-		dataDir = filepath.Dir(cfg.DatabasePath)
-	}
+	dataDir := effectiveDataDir(cfg)
 	if err := os.MkdirAll(filepath.Dir(cfg.DatabasePath), 0o700); err != nil {
 		return nil, wrapDataDirError(dataDir, err)
 	}
@@ -137,10 +134,7 @@ func newResolvedApp(ctx context.Context, cfg config.Config, logger *slog.Logger)
 // and the self-hosted path share it entirely; the only difference between them is
 // where the configuration came from.
 func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, error) {
-	dataDir := cfg.DataDir
-	if dataDir == "" {
-		dataDir = filepath.Dir(cfg.DatabasePath)
-	}
+	dataDir := effectiveDataDir(cfg)
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", wrapDataDirError(dataDir, err))
 	}
@@ -178,7 +172,7 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		}
 	}
 	db, err := repository.Open(ctx, cfg.DatabasePath,
-		repository.WithMigrationBackup(cipher, filepath.Join(cfg.DataDir, "backups"), 5),
+		repository.WithMigrationBackup(cipher, filepath.Join(dataDir, "backups"), 5),
 	)
 	if err != nil {
 		return nil, wrapDataDirError(dataDir, err)
@@ -454,6 +448,13 @@ func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler 
 	return pipeline, nil
 }
 
+func effectiveDataDir(cfg config.Config) string {
+	if cfg.DataDir != "" {
+		return cfg.DataDir
+	}
+	return filepath.Dir(cfg.DatabasePath)
+}
+
 func wrapDataDirError(dir string, err error) error {
 	if err != nil && errors.Is(err, os.ErrPermission) {
 		return fmt.Errorf("data directory %s is not writable by uid:gid %d:%d: %w", dir, os.Geteuid(), os.Getegid(), err)
@@ -493,7 +494,7 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return wrapListenError(a.cfg.ListenAddr, err)
 	}
-	a.logger.Info("HTTP server listening", "addr", a.cfg.ListenAddr, "base_path", a.cfg.BasePath)
+	a.logger.Info("HTTP server listening", "addr", listener.Addr().String(), "base_path", a.cfg.BasePath)
 	serverErrors := make(chan error, 1)
 	go func() {
 		serverErrors <- a.httpServer.Serve(listener)

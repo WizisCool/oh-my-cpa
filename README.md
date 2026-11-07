@@ -134,16 +134,18 @@ Deploys OMC and the updater beside an existing CPA without modifying or restarti
 ```bash
 mkdir -p oh-my-cpa && cd oh-my-cpa
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
-cat > .env <<EOF
-OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
-OMCPA_CPA_MANAGEMENT_KEY=<CPA's management key in plaintext, not the hash in config.yaml>
-OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+cat >> .env <<'EOF'
+OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key, not the hash in config.yaml>'
 EOF
 chmod 600 .env
-docker compose up -d
 ```
 
-Set `OMCPA_CPA_BASE_URL` in `.env` for where CPA runs:
+Edit `.env` to replace `<CPA plaintext management key, not the hash in config.yaml>` (keep single quotes if the key contains `$`, escaping any literal `'` as `\'`), set `OMCPA_CPA_BASE_URL` for where CPA runs, and start:
+
+```bash
+docker compose up -d
+```
 
 | Where CPA runs | `.env` setting |
 | --- | --- |
@@ -154,12 +156,12 @@ Set `OMCPA_CPA_BASE_URL` in `.env` for where CPA runs:
 
 Open **`http://127.0.0.1:8080/`** and sign in with the management key.
 
-Common `.env` adjustments (no `compose.yml` edits needed):
+Common `.env` adjustments (no `compose.yml` edits needed; run `docker compose up -d` to apply):
 
 | Need | `.env` setting |
 | --- | --- |
 | Port `8080` is already in use | `OMCPA_BIND=127.0.0.1:18317` (changes only the host port; keep container port `8080`) |
-| Store data in `./oh-my-cpa-data` | `OMCPA_DATA_PATH=./oh-my-cpa-data` and `OMCPA_USER=<host uid:gid>` (for example `1000:1000`, after `mkdir -p ./oh-my-cpa-data`) |
+| Store data in `./oh-my-cpa-data` | `OMCPA_DATA_PATH=./oh-my-cpa-data` and `OMCPA_USER=<host uid:gid>` (for example `1000:1000`, after `mkdir -p -m 700 ./oh-my-cpa-data`; set before first start, as changing `OMCPA_DATA_PATH` later opens a new empty directory without moving existing volume data—see [SQLite operations](docs/ops/sqlite-operations.md)) |
 | Serve behind an HTTPS reverse proxy | Proxy to `127.0.0.1:8080` (for example Caddy `reverse_proxy 127.0.0.1:8080`; UI and API share one port) and set `OMCPA_PUBLIC_URL=https://...` |
 
 ### Updating
@@ -337,7 +339,7 @@ trusted agents and serve the console over HTTPS before connecting one remotely.
 | `OMCPA_CPA_MANAGEMENT_KEY` | required | CPA's management key, and the console's sign-in password |
 | `OMCPA_MASTER_KEY` | required | At-rest encryption key (`openssl rand -hex 32`) |
 | `OMCPA_BIND` | `127.0.0.1:8080` | Docker host address mapped to the console |
-| `OMCPA_LISTEN_ADDR` | `:8080` | Process listen address (for native installs or `network_mode: host`) |
+| `OMCPA_LISTEN_ADDR` | `:8080` | Process listen address (for native installs) |
 | `OMCPA_DATA_PATH` | `oh-my-cpa-data` | Docker volume name or host directory path |
 | `OMCPA_USER` | `10001:10001` | Container `uid:gid` |
 | `OMCPA_DATA_DIR` | `./data` | Directory of the SQLite database (`/data` in the container image) |

@@ -17,7 +17,8 @@ established safely from the host.
 When an existing Compose file is present, read its `services.oh-my-cpa` definition before
 assuming `.env` variables take effect:
 - Official `compose.full.yml` and `compose.omc.yml` interpolate `OMCPA_BIND`,
-  `OMCPA_DATA_PATH`, `OMCPA_USER`, `OMCPA_NETWORK_NAME` and `OMCPA_NETWORK_EXTERNAL`.
+  `OMCPA_DATA_PATH`, `OMCPA_USER` and `OMCPA_NETWORK_NAME` (plus
+  `OMCPA_NETWORK_EXTERNAL` in `compose.omc.yml`).
 - Older or hand-written Compose files may hardcode `"127.0.0.1:8080:8080"` or
   `oh-my-cpa-data:/data` without variable interpolation; inspect the file first rather
   than setting `.env` variables that the file ignores.
@@ -27,6 +28,9 @@ the v8 management API and the existing plaintext management key.
 
 ## Preserve the existing installation
 
+- Inspect target paths first and get user approval before overwriting any existing file
+  (`compose.yml`, `config.yaml`, `.env`) in the target directory. An existing OMC
+  deployment follows [Upgrading](install.md#upgrading), not fresh key generation.
 - Let the user supply missing secrets privately; placeholders are not working credentials.
 - Never replace an existing `OMCPA_MASTER_KEY`. If encrypted data exists and its key is
   lost, stop and explain recovery limits ([`docs/ops/sqlite-operations.md`](ops/sqlite-operations.md))
@@ -59,17 +63,20 @@ Apply the configuration rules from [`docs/install.md`](install.md#ports-storage-
 - **Updater**: Recommended Docker paths include `oh-my-cpa-updater` by default. Disclose
   that `oh-my-cpa-updater` mounts `/var/run/docker.sock` (host-level Docker authority)
   while `oh-my-cpa` itself stays non-root (`10001:10001`), read-only and socket-free. If
-  the user declines Docker socket access, omit `oh-my-cpa-updater` and keep manual
-  updates (`docker compose pull && docker compose up -d`). Never merge the updater into
-  `oh-my-cpa` or run `oh-my-cpa` as root.
+  the user declines Docker socket access, omit `oh-my-cpa-updater` from `compose.yml`,
+  remove any existing updater container (`docker rm -f oh-my-cpa-updater`), and keep
+  manual OMC-only updates (`docker compose pull oh-my-cpa && docker compose up -d --no-deps oh-my-cpa`).
+  Never merge the updater into `oh-my-cpa` or run `oh-my-cpa` as root.
 - **Ports**: If host port `8080` is occupied in a Docker bridge deployment, change only
   the host mapping (`OMCPA_BIND=127.0.0.1:<port>`) and keep container port `8080`. Use
-  `OMCPA_LISTEN_ADDR` only for native executables or `network_mode: host`. Update the
-  verification URL and any reverse-proxy target to match the chosen host port.
-- **Storage**: Use the default `oh-my-cpa-data` named volume for new Docker installs so
-  no `mkdir` or `sudo chown` is required. Only when the user asks for a host bind mount
-  (`OMCPA_DATA_PATH=./oh-my-cpa-data`), align the non-root container user (`OMCPA_USER`)
-  with the directory owner (`OMCPA_USER=$(id -u):$(id -g)` or `chown 10001:10001`).
+  `OMCPA_LISTEN_ADDR` for native executables (or custom `network_mode: host` containers
+  that pass `OMCPA_LISTEN_ADDR` into `environment:`). Update the verification URL and any
+  reverse-proxy target to match the chosen host port.
+- **Storage**: Use the default `oh-my-cpa-data` named volume (with the default
+  `10001:10001` user) for new Docker installs so no `mkdir` or `sudo chown` is required.
+  Only when the user asks for a host bind mount (`OMCPA_DATA_PATH=./oh-my-cpa-data`),
+  align the non-root container user (`OMCPA_USER`) with the directory owner (write
+  numeric `OMCPA_USER=<uid>:<gid>` from `id -u` / `id -g` to `.env`, or `chown 10001:10001`).
 
 ## Verify and hand off
 
