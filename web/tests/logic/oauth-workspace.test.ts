@@ -173,6 +173,26 @@ test('providers: a multi-portal plugin files each credential under the portal th
   assert.equal(projection.records[0].authorizationProviderId, 'harbor-cn');
 });
 
+test('providers: workspace sections retain portal names across credential-family aliases', () => {
+  const plugins = [{
+    id: 'buddy', enabled: true, effective_enabled: true, supports_oauth: true,
+    oauth_providers: ['codebuddy', 'workbuddy', 'workbuddy-ai'], metadata: { name: 'Buddy' },
+    oauth_provider_entries: [
+      { identifier: 'codebuddy', name: 'CodeBuddy' },
+      { identifier: 'workbuddy', name: 'Workbuddy' },
+      { identifier: 'workbuddy-ai', name: 'Workbuddy AI' },
+    ],
+  }];
+  const portalChoices = pluginOAuthProviderChoices(plugins, echoT);
+  const projection = buildOAuthWorkspaceProjection([
+    file({ name: 'work.json', auth_index: 'work', type: 'codebuddy', oauth_provider: 'workbuddy' }),
+    file({ name: 'ai.json', auth_index: 'ai', type: 'codebuddy', oauth_provider: 'workbuddy-ai' }),
+  ], [], portalChoices, pluginMultiPortalKeys(plugins));
+  const titles = pluginOAuthProviderTitles(plugins);
+  assert.deepEqual(projection.records.map((record) => providerDisplayName(record.displayProvider, titles)), ['Workbuddy', 'Workbuddy AI']);
+  assert.deepEqual(projection.records.map((record) => record.authorizationProviderId), ['workbuddy', 'workbuddy-ai']);
+});
+
 test('quota conditions: capability is independent from observed health and authenticity', () => {
   const projection = buildOAuthWorkspaceProjection(
     [file()],

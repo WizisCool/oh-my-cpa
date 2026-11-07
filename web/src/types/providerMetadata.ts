@@ -66,9 +66,9 @@ export function getCredentialProviderMetadata(providerKey: string): ProviderMeta
  * title a plugin publishes for a provider it registers, then the brand table above, then the
  * key as recorded. The
  * dashboard and the OAuth page both read it, so a brand is never spelled from its raw
- * key on one page (`Deepseek`) and by its own name on the other (`DeepSeek`). Titles are
- * keyed by the canonical key, so an alias (`workbuddy`) reads the same as the section the
- * OAuth page files it under (`codebuddy`).
+ * key on one page (`Deepseek`) and by its own name on the other (`DeepSeek`). An exact
+ * portal title wins over its credential-family alias, so distinct login portals keep
+ * their own names while older credentials can still use the canonical family title.
  */
 export function providerDisplayName(providerKey: string, pluginTitles?: ReadonlyMap<string, string>): string {
   const key = (providerKey || '').trim();
@@ -86,7 +86,8 @@ export function providerDisplayName(providerKey: string, pluginTitles?: Readonly
 export function knownProviderDisplayName(providerKey: string, pluginTitles?: ReadonlyMap<string, string>): string | undefined {
   const key = (providerKey || '').toLowerCase().trim();
   const isBrand = Object.prototype.hasOwnProperty.call(CREDENTIAL_PROVIDERS, key);
-  return pluginTitles?.get(isBrand ? CREDENTIAL_PROVIDERS[key].id : key) || (isBrand ? CREDENTIAL_PROVIDERS[key].label : undefined);
+  return pluginTitles?.get(key)
+    || (isBrand ? pluginTitles?.get(CREDENTIAL_PROVIDERS[key].id) || CREDENTIAL_PROVIDERS[key].label : undefined);
 }
 
 /**

@@ -213,8 +213,8 @@ const RESERVED_PROVIDER_KEYS: ReadonlySet<string> = new Set([
 
 /**
  * pluginOAuthProviderTitles names the credentials of every plugin-registered provider with
- * the title its login card carries, keyed by the canonical provider key `providerDisplayName`
- * looks up. A credential typed by the plugin's own id or quota provider is the same identity,
+ * the title its login card carries, keyed by the exact portal identifier before credential-family
+ * aliases. A credential typed by the plugin's own id or quota provider is the same identity,
  * as it is for the logo, so it takes the plugin's name.
  *
  * Unlike the login cards, a disabled plugin still contributes: switching it off keeps the
@@ -228,20 +228,25 @@ export function pluginOAuthProviderTitles(plugins: PluginItem[] | undefined): Ma
   const ordered = [...(plugins ?? [])]
     .filter((plugin) => plugin.supports_oauth)
     .sort((a, b) => Number(isEnabled(b)) - Number(isEnabled(a)));
-  const claim = (providerKey: string, title: string) => {
-    const key = getCredentialProviderMetadata(providerKey).id;
-    if (BUILTIN_OAUTH_IDS.has(providerKey) || BUILTIN_OAUTH_IDS.has(key) || RESERVED_PROVIDER_KEYS.has(key) || titles.has(key)) return;
+  const claim = (key: string, title: string) => {
+    const canonical = getCredentialProviderMetadata(key).id;
+    if (BUILTIN_OAUTH_IDS.has(key) || BUILTIN_OAUTH_IDS.has(canonical) || RESERVED_PROVIDER_KEYS.has(canonical) || titles.has(key)) return;
     titles.set(key, title);
   };
-  // Login portals first: a portal's own title outranks another plugin's name for the same key.
-  for (const plugin of ordered) {
+  const portals = ordered.flatMap((plugin) => {
     const providerIds = pluginOAuthProviderIds(plugin);
     const portalTitle = pluginPortalTitles(plugin, providerIds);
-    for (const providerId of providerIds) claim(providerId, portalTitle(providerId));
-  }
+    return providerIds.map((id) => [id, portalTitle(id)] as const);
+  });
+  // Exact portal names win before aliases: Workbuddy and CodeBuddy may be distinct portals.
+  for (const [id, title] of portals) claim(id, title);
+  for (const [id, title] of portals) claim(getCredentialProviderMetadata(id).id, title);
   for (const plugin of ordered) {
     const name = pluginDisplayName(plugin);
-    for (const key of pluginOAuthProviderKeys(plugin)) claim(key, name);
+    for (const key of pluginOAuthProviderKeys(plugin)) {
+      claim(key, name);
+      claim(getCredentialProviderMetadata(key).id, name);
+    }
   }
   return titles;
 }

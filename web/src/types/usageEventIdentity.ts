@@ -282,7 +282,10 @@ export function resolveProviderInfo(
     // credential that answered is the line under it. Leading with the account
     // here made an OAuth cell answer a different question from the API-key cell
     // beside it.
-    const providerLabel = providerDisplayName(providerFamily, pluginTitles);
+    // The name follows the same declared issuing portal as the artwork; legacy credentials
+    // and portals without naming metadata retain the credential-family label.
+    const displayProvider = mark.providerKeys?.[0] || providerFamily;
+    const providerLabel = knownProviderDisplayName(displayProvider, pluginTitles) || providerDisplayName(providerFamily, pluginTitles);
     // The account is the one display value masking must reach here: the API-key half
     // of the same line is already a server-side mask, and a request record carries no
     // reveal, so this is the only form the row can print.
