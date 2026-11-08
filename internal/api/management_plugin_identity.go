@@ -198,7 +198,7 @@ func (c *pluginIdentityCache) refresh(ctx context.Context, client *management.Cl
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, pluginIdentityFetchTimeout)
 	defer cancel()
-	store, err := client.PluginStore(fetchCtx)
+	store, err := client.PluginStore(fetchCtx, false)
 	if err != nil {
 		c.mu.Lock()
 		c.lastAttempt = c.now()

@@ -221,7 +221,7 @@ func TestOnlyDeclaredReadsUseV0(t *testing.T) {
 	_, _ = client.RequestErrorLogs(context.Background())
 	_, _, _ = client.LatestVersion(context.Background())
 	_, _ = client.PluginList(context.Background())
-	_, _ = client.PluginStore(context.Background())
+	_, _ = client.PluginStore(context.Background(), false)
 	_, _ = client.OAuthStatus(context.Background(), "state-1")
 	_ = client.ResetQuota(context.Background(), "idx-1")
 	for _, path := range gateway.seen() {

@@ -356,9 +356,15 @@ func (c *Client) DeletePlugin(ctx context.Context, id string) (PluginDeleteResul
 	return result, nil
 }
 
-func (c *Client) PluginStore(ctx context.Context) (PluginStore, error) {
+// PluginStore requests fresh release checks only for an explicit operator action. Older CPA
+// versions may ignore the optional parameter; the response is not proof of check freshness.
+func (c *Client) PluginStore(ctx context.Context, shouldRefresh bool) (PluginStore, error) {
+	endpoint := "/plugins/store"
+	if shouldRefresh {
+		endpoint += "?refresh=true"
+	}
 	var raw json.RawMessage
-	if err := c.DoJSON(ctx, http.MethodGet, "/plugins/store", &raw); err != nil {
+	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &raw); err != nil {
 		return PluginStore{}, err
 	}
 	result := PluginStore{}

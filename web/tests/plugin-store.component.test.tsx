@@ -6,7 +6,7 @@ import { PluginStorePanel } from '../src/components/plugins/PluginStorePanel';
 import { InstalledPluginsPanel } from '../src/components/plugins/InstalledPluginsPanel';
 import { storeListingsByPluginId } from '../src/components/plugins/pluginStoreLogic';
 import type { PluginItem, PluginStoreResponse, StorePluginItem } from '../src/types/plugin';
-import { installOmcApi } from './support/omcApi';
+import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { PluginsPage } from '../src/pages/PluginsPage';
@@ -37,8 +37,8 @@ function Catalog() {
       <select aria-label="Catalog language" value={lang} onChange={(event) => setLang(event.target.value as Lang)}>
         {(['en', 'zh', 'zh-Hant', 'ms'] as const).map((value) => <option key={value}>{value}</option>)}
       </select>
-      <PluginStorePanel store={store} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} />
-      <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([{ ...entry, installed: true, install_source_status: 'matched' }])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => null} isCheckingUpdates={false} />
+      <PluginStorePanel store={store} isLoading={false} isDemo={false} onRefresh={() => {}} isRefreshing={false} onManage={() => {}} onOpenSettings={() => {}} />
+      <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([{ ...entry, installed: true, install_source_status: 'matched' }])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => {}} isCheckingUpdates={false} />
     </>
   );
 }
@@ -115,7 +115,7 @@ it('keeps the runtime identity in search and delete confirmation when the catalo
     locales: { 'zh-CN': { name: 'Unrelated catalog name', author: 'Unrelated catalog author' } },
   };
   const { container } = renderWithOmc(
-    <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([foreignListing])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => null} isCheckingUpdates={false} />,
+    <InstalledPluginsPanel plugins={[installed]} catalog={storeListingsByPluginId([foreignListing])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => {}} isCheckingUpdates={false} />,
   );
   expect(await screen.findByText('Runtime name')).toBeTruthy();
   expect(screen.getByText('Runtime author')).toBeTruthy();
@@ -146,7 +146,6 @@ it('checks for updates on request and updates a plugin from its installed row', 
         onCheckUpdates={async () => {
           checks += 1;
           setCatalog(newer);
-          return newer;
         }}
       />
     );
@@ -156,7 +155,6 @@ it('checks for updates on request and updates a plugin from its installed row', 
   await screen.findByText('Runtime name');
   expect(container.querySelector('[data-testid="plugin-row-update"]')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: t('plugin.check_updates') }));
-  expect(await screen.findByText(t('plugin.check_updates_found', { n: 1 }))).toBeTruthy();
   expect(checks).toBe(1);
   fireEvent.click(await screen.findByRole('button', { name: t('plugin.update_label_to', { name: 'Runtime name', version: 'v1.3.0' }) }));
   const dialog = await screen.findByRole('dialog');
@@ -176,24 +174,93 @@ it('keeps background registry refresh separate from a manually requested update 
     return { status: 'ok' };
   });
   const automatic = server.hold('GET', '/management/plugin-store');
-  renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
-  await automatic.arrived;
+  const { client } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
+  expect((await automatic.arrived).query.has('refresh')).toBe(false);
   const check = screen.getByTestId('plugin-check-updates');
   expect(check.classList.contains('ant-btn-loading')).toBe(false);
   await act(async () => automatic.release());
 
   const refresh = server.hold('GET', '/management/plugin-store');
   fireEvent.click(screen.getByRole('switch', { name: makeT('en')('plugin.toggle_label', { name: 'Runtime name' }) }));
-  await refresh.arrived;
+  const backgroundRequest = await refresh.arrived;
+  expect(backgroundRequest.query.has('refresh')).toBe(false);
   expect(check.classList.contains('ant-btn-loading')).toBe(false);
-  await act(async () => refresh.release());
 
   const manual = server.hold('GET', '/management/plugin-store');
   fireEvent.click(check);
-  await manual.arrived;
+  expect((await manual.arrived).query.get('refresh')).toBe('true');
   await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(true));
-  await act(async () => manual.release());
+  expect(backgroundRequest.init.signal?.aborted).toBe(true);
+  const updated = { ...store, plugins: [{ ...entry, installed: true, install_source_status: 'matched', version: '1.3.0', update_available: true }] };
+  await act(async () => manual.release(updated));
+  expect(await screen.findByText(makeT('en')('plugin.check_updates_found', { n: 1 }))).toBeTruthy();
   await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(false));
+  await act(async () => refresh.release());
+  expect(client.getQueryData<PluginStoreResponse>(['management-plugin-store'])).toEqual(updated);
+});
+
+it('refreshes the store on request without losing its filter or clearing the previous catalog on failure', async () => {
+  const server = installOmcApi();
+  server.on('GET', '/management/plugin-store', () => store);
+  const t = makeT('en');
+  const { client } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins/store' });
+  await screen.findByText('Base name');
+  const search = screen.getByRole('textbox', { name: t('plugin.search_store') });
+  fireEvent.change(search, { target: { value: 'Base' } });
+  const refresh = screen.getByRole('button', { name: t('common.refresh') });
+  const manual = server.hold('GET', '/management/plugin-store');
+  fireEvent.click(refresh);
+  expect((await manual.arrived).query.get('refresh')).toBe('true');
+  expect(refresh.getAttribute('aria-busy')).toBe('true');
+  fireEvent.click(refresh);
+  expect(server.requests.filter((request) => request.query.get('refresh') === 'true')).toHaveLength(1);
+  await act(async () => manual.release({ ...store, plugins: [{ ...entry, name: 'Base refreshed' }] }));
+  expect(await screen.findByText('Base refreshed')).toBeTruthy();
+  expect((search as HTMLInputElement).value).toBe('Base');
+  expect(client.getQueryData<PluginStoreResponse>(['management-plugin-store'])?.plugins[0].name).toBe('Base refreshed');
+
+  const failure = server.hold('GET', '/management/plugin-store');
+  fireEvent.click(refresh);
+  await failure.arrived;
+  await act(async () => failure.release(json({ error: 'GitHub quota exhausted', code: 'plugin_store_rate_limited', retry_after: 60 }, 429)));
+  expect(await screen.findByText(/GitHub quota exhausted/)).toBeTruthy();
+  expect(screen.getByText(/Try again in 60 s/)).toBeTruthy();
+  expect(screen.getByText('Base refreshed')).toBeTruthy();
+  expect((search as HTMLInputElement).value).toBe('Base');
+  await waitFor(() => expect(refresh.getAttribute('aria-busy')).toBe('false'));
+});
+
+it.each(['complete', 'partial'] as const)('reports a %s manual check without claiming all releases are current', async (outcome) => {
+  const server = installOmcApi({ plugins: [installed] });
+  server.on('GET', '/management/plugin-store', () => store);
+  const t = makeT('en');
+  const { client } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
+  await screen.findByText('Runtime name');
+  await waitFor(() => expect(client.getQueryData(['management-plugin-store'])).toBeDefined());
+  const manual = server.hold('GET', '/management/plugin-store');
+  fireEvent.click(screen.getByTestId('plugin-check-updates'));
+  expect((await manual.arrived).query.get('refresh')).toBe('true');
+  const sourceErrors = outcome === 'partial'
+    ? [{ source_id: 'registry-source', source_name: 'Publisher registry', source_url: 'https://publisher.example/registry.json', message: 'Registry unavailable' }]
+    : [];
+  await act(async () => manual.release({ ...store, source_errors: sourceErrors }));
+  const title = await screen.findByText(t(outcome === 'partial' ? 'plugin.store_refresh_partial' : 'plugin.check_updates_none'));
+  expect(title.closest(outcome === 'partial' ? '.ant-notification-notice-warning' : '.ant-notification-notice-info')).not.toBeNull();
+  if (outcome === 'partial') expect(screen.getByText('Registry unavailable')).toBeTruthy();
+  expect(screen.getByText('Runtime name')).toBeTruthy();
+});
+
+it('retries a failed initial store load as an ordinary read', async () => {
+  const server = installOmcApi();
+  server.on('GET', '/management/plugin-store', () => json({ error: 'Registry unavailable' }, 502));
+  renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins/store' });
+  await screen.findByText('Registry unavailable');
+  server.on('GET', '/management/plugin-store', () => store);
+  fireEvent.click(screen.getByRole('button', { name: makeT('en')('common.retry') }));
+  await screen.findByText('Base name');
+  const reads = server.requests.filter((request) => request.path === '/management/plugin-store');
+  expect(reads).toHaveLength(2);
+  expect(reads.every((request) => !request.query.has('refresh'))).toBe(true);
 });
 
 it('heads the store with the navigation label that led there', async () => {
@@ -212,7 +279,7 @@ it('heads the store with the navigation label that led there', async () => {
 it('persists plugin moves across filters and remounts without changing gateway order', async () => {
   const plugins = [installed, { ...installed, id: 'hidden', metadata: { name: 'Hidden' } }, { ...installed, id: 'last', metadata: { name: 'Runtime last' } }];
   const server = installOmcApi({ preferences: { omc_plugin_order: { installed: plugins.map((plugin) => plugin.id) } } });
-  const panel = <InstalledPluginsPanel plugins={plugins} catalog={new Map()} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => null} isCheckingUpdates={false} />;
+  const panel = <InstalledPluginsPanel plugins={plugins} catalog={new Map()} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => {}} isCheckingUpdates={false} />;
   const { container, unmount } = renderWithOmc(panel);
   const rows = () => [...container.querySelectorAll('[data-plugin-id]')].map((row) => row.getAttribute('data-plugin-id'));
   const label = `${makeT('en')('common.reorder_handle')}: Runtime last`;
@@ -239,7 +306,7 @@ it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and
   server.on('POST', `/management/plugin-store/${own.id}/install`, () => ({ status: 'ok', id: own.id, version: own.version, plugins_enabled: true }));
   const emptySource = { id: 'empty', name: 'empty.example', url: 'https://empty.example/registry.json', is_official: false, is_omc: false };
   const omcStore: PluginStoreResponse = { ...store, sources: [omcSource, emptySource], plugins: [curated, own, entry] };
-  const { container, unmount } = renderWithOmc(<ThemeProvider><PluginStorePanel store={omcStore} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
+  const { container, unmount } = renderWithOmc(<ThemeProvider><PluginStorePanel store={omcStore} isLoading={false} isDemo={false} onRefresh={() => {}} isRefreshing={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
   const showcase = await waitFor(() => container.querySelector<HTMLElement>('[data-store-source="omc"]')!);
   // Only the plugins Oh My CPA maintains are featured; the ones it curates sit with the other catalogues.
   expect([...showcase.querySelectorAll('[data-plugin-id]')].map((card) => card.getAttribute('data-plugin-id'))).toEqual(['own']);
@@ -276,7 +343,7 @@ it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and
   // Switched off, the section offers the switch rather than sending the operator elsewhere.
   unmount();
   server.state.preferences.omc_plugin_source_enabled = false;
-  renderWithOmc(<ThemeProvider><PluginStorePanel store={{ ...store, plugins: [entry] }} isLoading={false} isDemo={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
+  renderWithOmc(<ThemeProvider><PluginStorePanel store={{ ...store, plugins: [entry] }} isLoading={false} isDemo={false} onRefresh={() => {}} isRefreshing={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
   fireEvent.click(await screen.findByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.omc_source_enable').replace(/\s/g, '') }));
   await waitFor(() => expect(server.preferenceWrites()).toEqual([{ key: 'omc_plugin_source_enabled', value: true }]));
 });

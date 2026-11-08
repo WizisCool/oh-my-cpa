@@ -224,6 +224,7 @@ func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *h
 
 // afterConfigWrite drops what a configuration write may have made stale.
 func (h *Handler) afterConfigWrite() {
+	h.releaseToken.invalidate()
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}

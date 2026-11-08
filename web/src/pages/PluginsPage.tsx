@@ -3,7 +3,7 @@ import { Button, Segmented } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { UPDATE_STATUS_QUERY_KEY } from '../hooks/useUpdateNotice';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import type { PluginItem } from '../types/plugin';
@@ -14,8 +14,10 @@ import { PluginSettingsPanel } from '../components/plugins/PluginSettingsPanel';
 import { PluginConfigDrawer } from '../components/plugins/PluginConfigDrawer';
 import { storeListingsByPluginId } from '../components/plugins/pluginStoreLogic';
 import styles from '../components/plugins/Plugins.module.css';
-import { LoadFailure, Notice } from '../components/feedback';
+import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { Panel } from '../components/common/Panel';
+
+const PLUGIN_STORE_QUERY_KEY = ['management-plugin-store'] as const;
 
 const PLUGIN_TABS = ['installed', 'store', 'settings'] as const;
 type PluginTab = (typeof PLUGIN_TABS)[number];
@@ -51,6 +53,7 @@ function isPluginTab(value: string | null): value is PluginTab {
 export const PluginsPage: React.FC = () => {
   const t = useT();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const isDemo = isDemoMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,7 +71,8 @@ export const PluginsPage: React.FC = () => {
   }, [legacyTab, navigate, searchParams]);
 
   const [configuring, setConfiguring] = React.useState<PluginItem | null>(null);
-  const [isCheckingUpdates, setIsCheckingUpdates] = React.useState(false);
+  const [isRefreshingStore, setIsRefreshingStore] = React.useState(false);
+  const storeRefreshRef = React.useRef<Promise<void> | null>(null);
 
   const pluginsQuery = useQuery({
     queryKey: ['management-plugins'],
@@ -77,9 +81,9 @@ export const PluginsPage: React.FC = () => {
   });
 
   const storeQuery = useQuery({
-    queryKey: ['management-plugin-store'],
-    queryFn: async () => {
-      const store = await api.getPluginStore();
+    queryKey: PLUGIN_STORE_QUERY_KEY,
+    queryFn: async ({ signal }) => {
+      const store = await api.getPluginStore({ signal });
       void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
       return store;
     },
@@ -112,15 +116,46 @@ export const PluginsPage: React.FC = () => {
     // every render and is deliberately not a trigger.
   }, [requestedPlugin, pluginsQuery.data]);
 
-  const checkUpdates = async () => {
-    // Registry invalidation also follows plugin writes; only an explicit check owns this spinner.
-    setIsCheckingUpdates(true);
-    try {
-      const result = await storeQuery.refetch();
-      return result.isSuccess ? storeListingsByPluginId(result.data.plugins) : null;
-    } finally {
-      setIsCheckingUpdates(false);
-    }
+  const refreshStore = (isUpdateCheck: boolean): Promise<void> => {
+    if (storeRefreshRef.current) return storeRefreshRef.current;
+    setIsRefreshingStore(true);
+    storeRefreshRef.current = (async () => {
+      try {
+        // A normal read must not absorb the explicit refresh or later overwrite its result.
+        await queryClient.cancelQueries({ queryKey: PLUGIN_STORE_QUERY_KEY });
+        const store = await api.getPluginStore({ refresh: true });
+        queryClient.setQueryData(PLUGIN_STORE_QUERY_KEY, store);
+        void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+        const listings = storeListingsByPluginId(store.plugins);
+        const count = plugins.filter((plugin) => listings.get(plugin.id)?.update_available).length;
+        if (store.source_errors.length > 0) {
+          toast.warning(t(isUpdateCheck && count > 0 ? 'plugin.check_updates_found' : 'plugin.store_refresh_partial', { n: count }), {
+            items: store.source_errors.map((source) => ({ name: source.source_name, reason: source.message })),
+            actions: <Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>,
+          });
+        } else if (isUpdateCheck) {
+          // CPA can retain a previous version after a failed release lookup; zero is not proof of freshness.
+          if (count > 0) toast.success(t('plugin.check_updates_found', { n: count }));
+          else toast.info(t('plugin.check_updates_none'));
+        } else {
+          toast.success(t('plugin.store_refreshed'));
+        }
+      } catch (error: unknown) {
+        const isRateLimited = error instanceof ApiError && (error.status === 429 || apiErrorCode(error) === 'plugin_store_rate_limited');
+        const retryAfter = error instanceof ApiError && error.data !== null && typeof error.data === 'object' && 'retry_after' in error.data
+          ? error.data.retry_after : undefined;
+        const detail = [describeError(error), typeof retryAfter === 'number' && retryAfter > 0 && Number.isFinite(retryAfter)
+          ? t('plugin.retry_after_seconds', { n: Math.ceil(retryAfter) }) : ''].filter(Boolean).join(' ');
+        toast.error(t(isRateLimited ? 'plugin.rate_limited' : isUpdateCheck ? 'plugin.check_updates_failed' : 'plugin.store_refresh_failed'), {
+          detail,
+          actions: isRateLimited ? <Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button> : undefined,
+        });
+      } finally {
+        setIsRefreshingStore(false);
+        storeRefreshRef.current = null;
+      }
+    })();
+    return storeRefreshRef.current;
   };
 
   const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
@@ -209,8 +244,8 @@ export const PluginsPage: React.FC = () => {
             onConfigure={setConfiguring}
             onBrowseStore={() => selectTab('store')}
             onOpenSettings={() => selectTab('settings')}
-            onCheckUpdates={checkUpdates}
-            isCheckingUpdates={isCheckingUpdates}
+            onCheckUpdates={() => refreshStore(true)}
+            isCheckingUpdates={isRefreshingStore}
           />
         </Panel>
       )}
@@ -219,6 +254,8 @@ export const PluginsPage: React.FC = () => {
           store={storeQuery.data}
           isLoading={storeQuery.isPending}
           isDemo={isDemo}
+          onRefresh={() => void refreshStore(false)}
+          isRefreshing={isRefreshingStore}
           onManage={manage}
           onOpenSettings={() => selectTab('settings')}
         />

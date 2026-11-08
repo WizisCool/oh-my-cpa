@@ -25,6 +25,7 @@ import { Notice, useToast } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { Toolbar } from '../common/Toolbar';
+import { RefreshButton } from '../common/RefreshButton';
 import { Tooltip } from '../common/Tooltip';
 import { SectionHeading } from '../common/SectionHeading';
 import { BrandArtwork } from '../common/BrandArtwork';
@@ -42,6 +43,8 @@ interface PluginStorePanelProps {
   store: PluginStoreResponse | undefined;
   isLoading: boolean;
   isDemo: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
   onManage: (pluginId: string) => void;
   onOpenSettings: () => void;
 }
@@ -59,7 +62,7 @@ interface PluginStorePanelProps {
  * its own name, so the source of every card is the section it sits in. Installing a plugin
  * runs its code inside the gateway, so each card still says whose code it is.
  */
-export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSettings }: PluginStorePanelProps) {
+export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefreshing, onManage, onOpenSettings }: PluginStorePanelProps) {
   const t = useT();
   const { lang } = useI18n();
   const isPhone = useIsPhoneViewport();
@@ -151,7 +154,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
 
   return (
     <div className={styles.store} data-plugin-panel="store">
-      <Toolbar>
+      <Toolbar end={<RefreshButton onRefresh={onRefresh} isRefreshing={isRefreshing} disabled={isRefreshing} />}>
         <SearchInput
           className={styles.search}
           value={query}

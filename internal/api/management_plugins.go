@@ -325,7 +325,9 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	store, err := h.readPluginStore(request.Context(), client, isOMCSourceEnabled)
+	refresh := strings.TrimSpace(request.URL.Query().Get("refresh"))
+	shouldRefresh := strings.EqualFold(refresh, "true") || refresh == "1"
+	store, err := h.readPluginStore(request.Context(), client, isOMCSourceEnabled, shouldRefresh)
 	if err != nil {
 		writePluginFacadeError(writer, err)
 		return
@@ -455,19 +457,19 @@ func (h *Handler) observePluginUpdates(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = h.readPluginStore(ctx, client, isSourceEnabled)
+	_, err = h.readPluginStore(ctx, client, isSourceEnabled, false)
 	return err
 }
 
 // readPluginStore shares manual and scheduled observation. The installed list is
 // read first so removal stays authoritative even when registry reads fail.
-func (h *Handler) readPluginStore(ctx context.Context, client *management.Client, isSourceEnabled bool) (management.PluginStore, error) {
+func (h *Handler) readPluginStore(ctx context.Context, client *management.Client, isSourceEnabled, shouldRefresh bool) (management.PluginStore, error) {
 	list, err := client.PluginList(ctx)
 	if err != nil {
 		return management.PluginStore{}, err
 	}
 	h.pluginIdentities.retainInstalled(list.Plugins)
-	store, err := client.PluginStore(ctx)
+	store, err := client.PluginStore(ctx, shouldRefresh)
 	if err != nil {
 		return management.PluginStore{}, err
 	}

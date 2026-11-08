@@ -44,8 +44,8 @@ interface InstalledPluginsPanelProps {
   onConfigure: (plugin: PluginItem) => void;
   onBrowseStore: () => void;
   onOpenSettings: () => void;
-  /** Reads the store, which is what knows the newest releases; resolves to its listings by plugin id. */
-  onCheckUpdates: () => Promise<ReadonlyMap<string, StorePluginItem> | null>;
+  /** Requests fresh store data; the page owns the shared request and its feedback. */
+  onCheckUpdates: () => Promise<void>;
   isCheckingUpdates: boolean;
 }
 
@@ -98,18 +98,6 @@ export function InstalledPluginsPanel({
     running: plugins.filter((plugin) => matchesInstalledState(plugin, 'running')).length,
     stopped: plugins.filter((plugin) => matchesInstalledState(plugin, 'stopped')).length,
   }), [plugins]);
-
-  // Manual checks report their outcome; automatic checks only update the rows and navigation.
-  const checkUpdates = async () => {
-    const listings = await onCheckUpdates();
-    if (!listings) {
-      toast.error(t('plugin.check_updates_failed'));
-      return;
-    }
-    const count = plugins.filter((plugin) => listings.get(plugin.id)?.update_available).length;
-    if (count > 0) toast.success(t('plugin.check_updates_found', { n: count }));
-    else toast.success(t('plugin.check_updates_none'));
-  };
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
@@ -182,7 +170,7 @@ export function InstalledPluginsPanel({
             className={styles['check-updates']}
             icon={<PackageSearchOutlined />}
             loading={isCheckingUpdates}
-            onClick={() => void checkUpdates()}
+            onClick={() => void onCheckUpdates()}
             aria-label={t('plugin.check_updates')}
             data-testid="plugin-check-updates"
           >
