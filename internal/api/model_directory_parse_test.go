@@ -23,6 +23,12 @@ func TestModelDirectoryRejectsMalformedOrUnrecognizedJSON(t *testing.T) {
 		{name: "empty_models_control", body: `{"models":[]}`},
 		{name: "empty_array_control", body: `[]`},
 		{name: "model_control", body: `{"data":[{"id":"fixture-model"}]}`, wantModels: []string{"fixture-model"}},
+		{name: "gemini_resource_stripped", body: `{"models":[{"name":"models/gemini-2.5-pro"}]}`, wantModels: []string{"gemini-2.5-pro"}},
+		{name: "vertex_resource_stripped", body: `{"models":[{"name":"publishers/google/models/gemini-2.5-pro"}]}`, wantModels: []string{"gemini-2.5-pro"}},
+		{name: "relay_path_kept", body: `{"data":[{"id":"accounts/fireworks/models/llama-v3p1-8b"}]}`, wantModels: []string{"accounts/fireworks/models/llama-v3p1-8b"}},
+		// The upstream owns these names. A rune whose lower case is a different
+		// number of bytes must not shift where the resource prefix ends.
+		{name: "unicode_resource_name", body: `{"models":[{"name":"projects/Ⱥ/models/x"}]}`, wantModels: []string{"x"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

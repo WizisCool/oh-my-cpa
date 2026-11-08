@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
@@ -114,7 +115,7 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, pullProtocol(family), headers)
+	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, family, headers)
 	if err != nil {
 		switch {
 		case errors.Is(err, errInvalidModelPullURL):
@@ -146,7 +147,67 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 	})
 }
 
-func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, protocol string, customHeaders map[string]string) ([]string, error) {
+// MODEL_DIRECTORY_PAGE_SIZE asks a paged directory for one full page. Both
+// upstreams otherwise truncate a pull silently: Anthropic's list answers 20
+// entries by default and Gemini's 50, and neither is the whole directory.
+const MODEL_DIRECTORY_PAGE_SIZE = 1000
+
+// modelDirectoryTargets lists the URLs a family's model directory may live at,
+// most authoritative first.
+//
+// The dialect comes first because that is what the credential is for, and its
+// version segment is exactly what an operator is not expected to type: the
+// Anthropic Messages API lists at /v1/models, and both Gemini dialects at
+// /v1beta/models. The OpenAI shapes follow as fallbacks, since republishing the
+// same directory at /models or /v1/models is what a relay does, and they are the
+// whole answer for the families that speak the OpenAI dialect themselves.
+//
+// Vertex AI has no versioned candidate on purpose: its publisher model list is
+// OAuth-only, so an API key has no directory to ask for there.
+func modelDirectoryTargets(family, rawBaseURL string) []string {
+	base := strings.TrimRight(strings.TrimSpace(rawBaseURL), "/")
+	if base == "" {
+		return nil
+	}
+	targets := make([]string, 0, 3)
+	seen := make(map[string]bool, 3)
+	appendTarget := func(target string) {
+		// One candidate per path: a query only asks the same endpoint for a
+		// different slice of the directory, not for a directory that may exist.
+		path := target
+		if index := strings.IndexByte(path, '?'); index >= 0 {
+			path = path[:index]
+		}
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		targets = append(targets, target)
+	}
+	family = strings.ToLower(strings.TrimSpace(family))
+	root := base
+	pageQuery := ""
+	switch family {
+	case string(management.ConfigFamilyClaude):
+		root = claudeAPIRoot(base)
+		pageQuery = fmt.Sprintf("?limit=%d", MODEL_DIRECTORY_PAGE_SIZE)
+	case string(management.ConfigFamilyGemini), string(management.ConfigFamilyInteractions):
+		root = geminiAPIRoot(base)
+		pageQuery = fmt.Sprintf("?pageSize=%d", MODEL_DIRECTORY_PAGE_SIZE)
+	}
+	appendTarget(root + "/models" + pageQuery)
+	// A base that names no version segment leaves /v1 as the OpenAI default to
+	// try, and its own path as one a relay may republish the directory at.
+	if !strings.Contains(strings.ToLower(base), "/v1") {
+		if base != root {
+			appendTarget(base + "/models")
+		}
+		appendTarget(base + "/v1/models")
+	}
+	return targets
+}
+
+func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, family string, customHeaders map[string]string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -179,6 +240,7 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	}
 
 	trimmed := strings.TrimRight(rawBaseURL, "/")
+	protocol := pullProtocol(family)
 	buildRequest := func(target string) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 		if err != nil {
@@ -191,36 +253,36 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 		return req, nil
 	}
 
-	req, err := buildRequest(trimmed + "/models")
-	if err != nil {
-		return nil, err
+	targets := modelDirectoryTargets(family, trimmed)
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("%w: base URL is required", errInvalidModelPullURL)
 	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound && !strings.HasSuffix(trimmed, "/v1") {
-		retryURL := trimmed + "/v1/models"
-		req2, err := buildRequest(retryURL)
-		if err == nil {
-			if resp2, err2 := client.Do(req2); err2 == nil {
-				defer resp2.Body.Close()
-				if resp2.StatusCode == http.StatusOK {
-					return parseModelsResponse(resp2.Body)
-				}
-			}
+	// A 404 means this path is not the directory, so the next candidate is worth
+	// asking. Any other status is the upstream's answer about the request itself -
+	// a key it rejects, a body it refuses - and asking again at another path would
+	// only send the same key to a destination that already declined it.
+	var unreachable error
+	for _, target := range targets {
+		req, err := buildRequest(target)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			return parseModelsResponse(resp.Body)
+		}
+		bodySnippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		resp.Body.Close()
+		unreachable = fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodySnippet)))
+		if resp.StatusCode != http.StatusNotFound {
+			return nil, unreachable
 		}
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		bodySnippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodySnippet)))
-	}
-
-	return parseModelsResponse(resp.Body)
+	return nil, unreachable
 }
 
 // setModelPullAuthHeaders authenticates a model-list request the way each
@@ -279,13 +341,33 @@ func parseModelsResponse(r io.Reader) ([]string, error) {
 			}
 			name = firstNonEmpty(item.ID, item.Name)
 		}
-		name = strings.TrimSpace(name)
+		name = directoryModelName(name)
 		if name != "" && !seen[name] {
 			seen[name] = true
 			models = append(models, name)
 		}
 	}
 	return models, nil
+}
+
+// directoryModelName drops the resource path a Google directory names a model by
+// - "models/gemini-2.5-pro" for Gemini, "publishers/google/models/..." for Vertex -
+// so the entry matches the model CPA routes.
+//
+// Only Google's own resource containers are stripped. Another directory may route
+// by a path of its own - Fireworks names a model "accounts/fireworks/models/..." -
+// and cutting that prefix would hand the operator a name the upstream rejects.
+func directoryModelName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	lower := asciiLower(trimmed)
+	googleContainer := strings.HasPrefix(lower, "publishers/") || strings.HasPrefix(lower, "projects/")
+	if index := strings.LastIndex(lower, "/models/"); index >= 0 && googleContainer {
+		return trimmed[index+len("/models/"):]
+	}
+	if strings.HasPrefix(lower, "models/") {
+		return trimmed[len("models/"):]
+	}
+	return trimmed
 }
 
 func modelDirectoryEntries(data []byte) ([]json.RawMessage, error) {
