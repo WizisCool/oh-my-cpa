@@ -1,0 +1,34 @@
+/* The mark's layout slot: the placeholder and the artwork share it, so the row never moves. */
+.frame {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The console's own first-load block, held inside that slot. */
+.skeleton {
+  position: absolute;
+  inset: 0;
+}
+
+/* Its corner is the small tier, kept short of a circle on the glyph-sized marks the rail and the
+   request rows draw. */
+.frame .skeleton {
+  border-radius: min(var(--radius-sm), 22%);
+}
+
+/* The artwork arrives over the block it was waited for. */
+.mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.frame[data-remote-image='loaded'] > .mark {
+  opacity: 1;
+}
