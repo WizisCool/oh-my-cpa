@@ -361,7 +361,7 @@ export default {
   "cfg.f_affinity_rebind_on_desc": "Jenis ralat yang mencetuskan pengikatan semula kelayakan",
   "cfg.affinity_rebind_any": "Sebarang kegagalan",
   "cfg.affinity_rebind_quota": "Ralat kuota dan pengesahan sahaja (ralat sementara hanya failover permintaan ini)",
-  "cfg.affinity_rebind_never": "Tidak pernah (sesi kekal pada kelayakan terikat dan ralat dipulangkan)",
+  "cfg.affinity_rebind_never": "Tidak pernah (kekalkan ikatan dan pulangkan ralat)",
   "cfg.f_keepalive_before_ft": "Degupan sebelum token pertama",
   "cfg.f_keepalive_before_ft_desc": "Hantar ping keepalive SSE sebelum token pertama tiba",
   "cfg.f_codex_siwc_identifier": "Pengecam Sign in with ChatGPT",
