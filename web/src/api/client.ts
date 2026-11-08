@@ -358,6 +358,10 @@ export const api = {
   deleteWarmupTask(id: string): Promise<WarmupStateView> {
     return request(`/management/quota/warmup/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
+  clearWarmupRuns(taskIds: string[] = []): Promise<WarmupStateView> {
+    const query = new URLSearchParams(taskIds.map((id) => ['task_id', id])).toString();
+    return request(`/management/quota/warmup/runs${query ? `?${query}` : ''}`, { method: 'DELETE' });
+  },
   runWarmupTask(id: string): Promise<WarmupRunResponse> {
     return request(`/management/quota/warmup/tasks/${encodeURIComponent(id)}/run`, { method: 'POST' });
   },

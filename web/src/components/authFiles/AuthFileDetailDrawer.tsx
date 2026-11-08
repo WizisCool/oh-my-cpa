@@ -1,7 +1,7 @@
 import { CredentialRecoveryPanel } from './CredentialRecoveryPanel';
 import { SecretInput } from '../common/SecretInput';
 import type { MessageKey } from '../../i18n/catalog';
-import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Tabs,
   Button,
@@ -87,12 +87,10 @@ interface AuthFileDetailDrawerProps {
   onDownload: (file: ManagementAuthFile) => void;
   onRecover?: () => void;
   quotaContent?: React.ReactNode;
-  warmupContent?: React.ReactNode;
   /** The provider the list files this credential under, which names and marks it here too. */
   provider?: string;
   pluginLogos?: PluginOAuthLogos;
-  hasExternalDraft?: boolean;
-  initialSection?: 'overview' | 'renewal' | 'warmup' | 'configuration' | 'models';
+  initialSection?: 'overview' | 'renewal' | 'configuration' | 'models';
   /**
    * Whether the safe fields may be written. The write is keyed by file name, so a
    * credential whose name does not identify one entry cannot be edited safely: the
@@ -203,8 +201,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onDownload,
   onRecover,
   quotaContent,
-  warmupContent,
-  hasExternalDraft = false,
   initialSection = 'overview',
   canEdit = false,
   provider,
@@ -225,7 +221,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const [policyBaseline, setPolicyBaseline] = useState<CredentialPolicyDraft>(EMPTY_CREDENTIAL_POLICY_DRAFT);
   const [isPolicyChecked, setIsPolicyChecked] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
-  const [activeSection, setActiveSection] = useState<'overview' | 'renewal' | 'warmup' | 'configuration' | 'models'>(initialSection);
+  const [activeSection, setActiveSection] = useState<'overview' | 'renewal' | 'configuration' | 'models'>(initialSection);
 
   const resetPolicy = useCallback((next: CredentialPolicyDraft) => {
     setPolicy(next);
@@ -236,16 +232,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const sessionCounterRef = useRef(0);
   const currentSessionRef = useRef<number>(0);
   const isPendingRef = useRef<boolean>(false);
-  const hasExternalDraftRef = useRef(hasExternalDraft);
-  useLayoutEffect(() => {
-    // A suspended render must not overwrite the draft state used by save completion.
-    hasExternalDraftRef.current = hasExternalDraft;
-  }, [hasExternalDraft]);
-  const closeAfterSaving = useCallback(() => {
-    // Saving another section must not discard a warmup draft, including one
-    // created while this field save was in flight.
-    if (!hasExternalDraftRef.current) onClose();
-  }, [onClose]);
 
   useEffect(() => {
     return () => {
@@ -342,7 +328,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
         }
         toast.success(t('af.save_fields_success'));
         setIsDirty(false);
-        closeAfterSaving();
+        onClose();
       }
     },
     onError: (err: unknown) => {
@@ -367,7 +353,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   const confirmDiscardFor = useCallback((action: () => void) => {
     if (saveMutation.isPending || isPendingRef.current) return;
-    if (isDirty || hasExternalDraft) {
+    if (isDirty) {
       modal.confirm({
         title: t('af.unsaved_confirm_title'),
         icon: <ExclamationCircleOutlined />,
@@ -383,7 +369,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     } else {
       action();
     }
-  }, [isDirty, hasExternalDraft, modal, saveMutation.isPending, t]);
+  }, [isDirty, modal, saveMutation.isPending, t]);
 
   const handleAttemptClose = useCallback(() => confirmDiscardFor(onClose), [confirmDiscardFor, onClose]);
 
@@ -496,7 +482,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       isPendingRef.current = false;
       form.setFieldsValue(baseline);
       setIsDirty(false);
-      closeAfterSaving();
+      onClose();
       return;
     }
 
@@ -784,12 +770,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 disabled: saveMutation.isPending,
                 children: <CredentialRecoveryPanel file={file} canEdit={canEdit} onRecover={onRecover ? () => confirmDiscardFor(onRecover) : undefined} onChanged={onSaved} />,
               },
-              ...(warmupContent ? [{
-                key: 'warmup',
-                label: <span className={styles['tab-label']}>{t('warmup.title')}{hasExternalDraft && <Tag tone="warn">{t('cfg.dirty_bar_unsaved')}</Tag>}</span>,
-                disabled: saveMutation.isPending,
-                children: warmupContent,
-              }] : []),
               {
                 key: 'configuration',
                 forceRender: true,

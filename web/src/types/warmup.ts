@@ -1,3 +1,5 @@
+import { providerDisplayName } from './providerMetadata';
+
 export interface WarmupTrigger {
   kind: 'window' | 'daily' | 'every';
   window?: string;
@@ -60,6 +62,8 @@ export interface WarmupCatalogAccount {
   auth_index: string;
   name: string;
   provider: string;
+  /** The login portal that issued the credential, when a plugin declares several. */
+  oauth_provider?: string;
   email?: string;
   status?: string;
   disabled?: boolean;
@@ -100,39 +104,30 @@ export interface WarmupRunResponse {
   state: WarmupStateView;
 }
 
-const LIGHT_TIERS: Array<{ pattern: RegExp; rank: number }> = [
-  { pattern: /(?:^|[^a-z0-9])flash(?:[^a-z0-9]|$)/i, rank: 0 },
-  { pattern: /(?:^|[^a-z0-9])lite(?:[^a-z0-9]|$)/i, rank: 1 },
-  { pattern: /(?:^|[^a-z0-9])mini(?:[^a-z0-9]|$)/i, rank: 2 },
-  { pattern: /(?:^|[^a-z0-9])nano(?:[^a-z0-9]|$)/i, rank: 3 },
-  { pattern: /(?:^|[^a-z0-9])small(?:[^a-z0-9]|$)/i, rank: 4 },
-  { pattern: /(?:^|[^a-z0-9])turbo(?:[^a-z0-9]|$)/i, rank: 5 },
-  { pattern: /(?:^|[^a-z0-9])haiku(?:[^a-z0-9]|$)/i, rank: 6 },
-];
-
-const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-
-function lightTierRank(model: string): number {
-  for (const tier of LIGHT_TIERS) {
-    if (tier.pattern.test(model)) return tier.rank;
-  }
-  return LIGHT_TIERS.length;
+export interface WarmupCredentialGroup {
+  provider: string;
+  label: string;
+  accounts: WarmupCatalogAccount[];
 }
 
-export function sortModelsForAuto(models: string[]): string[] {
-  return [...models].sort((a, b) => {
-    const rankDiff = lightTierRank(a) - lightTierRank(b);
-    if (rankDiff !== 0) return rankDiff;
-    return COLLATOR.compare(b, a);
-  });
+/**
+ * The credential picker's groups: one per provider, in the catalogue's own order and named the way
+ * the rest of the console names that provider.
+ */
+export function groupWarmupAccounts(
+  catalog?: WarmupCatalog,
+  pluginTitles?: ReadonlyMap<string, string>,
+): WarmupCredentialGroup[] {
+  return (catalog?.providers ?? [])
+    .filter((group) => group.accounts.length > 0)
+    .map((group) => ({
+      provider: group.provider,
+      label: providerDisplayName(group.provider, pluginTitles),
+      accounts: group.accounts,
+    }));
 }
 
-export function pickAutoModel(models: string[]): string {
-  const clean = models.map((m) => m.trim()).filter(Boolean);
-  if (clean.length === 0) return '';
-  return sortModelsForAuto(clean)[0] ?? '';
-}
-
+/** The task's own model, else the one the server picked for Auto: the server alone knows which listed names are OAuth aliases. */
 export function resolveTaskModel(
   task: Pick<WarmupTaskInput, 'model'>,
   account?: WarmupCatalogAccount,
@@ -140,7 +135,7 @@ export function resolveTaskModel(
   const explicit = task.model.trim();
   if (explicit) return explicit;
   if (!account) return '';
-  return account.auto_model || pickAutoModel(account.models);
+  return account.auto_model;
 }
 
 export function canSaveWarmupTask(task: WarmupTaskInput): boolean {
@@ -163,6 +158,30 @@ export function canSaveWarmupTask(task: WarmupTaskInput): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * The name the server stores when a task is saved without one (Go `warmup.DefaultTaskName`). It
+ * is frozen at save time, so a task carrying it is shown and edited as unnamed: otherwise a later
+ * change of credential or trigger would keep the old credential's name.
+ */
+export function generatedTaskName(task: Pick<WarmupTaskInput, 'account' | 'auth_index' | 'provider' | 'trigger'>): string {
+  const target = task.account.trim() || task.auth_index.trim() || task.provider.trim();
+  switch (task.trigger.kind) {
+    case 'window':
+      return `${target} · ${task.trigger.window ?? ''}`;
+    case 'daily':
+      return `${target} · ${task.trigger.time ?? ''}`;
+    case 'every':
+      return `${target} · ${task.trigger.hours ?? 0}h`;
+    default:
+      return target;
+  }
+}
+
+export function hasCustomTaskName(task: Pick<WarmupTaskInput, 'name' | 'account' | 'auth_index' | 'provider' | 'trigger'>): boolean {
+  const name = task.name.trim();
+  return name !== '' && name !== generatedTaskName(task);
 }
 
 export function defaultWarmupTaskInput(

@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 import { api, requestResponse } from '../src/api/client';
-import { pickAutoModel, sortModelsForAuto } from '../src/types/warmup';
 import { createWarmupFixture, WARMUP_CONTRACT } from '../../scripts/acceptance/warmup-fixture.mjs';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,11 +29,4 @@ it('uses the handler-certified wire projection and strict refusals through the t
       requestResponse('/management/quota/warmup/tasks', { method: 'POST', body: JSON.stringify(refusal.body) }),
     ).rejects.toMatchObject({ status: refusal.status, data: refusal.response });
   }
-});
-
-it('picks the lightest newest model for Auto mode', () => {
-  expect(pickAutoModel(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'])).toBe('claude-haiku-4-5');
-  expect(pickAutoModel(['gpt-5.2', 'gpt-5.4', 'gpt-5.4-mini'])).toBe('gpt-5.4-mini');
-  expect(sortModelsForAuto(['claude-haiku-3-5', 'claude-haiku-4-5', 'claude-sonnet-4-6'])[0]).toBe('claude-haiku-4-5');
-  expect(pickAutoModel(['custom-flashlight-v1', 'claude-haiku-4-5'])).toBe('claude-haiku-4-5');
 });
