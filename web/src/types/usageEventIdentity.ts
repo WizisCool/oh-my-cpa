@@ -225,6 +225,28 @@ export function createProviderNameResolver(
   };
 }
 
+/**
+ * createServingProviderResolver names the configured provider that answered a record from the
+ * credential that served it.
+ *
+ * CPA labels an API-key request with its protocol family - `claude`, `codex` - the same word it
+ * writes for that family's OAuth channel, so the recorded label names a dialect several unrelated
+ * connections speak and never the connection itself. The runtime auth index does identify the
+ * credential, and the provider whose credential list publishes it is the connection that answered.
+ * An index no provider claims, or one two providers both publish, resolves to nothing: a weaker
+ * label would move that history onto whichever entry happened to be read first.
+ *
+ * Only an API-key credential may be resolved this way. An OAuth record's index lives in the same
+ * column but belongs to a sign-in, never to a provider's key list, so callers pass an API-key
+ * record's index and nothing else.
+ */
+export function createServingProviderResolver(
+  configured: readonly ProviderLookupEntry[] = [],
+): (authIndex: string | null | undefined) => string | undefined {
+  const resolveProvider = createProviderResolver(configured);
+  return (authIndex) => resolveProvider(undefined, authIndex ?? undefined)?.id.trim() || undefined;
+}
+
 export interface ResolvedProviderInfo extends BrandMark {
   isOAuth: boolean;
   iconId: string;

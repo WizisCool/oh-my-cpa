@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   FOLDED_ID,
+  attributeServingProviders,
   buildFlow,
   buildMatrix,
   compareMetric,
@@ -18,7 +19,13 @@ import {
 } from '../../src/pages/insights/insightsCube.ts';
 import { comparesSameStretch, insightsRangeParams, parseInsightsRange } from '../../src/types/insights.ts';
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../../src/pages/insights/insightsRhythm.ts';
-import { DEFAULT_INSIGHTS_VIEW, readInsightsView, toggleFilter, writeInsightsView } from '../../src/pages/insights/insightsViewState.ts';
+import {
+  DEFAULT_INSIGHTS_VIEW,
+  readInsightsView,
+  requestFilterValues,
+  toggleFilter,
+  writeInsightsView,
+} from '../../src/pages/insights/insightsViewState.ts';
 import type { InsightsCubeResponse } from '../../src/types/insights.ts';
 import { test } from 'vitest';
 
@@ -156,6 +163,85 @@ test('insights cube', () => {
   assert.equal(keyTotal, 20, 'every request flows out of the first level once');
 
   assert.deepEqual(facetValues(cube, cube.rows, 'model'), [{ id: 'gpt-5', requests: 12 }, { id: 'sonnet', requests: 8 }]);
+
+  // ── provider attribution ──────────────────────────────────────────────────────
+
+  // CPA labels every API-key request with its protocol family - the word it also writes for that
+  // family's OAuth channel - so a provider the operator named AnyRouter arrives as `claude`, beside
+  // the channel's own sign-in traffic. The credential that served the row is what names the
+  // connection, and 'claude-key'/'relay-key' are the keys the configured providers publish.
+  const attribution = decodeInsightsCube({
+    ...response,
+    dims: {
+      ...response.dims,
+      providers: ['claude', 'openai-compatible-relay'],
+      credentials: [
+        { auth_index: 'claude-key', auth_type: 'apikey' },
+        { auth_index: 'claude-login', auth_type: 'oauth' },
+        { auth_index: 'relay-key', auth_type: 'apikey' },
+        { auth_index: 'rotated-key', auth_type: 'apikey' },
+      ],
+    },
+    rows: [
+      row(0, 0, 0, 1, 0, 0, 10, 0, 1000, 0),
+      row(0, 0, 0, 1, 0, 1, 5, 0, 500, 0),
+      row(0, 0, 0, 0, 1, 2, 3, 0, 300, 0),
+      row(0, 0, 0, 1, 0, 3, 1, 0, 100, 0),
+    ],
+    previous_rows: [row(-1, 0, 0, 1, 0, 0, 4, 0, 400, 0).slice(1)],
+  });
+  // 'claude-login' is claimed by no provider key list, but asking for it must change nothing either:
+  // an OAuth record's index is a sign-in, never a configured provider's credential.
+  const claimedByID: Record<string, string> = { 'claude-key': 'claude-0', 'relay-key': 'openai-compat-0', 'claude-login': 'claude-0' };
+  const attributed = attributeServingProviders(attribution, (authIndex) => claimedByID[authIndex]);
+  assert.deepEqual(attributed.values.provider, ['claude', 'claude-0', 'openai-compat-0']);
+  assert.equal(attributed.rows[0].dims[3], attributed.values.provider.indexOf('claude-0'), 'a claimed key names its provider');
+  assert.equal(attributed.rows[1].dims[3], attributed.values.provider.indexOf('claude'), 'a sign-in keeps the family label');
+  assert.equal(attributed.rows[2].dims[3], attributed.values.provider.indexOf('openai-compat-0'), 'a compatibility key names its provider');
+  assert.equal(attributed.rows[3].dims[3], attributed.values.provider.indexOf('claude'), 'an unclaimed key keeps the label');
+  assert.deepEqual(
+    rankGroups(groupTotals(attributed, attributed.rows, 'provider'), 'requests').map((group) => [group.id, group.measures.requests]),
+    [['claude-0', 10], ['claude', 6], ['openai-compat-0', 3]],
+    'the connection and the family channel are two groups, and the rotated key counts with the label',
+  );
+  assert.equal(attributed.previous[0].dims[3], attributed.values.provider.indexOf('claude-0'), 'the comparison period is re-keyed the same way');
+  assert.deepEqual(attribution.values.provider, ['claude', 'openai-compatible-relay'], 'the decoded cube is left as it was');
+  assert.equal(filterRows(attributed, attributed.rows, { provider: ['claude-0'] }).length, 1, 'the attributed value is what a filter selects');
+  assert.equal(filterRows(attributed, attributed.rows, { provider: ['claude'] }).length, 2, 'the label still selects the rows it names');
+  // A catalog that claims nothing - unread, or every key rotated away - leaves the page as it was.
+  const unclaimed = attributeServingProviders(attribution, () => undefined);
+  assert.deepEqual(unclaimed.values.provider, attribution.values.provider);
+  assert.deepEqual(unclaimed.rows.map((item) => item.dims[3]), attribution.rows.map((item) => item.dims[3]));
+
+  // The rhythm read filters request records, where a connection is the credentials that served it.
+  assert.deepEqual(requestFilterValues(attributed, {}), { provider: [], credential: [] });
+  assert.deepEqual(requestFilterValues(attributed, { provider: ['claude-0'] }), { provider: [], credential: ['claude-key'] });
+  assert.deepEqual(requestFilterValues(attributed, { provider: ['claude'] }), { provider: [], credential: ['claude-login', 'rotated-key'] });
+  assert.deepEqual(requestFilterValues(attributed, { credential: ['rotated-key'] }), { provider: [], credential: ['rotated-key'] });
+  assert.deepEqual(
+    requestFilterValues(attributed, { provider: ['claude-0', 'openai-compat-0'] }),
+    { provider: [], credential: ['claude-key', 'relay-key'] },
+    'two connections are the credentials of both',
+  );
+  assert.deepEqual(
+    requestFilterValues(attributed, { provider: ['claude-0'], credential: ['claude-key'] }),
+    { provider: [], credential: ['claude-key'] },
+    'both dimensions narrow the same column, so they intersect',
+  );
+  assert.deepEqual(
+    requestFilterValues(attributed, { provider: ['claude-0'], credential: ['relay-key'] }),
+    { provider: ['claude-0'], credential: ['relay-key'] },
+    'a pair that shares no credential keeps both filters, which selects nothing rather than everything',
+  );
+  // A group whose rows name no credential can only be selected by the label CPA recorded for it.
+  const keyless = decodeInsightsCube({
+    ...response,
+    dims: { ...response.dims, providers: ['relay'], credentials: [{ auth_index: '', auth_type: 'apikey' }] },
+    rows: [row(0, 0, 0, 0, 0, 0, 2, 0, 200, 0)],
+    previous_rows: [],
+  });
+  assert.deepEqual(requestFilterValues(keyless, { provider: ['relay'] }), { provider: ['relay'], credential: [] });
+  assert.deepEqual(requestFilterValues(undefined, { provider: ['relay'] }), { provider: ['relay'], credential: [] }, 'a cube that has not arrived leaves the filter as it was');
 
   // ── the stored window ─────────────────────────────────────────────────────────
 

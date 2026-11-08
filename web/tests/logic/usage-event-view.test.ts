@@ -27,6 +27,7 @@ import {
   resolveCredential,
   resolveProviderInfo,
   createProviderNameResolver,
+  createServingProviderResolver,
 } from '../../src/types/usageEventIdentity.ts';
 import {
   requestGroupName,
@@ -1471,6 +1472,35 @@ test('usage event view', () => {
   const emptyResolver = createProviderNameResolver([]);
   assert.equal(emptyResolver('openai-compatible-anything'), 'openai-compatible-anything');
   assert.equal(providerFacetLabel('CommandCode GOAT', 42), 'CommandCode GOAT (42)');
+
+  // The provider that answered a record is named by the credential that served it.
+  //
+  // CPA labels an API-key request with its protocol family - `claude`, the same word it writes for
+  // that family's OAuth channel - so the label cannot say which configured provider answered. The
+  // runtime auth index can: a provider publishes the indexes of the keys it holds.
+  const servingResolver = createServingProviderResolver([
+    { id: 'claude-0', name: 'AnyRouter', family: 'claude', auth_indexes: ['key-claude-01', 'key-claude-02'] },
+    { id: 'claude-1', name: 'Backup relay', family: 'claude', auth_index: 'key-claude-03' },
+    { id: 'openai-compat-0', name: 'DeepSeek 专线', upstream_name: 'deepseek', family: 'openai-compatibility', auth_indexes: ['relay-key'] },
+    { id: 'claude-4', name: 'First claim', family: 'claude', auth_indexes: ['shared-key'] },
+    { id: 'claude-5', name: 'Second claim', family: 'claude', auth_indexes: ['shared-key'] },
+  ]);
+  assert.equal(servingResolver('key-claude-01'), 'claude-0', 'any key the provider holds names it');
+  assert.equal(servingResolver('key-claude-02'), 'claude-0');
+  assert.equal(servingResolver(' key-claude-03 '), 'claude-1', 'surrounding whitespace is not a different credential');
+  assert.equal(servingResolver('relay-key'), 'openai-compat-0');
+  // The name the page prints for that identity is the provider's own name, never the family's brand.
+  assert.equal(
+    createProviderNameResolver([{ id: 'claude-0', name: 'AnyRouter', family: 'claude' }])(servingResolver('key-claude-01')!),
+    'AnyRouter',
+  );
+  // An index two providers publish is not an identity for either.
+  assert.equal(servingResolver('shared-key'), undefined);
+  // A rotated, removed or never-configured key keeps CPA's label rather than borrowing one.
+  assert.equal(servingResolver('key-claude-09'), undefined);
+  assert.equal(servingResolver(''), undefined);
+  assert.equal(servingResolver(null), undefined);
+  assert.equal(createServingProviderResolver([])('key-claude-01'), undefined, 'an unread catalog claims nothing');
 
 
   // Timing visibility and request mode do not depend on a guessed throughput threshold.

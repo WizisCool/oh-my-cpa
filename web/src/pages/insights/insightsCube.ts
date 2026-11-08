@@ -139,6 +139,53 @@ export function isOAuthRow(cube: InsightsCube, row: CubeRow): boolean {
   return cube.credentialTypes[index] === 'oauth' && (cube.values.credential[index] ?? '') !== '';
 }
 
+/** Whether a credential is an API key, whose runtime index a configured provider publishes. */
+function isAPIKeyCredential(authType: string | undefined): boolean {
+  const type = (authType || '').trim().toLowerCase();
+  return type === 'apikey' || type === 'api_key';
+}
+
+/**
+ * Re-keys the provider dimension by the provider that answered each row.
+ *
+ * CPA labels every API-key request with its protocol family - `claude`, `codex` - and writes the same
+ * word for that family's OAuth channel, so the recorded label names a dialect several unrelated
+ * connections speak. A provider the operator named AnyRouter therefore reads under the family's
+ * brand, beside the channel's own traffic. The credential that served the row is what identifies the
+ * connection: the configured provider publishing that runtime auth index in its credential list
+ * claims the row.
+ *
+ * A row no provider claims keeps CPA's label, which is then the truest thing known about it: a
+ * rotated, removed or twice-published credential cannot be replaced by a weaker guess without moving
+ * history. Only an API-key credential is asked: an OAuth record's index sits in the same column but
+ * belongs to a sign-in.
+ */
+export function attributeServingProviders(
+  cube: InsightsCube,
+  providerIDOf: (authIndex: string) => string | undefined,
+): InsightsCube {
+  // One lookup per credential dictionary entry, not per row: a window holds far more rows than
+  // credentials, and the answer is the credential's alone.
+  const claimed = cube.values.credential.map((authIndex, index) =>
+    authIndex && isAPIKeyCredential(cube.credentialTypes[index]) ? providerIDOf(authIndex) : undefined);
+  const identityOf = (row: CubeRow): string =>
+    claimed[row.dims[DIMENSION_POSITION.credential]] ?? rowValue(cube, row, 'provider');
+
+  const identities = new Set<string>();
+  for (const row of cube.rows) identities.add(identityOf(row));
+  for (const row of cube.previous) identities.add(identityOf(row));
+  // Sorted like every other dictionary, so two responses over the same traffic list their providers
+  // in one order.
+  const provider = [...identities].sort();
+  const position = new Map(provider.map((value, index) => [value, index]));
+  const rekey = (rows: readonly CubeRow[]) => rows.map((row) => {
+    const dims = row.dims.slice();
+    dims[DIMENSION_POSITION.provider] = position.get(identityOf(row))!;
+    return { ...row, dims };
+  });
+  return { ...cube, values: { ...cube.values, provider }, rows: rekey(cube.rows), previous: rekey(cube.previous) };
+}
+
 /**
  * The rows every selected value admits. `except` leaves dimensions unconstrained: a filter's own
  * picker counts the values it could switch to that way, and a figure that is itself a control over a

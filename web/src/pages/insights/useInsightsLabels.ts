@@ -35,6 +35,10 @@ const MARK_KEYS: Partial<Record<InsightsDimension, EventFilterKey>> = {
  * behind an auth file, the provider's brand or a plugin's logo - from the same queries, so one value
  * reads the same on both pages. A credential keeps its runtime index when it has since been removed,
  * because its usage outlives it.
+ *
+ * A provider value is the connection that answered, re-keyed by `attributeServingProviders`, so its
+ * name is the operator's own for that provider; the label CPA wrote still names the traffic no
+ * configured provider claims.
  */
 export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabels {
   const t = useT();
@@ -68,13 +72,19 @@ export function useInsightsLabels(cube: InsightsCube | undefined): InsightsLabel
         ? { name: credentialTitle(file) || credentialFileName(file), provider: file.provider || file.type }
         : { name: index });
     }
+    // Two configured providers publishing one runtime index are equally ambiguous, and CPA derives
+    // that index from the credential itself, so the same key entered twice yields one index under
+    // both names. Naming either would credit a credential whose key the console cannot know.
+    const claims = new Map<string, { name: string; provider?: string } | null>();
     for (const provider of configuredProviders ?? []) {
       const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
       indexes.forEach((index, position) => {
-        if (!names.has(index)) {
-          names.set(index, { name: indexes.length > 1 ? `${provider.name} #${position + 1}` : provider.name, provider: provider.name });
-        }
+        const name = indexes.length > 1 ? `${provider.name} #${position + 1}` : provider.name;
+        claims.set(index, claims.has(index) ? null : { name, provider: provider.name });
       });
+    }
+    for (const [index, claim] of claims) {
+      if (claim && !names.has(index)) names.set(index, claim);
     }
     return names;
   }, [credentialFiles, configuredProviders]);

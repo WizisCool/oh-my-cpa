@@ -8,6 +8,8 @@ import { usePreference } from '../../hooks/usePreference';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useViewSearchParams } from '../../hooks/useViewSearchParams';
 import { useScrollAnchor } from '../../hooks/useScrollAnchor';
+import { useProviderBranding } from '../../hooks/useProviderBranding';
+import { createServingProviderResolver } from '../../types/usageEventIdentity';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import dayjs from '../../utils/time';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -33,6 +35,7 @@ import { SwapOutlined } from '../../components/icons';
 import { LoadFailure } from '../../components/feedback';
 import {
   FOLDED_ID,
+  attributeServingProviders,
   buildFlow,
   decodeInsightsCube,
   filterRows,
@@ -53,6 +56,7 @@ import {
 import {
   INSIGHTS_GROUPINGS,
   readInsightsView,
+  requestFilterValues,
   toggleFilter,
   writeInsightsView,
   type InsightsGrouping,
@@ -82,15 +86,23 @@ const HOUR_LIMIT_MS = 14 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The rhythm read's parameters: the request list's filter vocabulary, so the server needs no second one. */
-const RHYTHM_PARAMETERS: Record<InsightsDimension, string> = {
-  key: 'api_key', call_point: 'model_alias', model: 'model', provider: 'provider', credential: 'auth_index',
-};
+const RHYTHM_PARAMETERS: ReadonlyArray<[Exclude<InsightsDimension, 'provider' | 'credential'>, string]> = [
+  ['key', 'api_key'], ['call_point', 'model_alias'], ['model', 'model'],
+];
 
-function rhythmParams(range: InsightsRange, filters: InsightsFilters): string {
+function rhythmParams(
+  range: InsightsRange,
+  filters: InsightsFilters,
+  request: { provider: readonly string[]; credential: readonly string[] },
+): string {
   const params = new URLSearchParams(insightsRangeParams(range));
-  for (const [dimension, parameter] of Object.entries(RHYTHM_PARAMETERS) as Array<[InsightsDimension, string]>) {
+  for (const [dimension, parameter] of RHYTHM_PARAMETERS) {
     for (const value of filters[dimension] ?? []) params.append(parameter, value);
   }
+  // The read takes request records; a provider value names the connection, and the credentials that
+  // served its rows are how that vocabulary spells one.
+  for (const value of request.provider) params.append('provider', value);
+  for (const value of request.credential) params.append('auth_index', value);
   return params.toString();
 }
 
@@ -148,12 +160,23 @@ export const InsightsPage: React.FC = () => {
     staleTime: 10_000,
     refetchInterval: (query) => insightsPollInterval(query.state.data?.window),
   });
-  const cube = React.useMemo(() => (cubeQuery.data ? decodeInsightsCube(cubeQuery.data) : undefined), [cubeQuery.data]);
+  const { configuredProviders } = useProviderBranding();
+  // A provider's own name is the identity of the connection that answered, and the credential that
+  // served a row is what says which connection that was: CPA labels an API-key request with its
+  // protocol family, which is also the label of that family's OAuth channel.
+  const servingProvider = React.useMemo(() => createServingProviderResolver(configuredProviders), [configuredProviders]);
+  const cube = React.useMemo(() => {
+    if (!cubeQuery.data) return undefined;
+    return attributeServingProviders(decodeInsightsCube(cubeQuery.data), servingProvider);
+  }, [cubeQuery.data, servingProvider]);
   const labels = useInsightsLabels(cube);
   const formatCompareWindow = useCompareWindowLabel();
 
   const [openKey, setOpenKey] = React.useState<string | null>(null);
-  const rhythmQueryString = rhythmParams(range, view.filters);
+  // The rhythm read filters request records, where a connection is the credentials that served it;
+  // the page's provider filter names the connection.
+  const requestFilters = React.useMemo(() => requestFilterValues(cube, view.filters), [cube, view.filters]);
+  const rhythmQueryString = rhythmParams(range, view.filters, requestFilters);
   const rhythmQuery = useQuery({
     queryKey: ['insights-rhythm', rhythmQueryString],
     queryFn: () => api.getInsightsRhythm(rhythmQueryString),
@@ -163,7 +186,7 @@ export const InsightsPage: React.FC = () => {
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
     meta: { silent: true },
   });
-  const drawerRhythmString = openKey ? rhythmParams(range, { ...view.filters, key: [openKey] }) : '';
+  const drawerRhythmString = openKey ? rhythmParams(range, { ...view.filters, key: [openKey] }, requestFilters) : '';
   const drawerRhythmQuery = useQuery({
     queryKey: ['insights-rhythm', drawerRhythmString],
     queryFn: () => api.getInsightsRhythm(drawerRhythmString),
