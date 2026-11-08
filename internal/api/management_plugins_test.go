@@ -45,12 +45,14 @@ type pluginMockState struct {
 	nativeReads           int
 	handler               *Handler
 	// hasBareInstall lists a second plugin that is installed but has no settings.
-	hasBareInstall   bool
-	storeResponse    string
-	pluginsResponse  string
-	storeReads       int
-	storeUnavailable bool
-	storeFailureBody string
+	hasBareInstall     bool
+	storeResponse      string
+	pluginsResponse    string
+	storeReads         int
+	storeQueries       []string
+	storeUnavailable   bool
+	storeFailureBody   string
+	storeFailureStatus int
 }
 
 type pluginRouteCall struct {
@@ -211,8 +213,13 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			_, _ = writer.Write([]byte(`{"status":"deleted","id":"` + id + `","path":"/srv/cpa/plugins/logger.so","file_deleted":true,"configured_removed":true,"restart_required":false}`))
 		case path == "/v8/management/plugins/store" && request.Method == http.MethodGet:
 			state.storeReads++
+			state.storeQueries = append(state.storeQueries, request.URL.RawQuery)
 			if state.storeUnavailable {
-				writer.WriteHeader(http.StatusBadGateway)
+				status := state.storeFailureStatus
+				if status == 0 {
+					status = http.StatusBadGateway
+				}
+				writer.WriteHeader(status)
 				_, _ = writer.Write([]byte(state.storeFailureBody))
 				return
 			}
@@ -501,6 +508,66 @@ func TestPluginsLifecycle(t *testing.T) {
 	events, err := repo.ListAuditEvents(context.Background(), 20)
 	if err != nil || len(events) < 4 {
 		t.Fatalf("expected at least 4 audit events recorded, got %d, err: %v", len(events), err)
+	}
+}
+
+func TestPluginStoreRefreshOnlyForwardsExplicitRefresh(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+	for _, test := range []struct {
+		query string
+		want  string
+	}{
+		{"", ""},
+		{"?refresh=true&ignored=value", "refresh=true"},
+		{"?refresh=1", "refresh=true"},
+		{"?refresh=false", ""},
+	} {
+		t.Run(test.query, func(t *testing.T) {
+			response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/plugin-store"+test.query, "")
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", response.StatusCode, body)
+			}
+			state.mu.Lock()
+			got := state.storeQueries[len(state.storeQueries)-1]
+			state.mu.Unlock()
+			if got != test.want {
+				t.Fatalf("CPA store query = %q, want %q", got, test.want)
+			}
+		})
+	}
+	state.handler.CheckPluginUpdates(context.Background())
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if got := state.storeQueries[len(state.storeQueries)-1]; got != "" {
+		t.Fatalf("scheduled check query = %q, want ordinary cached read", got)
+	}
+}
+
+func TestPluginStoreRefreshPreservesRateLimitRetryAfter(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+	state.mu.Lock()
+	state.storeUnavailable = true
+	state.storeFailureStatus = http.StatusTooManyRequests
+	state.storeFailureBody = `{"error":"plugin_store_rate_limited","message":"GitHub quota exhausted","retry_after":60}`
+	state.mu.Unlock()
+	response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/plugin-store?refresh=true", "")
+	if response.StatusCode != http.StatusTooManyRequests || response.Header.Get("Retry-After") != "60" {
+		t.Fatalf("status = %d, Retry-After = %q, body = %s", response.StatusCode, response.Header.Get("Retry-After"), body)
+	}
+	var result struct {
+		Code       string `json:"code"`
+		RetryAfter int    `json:"retry_after"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Code != "plugin_store_rate_limited" || result.RetryAfter != 60 {
+		t.Fatalf("rate limit response = %#v", result)
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if len(state.storeQueries) != 1 || state.storeQueries[0] != "refresh=true" {
+		t.Fatalf("refresh must make one attempt without retry: %v", state.storeQueries)
 	}
 }
 

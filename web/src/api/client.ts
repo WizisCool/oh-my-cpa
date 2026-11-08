@@ -1187,8 +1187,9 @@ export const api = {
     });
   },
 
-  async getPluginStore(): Promise<PluginStoreResponse> {
-    return request<PluginStoreResponse>('/management/plugin-store', { method: 'GET' });
+  async getPluginStore(options: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<PluginStoreResponse> {
+    const query = options.refresh ? '?refresh=true' : '';
+    return request<PluginStoreResponse>(`/management/plugin-store${query}`, { method: 'GET', signal: options.signal });
   },
 
   async installPlugin(id: string, options: { sourceId?: string; version?: string } = {}): Promise<PluginInstallResponse> {

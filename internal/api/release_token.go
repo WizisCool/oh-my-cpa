@@ -9,9 +9,8 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
-// releaseTokenTTL bounds how long one read of the gateway's configuration answers the token
-// question. It is short enough that a token changed in the console reaches the next sweep, and
-// long enough that a sweep's few requests share one configuration read.
+// releaseTokenTTL bounds reads of tokens changed outside this console. A successful console
+// configuration write invalidates the cache immediately; a sweep still shares one read.
 const releaseTokenTTL = 5 * time.Minute
 
 // releaseTokenCache holds the gateway's GitHub token for this process.
@@ -26,6 +25,14 @@ type releaseTokenCache struct {
 	mutex       sync.Mutex
 	token       string
 	attemptedAt time.Time
+}
+
+// invalidate discards credentials a successful configuration write may have replaced or removed.
+func (c *releaseTokenCache) invalidate() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.token = ""
+	c.attemptedAt = time.Time{}
 }
 
 // ReleaseToken answers the GitHub token Oh My CPA's own release and star-count reads carry.

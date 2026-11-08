@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Button, Checkbox, Input, Select } from 'antd';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
@@ -293,6 +294,11 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
                 {t('plugin.settings_add_rule')}
               </Button>
             )}
+          />
+          <Notice
+            tone="info"
+            title={t('plugin.github_token_hint')}
+            action={<Link to="/config">{t('cfg.f_github_token')}</Link>}
           />
           {current.rules.length === 0 ? (
             <EmptyState size="compact" title={t('plugin.settings_auth_empty')} />
