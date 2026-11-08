@@ -241,10 +241,16 @@
   min-height: 32px;
 }
 .settings-field-switch-header .settings-field-label {
+  flex: 1;
+  min-width: 0;
   margin-bottom: 0;
   cursor: pointer;
 }
+/* The shared control rule stretches every control to the row; a switch sits
+   beside its label and must keep only its own width. */
 .settings-field-control.is-switch {
+  flex: none;
+  width: auto;
   min-height: 32px;
   display: flex;
   align-items: center;
