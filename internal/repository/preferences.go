@@ -36,6 +36,13 @@ const (
 	// document does not name follows the named ones, so an added credential needs no rewrite.
 	PreferenceCredentialOrder = "omc_credential_order"
 
+	// PreferenceOAuthSectionOrder is the OAuth list's section display order: the list's name mapped
+	// to the provider keys in the order the operator dragged the sections into. A provider the
+	// document does not name follows the named ones in the console's fixed section order, so a
+	// provider whose first credential arrives later needs no rewrite. It is presentation only; which
+	// credential serves a request is CPA's priority and routing arrangement's business.
+	PreferenceOAuthSectionOrder = "omc_oauth_section_order"
+
 	// PreferencePluginOrder stores installed plugin IDs in display order, independent of
 	// the gateway's plugin loading order.
 	PreferencePluginOrder = "omc_plugin_order"

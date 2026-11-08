@@ -23,7 +23,7 @@ import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/type
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
-import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection } from '../../src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
@@ -764,6 +764,30 @@ test('a section keeps one plan shape together, richest first, unread last', () =
   assert.deepEqual(
     orderBySection(records, { [provider]: { key: 'quota', direction: 'asc' } }, { [provider]: ['d-pro'] }).map((record) => record.fileName),
     sortByQuotaColumn(records, 'asc').map((record) => record.fileName),
+  );
+});
+
+test('provider sections follow the operator\'s arrangement, and the pages are cut in it', () => {
+  const records = [
+    quotaRecord('c1', [], 'codex'),
+    quotaRecord('a1', [], 'antigravity'),
+    quotaRecord('l1', [], 'claude'),
+    quotaRecord('p1', [], 'acme'),
+  ];
+  // The console's own order pins the providers it names and puts an upstream it has not named last.
+  assert.deepEqual(providersInSectionOrder(records), ['claude', 'antigravity', 'codex', 'acme']);
+  // An arrangement leads; a provider it does not name keeps the console's order after the named ones,
+  // and a name it no longer matches is ignored rather than resurrecting a section.
+  const arranged = ['gone', 'codex', 'acme'];
+  assert.deepEqual(
+    orderBySection(records, {}, undefined, arranged).map((record) => record.fileName),
+    ['c1', 'p1', 'l1', 'a1'],
+  );
+  // The page's sections are drawn in the same arrangement the records were cut in, so a section
+  // split across two pages continues in the same place on both.
+  assert.deepEqual(
+    buildCredentialSections(records, records, arranged).map((section) => section.provider),
+    ['codex', 'acme', 'claude', 'antigravity'],
   );
 });
 
