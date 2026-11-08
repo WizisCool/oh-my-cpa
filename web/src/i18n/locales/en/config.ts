@@ -361,6 +361,7 @@ export default {
   'cfg.f_affinity_rebind_on_desc': 'Error types that trigger credential rebind during failover',
   'cfg.affinity_rebind_any': 'Any failure',
   'cfg.affinity_rebind_quota': 'Quota and auth errors only (transient errors fail over this request only)',
+  'cfg.affinity_rebind_never': 'Never (keep the binding and return the error)',
   'cfg.f_keepalive_before_ft': 'Heartbeats before first token',
   'cfg.f_keepalive_before_ft_desc': 'Send SSE keepalive pings before first token arrives',
   'cfg.f_codex_siwc_identifier': 'Sign in with ChatGPT identifier',

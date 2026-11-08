@@ -358,6 +358,7 @@ export default {
   'cfg.f_affinity_rebind_on_desc': '凭据出错时触发会话改绑的错误类型',
   'cfg.affinity_rebind_any': '任何错误',
   'cfg.affinity_rebind_quota': '仅配额与认证错误（临时错误只转移本次请求）',
+  'cfg.affinity_rebind_never': '从不改绑（保留绑定并返回错误）',
   'cfg.f_keepalive_before_ft': '首个 Token 前发送心跳',
   'cfg.f_keepalive_before_ft_desc': '在首个 Token 到达前即发送 SSE 保活心跳',
   'cfg.f_codex_siwc_identifier': 'Sign in with ChatGPT 标识',

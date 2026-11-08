@@ -44,6 +44,15 @@ test('The management key is deployment-owned in the visual editor', () => {
   assert.equal(schemaField('rmSecretKey').isReadOnly, true);
 });
 
+// CPA reads three rebind modes and reports any other value as `any`. A mode the picker omits leaves
+// the operator running it with an unlabelled value and no way to select it again.
+test('Every session-affinity rebind mode CPA accepts is offered', () => {
+  assert.deepEqual(
+    schemaField('routingSessionAffinityRebindOn').options?.map((option) => option.value),
+    ['any', 'quota', 'never'],
+  );
+});
+
 test('State Machine: Initial -> Loading -> Error blocks editing and saving', () => {
   const sm = createConfigStateMachine();
   assert.equal(sm.status, 'initial');
