@@ -1,5 +1,6 @@
 import React from 'react';
 import { CloudServerOutlined, DatabaseOutlined, GlobalOutlined, CodeOutlined, BoxOutlined } from '../../components/icons';
+import { RemoteImage } from '../../components/common/RemoteImage';
 import type { BackupProvider } from '../../types/databaseBackup';
 import { storageMarkURL, type StorageMark } from '../../assets/brand/storageMarks';
 import styles from './DatabaseBackups.module.css';
@@ -37,15 +38,7 @@ export function BackupProviderMark({
   return (
     <span className={styles['mark']} data-provider={provider} style={{ width: size, height: size }} aria-hidden>
       {slug ? (
-        <img
-          className={styles['mark-image']}
-          src={storageMarkURL(slug)}
-          alt=""
-          width={Math.round(size * 0.6)}
-          height={Math.round(size * 0.6)}
-          loading="eager"
-          decoding="async"
-        />
+        <RemoteImage src={storageMarkURL(slug)} size={Math.round(size * 0.6)} />
       ) : (
         <span className={styles['mark-glyph']} style={{ fontSize: Math.round(size * 0.5) }}>
           {SERVICE_GLYPHS[provider as keyof typeof SERVICE_GLYPHS]}

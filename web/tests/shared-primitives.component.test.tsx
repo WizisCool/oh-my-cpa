@@ -17,6 +17,8 @@ import { Tag, ToggleTag } from '../src/components/common/Tag';
 import { PageHeader } from '../src/components/common/PageHeader';
 import { SummaryStrip } from '../src/components/common/SummaryStrip';
 import { MaskedText } from '../src/components/common/MaskedText';
+import { MarkArtwork } from '../src/components/common/MarkArtwork';
+import { RemoteImage } from '../src/components/common/RemoteImage';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { renderWithOmc } from './support/render';
 import { installOmcApi } from './support/omcApi';
@@ -464,6 +466,50 @@ describe('MaskedText', () => {
     render(<MaskedText masked="Team seat" value="Team seat" revealLabel="Show account" hideLabel="Hide account" />);
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByText('Team seat')).toBeTruthy();
+  });
+});
+
+describe('RemoteImage', () => {
+  it('holds the mark’s box with the console placeholder until the bytes arrive', () => {
+    const { container } = render(<RemoteImage src="https://cdn.example/plugin.png" size={24} />);
+    const frame = container.querySelector<HTMLElement>('[data-remote-image="loading"]')!;
+    expect(frame.style.width).toBe('24px');
+    expect(frame.querySelector('.placeholder')).not.toBeNull();
+
+    fireEvent.load(frame.querySelector('img')!);
+
+    expect(frame.getAttribute('data-remote-image')).toBe('loaded');
+    expect(frame.querySelector('.placeholder')).toBeNull();
+    expect(frame.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/plugin.png');
+  });
+
+  it('does not hold a source that is already here', () => {
+    const { container } = render(<RemoteImage src="data:image/svg+xml,%3Csvg/%3E" size="100%" />);
+    expect(container.querySelector('[data-remote-image="loaded"]')).not.toBeNull();
+    expect(container.querySelector('.placeholder')).toBeNull();
+  });
+
+  it('hands a failed source back, so the next candidate and then the fallback draw', () => {
+    const { container } = render(
+      <MarkArtwork
+        artworks={[{ url: 'https://cdn.example/first.png', isMono: false }, { url: 'https://cdn.example/second.png', isMono: false }]}
+        size={20}
+        fallback={<span data-fallback="" />}
+      />,
+    );
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/first.png');
+
+    fireEvent.error(container.querySelector('img')!);
+
+    const second = container.querySelector('img')!;
+    expect(second.getAttribute('src')).toBe('https://cdn.example/second.png');
+    expect(container.querySelector('.placeholder')).not.toBeNull();
+
+    fireEvent.error(second);
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('[data-fallback]')).not.toBeNull();
+    expect(container.querySelector('.placeholder')).toBeNull();
   });
 });
 
