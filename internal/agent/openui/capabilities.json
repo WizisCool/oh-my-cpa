@@ -4503,1020 +4503,444 @@
     }
   },
   {
-    "name": "quota_warmup_credential_get",
-    "description": "Read one credential's effective warmup policy, selected model, verified activation and safe paused reason.",
-    "permission": "read",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "auth_index": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "auth_index"
-      ],
-      "additionalProperties": false
-    },
-    "output_schema": {
-      "type": "object",
-      "properties": {
-        "auth_index": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "inherit": {
-          "type": "boolean"
-        },
-        "policy": {
-          "type": "object",
-          "properties": {
-            "reset_mode": {
-              "type": "string"
-            },
-            "daily_enabled": {
-              "type": "boolean"
-            },
-            "daily_time": {
-              "type": "string"
-            },
-            "model": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "reset_mode",
-            "daily_enabled",
-            "daily_time",
-            "model"
-          ],
-          "additionalProperties": false
-        },
-        "models": {
-          "type": [
-            "null",
-            "array"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "timezone": {
-          "type": "string"
-        },
-        "revision": {
-          "type": "string"
-        },
-        "next_at_ms": {
-          "type": [
-            "null",
-            "integer"
-          ]
-        },
-        "reason": {
-          "type": "string"
-        },
-        "state": {
-          "type": "object",
-          "properties": {
-            "protocol_pause": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "reason": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model",
-                "reason"
-              ],
-              "additionalProperties": false
-            },
-            "activation_basis": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "model_windows": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "object",
-                    "properties": {
-                      "state": {
-                        "type": "string"
-                      },
-                      "used_percent": {
-                        "type": [
-                          "null",
-                          "number"
-                        ]
-                      },
-                      "reset_at_ms": {
-                        "type": [
-                          "null",
-                          "integer"
-                        ]
-                      },
-                      "period_ms": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "state",
-                      "period_ms"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "blocked_models": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "observed_at_ms": {
-                  "type": "integer"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "paid_fallback": {
-                  "type": "string"
-                },
-                "paid_source": {
-                  "type": "string"
-                },
-                "five_hour": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "weekly": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "blocked": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "observed_at_ms",
-                "provider",
-                "paid_fallback",
-                "paid_source",
-                "five_hour",
-                "weekly",
-                "blocked"
-              ],
-              "additionalProperties": false
-            },
-            "credential_id": {
-              "type": "string"
-            },
-            "provider": {
-              "type": "string"
-            },
-            "observation": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "model_windows": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "object",
-                    "properties": {
-                      "state": {
-                        "type": "string"
-                      },
-                      "used_percent": {
-                        "type": [
-                          "null",
-                          "number"
-                        ]
-                      },
-                      "reset_at_ms": {
-                        "type": [
-                          "null",
-                          "integer"
-                        ]
-                      },
-                      "period_ms": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "state",
-                      "period_ms"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "blocked_models": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "observed_at_ms": {
-                  "type": "integer"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "paid_fallback": {
-                  "type": "string"
-                },
-                "paid_source": {
-                  "type": "string"
-                },
-                "five_hour": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "weekly": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "blocked": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "observed_at_ms",
-                "provider",
-                "paid_fallback",
-                "paid_source",
-                "five_hour",
-                "weekly",
-                "blocked"
-              ],
-              "additionalProperties": false
-            },
-            "generation": {
-              "type": "integer"
-            },
-            "daily_key": {
-              "type": "string"
-            },
-            "last_result": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "request_id": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "reason": {
-                  "type": "string"
-                },
-                "model": {
-                  "type": "string"
-                },
-                "trigger": {
-                  "type": "string"
-                },
-                "started_at_ms": {
-                  "type": "integer"
-                },
-                "finished_at_ms": {
-                  "type": "integer"
-                },
-                "input_tokens": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ]
-                },
-                "output_tokens": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ]
-                }
-              },
-              "required": [
-                "request_id",
-                "status",
-                "model",
-                "trigger",
-                "started_at_ms"
-              ],
-              "additionalProperties": false
-            },
-            "last_cycle": {
-              "type": "string"
-            },
-            "next_attempt_ms": {
-              "type": "integer"
-            },
-            "failures": {
-              "type": "integer"
-            },
-            "verification_reads": {
-              "type": "integer"
-            },
-            "verified_model": {
-              "type": "string"
-            },
-            "protocol_verified": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "generation",
-            "protocol_verified"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "auth_index",
-        "provider",
-        "name",
-        "inherit",
-        "policy",
-        "models",
-        "timezone",
-        "revision",
-        "state"
-      ],
-      "additionalProperties": false
-    }
-  },
-  {
-    "name": "quota_warmup_credential_set",
-    "description": "Override a credential warmup policy or restore provider inheritance. Requires confirmation; does not modify provider credentials or billing settings.",
-    "permission": "write",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "auth_index": {
-          "type": "string"
-        },
-        "inherit": {
-          "type": "boolean"
-        },
-        "policy": {
-          "type": "object",
-          "properties": {
-            "reset_mode": {
-              "type": "string"
-            },
-            "daily_enabled": {
-              "type": "boolean"
-            },
-            "daily_time": {
-              "type": "string"
-            },
-            "model": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "reset_mode",
-            "daily_enabled",
-            "daily_time",
-            "model"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "auth_index",
-        "inherit",
-        "policy"
-      ],
-      "additionalProperties": false
-    },
-    "output_schema": {
-      "type": "object",
-      "properties": {
-        "auth_index": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "inherit": {
-          "type": "boolean"
-        },
-        "policy": {
-          "type": "object",
-          "properties": {
-            "reset_mode": {
-              "type": "string"
-            },
-            "daily_enabled": {
-              "type": "boolean"
-            },
-            "daily_time": {
-              "type": "string"
-            },
-            "model": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "reset_mode",
-            "daily_enabled",
-            "daily_time",
-            "model"
-          ],
-          "additionalProperties": false
-        },
-        "models": {
-          "type": [
-            "null",
-            "array"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "timezone": {
-          "type": "string"
-        },
-        "revision": {
-          "type": "string"
-        },
-        "next_at_ms": {
-          "type": [
-            "null",
-            "integer"
-          ]
-        },
-        "reason": {
-          "type": "string"
-        },
-        "state": {
-          "type": "object",
-          "properties": {
-            "protocol_pause": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "reason": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model",
-                "reason"
-              ],
-              "additionalProperties": false
-            },
-            "activation_basis": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "model_windows": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "object",
-                    "properties": {
-                      "state": {
-                        "type": "string"
-                      },
-                      "used_percent": {
-                        "type": [
-                          "null",
-                          "number"
-                        ]
-                      },
-                      "reset_at_ms": {
-                        "type": [
-                          "null",
-                          "integer"
-                        ]
-                      },
-                      "period_ms": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "state",
-                      "period_ms"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "blocked_models": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "observed_at_ms": {
-                  "type": "integer"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "paid_fallback": {
-                  "type": "string"
-                },
-                "paid_source": {
-                  "type": "string"
-                },
-                "five_hour": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "weekly": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "blocked": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "observed_at_ms",
-                "provider",
-                "paid_fallback",
-                "paid_source",
-                "five_hour",
-                "weekly",
-                "blocked"
-              ],
-              "additionalProperties": false
-            },
-            "credential_id": {
-              "type": "string"
-            },
-            "provider": {
-              "type": "string"
-            },
-            "observation": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "model_windows": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "object",
-                    "properties": {
-                      "state": {
-                        "type": "string"
-                      },
-                      "used_percent": {
-                        "type": [
-                          "null",
-                          "number"
-                        ]
-                      },
-                      "reset_at_ms": {
-                        "type": [
-                          "null",
-                          "integer"
-                        ]
-                      },
-                      "period_ms": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "state",
-                      "period_ms"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "blocked_models": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "observed_at_ms": {
-                  "type": "integer"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "paid_fallback": {
-                  "type": "string"
-                },
-                "paid_source": {
-                  "type": "string"
-                },
-                "five_hour": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "weekly": {
-                  "type": "object",
-                  "properties": {
-                    "state": {
-                      "type": "string"
-                    },
-                    "used_percent": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "reset_at_ms": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "period_ms": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "state",
-                    "period_ms"
-                  ],
-                  "additionalProperties": false
-                },
-                "blocked": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "observed_at_ms",
-                "provider",
-                "paid_fallback",
-                "paid_source",
-                "five_hour",
-                "weekly",
-                "blocked"
-              ],
-              "additionalProperties": false
-            },
-            "generation": {
-              "type": "integer"
-            },
-            "daily_key": {
-              "type": "string"
-            },
-            "last_result": {
-              "type": [
-                "null",
-                "object"
-              ],
-              "properties": {
-                "request_id": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "reason": {
-                  "type": "string"
-                },
-                "model": {
-                  "type": "string"
-                },
-                "trigger": {
-                  "type": "string"
-                },
-                "started_at_ms": {
-                  "type": "integer"
-                },
-                "finished_at_ms": {
-                  "type": "integer"
-                },
-                "input_tokens": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ]
-                },
-                "output_tokens": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ]
-                }
-              },
-              "required": [
-                "request_id",
-                "status",
-                "model",
-                "trigger",
-                "started_at_ms"
-              ],
-              "additionalProperties": false
-            },
-            "last_cycle": {
-              "type": "string"
-            },
-            "next_attempt_ms": {
-              "type": "integer"
-            },
-            "failures": {
-              "type": "integer"
-            },
-            "verification_reads": {
-              "type": "integer"
-            },
-            "verified_model": {
-              "type": "string"
-            },
-            "protocol_verified": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "generation",
-            "protocol_verified"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "auth_index",
-        "provider",
-        "name",
-        "inherit",
-        "policy",
-        "models",
-        "timezone",
-        "revision",
-        "state"
-      ],
-      "additionalProperties": false
-    }
-  },
-  {
     "name": "quota_warmup_run",
-    "description": "Send one tiny request to the exact credential to start an idle subscription window. Human confirmation authorizes quota consumption and possible Codex charges. Claude requires paid fallback to be disabled. Active windows are refused; never retry an uncertain result.",
+    "description": "Trigger one warmup task immediately through CPA's credential-pinned verification endpoint. Requires confirmation.",
     "permission": "write",
     "input_schema": {
       "type": "object",
       "properties": {
-        "auth_index": {
+        "id": {
           "type": "string"
         }
       },
       "required": [
-        "auth_index"
+        "id"
       ],
       "additionalProperties": false
     },
     "output_schema": {
       "type": "object",
       "properties": {
-        "request_id": {
-          "type": "string"
+        "run": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "task_id": {
+              "type": "string"
+            },
+            "task_name": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "auth_index": {
+              "type": "string"
+            },
+            "account": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "ms": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "due": {
+              "type": "string"
+            },
+            "reset_key": {
+              "type": "string"
+            },
+            "input_tokens": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "output_tokens": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "task_id",
+            "task_name",
+            "at",
+            "outcome",
+            "source",
+            "provider",
+            "auth_index",
+            "account",
+            "model"
+          ],
+          "additionalProperties": false
         },
-        "status": {
-          "type": "string"
-        },
-        "reason": {
-          "type": "string"
-        },
-        "model": {
-          "type": "string"
-        },
-        "trigger": {
-          "type": "string"
-        },
-        "started_at_ms": {
-          "type": "integer"
-        },
-        "finished_at_ms": {
-          "type": "integer"
-        },
-        "input_tokens": {
-          "type": [
-            "null",
-            "integer"
-          ]
-        },
-        "output_tokens": {
-          "type": [
-            "null",
-            "integer"
-          ]
+        "state": {
+          "type": "object",
+          "properties": {
+            "tasks": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "auth_index": {
+                    "type": "string"
+                  },
+                  "account": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "trigger": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "window": {
+                        "type": "string"
+                      },
+                      "time": {
+                        "type": "string"
+                      },
+                      "time_zone": {
+                        "type": "string"
+                      },
+                      "hours": {
+                        "type": "integer"
+                      },
+                      "anchor": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "enabled",
+                  "provider",
+                  "auth_index",
+                  "account",
+                  "model",
+                  "trigger",
+                  "created_at",
+                  "updated_at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "runs": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "type": "string"
+                  },
+                  "task_name": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "auth_index": {
+                    "type": "string"
+                  },
+                  "account": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "ms": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "due": {
+                    "type": "string"
+                  },
+                  "reset_key": {
+                    "type": "string"
+                  },
+                  "input_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "output_tokens": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "task_id",
+                  "task_name",
+                  "at",
+                  "outcome",
+                  "source",
+                  "provider",
+                  "auth_index",
+                  "account",
+                  "model"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "next": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "timeline": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string"
+                  },
+                  "task_name": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "account": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "task_id",
+                  "task_name",
+                  "at",
+                  "account",
+                  "model"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "catalog": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "providers": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string"
+                      },
+                      "accounts": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "auth_index": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "disabled": {
+                              "type": "boolean"
+                            },
+                            "models": {
+                              "type": [
+                                "null",
+                                "array"
+                              ],
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "auto_model": {
+                              "type": "string"
+                            },
+                            "windows": {
+                              "type": [
+                                "null",
+                                "array"
+                              ],
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "used_percent": {
+                                    "type": [
+                                      "null",
+                                      "number"
+                                    ]
+                                  },
+                                  "resets_at": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "used_percent"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "snapshot_at": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "auth_index",
+                            "name",
+                            "provider",
+                            "models",
+                            "auto_model",
+                            "windows"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "accounts"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "timezone": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "providers",
+                "timezone"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "tasks",
+            "runs",
+            "next",
+            "timeline"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "request_id",
-        "status",
-        "model",
-        "trigger",
-        "started_at_ms"
+        "run",
+        "state"
       ],
       "additionalProperties": false
     }
   },
   {
     "name": "quota_warmup_settings_get",
-    "description": "Read opt-in credential window warmup defaults, timezone and revision. Warmup consumes quota and Codex requests may incur charges; it never redeems reset entitlements.",
+    "description": "Read window warmup tasks, recent runs, upcoming timeline and credential catalog.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -5525,18 +4949,192 @@
     "output_schema": {
       "type": "object",
       "properties": {
-        "providers": {
-          "type": "object",
-          "additionalProperties": {
+        "tasks": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
             "type": "object",
             "properties": {
-              "reset_mode": {
+              "id": {
                 "type": "string"
               },
-              "daily_enabled": {
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
                 "type": "boolean"
               },
-              "daily_time": {
+              "provider": {
+                "type": "string"
+              },
+              "auth_index": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "trigger": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "window": {
+                    "type": "string"
+                  },
+                  "time": {
+                    "type": "string"
+                  },
+                  "time_zone": {
+                    "type": "string"
+                  },
+                  "hours": {
+                    "type": "integer"
+                  },
+                  "anchor": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "enabled",
+              "provider",
+              "auth_index",
+              "account",
+              "model",
+              "trigger",
+              "created_at",
+              "updated_at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "runs": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "task_id": {
+                "type": "string"
+              },
+              "task_name": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "auth_index": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "ms": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "due": {
+                "type": "string"
+              },
+              "reset_key": {
+                "type": "string"
+              },
+              "input_tokens": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "output_tokens": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "task_name",
+              "at",
+              "outcome",
+              "source",
+              "provider",
+              "auth_index",
+              "account",
+              "model"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "next": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "timeline": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string"
+              },
+              "task_name": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "account": {
                 "type": "string"
               },
               "model": {
@@ -5544,98 +5142,350 @@
               }
             },
             "required": [
-              "reset_mode",
-              "daily_enabled",
-              "daily_time",
+              "task_id",
+              "task_name",
+              "at",
+              "account",
               "model"
             ],
             "additionalProperties": false
           }
         },
-        "models": {
-          "type": "object",
-          "additionalProperties": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "timezone": {
-          "type": "string"
-        },
-        "revision": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "providers",
-        "models",
-        "timezone",
-        "revision"
-      ],
-      "additionalProperties": false
-    }
-  },
-  {
-    "name": "quota_warmup_settings_set",
-    "description": "Change one provider's default warmup policy for existing and future inheriting credentials. Requests consume quota and Codex may incur charges. Claude requires paid fallback to be disabled.",
-    "permission": "write",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "provider": {
-          "type": "string"
-        },
-        "policy": {
-          "type": "object",
+        "catalog": {
+          "type": [
+            "null",
+            "object"
+          ],
           "properties": {
-            "reset_mode": {
-              "type": "string"
+            "providers": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "accounts": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "auth_index": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "disabled": {
+                          "type": "boolean"
+                        },
+                        "models": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "auto_model": {
+                          "type": "string"
+                        },
+                        "windows": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "used_percent": {
+                                "type": [
+                                  "null",
+                                  "number"
+                                ]
+                              },
+                              "resets_at": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "used_percent"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "snapshot_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "auth_index",
+                        "name",
+                        "provider",
+                        "models",
+                        "auto_model",
+                        "windows"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accounts"
+                ],
+                "additionalProperties": false
+              }
             },
-            "daily_enabled": {
-              "type": "boolean"
-            },
-            "daily_time": {
-              "type": "string"
-            },
-            "model": {
+            "timezone": {
               "type": "string"
             }
           },
           "required": [
-            "reset_mode",
-            "daily_enabled",
-            "daily_time",
-            "model"
+            "providers",
+            "timezone"
           ],
           "additionalProperties": false
         }
       },
       "required": [
-        "provider",
-        "policy"
+        "tasks",
+        "runs",
+        "next",
+        "timeline"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "quota_warmup_task_delete",
+    "description": "Delete a credential window warmup task.",
+    "permission": "destructive",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
       ],
       "additionalProperties": false
     },
     "output_schema": {
       "type": "object",
       "properties": {
-        "providers": {
-          "type": "object",
-          "additionalProperties": {
+        "tasks": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
             "type": "object",
             "properties": {
-              "reset_mode": {
+              "id": {
                 "type": "string"
               },
-              "daily_enabled": {
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
                 "type": "boolean"
               },
-              "daily_time": {
+              "provider": {
+                "type": "string"
+              },
+              "auth_index": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "trigger": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "window": {
+                    "type": "string"
+                  },
+                  "time": {
+                    "type": "string"
+                  },
+                  "time_zone": {
+                    "type": "string"
+                  },
+                  "hours": {
+                    "type": "integer"
+                  },
+                  "anchor": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "enabled",
+              "provider",
+              "auth_index",
+              "account",
+              "model",
+              "trigger",
+              "created_at",
+              "updated_at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "runs": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "task_id": {
+                "type": "string"
+              },
+              "task_name": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "auth_index": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "ms": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "due": {
+                "type": "string"
+              },
+              "reset_key": {
+                "type": "string"
+              },
+              "input_tokens": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "output_tokens": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "task_name",
+              "at",
+              "outcome",
+              "source",
+              "provider",
+              "auth_index",
+              "account",
+              "model"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "next": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "timeline": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string"
+              },
+              "task_name": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "account": {
                 "type": "string"
               },
               "model": {
@@ -5643,38 +5493,543 @@
               }
             },
             "required": [
-              "reset_mode",
-              "daily_enabled",
-              "daily_time",
+              "task_id",
+              "task_name",
+              "at",
+              "account",
               "model"
             ],
             "additionalProperties": false
           }
         },
-        "models": {
+        "catalog": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "providers": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "accounts": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "auth_index": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "disabled": {
+                          "type": "boolean"
+                        },
+                        "models": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "auto_model": {
+                          "type": "string"
+                        },
+                        "windows": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "used_percent": {
+                                "type": [
+                                  "null",
+                                  "number"
+                                ]
+                              },
+                              "resets_at": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "used_percent"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "snapshot_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "auth_index",
+                        "name",
+                        "provider",
+                        "models",
+                        "auto_model",
+                        "windows"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accounts"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "timezone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "providers",
+            "timezone"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "tasks",
+        "runs",
+        "next",
+        "timeline"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "quota_warmup_task_save",
+    "description": "Create or update a credential window warmup task. Requires confirmation; enabled tasks send minimal inference probes through CPA on schedule.",
+    "permission": "write",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "auth_index": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "window": {
+              "type": "string"
+            },
+            "time": {
+              "type": "string"
+            },
+            "time_zone": {
+              "type": "string"
+            },
+            "hours": {
+              "type": "integer"
+            },
+            "anchor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "enabled",
+        "provider",
+        "auth_index",
+        "account",
+        "model",
+        "trigger"
+      ],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "auth_index": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "trigger": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "window": {
+                    "type": "string"
+                  },
+                  "time": {
+                    "type": "string"
+                  },
+                  "time_zone": {
+                    "type": "string"
+                  },
+                  "hours": {
+                    "type": "integer"
+                  },
+                  "anchor": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "enabled",
+              "provider",
+              "auth_index",
+              "account",
+              "model",
+              "trigger",
+              "created_at",
+              "updated_at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "runs": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "task_id": {
+                "type": "string"
+              },
+              "task_name": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "auth_index": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "ms": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "due": {
+                "type": "string"
+              },
+              "reset_key": {
+                "type": "string"
+              },
+              "input_tokens": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "output_tokens": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "task_name",
+              "at",
+              "outcome",
+              "source",
+              "provider",
+              "auth_index",
+              "account",
+              "model"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "next": {
           "type": "object",
           "additionalProperties": {
             "type": [
               "null",
-              "array"
-            ],
-            "items": {
-              "type": "string"
-            }
+              "string"
+            ]
           }
         },
-        "timezone": {
-          "type": "string"
+        "timeline": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string"
+              },
+              "task_name": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "account": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id",
+              "task_name",
+              "at",
+              "account",
+              "model"
+            ],
+            "additionalProperties": false
+          }
         },
-        "revision": {
-          "type": "string"
+        "catalog": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "providers": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "accounts": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "auth_index": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "disabled": {
+                          "type": "boolean"
+                        },
+                        "models": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "auto_model": {
+                          "type": "string"
+                        },
+                        "windows": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "used_percent": {
+                                "type": [
+                                  "null",
+                                  "number"
+                                ]
+                              },
+                              "resets_at": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "used_percent"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "snapshot_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "auth_index",
+                        "name",
+                        "provider",
+                        "models",
+                        "auto_model",
+                        "windows"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accounts"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "timezone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "providers",
+            "timezone"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "providers",
-        "models",
-        "timezone",
-        "revision"
+        "tasks",
+        "runs",
+        "next",
+        "timeline"
       ],
       "additionalProperties": false
     }

@@ -1,17 +1,179 @@
 {
- "version": 1,
- "default_policy": {"reset_mode":"off","daily_enabled":false,"daily_time":"06:00","model":""},
- "credential": {"auth_index":"exact-claude","name":"claude.json","provider":"claude","inherit":true,"policy":{"reset_mode":"all","daily_enabled":false,"daily_time":"06:00","model":"claude-haiku-test"},"models":["claude-haiku-test"],"timezone":"UTC","revision":"wire-revision","reason":"quota_unknown","state":{"protocol_verified":false,"generation":0,"credential_id":"wire-credential-identity","provider":"claude"}},
- "paused_credential": {"auth_index":"exact-claude","name":"claude.json","provider":"claude","inherit":true,"policy":{"reset_mode":"all","daily_enabled":false,"daily_time":"06:00","model":"claude-haiku-test"},"models":["claude-haiku-test"],"timezone":"UTC","revision":"wire-revision","reason":"quota_unknown","state":{"protocol_verified":false,"generation":0,"credential_id":"wire-credential-identity","provider":"claude","protocol_pause":{"model":"claude-haiku-test","reason":"protocol_unsupported"}}},
- "result": {"request_id":"manual-wire-test","status":"activated","model":"claude-haiku-test","trigger":"manual","started_at_ms":1770000000000,"finished_at_ms":1770000001000,"input_tokens":5,"output_tokens":1},
- "cases": [
-  {"id":"confirmation-required","body":{"request_id":"manual-wire-test","revision":"wire-revision","confirmed":false},"status":400,"response":{"code":"invalid_parameters","error":"invalid_parameters"}},
-  {"id":"unknown-destination","body":{"request_id":"manual-wire-test","revision":"wire-revision","confirmed":true,"url":"https://example.test"},"status":400,"response":{"error":"invalid request body"}},
-  {"id":"missing-revision","body":{"request_id":"manual-wire-test","confirmed":true},"status":409,"response":{"code":"resource_conflict","error":"resource_conflict"}},
-  {"id":"missing-confirmation","body":{"request_id":"different-manual-id","revision":"wire-revision"},"status":400,"response":{"code":"invalid_parameters","error":"invalid_parameters"}},
-  {"id":"stale-revision","body":{"request_id":"different-manual-id","revision":"stale-revision","confirmed":true},"status":409,"response":{"code":"resource_conflict","error":"resource_conflict"}},
-  {"id":"missing-request-id","body":{"revision":"wire-revision","confirmed":true},"status":400,"response":{"code":"invalid_parameters","error":"invalid_parameters"}},
-  {"id":"short-request-id","body":{"request_id":"short","revision":"wire-revision","confirmed":true},"status":400,"response":{"code":"invalid_parameters","error":"invalid_parameters"}},
-  {"id":"invalid-confirmation-type","body":{"request_id":"different-manual-id","revision":"wire-revision","confirmed":"true"},"status":400,"response":{"error":"invalid request body"}}
- ]
+  "version": 1,
+  "state": {
+    "tasks": [
+      {
+        "id": "t_wire_test",
+        "name": "claude.json · 窗口重置后 (5h)",
+        "enabled": true,
+        "provider": "claude",
+        "auth_index": "exact-claude",
+        "account": "claude.json",
+        "model": "",
+        "trigger": {
+          "kind": "window",
+          "window": "five_hour"
+        },
+        "created_at": "2026-10-13T06:00:00Z",
+        "updated_at": "2026-10-13T06:00:00Z"
+      }
+    ],
+    "runs": [],
+    "next": {
+      "t_wire_test": null
+    },
+    "timeline": [],
+    "catalog": {
+      "providers": [
+        {
+          "provider": "codex",
+          "accounts": []
+        },
+        {
+          "provider": "claude",
+          "accounts": [
+             {
+               "auth_index": "exact-claude",
+               "name": "claude.json",
+               "provider": "claude",
+               "models": [
+                 "claude-haiku-4-5",
+                 "claude-sonnet-4-6"
+               ],
+               "auto_model": "claude-haiku-4-5",
+               "windows": [
+                 {
+                   "id": "five_hour",
+                   "label": "5h",
+                   "used_percent": null
+                 },
+                 {
+                   "id": "seven_day",
+                   "label": "7d",
+                   "used_percent": null
+                 }
+               ]
+             }
+          ]
+        }
+      ],
+      "timezone": "UTC"
+    }
+  },
+  "run": {
+    "id": "r_wire_test",
+    "task_id": "t_wire_test",
+    "task_name": "claude.json · 窗口重置后 (5h)",
+    "at": "2026-10-13T06:00:00.000Z",
+    "outcome": "ok",
+    "source": "manual",
+    "provider": "claude",
+    "auth_index": "exact-claude",
+    "account": "claude.json",
+    "model": "claude-haiku-4-5",
+    "ms": 100
+  },
+  "cases": [
+    {
+      "id": "missing-provider",
+      "body": {
+        "enabled": true,
+        "auth_index": "exact-claude",
+        "trigger": {
+          "kind": "window",
+          "window": "five_hour"
+        }
+      },
+      "status": 400,
+      "response": {
+        "code": "invalid_parameters",
+        "error": "invalid_parameters"
+      }
+    },
+    {
+      "id": "missing-account",
+      "body": {
+        "enabled": true,
+        "provider": "claude",
+        "trigger": {
+          "kind": "window",
+          "window": "five_hour"
+        }
+      },
+      "status": 400,
+      "response": {
+        "code": "invalid_parameters",
+        "error": "invalid_parameters"
+      }
+    },
+    {
+      "id": "invalid-trigger-kind",
+      "body": {
+        "enabled": true,
+        "provider": "claude",
+        "auth_index": "exact-claude",
+        "trigger": {
+          "kind": "unknown"
+        }
+      },
+      "status": 400,
+      "response": {
+        "code": "invalid_parameters",
+        "error": "invalid_parameters"
+      }
+    },
+    {
+      "id": "invalid-daily-time",
+      "body": {
+        "enabled": true,
+        "provider": "claude",
+        "auth_index": "exact-claude",
+        "trigger": {
+          "kind": "daily",
+          "time": "25:00",
+          "time_zone": "UTC"
+        }
+      },
+      "status": 400,
+      "response": {
+        "code": "invalid_parameters",
+        "error": "invalid_parameters"
+      }
+    },
+    {
+      "id": "invalid-every-hours",
+      "body": {
+        "enabled": true,
+        "provider": "claude",
+        "auth_index": "exact-claude",
+        "trigger": {
+          "kind": "every",
+          "hours": 200,
+          "anchor": "2026-10-13T06:00:00Z"
+        }
+      },
+      "status": 400,
+      "response": {
+        "code": "invalid_parameters",
+        "error": "invalid_parameters"
+      }
+    },
+    {
+      "id": "unknown-field",
+      "body": {
+        "enabled": true,
+        "provider": "claude",
+        "auth_index": "exact-claude",
+        "trigger": {
+          "kind": "window",
+          "window": "five_hour"
+        },
+        "extra": true
+      },
+      "status": 400,
+      "response": {
+        "error": "invalid request body"
+      }
+    }
+  ]
 }

@@ -65,7 +65,7 @@ export const ROUTE_READS: Record<string, string[]> = {
   '/ai-providers': ['providers', 'dashboard-providers-24h'],
   '/api-keys': ['api-keys', 'client-key-aliases'],
   '/routing': ['routing', 'routing-models'],
-  '/oauth-management': ['auth-files', 'auth-files-model-aliases', 'auth-files-excluded-models', 'auth-files-provider-models-claude', 'auth-files-provider-models-codex', 'auth-files-provider-models-none', 'plugins', 'quota', 'warmup-settings', 'warmup-codex', 'warmup-codex-secondary', 'warmup-claude'],
+  '/oauth-management': ['auth-files', 'auth-files-model-aliases', 'auth-files-excluded-models', 'auth-files-provider-models-claude', 'auth-files-provider-models-codex', 'auth-files-provider-models-none', 'plugins', 'quota', 'warmup-settings'],
   '/logs': ['logs', 'logs-status', 'request-error-logs'],
   '/audit': ['audit-events', 'audit-summary'],
   '/usage/events': ['usage-events', 'usage-facets', 'usage-event-detail', 'usage-ingest-status', 'usage-live'],

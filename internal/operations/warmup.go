@@ -2,69 +2,62 @@ package operations
 
 import (
 	"context"
-	"errors"
+	"strings"
 
-	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 func (service *Service) registerWarmup(registry *capability.Registry) error {
-	if service.WarmupSettings == nil {
-		return nil
-	}
-	if err := read(registry, "quota_warmup_settings_get", "Read opt-in credential window warmup defaults, timezone and revision. Warmup consumes quota and Codex requests may incur charges; it never redeems reset entitlements.", func(ctx context.Context, _ Empty) (warmup.Settings, error) { return service.WarmupSettings(ctx) }); err != nil {
-		return err
-	}
-	type Target struct {
-		AuthIndex string `json:"auth_index"`
-	}
-	if err := read(registry, "quota_warmup_credential_get", "Read one credential's effective warmup policy, selected model, verified activation and safe paused reason.", func(ctx context.Context, input Target) (warmup.Credential, error) {
-		return service.WarmupCredential(ctx, input.AuthIndex)
+	if err := read(registry, "quota_warmup_settings_get", "Read window warmup tasks, recent runs, upcoming timeline and credential catalog.", func(ctx context.Context, _ Empty) (warmup.StateView, error) {
+		return service.WarmupSettings(ctx)
 	}); err != nil {
 		return err
 	}
-	type SettingsInput struct {
-		Provider string        `json:"provider"`
-		Policy   warmup.Policy `json:"policy"`
-	}
-	metadata := Meta("quota_warmup_settings_set", "Change one provider's default warmup policy for existing and future inheriting credentials. Requests consume quota and Codex may incur charges. Claude requires paid fallback to be disabled.", "write", "high")
-	metadata.Invalidates = []string{"quota-warmup-settings", "quota-warmup-credential"}
-	if err := capability.Register(registry, metadata, func(ctx context.Context, input SettingsInput) (capability.Preview, error) {
-		if !warmup.IsProvider(input.Provider) || input.Policy.Validate() != nil {
-			return capability.Preview{}, errors.New("invalid_parameters")
-		}
-		current, err := service.WarmupSettings(ctx)
-		return capability.Preview{Target: input.Provider, Revision: current.Revision, Changes: input}, err
-	}, func(ctx context.Context, input SettingsInput, revision, _ string) (warmup.Settings, error) {
-		return service.SaveWarmupSettings(ctx, warmup.PolicyWrite{Provider: input.Provider, Policy: input.Policy, Revision: revision, IsConfirmed: true})
-	}); err != nil {
+	metadata := Meta("quota_warmup_task_save", "Create or update a credential window warmup task. Requires confirmation; enabled tasks send minimal inference probes through CPA on schedule.", "write", "high")
+	if err := capability.Register(registry, metadata,
+		func(_ context.Context, input warmup.TaskSaveInput) (capability.Preview, error) {
+			if err := warmup.ValidateTask(input.TaskInput); err != nil {
+				return capability.Preview{}, invalidParameters{detail: err.Error()}
+			}
+			target := strings.TrimSpace(input.ID)
+			if target == "" {
+				target = warmup.DefaultTaskName(input.TaskInput)
+			}
+			return capability.Preview{Target: target, Revision: service.revision(input), Changes: input}, nil
+		},
+		func(ctx context.Context, input warmup.TaskSaveInput, _, _ string) (warmup.StateView, error) {
+			return service.SaveWarmupTask(ctx, input)
+		},
+	); err != nil {
 		return err
 	}
-	type CredentialInput struct {
-		AuthIndex   string        `json:"auth_index"`
-		IsInherited bool          `json:"inherit"`
-		Policy      warmup.Policy `json:"policy"`
-	}
-	metadata = Meta("quota_warmup_credential_set", "Override a credential warmup policy or restore provider inheritance. Requires confirmation; does not modify provider credentials or billing settings.", "write", "high")
-	metadata.Invalidates = []string{"quota-warmup-credential"}
-	if err := capability.Register(registry, metadata, func(ctx context.Context, input CredentialInput) (capability.Preview, error) {
-		if !input.IsInherited && input.Policy.Validate() != nil {
-			return capability.Preview{}, errors.New("invalid_parameters")
-		}
-		current, err := service.WarmupCredential(ctx, input.AuthIndex)
-		return capability.Preview{Target: current.Name, Revision: current.Revision, Changes: input}, err
-	}, func(ctx context.Context, input CredentialInput, revision, _ string) (warmup.Credential, error) {
-		return service.SaveWarmupCredential(ctx, input.AuthIndex, warmup.CredentialWrite{IsInherited: input.IsInherited, Policy: input.Policy, Revision: revision, IsConfirmed: true})
-	}); err != nil {
+	metadata = Meta("quota_warmup_task_delete", "Delete a credential window warmup task.", "destructive", "high")
+	if err := capability.Register(registry, metadata,
+		func(_ context.Context, input warmup.TaskIDInput) (capability.Preview, error) {
+			id := strings.TrimSpace(input.ID)
+			if id == "" {
+				return capability.Preview{}, invalidParameters{detail: "id is required"}
+			}
+			return capability.Preview{Target: id, Revision: service.revision(id), Changes: map[string]string{"id": id}}, nil
+		},
+		func(ctx context.Context, input warmup.TaskIDInput, _, _ string) (warmup.StateView, error) {
+			return service.DeleteWarmupTask(ctx, strings.TrimSpace(input.ID))
+		},
+	); err != nil {
 		return err
 	}
-	metadata = Meta("quota_warmup_run", "Send one tiny request to the exact credential to start an idle subscription window. Human confirmation authorizes quota consumption and possible Codex charges. Claude requires paid fallback to be disabled. Active windows are refused; never retry an uncertain result.", "write", "high")
-	metadata.Invalidates = []string{"management-quota", "quota-warmup-credential"}
-	return capability.Register(registry, metadata, func(ctx context.Context, input Target) (capability.Preview, error) {
-		current, err := service.WarmupCredential(ctx, input.AuthIndex)
-		return capability.Preview{Target: current.Name, Revision: current.Revision, Changes: map[string]any{"model": current.Policy.Model, "consumes_quota": true}}, err
-	}, func(ctx context.Context, input Target, revision, _ string) (warmup.Result, error) {
-		return service.RunWarmup(ctx, input.AuthIndex, uuid.NewString(), revision)
-	})
+	metadata = Meta("quota_warmup_run", "Trigger one warmup task immediately through CPA's credential-pinned verification endpoint. Requires confirmation.", "write", "high")
+	return capability.Register(registry, metadata,
+		func(_ context.Context, input warmup.TaskIDInput) (capability.Preview, error) {
+			id := strings.TrimSpace(input.ID)
+			if id == "" {
+				return capability.Preview{}, invalidParameters{detail: "id is required"}
+			}
+			return capability.Preview{Target: id, Revision: service.revision(id), Changes: map[string]string{"id": id}}, nil
+		},
+		func(ctx context.Context, input warmup.TaskIDInput, _, _ string) (warmup.RunResponse, error) {
+			return service.RunWarmupTask(ctx, strings.TrimSpace(input.ID))
+		},
+	)
 }

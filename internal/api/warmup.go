@@ -2,11 +2,13 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,883 +20,979 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
+const (
+	warmupBodyLimit      = 16 << 10
+	warmupInstanceID     = "default"
+	warmupLoopInterval   = time.Minute
+	warmupModelCacheTTL  = 5 * time.Minute
+	warmupRequestTimeout = 30 * time.Second
+)
+
+var (
+	errWarmupTaskNotFound = errors.New("warmup task not found")
+	errWarmupTaskBusy     = errors.New("warmup task already running")
+)
+
 type warmupRuntime struct {
-	mu      sync.Mutex
-	running map[string]bool
+	mu          sync.Mutex
+	recovered   bool
+	runningTask map[string]bool
+	models      map[string]warmupModelCacheEntry
 }
 
-func (runtime *warmupRuntime) acquire(authIndex string) bool {
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
-	if runtime.running == nil {
-		runtime.running = map[string]bool{}
-	}
-	if runtime.running[authIndex] {
-		return false
-	}
-	runtime.running[authIndex] = true
-	return true
-}
-func (runtime *warmupRuntime) release(authIndex string) {
-	runtime.mu.Lock()
-	delete(runtime.running, authIndex)
-	runtime.mu.Unlock()
-}
-func (runtime *warmupRuntime) isRunning(authIndex string) bool {
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
-	return runtime.running[authIndex]
+type warmupModelCacheEntry struct {
+	models    []string
+	expiresAt time.Time
 }
 
-func (h *Handler) warmupPolicyTarget(file management.AuthFile) string {
-	return quota.DetectProvider(file.Type, file.Provider) + "/" + file.AuthIndex + "/" + h.warmupCredentialIdentity(file)
-}
-
-// This is a replacement guard, never a quota join or an account lookup. An
-// identity projection changing must discard activation observations and scheduling
-// state, even at the same index.
-func (h *Handler) warmupCredentialIdentity(file management.AuthFile) string {
-	// CPA's account field is opaque and can carry secret material. Hash the
-	// replacement guard with a keyed purpose; never persist or expose its input.
-	raw, _ := json.Marshal(struct{ ID, AccountID, Account, Email string }{file.ID, file.CodexChatgptAccountID(), file.Account, file.Email})
-	fingerprint, _ := h.cipher.Fingerprint("warmup-credential-identity", string(raw))
-	return fingerprint
-}
-func (h *Handler) warmupFile(ctx context.Context, client *management.Client, authIndex string) (management.AuthFile, error) {
-	files, err := client.AuthFiles(ctx)
-	if err != nil {
-		return management.AuthFile{}, err
-	}
-	var selected *management.AuthFile
-	for _, file := range files.Files {
-		if file.AuthIndex == authIndex && authIndex != "" {
-			if selected != nil {
-				return management.AuthFile{}, errors.New("credential_ambiguous")
-			}
-			copyFile := file
-			selected = &copyFile
-		}
-	}
-	if selected == nil {
-		return management.AuthFile{}, errors.New("resource_missing")
-	}
-	for _, file := range files.Files {
-		if file.AuthIndex != authIndex && file.Name == selected.Name {
-			return management.AuthFile{}, errors.New("credential_ambiguous")
-		}
-	}
-	if !warmup.IsProvider(quota.DetectProvider(selected.Type, selected.Provider)) || selected.Source == "config" {
-		return management.AuthFile{}, errors.New("provider_unsupported")
-	}
-	return *selected, nil
-}
-func (h *Handler) warmupSettings(ctx context.Context) (warmup.Settings, error) {
-	settings := warmup.Settings{Providers: map[string]warmup.Policy{}, Models: map[string][]string{"codex": {}, "claude": {}}, Timezone: h.repo.Timezone().Location().String()}
-	for _, provider := range []string{"codex", "claude"} {
-		policy, _, err := h.repo.ReadWarmupPolicy(ctx, defaultInstanceID(), "provider", provider)
-		if err != nil {
-			return settings, err
-		}
-		settings.Providers[provider] = policy
-	}
-	settings.Revision = h.operationsService().Revision(settings.Providers)
-	if h.cfg.IsDemoMode {
-		settings.Revision = "demo-warmup-settings"
-	}
-	return settings, nil
-}
-func (h *Handler) warmupCredential(ctx context.Context, client *management.Client, file management.AuthFile, readModels bool) (warmup.Credential, error) {
-	provider := quota.DetectProvider(file.Type, file.Provider)
-	policy, hasOverride, err := h.repo.ReadWarmupPolicy(ctx, defaultInstanceID(), "credential", h.warmupPolicyTarget(file))
-	if err != nil {
-		return warmup.Credential{}, err
-	}
-	if !hasOverride {
-		policy, _, err = h.repo.ReadWarmupPolicy(ctx, defaultInstanceID(), "provider", provider)
-		if err != nil {
-			return warmup.Credential{}, err
-		}
-	}
-	state, err := h.repo.ReadWarmupState(ctx, defaultInstanceID(), file.AuthIndex)
-	if err != nil {
-		return warmup.Credential{}, err
-	}
-	if state.CredentialID != h.warmupCredentialIdentity(file) || state.Provider != provider {
-		state = warmup.State{CredentialID: h.warmupCredentialIdentity(file), Provider: provider}
-	}
-	if state.LastResult != nil && state.LastResult.Status == "executing" && !h.warmupRuntime.isRunning(file.AuthIndex) {
-		state.LastResult.Status = "uncertain"
-		state.LastResult.Reason = "outcome_unknown"
-	}
-	credential := warmup.Credential{AuthIndex: file.AuthIndex, Name: file.Name, Provider: provider, IsInherited: !hasOverride, Policy: policy, State: state, Timezone: h.repo.Timezone().Location().String(), Models: []string{}}
-	if readModels {
-		models, err := client.AuthFileModels(ctx, file.Name)
-		if err != nil {
-			return credential, err
-		}
-		for _, model := range models {
-			if model.ID != "" && len(model.ID) <= 200 && len(credential.Models) < 64 {
-				credential.Models = append(credential.Models, model.ID)
-			}
-		}
-		slices.Sort(credential.Models)
-		credential.Models = slices.Compact(credential.Models)
-	}
-	credential.Revision = h.operationsService().Revision(struct {
-		Identity      string
-		AuthIndex     string
-		Provider      string
-		Name          string
-		IsDisabled    bool
-		IsUnavailable bool
-		Policy        warmup.Policy
-		IsInherited   bool
-	}{h.warmupCredentialIdentity(file), file.AuthIndex, provider, file.Name, file.Disabled, file.Unavailable, policy, !hasOverride})
-	if h.cfg.IsDemoMode {
-		credential.Revision = "demo-warmup-credential"
-		credential.State.CredentialID = "demo-credential/" + file.AuthIndex
-	}
-	_, credential.Reason, _, credential.NextAtMS = warmup.Decide(policy, state, h.now().In(h.repo.Timezone().Location()), false)
-	if file.Disabled {
-		credential.Reason = "credential_disabled"
-	}
-	if file.Unavailable {
-		credential.Reason = "credential_unavailable"
-	}
-	return credential, nil
-}
 func (h *Handler) getWarmupSettings(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	settings, err := h.warmupSettings(request.Context())
+	state, err := h.warmupState(request.Context())
 	if err != nil {
-		writeWarmupError(writer, err)
+		h.writeWarmupError(writer, err)
 		return
 	}
-	client, ok := h.managementClientOrError(writer, request)
-	if !ok {
+	writeJSON(writer, http.StatusOK, state)
+}
+
+func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	var input warmup.TaskInput
+	if err := decodeManagementJSON(writer, request, warmupBodyLimit, &input); err != nil {
 		return
 	}
-	files, err := client.AuthFiles(request.Context())
+	state, err := h.saveWarmupTask(request.Context(), "", input)
 	if err != nil {
-		writeCPAFacadeError(writer, err)
+		h.writeWarmupError(writer, err)
 		return
 	}
-	for _, file := range files.Files {
-		provider := quota.DetectProvider(file.Type, file.Provider)
-		if !warmup.IsProvider(provider) || file.Source == "config" {
+	writeJSON(writer, http.StatusCreated, state)
+}
+
+func (h *Handler) updateWarmupTask(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	id := strings.TrimSpace(chi.URLParam(request, "id"))
+	if id == "" {
+		writeWarmupJSONError(writer, http.StatusBadRequest, "invalid_parameters")
+		return
+	}
+	var input warmup.TaskInput
+	if err := decodeManagementJSON(writer, request, warmupBodyLimit, &input); err != nil {
+		return
+	}
+	state, err := h.saveWarmupTask(request.Context(), id, input)
+	if err != nil {
+		h.writeWarmupError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, state)
+}
+
+func (h *Handler) deleteWarmupTask(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	id := strings.TrimSpace(chi.URLParam(request, "id"))
+	if id == "" {
+		writeWarmupJSONError(writer, http.StatusBadRequest, "invalid_parameters")
+		return
+	}
+	state, err := h.removeWarmupTask(request.Context(), id)
+	if err != nil {
+		h.writeWarmupError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, state)
+}
+
+func (h *Handler) runWarmupTask(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	id := strings.TrimSpace(chi.URLParam(request, "id"))
+	if id == "" {
+		writeWarmupJSONError(writer, http.StatusBadRequest, "invalid_parameters")
+		return
+	}
+	result, err := h.triggerWarmupTask(request.Context(), id)
+	if err != nil {
+		h.writeWarmupError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, result)
+}
+
+func writeWarmupJSONError(writer http.ResponseWriter, status int, code string) {
+	writeJSON(writer, status, map[string]string{
+		"code":  code,
+		"error": code,
+	})
+}
+
+func (h *Handler) writeWarmupError(writer http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errWarmupTaskNotFound):
+		writeWarmupJSONError(writer, http.StatusNotFound, "resource_not_found")
+	case errors.Is(err, errWarmupTaskBusy):
+		writeWarmupJSONError(writer, http.StatusConflict, "resource_conflict")
+	case err != nil && (strings.HasPrefix(err.Error(), "invalid_") || strings.HasPrefix(err.Error(), "missing_")):
+		writeWarmupJSONError(writer, http.StatusBadRequest, "invalid_parameters")
+	default:
+		writeWarmupJSONError(writer, http.StatusServiceUnavailable, "warmup_unavailable")
+	}
+}
+
+func (h *Handler) warmupState(ctx context.Context) (warmup.StateView, error) {
+	if h.repo == nil {
+		return warmup.StateView{}, errors.New("repository unavailable")
+	}
+	h.recoverWarmupRunsOnce(ctx)
+	var client *management.Client
+	if c, err := h.capabilityClient(ctx); err == nil {
+		client = c
+	}
+	catalog, _ := h.warmupCatalogWithFiles(ctx, client)
+	return h.buildWarmupStateView(ctx, &catalog)
+}
+
+func (h *Handler) buildWarmupStateView(ctx context.Context, catalog *warmup.Catalog) (warmup.StateView, error) {
+	tasks, err := h.repo.ListWarmupTasks(ctx, warmupInstanceID)
+	if err != nil {
+		return warmup.StateView{}, err
+	}
+	marksMap, err := h.repo.ListWarmupMarks(ctx, warmupInstanceID)
+	if err != nil {
+		return warmup.StateView{}, err
+	}
+	runs, err := h.repo.ListWarmupRuns(ctx, warmupInstanceID)
+	if err != nil {
+		return warmup.StateView{}, err
+	}
+	now := h.now().UTC()
+	next := make(map[string]*string, len(tasks))
+	timeline := make([]warmup.TimelineEntry, 0)
+
+	for _, task := range tasks {
+		if !task.Enabled {
+			next[task.ID] = nil
 			continue
 		}
-		models := file.Models
-		if len(models) == 0 && len(settings.Models[provider]) == 0 {
-			if listed, readErr := client.AuthFileModels(request.Context(), file.Name); readErr == nil {
-				models = listed
-			}
+		account := findCatalogAccount(catalog, task)
+		resolvedModel := warmup.ResolveModel(task, account)
+		if resolvedModel == "" {
+			resolvedModel = "Auto"
 		}
-		for _, model := range models {
-			if model.ID != "" && len(model.ID) <= 200 && len(settings.Models[provider]) < 64 {
-				settings.Models[provider] = append(settings.Models[provider], model.ID)
-			}
+		accountLabel := task.Account
+		if accountLabel == "" && account != nil {
+			accountLabel = account.Name
 		}
-	}
-	for provider, models := range settings.Models {
-		slices.Sort(models)
-		settings.Models[provider] = slices.Compact(models)
-	}
-	writeJSON(writer, http.StatusOK, settings)
-}
-func (h *Handler) saveWarmupSettings(ctx context.Context, input warmup.PolicyWrite) (warmup.Settings, error) {
-	if h.cfg.IsDemoMode {
-		return warmup.Settings{}, errors.New("demo_operation_refused")
-	}
-	if !input.IsConfirmed || !warmup.IsProvider(input.Provider) || input.Policy.Validate() != nil {
-		return warmup.Settings{}, warmup.ErrInvalidPolicy
-	}
-	if err := h.providerWrites.acquire(ctx); err != nil {
-		return warmup.Settings{}, err
-	}
-	defer h.providerWrites.release()
-	settings, err := h.warmupSettings(ctx)
-	if err != nil {
-		return settings, err
-	}
-	if input.Revision == "" || input.Revision != settings.Revision {
-		return settings, errors.New("resource_conflict")
-	}
-	if err = h.auditWarmup(ctx, "warmup.settings", input.Provider, "attempt", map[string]any{"policy": input.Policy}); err != nil {
-		return settings, err
-	}
-	if err = h.repo.WriteWarmupPolicy(ctx, defaultInstanceID(), "provider", input.Provider, &input.Policy, h.now().UnixMilli()); err != nil {
-		return settings, err
-	}
-	_ = h.auditWarmup(ctx, "warmup.settings", input.Provider, "success", nil)
-	return h.warmupSettings(ctx)
-}
-func (h *Handler) putWarmupSettings(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	var input warmup.PolicyWrite
-	if decodeManagementJSON(writer, request, 8192, &input) != nil {
-		return
-	}
-	result, err := h.saveWarmupSettings(request.Context(), input)
-	if err != nil {
-		writeWarmupError(writer, err)
-		return
-	}
-	writeJSON(writer, 200, result)
-}
-func (h *Handler) getWarmupCredential(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	client, ok := h.managementClientOrError(writer, request)
-	if !ok {
-		return
-	}
-	file, err := h.warmupFile(request.Context(), client, chi.URLParam(request, "authIndex"))
-	if err != nil {
-		writeWarmupError(writer, err)
-		return
-	}
-	result, err := h.warmupCredential(request.Context(), client, file, true)
-	if err != nil {
-		writeWarmupError(writer, err)
-		return
-	}
-	writeJSON(writer, 200, result)
-}
-func (h *Handler) saveWarmupCredential(ctx context.Context, authIndex string, input warmup.CredentialWrite) (warmup.Credential, error) {
-	if h.cfg.IsDemoMode {
-		return warmup.Credential{}, errors.New("demo_operation_refused")
-	}
-	if !input.IsConfirmed || (!input.IsInherited && input.Policy.Validate() != nil) {
-		return warmup.Credential{}, warmup.ErrInvalidPolicy
-	}
-	if err := h.providerWrites.acquire(ctx); err != nil {
-		return warmup.Credential{}, err
-	}
-	defer h.providerWrites.release()
-	if !h.warmupRuntime.acquire(authIndex) {
-		return warmup.Credential{}, warmup.ErrBusy
-	}
-	defer h.warmupRuntime.release(authIndex)
-	client, err := h.capabilityClient(ctx)
-	if err != nil {
-		return warmup.Credential{}, err
-	}
-	file, err := h.warmupFile(ctx, client, authIndex)
-	if err != nil {
-		return warmup.Credential{}, err
-	}
-	credential, err := h.warmupCredential(ctx, client, file, true)
-	if err != nil {
-		return credential, err
-	}
-	if input.Revision == "" || input.Revision != credential.Revision {
-		return credential, errors.New("resource_conflict")
-	}
-	if !input.IsInherited && input.Policy.Model != "" && !slices.Contains(credential.Models, input.Policy.Model) {
-		return credential, errors.New("model_unavailable")
-	}
-	if err = h.auditWarmup(ctx, "warmup.credential", authIndex, "attempt", map[string]any{"inherit": input.IsInherited, "policy": input.Policy}); err != nil {
-		return credential, err
-	}
-	policy := &input.Policy
-	if input.IsInherited {
-		policy = nil
-	}
-	if err = h.repo.WriteWarmupPolicy(ctx, defaultInstanceID(), "credential", h.warmupPolicyTarget(file), policy, h.now().UnixMilli()); err != nil {
-		return credential, err
-	}
-	_ = h.auditWarmup(ctx, "warmup.credential", authIndex, "success", nil)
-	return h.warmupCredential(ctx, client, file, true)
-}
-func (h *Handler) putWarmupCredential(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	var input warmup.CredentialWrite
-	if decodeManagementJSON(writer, request, 8192, &input) != nil {
-		return
-	}
-	result, err := h.saveWarmupCredential(request.Context(), chi.URLParam(request, "authIndex"), input)
-	if err != nil {
-		writeWarmupError(writer, err)
-		return
-	}
-	writeJSON(writer, 200, result)
-}
-func (h *Handler) postWarmupRun(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	var input struct {
-		RequestID   string `json:"request_id"`
-		Revision    string `json:"revision"`
-		IsConfirmed bool   `json:"confirmed"`
-	}
-	if decodeManagementJSON(writer, request, 8192, &input) != nil {
-		return
-	}
-	if !input.IsConfirmed || !validWarmupRequestID(input.RequestID) {
-		writeWarmupError(writer, errors.New("invalid_parameters"))
-		return
-	}
-	result, err := h.executeWarmup(request.Context(), chi.URLParam(request, "authIndex"), input.RequestID, input.Revision, true)
-	if err != nil {
-		writeWarmupError(writer, err)
-		return
-	}
-	writeJSON(writer, 200, result)
-}
-func validWarmupRequestID(requestID string) bool {
-	return len(requestID) >= 8 && len(requestID) <= 128 && strings.TrimSpace(requestID) == requestID && !strings.ContainsAny(requestID, "\r\n\x00") && !strings.HasPrefix(requestID, "auto/")
-}
-func (h *Handler) auditWarmup(ctx context.Context, action, authIndex, result string, details map[string]any) error {
-	_, err := h.repo.RecordAuditEvent(ctx, repository.AuditEvent{Action: action, TargetType: "credential_warmup", TargetID: authIndex, Result: result, OccurredAtMS: h.now().UnixMilli(), Details: details})
-	return err
-}
-func writeWarmupError(writer http.ResponseWriter, err error) {
-	code := err.Error()
-	status := http.StatusInternalServerError
-	switch code {
-	case "demo_operation_refused":
-		status = http.StatusForbidden
-	case "invalid_warmup_policy", "invalid_parameters", "provider_unsupported", "model_unavailable":
-		status = http.StatusBadRequest
-	case "resource_missing":
-		status = http.StatusNotFound
-	case "resource_conflict", "credential_ambiguous", "warmup_busy":
-		status = http.StatusConflict
-	default:
-		if errors.Is(err, errProviderWriteBusy) {
-			status = http.StatusConflict
-			code = "warmup_busy"
+		if task.Trigger.Kind == "window" {
+			marks := marksMap[task.ID]
+			due := warmup.CurrentWindowDue(task, account, marks, now)
+			if due != nil && !slices.Contains(marks.ResetKeys, due.ResetKey) {
+				at := due.At
+				next[task.ID] = &at
+				timeline = append(timeline, warmup.TimelineEntry{
+					TaskID:   task.ID,
+					TaskName: task.Name,
+					At:       at,
+					Account:  accountLabel,
+					Model:    resolvedModel,
+				})
+			} else {
+				next[task.ID] = nil
+			}
+			continue
+		}
+		slots := warmup.Upcoming(task.Trigger, nil, now, 3)
+		if len(slots) > 0 {
+			first := slots[0]
+			next[task.ID] = &first
 		} else {
-			code = "warmup_unavailable"
+			next[task.ID] = nil
+		}
+		for _, at := range slots {
+			timeline = append(timeline, warmup.TimelineEntry{
+				TaskID:   task.ID,
+				TaskName: task.Name,
+				At:       at,
+				Account:  accountLabel,
+				Model:    resolvedModel,
+			})
 		}
 	}
-	writeJSON(writer, status, map[string]string{"code": code, "error": code})
+	slices.SortFunc(timeline, func(a, b warmup.TimelineEntry) int {
+		return strings.Compare(a.At, b.At)
+	})
+	if len(timeline) > warmup.MAX_TIMELINE {
+		timeline = timeline[:warmup.MAX_TIMELINE]
+	}
+	return warmup.StateView{
+		Tasks:    tasks,
+		Runs:     runs,
+		Next:     next,
+		Timeline: timeline,
+		Catalog:  catalog,
+	}, nil
 }
 
-func (h *Handler) refreshWarmupObservation(ctx context.Context, client *management.Client, file management.AuthFile) (*warmup.Observation, error) {
-	return h.readWarmupObservation(ctx, client, file, false)
-}
-
-// readWarmupObservation reads quota evidence for warmup. isAutomatic marks a read nobody is
-// waiting on: the scheduler's own observation refresh and its pending confirmation both wait out
-// a credential backoff instead of spending another refused request.
-func (h *Handler) readWarmupObservation(ctx context.Context, client *management.Client, file management.AuthFile, isAutomatic bool) (*warmup.Observation, error) {
-	service := quota.NewServiceWithClock(client, h.now)
-	prior := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
-	refresh := h.refreshQuotaReading
-	if isAutomatic {
-		refresh = h.refreshAutomaticQuotaReading
-	}
-	reading, err := refresh(ctx, service, file, prior)
-	if err != nil || reading == nil || reading.Error != "" || reading.Status == "error" || reading.Status == "stale" || reading.WarmupEvidence == nil {
-		return nil, errors.New("quota_unknown")
-	}
-	if err = h.persistNormalizedQuotaSnapshot(ctx, reading); err != nil {
-		return nil, err
-	}
-	return reading.WarmupEvidence, nil
-}
-func isWarmupActivated(before, after *warmup.Observation) bool {
-	if before == nil || after == nil || after.ObservedAtMS <= before.ObservedAtMS {
-		return false
-	}
-	for _, pair := range [][2]warmup.Window{{before.FiveHour, after.FiveHour}, {before.Weekly, after.Weekly}} {
-		// An idle Codex window slides: its reset tracks each read, so between reads
-		// it moves by the elapsed time. A window the warmup started is frozen at
-		// send time and moved only by the delay between the first read and the
-		// send. Requiring that delay to be under a second rejected real starts.
-		if pair[0].State == "idle" && pair[0].ResetAtMS != nil && pair[1].ResetAtMS != nil && pair[1].UsedPercent != nil && *pair[1].UsedPercent == 0 {
-			elapsed := after.ObservedAtMS - before.ObservedAtMS
-			drift := *pair[1].ResetAtMS - *pair[0].ResetAtMS
-			if elapsed < 30000 || drift < -1000 || drift > elapsed-5000 {
-				return false
-			}
-		}
-	}
-	return (after.Provider == "codex" || after.PaidFallback == "disabled") && (before.FiveHour.State != "idle" || after.FiveHour.State == "active") && (before.Weekly.State != "idle" || after.Weekly.State == "active") && (before.FiveHour.State == "idle" || before.Weekly.State == "idle")
-}
-func (h *Handler) persistWarmupResult(ctx context.Context, authIndex string, state warmup.State, result warmup.Result) error {
-	// Latest receipts change during a recheck; the model's refusal survives until activation.
-	state.ProtocolPause = state.ReadProtocolPause()
-	if result.Reason == "protocol_unsupported" || result.Reason == "unexpected_tool" {
-		state.ProtocolPause = &warmup.ProtocolPause{Model: result.Model, Reason: result.Reason}
-	} else if result.Status == "activated" && state.ProtocolPause != nil && state.ProtocolPause.Model == result.Model {
-		state.ProtocolPause = nil
-	}
-	// A non-consuming refusal must not erase unresolved or unsupported-model evidence.
-	if result.Status != "skipped" || state.LastResult == nil {
-		state.LastResult = &result
-	}
-	if err := h.repo.WriteWarmupState(ctx, defaultInstanceID(), authIndex, state, h.now().UnixMilli()); err != nil {
-		return err
-	}
-	return h.repo.WriteWarmupRun(ctx, defaultInstanceID(), authIndex, result)
-}
-
-func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revision string, isManual bool) (warmup.Result, error) {
+func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.TaskInput) (warmup.StateView, error) {
 	if h.cfg.IsDemoMode {
-		return warmup.Result{}, errors.New("demo_operation_refused")
+		return warmup.StateView{}, errors.New("demo_operation_refused")
 	}
-	if !h.warmupRuntime.acquire(authIndex) {
-		return warmup.Result{}, warmup.ErrBusy
+	if h.repo == nil {
+		return warmup.StateView{}, errors.New("repository unavailable")
 	}
-	defer h.warmupRuntime.release(authIndex)
-	if requestID != "" {
-		previous, err := h.repo.ReadWarmupRun(ctx, defaultInstanceID(), authIndex, requestID)
+	input.Provider = strings.ToLower(strings.TrimSpace(input.Provider))
+	input.AuthIndex = strings.TrimSpace(input.AuthIndex)
+	input.Account = strings.TrimSpace(input.Account)
+	input.Model = strings.TrimSpace(input.Model)
+	if input.Trigger.Kind == "daily" && strings.TrimSpace(input.Trigger.TimeZone) == "" {
+		input.Trigger.TimeZone = h.warmupTimezoneName()
+	}
+	if err := warmup.ValidateTask(input); err != nil {
+		return warmup.StateView{}, err
+	}
+
+	var client *management.Client
+	if c, err := h.capabilityClient(ctx); err == nil {
+		client = c
+	}
+	catalog, _ := h.warmupCatalogWithFiles(ctx, client)
+	if account := findCatalogAccount(&catalog, warmup.Task{Provider: input.Provider, AuthIndex: input.AuthIndex, Account: input.Account}); account != nil {
+		if input.AuthIndex == "" {
+			input.AuthIndex = account.AuthIndex
+		}
+		if input.Account == "" {
+			input.Account = account.Name
+		}
+	}
+	if input.Account == "" {
+		input.Account = input.AuthIndex
+	}
+
+	now := h.now().UTC()
+	nowISO := warmup.FormatISO(now)
+	var task warmup.Task
+	action := "warmup.task.create"
+	if strings.TrimSpace(id) != "" {
+		existing, err := h.repo.ReadWarmupTask(ctx, warmupInstanceID, id)
 		if err != nil {
-			return warmup.Result{}, err
+			return warmup.StateView{}, err
 		}
-		if previous != nil {
-			if previous.Status == "executing" {
-				previous.Status = "uncertain"
-				previous.Reason = "outcome_unknown"
-			}
-			return *previous, nil
+		if existing == nil {
+			return warmup.StateView{}, errWarmupTaskNotFound
 		}
-	}
-	client, err := h.capabilityClient(ctx)
-	if err != nil {
-		return warmup.Result{}, err
-	}
-	file, err := h.warmupFile(ctx, client, authIndex)
-	if err != nil {
-		return warmup.Result{}, err
-	}
-	credential, err := h.warmupCredential(ctx, client, file, true)
-	if err != nil {
-		return warmup.Result{}, err
-	}
-
-	if isManual && (revision == "" || revision != credential.Revision) {
-		return warmup.Result{}, errors.New("resource_conflict")
-	}
-	state := credential.State
-	now := h.now().In(h.repo.Timezone().Location())
-	result := warmup.Result{RequestID: requestID, Status: "skipped", Model: credential.Policy.Model, Trigger: "manual", StartedAtMS: now.UnixMilli()}
-	finish := func(reason string) (warmup.Result, error) {
-		result.Reason = reason
-		result.FinishedAtMS = h.now().UnixMilli()
-		if result.RequestID == "" {
-			return result, nil
+		task = warmup.Task{
+			ID:        existing.ID,
+			Name:      warmup.DefaultTaskName(input),
+			Enabled:   input.Enabled,
+			Provider:  input.Provider,
+			AuthIndex: input.AuthIndex,
+			Account:   input.Account,
+			Model:     input.Model,
+			Trigger:   input.Trigger,
+			CreatedAt: existing.CreatedAt,
+			UpdatedAt: nowISO,
 		}
-		return result, h.persistWarmupResult(ctx, authIndex, state, result)
-	}
-	if file.Disabled {
-		return finish("credential_disabled")
-	}
-	if file.Unavailable {
-		return finish("credential_unavailable")
-	}
-	if credential.Policy.Model == "" {
-		return finish("model_required")
-	}
-	if !slices.Contains(credential.Models, credential.Policy.Model) {
-		return finish("model_unavailable")
-	}
-	if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, []string{authIndex}, h.now().UnixMilli()); err != nil {
-		return warmup.Result{}, err
-	} else if cooldowns[authIndex].IsActive {
-		return finish("cooldown")
-	}
-	priorReading := h.loadPriorNormalizedQuota(ctx, authIndex)
-	// An automatic call may reuse the scheduler's fresh observation: it was just stored, and
-	// reading again would spend a provider request to learn what the stored evidence already says.
-	// A manual call and an unresolved earlier run still read, because their answer is about now.
-	var before *warmup.Observation
-	isReused := false
-	if !isManual && isWarmupRunSettled(state) && priorReading != nil && priorReading.WarmupEvidence != nil &&
-		h.now().UnixMilli()-priorReading.WarmupEvidence.ObservedAtMS < warmup.OBSERVATION_MAX_AGE_MS {
-		before, isReused = priorReading.WarmupEvidence, true
-	} else if before, err = h.readWarmupObservation(ctx, client, file, !isManual); err != nil {
-		return finish("quota_unknown")
-	}
-	if priorReading != nil && priorReading.WarmupEvidence != nil && priorReading.WarmupEvidence.ObservedAtMS < before.ObservedAtMS {
-		state = warmup.Reconcile(state, *priorReading.WarmupEvidence)
-	}
-	state = warmup.Reconcile(state, *before)
-	before = state.Observation
-	if state.LastResult != nil && state.LastCycle == fmt.Sprintf("cycle/%d", state.Generation) && (state.LastResult.Status == "pending" || state.LastResult.Status == "uncertain" || state.LastResult.Status == "executing") {
-		previous := *state.LastResult
-		if previous.Status == "pending" && isWarmupActivated(state.ActivationBasis, before) {
-			previous.Status = "activated"
-			state.LastCycle = fmt.Sprintf("cycle/%d", state.Generation)
-			state.VerifiedModel = previous.Model
-			previous.Reason = ""
-			state.IsProtocolVerified = true
-		}
-		// A pending run keeps confirming in the scheduler; a second click must
-		// neither send again nor cut that confirmation short.
-		if previous.Status == "executing" {
-			previous.Status = "uncertain"
-			previous.Reason = "outcome_unknown"
-		}
-		if err := h.persistWarmupResult(ctx, authIndex, state, previous); err != nil {
-			return warmup.Result{}, err
-		}
-		// This receipt refuses the new request without overwriting the observed prior run.
-		result.Reason = "outcome_unknown"
-		switch previous.Status {
-		case "pending":
-			result.Reason = "activation_pending"
-		case "activated":
-			result.Reason = "already_active"
-		}
-		result.FinishedAtMS = h.now().UnixMilli()
-		if result.RequestID == "" {
-			return result, nil
-		}
-		return result, h.repo.WriteWarmupRun(ctx, defaultInstanceID(), authIndex, result)
-	}
-	trigger, reason, cycle, _ := warmup.Decide(credential.Policy, state, now, isManual)
-	if trigger == "" {
-		return h.skipWarmupRun(ctx, authIndex, state, credential.Policy.DailyTime, now, reason, cycle, finish)
-	}
-	// Evidence a caller asked for now may have been reused from the scheduler. A consuming
-	// request still needs a read immediately before it, so a send never rests on evidence the
-	// operator did not just ask to confirm.
-	if isReused {
-		if before, err = h.readWarmupObservation(ctx, client, file, !isManual); err != nil {
-			return finish("quota_unknown")
-		}
-		if priorReading != nil && priorReading.WarmupEvidence != nil && priorReading.WarmupEvidence.ObservedAtMS < before.ObservedAtMS {
-			state = warmup.Reconcile(state, *priorReading.WarmupEvidence)
-		}
-		state = warmup.Reconcile(state, *before)
-		before = state.Observation
-		if trigger, reason, cycle, _ = warmup.Decide(credential.Policy, state, now, isManual); trigger == "" {
-			return h.skipWarmupRun(ctx, authIndex, state, credential.Policy.DailyTime, now, reason, cycle, finish)
-		}
-	}
-	if state.LastCycle == fmt.Sprintf("cycle/%d", state.Generation) && !isManual {
-		return finish("already_attempted")
-	}
-	if state.LastCycle == fmt.Sprintf("cycle/%d", state.Generation) && state.LastResult != nil && state.LastResult.Status == "activated" && isManual {
-		return finish("already_active")
-	}
-	if requestID == "" {
-		result.RequestID = fmt.Sprintf("auto/%s/attempt/%d", cycle, state.Failures)
-	}
-	result.Trigger = trigger
-	result.Status = "executing"
-	if err = h.auditWarmup(ctx, "warmup.run", authIndex, "attempt", map[string]any{"model": result.Model, "trigger": trigger, "request_id": result.RequestID}); err != nil {
-		return result, err
-	}
-	previousCycle, previousDailyKey, previousBasis := state.LastCycle, state.DailyKey, state.ActivationBasis
-	state.ActivationBasis = before
-	state.LastCycle = fmt.Sprintf("cycle/%d", state.Generation)
-	if trigger == "daily" {
-		state.DailyKey = warmup.DailyKey(credential.Policy.DailyTime, now)
-	}
-	if err = h.persistWarmupResult(ctx, authIndex, state, result); err != nil {
-		return result, err
-	}
-	// Revalidate identity and policy after admission, before any consuming request.
-	currentFile, err := h.warmupFile(ctx, client, authIndex)
-	if err != nil || h.warmupCredentialIdentity(currentFile) != h.warmupCredentialIdentity(file) || currentFile.Disabled || currentFile.Unavailable {
-		state.LastCycle, state.DailyKey, state.ActivationBasis = previousCycle, previousDailyKey, previousBasis
-		result.Status = "failed"
-		return finish("resource_conflict")
-	}
-	current, err := h.warmupCredential(ctx, client, currentFile, false)
-	if err != nil || current.Policy != credential.Policy {
-		state.LastCycle, state.DailyKey, state.ActivationBasis = previousCycle, previousDailyKey, previousBasis
-		result.Status = "failed"
-		return finish("resource_conflict")
-	}
-	outcome := warmup.Send(ctx, client, file, credential.Provider, credential.Policy.Model)
-	result.Status = outcome.Status
-	result.Reason = outcome.Reason
-	result.InputTokens = outcome.InputTokens
-	result.OutputTokens = outcome.OutputTokens
-	result.FinishedAtMS = h.now().UnixMilli()
-	if outcome.Status == "pending" {
-		after, readErr := h.readWarmupObservation(ctx, client, file, !isManual)
-		state.VerificationReads = 1
-		if readErr == nil {
-			if isWarmupActivated(before, after) {
-				result.Status = "activated"
-				result.Reason = ""
-				state.IsProtocolVerified = true
-				state.VerifiedModel = credential.Policy.Model
-			}
-			state = warmup.Reconcile(state, *after)
-			state.LastCycle = fmt.Sprintf("cycle/%d", state.Generation)
-		}
-	}
-	if outcome.Status == "failed" && outcome.Reason == "rate_limited" {
-		state.Failures++
-		if state.Failures <= 3 {
-			delays := []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute}
-			state.NextAttemptMS = h.now().Add(delays[state.Failures-1]).UnixMilli()
-			state.LastCycle = ""
-		}
+		action = "warmup.task.update"
 	} else {
-		state.NextAttemptMS = 0
-		state.Failures = 0
+		task = warmup.Task{
+			ID:        newWarmupID("t", now),
+			Name:      warmup.DefaultTaskName(input),
+			Enabled:   input.Enabled,
+			Provider:  input.Provider,
+			AuthIndex: input.AuthIndex,
+			Account:   input.Account,
+			Model:     input.Model,
+			Trigger:   input.Trigger,
+			CreatedAt: nowISO,
+			UpdatedAt: nowISO,
+		}
 	}
-	// A consumed request must not become a plain retryable error if persistence fails.
-	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
-	if err = h.persistWarmupResult(finalCtx, authIndex, state, result); err != nil {
-		return warmup.Result{RequestID: result.RequestID, Status: "uncertain", Reason: "outcome_unknown", Model: result.Model, Trigger: trigger, StartedAtMS: result.StartedAtMS}, nil
+	if err := h.writeWarmupAudit(ctx, action, task.ID, map[string]any{
+		"enabled":    task.Enabled,
+		"provider":   task.Provider,
+		"auth_index": task.AuthIndex,
+		"model":      task.Model,
+		"trigger":    task.Trigger,
+	}); err != nil {
+		return warmup.StateView{}, err
 	}
-	_ = h.auditWarmup(finalCtx, "warmup.run", authIndex, result.Status, map[string]any{"reason": result.Reason, "request_id": result.RequestID})
-	return result, nil
+	if err := h.repo.WriteWarmupTask(ctx, warmupInstanceID, task, now.UnixMilli()); err != nil {
+		return warmup.StateView{}, err
+	}
+	return h.buildWarmupStateView(ctx, &catalog)
 }
 
-// isWarmupRunSettled reports whether the last result is a finished observation rather than a run
-// still waiting for its confirmation read. An unresolved run keeps reading because its next answer
-// decides the outcome.
-func isWarmupRunSettled(state warmup.State) bool {
-	status := ""
-	if state.LastResult != nil {
-		status = state.LastResult.Status
+func (h *Handler) removeWarmupTask(ctx context.Context, id string) (warmup.StateView, error) {
+	if h.cfg.IsDemoMode {
+		return warmup.StateView{}, errors.New("demo_operation_refused")
 	}
-	return status != "pending" && status != "uncertain" && status != "executing"
+	if h.repo == nil {
+		return warmup.StateView{}, errors.New("repository unavailable")
+	}
+	existing, err := h.repo.ReadWarmupTask(ctx, warmupInstanceID, id)
+	if err != nil {
+		return warmup.StateView{}, err
+	}
+	if existing == nil {
+		return warmup.StateView{}, errWarmupTaskNotFound
+	}
+	if err := h.writeWarmupAudit(ctx, "warmup.task.delete", existing.ID, map[string]any{
+		"provider":   existing.Provider,
+		"auth_index": existing.AuthIndex,
+	}); err != nil {
+		return warmup.StateView{}, err
+	}
+	if err := h.repo.DeleteWarmupTask(ctx, warmupInstanceID, existing.ID); err != nil {
+		return warmup.StateView{}, err
+	}
+	return h.warmupState(ctx)
 }
 
-// skipWarmupRun records a call that sent nothing: the daily task it consumed, and the reconciled
-// observation. Persisting the observation is what ends the loop that made an automatic round read
-// the same snapshot again on the next tick, because a newer stored snapshot outranks warmup state.
-func (h *Handler) skipWarmupRun(ctx context.Context, authIndex string, state warmup.State, dailyTime string, now time.Time, reason, cycle string, finish func(string) (warmup.Result, error)) (warmup.Result, error) {
-	if strings.HasPrefix(cycle, "daily/") {
-		state.DailyKey = warmup.DailyKey(dailyTime, now)
+func (h *Handler) triggerWarmupTask(ctx context.Context, id string) (warmup.RunResponse, error) {
+	if h.cfg.IsDemoMode {
+		return warmup.RunResponse{}, errors.New("demo_operation_refused")
 	}
-	if err := h.repo.WriteWarmupState(ctx, defaultInstanceID(), authIndex, state, h.now().UnixMilli()); err != nil {
-		return warmup.Result{}, err
+	if h.repo == nil {
+		return warmup.RunResponse{}, errors.New("repository unavailable")
 	}
-	return finish(reason)
+	task, err := h.repo.ReadWarmupTask(ctx, warmupInstanceID, id)
+	if err != nil {
+		return warmup.RunResponse{}, err
+	}
+	if task == nil {
+		return warmup.RunResponse{}, errWarmupTaskNotFound
+	}
+	if h.isWarmupTaskRunning(task.ID) {
+		return warmup.RunResponse{}, errWarmupTaskBusy
+	}
+	if err := h.writeWarmupAudit(ctx, "warmup.task.run", task.ID, map[string]any{
+		"provider":   task.Provider,
+		"auth_index": task.AuthIndex,
+		"model":      task.Model,
+		"source":     "manual",
+	}); err != nil {
+		return warmup.RunResponse{}, err
+	}
+	var client *management.Client
+	if c, err := h.capabilityClient(ctx); err == nil {
+		client = c
+	}
+	catalog, filesByIndex := h.warmupCatalogWithFiles(ctx, client)
+	run, err := h.executeTaskRun(ctx, client, &catalog, filesByIndex, *task, "manual", "", "")
+	if err != nil {
+		return warmup.RunResponse{}, err
+	}
+	state, err := h.buildWarmupStateView(ctx, &catalog)
+	if err != nil {
+		return warmup.RunResponse{}, err
+	}
+	return warmup.RunResponse{Run: run, State: state}, nil
+}
+
+func (h *Handler) executeTaskRun(
+	ctx context.Context,
+	client *management.Client,
+	catalog *warmup.Catalog,
+	filesByIndex map[string]management.AuthFile,
+	task warmup.Task,
+	source, due, resetKey string,
+) (warmup.Run, error) {
+	if !h.claimWarmupTask(task.ID) {
+		return warmup.Run{}, errWarmupTaskBusy
+	}
+	defer h.releaseWarmupTask(task.ID)
+
+	started := h.now().UTC()
+	account := findCatalogAccount(catalog, task)
+	var file *management.AuthFile
+	if task.AuthIndex != "" {
+		if f, ok := filesByIndex[task.AuthIndex]; ok {
+			file = &f
+		}
+	}
+	if file == nil && account != nil && account.AuthIndex != "" {
+		if f, ok := filesByIndex[account.AuthIndex]; ok {
+			file = &f
+		}
+	}
+	model := warmup.ResolveModel(task, account)
+	accountName := task.Account
+	if accountName == "" && account != nil {
+		accountName = account.Name
+	}
+	authIndex := task.AuthIndex
+	if authIndex == "" && account != nil {
+		authIndex = account.AuthIndex
+	}
+
+	run := warmup.Run{
+		ID:        newWarmupID("r", started),
+		TaskID:    task.ID,
+		TaskName:  task.Name,
+		At:        warmup.FormatISO(started),
+		Outcome:   "running",
+		Source:    source,
+		Provider:  task.Provider,
+		AuthIndex: authIndex,
+		Account:   accountName,
+		Model:     model,
+		Due:       due,
+		ResetKey:  resetKey,
+	}
+	if run.Model == "" {
+		run.Model = "Auto"
+	}
+	_ = h.repo.WriteWarmupRun(ctx, warmupInstanceID, run)
+
+	finish := func(outcome, message string) warmup.Run {
+		elapsed := h.now().UTC().Sub(started).Milliseconds()
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		run.Outcome = outcome
+		run.Message = message
+		run.MS = &elapsed
+		_ = h.repo.WriteWarmupRun(context.WithoutCancel(ctx), warmupInstanceID, run)
+		return run
+	}
+
+	if client == nil {
+		return finish("failed", "gateway_unavailable"), nil
+	}
+	if file == nil {
+		return finish("failed", "credential_not_found"), nil
+	}
+	if model == "" {
+		return finish("failed", "model_unavailable"), nil
+	}
+
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), warmupRequestTimeout)
+	outcome := warmup.Send(sendCtx, client.VerifyAuthFile, *file, model)
+	cancel()
+
+	completed := finish(outcome.Status, outcome.Reason)
+	if task.Trigger.Kind == "window" && outcome.Status == "ok" {
+		marks, err := h.repo.ReadWarmupMarks(context.WithoutCancel(ctx), warmupInstanceID, task.ID)
+		if err == nil {
+			marks.LastSent = warmup.FormatISO(h.now().UTC())
+			_ = h.repo.WriteWarmupMarks(context.WithoutCancel(ctx), warmupInstanceID, task.ID, marks, h.now().UnixMilli())
+		}
+	}
+	return completed, nil
 }
 
 func (h *Handler) RunCredentialWarmup(ctx context.Context) error {
-	if h.cfg.IsDemoMode {
-		return nil
-	}
-	ticker := time.NewTicker(time.Minute)
+	h.recoverWarmupRunsOnce(ctx)
+	ticker := time.NewTicker(warmupLoopInterval)
 	defer ticker.Stop()
-	return h.runCredentialWarmupTicks(ctx, ticker.C)
-}
-
-func (h *Handler) runCredentialWarmupTicks(ctx context.Context, ticks <-chan time.Time) error {
-	// Recovery must complete before a consuming round, but transient database
-	// failures must not remove the scheduler until the process is restarted.
-	recoverExecution := func() bool {
-		if err := h.recoverWarmupExecution(ctx); err != nil {
-			if ctx.Err() == nil {
-				h.logger.Warn("credential warmup recovery unavailable", "error", err)
-			}
-			return false
-		}
-		return true
-	}
-	hasRecovered := recoverExecution()
 	for {
+		if err := h.runCredentialWarmupRound(ctx); err != nil && h.logger != nil && !errors.Is(err, context.Canceled) {
+			h.logger.Warn("credential warmup round failed", "error", err)
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticks:
-			if !hasRecovered {
-				hasRecovered = recoverExecution()
-				if !hasRecovered {
-					continue
-				}
-			}
-			if err := h.runCredentialWarmupRound(ctx); err != nil {
-				h.logger.Warn("credential warmup round unavailable")
-			}
+		case <-ticker.C:
 		}
 	}
 }
+
 func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
-	_, err := h.warmupSettings(ctx)
+	if h.repo == nil {
+		return nil
+	}
+	h.recoverWarmupRunsOnce(ctx)
+	tasks, err := h.repo.ListWarmupTasks(ctx, warmupInstanceID)
 	if err != nil {
 		return err
 	}
-	// Disabled defaults may still have independently enabled credential policies.
-	var count int
-	if err = h.repo.SQL().QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM credential_warmup_policies WHERE instance_id=?) + (SELECT COUNT(*) FROM credential_warmup_state WHERE instance_id=? AND json_extract(document_json,'$.last_result.status')='pending')`, defaultInstanceID(), defaultInstanceID()).Scan(&count); err != nil {
-		return err
+	enabled := make([]warmup.Task, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Enabled {
+			enabled = append(enabled, task)
+		}
 	}
-	if count == 0 {
+	if len(enabled) == 0 {
 		return nil
 	}
+
 	client, err := h.capabilityClient(ctx)
 	if err != nil {
 		return err
 	}
-	files, err := client.AuthFiles(ctx)
+	catalog, filesByIndex := h.warmupCatalogWithFiles(ctx, client)
+	marksMap, err := h.repo.ListWarmupMarks(ctx, warmupInstanceID)
 	if err != nil {
 		return err
 	}
-	counts := map[string]int{}
-	for _, file := range files.Files {
-		counts[file.AuthIndex]++
-	}
-	attemptOrder := map[string]int64{}
-	for _, file := range files.Files {
-		state, readErr := h.repo.ReadWarmupState(ctx, defaultInstanceID(), file.AuthIndex)
-		if readErr != nil {
-			return readErr
-		}
-		observed := int64(0)
-		if state.Observation != nil {
-			observed = state.Observation.ObservedAtMS
-		}
-		if state.NextAttemptMS > observed {
-			observed = state.NextAttemptMS
-		}
-		attemptOrder[file.AuthIndex] = observed
-	}
-	slices.SortStableFunc(files.Files, func(first, second management.AuthFile) int {
-		if attemptOrder[first.AuthIndex] < attemptOrder[second.AuthIndex] {
-			return -1
-		}
-		if attemptOrder[first.AuthIndex] > attemptOrder[second.AuthIndex] {
-			return 1
-		}
-		return strings.Compare(first.AuthIndex, second.AuthIndex)
-	})
+	now := h.now().UTC()
 
-	semaphore := make(chan struct{}, 4)
-	var workers sync.WaitGroup
-	processed := 0
-	for _, file := range files.Files {
-		if processed >= 16 {
-			break
-		}
-		if counts[file.AuthIndex] != 1 || file.AuthIndex == "" || file.Disabled || file.Unavailable || !warmup.IsProvider(quota.DetectProvider(file.Type, file.Provider)) || file.Source == "config" {
+	refreshedAny := false
+	refreshedIndices := make(map[string]struct{})
+	for _, task := range enabled {
+		if task.Trigger.Kind != "window" {
 			continue
 		}
-		credential, err := h.warmupCredential(ctx, client, file, false)
-		if err != nil {
+		account := findCatalogAccount(&catalog, task)
+		authIndex := task.AuthIndex
+		if authIndex == "" && account != nil {
+			authIndex = account.AuthIndex
+		}
+		if authIndex == "" {
 			continue
 		}
-		pendingPolicy := credential.State.LastResult != nil && credential.State.LastResult.Status == "pending"
-		if !credential.Policy.IsEnabled() && !pendingPolicy {
+		if _, already := refreshedIndices[authIndex]; already {
 			continue
 		}
-		state := credential.State
-		now := h.now().In(h.repo.Timezone().Location())
-		isPending := state.LastResult != nil && (state.LastResult.Status == "pending" || state.LastResult.Status == "executing")
-		if !isPending && state.NextAttemptMS > now.UnixMilli() {
+		file, ok := filesByIndex[authIndex]
+		if !ok || file.Disabled || file.Unavailable {
 			continue
 		}
-		isFresh := state.Observation != nil && now.UnixMilli()-state.Observation.ObservedAtMS < warmup.OBSERVATION_MAX_AGE_MS
-		hasElapsedReset := false
-		if state.Observation != nil {
-			for _, window := range []warmup.Window{state.Observation.FiveHour, state.Observation.Weekly} {
-				if window.ResetAtMS != nil && *window.ResetAtMS <= now.UnixMilli() {
-					hasElapsedReset = true
-				}
+		if needsWindowQuotaRefresh(task, account, marksMap[task.ID], now) {
+			refreshedIndices[authIndex] = struct{}{}
+			if h.refreshWarmupQuota(ctx, client, file) {
+				refreshedAny = true
 			}
 		}
-		trigger, _, cycle, next := warmup.Decide(credential.Policy, state, now, false)
-		latest := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
-		hasNewReading := latest != nil && latest.WarmupEvidence != nil && (state.Observation == nil || latest.WarmupEvidence.ObservedAtMS > state.Observation.ObservedAtMS)
-		if !isPending && !hasNewReading && !hasElapsedReset && !strings.HasPrefix(cycle, "daily/") && isFresh && trigger == "" && (next == nil || *next > now.UnixMilli()) {
-			continue
-		}
-		processed++
-		semaphore <- struct{}{}
-		workers.Add(1)
-		go func(file management.AuthFile, credential warmup.Credential) {
-			defer workers.Done()
-			defer func() { <-semaphore }()
-			if !h.warmupRuntime.acquire(file.AuthIndex) {
-				return
-			}
-			state := credential.State
-			reading := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
-			observation := (*warmup.Observation)(nil)
-			if reading != nil && reading.WarmupEvidence != nil && h.now().UnixMilli()-reading.WarmupEvidence.ObservedAtMS < warmup.OBSERVATION_MAX_AGE_MS {
-				observation = reading.WarmupEvidence
-			}
-			isPending := state.LastResult != nil && (state.LastResult.Status == "pending" || state.LastResult.Status == "executing")
-			if observation == nil || isPending {
-				observation, _ = h.readWarmupObservation(ctx, client, file, true)
-			}
-			if observation == nil {
-				state.NextAttemptMS = h.now().Add(5 * time.Minute).UnixMilli()
-				_ = h.repo.WriteWarmupState(ctx, defaultInstanceID(), file.AuthIndex, state, h.now().UnixMilli())
-				h.warmupRuntime.release(file.AuthIndex)
-				return
-			}
-			state = warmup.Reconcile(state, *observation)
-			observation = state.Observation
-			if isPending {
-				result := *state.LastResult
-				if result.Status == "executing" {
-					result.Status = "uncertain"
-					result.Reason = "outcome_unknown"
-				} else if isWarmupActivated(state.ActivationBasis, observation) {
-					result.Status = "activated"
-					state.LastCycle = fmt.Sprintf("cycle/%d", state.Generation)
-					result.Reason = ""
-					state.IsProtocolVerified = true
-					state.VerifiedModel = result.Model
-				} else {
-					state.VerificationReads++
-					if state.VerificationReads >= 3 {
-						result.Status = "uncertain"
-						result.Reason = "activation_unconfirmed"
-					}
-				}
-				_ = h.persistWarmupResult(ctx, file.AuthIndex, state, result)
-				h.warmupRuntime.release(file.AuthIndex)
-				return
-			}
-			saveErr := h.repo.WriteWarmupState(ctx, defaultInstanceID(), file.AuthIndex, state, h.now().UnixMilli())
-			if saveErr != nil {
-				h.warmupRuntime.release(file.AuthIndex)
-				return
-			}
-			// The reconciled state decides first: with active windows and fresh evidence there is
-			// nothing to send, and entering execution would only read policy and quota again.
-			if trigger, _, cycle, _ := warmup.Decide(credential.Policy, state, now, false); trigger == "" && !strings.HasPrefix(cycle, "daily/") {
-				h.warmupRuntime.release(file.AuthIndex)
-				return
-			}
-			h.warmupRuntime.release(file.AuthIndex)
-			_, _ = h.executeWarmup(ctx, file.AuthIndex, "", "", false)
-		}(file, credential)
 	}
-	workers.Wait()
+	if refreshedAny {
+		catalog, filesByIndex = h.warmupCatalogWithFiles(ctx, client)
+	}
+
+	now = h.now().UTC()
+	for _, task := range enabled {
+		if h.isWarmupTaskRunning(task.ID) {
+			continue
+		}
+		marks := marksMap[task.ID]
+		if task.Trigger.Kind == "window" {
+			account := findCatalogAccount(&catalog, task)
+			win := warmup.FindAccountWindow(account, task.Trigger.Window)
+			due := warmup.CurrentWindowDue(task, account, marks, now)
+			if due != nil && !due.Idle && win != nil && win.ResetsAt != "" && marks.LastReset != win.ResetsAt {
+				marks.LastReset = win.ResetsAt
+				marksMap[task.ID] = marks
+				_ = h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli())
+			}
+			if due == nil || slices.Contains(marks.ResetKeys, due.ResetKey) {
+				continue
+			}
+			dueTime, ok := warmup.ParseISO(due.At)
+			if !ok || dueTime.After(now) {
+				continue
+			}
+			marks.ResetKeys = append(marks.ResetKeys, due.ResetKey)
+			if len(marks.ResetKeys) > warmup.MAX_RESET_KEYS {
+				marks.ResetKeys = marks.ResetKeys[len(marks.ResetKeys)-warmup.MAX_RESET_KEYS:]
+			}
+			marksMap[task.ID] = marks
+			if err := h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli()); err != nil {
+				continue
+			}
+			_, _ = h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, "schedule", due.At, due.ResetKey)
+			continue
+		}
+
+		dueTime, ok := warmup.LastDue(now, task.Trigger)
+		if !ok {
+			continue
+		}
+		floorISO := maxISOString(marks.LastDue, task.UpdatedAt)
+		if floorTime, ok := warmup.ParseISO(floorISO); ok && !dueTime.After(floorTime) {
+			continue
+		}
+		source := "schedule"
+		if now.Sub(dueTime) > warmup.CATCHUP_LAG {
+			source = "catchup"
+		}
+		dueISO := warmup.FormatISO(dueTime)
+		marks.LastDue = dueISO
+		marksMap[task.ID] = marks
+		if err := h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli()); err != nil {
+			continue
+		}
+		_, _ = h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, source, dueISO, "")
+	}
 	return nil
 }
 
-func (h *Handler) recoverWarmupExecution(ctx context.Context) error {
-	rows, err := h.repo.SQL().QueryContext(ctx, `SELECT auth_index FROM credential_warmup_state WHERE instance_id=? AND json_extract(document_json,'$.last_result.status')='executing'`, defaultInstanceID())
-	if err != nil {
-		return err
+func needsWindowQuotaRefresh(task warmup.Task, account *warmup.CatalogAccount, marks warmup.TaskMarks, now time.Time) bool {
+	if account == nil || strings.TrimSpace(account.SnapshotAt) == "" {
+		return true
 	}
-	authIndexes := []string{}
-	for rows.Next() {
-		var authIndex string
-		if err = rows.Scan(&authIndex); err != nil {
-			rows.Close()
-			return err
+	snapAt, hasSnap := warmup.ParseISO(account.SnapshotAt)
+	if !hasSnap {
+		return true
+	}
+	if sentAt, ok := warmup.ParseISO(marks.LastSent); ok {
+		settleAt := sentAt.Add(warmup.POST_SEND_SETTLE)
+		if !now.Before(settleAt) && snapAt.Before(settleAt) {
+			return true
 		}
-		authIndexes = append(authIndexes, authIndex)
 	}
-	err = rows.Err()
-	rows.Close()
+	win := warmup.FindAccountWindow(account, task.Trigger.Window)
+	if win == nil {
+		return false
+	}
+	if resetAt, ok := warmup.ParseISO(win.ResetsAt); ok {
+		if !now.Before(resetAt) && snapAt.Before(resetAt) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Handler) refreshWarmupQuota(ctx context.Context, client *management.Client, file management.AuthFile) bool {
+	service := quota.NewServiceWithClock(client, h.now)
+	prior := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
+	reading, err := h.refreshQuotaReadingAs(ctx, service, file, prior, true)
+	if err != nil || reading == nil {
+		return false
+	}
+	_ = h.persistNormalizedQuotaSnapshot(ctx, reading)
+	return true
+}
+
+func (h *Handler) warmupCatalogWithFiles(ctx context.Context, client *management.Client) (warmup.Catalog, map[string]management.AuthFile) {
+	catalog := warmup.Catalog{
+		Providers: []warmup.CatalogProvider{},
+		TimeZone:  h.warmupTimezoneName(),
+	}
+	filesByIndex := make(map[string]management.AuthFile)
+	if client == nil {
+		return catalog, filesByIndex
+	}
+	filesResp, err := client.AuthFiles(ctx)
 	if err != nil {
-		return err
+		return catalog, filesByIndex
 	}
-	for _, authIndex := range authIndexes {
-		if !h.warmupRuntime.acquire(authIndex) {
+
+	authIndices := make([]string, 0, len(filesResp.Files))
+	for _, file := range filesResp.Files {
+		idx := strings.TrimSpace(file.AuthIndex)
+		if idx == "" || file.RuntimeOnly {
 			continue
 		}
-		state, readErr := h.repo.ReadWarmupState(ctx, defaultInstanceID(), authIndex)
-		if readErr == nil && state.LastResult != nil && state.LastResult.Status == "executing" {
-			result := *state.LastResult
-			result.Status = "uncertain"
-			result.Reason = "outcome_unknown"
-			readErr = h.persistWarmupResult(ctx, authIndex, state, result)
+		filesByIndex[idx] = file
+		authIndices = append(authIndices, idx)
+	}
+	snapshots, _ := h.repo.GetLatestQuotaSnapshots(ctx, authIndices)
+
+	byProvider := map[string][]warmup.CatalogAccount{
+		"codex":  {},
+		"claude": {},
+	}
+	for _, file := range filesResp.Files {
+		idx := strings.TrimSpace(file.AuthIndex)
+		if idx == "" || file.RuntimeOnly {
+			continue
 		}
-		h.warmupRuntime.release(authIndex)
-		if readErr != nil {
-			return readErr
+		provider := warmupProvider(file)
+		if provider == "" {
+			continue
+		}
+		models := h.warmupModelsForFile(ctx, client, provider, file, filesResp.Files)
+		autoModel := warmup.PickAutoModel(models)
+		windows, snapshotAt := warmupAccountWindows(provider, idx, snapshots)
+		account := warmup.CatalogAccount{
+			AuthIndex:  idx,
+			Name:       firstNonEmpty(strings.TrimSpace(file.Name), idx),
+			Provider:   provider,
+			Email:      strings.TrimSpace(file.Email),
+			Status:     strings.TrimSpace(file.Status),
+			Disabled:   file.Disabled || file.Unavailable,
+			Models:     models,
+			AutoModel:  autoModel,
+			Windows:    windows,
+			SnapshotAt: snapshotAt,
+		}
+		byProvider[provider] = append(byProvider[provider], account)
+	}
+
+	providerOrder := []string{"codex", "claude"}
+	for p := range byProvider {
+		if p != "codex" && p != "claude" {
+			providerOrder = append(providerOrder, p)
+		}
+	}
+	if len(providerOrder) > 2 {
+		sort.Strings(providerOrder[2:])
+	}
+	for _, p := range providerOrder {
+		accounts := byProvider[p]
+		slices.SortFunc(accounts, func(a, b warmup.CatalogAccount) int {
+			if a.Name != b.Name {
+				return strings.Compare(a.Name, b.Name)
+			}
+			return strings.Compare(a.AuthIndex, b.AuthIndex)
+		})
+		catalog.Providers = append(catalog.Providers, warmup.CatalogProvider{
+			Provider: p,
+			Accounts: accounts,
+		})
+	}
+	return catalog, filesByIndex
+}
+
+func warmupAccountWindows(provider, authIndex string, snapshots map[string]repository.QuotaSnapshotRecord) ([]warmup.QuotaWindow, string) {
+	snapshot, hasSnapshot := snapshots[authIndex]
+	windows := make([]warmup.QuotaWindow, 0)
+	snapshotAt := ""
+	if hasSnapshot {
+		q := normalizedQuotaFromSnapshot(authIndex, snapshot)
+		if q.ObservedAtMS > 0 {
+			snapshotAt = warmup.FormatISO(time.UnixMilli(q.ObservedAtMS).UTC())
+		}
+		seenIDs := make(map[string]bool, len(q.Windows))
+		for _, w := range q.Windows {
+			resetsAt := formatOptionalEpochISO(w.ResetAtMS)
+			windows = append(windows, warmup.QuotaWindow{
+				ID:          w.ID,
+				Label:       firstNonEmpty(w.Label, w.ID),
+				UsedPercent: w.UsedPercent,
+				ResetsAt:    resetsAt,
+			})
+			seenIDs[w.ID] = true
+		}
+		if q.WarmupEvidence != nil {
+			if !seenIDs["five_hour"] && (q.WarmupEvidence.FiveHour.State == "idle" || q.WarmupEvidence.FiveHour.ResetAtMS != nil) {
+				windows = append([]warmup.QuotaWindow{{
+					ID:          "five_hour",
+					Label:       "5h",
+					UsedPercent: q.WarmupEvidence.FiveHour.UsedPercent,
+					ResetsAt:    formatOptionalEpochISO(q.WarmupEvidence.FiveHour.ResetAtMS),
+				}}, windows...)
+			}
+			if !seenIDs["seven_day"] && !seenIDs["weekly"] && (q.WarmupEvidence.Weekly.State == "idle" || q.WarmupEvidence.Weekly.ResetAtMS != nil) {
+				wid := "seven_day"
+				if provider == "codex" {
+					wid = "weekly"
+				}
+				windows = append(windows, warmup.QuotaWindow{
+					ID:          wid,
+					Label:       "7d",
+					UsedPercent: q.WarmupEvidence.Weekly.UsedPercent,
+					ResetsAt:    formatOptionalEpochISO(q.WarmupEvidence.Weekly.ResetAtMS),
+				})
+			}
+		}
+	}
+	if len(windows) == 0 && (provider == "claude" || provider == "codex") {
+		wid := "seven_day"
+		if provider == "codex" {
+			wid = "weekly"
+		}
+		windows = []warmup.QuotaWindow{
+			{ID: "five_hour", Label: "5h"},
+			{ID: wid, Label: "7d"},
+		}
+	}
+	return windows, snapshotAt
+}
+
+func formatOptionalEpochISO(epochMS *int64) string {
+	if epochMS == nil || *epochMS <= 0 {
+		return ""
+	}
+	return warmup.FormatISO(time.UnixMilli(*epochMS).UTC())
+}
+
+func findCatalogAccount(catalog *warmup.Catalog, task warmup.Task) *warmup.CatalogAccount {
+	if catalog == nil {
+		return nil
+	}
+	for pIdx := range catalog.Providers {
+		p := &catalog.Providers[pIdx]
+		if task.Provider != "" && p.Provider != task.Provider {
+			continue
+		}
+		for aIdx := range p.Accounts {
+			acc := &p.Accounts[aIdx]
+			if task.AuthIndex != "" && acc.AuthIndex == task.AuthIndex {
+				return acc
+			}
+		}
+		for aIdx := range p.Accounts {
+			acc := &p.Accounts[aIdx]
+			if task.Account != "" && acc.Name == task.Account {
+				return acc
+			}
 		}
 	}
 	return nil
+}
+
+func warmupProvider(file management.AuthFile) string {
+	provider := quota.DetectProvider(file.Type, file.Provider)
+	if provider == "unknown" {
+		return ""
+	}
+	return provider
+}
+
+func (h *Handler) warmupModelsForFile(ctx context.Context, client *management.Client, provider string, file management.AuthFile, allFiles []management.AuthFile) []string {
+	candidates := modelIDs(file.Models)
+	if len(candidates) == 0 && client != nil && strings.TrimSpace(file.Name) != "" {
+		if models, err := client.AuthFileModels(ctx, file.Name); err == nil {
+			candidates = modelIDs(models)
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = h.warmupModelsForProvider(ctx, client, provider, allFiles)
+	}
+	filtered := make([]string, 0, len(candidates))
+	seen := make(map[string]bool, len(candidates))
+	for _, m := range candidates {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		seen[m] = true
+		filtered = append(filtered, m)
+	}
+	sort.Strings(filtered)
+	return filtered
+}
+
+func (h *Handler) warmupModelsForProvider(ctx context.Context, client *management.Client, provider string, files []management.AuthFile) []string {
+	now := h.now()
+	h.warmupRuntime.mu.Lock()
+	if h.warmupRuntime.models == nil {
+		h.warmupRuntime.models = make(map[string]warmupModelCacheEntry)
+	}
+	if cached, ok := h.warmupRuntime.models[provider]; ok && now.Before(cached.expiresAt) {
+		out := slices.Clone(cached.models)
+		h.warmupRuntime.mu.Unlock()
+		return out
+	}
+	h.warmupRuntime.mu.Unlock()
+
+	seen := make(map[string]bool)
+	models := make([]string, 0)
+	add := func(ids []string) {
+		for _, id := range ids {
+			id = strings.TrimSpace(id)
+			if id != "" && !seen[id] {
+				seen[id] = true
+				models = append(models, id)
+			}
+		}
+	}
+	for _, f := range files {
+		if warmupProvider(f) == provider {
+			add(modelIDs(f.Models))
+			if len(f.Models) == 0 && client != nil && strings.TrimSpace(f.Name) != "" {
+				if fileModels, err := client.AuthFileModels(ctx, f.Name); err == nil {
+					add(modelIDs(fileModels))
+				}
+			}
+		}
+	}
+	if len(models) == 0 && client != nil {
+		if defs, _, err := client.OAuthChannelModelDefinitions(ctx, provider); err == nil {
+			add(modelIDs(defs))
+		}
+	}
+	sort.Strings(models)
+	if len(models) > 0 {
+		h.warmupRuntime.mu.Lock()
+		h.warmupRuntime.models[provider] = warmupModelCacheEntry{models: slices.Clone(models), expiresAt: now.Add(warmupModelCacheTTL)}
+		h.warmupRuntime.mu.Unlock()
+	}
+	return models
+}
+
+func modelIDs(models []management.AuthModel) []string {
+	out := make([]string, 0, len(models))
+	for _, m := range models {
+		if id := strings.TrimSpace(m.ID); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func (h *Handler) warmupTimezoneName() string {
+	if h.repo != nil && h.repo.Timezone() != nil && h.repo.Timezone().Location() != nil {
+		if tz := strings.TrimSpace(h.repo.Timezone().Location().String()); tz != "" && warmup.ValidTimeZone(tz) {
+			return tz
+		}
+	}
+	return "UTC"
+}
+
+func (h *Handler) claimWarmupTask(taskID string) bool {
+	h.warmupRuntime.mu.Lock()
+	defer h.warmupRuntime.mu.Unlock()
+	if h.warmupRuntime.runningTask == nil {
+		h.warmupRuntime.runningTask = make(map[string]bool)
+	}
+	if h.warmupRuntime.runningTask[taskID] {
+		return false
+	}
+	h.warmupRuntime.runningTask[taskID] = true
+	return true
+}
+
+func (h *Handler) releaseWarmupTask(taskID string) {
+	h.warmupRuntime.mu.Lock()
+	defer h.warmupRuntime.mu.Unlock()
+	delete(h.warmupRuntime.runningTask, taskID)
+}
+
+func (h *Handler) isWarmupTaskRunning(taskID string) bool {
+	h.warmupRuntime.mu.Lock()
+	defer h.warmupRuntime.mu.Unlock()
+	return h.warmupRuntime.runningTask[taskID]
+}
+
+func (h *Handler) recoverWarmupRunsOnce(ctx context.Context) {
+	h.warmupRuntime.mu.Lock()
+	if h.warmupRuntime.recovered {
+		h.warmupRuntime.mu.Unlock()
+		return
+	}
+	h.warmupRuntime.recovered = true
+	h.warmupRuntime.mu.Unlock()
+	if h.repo != nil {
+		_ = h.repo.RecoverWarmupRuns(ctx, warmupInstanceID)
+	}
+}
+
+func (h *Handler) writeWarmupAudit(ctx context.Context, action, target string, detail map[string]any) error {
+	if h.repo == nil {
+		return nil
+	}
+	_, err := h.repo.RecordAuditEvent(ctx, repository.AuditEvent{
+		OccurredAtMS: h.now().UTC().UnixMilli(),
+		Action:       action,
+		TargetType:   "warmup",
+		TargetID:     target,
+		Result:       "success",
+		Details:      detail,
+	})
+	return err
+}
+
+func newWarmupID(prefix string, now time.Time) string {
+	var b [3]byte
+	_, _ = rand.Read(b[:])
+	return prefix + "_" + strconv.FormatInt(now.UnixMilli(), 36) + "_" + hex.EncodeToString(b[:])
+}
+
+func maxISOString(a, b string) string {
+	ta, oka := warmup.ParseISO(a)
+	tb, okb := warmup.ParseISO(b)
+	switch {
+	case oka && okb:
+		if ta.After(tb) {
+			return a
+		}
+		return b
+	case oka:
+		return a
+	case okb:
+		return b
+	default:
+		return ""
+	}
 }

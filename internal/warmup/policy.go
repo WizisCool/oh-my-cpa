@@ -1,186 +1,454 @@
 package warmup
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
-// DailyStart uses the deployment calendar, never the browser's zone. A repeated
-// DST hour has one task identity; a missing hour is moved to the next valid hour.
-func DailyStart(clock string, now time.Time) time.Time {
-	hour, _ := strconv.Atoi(clock[:2])
-	minute, _ := strconv.Atoi(clock[3:])
-	year, month, day := now.Date()
-	start := time.Date(year, month, day, hour, minute, 0, 0, now.Location())
-	if start.Hour() < hour {
-		start = start.Add(time.Hour)
+var (
+	specWords = []string{"flash", "lite", "mini", "nano", "small", "turbo", "haiku"}
+	specRegex = func() []*regexp.Regexp {
+		out := make([]*regexp.Regexp, len(specWords))
+		for i, word := range specWords {
+			out[i] = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])` + word + `(?:$|[^a-z0-9])`)
+		}
+		return out
+	}()
+	clockPattern = regexp.MustCompile(`^(\d{2}):(\d{2})$`)
+)
+
+func lastSegment(id string) string {
+	idx := strings.LastIndexByte(id, '/')
+	if idx >= 0 {
+		return id[idx+1:]
 	}
-	return start
-}
-func NextDailyStart(clock string, now time.Time) time.Time {
-	start := DailyStart(clock, now)
-	if !start.After(now) {
-		start = DailyStart(clock, now.AddDate(0, 0, 1))
-	}
-	return start
-}
-func DailyKey(clock string, now time.Time) string {
-	return now.Location().String() + "/" + now.Format(time.DateOnly) + "/" + clock
+	return id
 }
 
-func Reconcile(state State, observation Observation) State {
-	previous := state.Observation
-	if previous != nil {
-		elapsed := observation.ObservedAtMS - previous.ObservedAtMS
-		for _, pair := range []struct {
-			before Window
-			after  *Window
-		}{{previous.FiveHour, &observation.FiveHour}, {previous.Weekly, &observation.Weekly}} {
-			before, after := pair.before, pair.after
-			if elapsed >= 30000 && before.UsedPercent != nil && after.UsedPercent != nil && *before.UsedPercent == 0 && *after.UsedPercent == 0 && before.ResetAtMS != nil && after.ResetAtMS != nil && before.PeriodMS == after.PeriodMS && *after.ResetAtMS-observation.ObservedAtMS >= after.PeriodMS-600000 {
-				shift := *after.ResetAtMS - *before.ResetAtMS - elapsed
-				if shift >= -1000 && shift <= 1000 {
-					after.State = "idle"
+func specTier(id string) int {
+	name := lastSegment(id)
+	for i, re := range specRegex {
+		if re.MatchString(name) {
+			return i
+		}
+	}
+	return len(specWords)
+}
+
+// compareNaturalFold compares two strings case-insensitively with numeric-aware chunk ordering.
+func compareNaturalFold(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	ia, ib := 0, 0
+	for ia < len(ra) && ib < len(rb) {
+		da := unicode.IsDigit(ra[ia])
+		db := unicode.IsDigit(rb[ib])
+		if da && db {
+			sa, sb := ia, ib
+			for ia < len(ra) && unicode.IsDigit(ra[ia]) {
+				ia++
+			}
+			for ib < len(rb) && unicode.IsDigit(rb[ib]) {
+				ib++
+			}
+			na := strings.TrimLeft(string(ra[sa:ia]), "0")
+			nb := strings.TrimLeft(string(rb[sb:ib]), "0")
+			if len(na) != len(nb) {
+				if len(na) < len(nb) {
+					return -1
 				}
+				return 1
 			}
+			if na != nb {
+				if na < nb {
+					return -1
+				}
+				return 1
+			}
+			continue
+		}
+		ca := unicode.ToLower(ra[ia])
+		cb := unicode.ToLower(rb[ib])
+		if ca != cb {
+			if ca < cb {
+				return -1
+			}
+			return 1
+		}
+		ia++
+		ib++
+	}
+	switch {
+	case ia < len(ra):
+		return 1
+	case ib < len(rb):
+		return -1
+	default:
+		return 0
+	}
+}
+
+// SortModelsForAuto orders models by lightness tier (flash < lite < mini < nano < small < turbo < haiku),
+// breaking ties by newer version first (descending natural sort on the last segment).
+func SortModelsForAuto(models []string) []string {
+	out := make([]string, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
+	for _, raw := range models {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	slices.SortFunc(out, func(a, b string) int {
+		ta, tb := specTier(a), specTier(b)
+		if ta != tb {
+			return ta - tb
+		}
+		return compareNaturalFold(lastSegment(b), lastSegment(a))
+	})
+	return out
+}
+
+// PickAutoModel selects the lightest candidate model from the credential's model list.
+func PickAutoModel(models []string) string {
+	sorted := SortModelsForAuto(models)
+	if len(sorted) == 0 {
+		return ""
+	}
+	return sorted[0]
+}
+
+// ResolveModel returns the task's configured model, or the account's resolved auto model when empty.
+func ResolveModel(task Task, account *CatalogAccount) string {
+	if explicit := strings.TrimSpace(task.Model); explicit != "" {
+		return explicit
+	}
+	if account == nil {
+		return ""
+	}
+	if account.AutoModel != "" {
+		return account.AutoModel
+	}
+	return PickAutoModel(account.Models)
+}
+
+func ParseClock(clock string) (int, int, bool) {
+	m := clockPattern.FindStringSubmatch(strings.TrimSpace(clock))
+	if m == nil {
+		return 0, 0, false
+	}
+	hour, err1 := strconv.Atoi(m[1])
+	minute, err2 := strconv.Atoi(m[2])
+	if err1 != nil || err2 != nil || hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		return 0, 0, false
+	}
+	return hour, minute, true
+}
+
+func ValidTimeZone(tz string) bool {
+	trimmed := strings.TrimSpace(tz)
+	if trimmed == "" {
+		return false
+	}
+	_, err := time.LoadLocation(trimmed)
+	return err == nil
+}
+
+func ParseISO(raw string) (time.Time, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
+		return t.UTC(), true
+	}
+	if t, err := time.Parse(time.RFC3339, trimmed); err == nil {
+		return t.UTC(), true
+	}
+	return time.Time{}, false
+}
+
+func FormatISO(t time.Time) string {
+	return t.UTC().Truncate(time.Millisecond).Format("2006-01-02T15:04:05.000Z")
+}
+
+func zonedDayTime(year int, month time.Month, day, hour, minute int, loc *time.Location) time.Time {
+	targetUTC := time.Date(year, month, day, hour, minute, 0, 0, time.UTC)
+	guess := targetUTC
+	for range 4 {
+		p := guess.In(loc)
+		asUTC := time.Date(p.Year(), p.Month(), p.Day(), p.Hour(), p.Minute(), p.Second(), 0, time.UTC)
+		diff := targetUTC.Sub(asUTC)
+		if diff == 0 {
+			return guess.UTC()
+		}
+		guess = guess.Add(diff)
+	}
+	return guess.UTC()
+}
+
+// NextDaily computes the next daily trigger instant strictly after `after`.
+func NextDaily(after time.Time, clockStr, timeZone string) (time.Time, bool) {
+	hour, minute, ok := ParseClock(clockStr)
+	if !ok {
+		return time.Time{}, false
+	}
+	loc, err := time.LoadLocation(strings.TrimSpace(timeZone))
+	if err != nil {
+		return time.Time{}, false
+	}
+	start := after.In(loc)
+	for offset := 0; offset <= 7; offset++ {
+		day := time.Date(start.Year(), start.Month(), start.Day()+offset, 12, 0, 0, 0, time.UTC)
+		candidate := zonedDayTime(day.Year(), day.Month(), day.Day(), hour, minute, loc)
+		if candidate.After(after) {
+			return candidate, true
 		}
 	}
-	if previous != nil && observation.ObservedAtMS <= previous.ObservedAtMS {
-		return state
+	return time.Time{}, false
+}
+
+// NextEvery computes the next fixed-interval trigger instant strictly after `after`.
+func NextEvery(after time.Time, hours int, anchorISO string) (time.Time, bool) {
+	if hours < MIN_EVERY_HOURS || hours > MAX_EVERY_HOURS {
+		return time.Time{}, false
 	}
-	if previous != nil {
-		for _, pair := range [][2]Window{{previous.FiveHour, observation.FiveHour}, {previous.Weekly, observation.Weekly}} {
-			before, after := pair[0], pair[1]
-			if after.State == "idle" && before.State == "active" {
-				state.Generation++
+	anchor, ok := ParseISO(anchorISO)
+	if !ok {
+		return time.Time{}, false
+	}
+	step := time.Duration(hours) * time.Hour
+	if !after.After(anchor) {
+		return anchor, true
+	}
+	steps := after.Sub(anchor)/step + 1
+	return anchor.Add(steps * step).UTC(), true
+}
+
+// LastDue returns the most recent scheduled due instant at or before `now` for daily and every triggers.
+func LastDue(now time.Time, trigger Trigger) (time.Time, bool) {
+	switch trigger.Kind {
+	case "daily":
+		cursor := now.Add(-DAILY_LOOKBACK)
+		var last time.Time
+		hasLast := false
+		for range 8 {
+			next, ok := NextDaily(cursor, trigger.Time, trigger.TimeZone)
+			if !ok || next.After(now) {
 				break
 			}
-			if before.ResetAtMS != nil && after.ResetAtMS != nil && absWarmupTime(*before.ResetAtMS-*after.ResetAtMS) > 1000 && after.State == "active" {
-				state.Generation++
-				break
-			}
+			last = next
+			hasLast = true
+			cursor = next
 		}
+		return last, hasLast
+	case "every":
+		if trigger.Hours < MIN_EVERY_HOURS || trigger.Hours > MAX_EVERY_HOURS {
+			return time.Time{}, false
+		}
+		anchor, ok := ParseISO(trigger.Anchor)
+		if !ok || now.Before(anchor) {
+			return time.Time{}, false
+		}
+		step := time.Duration(trigger.Hours) * time.Hour
+		steps := now.Sub(anchor) / step
+		return anchor.Add(steps * step).UTC(), true
+	default:
+		return time.Time{}, false
 	}
-	state.Observation = &observation
-	return state
 }
 
-func Eligibility(policy Policy, observation *Observation, nowMS int64) string {
-	if policy.Model == "" {
-		return "model_required"
-	}
-	if observation == nil || observation.ObservedAtMS > nowMS+1000 || nowMS-observation.ObservedAtMS > OBSERVATION_MAX_AGE_MS {
-		return "quota_unknown"
-	}
-	if observation.Provider != "codex" && observation.PaidFallback == "enabled" {
-		return "paid_usage_enabled"
-	}
-	if observation.Provider != "codex" && observation.PaidFallback != "disabled" {
-		return "paid_usage_unknown"
-	}
-	for family, window := range observation.ModelWindows {
-		if strings.Contains(strings.ToLower(policy.Model), family) {
-			if window.State == "unknown" {
-				return "quota_unknown"
-			}
-			if window.UsedPercent != nil && *window.UsedPercent >= 100 {
-				return "quota_exhausted"
-			}
-		}
-	}
-	for _, model := range observation.BlockedModels {
-		if strings.EqualFold(model, policy.Model) {
-			return "quota_exhausted"
-		}
-	}
-	if observation.IsBlocked {
-		return "quota_exhausted"
-	}
-	for _, window := range []Window{observation.FiveHour, observation.Weekly} {
-		if window.State == "unknown" || window.State == "" {
-			return "quota_unknown"
-		}
-		if window.State == "active" && (window.UsedPercent == nil || *window.UsedPercent >= 100) {
-			return "quota_exhausted"
-		}
-	}
-	return ""
+func hourFloorISO(t time.Time) string {
+	u := t.UTC()
+	floored := time.Date(u.Year(), u.Month(), u.Day(), u.Hour(), 0, 0, 0, time.UTC)
+	return FormatISO(floored)
 }
 
-// Decide combines simultaneous triggers. Manual runs intentionally bypass the
-// clock preference, but never provider-specific billing, observation or already-active guards.
-func Decide(policy Policy, state State, now time.Time, isManual bool) (trigger, reason, cycle string, next *int64) {
-	if !isManual && !policy.IsEnabled() {
-		return "", "disabled", "", nil
+// WindowDue evaluates when a quota window is due for warmup.
+// An idle window (no resets_at, or resets_at <= snapshot_at) is due immediately at most once per hour.
+// An active window is due 30s after resets_at.
+func WindowDue(window *QuotaWindow, snapshotAt string) *WindowDueResult {
+	if window == nil {
+		return nil
 	}
-	if reason = Eligibility(policy, state.Observation, now.UnixMilli()); reason != "" {
-		return
-	}
-	observation := state.Observation
-	cycle = fmt.Sprintf("cycle/%d", state.Generation)
-	if isManual {
-		if observation.FiveHour.State != "idle" && observation.Weekly.State != "idle" {
-			return "", "already_active", cycle, nil
+	if strings.TrimSpace(window.ResetsAt) == "" {
+		snap, ok := ParseISO(snapshotAt)
+		if !ok {
+			return nil
 		}
-		return "manual", "", cycle, nil
-	}
-	// An observed protocol refusal pauses that model; an untried model is admitted
-	// by the approved policy and current quota evidence, not historical success.
-	if pause := state.ReadProtocolPause(); pause != nil && pause.Model == policy.Model &&
-		(observation.FiveHour.State == "idle" || observation.Weekly.State == "idle") {
-		return "", pause.Reason, cycle, nil
-	}
-	if state.NextAttemptMS > now.UnixMilli() {
-		instant := state.NextAttemptMS
-		return "", "retry_wait", cycle, &instant
-	}
-	if state.Failures > 0 && state.Failures <= 3 && state.LastResult != nil && state.LastResult.Status == "failed" && state.LastResult.Reason == "rate_limited" && state.LastResult.Trigger == "daily" {
-		start := DailyStart(policy.DailyTime, now)
-		if policy.IsDailyEnabled && !now.Before(start) && now.Sub(start) <= time.Hour && observation.FiveHour.State == "idle" {
-			return "daily", "", "daily/" + DailyKey(policy.DailyTime, now), nil
+		return &WindowDueResult{
+			At:       FormatISO(snap),
+			ResetKey: "idle:" + hourFloorISO(snap),
+			Idle:     true,
 		}
 	}
-
-	start := DailyStart(policy.DailyTime, now)
-	dailyKey := DailyKey(policy.DailyTime, now)
-	isDailyDue := policy.IsDailyEnabled && !now.Before(start) && now.Sub(start) <= time.Hour && state.DailyKey != dailyKey
-	if isDailyDue {
-		if observation.FiveHour.State == "idle" {
-			return "daily", "", "daily/" + dailyKey, nil
-		}
-		return "", "already_active", "daily/" + dailyKey, nil
+	resetAt, ok := ParseISO(window.ResetsAt)
+	if !ok {
+		return nil
 	}
-	isResetDue := (policy.ResetMode == "all" && observation.FiveHour.State == "idle") || (policy.ResetMode != "off" && observation.Weekly.State == "idle")
-	if isResetDue && state.LastCycle != cycle {
-		if policy.IsDailyEnabled && observation.FiveHour.State == "idle" {
-			nextStart := NextDailyStart(policy.DailyTime, now)
-			if nextStart.Sub(now) < 5*time.Hour {
-				instant := nextStart.UnixMilli()
-				return "", "waiting_daily", cycle, &instant
-			}
-		}
-		return "reset", "", cycle, nil
-	}
-	if policy.IsDailyEnabled {
-		instant := NextDailyStart(policy.DailyTime, now).UnixMilli()
-		next = &instant
-	}
-	for _, window := range []Window{observation.FiveHour, observation.Weekly} {
-		if window.ResetAtMS != nil && *window.ResetAtMS > now.UnixMilli() && policy.ResetMode != "off" && (window.PeriodMS == WEEK_MS || policy.ResetMode == "all") {
-			if next == nil || *window.ResetAtMS < *next {
-				instant := *window.ResetAtMS
-				next = &instant
-			}
+	if snap, ok := ParseISO(snapshotAt); ok && !resetAt.After(snap) {
+		return &WindowDueResult{
+			At:       FormatISO(snap),
+			ResetKey: "idle:" + hourFloorISO(snap),
+			Idle:     true,
 		}
 	}
-	return "", "already_active", cycle, next
+	return &WindowDueResult{
+		At:       FormatISO(resetAt.Add(WINDOW_GRACE)),
+		ResetKey: FormatISO(resetAt),
+		Idle:     false,
+	}
 }
 
-func absWarmupTime(value int64) int64 {
-	if value < 0 {
-		return -value
+// FindAccountWindow finds a matching quota window on an account, treating "seven_day" and "weekly" as synonyms.
+func FindAccountWindow(account *CatalogAccount, windowID string) *QuotaWindow {
+	if account == nil || windowID == "" {
+		return nil
 	}
-	return value
+	for i := range account.Windows {
+		if account.Windows[i].ID == windowID {
+			return &account.Windows[i]
+		}
+	}
+	if windowID == "seven_day" || windowID == "weekly" {
+		alt := "weekly"
+		if windowID == "weekly" {
+			alt = "seven_day"
+		}
+		for i := range account.Windows {
+			if account.Windows[i].ID == alt {
+				return &account.Windows[i]
+			}
+		}
+	}
+	return nil
+}
+
+// CurrentWindowDue computes the effective window due state for a task given account quota and persisted marks.
+func CurrentWindowDue(task Task, account *CatalogAccount, marks TaskMarks, now time.Time) *WindowDueResult {
+	if task.Trigger.Kind != "window" || account == nil || strings.TrimSpace(account.SnapshotAt) == "" {
+		return nil
+	}
+	win := FindAccountWindow(account, task.Trigger.Window)
+	if win == nil {
+		return nil
+	}
+	due := WindowDue(win, account.SnapshotAt)
+	if due == nil {
+		return nil
+	}
+	if due.Idle {
+		if sentAt, ok1 := ParseISO(marks.LastSent); ok1 {
+			if snapAt, ok2 := ParseISO(account.SnapshotAt); ok2 && snapAt.Sub(sentAt) < POST_SEND_SETTLE {
+				return nil
+			}
+		}
+		if lastResetAt, ok := ParseISO(marks.LastReset); ok && lastResetAt.After(now) {
+			return nil
+		}
+	}
+	return due
+}
+
+// Upcoming returns the next `count` trigger timestamps as ISO strings.
+func Upcoming(trigger Trigger, window *QuotaWindow, now time.Time, count int) []string {
+	if count <= 0 {
+		count = 3
+	}
+	if trigger.Kind == "window" {
+		if window == nil || strings.TrimSpace(window.ResetsAt) == "" {
+			return []string{}
+		}
+		due := WindowDue(window, FormatISO(now))
+		if due == nil || due.Idle {
+			return []string{}
+		}
+		return []string{due.At}
+	}
+	out := make([]string, 0, count)
+	cursor := now.Add(-time.Millisecond)
+	for range count {
+		var next time.Time
+		var ok bool
+		switch trigger.Kind {
+		case "daily":
+			next, ok = NextDaily(cursor, trigger.Time, trigger.TimeZone)
+		case "every":
+			next, ok = NextEvery(cursor, trigger.Hours, trigger.Anchor)
+		}
+		if !ok {
+			break
+		}
+		out = append(out, FormatISO(next))
+		cursor = next
+	}
+	return out
+}
+
+// ValidateTask checks whether a TaskInput has valid provider, credential, and trigger settings.
+func ValidateTask(input TaskInput) error {
+	provider := strings.ToLower(strings.TrimSpace(input.Provider))
+	if provider == "" {
+		return errors.New("invalid_provider")
+	}
+	if strings.TrimSpace(input.AuthIndex) == "" && strings.TrimSpace(input.Account) == "" {
+		return errors.New("missing_account")
+	}
+	switch input.Trigger.Kind {
+	case "window":
+		if strings.TrimSpace(input.Trigger.Window) == "" {
+			return errors.New("missing_window")
+		}
+	case "daily":
+		if _, _, ok := ParseClock(input.Trigger.Time); !ok {
+			return errors.New("invalid_daily_time")
+		}
+		if !ValidTimeZone(input.Trigger.TimeZone) {
+			return errors.New("invalid_timezone")
+		}
+	case "every":
+		if input.Trigger.Hours < MIN_EVERY_HOURS || input.Trigger.Hours > MAX_EVERY_HOURS {
+			return errors.New("invalid_interval_hours")
+		}
+		if _, ok := ParseISO(input.Trigger.Anchor); !ok {
+			return errors.New("invalid_anchor")
+		}
+	default:
+		return errors.New("invalid_trigger_kind")
+	}
+	return nil
+}
+
+// DefaultTaskName synthesizes a concise task name when the caller leaves Name blank.
+func DefaultTaskName(input TaskInput) string {
+	if trimmed := strings.TrimSpace(input.Name); trimmed != "" {
+		return trimmed
+	}
+	target := strings.TrimSpace(input.Account)
+	if target == "" {
+		target = strings.TrimSpace(input.AuthIndex)
+	}
+	if target == "" {
+		target = strings.TrimSpace(input.Provider)
+	}
+	switch input.Trigger.Kind {
+	case "window":
+		return fmt.Sprintf("%s · %s", target, input.Trigger.Window)
+	case "daily":
+		return fmt.Sprintf("%s · %s", target, input.Trigger.Time)
+	case "every":
+		return fmt.Sprintf("%s · %dh", target, input.Trigger.Hours)
+	default:
+		return target
+	}
 }
