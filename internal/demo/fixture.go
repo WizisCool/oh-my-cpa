@@ -1,7 +1,7 @@
 package demo
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/base64"
 	"fmt"
 	"sort"
@@ -435,17 +435,19 @@ func PricingCatalogModels() []string {
 // Fixture artwork is self-contained so the demo can show plugin branding without
 // contacting a publisher's host.
 type pluginEntry struct {
-	id           string
-	name         string
-	version      string
-	author       string
-	repository   string
-	logo         string
-	isEnabled    bool
-	isConfigured bool
-	isRegistered bool
-	configFields []map[string]any
-	config       map[string]any
+	id            string
+	name          string
+	version       string
+	author        string
+	repository    string
+	logo          string
+	isEnabled     bool
+	isConfigured  bool
+	isRegistered  bool
+	supportsOAuth bool
+	supportsQuota bool
+	configFields  []map[string]any
+	config        map[string]any
 }
 
 // storePluginEntry is one plugin a store registry offers.
@@ -461,6 +463,30 @@ type storePluginEntry struct {
 	logo             string
 	sourceID         string
 	installedVersion string
+}
+
+// demoPluginLogos are resized copies of the artwork published by the OMC plugin registry.
+//
+//go:embed plugin-logos/*.png
+var demoPluginLogos embed.FS
+
+type realPluginFixture struct {
+	id, name, installedVersion, version, description string
+}
+
+var realPluginFixtures = []realPluginFixture{
+	{"omc-qoder-oauth", "OMC Qoder OAuth", "0.2.1", "0.2.2", "Native Qoder provider with OAuth login, model discovery, OpenAI-compatible requests and quota."},
+	{"omc-zcode-oauth", "OMC ZCode OAuth", "0.2.2", "0.2.3", "Native ZCode provider with Z.ai and BigModel OAuth login, model discovery and quota."},
+	{"omc-workbuddy-oauth", "OMC WorkBuddy OAuth", "0.1.7", "0.1.8", "Native WorkBuddy provider with OAuth login, model discovery and quota."},
+	{"omc-opencode-zen-free", "OMC OpenCode Zen Free", "0.1.0", "0.1.2", "OpenCode Zen free models with public-credential login and live model discovery."},
+}
+
+func realPluginLogo(id string) string {
+	data, err := demoPluginLogos.ReadFile("plugin-logos/" + id + ".png")
+	if err != nil {
+		panic(err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 }
 
 // fixtureLogo draws a plugin mark as an inline SVG, so the demo shows plugin artwork
@@ -480,7 +506,16 @@ func configField(name, fieldType, description string, enumValues ...string) map[
 }
 
 func pluginCatalog() []pluginEntry {
-	return []pluginEntry{
+	plugins := make([]pluginEntry, 0, len(realPluginFixtures)+3)
+	for _, plugin := range realPluginFixtures {
+		plugins = append(plugins, pluginEntry{
+			id: plugin.id, name: plugin.name, version: plugin.installedVersion, author: "Oh My CPA",
+			repository: "omc-community/" + plugin.id, logo: realPluginLogo(plugin.id),
+			isEnabled: true, isConfigured: true, isRegistered: true, supportsOAuth: true, supportsQuota: true,
+			configFields: []map[string]any{}, config: map[string]any{"enabled": true},
+		})
+	}
+	return append(plugins, []pluginEntry{
 		{
 			id: "usage-exporter", name: "Usage exporter", version: "1.4.2", author: "router-for-me",
 			repository: "router-for-me/cpa-plugin-usage-exporter", logo: fixtureLogo("UE", "#0F766E"),
@@ -522,11 +557,20 @@ func pluginCatalog() []pluginEntry {
 				"threshold-percent": 15, "labels": map[string]any{"team": "platform"},
 			},
 		},
-	}
+	}...)
 }
 
 func pluginStoreCatalog() []storePluginEntry {
-	return []storePluginEntry{
+	plugins := make([]storePluginEntry, 0, len(realPluginFixtures)+8)
+	for _, plugin := range realPluginFixtures {
+		plugins = append(plugins, storePluginEntry{
+			id: plugin.id, name: plugin.name, version: plugin.version, installedVersion: plugin.installedVersion,
+			author: "Oh My CPA", description: plugin.description, repository: "omc-community/" + plugin.id,
+			license: "MIT", tags: []string{"Provider", "OAuth", "OMC"}, logo: realPluginLogo(plugin.id),
+			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL),
+		})
+	}
+	return append(plugins, []storePluginEntry{
 		{id: "usage-exporter", name: "Usage exporter", version: "1.5.0", author: "router-for-me",
 			description: "Streams every captured request record to an S3-compatible bucket.",
 			repository:  "router-for-me/cpa-plugin-usage-exporter", license: "MIT",
@@ -571,7 +615,7 @@ func pluginStoreCatalog() []storePluginEntry {
 			repository:  "bench-lab/cpa-model-bench", license: "MIT",
 			tags: []string{"evaluation"}, logo: fixtureLogo("MB", "#7C3AED"),
 			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL)},
-	}
+	}...)
 }
 
 // pluginStoreSources are the registries the fixture's store lists, keyed by source id.

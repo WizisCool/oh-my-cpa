@@ -647,8 +647,30 @@ func TestFixturePublishesNoPluginLogoURL(t *testing.T) {
 		logos = append(logos, plugin.logo)
 	}
 	for _, logo := range logos {
-		if logo != "" && !strings.HasPrefix(logo, "data:image/svg+xml;base64,") {
+		if logo != "" && !strings.HasPrefix(logo, "data:image/svg+xml;base64,") && !strings.HasPrefix(logo, "data:image/png;base64,") {
 			t.Errorf("fixture logo %q is not inline artwork", logo)
+		}
+	}
+}
+
+func TestRealPluginFixturesHaveInlineArtworkAndUpdates(t *testing.T) {
+	installed := map[string]pluginEntry{}
+	for _, plugin := range pluginCatalog() {
+		installed[plugin.id] = plugin
+	}
+	for _, entry := range pluginStoreCatalog() {
+		plugin, ok := installed[entry.id]
+		if !ok || !strings.HasPrefix(entry.id, "omc-") {
+			continue
+		}
+		if !strings.HasPrefix(plugin.logo, "data:image/png;base64,") || entry.logo != plugin.logo || entry.installedVersion != plugin.version || entry.version == plugin.version {
+			t.Errorf("real plugin %s has inconsistent artwork or update versions", entry.id)
+		}
+		delete(installed, entry.id)
+	}
+	for _, plugin := range realPluginFixtures {
+		if _, ok := installed[plugin.id]; ok {
+			t.Errorf("real plugin %s has no store entry", plugin.id)
 		}
 	}
 }

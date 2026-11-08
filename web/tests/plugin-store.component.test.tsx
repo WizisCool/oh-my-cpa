@@ -166,6 +166,44 @@ it('checks for updates on request and updates a plugin from its installed row', 
   expect(server.writes('/install')[0]).toMatchObject({ body: { source_id: entry.source_id } });
 });
 
+it('updates the installed fleet sequentially and reports partial failures without bypassing confirmation', async () => {
+  const server = installOmcApi();
+  const official = { ...entry, id: 'official', store_id: 'official', installed: true, update_available: true, is_omc: true, is_omc_repository: true, locales: undefined };
+  const community = { ...entry, id: 'community', store_id: 'community', installed: true, update_available: true, locales: undefined };
+  const blocked = { ...entry, id: 'blocked', store_id: 'blocked', installed: true, update_available: true, auth_required: true, locales: undefined };
+  const plugins = [official, community, blocked].map((item) => ({ ...installed, id: item.id, logo: item.id === 'official' ? 'data:image/png;base64,aW1hZ2U=' : undefined, metadata: { name: item.id, version: '1.0.0' } }));
+  server.on('POST', '/management/plugin-store/official/install', () => ({ status: 'ok', id: 'official', version: '1.2.3', plugins_enabled: true }));
+  server.on('POST', '/management/plugin-store/community/install', () => json({ error: 'Download failed' }, 500));
+  const first = server.hold('POST', '/management/plugin-store/official/install');
+  const t = makeT('en');
+  renderWithOmc(<InstalledPluginsPanel plugins={plugins} catalog={storeListingsByPluginId([official, community, blocked])} isLoading={false} isPluginSystemEnabled isDemo={false} onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => {}} isCheckingUpdates={false} />);
+  fireEvent.change(screen.getByRole('textbox', { name: t('plugin.search_installed') }), { target: { value: 'official' } });
+  fireEvent.click(screen.getByRole('button', { name: t('plugin.update_all') }));
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog.textContent).toContain('community');
+  expect(dialog.textContent).toContain('blocked');
+  expect(dialog.querySelector('img[src="data:image/png;base64,aW1hZ2U="]')).not.toBeNull();
+  expect(dialog.textContent).toContain(t('plugin.auth_required_hint'));
+  const confirm = within(dialog).getByRole('button', { name: t('plugin.update_all') });
+  expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(within(dialog).getByPlaceholderText('community'), { target: { value: 'community' } });
+  fireEvent.click(confirm);
+  await first.arrived;
+  expect(server.writes('/install')).toHaveLength(1);
+  await act(async () => first.release());
+  await waitFor(() => expect(server.writes('/install')).toHaveLength(2));
+  expect(server.writes('/install').map((write) => write.path)).toEqual(['/management/plugin-store/official/install', '/management/plugin-store/community/install']);
+  expect(await within(dialog).findByText(/Download failed/)).toBeTruthy();
+  expect(within(dialog).getByText(t('plugin.update_all_item_success'))).toBeTruthy();
+});
+
+it('keeps bulk updates unavailable in demo mode', async () => {
+  const first = { ...entry, id: 'first', installed: true, update_available: true };
+  const second = { ...entry, id: 'second', installed: true, update_available: true };
+  renderWithOmc(<InstalledPluginsPanel plugins={[{ ...installed, id: 'first' }, { ...installed, id: 'second' }]} catalog={storeListingsByPluginId([first, second])} isLoading={false} isPluginSystemEnabled isDemo onConfigure={() => {}} onBrowseStore={() => {}} onOpenSettings={() => {}} onCheckUpdates={async () => {}} isCheckingUpdates={false} />);
+  expect((screen.getByRole('button', { name: makeT('en')('plugin.update_all') }) as HTMLButtonElement).disabled).toBe(true);
+});
+
 it('keeps background registry refresh separate from a manually requested update check', async () => {
   const server = installOmcApi({ plugins: [installed] });
   server.on('GET', '/management/plugin-store', () => store);

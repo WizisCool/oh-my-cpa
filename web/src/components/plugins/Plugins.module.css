@@ -259,6 +259,44 @@
   border-left: 1px solid var(--border-soft);
 }
 
+.bulk-update-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.bulk-update-heading {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.bulk-update-heading .logo {
+  width: 40px;
+  height: 40px;
+}
+
+.bulk-update-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+@media (max-width: 480px) {
+  .bulk-update-heading {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .bulk-update-heading .meta {
+    grid-column: 2;
+  }
+}
+
 /* ── store ─────────────────────────────────────────────────────────────── */
 
 .store-notice {
@@ -896,6 +934,10 @@
   .installed-toolbar .store-filters {
     min-width: 0;
     justify-self: start;
+  }
+
+  .installed-toolbar :global(.toolbar-end) {
+    flex-wrap: nowrap;
   }
 
   .check-updates {

@@ -12,6 +12,7 @@ import { safeExternalURL } from '../../utils/externalUrl';
 import { filterInstalledPlugins, isStoreInstallBlocked, matchesInstalledState, storePluginOrigin, type InstalledStateFilter } from './pluginStoreLogic';
 import type { MessageKey } from '../../i18n/catalog';
 import { PluginInstallModal } from './PluginInstallModal';
+import { PluginUpdateAllModal } from './PluginUpdateAllModal';
 import { waitForPluginRuntime } from './pluginRuntime';
 import { formatPluginVersion, PluginLogo, PluginMeta, PluginOriginBadge, PluginStateLabel } from './PluginParts';
 import styles from './Plugins.module.css';
@@ -79,6 +80,7 @@ export function InstalledPluginsPanel({
   const [stateFilter, setStateFilter] = React.useState<InstalledStateFilter>('all');
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
   const [updating, setUpdating] = React.useState<StorePluginItem | null>(null);
+  const [bulkUpdates, setBulkUpdates] = React.useState<StorePluginItem[] | null>(null);
   const moreButtonRefs = React.useRef(new Map<string, HTMLElement>());
   const previousDeleteIdRef = React.useRef<string | null>(null);
 
@@ -93,6 +95,10 @@ export function InstalledPluginsPanel({
     () => filterInstalledPlugins(sortable.ordered, query, catalog, lang).filter((plugin) => matchesInstalledState(plugin, stateFilter)),
     [sortable.ordered, query, catalog, lang, stateFilter],
   );
+  const availableUpdates = plugins.flatMap((plugin) => {
+    const listing = catalog.get(plugin.id);
+    return listing?.update_available ? [{ ...listing, logo: plugin.logo || plugin.metadata?.logo || listing.logo }] : [];
+  });
   const stateCounts = React.useMemo(() => ({
     all: plugins.length,
     running: plugins.filter((plugin) => matchesInstalledState(plugin, 'running')).length,
@@ -165,6 +171,20 @@ export function InstalledPluginsPanel({
   return (
     <div data-plugin-panel="installed">
       <Toolbar className={styles['installed-toolbar']} end={(
+        <>
+        {availableUpdates.length > 1 && (
+          <Tooltip title={isDemo ? t('demo.blocked') : isPhone ? t('plugin.update_all') : undefined}>
+            <Button
+              className={styles['check-updates']}
+              icon={<UpgradeOutlined />}
+              disabled={isDemo}
+              onClick={() => setBulkUpdates(availableUpdates)}
+              aria-label={t('plugin.update_all')}
+            >
+              {!isPhone && t('plugin.update_all')}
+            </Button>
+          </Tooltip>
+        )}
         <Tooltip title={isPhone ? t('plugin.check_updates') : undefined}>
           <Button
             className={styles['check-updates']}
@@ -177,6 +197,7 @@ export function InstalledPluginsPanel({
             {!isPhone && t('plugin.check_updates')}
           </Button>
         </Tooltip>
+        </>
       )}>
         <SearchInput
           className={styles.search}
@@ -362,6 +383,7 @@ export function InstalledPluginsPanel({
         </RowReorder>
       )}
 
+      {bulkUpdates && <PluginUpdateAllModal entries={bulkUpdates} isPluginSystemEnabled={isPluginSystemEnabled} onClose={() => setBulkUpdates(null)} />}
       <PluginInstallModal
         entry={updating}
         isPluginSystemEnabled={isPluginSystemEnabled}
