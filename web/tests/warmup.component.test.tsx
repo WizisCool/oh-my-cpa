@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
@@ -7,22 +7,27 @@ import { WarmupSettingsDrawer } from '../src/components/authFiles/CredentialWarm
 import { createWarmupFixture } from '../../scripts/acceptance/warmup-fixture.mjs';
 import { canSaveWarmupTask, defaultWarmupTaskInput, hasCustomTaskName } from '../src/types/warmup';
 
-function mount(children: React.ReactNode, { isSettingsFailing = false } = {}) {
+function mount(children: React.ReactNode) {
   const omc = installOmcApi();
   omc.serve(/\/warmup(\/|$)/, createWarmupFixture());
-  if (isSettingsFailing) omc.on('*', /\/warmup\/settings$/, () => json({ code: 'warmup_unavailable', error: 'warmup_unavailable' }, 500));
   const surface = renderWithOmc(children, { isStrict: true });
-  return { ...surface, get requests() { return omc.requests; } };
+  return { ...surface, omc, get requests() { return omc.requests; } };
 }
 
 it('validates task drafts and recognises server-made names', () => {
   const draft = defaultWarmupTaskInput({
-    auth_index: 'exact-claude',
-    name: 'claude.json',
-    provider: 'claude',
-    models: ['claude-sonnet-4-6', 'claude-haiku-4-5'],
-    auto_model: 'claude-haiku-4-5',
-    windows: [{ id: 'five_hour', label: '5h', used_percent: null }],
+    timezone: 'UTC',
+    providers: [{
+      provider: 'claude',
+      accounts: [{
+        auth_index: 'exact-claude',
+        name: 'claude.json',
+        provider: 'claude',
+        models: ['claude-sonnet-4-6', 'claude-haiku-4-5'],
+        auto_model: 'claude-haiku-4-5',
+        windows: [{ id: 'five_hour', label: '5h', used_percent: null }],
+      }],
+    }],
   });
   expect(canSaveWarmupTask(draft)).toBe(true);
   expect(canSaveWarmupTask({ ...draft, provider: '' })).toBe(false);
@@ -70,5 +75,23 @@ it('creates a new warmup task from the settings drawer', async () => {
     auth_index: 'exact-claude',
     trigger: { kind: 'window', window: 'five_hour' },
   });
+  surface.unmount();
+});
+
+it('keeps an open draft when a background refresh fails', async () => {
+  const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
+  await screen.findByText('claude.json · 窗口重置后 (5h)');
+
+  fireEvent.click(screen.getByTestId('warmup-add-task'));
+  const dialog = await screen.findByTestId('warmup-task-editor');
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Unsaved draft' } });
+
+  surface.omc.on('GET', /\/warmup\/settings$/, () => json({ code: 'warmup_unavailable', error: 'warmup_unavailable' }, 503));
+  await act(() => surface.client.refetchQueries({ queryKey: ['quota-warmup-settings'] }));
+  // The query tells its observers on the next task, so the failure reaches the drawer only then.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  expect(surface.client.getQueryState(['quota-warmup-settings'])?.status).toBe('error');
+  expect(within(screen.getByTestId('warmup-task-editor')).getByLabelText('Name')).toHaveProperty('value', 'Unsaved draft');
   surface.unmount();
 });

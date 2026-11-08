@@ -468,7 +468,9 @@ workflow rejects tags whose snapshot is more than 30 days older than the tagged 
   CPA's `credentials/verify`, so a successful run is recorded as `ok`. Window tasks read the
   credential's quota first and retry a failed read after five minutes.
 - **Warmup safety**: A run's record is written before the request is sent, and a run whose
-  record cannot be written is not sent. Disabled and unavailable credentials are refused as
+  record cannot be written is not sent. A run reads its task again as it starts: a task deleted
+  a moment earlier sends nothing, one switched off does not run on schedule, and a task cannot
+  be deleted while its run is in flight. Disabled and unavailable credentials are refused as
   `credential_disabled` and `credential_unavailable` instead of being woken. An outcome left
   uncertain by the transport or by an OMC restart is recorded as unknown and never resent
   automatically. Each task keeps its newest 50 run records.

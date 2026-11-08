@@ -456,7 +456,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   });
 
   const startCreate = () => {
-    setEditing({ id: null, draft: defaultWarmupTaskInput(catalogAccounts(catalog)[0], timezone) });
+    setEditing({ id: null, draft: defaultWarmupTaskInput(catalog) });
   };
 
   const nextLabel = (task: WarmupTask): string => {
@@ -527,9 +527,9 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       isConfirming={deleteMutation.isPending && deleteMutation.variables === task.id}
                       tooltip={t('warmup.delete_task')}
                       onConfirm={() => deleteMutation.mutateAsync(task.id)}
-                      disabled={isDemo}
+                      disabled={isDemo || isRunning}
                     >
-                      <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isDemo} />
+                      <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isDemo || isRunning} />
                     </ConfirmAction>
                     <Switch
                       size="small"
@@ -623,13 +623,14 @@ function WarmupBody({ isActive }: { isActive: boolean }) {
     retry: false,
     refetchInterval: isActive ? 30_000 : false,
   });
+  // A failed background refresh keeps the last answer on screen, and with it a draft being edited.
   return (
     <div className={styles['body']}>
       <p className={styles['intro']}>{t('warmup.description')}</p>
-      {query.isError ? (
-        <LoadFailure title={t('warmup.load_failed')} error={describeError(query.error)} onRetry={() => void query.refetch()} />
-      ) : query.data ? (
+      {query.data ? (
         <WarmupWorkspace state={query.data} />
+      ) : query.isError ? (
+        <LoadFailure title={t('warmup.load_failed')} error={describeError(query.error)} onRetry={() => void query.refetch()} />
       ) : (
         <ListPlaceholder rows={3} isFramed />
       )}

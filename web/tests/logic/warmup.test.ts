@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { groupWarmupAccounts, type WarmupCatalog, type WarmupCatalogAccount } from '../../src/types/warmup';
+import { defaultWarmupTaskInput, groupWarmupAccounts, type WarmupCatalog, type WarmupCatalogAccount } from '../../src/types/warmup';
 
 function account(authIndex: string, provider: string, patch: Partial<WarmupCatalogAccount> = {}): WarmupCatalogAccount {
   return {
@@ -35,4 +35,22 @@ test('groupWarmupAccounts keeps the catalogue order and names each provider', ()
 
 test('groupWarmupAccounts answers a missing catalogue with no groups', () => {
   expect(groupWarmupAccounts(undefined)).toEqual([]);
+});
+
+test('defaultWarmupTaskInput starts a new task on the first credential the picker offers', () => {
+  const catalog: WarmupCatalog = {
+    timezone: 'Asia/Shanghai',
+    providers: [
+      { provider: 'claude', accounts: [account('claude-off', 'claude', { disabled: true })] },
+      { provider: 'codex', accounts: [account('codex-1', 'codex')] },
+    ],
+  };
+
+  expect(defaultWarmupTaskInput(catalog)).toMatchObject({
+    provider: 'codex',
+    auth_index: 'codex-1',
+    trigger: { kind: 'window', time_zone: 'Asia/Shanghai' },
+  });
+  // With nothing to choose, the draft names no credential rather than one the picker refuses.
+  expect(defaultWarmupTaskInput({ ...catalog, providers: catalog.providers.slice(0, 1) }).auth_index).toBe('');
 });

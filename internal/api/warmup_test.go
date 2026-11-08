@@ -691,7 +691,7 @@ func TestWarmupClearRunsScope(t *testing.T) {
 	}
 }
 
-func TestWarmupConcurrentManualRunReturnsConflict(t *testing.T) {
+func TestWarmupInFlightRunRefusesConcurrentRunAndDelete(t *testing.T) {
 	fixture := &warmupFixture{
 		entered:    make(chan struct{}),
 		release:    make(chan struct{}),
@@ -720,10 +720,78 @@ func TestWarmupConcurrentManualRunReturnsConflict(t *testing.T) {
 	if _, err := handler.triggerWarmupTask(ctx, taskID); err != errWarmupTaskBusy {
 		t.Fatalf("expected busy conflict, got %v", err)
 	}
+	// The run in flight writes its record when it ends, so its task cannot be deleted under it.
+	if _, err := handler.removeWarmupTask(ctx, taskID); err != errWarmupTaskBusy {
+		t.Fatalf("expected busy conflict on delete, got %v", err)
+	}
 	close(fixture.release)
 	res := <-done
 	if res.Run.Outcome != "unknown" {
 		t.Fatalf("expected unknown outcome on gateway timeout, got %+v", res.Run)
+	}
+	// Once the run has ended, the task and its history go together.
+	state, err = handler.removeWarmupTask(ctx, taskID)
+	if err != nil || len(state.Tasks) != 0 || len(state.Runs) != 0 {
+		t.Fatalf("delete after the run: tasks=%+v runs=%+v err=%v", state.Tasks, state.Runs, err)
+	}
+}
+
+// A run acts on its task as it stands when the run starts, not as the round or the console read it
+// a moment earlier: one changed since sends what it names now, one switched off since does not run
+// on schedule, and one deleted since does not run at all.
+func TestWarmupRunRereadsItsTask(t *testing.T) {
+	fixture := &warmupFixture{}
+	handler := newWarmupHandler(t, fixture)
+	ctx := context.Background()
+	input := warmup.TaskInput{
+		Enabled:   true,
+		Provider:  "claude",
+		AuthIndex: "exact-claude",
+		Trigger:   warmup.Trigger{Kind: "window", Window: "five_hour"},
+	}
+	state, err := handler.saveWarmupTask(ctx, "", input)
+	if err != nil || len(state.Tasks) != 1 {
+		t.Fatalf("save task: %v", err)
+	}
+	read := state.Tasks[0]
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, files := handler.warmupCatalogWithFiles(ctx, client)
+	sent := func() (int, string) {
+		fixture.mu.Lock()
+		defer fixture.mu.Unlock()
+		return fixture.sends, fixture.lastModel
+	}
+
+	changed := input
+	changed.Model = "claude-sonnet-4-6"
+	if _, err := handler.saveWarmupTask(ctx, read.ID, changed); err != nil {
+		t.Fatal(err)
+	}
+	run, err := handler.executeTaskRun(ctx, client, &catalog, files, read, "manual", "", "")
+	if sends, model := sent(); err != nil || run.Model != "claude-sonnet-4-6" || sends != 1 || model != "claude-sonnet-4-6" {
+		t.Fatalf("the changed task ran as read: run=%+v sends=%d model=%s err=%v", run, sends, model, err)
+	}
+
+	changed.Enabled = false
+	if _, err := handler.saveWarmupTask(ctx, read.ID, changed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.executeTaskRun(ctx, client, &catalog, files, read, "schedule", "", ""); err != errWarmupTaskNotFound {
+		t.Fatalf("a task switched off since it was read ran on schedule: %v", err)
+	}
+
+	if _, err := handler.removeWarmupTask(ctx, read.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.executeTaskRun(ctx, client, &catalog, files, read, "manual", "", ""); err != errWarmupTaskNotFound {
+		t.Fatalf("a deleted task ran: %v", err)
+	}
+	runs, err := handler.repo.ListWarmupRuns(ctx, warmupInstanceID)
+	if sends, _ := sent(); err != nil || sends != 1 || len(runs) != 0 {
+		t.Fatalf("a withdrawn task reached CPA or left a record: sends=%d runs=%+v err=%v", sends, runs, err)
 	}
 }
 

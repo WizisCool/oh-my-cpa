@@ -13,8 +13,10 @@ import (
 type VerifyFunc func(ctx context.Context, name, authIndex, model string) (bool, error)
 
 // Send triggers a minimal credential-pinned warmup request by delegating directly to CPA.
+// The model goes out as the task names it: CPA strips the credential's own prefix and resolves an
+// OAuth alias itself, and an alias may contain a slash.
 func Send(ctx context.Context, verify VerifyFunc, file management.AuthFile, model string) Outcome {
-	model = lastSegment(strings.TrimSpace(model))
+	model = strings.TrimSpace(model)
 	if verify == nil || (strings.TrimSpace(file.Name) == "" && strings.TrimSpace(file.AuthIndex) == "") {
 		return Outcome{Status: "failed", Reason: "invalid_parameters"}
 	}
@@ -23,9 +25,13 @@ func Send(ctx context.Context, verify VerifyFunc, file management.AuthFile, mode
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return Outcome{Status: "unknown", Reason: "timeout"}
 		}
+		// CPA may have run the request without its answer arriving, so repeating it could consume twice.
+		if errors.Is(err, management.ErrCredentialOutcomeUnknown) {
+			return Outcome{Status: "unknown", Reason: "no_answer"}
+		}
 		var httpErr *management.HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode > 0 {
-			if httpErr.StatusCode == 504 || strings.Contains(strings.ToLower(httpErr.Body), "timeout") {
+			if httpErr.StatusCode == 504 {
 				return Outcome{Status: "unknown", Reason: "timeout"}
 			}
 			return Outcome{Status: "failed", Reason: fmt.Sprintf("HTTP %d", httpErr.StatusCode)}

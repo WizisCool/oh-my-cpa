@@ -289,13 +289,9 @@ func (h *Handler) buildWarmupStateView(ctx context.Context, catalog *warmup.Cata
 	}, nil
 }
 
-func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.TaskInput) (warmup.StateView, error) {
-	if h.cfg.IsDemoMode {
-		return warmup.StateView{}, errors.New("demo_operation_refused")
-	}
-	if h.repo == nil {
-		return warmup.StateView{}, errors.New("repository unavailable")
-	}
+// normalizeWarmupTask is the task every save path validates and stores, the Agent's preview
+// included: names trimmed, and a daily trigger that names no zone placed in the deployment's.
+func (h *Handler) normalizeWarmupTask(input warmup.TaskInput) warmup.TaskInput {
 	input.Provider = strings.ToLower(strings.TrimSpace(input.Provider))
 	input.AuthIndex = strings.TrimSpace(input.AuthIndex)
 	input.Account = strings.TrimSpace(input.Account)
@@ -303,6 +299,17 @@ func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.Ta
 	if input.Trigger.Kind == "daily" && strings.TrimSpace(input.Trigger.TimeZone) == "" {
 		input.Trigger.TimeZone = h.warmupTimezoneName()
 	}
+	return input
+}
+
+func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.TaskInput) (warmup.StateView, error) {
+	if h.cfg.IsDemoMode {
+		return warmup.StateView{}, errors.New("demo_operation_refused")
+	}
+	if h.repo == nil {
+		return warmup.StateView{}, errors.New("repository unavailable")
+	}
+	input = h.normalizeWarmupTask(input)
 	if err := warmup.ValidateTask(input); err != nil {
 		return warmup.StateView{}, err
 	}
@@ -392,6 +399,12 @@ func (h *Handler) removeWarmupTask(ctx context.Context, id string) (warmup.State
 	if existing == nil {
 		return warmup.StateView{}, errWarmupTaskNotFound
 	}
+	// A run in flight writes its record when it ends, so its task cannot be deleted under it; the
+	// claim also keeps a run from starting while the task's rows go.
+	if !h.claimWarmupTask(existing.ID) {
+		return warmup.StateView{}, errWarmupTaskBusy
+	}
+	defer h.releaseWarmupTask(existing.ID)
 	if err := h.writeWarmupAudit(ctx, "warmup.task.delete", existing.ID, map[string]any{
 		"provider":   existing.Provider,
 		"auth_index": existing.AuthIndex,
@@ -475,6 +488,17 @@ func (h *Handler) executeTaskRun(
 		return warmup.Run{}, errWarmupTaskBusy
 	}
 	defer h.releaseWarmupTask(task.ID)
+	// The round and the console hand over a task read moments earlier. One deleted since must not
+	// send, nor one switched off since on schedule, and a run that does send uses what the task
+	// names now.
+	current, err := h.repo.ReadWarmupTask(ctx, warmupInstanceID, task.ID)
+	if err != nil {
+		return warmup.Run{}, err
+	}
+	if current == nil || (source != "manual" && !current.Enabled) {
+		return warmup.Run{}, errWarmupTaskNotFound
+	}
+	task = *current
 
 	started := h.now().UTC()
 	account := findCatalogAccount(catalog, task)
@@ -714,8 +738,9 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 // task's marks by the time the run is attempted, so a discarded error would hide both the cause
 // and the fact that this window or due slot was passed over.
 func (h *Handler) reportSkippedWarmup(task warmup.Task, err error) {
-	// A run already in flight is the round's own guard working, not a skipped slot.
-	if errors.Is(err, errWarmupTaskBusy) || h.logger == nil {
+	// A run already in flight, or a task withdrawn since the round read it, is the round's own
+	// guard working, not a skipped slot.
+	if errors.Is(err, errWarmupTaskBusy) || errors.Is(err, errWarmupTaskNotFound) || h.logger == nil {
 		return
 	}
 	h.logger.Warn("warmup run was not sent", "task", task.ID, "error", err)

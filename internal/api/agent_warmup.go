@@ -9,6 +9,7 @@ import (
 
 func (h *Handler) bindWarmupOperations(service *operations.Service) {
 	service.WarmupSettings = h.warmupState
+	service.NormalizeWarmupTask = h.normalizeWarmupTask
 	service.SaveWarmupTask = func(ctx context.Context, input warmup.TaskSaveInput) (warmup.StateView, error) {
 		return h.saveWarmupTask(ctx, input.ID, input.TaskInput)
 	}

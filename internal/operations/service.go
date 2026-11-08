@@ -44,6 +44,7 @@ type Service struct {
 	NormalizeOAuthExclusions   func(string, []string) (string, []string, error)
 	SetOAuthExcludedModels     func(context.Context, string, []string, string) error
 	NormalizeCredentialFields  func(map[string]any) (map[string]any, error)
+	NormalizeWarmupTask        func(warmup.TaskInput) warmup.TaskInput
 	UpdateCredentialFields     func(context.Context, CredentialTarget, map[string]any, string) error
 	ReadRouting                func(context.Context) (RoutingBoard, error)
 	ApplyRouting               func(context.Context, NormalizedRoutingPlan) (RoutingOutcome, error)

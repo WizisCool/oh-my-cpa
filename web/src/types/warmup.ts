@@ -184,10 +184,9 @@ export function hasCustomTaskName(task: Pick<WarmupTaskInput, 'name' | 'account'
   return name !== '' && name !== generatedTaskName(task);
 }
 
-export function defaultWarmupTaskInput(
-  account?: WarmupCatalogAccount,
-  timezone = 'UTC',
-): WarmupTaskInput {
+/** A new task's draft, on the first credential the picker lets the operator choose. */
+export function defaultWarmupTaskInput(catalog?: WarmupCatalog): WarmupTaskInput {
+  const account = catalog?.providers.flatMap((group) => group.accounts).find((acc) => !acc.disabled);
   const provider = account?.provider ?? 'codex';
   const defaultWindow = account?.windows[0]?.id ?? 'five_hour';
   return {
@@ -201,7 +200,7 @@ export function defaultWarmupTaskInput(
       kind: 'window',
       window: defaultWindow,
       time: '08:55',
-      time_zone: timezone || 'UTC',
+      time_zone: catalog?.timezone || 'UTC',
       hours: 5,
       anchor: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
     },

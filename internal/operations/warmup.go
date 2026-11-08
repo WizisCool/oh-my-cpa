@@ -2,6 +2,7 @@ package operations
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
@@ -17,6 +18,11 @@ func (service *Service) registerWarmup(registry *capability.Registry) error {
 	metadata := Meta("quota_warmup_task_save", "Create or update a credential window warmup task. Requires confirmation; enabled tasks send minimal inference probes through CPA on schedule.", "write", "high")
 	if err := capability.Register(registry, metadata,
 		func(_ context.Context, input warmup.TaskSaveInput) (capability.Preview, error) {
+			if service.NormalizeWarmupTask == nil {
+				return capability.Preview{}, errors.New("capability_unavailable")
+			}
+			// The save fills in what a caller may leave out, so the preview checks and shows that.
+			input.TaskInput = service.NormalizeWarmupTask(input.TaskInput)
 			if err := warmup.ValidateTask(input.TaskInput); err != nil {
 				return capability.Preview{}, invalidParameters{detail: err.Error()}
 			}
