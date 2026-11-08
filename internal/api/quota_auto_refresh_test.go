@@ -465,6 +465,36 @@ func TestQuotaReadDoesNotClearActiveModelCooldown(t *testing.T) {
 	}
 }
 
+func TestQuotaReadKeepsACredentialResetWhileAnotherModelMayBeResting(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	insertAutoRefreshCooldown(t, handler, "mirrored-credential", "codex-unread", nowMS+time.Hour.Milliseconds(), nowMS-1000)
+	// A credential quota mirrored onto its model exposes no independent model limit,
+	// so the row is excluded from the model-scoped view; CPA can still hold one
+	// beneath it, which is why the credential reset must not run either.
+	_, err := handler.repo.SQL().ExecContext(ctx, `UPDATE error_events SET cooldown_model = 'gpt-5', model_quota_exceeded = 1, model_quota_inherited = 1, model_next_recover_at_ms = ? WHERE event_key = 'mirrored-credential'`, nowMS+time.Hour.Milliseconds())
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":60,"refresh_on_reset":false}`)
+
+	round, err := handler.runQuotaAutoRefreshRound(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if round.Refreshed == 0 {
+		t.Fatalf("round = %+v, want a restored read to reach the release path", round)
+	}
+	if got := fixture.cooldownResets("codex-unread"); got != 0 {
+		t.Fatalf("codex-unread reset %d times, want the credential reset withheld", got)
+	}
+	if rows := cooldownEvidenceRows(t, handler, "codex-unread"); rows != 1 {
+		t.Fatalf("codex-unread keeps %d rows of cooldown evidence, want 1", rows)
+	}
+}
+
 func TestQuotaReadReleasesACooldownOnceCapacityIsBack(t *testing.T) {
 	ctx := context.Background()
 	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
