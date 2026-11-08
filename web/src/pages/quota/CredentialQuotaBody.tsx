@@ -263,6 +263,12 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
                 {t('quota.recover_at', { time: formatTimeWithCountdown(item.active_cooldown.recover_at_ms, nowMS, t) })}
               </div>
             )}
+            {item.active_cooldown.retry_at_ms && item.active_cooldown.retry_at_ms !== item.active_cooldown.recover_at_ms && (
+              <div className={styles['rec-sub-danger']}>
+                {t('quota.retry_at', { time: formatTimeWithCountdown(item.active_cooldown.retry_at_ms, nowMS, t) })}
+              </div>
+            )}
+            {!!item.active_cooldown.backoff_level && <div>{t('quota.backoff_level', { level: item.active_cooldown.backoff_level })}</div>}
           </div>
           {onClearCooldown && (
             <Button
@@ -277,6 +283,33 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           )}
         </div>
       )}
+
+      {(item.model_cooldowns ?? []).filter((cooldown) => cooldown.is_active).map((cooldown, index) => (
+        <div className={`${styles['rec-banner']} ${styles['rec-banner-danger']}`} key={cooldown.model}>
+          <span className={styles['banner-dot']} style={{ background: 'var(--danger)' }} />
+          <div className={styles['rec-text']}>
+            <div>{t('quota.model_cooldown', { model: cooldown.model ?? '' })}</div>
+            {cooldown.recover_at_ms && (
+              <div className={styles['rec-sub-danger']}>
+                {t('quota.recover_at', { time: formatTimeWithCountdown(cooldown.recover_at_ms, nowMS, t) })}
+              </div>
+            )}
+            {cooldown.retry_at_ms && cooldown.retry_at_ms !== cooldown.recover_at_ms && (
+              <div className={styles['rec-sub-danger']}>
+                {t('quota.retry_at', { time: formatTimeWithCountdown(cooldown.retry_at_ms, nowMS, t) })}
+              </div>
+            )}
+            {!!cooldown.backoff_level && <div>{t('quota.backoff_level', { level: cooldown.backoff_level })}</div>}
+          </div>
+          {index === 0 && !item.active_cooldown?.is_active && onClearCooldown && (
+            <Button size="small" danger disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
+              title={isDemo ? t('demo.blocked') : t('quota.clear_all_cooldowns')}
+              onClick={() => onClearCooldown(item.auth_index)}>
+              {t('quota.clear_all_cooldowns')}
+            </Button>
+          )}
+        </div>
+      ))}
 
       {item.reset_credits && creditRows.length > 0 && (
         <div className={styles.section}>

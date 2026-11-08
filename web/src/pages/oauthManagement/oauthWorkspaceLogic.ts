@@ -187,6 +187,7 @@ function hasMeaningfulObservation(item: QuotaItem): boolean {
       || item.plan
       || item.reset_credits
       || item.active_cooldown?.is_active
+      || (item.model_cooldowns?.length ?? 0) > 0
       || Object.keys(item.raw_signals ?? {}).length > 0
       || Object.keys(item.quota?.signals ?? {}).length > 0
       || Object.keys(item.model_quotas ?? {}).length > 0,
@@ -217,6 +218,7 @@ export function quotaConditionOf(item: QuotaItem | undefined): OAuthWorkspaceQuo
   if (item.status === 'error') return 'error';
   if (item.status === 'stale') return 'stale';
   if (item.recommendation?.status === 'needs_reauth' || item.recommendation?.action === 'reauth') return 'reauth';
+  if ((item.model_cooldowns?.length ?? 0) > 0) return 'warning';
   if (item.status === 'healthy') return 'healthy';
   return conditionFromWindows(item);
 }
@@ -317,7 +319,7 @@ export function buildOAuthWorkspaceProjection(
         quota
           && uniqueIndex
           && quota.capabilities?.clear_cooldown_supported
-          && quota.active_cooldown?.is_active,
+          && (quota.active_cooldown?.is_active || (quota.model_cooldowns?.length ?? 0) > 0),
       ),
       // The bank of credits decides whether redeeming is offered. Upstream's
       // `applicable_available_count` is not the gate: it refines which credits would apply

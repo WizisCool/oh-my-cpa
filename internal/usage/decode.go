@@ -337,6 +337,13 @@ func failDetail(payload Payload) (int, string, FailureCode) {
 	return statusCode, boundedSafe(payload.Fail.Body, MaxFailBodyRunes), NormalizeFailureCode(payload.Fail.Code)
 }
 
+type errorQuotaPayload struct {
+	Exceeded      bool       `json:"exceeded"`
+	Reason        string     `json:"reason"`
+	NextRecoverAt *time.Time `json:"next_recover_at"`
+	BackoffLevel  int        `json:"backoff_level"`
+}
+
 // ErrorPayload is one CPA credential error notification.
 type ErrorPayload struct {
 	Timestamp  time.Time `json:"timestamp"`
@@ -352,42 +359,50 @@ type ErrorPayload struct {
 		// CPA reports this as a numeric status enum; only the message and the
 		// boolean flags carry meaning for storage. json.RawMessage keeps a
 		// future format change here from rejecting the whole record.
-		Status         json.RawMessage `json:"status"`
-		StatusMessage  string          `json:"status_message"`
-		Disabled       bool            `json:"disabled"`
-		Unavailable    bool            `json:"unavailable"`
-		NextRetryAfter *time.Time      `json:"next_retry_after"`
-		Quota          *struct {
-			Exceeded      bool       `json:"exceeded"`
-			Reason        string     `json:"reason"`
-			NextRecoverAt *time.Time `json:"next_recover_at"`
-			BackoffLevel  int        `json:"backoff_level"`
-		} `json:"quota"`
+		Status         json.RawMessage    `json:"status"`
+		StatusMessage  string             `json:"status_message"`
+		Disabled       bool               `json:"disabled"`
+		Unavailable    bool               `json:"unavailable"`
+		NextRetryAfter *time.Time         `json:"next_retry_after"`
+		Quota          *errorQuotaPayload `json:"quota"`
+		Model          *struct {
+			Name           string             `json:"name"`
+			NextRetryAfter *time.Time         `json:"next_retry_after"`
+			Quota          *errorQuotaPayload `json:"quota"`
+		} `json:"model"`
 	} `json:"auth_status"`
 }
 
 // ErrorEvent is the decoded row for error_events.
 type ErrorEvent struct {
-	InstanceID       string
-	EventKey         string
-	RequestID        string
-	Provider         string
-	Model            string
-	AuthID           string
-	AuthIndex        string
-	StatusCode       int
-	Code             string
-	Body             string
-	Retryable        bool
-	AuthStatus       string
-	AuthDisabled     bool
-	AuthUnavailable  bool
-	QuotaExceeded    bool
-	QuotaReason      string
-	NextRetryAfterMS *int64
-	NextRecoverAtMS  *int64
-	BackoffLevel     int
-	TimestampMS      int64
+	InstanceID            string
+	EventKey              string
+	RequestID             string
+	Provider              string
+	Model                 string
+	AuthID                string
+	AuthIndex             string
+	StatusCode            int
+	Code                  string
+	Body                  string
+	Retryable             bool
+	AuthStatus            string
+	AuthDisabled          bool
+	AuthUnavailable       bool
+	QuotaExceeded         bool
+	QuotaReason           string
+	NextRetryAfterMS      *int64
+	NextRecoverAtMS       *int64
+	BackoffLevel          int
+	CooldownModel         string `json:",omitempty"`
+	AuthQuotaAggregate    bool   `json:",omitempty"`
+	ModelQuotaInherited   bool   `json:",omitempty"`
+	ModelQuotaExceeded    bool   `json:",omitempty"`
+	ModelQuotaReason      string `json:",omitempty"`
+	ModelNextRetryAfterMS *int64 `json:",omitempty"`
+	ModelNextRecoverAtMS  *int64 `json:",omitempty"`
+	ModelBackoffLevel     int    `json:",omitempty"`
+	TimestampMS           int64
 }
 
 // DecodeErrorEvent converts a raw errors-channel message into an ErrorEvent.
@@ -438,6 +453,38 @@ func DecodeErrorEventWithFingerprinter(raw string, instanceID string, observedAt
 		if quota.NextRecoverAt != nil {
 			value := quota.NextRecoverAt.UnixMilli()
 			event.NextRecoverAtMS = &value
+		}
+	}
+	if model := payload.AuthStatus.Model; model != nil {
+		event.CooldownModel = boundedSafe(model.Name, 256)
+		// CPA aggregates model quota into auth.Quota with reason "quota";
+		// credential-scoped quota uses "credential_quota" instead.
+		if quota := payload.AuthStatus.Quota; quota != nil {
+			event.AuthQuotaAggregate = quota.Reason == "quota"
+			if quota.Exceeded && quota.Reason == "credential_quota" && model.Quota != nil && model.Quota.Exceeded {
+				credentialUntil := quota.NextRecoverAt
+				if retry := payload.AuthStatus.NextRetryAfter; retry != nil && (credentialUntil == nil || retry.After(*credentialUntil)) {
+					credentialUntil = retry
+				}
+				// CPA also projects a credential cooldown onto the reporting model.
+				// The notification does not expose an independent model shadow.
+				event.ModelQuotaInherited = credentialUntil != nil &&
+					(model.NextRetryAfter == nil || !model.NextRetryAfter.After(*credentialUntil)) &&
+					(model.Quota.NextRecoverAt == nil || !model.Quota.NextRecoverAt.After(*credentialUntil))
+			}
+		}
+		if model.NextRetryAfter != nil {
+			value := model.NextRetryAfter.UnixMilli()
+			event.ModelNextRetryAfterMS = &value
+		}
+		if quota := model.Quota; quota != nil {
+			event.ModelQuotaExceeded = quota.Exceeded
+			event.ModelQuotaReason = security.RedactText(boundedSafe(quota.Reason, 512))
+			event.ModelBackoffLevel = quota.BackoffLevel
+			if quota.NextRecoverAt != nil {
+				value := quota.NextRecoverAt.UnixMilli()
+				event.ModelNextRecoverAtMS = &value
+			}
 		}
 	}
 	return event, nil

@@ -437,7 +437,8 @@
 /* A credential that recovers on its own clock is a warning; one that waits for the operator is a
    failure. */
 .quota-row.is-blocked .quota-row-status { color: var(--danger); }
-.quota-row.is-cooldown .quota-row-status { color: var(--warn); }
+.quota-row.is-cooldown .quota-row-status,
+.quota-row.is-model-cooldown .quota-row-status { color: var(--warn); }
 .quota-row-status-icon { font-size: var(--text-base); flex: none; }
 .quota-row-when {
   grid-area: when;

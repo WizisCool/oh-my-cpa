@@ -16,9 +16,9 @@ import { credentialTitle } from '../../types/usageEventIdentity';
  * operator can repeat, then the two that recover on their own clock, then a failure with no
  * recovery time to offer. `low` still serves and is the one worth knowing about before it stops.
  */
-export type CredentialQuotaState = 'reauth' | 'cooldown' | 'exhausted' | 'problem' | 'low' | 'healthy' | 'unread';
+export type CredentialQuotaState = 'reauth' | 'cooldown' | 'exhausted' | 'problem' | 'model-cooldown' | 'low' | 'healthy' | 'unread';
 
-const STATE_ORDER: CredentialQuotaState[] = ['reauth', 'cooldown', 'exhausted', 'problem', 'low', 'healthy', 'unread'];
+const STATE_ORDER: CredentialQuotaState[] = ['reauth', 'cooldown', 'exhausted', 'problem', 'model-cooldown', 'low', 'healthy', 'unread'];
 const BLOCKED_STATES = new Set<CredentialQuotaState>(['reauth', 'cooldown', 'exhausted', 'problem']);
 
 /** The remaining shares at which a window stops reading as plentiful, and then as nearly spent. */
@@ -158,6 +158,7 @@ function resolveState(file: ManagementAuthFile, item: QuotaItem | undefined, rem
   if (item?.active_cooldown?.is_active || item?.status === 'cooldown') return 'cooldown';
   if (item?.status === 'exhausted' || remainingPercent === 0) return 'exhausted';
   if (isUnavailable(file) || item?.status === 'error') return 'problem';
+  if ((item?.model_cooldowns?.length ?? 0) > 0) return 'model-cooldown';
   if (remainingPercent == null) return 'unread';
   return remainingPercent < QUOTA_LOW_PERCENT ? 'low' : 'healthy';
 }

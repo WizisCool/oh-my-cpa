@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -374,6 +375,94 @@ func cooldownEvidenceRows(t *testing.T, handler *Handler, authIndex string) int 
 		t.Fatal(err)
 	}
 	return rows
+}
+
+func TestQuotaAutoRefreshDoesNotClearExpiredCredentialWithActiveModel(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	insertAutoRefreshCooldown(t, handler, "expired-global-active-model", "codex-fresh", nowMS-60000, nowMS-120000)
+	_, err := handler.repo.SQL().ExecContext(ctx, `UPDATE error_events SET cooldown_model = 'gpt-5', model_quota_exceeded = 1, model_next_recover_at_ms = ? WHERE event_key = 'expired-global-active-model'`, nowMS+60000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":0,"refresh_on_reset":true}`)
+	if _, err := handler.runQuotaAutoRefreshRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := fixture.cooldownResets("codex-fresh"); got != 0 {
+		t.Fatalf("active model was reset %d times", got)
+	}
+}
+
+func TestQuotaOverviewReportsModelCooldownWithoutBlockingCredential(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	_, err := handler.repo.SQL().ExecContext(ctx, `INSERT INTO error_events (instance_id,event_key,auth_index,cooldown_model,model_quota_exceeded,model_next_recover_at_ms,model_backoff_level,timestamp_ms,created_at_ms) VALUES ('default','model-only','codex-unread','gpt-5',1,?,6,?,?)`, nowMS+60000, nowMS, nowMS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := handler.buildQuotaOverview(ctx, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range overview.Quotas {
+		if item.AuthIndex != "codex-unread" {
+			continue
+		}
+		if item.ActiveCooldown != nil || item.Status == "cooldown" || len(item.ModelCooldowns) != 1 || item.ModelCooldowns[0].Model != "gpt-5" || item.ModelCooldowns[0].BackoffLevel != 6 {
+			t.Fatalf("overview item = %+v", item)
+		}
+		router := chi.NewRouter()
+		router.Get("/quota/{authIndex}", handler.getCredentialQuotaDetail)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/quota/codex-unread", nil))
+		var detail struct {
+			Quota struct {
+				ModelCooldowns []struct {
+					Model        string `json:"model"`
+					BackoffLevel int    `json:"backoff_level"`
+				} `json:"model_cooldowns"`
+			} `json:"quota"`
+		}
+		if response.Code != http.StatusOK {
+			t.Fatalf("detail HTTP status = %d, body = %s", response.Code, response.Body.String())
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil || len(detail.Quota.ModelCooldowns) != 1 || detail.Quota.ModelCooldowns[0].Model != "gpt-5" || detail.Quota.ModelCooldowns[0].BackoffLevel != 6 {
+			t.Fatalf("detail = %+v, %v", detail, err)
+		}
+		return
+	}
+	t.Fatal("missing codex-unread")
+}
+
+func TestQuotaReadDoesNotClearActiveModelCooldown(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	insertAutoRefreshCooldown(t, handler, "global-and-model", "codex-unread", nowMS+time.Hour.Milliseconds(), nowMS-1000)
+	_, err := handler.repo.SQL().ExecContext(ctx, `UPDATE error_events SET cooldown_model = 'gpt-5', model_quota_exceeded = 1, model_next_recover_at_ms = ? WHERE event_key = 'global-and-model'`, nowMS+time.Hour.Milliseconds())
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":60,"refresh_on_reset":false}`)
+	if _, err := handler.runQuotaAutoRefreshRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := fixture.cooldownResets("codex-unread"); got != 0 {
+		t.Fatalf("active model was reset %d times", got)
+	}
+	if rows := cooldownEvidenceRows(t, handler, "codex-unread"); rows != 1 {
+		t.Fatalf("global evidence rows = %d, want 1", rows)
+	}
 }
 
 func TestQuotaReadReleasesACooldownOnceCapacityIsBack(t *testing.T) {

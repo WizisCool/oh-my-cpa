@@ -2,6 +2,11 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/quota';
 
 export default {
+  'quota.retry_at': 'Cuba semula selepas: {time}',
+  'quota.clear_all_cooldowns': 'Kosongkan semua tempoh bertenang kelayakan',
+  'quota.model_cooldown_status': 'Model dalam tempoh bertenang',
+  'quota.model_cooldown': '{model} sedang bertenang dalam CPA',
+  'quota.backoff_level': 'Tahap tunggu: {level}',
   "quota.reset_estimated_hint": "Masa set semula dianggarkan daripada kitaran pengebilan huluan",
   "quota.reset_expiry_title_zoned": "Tamat kredit set semula ({zone})",
   "quota.reset_grants_title_zoned": "Geran set semula Claude ({zone})",

@@ -69,6 +69,7 @@ const WINDOW_LABEL_KEYS: Record<QuotaWindowPeriod, MessageKey> = {
 const STATUS_ROW_STATES: Partial<Record<CredentialQuotaState, { labelKey: MessageKey; Icon: React.ComponentType<{ className?: string }> }>> = {
   reauth: { labelKey: 'dash.quota.state_reauth', Icon: KeyOutlined },
   cooldown: { labelKey: 'dash.quota.state_cooldown', Icon: HourglassOutlined },
+  'model-cooldown': { labelKey: 'quota.model_cooldown_status', Icon: HourglassOutlined },
   problem: { labelKey: 'dash.quota.state_problem', Icon: CloseCircleOutlined },
   unread: { labelKey: 'dash.quota.state_unread', Icon: ExclamationCircleOutlined },
 };

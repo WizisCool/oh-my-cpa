@@ -542,8 +542,10 @@ func (r *Repository) InsertErrorEvent(ctx context.Context, event usage.ErrorEven
 			instance_id, event_key, request_id, provider, model, auth_id, auth_index,
 			status_code, code, body, retryable, auth_status, auth_disabled, auth_unavailable,
 			quota_exceeded, quota_reason, next_retry_after_ms, next_recover_at_ms,
-			backoff_level, timestamp_ms, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			backoff_level, timestamp_ms, created_at_ms, cooldown_model, model_quota_exceeded,
+			model_quota_reason, model_next_retry_after_ms, model_next_recover_at_ms, model_backoff_level,
+			auth_quota_aggregate, model_quota_inherited
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(event_key) DO NOTHING`,
 		security.RedactText(truncate(event.InstanceID, 256)),
 		security.RedactText(truncate(event.EventKey, 256)),
@@ -556,7 +558,10 @@ func (r *Repository) InsertErrorEvent(ctx context.Context, event usage.ErrorEven
 		boolInt(event.Retryable), security.RedactText(truncate(event.AuthStatus, 512)),
 		boolInt(event.AuthDisabled), boolInt(event.AuthUnavailable), boolInt(event.QuotaExceeded),
 		security.RedactText(truncate(event.QuotaReason, 512)), event.NextRetryAfterMS,
-		event.NextRecoverAtMS, event.BackoffLevel, event.TimestampMS, time.Now().UnixMilli())
+		event.NextRecoverAtMS, event.BackoffLevel, event.TimestampMS, time.Now().UnixMilli(),
+		security.RedactText(truncate(event.CooldownModel, 256)), boolInt(event.ModelQuotaExceeded),
+		security.RedactText(truncate(event.ModelQuotaReason, 512)), event.ModelNextRetryAfterMS,
+		event.ModelNextRecoverAtMS, event.ModelBackoffLevel, boolInt(event.AuthQuotaAggregate), boolInt(event.ModelQuotaInherited))
 	if err != nil {
 		return fmt.Errorf("insert error event: %w", err)
 	}

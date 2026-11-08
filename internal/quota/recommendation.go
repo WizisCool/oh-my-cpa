@@ -182,11 +182,9 @@ func activeCooldownExpired(cooldown *ActiveCooldown, nowMS int64) bool {
 	if cooldown == nil {
 		return false
 	}
-	if cooldown.RecoverAtMS != nil {
-		return *cooldown.RecoverAtMS <= nowMS
-	}
-	if cooldown.RetryAfterSeconds != nil && cooldown.CorrelatedAtMS != nil {
-		return *cooldown.CorrelatedAtMS+*cooldown.RetryAfterSeconds*1000 <= nowMS
+	if cooldown.RecoverAtMS != nil || cooldown.RetryAtMS != nil {
+		return (cooldown.RecoverAtMS == nil || *cooldown.RecoverAtMS <= nowMS) &&
+			(cooldown.RetryAtMS == nil || *cooldown.RetryAtMS <= nowMS)
 	}
 	return false
 }

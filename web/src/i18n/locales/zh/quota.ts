@@ -1,4 +1,9 @@
 export default {
+  'quota.retry_at': '重试时间：{time}',
+  'quota.clear_all_cooldowns': '清除此凭据的全部冷却',
+  'quota.model_cooldown_status': '部分模型冷却中',
+  'quota.model_cooldown': '{model} 正在 CPA 冷却',
+  'quota.backoff_level': '退避等级：{level}',
   'quota.reset_estimated_hint': '基于上游计费周期推导的重置时间',
   'quota.reset_expiry_title_zoned': '重置积分到期时间（{zone}）',
   'quota.reset_grants_title_zoned': 'Claude 重置授权（{zone}）',
