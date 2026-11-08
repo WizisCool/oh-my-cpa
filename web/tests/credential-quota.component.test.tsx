@@ -306,6 +306,31 @@ describe('credential section row', () => {
 });
 
 describe('provider sections across pages', () => {
+  it('moves a provider section above the one before it and saves the arrangement', async () => {
+    const files = [
+      file('codex-main', { type: 'codex', provider: 'codex' }),
+      file('claude-main', { type: 'claude', provider: 'claude' }),
+    ];
+    const api = installOmcApi({ authFiles: files.map(entry => ({ file: entry, fields: {} })) });
+    api.on('GET', '/management/quota', () => ({ quotas: [] }));
+    const router = createMemoryRouter([{ path: '*', element: <OAuthManagementPage /> }], { initialEntries: ['/oauth-management'] });
+    const view = renderWithOmc(<RouterProvider router={router} />);
+    const drawnProviders = () => screen.getAllByTestId('oauth-credential-section').map(section => section.getAttribute('data-provider'));
+    const sectionWrites = () => api.preferenceWrites().filter(write => write.key === 'omc_oauth_section_order');
+    try {
+      // The console's own order leads until the operator arranges the sections: Claude is pinned first.
+      await waitFor(() => expect(drawnProviders()).toEqual(['claude', 'codex']));
+      // The band that names a provider is what a pointer grabs, and the grip on it steps by keyboard.
+      const codex = screen.getAllByTestId('oauth-credential-section').find(section => section.getAttribute('data-provider') === 'codex')!;
+      expect(codex.querySelector('header')?.getAttribute('data-draggable')).toBe('true');
+      fireEvent.keyDown(await screen.findByRole('button', { name: 'Drag to reorder: Codex' }), { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 });
+      await waitFor(() => expect(sectionWrites()).toEqual([{ key: 'omc_oauth_section_order', value: { sections: ['codex', 'claude'] } }]));
+      expect(drawnProviders()).toEqual(['codex', 'claude']);
+    } finally {
+      view.unmount();
+    }
+  });
+
   it('sorts a provider by quota across pages and exposes SIWC and reset credit badges', async () => {
     const files = Array.from({ length: 13 }, (_, index) => file(`account-${String(index + 1).padStart(2, '0')}`,
       index === 12 ? { siwc_bound: true, siwc_status: 'valid', use_siwc: true } : {}));

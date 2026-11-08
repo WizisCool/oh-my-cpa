@@ -65,7 +65,7 @@ import { maskAccount } from '../../utils/maskAccount';
 import styles from './CredentialSection.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
 import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../../components/common/InlineName';
-import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../../components/common/RowReorder';
+import { ReorderHandle, RowReorder, useReorderList, useReorderRow, type ReorderRow } from '../../components/common/RowReorder';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import type { DropSide } from '../../types/displayOrder';
 
@@ -115,6 +115,33 @@ interface CredentialSectionProps {
    * cannot be rearranged (a phone, or before the stored order has been read).
    */
   onReorder?: (record: OAuthWorkspaceRecord, target: OAuthWorkspaceRecord, side: DropSide) => unknown;
+  /**
+   * The section's own part in the page's section list: drawn by `ReorderableCredentialSection`, so
+   * the provider is dragged by the header band that names it.
+   */
+  sectionRow?: ReorderRow;
+}
+
+/**
+ * One provider section as a row of the page's section list. The row is the section itself and its
+ * header band picks it up, so an operator drags a provider the way they drag a window by its title.
+ */
+export function ReorderableCredentialSection(props: CredentialSectionProps) {
+  const sectionRow = useReorderRow(props.section.provider);
+  return <CredentialSection {...props} sectionRow={sectionRow} />;
+}
+
+/**
+ * Whether a pointer may pick the section up here: anywhere on the band that names it, but never on a
+ * control the band holds. A finger is not a pointer here - a touch that lands on the band is the
+ * page's to scroll, so a touch drag starts on the grip alone, which the browser has been told not to
+ * scroll.
+ */
+function startsSectionDrag(event: React.PointerEvent<HTMLElement>): boolean {
+  const target = event.target instanceof Element ? event.target : undefined;
+  const isGrip = Boolean(target?.closest('[data-reorder-handle]'));
+  if (event.pointerType === 'touch') return isGrip;
+  return isGrip || !target?.closest('button, a, input, label, [role="button"], [role="checkbox"]');
 }
 
 const PERIOD_KEYS: Record<QuotaPeriod, MessageKey> = {
@@ -146,7 +173,7 @@ function readingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
  * column's header sorts the section by that reading, which is how an operator with many accounts
  * finds the one with the most Claude quota left without opening anything.
  */
-export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort, onReorder }: CredentialSectionProps) {
+export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort, onReorder, sectionRow }: CredentialSectionProps) {
   const t = useT();
   const metadata = getCredentialProviderMetadata(section.provider);
   const records = section.records;
@@ -157,6 +184,10 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
   const isSorted = columnSort?.key === 'quota';
   // A quota sort is an order the operator did not arrange, so the handles step aside while it holds.
   const canReorder = Boolean(onReorder);
+  const isPhone = useIsPhoneViewport();
+  const sectionName = title ?? metadata.label;
+  const sectionDrag = sectionRow?.handle;
+  const canDragSection = Boolean(sectionDrag?.isEnabled);
   const byKey = React.useMemo(() => new Map(section.visibleRecords.map((record) => [record.key, record])), [section.visibleRecords]);
   const write = (key: string, targetKey: string, side: DropSide) => {
     const record = byKey.get(key);
@@ -176,13 +207,31 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
     else void write(key, neighbour.key, side);
   };
   return (
-    <section className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
-      <header className={styles.head}>
+    <section {...sectionRow?.row} className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
+      <header
+        className={styles.head}
+        data-draggable={canDragSection ? 'true' : undefined}
+        onPointerDown={canDragSection ? (event) => {
+          if (startsSectionDrag(event)) sectionDrag?.onPointerDown?.(event);
+        } : undefined}
+      >
         <div className={styles['head-info']}>
+          {/* The band above is what a pointer grabs, so the grip carries no pointer handler of its
+              own: it is the section's keyboard handle, and the finger's way in on a touch screen. */}
+          {sectionDrag && (
+            <ReorderHandle
+              isEnabled={sectionDrag.isEnabled}
+              isDragging={sectionDrag.isDragging}
+              activatorRef={sectionDrag.activatorRef}
+              onStep={sectionDrag.onStep}
+              name={sectionName}
+              variant={isPhone ? 'inline' : 'edge'}
+            />
+          )}
           <span className={styles['head-icon']}>
             <CredentialMark credential={{ provider: section.provider }} pluginLogos={pluginLogos} size={18} />
           </span>
-          <h2 className={styles['head-title']}>{title ?? metadata.label}</h2>
+          <h2 className={styles['head-title']}>{sectionName}</h2>
           <Tag size="small">{t('omc.section_count', { n: section.records.length })}</Tag>
         </div>
         {selectable.length > 0 && (
@@ -191,7 +240,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
               checked={selectable.length > 0 && selectedCount === selectable.length}
               indeterminate={selectedCount > 0 && selectedCount < selectable.length}
               onChange={(event) => actions.onSelect(selectable, event.target.checked)}
-              aria-label={t('omc.section_select', { provider: title ?? metadata.label })}
+              aria-label={t('omc.section_select', { provider: sectionName })}
             >
               <span className={styles['head-mobile-select-label']}>
                 {selectedCount > 0 ? `${selectedCount}/${selectable.length}` : t('pro.select_all')}
@@ -221,7 +270,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
                       indeterminate={selectedCount > 0 && selectedCount < selectable.length}
                       disabled={selectable.length === 0}
                       onChange={(event) => actions.onSelect(selectable, event.target.checked)}
-                      aria-label={t('omc.section_select', { provider: title ?? metadata.label })}
+                      aria-label={t('omc.section_select', { provider: sectionName })}
                     />
                     {t('omc.col_credential')}
                   </span>

@@ -225,6 +225,24 @@ export function compareSections(left: string, right: string): number {
   return sectionRank(left) - sectionRank(right) || left.localeCompare(right);
 }
 
+/**
+ * The providers a set of records has, each once, in the console's fixed section order. This is the
+ * list an operator's section arrangement is applied to: rearranging providers rather than the page on
+ * screen is what keeps a section on the same side of every page boundary.
+ */
+export function providersInSectionOrder(records: readonly OAuthWorkspaceRecord[]): string[] {
+  return [...new Set(records.map((record) => record.displayProvider))].sort(compareSections);
+}
+
+/** The sections in the operator's arrangement, every provider it does not name in the fixed order. */
+function orderSections(
+  sections: [string, OAuthWorkspaceRecord[]][],
+  sectionOrder: readonly string[] | undefined,
+): [string, OAuthWorkspaceRecord[]][] {
+  const fixed = [...sections].sort(([left], [right]) => compareSections(left, right));
+  return applyKeyOrder(fixed, ([provider]) => provider, sectionOrder);
+}
+
 /** The lines a credential draws, as one comparable key; empty without a reading. */
 function listedFamiliesOf(record: OAuthWorkspaceRecord): string[] {
   return quotaLinesOf(record).map((line) => line.key).sort();
@@ -248,14 +266,16 @@ function clusterByShape(records: OAuthWorkspaceRecord[]): OAuthWorkspaceRecord[]
 }
 
 /**
- * Section order stays fixed. Inside a section an active quota sort orders the provider's full
- * filtered records; otherwise its credentials are grouped by plan shape in the chosen order, and
- * the custom order, when given, puts the credentials the operator arranged first in their order.
+ * Section order stays fixed unless the operator arranged the sections, in which case the whole list
+ * follows that arrangement. Inside a section an active quota sort orders the provider's full filtered
+ * records; otherwise its credentials are grouped by plan shape in the chosen order, and the custom
+ * order, when given, puts the credentials the operator arranged first in their order.
  */
 export function orderBySection(
   records: OAuthWorkspaceRecord[],
   columnSorts: Readonly<Partial<Record<string, QuotaColumnSort>>> = {},
   customOrder?: Readonly<Record<string, readonly string[]>>,
+  sectionOrder?: readonly string[],
 ): OAuthWorkspaceRecord[] {
   const sections = new Map<string, OAuthWorkspaceRecord[]>();
   for (const record of records) {
@@ -263,8 +283,7 @@ export function orderBySection(
     rows.push(record);
     sections.set(record.displayProvider, rows);
   }
-  return [...sections.entries()]
-    .sort(([left], [right]) => compareSections(left, right))
+  return orderSections([...sections.entries()], sectionOrder)
     .flatMap(([provider, rows]) => {
       const sort = columnSorts[provider];
       if (sort) return sortByQuotaColumn(rows, sort.direction);
@@ -279,18 +298,22 @@ export function credentialOrderKey(record: OAuthWorkspaceRecord): string {
 }
 
 /**
- * The sections a page shows. Rows are the page's records; columns come from every visible record
- * of the provider, so paging through a section never adds or drops a column.
+ * The sections a page shows, in the same provider order the pages were cut in. Rows are the page's
+ * records; columns come from every visible record of the provider, so paging through a section never
+ * adds or drops a column.
  */
-export function buildCredentialSections(pageRecords: OAuthWorkspaceRecord[], visibleRecords: OAuthWorkspaceRecord[]): CredentialSection[] {
+export function buildCredentialSections(
+  pageRecords: OAuthWorkspaceRecord[],
+  visibleRecords: OAuthWorkspaceRecord[],
+  sectionOrder?: readonly string[],
+): CredentialSection[] {
   const sections = new Map<string, OAuthWorkspaceRecord[]>();
   for (const record of pageRecords) {
     const rows = sections.get(record.displayProvider) ?? [];
     rows.push(record);
     sections.set(record.displayProvider, rows);
   }
-  return [...sections.entries()]
-    .sort(([left], [right]) => compareSections(left, right))
+  return orderSections([...sections.entries()], sectionOrder)
     .map(([provider, records]) => {
       const providerRecords = visibleRecords.filter((record) => record.displayProvider === provider);
       const hasQuota = providerRecords.some((record) => quotaLinesOf(record, provider).length > 0);

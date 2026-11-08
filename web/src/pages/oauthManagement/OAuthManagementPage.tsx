@@ -43,9 +43,11 @@ import { SummaryStrip } from '../../components/common/SummaryStrip';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
-import { CredentialSection, type CredentialRowActions } from './CredentialSection';
-import { buildCredentialSections, credentialOrderKey, orderBySection, type QuotaColumnSort } from './credentialSections';
+import { ReorderableCredentialSection, type CredentialRowActions } from './CredentialSection';
+import { buildCredentialSections, credentialOrderKey, orderBySection, providersInSectionOrder, type QuotaColumnSort } from './credentialSections';
 import { useCredentialOrder } from './useCredentialOrder';
+import { useOAuthSectionOrder } from './useOAuthSectionOrder';
+import { RowReorder } from '../../components/common/RowReorder';
 import { moveKey, type DropSide } from '../../types/displayOrder';
 import { useOAuthSessions } from './useOAuthSessions';
 import { isSIWCPending, siwcTargetKey, useSIWCBindings } from '../../hooks/useSIWCBindings';
@@ -186,12 +188,22 @@ export const OAuthManagementPage: React.FC = () => {
     ),
     [queryState.provider, queryState.query, queryState.quota, queryState.sort, queryState.status, records],
   );
-  // Pages are cut from the section order, so a page groups into the same sections the next page continues.
+  // A page is cut from the record order, which keeps a provider's credentials together, so a page
+  // groups into the same sections the next page continues.
   const credentialOrder = useCredentialOrder();
+  // The section arrangement is over every provider the workspace has, not just the page on screen, so
+  // a drag moves the providers themselves and the pages are cut in that order.
+  const sectionProviders = React.useMemo(() => providersInSectionOrder(records), [records]);
+  const sectionOrder = useOAuthSectionOrder(sectionProviders);
   const isCustomOrder = queryState.sort === 'custom';
   const visibleRecords = React.useMemo(
-    () => orderBySection(sortedRecords, quotaColumnSorts, isCustomOrder ? credentialOrder.value : undefined),
-    [sortedRecords, quotaColumnSorts, isCustomOrder, credentialOrder.value],
+    () => orderBySection(
+      sortedRecords,
+      quotaColumnSorts,
+      isCustomOrder ? credentialOrder.value : undefined,
+      sectionOrder.ordered,
+    ),
+    [sortedRecords, quotaColumnSorts, isCustomOrder, credentialOrder.value, sectionOrder.ordered],
   );
   // A drag rearranges the provider's whole list, filters and pages notwithstanding, starting from
   // the order on screen; under another sort that order becomes the custom one. The document then
@@ -582,7 +594,7 @@ export const OAuthManagementPage: React.FC = () => {
   };
 
   const renameCredential = useCredentialRename();
-  const sections = buildCredentialSections(pagedRecords, visibleRecords);
+  const sections = buildCredentialSections(pagedRecords, visibleRecords, sectionOrder.ordered);
   const rowActions: CredentialRowActions = {
     isBusy: (record) => actions.isRecordBusy(record),
     isRefreshingQuota: (record) => Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex)),
@@ -923,30 +935,46 @@ export const OAuthManagementPage: React.FC = () => {
       ) : (
         <>
           <div className={styles.sections}>
-            {sections.map((section) => (
-              <CredentialSection
-                key={section.provider}
-                section={section}
-                title={providerDisplayName(section.provider, pluginTitles)}
-                pluginLogos={pluginLogos}
-                selectedKeys={selectedKeySet}
-                nowMS={visibleNow}
-                actions={rowActions}
-                columnSort={quotaColumnSorts[section.provider]}
-                onReorder={credentialOrder.loaded ? reorderCredential : undefined}
-                onSort={(key) => {
-                  setQuotaColumnSorts((current) => {
-                    const next = { ...current };
-                    const sort = current[section.provider];
-                    if (sort?.key !== key) next[section.provider] = { key, direction: 'asc' };
-                    else if (sort.direction === 'asc') next[section.provider] = { key, direction: 'desc' };
-                    else delete next[section.provider];
-                    return next;
-                  });
-                  setSearch({ page: null });
-                }}
-              />
-            ))}
+            {/* The provider sections are the page's reorderable list: each section is a row, held by
+                the band that names it. A keyboard step trades places with the section drawn beside
+                it; a step never reaches a section the page does not show. */}
+            <RowReorder
+              items={sections.map((section) => section.provider)}
+              isEnabled={sectionOrder.reorder.isEnabled}
+              onMove={sectionOrder.reorder.onMove}
+              onStep={(provider, direction) => {
+                const index = sections.findIndex((section) => section.provider === provider);
+                const neighbour = sections[index + direction];
+                if (index >= 0 && neighbour) {
+                  sectionOrder.reorder.onMove(provider, neighbour.provider, direction < 0 ? 'before' : 'after');
+                }
+              }}
+            >
+              {sections.map((section) => (
+                <ReorderableCredentialSection
+                  key={section.provider}
+                  section={section}
+                  title={providerDisplayName(section.provider, pluginTitles)}
+                  pluginLogos={pluginLogos}
+                  selectedKeys={selectedKeySet}
+                  nowMS={visibleNow}
+                  actions={rowActions}
+                  columnSort={quotaColumnSorts[section.provider]}
+                  onReorder={credentialOrder.loaded ? reorderCredential : undefined}
+                  onSort={(key) => {
+                    setQuotaColumnSorts((current) => {
+                      const next = { ...current };
+                      const sort = current[section.provider];
+                      if (sort?.key !== key) next[section.provider] = { key, direction: 'asc' };
+                      else if (sort.direction === 'asc') next[section.provider] = { key, direction: 'desc' };
+                      else delete next[section.provider];
+                      return next;
+                    });
+                    setSearch({ page: null });
+                  }}
+                />
+              ))}
+            </RowReorder>
           </div>
           <div className={styles.pagination}>
             <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
