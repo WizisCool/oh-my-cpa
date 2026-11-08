@@ -25,6 +25,7 @@ export function PluginUpdateAllModal({ entries, isPluginSystemEnabled, onClose }
   const queryClient = useQueryClient();
   const [confirmations, setConfirmations] = React.useState<Record<string, string>>({});
   const [results, setResults] = React.useState<Array<{ entry: StorePluginItem; error?: string }> | null>(null);
+  const inFlight = React.useRef(false);
   const eligible = entries.filter((entry) => !isStoreInstallBlocked(entry));
   const confirmed = eligible.every((entry) => !STORE_INSTALL_WARNINGS[storePluginOrigin(entry)] || confirmations[entry.id]?.trim() === storeInstallConfirmToken(entry));
   const mutation = useMutation({
@@ -41,6 +42,7 @@ export function PluginUpdateAllModal({ entries, isPluginSystemEnabled, onClose }
       }
       return outcomes;
     },
+    onSettled: () => { inFlight.current = false; },
     onSuccess: (outcomes) => {
       void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
       void queryClient.invalidateQueries({ queryKey: ['management-plugin-store'] });
@@ -61,7 +63,13 @@ export function PluginUpdateAllModal({ entries, isPluginSystemEnabled, onClose }
       open
       title={t('plugin.update_all_title')}
       onCancel={() => { if (!mutation.isPending) onClose(); }}
-      onOk={() => { if (results) onClose(); else mutation.mutate(); }}
+      onOk={() => {
+        if (results) onClose();
+        else if (!inFlight.current) {
+          inFlight.current = true;
+          mutation.mutate();
+        }
+      }}
       okText={results ? t('common.close') : t('plugin.update_all')}
       cancelText={t('common.cancel')}
       okButtonProps={{ disabled: !results && (!eligible.length || !confirmed) }}

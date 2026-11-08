@@ -658,6 +658,11 @@ func TestRealPluginFixturesHaveInlineArtworkAndUpdates(t *testing.T) {
 	for _, plugin := range pluginCatalog() {
 		installed[plugin.id] = plugin
 	}
+	for _, plugin := range realPluginFixtures {
+		if _, ok := installed[plugin.id]; !ok {
+			t.Errorf("real plugin %s has no installed entry", plugin.id)
+		}
+	}
 	for _, entry := range pluginStoreCatalog() {
 		plugin, ok := installed[entry.id]
 		if !ok || !strings.HasPrefix(entry.id, "omc-") {

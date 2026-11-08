@@ -187,7 +187,10 @@ it('updates the installed fleet sequentially and reports partial failures withou
   const confirm = within(dialog).getByRole('button', { name: t('plugin.update_all') });
   expect((confirm as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(within(dialog).getByPlaceholderText('community'), { target: { value: 'community' } });
-  fireEvent.click(confirm);
+  act(() => {
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+  });
   await first.arrived;
   expect(server.writes('/install')).toHaveLength(1);
   await act(async () => first.release());
