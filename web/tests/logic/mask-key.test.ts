@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { maskKeyText } from '../../src/utils/maskKey.ts';
-import { maskAccount, maskAccountIn } from '../../src/utils/maskAccount.ts';
+import { maskAccount, maskAccountIn, maskEmailAddresses } from '../../src/utils/maskAccount.ts';
 
 const MASK_RUN = '••••••••';
 
@@ -119,4 +119,18 @@ test('an account mask keeps the edges an owner recognises and hides the length',
   // mask were passed as a plain string.
   assert.equal(maskAccountIn('codex+tag@example.com.json', 'codex+tag@example.com'), 'co•••g@example.com.json');
   assert.equal(maskAccountIn('codex-$&xy@example.com.json', '$&xy@example.com'), 'codex-$&•••y@example.com.json');
+});
+
+test('an address inside a label masks itself when the credential is not at hand', () => {
+  assert.equal(maskEmailAddresses('zcode: operator@example.com'), 'zcode: op•••r@example.com');
+  assert.equal(maskEmailAddresses('codex-Operator@Example.com.json'), 'co•••r@Example.com.json');
+  // A gateway's own name for a credential carries no address and is left whole; so is a value
+  // shaped like one only by an `@` with no domain.
+  assert.equal(maskEmailAddresses('Codex · team primary'), 'Codex · team primary');
+  assert.equal(maskEmailAddresses('team@work'), 'team@work');
+  // An address the credential's own identity already masked is not masked again, so the precise
+  // mask keeps the prefix the label carries.
+  const precise = maskAccountIn('codex-operator@example.com.json', 'operator@example.com');
+  assert.equal(precise, 'codex-op•••r@example.com.json');
+  assert.equal(maskEmailAddresses(precise), precise);
 });

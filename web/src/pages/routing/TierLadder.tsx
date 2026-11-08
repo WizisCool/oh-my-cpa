@@ -25,6 +25,7 @@ import { ProviderMark, CredentialMark } from '../../components/LobeIcon';
 import { type ProviderBrandSources } from '../../types/brandMark';
 import { credentialBrandIdentity } from '../../types/credentialIdentity';
 import { ActionMenu } from '../../components/common/ActionMenu';
+import { MaskedText } from '../../components/common/MaskedText';
 import { ToolButton } from '../../components/common/ToolButton';
 import { StatusLabel } from '../../components/common/StatusLabel';
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, HolderOutlined, VerticalAlignTopOutlined } from '../../components/icons';
@@ -49,10 +50,19 @@ const STATE_KEYS: Partial<Record<RouteMemberState, MessageKey>> = {
   unknown: 'orch.state_unknown',
 };
 
+export interface MemberLabel {
+  /** The name as the board prints it, with the identities the credential reports masked out. */
+  masked: string;
+  /** The full name the card reveals when the operator asks for it. */
+  full: string;
+}
+
 export interface TierLadderProps {
   branding: ProviderBrandSources;
   tiers: RoutingTier[];
   members: ReadonlyMap<string, RoutingMember>;
+  /** What each card prints where its own name repeats a credential's reported identity. */
+  labels: ReadonlyMap<string, MemberLabel>;
   /** Priority each tier will be written with, in tier order. */
   tierPriorities: number[];
   strategy: RoutingStrategy;
@@ -287,7 +297,7 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
         </div>
       </div>
       <DragOverlay dropAnimation={null}>
-        {dragged ? <CardFace branding={props.branding} member={dragged} className={styles['card-overlay']} /> : null}
+        {dragged ? <CardFace branding={props.branding} member={dragged} label={props.labels.get(dragged.key)} className={styles['card-overlay']} /> : null}
       </DragOverlay>
     </DndContext>
   );
@@ -466,7 +476,7 @@ const TierBand: React.FC<{
 };
 
 /** The card's own face, shared by the resting card and the one following the pointer. */
-const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember; className?: string; children?: React.ReactNode }> = ({ member, branding, className, children }) => {
+const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember; label?: MemberLabel; className?: string; children?: React.ReactNode }> = ({ member, branding, label, className, children }) => {
   const t = useT();
   return (
     <div className={clsx(styles['card-face'], className)}>
@@ -477,7 +487,13 @@ const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember
             credential={credentialBrandIdentity(member.family, { name: member.name, oauth_provider: member.oauth_provider }, branding.multiPortalKeys)}
             pluginLogos={branding.pluginLogos} size={20} />}
       <span className={styles['card-text']}>
-        <span className={styles['card-name']}>{member.name}</span>
+        <MaskedText
+          className={styles['card-name']}
+          masked={label?.masked ?? member.name}
+          value={label?.full ?? member.name}
+          revealLabel={t('omc.account_reveal')}
+          hideLabel={t('omc.account_hide')}
+        />
         <span className={styles['card-sub']}>
           {t(member.kind === 'provider' ? 'orch.kind_provider' : 'orch.kind_credential')}
           {member.key_count > 1 && <> · {t('orch.key_count', { n: member.key_count })}</>}
@@ -503,9 +519,11 @@ interface RoutingCardProps extends TierLadderProps {
 }
 
 const RoutingCard: React.FC<RoutingCardProps> = ({
-  member, branding, tierIndex, tierCount, isAlone, isFirstInTier, isLastInTier, isServingTier, canDrag, disabled = false, strategy, weights, preview, isLens, landedKey, onStep, onSplit, onWeights, onShift,
+  member, branding, labels, tierIndex, tierCount, isAlone, isFirstInTier, isLastInTier, isServingTier, canDrag, disabled = false, strategy, weights, preview, isLens, landedKey, onStep, onSplit, onWeights, onShift,
 }) => {
   const t = useT();
+  const label = labels.get(member.key);
+  const shownName = label?.masked ?? member.name;
   const state = preview.states.get(member.key);
   const isHidden = isLens && state === 'ineligible';
   const isLocked = member.is_runtime_only || disabled || isHidden;
@@ -570,7 +588,7 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
       tabIndex={isHidden ? -1 : 0}
       aria-hidden={isHidden ? 'true' : undefined}
       aria-keyshortcuts={isLocked ? 'Alt+ArrowLeft Alt+ArrowRight' : 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight'}
-      aria-label={member.name}
+      aria-label={shownName}
       onKeyDown={handleKeyDown}
       className={clsx(
         styles['card'],
@@ -585,7 +603,7 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
       style={travel}
       {...(canDrag && !isLocked ? listeners : {})}
     >
-      <CardFace branding={branding} member={member}>
+      <CardFace branding={branding} member={member} label={label}>
         {isLens && isServingTier && typeof share === 'number' && (
           <span className={styles['card-share-bar']} style={{ '--share': share } as React.CSSProperties} aria-hidden="true" />
         )}
@@ -600,7 +618,7 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
             </span>
           )}
           {strategy === 'weighted-round-robin' && memberWeights.length > 0 && (
-            <WeightControl member={member} weights={memberWeights} isLocked={isLocked} onChange={(next) => onWeights(member.key, next)} />
+            <WeightControl member={member} name={shownName} weights={memberWeights} isLocked={isLocked} onChange={(next) => onWeights(member.key, next)} />
           )}
           {!member.is_runtime_only && (
             <ActionMenu label={t('orch.card_actions')}>
@@ -623,10 +641,12 @@ const MAX_WEIGHT = 1_000_000;
 /** One weight per key; an empty field runs as CPA's default of 1. */
 const WeightControl: React.FC<{
   member: RoutingMember;
+  /** The card's name as the board prints it; a weight is named after it without revealing an account. */
+  name: string;
   weights: (number | null)[];
   isLocked: boolean;
   onChange: (weights: (number | null)[]) => void;
-}> = ({ member, weights, isLocked, onChange }) => {
+}> = ({ member, name, weights, isLocked, onChange }) => {
   const t = useT();
   const total = weights.reduce<number>((sum, weight) => sum + (weight ?? 1), 0);
   // A member with one key is weighted from its chip too: the wheel over it steps the weight, as it
@@ -658,7 +678,7 @@ const WeightControl: React.FC<{
   );
   return (
     <Popover trigger="click" placement="bottomRight" content={content}>
-      <button type="button" ref={setChip} className={styles['weight-chip']} aria-label={t('orch.weight_named', { name: member.name })}>
+      <button type="button" ref={setChip} className={styles['weight-chip']} aria-label={t('orch.weight_named', { name })}>
         ×{total}
       </button>
     </Popover>

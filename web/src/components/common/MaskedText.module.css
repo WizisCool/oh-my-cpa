@@ -1,0 +1,25 @@
+/*
+ * The toggle has to look like the text it replaces, and a button carries its own font, padding
+ * and border. `:where()` keeps the reset at zero specificity, so the caller's typography - a
+ * credential's name size, a card label's truncation - still applies in any stylesheet order.
+ */
+:where(.toggle) {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}

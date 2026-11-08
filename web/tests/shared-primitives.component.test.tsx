@@ -16,6 +16,7 @@ import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
 import { PageHeader } from '../src/components/common/PageHeader';
 import { SummaryStrip } from '../src/components/common/SummaryStrip';
+import { MaskedText } from '../src/components/common/MaskedText';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { renderWithOmc } from './support/render';
 import { installOmcApi } from './support/omcApi';
@@ -436,6 +437,33 @@ describe('SummaryStrip', () => {
     expect(screen.getByTestId('keys-count').textContent).toBe('共 1 个密钥');
     expect(screen.getByTestId('active-key').textContent).toBe('24 小时内 1 个在用');
     expect(screen.getByTestId('active-key').querySelector('[class*="status-dot"]')).not.toBeNull();
+  });
+});
+
+describe('MaskedText', () => {
+  it('keeps a reveal only while the forms it was opened for are unchanged', () => {
+    const props = { masked: 'op•••r@example.com', value: 'operator@example.com', revealLabel: 'Show account', hideLabel: 'Hide account' };
+    const { rerender } = render(<MaskedText {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: props.masked }));
+    expect(screen.getByText(props.value)).toBeTruthy();
+
+    // A re-render of the same pair keeps the operator's reveal.
+    rerender(<MaskedText {...props} />);
+    expect(screen.getByText(props.value)).toBeTruthy();
+
+    // A changed mask or value is a different thing to reveal, so it starts masked again.
+    rerender(<MaskedText {...props} masked="op•••r@example.org" />);
+    expect(screen.queryByText(props.value)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'op•••r@example.org' }));
+    rerender(<MaskedText {...props} masked="op•••r@example.org" value="owner@example.com" />);
+    expect(screen.queryByText('owner@example.com')).toBeNull();
+    expect(screen.getByText('op•••r@example.org')).toBeTruthy();
+  });
+
+  it('is plain text when nothing is hidden', () => {
+    render(<MaskedText masked="Team seat" value="Team seat" revealLabel="Show account" hideLabel="Hide account" />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Team seat')).toBeTruthy();
   });
 });
 
