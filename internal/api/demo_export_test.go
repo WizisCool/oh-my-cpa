@@ -643,6 +643,13 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) {
 			deltaMS = 0
 		}
+		// A warmup catalog account restates that same observation as instants - `snapshot_at`
+		// and `windows[].resets_at` - rather than as epoch milliseconds. It sits on the
+		// fixture's clock too, so the export's delta would move every reset bound by however
+		// long the export ran after the seed, and the dataset would differ on each run.
+		if typed["auth_index"] != nil && typed["snapshot_at"] != nil && typed["windows"] != nil {
+			deltaMS = 0
+		}
 		// The FX cache is seeded reference data, not an attempt made during export.
 		if typed["base_currency"] == "USD" && typed["source"] == "frankfurter_v2" && typed["rates"] != nil {
 			deltaMS = 0
