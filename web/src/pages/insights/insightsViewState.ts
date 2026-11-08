@@ -7,7 +7,15 @@
  */
 
 import { INSIGHTS_BUCKETS, type InsightsBucketChoice } from '../../types/insights';
-import { INSIGHTS_DIMENSIONS, INSIGHTS_METRICS, type InsightsDimension, type InsightsFilters, type InsightsMetric } from './insightsCube';
+import {
+  INSIGHTS_DIMENSIONS,
+  INSIGHTS_METRICS,
+  rowValue,
+  type InsightsCube,
+  type InsightsDimension,
+  type InsightsFilters,
+  type InsightsMetric,
+} from './insightsCube';
 
 /** What the trend stacks by; `none` draws the whole selection as one series. */
 export type InsightsGrouping = 'key' | 'model' | 'provider' | 'credential' | 'none';
@@ -69,4 +77,39 @@ export function toggleFilter(filters: InsightsFilters, dimension: InsightsDimens
 
 export function hasFilters(filters: InsightsFilters): boolean {
   return INSIGHTS_DIMENSIONS.some((dimension) => (filters[dimension]?.length ?? 0) > 0);
+}
+
+/**
+ * The page's filters as the request list's own vocabulary, for the reads that still take it.
+ *
+ * A provider value names a connection - a configured provider, or CPA's label for traffic no provider
+ * claims - while the rhythm read filters request records by the label CPA wrote, which for an API-key
+ * request is the protocol family rather than the connection. What one connection's rows share there
+ * is the credentials that served them, and that is a single dimension whether the credential is a key
+ * or a sign-in. A group whose rows name no credential at all keeps its label, which is the only value
+ * CPA recorded for it.
+ *
+ * A reader may narrow by provider, by credential, or by both; both narrow the same column, so the
+ * credentials that satisfy both are what the read is given. A pair that shares none leaves neither
+ * set usable, and both filters are kept so the read counts nothing rather than everything.
+ */
+export function requestFilterValues(
+  cube: InsightsCube | undefined,
+  filters: InsightsFilters,
+): { provider: readonly string[]; credential: readonly string[] } {
+  const provider = filters.provider ?? [];
+  const credential = filters.credential ?? [];
+  if (!cube || provider.length === 0) return { provider, credential };
+  const selected = new Set(provider);
+  const served = new Set<string>();
+  for (const row of cube.rows) {
+    const authIndex = rowValue(cube, row, 'credential');
+    if (authIndex && selected.has(rowValue(cube, row, 'provider'))) served.add(authIndex);
+  }
+  if (served.size === 0) return { provider, credential };
+  const narrowed = credential.length === 0
+    ? [...served].sort()
+    : credential.filter((value) => served.has(value));
+  if (narrowed.length === 0) return { provider, credential };
+  return { provider: [], credential: narrowed };
 }
