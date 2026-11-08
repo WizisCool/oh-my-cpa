@@ -176,9 +176,6 @@ func demoExportCases() []demoExportCase {
 		// for a state the fixture can describe.
 		{Name: "oauth-status", Path: "/api/v1/management/oauth/status?state=demo-idle"},
 		{Name: "warmup-settings", Path: "/api/v1/management/quota/warmup/settings"},
-		{Name: "warmup-codex", Path: "/api/v1/management/quota/warmup/credentials/auth-codex-01", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
-		{Name: "warmup-codex-secondary", Path: "/api/v1/management/quota/warmup/credentials/auth-codex-02", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
-		{Name: "warmup-claude", Path: "/api/v1/management/quota/warmup/credentials/auth-claude-01", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
 		{Name: "quota", Path: "/api/v1/management/quota"},
 		// One credential's quota detail, for the page the quota list links into.
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},

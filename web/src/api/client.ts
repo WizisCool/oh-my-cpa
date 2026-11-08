@@ -2,7 +2,7 @@ import type { BackupAuthorization, BackupArchive, BackupAutomation, BackupAutoma
 import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } from '../types/routing';
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
-import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
+import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../types/warmup';
 import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
 import type { InstalledFont } from '../types/fonts';
@@ -346,20 +346,20 @@ export interface AuthSession {
 }
 
 export const api = {
-  getWarmupSettings(): Promise<WarmupSettings> {
+  getWarmupSettings(): Promise<WarmupStateView> {
     return request('/management/quota/warmup/settings', { method: 'GET' });
   },
-  saveWarmupSettings(provider: 'codex' | 'claude', policy: WarmupPolicy, revision: string): Promise<WarmupSettings> {
-    return request('/management/quota/warmup/settings', { method: 'PUT', body: JSON.stringify({ provider, policy, revision, confirmed: true }) });
+  createWarmupTask(input: WarmupTaskInput): Promise<WarmupStateView> {
+    return request('/management/quota/warmup/tasks', { method: 'POST', body: JSON.stringify(input) });
   },
-  getWarmupCredential(authIndex: string): Promise<WarmupCredential> {
-    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}`, { method: 'GET' });
+  updateWarmupTask(id: string, input: WarmupTaskInput): Promise<WarmupStateView> {
+    return request(`/management/quota/warmup/tasks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
   },
-  saveWarmupCredential(authIndex: string, inherit: boolean, policy: WarmupPolicy, revision: string): Promise<WarmupCredential> {
-    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}`, { method: 'PUT', body: JSON.stringify({ inherit, policy, revision, confirmed: true }) });
+  deleteWarmupTask(id: string): Promise<WarmupStateView> {
+    return request(`/management/quota/warmup/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
-  runWarmup(authIndex: string, requestId: string, revision: string): Promise<WarmupResult> {
-    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}/run`, { method: 'POST', body: JSON.stringify({ request_id: requestId, revision, confirmed: true }) });
+  runWarmupTask(id: string): Promise<WarmupRunResponse> {
+    return request(`/management/quota/warmup/tasks/${encodeURIComponent(id)}/run`, { method: 'POST' });
   },
 
   async getCustomIcons(): Promise<CustomIcon[]> {

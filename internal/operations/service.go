@@ -16,12 +16,11 @@ import (
 )
 
 type Service struct {
-	WarmupSettings       func(context.Context) (warmup.Settings, error)
-	WarmupCredential     func(context.Context, string) (warmup.Credential, error)
-	SaveWarmupSettings   func(context.Context, warmup.PolicyWrite) (warmup.Settings, error)
-	SaveWarmupCredential func(context.Context, string, warmup.CredentialWrite) (warmup.Credential, error)
-	RunWarmup            func(context.Context, string, string, string) (warmup.Result, error)
-	TLSSkipVerify        bool
+	WarmupSettings   func(context.Context) (warmup.StateView, error)
+	SaveWarmupTask   func(context.Context, warmup.TaskSaveInput) (warmup.StateView, error)
+	DeleteWarmupTask func(context.Context, string) (warmup.StateView, error)
+	RunWarmupTask    func(context.Context, string) (warmup.RunResponse, error)
+	TLSSkipVerify    bool
 	Pricing              Pricing
 	Repo                 *repository.Repository
 	Cipher               *appcrypto.Cipher
