@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -188,7 +189,7 @@ func TestModelPullBaseURLPolicy(t *testing.T) {
 
 func TestFetchEndpointModelsRejectsPublicHTTP(t *testing.T) {
 	useProviderDNS(t, map[string][]net.IP{"example.com.": {net.ParseIP("93.184.216.34")}})
-	_, err := fetchEndpointModels(context.Background(), "http://example.com/v1", "sk-provider-secret-1234", "", "openai", nil)
+	_, err := fetchEndpointModels(context.Background(), "http://example.com/v1", "sk-provider-secret-1234", "", openAICompatibilityFamily, nil)
 	if err == nil || !strings.Contains(err.Error(), "HTTPS") {
 		t.Fatalf("expected HTTPS policy error, got %v", err)
 	}
@@ -248,8 +249,8 @@ func TestPullProviderModelsReportsRedirectRefusal(t *testing.T) {
 }
 
 func TestFetchEndpointModelsRefusesCrossOriginRedirect(t *testing.T) {
-	for _, protocol := range []string{"openai", "anthropic", "gemini"} {
-		t.Run(protocol, func(t *testing.T) {
+	for _, family := range []string{openAICompatibilityFamily, "claude", "gemini"} {
+		t.Run(family, func(t *testing.T) {
 			redirectedHeaders := make(chan http.Header, 1)
 			redirectTarget := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				redirectedHeaders <- request.Header.Clone()
@@ -267,7 +268,7 @@ func TestFetchEndpointModelsRefusesCrossOriginRedirect(t *testing.T) {
 				redirectSource.URL,
 				"sk-provider-secret-1234",
 				"",
-				protocol,
+				family,
 				map[string]string{"X-Provider-Secret": "custom-secret"},
 			)
 			if err == nil {
@@ -300,7 +301,7 @@ func TestFetchEndpointModelsFollowsSameOriginRedirect(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", "openai", nil)
+	models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", openAICompatibilityFamily, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,6 +382,167 @@ func TestPullProviderModelsByProviderID(t *testing.T) {
 	}
 	if len(pullResp.Models) != 2 || pullResp.Models[0] != "gpt-5.2-codex" {
 		t.Fatalf("unexpected codex models list: %#v", pullResp.Models)
+	}
+}
+
+// A family's model directory hangs from its own versioned root. Typing that
+// segment is the operator's job nowhere else in the console, so a version-less
+// base URL must still reach it - and reach it first, because a wrong path can
+// answer with something other than 404 (the Gemini host answers 403 at
+// /v1/models), which ends the search.
+func TestModelDirectoryTargetsFollowFamilyDialect(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		family string
+		base   string
+		want   []string
+	}{
+		{
+			name:   "anthropic messages without a version segment",
+			family: "claude",
+			base:   "https://api.anthropic.com",
+			want:   []string{"https://api.anthropic.com/v1/models?limit=1000", "https://api.anthropic.com/models"},
+		},
+		{
+			name:   "anthropic messages naming /v1",
+			family: "claude",
+			base:   "https://relay.example.test/anthropic/v1/",
+			want:   []string{"https://relay.example.test/anthropic/v1/models?limit=1000"},
+		},
+		{
+			name:   "anthropic messages pasted with its messages endpoint",
+			family: "claude",
+			base:   "https://relay.example.test/v1/messages",
+			want:   []string{"https://relay.example.test/v1/models?limit=1000"},
+		},
+		{
+			name:   "gemini without a version segment",
+			family: "gemini",
+			base:   "https://generativelanguage.googleapis.com",
+			want: []string{
+				"https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+				"https://generativelanguage.googleapis.com/models",
+				"https://generativelanguage.googleapis.com/v1/models",
+			},
+		},
+		{
+			name:   "gemini naming its openai-compatible base",
+			family: "gemini",
+			base:   "https://generativelanguage.googleapis.com/v1beta/openai",
+			want:   []string{"https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"},
+		},
+		{
+			name:   "interactions shares the gemini directory",
+			family: "interactions",
+			base:   "https://interactions.example.test",
+			want: []string{
+				"https://interactions.example.test/v1beta/models?pageSize=1000",
+				"https://interactions.example.test/models",
+				"https://interactions.example.test/v1/models",
+			},
+		},
+		{
+			name:   "openai-compatible keeps the openai shapes",
+			family: openAICompatibilityFamily,
+			base:   "https://relay.example.test/v1",
+			want:   []string{"https://relay.example.test/v1/models"},
+		},
+		{
+			name:   "an unknown family keeps the openai shapes",
+			family: "",
+			base:   "https://relay.example.test",
+			want:   []string{"https://relay.example.test/models", "https://relay.example.test/v1/models"},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := modelDirectoryTargets(testCase.family, testCase.base); !slices.Equal(got, testCase.want) {
+				t.Fatalf("targets = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestFetchEndpointModelsAsksTheFamilyDialectFirst(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		family  string
+		path    string
+		query   string
+		status  int
+		body    string
+		want    []string
+		wantErr string
+	}{
+		{
+			name:   "anthropic messages",
+			family: "claude",
+			path:   "/v1/models",
+			query:  "limit=1000",
+			body:   `{"data":[{"id":"claude-opus-4.6"},{"id":"claude-sonnet-4.6"}]}`,
+			want:   []string{"claude-opus-4.6", "claude-sonnet-4.6"},
+		},
+		{
+			name:   "gemini generate content",
+			family: "gemini",
+			path:   "/v1beta/models",
+			query:  "pageSize=1000",
+			body:   `{"models":[{"name":"models/gemini-2.5-pro"},{"name":"models/gemini-2.5-flash"}]}`,
+			want:   []string{"gemini-2.5-pro", "gemini-2.5-flash"},
+		},
+		{
+			// Only a 404 means this path is not the directory. A refusal is the
+			// upstream's answer about the request, and the same key must not be
+			// presented again at another path on that host.
+			name:    "a refused request ends the ladder",
+			family:  "claude",
+			path:    "/v1/models",
+			query:   "limit=1000",
+			status:  http.StatusForbidden,
+			wantErr: "HTTP 403",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			var requested []string
+			var query string
+			upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				requested = append(requested, request.URL.Path)
+				// Anything this dialect does not publish is refused the way the
+				// Google host refuses another path: not with a 404 a fallback could
+				// step over, but with a refusal that ends the search.
+				if request.URL.Path != testCase.path {
+					http.Error(writer, "not this dialect's directory", http.StatusForbidden)
+					return
+				}
+				query = request.URL.RawQuery
+				if testCase.status != 0 {
+					http.Error(writer, "refused", testCase.status)
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(testCase.body))
+			}))
+			defer upstream.Close()
+
+			models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", testCase.family, nil)
+			if !slices.Equal(requested, []string{testCase.path}) {
+				t.Fatalf("requested %v, want exactly [%s]", requested, testCase.path)
+			}
+			if query != testCase.query {
+				t.Fatalf("query = %q, want %q", query, testCase.query)
+			}
+			if testCase.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+					t.Fatalf("error = %v, want %q", err, testCase.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("pull from %s: %v", testCase.family, err)
+			}
+			if !slices.Equal(models, testCase.want) {
+				t.Fatalf("models = %v, want %v", models, testCase.want)
+			}
+		})
 	}
 }
 

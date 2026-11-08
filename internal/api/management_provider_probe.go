@@ -89,14 +89,7 @@ func probeEndpointForFamily(family, baseURL, model string) (probeSpec, error) {
 		if trimmed == "" {
 			trimmed = "https://api.anthropic.com"
 		}
-		target := trimmed
-		switch {
-		case strings.HasSuffix(target, "/v1/messages"):
-		case strings.HasSuffix(target, "/v1"):
-			target = join("/messages")
-		default:
-			target = join("/v1/messages")
-		}
+		target := claudeAPIRoot(trimmed) + "/messages"
 		return probeSpec{
 			target: target,
 			body:   map[string]any{"model": model, "max_tokens": 8, "messages": []any{map[string]any{"role": "user", "content": "Hi"}}},
@@ -119,28 +112,17 @@ func probeEndpointForFamily(family, baseURL, model string) (probeSpec, error) {
 		if resource == "" {
 			return probeSpec{}, fmt.Errorf("%w: model is required", errInvalidProbeURL)
 		}
-		root := trimmed
-		if strings.HasSuffix(strings.ToLower(root), ":generatecontent") {
+		if strings.HasSuffix(strings.ToLower(trimmed), ":generatecontent") {
 			return probeSpec{
-				target: root,
+				target: trimmed,
 				body:   map[string]any{"contents": []any{map[string]any{"parts": []any{map[string]any{"text": "Hi"}}}}, "generationConfig": map[string]any{"maxOutputTokens": 8}},
 				apply: func(header http.Header, apiKey string) {
 					setProbeAuthHeader(header, "x-goog-api-key", apiKey)
 				},
 			}, nil
 		}
-		lower := strings.ToLower(root)
-		switch {
-		case strings.HasSuffix(lower, "/v1beta/models"):
-			root = root[:len(root)-len("/models")]
-		case !strings.HasSuffix(lower, "/v1beta"):
-			if index := strings.LastIndex(lower, "/v1beta/"); index >= 0 {
-				root = root[:index]
-			}
-			root += "/v1beta"
-		}
 		return probeSpec{
-			target: root + "/" + resource + ":generateContent",
+			target: geminiAPIRoot(trimmed) + "/" + resource + ":generateContent",
 			body:   map[string]any{"contents": []any{map[string]any{"parts": []any{map[string]any{"text": "Hi"}}}}, "generationConfig": map[string]any{"maxOutputTokens": 8}},
 			apply: func(header http.Header, apiKey string) {
 				setProbeAuthHeader(header, "x-goog-api-key", apiKey)
@@ -183,22 +165,8 @@ func probeEndpointForFamily(family, baseURL, model string) (probeSpec, error) {
 		if trimmed == "" {
 			trimmed = "https://generativelanguage.googleapis.com"
 		}
-		target := trimmed
-		lower := strings.ToLower(target)
-		if !strings.HasSuffix(lower, "/v1beta/interactions") {
-			root := strings.TrimRight(target, "/")
-			if strings.HasSuffix(strings.ToLower(root), "/v1beta/models") {
-				root = root[:len(root)-len("/models")]
-			} else if !strings.HasSuffix(strings.ToLower(root), "/v1beta") {
-				if index := strings.LastIndex(strings.ToLower(root), "/v1beta/"); index >= 0 {
-					root = root[:index]
-				}
-				root += "/v1beta"
-			}
-			target = root + "/interactions"
-		}
 		return probeSpec{
-			target: target,
+			target: geminiAPIRoot(trimmed) + "/interactions",
 			body:   map[string]any{"model": model, "input": "Hi"},
 			apply: func(header http.Header, apiKey string) {
 				setProbeAuthHeader(header, "x-goog-api-key", apiKey)
@@ -207,6 +175,58 @@ func probeEndpointForFamily(family, baseURL, model string) (probeSpec, error) {
 		}, nil
 	}
 	return probeSpec{}, fmt.Errorf("%w: unsupported family %q", errInvalidProbeURL, family)
+}
+
+// asciiLower folds ASCII letters only, so a case-insensitive match keeps every
+// byte offset of the original. A Unicode case mapping can change a rune's byte
+// length, and an offset found in the folded copy would then slice the original at
+// the wrong place - or past its end.
+func asciiLower(value string) string {
+	folded := []byte(value)
+	for index, character := range folded {
+		if character >= 'A' && character <= 'Z' {
+			folded[index] = character + ('a' - 'A')
+		}
+	}
+	return string(folded)
+}
+
+// claudeAPIRoot is the root the Anthropic Messages dialect publishes under.
+//
+// The official API puts every endpoint behind /v1, while an operator enters the
+// bare host because CPA appends that segment itself. Both the inference probe and
+// the model directory pull derive the root here, so neither can disagree about
+// where a typed base URL points.
+func claudeAPIRoot(baseURL string) string {
+	root := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	lower := asciiLower(root)
+	if strings.HasSuffix(lower, "/v1/messages") {
+		return root[:len(root)-len("/messages")]
+	}
+	if strings.HasSuffix(lower, "/v1") {
+		return root
+	}
+	return root + "/v1"
+}
+
+// geminiAPIRoot is the root both Gemini dialects (generateContent and
+// Interactions) publish under: /v1beta, whatever the operator typed. A base that
+// already names a resource under that segment keeps everything up to it, so
+// /v1beta/openai/models resolves to the root rather than to a second version
+// segment.
+func geminiAPIRoot(baseURL string) string {
+	root := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	lower := asciiLower(root)
+	if strings.HasSuffix(lower, "/v1beta/models") {
+		return root[:len(root)-len("/models")]
+	}
+	if strings.HasSuffix(lower, "/v1beta") {
+		return root
+	}
+	if index := strings.LastIndex(lower, "/v1beta/"); index >= 0 {
+		return root[:index] + "/v1beta"
+	}
+	return root + "/v1beta"
 }
 
 func probeGeminiResource(model string) string {
