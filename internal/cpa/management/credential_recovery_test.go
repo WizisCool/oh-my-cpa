@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCredentialRecoverySummaryBoundsEvidence(t *testing.T) {
@@ -68,5 +71,52 @@ func TestCredentialErrorsPreserveCancellationWithoutRequestDetails(t *testing.T)
 		if !errors.Is(safe, cause) || safe != cause || strings.Contains(safe.Error(), "PRIVATE-STATE") {
 			t.Fatalf("lost safe cancellation identity for %v: %v", cause, safe)
 		}
+	}
+}
+
+// A verify request that may have reached CPA is not a refusal a caller can repeat: a connection
+// dropped before the answer, or a 2xx answer that cannot be read, is uncertain. A connection never
+// made is a plain failure. Neither carries the gateway's address.
+func TestVerifyAuthFileSeparatesUnansweredRequestsFromRefusals(t *testing.T) {
+	gateway := func(answer func(http.ResponseWriter)) string {
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/v8/management"+MANAGEMENT_V8_PROBE_ENDPOINT {
+				_, _ = writer.Write([]byte("8"))
+				return
+			}
+			answer(writer)
+		}))
+		t.Cleanup(server.Close)
+		return server.URL
+	}
+	dropped := gateway(func(writer http.ResponseWriter) {
+		if connection, _, err := writer.(http.Hijacker).Hijack(); err == nil {
+			_ = connection.Close()
+		}
+	})
+	unreadable := gateway(func(writer http.ResponseWriter) { _, _ = writer.Write([]byte("<html>")) })
+	closed := httptest.NewServer(http.NotFoundHandler())
+	unreachable := closed.URL
+	closed.Close()
+
+	for _, test := range []struct {
+		name        string
+		baseURL     string
+		isUncertain bool
+	}{
+		{"dropped", dropped, true},
+		{"unreadable", unreadable, true},
+		{"unreachable", unreachable, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, err := NewClient(test.baseURL, "management-key", 5*time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.VerifyAuthFile(context.Background(), "claude.json", "exact-claude", "claude-haiku-4-5")
+			if err == nil || errors.Is(err, ErrCredentialOutcomeUnknown) != test.isUncertain || strings.Contains(err.Error(), "127.0.0.1") {
+				t.Fatalf("verify error = %v, want uncertain %t", err, test.isUncertain)
+			}
+		})
 	}
 }

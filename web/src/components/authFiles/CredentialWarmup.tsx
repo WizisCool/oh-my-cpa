@@ -1,263 +1,648 @@
-import { translateOr } from '../../i18n/catalog';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { App, Button, Input, Segmented, Space, Tabs, Typography } from 'antd';
+import { Button, Input, Segmented } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../../api/client';
+import { api, describeError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
-import { createID } from '../../utils/ids';
 import { languageLocale } from '../../i18n/language';
 import { isDemoMode } from '../../types/demoMode';
-import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, isWarmupPolicyEnabled, type WarmupPolicy, type WarmupResult, type WarmupSettings, type WarmupCredential } from '../../types/warmup';
+import { formatEventDuration } from '../../types/usageEventMetrics';
+import { credentialBrandIdentity } from '../../types/credentialIdentity';
+import { usePluginMultiPortalKeys, usePluginOAuthLogos, usePluginOAuthTitles } from '../../hooks/usePluginOAuthLogos';
+import {
+  canSaveWarmupTask,
+  defaultWarmupTaskInput,
+  groupWarmupAccounts,
+  hasCustomTaskName,
+  resolveTaskModel,
+  type WarmupCatalog,
+  type WarmupCatalogAccount,
+  type WarmupRun,
+  type WarmupStateView,
+  type WarmupTask,
+  type WarmupTaskInput,
+  type WarmupTrigger,
+} from '../../types/warmup';
 import { AppDrawer } from '../common/AppDrawer';
+import { AppModal } from '../common/AppModal';
+import { ConfirmAction } from '../common/ConfirmAction';
+import { EmptyState } from '../common/EmptyState';
+import { NumberInput } from '../common/NumberInput';
+import { ListPlaceholder } from '../common/Placeholder';
 import { SearchSelect } from '../common/SearchSelect';
 import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { Switch } from '../common/Switch';
+import { TimeZoneSelect } from '../common/TimeZoneSelect';
+import { ToolButton } from '../common/ToolButton';
+import { ClearOutlined, DeleteOutlined, EditOutlined, PlayCircleOutlined, PlusOutlined } from '../icons';
+import { CredentialMark } from '../LobeIcon';
 import { LoadFailure, useToast } from '../feedback';
 import styles from './CredentialWarmup.module.css';
-import { TAB_OVERFLOW } from '../common/tabOverflow';
 
-const { Text } = Typography;
-const REASON_KEYS: Record<string, MessageKey> = {
-  disabled: 'warmup.reason_disabled', model_required: 'warmup.reason_model_required',
-  model_unavailable: 'warmup.reason_model_unavailable', quota_unknown: 'warmup.reason_quota_unknown',
-  paid_usage_enabled: 'warmup.reason_paid_enabled', paid_usage_unknown: 'warmup.reason_paid_unknown',
-  quota_exhausted: 'warmup.reason_exhausted', already_active: 'warmup.reason_active',
-  waiting_daily: 'warmup.reason_waiting_daily', retry_wait: 'warmup.reason_retry',
-  credential_disabled: 'warmup.reason_disabled_credential',
-  credential_unavailable: 'warmup.reason_unavailable_credential', cooldown: 'warmup.reason_cooldown',
-  outcome_unknown: 'warmup.reason_unknown', activation_pending: 'warmup.reason_pending',
-  activation_unconfirmed: 'warmup.reason_unconfirmed', protocol_unsupported: 'warmup.reason_unsupported',
-  needs_reauth: 'warmup.reason_reauth', rate_limited: 'warmup.reason_rate_limited',
-  already_attempted: 'warmup.reason_attempted', resource_conflict: 'warmup.reason_conflict',
-  unexpected_tool: 'warmup.reason_unsupported',
+const WARMUP_QUERY_KEY = ['quota-warmup-settings'] as const;
+const RUNS_PREVIEW = 6;
+
+const OUTCOME_KEYS: Record<WarmupRun['outcome'], MessageKey> = {
+  ok: 'warmup.outcome_ok',
+  failed: 'warmup.outcome_failed',
+  unknown: 'warmup.outcome_unknown',
+  running: 'warmup.outcome_running',
 };
-// Reasons that stop automatic warmup until the operator or the provider changes something.
-const PAUSING_REASONS = new Set(['model_required', 'model_unavailable', 'quota_unknown', 'paid_usage_enabled', 'paid_usage_unknown',
-  'quota_exhausted', 'credential_disabled', 'credential_unavailable', 'cooldown', 'protocol_unsupported', 'unexpected_tool', 'needs_reauth']);
 
-export function warmupReason(reason: string | undefined, t: TFunc): string {
-  return reason ? t(REASON_KEYS[reason] ?? 'warmup.reason_unknown') : '';
-}
-function safeError(error: unknown, t: TFunc): string {
-  const code = error instanceof ApiError ? error.message : '';
-  return code in REASON_KEYS ? t(REASON_KEYS[code]) : t('warmup.load_failed');
-}
-function formatInstant(ms: number, timeZone: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms);
-}
-function addHours(clock: string, hours: number): string {
-  const [hour, minute] = clock.split(':').map(Number);
-  return `${String((hour + hours) % 24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+const OUTCOME_TONES: Record<WarmupRun['outcome'], StatusTone> = {
+  ok: 'success',
+  failed: 'danger',
+  unknown: 'warn',
+  running: 'accent',
+};
+
+const SOURCE_KEYS: Record<WarmupRun['source'], MessageKey> = {
+  schedule: 'warmup.source_schedule',
+  catchup: 'warmup.source_catchup',
+  manual: 'warmup.source_manual',
+};
+
+const WINDOW_KEYS: Record<string, MessageKey> = {
+  five_hour: 'warmup.window_five_hour',
+  weekly: 'warmup.window_weekly',
+  seven_day: 'warmup.window_weekly',
+};
+
+const nowISO = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+function formatInstant(iso: string | null | undefined, timeZone: string, locale: string): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+  try {
+    return new Intl.DateTimeFormat(locale, { ...options, timeZone: timeZone || 'UTC' }).format(ms);
+  } catch {
+    return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(ms);
+  }
 }
 
-/** The rules a policy runs, each as one plain sentence; empty when nothing is automatic. */
-function describePolicy(policy: WarmupPolicy, timezone: string, t: TFunc): string[] {
-  const rules: string[] = [];
-  if (policy.daily_enabled) rules.push(t('warmup.summary_daily', { time: policy.daily_time, zone: timezone }));
-  if (policy.reset_mode !== 'off') rules.push(t(`warmup.summary_reset_${policy.reset_mode}`));
-  return rules;
+function catalogAccounts(catalog: WarmupCatalog | undefined): WarmupCatalogAccount[] {
+  return catalog?.providers.flatMap((group) => group.accounts) ?? [];
 }
 
-function RuleEditor({ policy, onChange, models, timezone, disabled }: {
-  policy: WarmupPolicy; onChange: (policy: WarmupPolicy) => void; models: string[]; timezone: string; disabled?: boolean;
+function findAccount(catalog: WarmupCatalog | undefined, task: Pick<WarmupTask, 'auth_index' | 'account'>): WarmupCatalogAccount | undefined {
+  const accounts = catalogAccounts(catalog);
+  return (task.auth_index ? accounts.find((acc) => acc.auth_index === task.auth_index) : undefined)
+    ?? (task.account ? accounts.find((acc) => acc.name === task.account) : undefined);
+}
+
+function accountLabel(account: WarmupCatalogAccount | undefined, task: Pick<WarmupTask, 'account' | 'auth_index'>): string {
+  return account?.email || account?.name || task.account || task.auth_index;
+}
+
+function windowLabel(id: string | undefined, account: WarmupCatalogAccount | undefined, t: TFunc): string {
+  const key = id ? WINDOW_KEYS[id] : undefined;
+  if (key) return t(key);
+  return account?.windows.find((w) => w.id === id)?.label || id || '';
+}
+
+function describeTrigger(trigger: WarmupTrigger, account: WarmupCatalogAccount | undefined, fallbackZone: string, t: TFunc): string {
+  switch (trigger.kind) {
+    case 'window':
+      return t('warmup.summary_window', { window: windowLabel(trigger.window, account, t) });
+    case 'daily':
+      return t('warmup.summary_daily', { time: trigger.time ?? '08:55', zone: trigger.time_zone || fallbackZone || 'UTC' });
+    case 'every':
+      return t('warmup.summary_every', { hours: trigger.hours ?? 5 });
+  }
+}
+
+function describeModel(task: Pick<WarmupTaskInput, 'model'>, account: WarmupCatalogAccount | undefined, t: TFunc): string {
+  if (task.model.trim()) return task.model.trim();
+  const auto = resolveTaskModel(task, account);
+  return auto ? t('warmup.model_auto', { model: auto }) : t('warmup.model_auto_fallback');
+}
+
+function taskToInput(task: WarmupTask, fallbackZone: string): WarmupTaskInput {
+  return {
+    // A frozen server-made name is not the operator's: editing starts unnamed so it follows the new choices.
+    name: hasCustomTaskName(task) ? task.name : '',
+    enabled: task.enabled,
+    provider: task.provider,
+    auth_index: task.auth_index,
+    account: task.account,
+    model: task.model,
+    trigger: {
+      kind: task.trigger.kind,
+      window: task.trigger.window || 'five_hour',
+      time: task.trigger.time || '08:55',
+      time_zone: task.trigger.time_zone || fallbackZone || 'UTC',
+      hours: task.trigger.hours || 5,
+      anchor: task.trigger.anchor || task.created_at || nowISO(),
+    },
+  };
+}
+
+/** The editor keeps every trigger kind's values while the reader switches; only the chosen kind is sent. */
+function toPayload(input: WarmupTaskInput, fallbackZone: string): WarmupTaskInput {
+  const { trigger } = input;
+  const cleaned: WarmupTrigger = trigger.kind === 'window'
+    ? { kind: 'window', window: trigger.window || 'five_hour' }
+    : trigger.kind === 'daily'
+      ? { kind: 'daily', time: trigger.time || '08:55', time_zone: trigger.time_zone?.trim() || fallbackZone || 'UTC' }
+      : { kind: 'every', hours: trigger.hours ?? 5, anchor: trigger.anchor || nowISO() };
+  return { ...input, name: input.name.trim(), model: input.model.trim(), trigger: cleaned };
+}
+
+function TaskEditorModal({
+  editing,
+  catalog,
+  isSaving,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  editing: { id: string | null; draft: WarmupTaskInput } | null;
+  catalog?: WarmupCatalog;
+  isSaving: boolean;
+  onChange: (next: WarmupTaskInput) => void;
+  onSave: () => void;
+  onCancel: () => void;
 }) {
   const t = useT();
-  const dailyId = React.useId();
-  const resetId = React.useId();
-  const modelOptions = [...new Set([...models, ...(policy.model ? [policy.model] : [])])].sort((first, second) =>
-    Number(!/haiku|mini/i.test(first)) - Number(!/haiku|mini/i.test(second)) || first.localeCompare(second));
-  const isResetOn = policy.reset_mode !== 'off';
-  return <div className={styles['rules']}>
-    <div className={styles['rule']}>
-      <div className={styles['rule-head']}>
-        <Switch id={dailyId} aria-label={t('warmup.rule_daily')} checked={policy.daily_enabled} disabled={disabled}
-          onChange={daily_enabled => onChange({ ...policy, daily_enabled })} />
-        <label htmlFor={dailyId}>{t('warmup.rule_daily')}</label>
-        <Input type="time" aria-label={t('warmup.daily_time')} value={policy.daily_time} disabled={disabled || !policy.daily_enabled}
-          className={styles['rule-time']} onChange={event => onChange({ ...policy, daily_time: event.target.value })} />
+  const timezone = catalog?.timezone || 'UTC';
+  const accounts = catalogAccounts(catalog);
+  const pluginLogos = usePluginOAuthLogos();
+  const pluginTitles = usePluginOAuthTitles();
+  const multiPortalKeys = usePluginMultiPortalKeys();
+  const draft = editing?.draft;
+  const account = draft ? findAccount(catalog, draft) : undefined;
+  const isDisabled = isSaving || isDemoMode();
+
+  if (!draft) return <AppModal open={false} title="" onCancel={onCancel} />;
+
+  const set = (patch: Partial<WarmupTaskInput>) => onChange({ ...draft, ...patch });
+  const setTrigger = (patch: Partial<WarmupTrigger>) => onChange({ ...draft, trigger: { ...draft.trigger, ...patch } });
+
+  const models = account?.models ?? [];
+  const autoModel = resolveTaskModel({ model: '' }, account);
+  const modelOptions = [
+    { value: '', label: autoModel ? t('warmup.model_auto', { model: autoModel }) : t('warmup.model_auto_fallback') },
+    ...models.map((m) => ({ value: m, label: m })),
+    ...(draft.model && !models.includes(draft.model) ? [{ value: draft.model, label: draft.model }] : []),
+  ];
+  const windows = account?.windows.length
+    ? account.windows.map((w) => w.id)
+    : ['five_hour', draft.provider === 'codex' ? 'weekly' : 'seven_day'];
+  // The picker groups credentials by provider, with the connector that issued each one drawn on
+  // its row: a plugin that declares several portals shows which one a credential belongs to.
+  const credentialOptions = groupWarmupAccounts(catalog, pluginTitles).map((group) => ({
+    label: group.label,
+    options: group.accounts.map((acc) => ({
+      value: acc.auth_index,
+      disabled: acc.disabled,
+      search: `${acc.email ?? ''} ${acc.name} ${acc.provider} ${acc.oauth_provider ?? ''}`,
+      label: (
+        <span className={styles['credential-option']}>
+          <CredentialMark
+            credential={credentialBrandIdentity(acc.provider, acc, multiPortalKeys)}
+            pluginLogos={pluginLogos}
+            size={16}
+          />
+          <span className={styles['credential-option-name']}>{acc.email || acc.name}</span>
+        </span>
+      ),
+    })),
+  }));
+
+  return (
+    <AppModal
+      open
+      size="medium"
+      title={t(editing?.id ? 'warmup.edit_task_title' : 'warmup.add_task_title')}
+      onCancel={onCancel}
+      isDismissible={!isSaving}
+      destroyOnHidden
+      footer={[
+        <Button key="cancel" onClick={onCancel} disabled={isSaving}>{t('common.cancel')}</Button>,
+        <Button key="save" type="primary" onClick={onSave} loading={isSaving} disabled={!canSaveWarmupTask(draft) || isDemoMode()}>
+          {t('common.save')}
+        </Button>,
+      ]}
+    >
+      <div className={styles['form']} data-testid="warmup-task-editor">
+        <label className={styles['field']}>
+          <span className={styles['field-label']}>{t('warmup.credential')}</span>
+          <SearchSelect
+            label={t('warmup.credential')}
+            value={draft.auth_index || undefined}
+            disabled={isDisabled}
+            showSearch={{ optionFilterProp: 'search' }}
+            classNames={{ popup: { root: styles['credential-picker'] } }}
+            options={credentialOptions}
+            onChange={(authIndex: string) => {
+              const next = accounts.find((acc) => acc.auth_index === authIndex);
+              onChange({
+                ...draft,
+                provider: next?.provider ?? draft.provider,
+                auth_index: authIndex,
+                account: next?.name ?? authIndex,
+                model: '',
+                trigger: { ...draft.trigger, window: next?.windows[0]?.id ?? draft.trigger.window ?? 'five_hour' },
+              });
+            }}
+          />
+        </label>
+
+        <div className={styles['field']}>
+          <span className={styles['field-label']}>{t('warmup.trigger')}</span>
+          <Segmented
+            block
+            aria-label={t('warmup.trigger')}
+            value={draft.trigger.kind}
+            disabled={isDisabled}
+            options={[
+              { value: 'window', label: t('warmup.trigger_window') },
+              { value: 'daily', label: t('warmup.trigger_daily') },
+              { value: 'every', label: t('warmup.trigger_every') },
+            ]}
+            onChange={(kind) => setTrigger({
+              kind: kind as WarmupTrigger['kind'],
+              window: windows.includes(draft.trigger.window ?? '') ? draft.trigger.window : windows[0],
+            })}
+          />
+        </div>
+
+        {draft.trigger.kind === 'window' && (
+          <div className={styles['field']}>
+            <span className={styles['field-label']}>{t('warmup.window_select')}</span>
+            <Segmented
+              block
+              aria-label={t('warmup.window_select')}
+              value={draft.trigger.window || windows[0]}
+              disabled={isDisabled}
+              options={windows.map((id) => ({ value: id, label: windowLabel(id, account, t) }))}
+              onChange={(win) => setTrigger({ window: String(win) })}
+            />
+          </div>
+        )}
+
+        {draft.trigger.kind === 'daily' && (
+          <div className={styles['field-pair']}>
+            <label className={styles['field']}>
+              <span className={styles['field-label']}>{t('warmup.daily_time')}</span>
+              <Input
+                type="time"
+                aria-label={t('warmup.daily_time')}
+                value={draft.trigger.time ?? '08:55'}
+                disabled={isDisabled}
+                onChange={(e) => setTrigger({ time: e.target.value })}
+              />
+            </label>
+            <div className={styles['field']}>
+              <span className={styles['field-label']}>{t('warmup.time_zone')}</span>
+              <TimeZoneSelect
+                aria-label={t('warmup.time_zone')}
+                value={draft.trigger.time_zone || timezone}
+                serverTimezone={timezone}
+                isDisabled={isDisabled}
+                onChange={(zone) => setTrigger({ time_zone: zone || timezone })}
+              />
+            </div>
+          </div>
+        )}
+
+        {draft.trigger.kind === 'every' && (
+          <label className={styles['field']}>
+            <span className={styles['field-label']}>{t('warmup.every_hours')}</span>
+            <NumberInput
+              aria-label={t('warmup.every_hours')}
+              min={1}
+              max={168}
+              precision={0}
+              suffix={t('warmup.hours_unit')}
+              value={draft.trigger.hours ?? 5}
+              disabled={isDisabled}
+              onChange={(val) => setTrigger({ hours: typeof val === 'number' ? val : 5 })}
+            />
+          </label>
+        )}
+
+        <label className={styles['field']}>
+          <span className={styles['field-label']}>{t('warmup.model')}</span>
+          <SearchSelect
+            label={t('warmup.model')}
+            value={draft.model}
+            disabled={isDisabled}
+            showSearch={{ optionFilterProp: 'label' }}
+            options={modelOptions}
+            onChange={(model: string) => set({ model: model ?? '' })}
+          />
+        </label>
+
+        <label className={styles['field']}>
+          <span className={styles['field-label']}>{t('warmup.task_name')}</span>
+          <Input
+            aria-label={t('warmup.task_name')}
+            value={draft.name}
+            maxLength={120}
+            placeholder={`${accountLabel(account, draft)} · ${describeTrigger(draft.trigger, account, timezone, t)}`}
+            disabled={isDisabled}
+            onChange={(e) => set({ name: e.target.value })}
+          />
+        </label>
       </div>
-      <div className={styles['rule-body']}>
-        <Text type="secondary" className={styles['rule-hint']}>
-          {t('warmup.daily_hint', { start: policy.daily_time, end: addHours(policy.daily_time, 5), zone: timezone })}
-        </Text>
-      </div>
-    </div>
-    <div className={styles['rule']}>
-      <div className={styles['rule-head']}>
-        <Switch id={resetId} aria-label={t('warmup.rule_reset')} checked={isResetOn} disabled={disabled}
-          onChange={isOn => onChange({ ...policy, reset_mode: isOn ? 'all' : 'off' })} />
-        <label htmlFor={resetId}>{t('warmup.rule_reset')}</label>
-      </div>
-      <div className={styles['rule-body']}>
-        <Text type="secondary" className={styles['rule-hint']}>{t('warmup.reset_hint')}</Text>
-        {isResetOn && <Segmented className={styles['reset-scope']} size="small" aria-label={t('warmup.reset_scope')} value={policy.reset_mode} disabled={disabled}
-          options={[{ value: 'all', label: t('warmup.reset_all') }, { value: 'weekly', label: t('warmup.reset_weekly') }]}
-          onChange={reset_mode => onChange({ ...policy, reset_mode: reset_mode as WarmupPolicy['reset_mode'] })} />}
-      </div>
-    </div>
-    <label className={styles['model']}>
-      <Text>{t('warmup.model')}</Text>
-      <SearchSelect label={t('warmup.model')} value={policy.model || undefined} placeholder={t('warmup.select_model')} disabled={disabled}
-        showSearch={{ optionFilterProp: 'label' }} options={modelOptions.map(model => ({ value: model, label: model }))}
-        onChange={(model: string) => onChange({ ...policy, model })} />
-      <Text type="secondary" className={styles['rule-hint']}>{t('warmup.model_hint')}</Text>
-    </label>
-  </div>;
+    </AppModal>
+  );
 }
 
-/** An inherited policy reads as what it does, not as a form the operator cannot touch. */
-function RuleSummary({ policy, provider, timezone }: { policy: WarmupPolicy; provider: string; timezone: string }) {
+interface TaskView {
+  task: WarmupTask;
+  account?: WarmupCatalogAccount;
+  title: string;
+  meta: string[];
+}
+
+function useTaskViews(state: WarmupStateView, tasks: WarmupTask[]): Map<string, TaskView> {
   const t = useT();
-  const rules = describePolicy(policy, timezone, t);
-  return <div className={styles['summary']}>
-    <ul className={styles['summary-rules']}>
-      {rules.length ? rules.map(rule => <li key={rule}>{rule}</li>) : <li>{t('warmup.summary_none')}</li>}
-      {rules.length > 0 && policy.model && <li className={styles['summary-model']}>{t('warmup.summary_model', { model: policy.model })}</li>}
-    </ul>
-    <Text type="secondary" className={styles['rule-hint']}>{t('warmup.inherit_hint', { provider: provider === 'codex' ? 'Codex' : 'Claude' })}</Text>
-  </div>;
+  const timezone = state.catalog?.timezone || 'UTC';
+  return React.useMemo(() => new Map(tasks.map((task) => {
+    const account = findAccount(state.catalog, task);
+    const who = accountLabel(account, task);
+    const when = describeTrigger(task.trigger, account, timezone, t);
+    const isNamed = hasCustomTaskName(task);
+    const title = isNamed ? task.name : who;
+    const meta = [
+      title === when ? null : when,
+      describeModel(task, account, t),
+    ].filter((part): part is string => Boolean(part));
+    return [task.id, { task, account, title, meta }];
+  })), [state.catalog, t, tasks, timezone]);
 }
 
-function StatusCard({ credential, result }: { credential: WarmupCredential; result?: WarmupResult }) {
-  const t = useT(); const locale = languageLocale(useI18n().lang);
-  const isOn = isWarmupPolicyEnabled(credential.policy);
-  const isConfirming = result?.status === 'pending' || result?.status === 'executing';
-  const isPaused = isOn && Boolean(credential.reason && PAUSING_REASONS.has(credential.reason));
-  const tone: StatusTone = !isOn ? 'neutral' : isPaused ? 'warn' : isConfirming ? 'accent' : 'success';
-  const headline = isConfirming ? t(`warmup.status_${result!.status}`) : t(!isOn ? 'warmup.auto_off' : isPaused ? 'warmup.auto_paused' : 'warmup.auto_on');
-  const detail = isConfirming ? warmupReason('activation_pending', t) : isOn ? warmupReason(credential.reason, t) : t('warmup.auto_off_hint');
-  const paid = credential.state.observation?.paid_fallback ?? 'unknown';
-  const lastTone: StatusTone = result?.status === 'activated' ? 'success' : result?.status === 'failed' || result?.status === 'uncertain' ? 'warn' : 'neutral';
-  return <div className={styles['status']} data-testid="warmup-status">
-    <div className={styles['status-head']}>
-      <StatusLabel tone={tone} className={styles['status-headline']}>{headline}</StatusLabel>
-      {detail && <Text type="secondary" className={styles['status-detail']}>{detail}</Text>}
+function WarmupWorkspace({ state }: { state: WarmupStateView }) {
+  const t = useT();
+  const locale = languageLocale(useI18n().lang);
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const isDemo = isDemoMode();
+
+  const catalog = state.catalog;
+  const timezone = catalog?.timezone || 'UTC';
+  const tasks = state.tasks;
+  const runs = state.runs;
+  const views = useTaskViews(state, tasks);
+
+  const [editing, setEditing] = React.useState<{ id: string | null; draft: WarmupTaskInput } | null>(null);
+  const [isShowingAllRuns, setIsShowingAllRuns] = React.useState(false);
+
+  const applyState = (next: WarmupStateView) => queryClient.setQueryData<WarmupStateView>(WARMUP_QUERY_KEY, next);
+  const reportFailure = (titleKey: MessageKey) => (err: unknown) => toast.error(t(titleKey), { detail: describeError(err) });
+
+  // The editor renders inside the task list, so a task deleted by another tab, the Agent or an MCP
+  // client would leave its draft invisible while it kept every other row uneditable.
+  React.useEffect(() => {
+    if (editing?.id && !tasks.some((task) => task.id === editing.id)) setEditing(null);
+  }, [editing, tasks]);
+
+  const saveMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string | null; input: WarmupTaskInput }) => {
+      const payload = toPayload(input, timezone);
+      return id ? api.updateWarmupTask(id, payload) : api.createWarmupTask(payload);
+    },
+    onSuccess: (next) => {
+      applyState(next);
+      setEditing(null);
+      toast.success(t('warmup.saved'));
+    },
+    onError: reportFailure('warmup.save_failed'),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ task, enabled }: { task: WarmupTask; enabled: boolean }) =>
+      api.updateWarmupTask(task.id, toPayload({ ...taskToInput(task, timezone), name: task.name, enabled }, timezone)),
+    onSuccess: applyState,
+    onError: reportFailure('warmup.update_failed'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteWarmupTask(id),
+    onSuccess: (next) => {
+      applyState(next);
+      toast.success(t('warmup.deleted'));
+    },
+    onError: reportFailure('warmup.delete_failed'),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: (id: string) => api.runWarmupTask(id),
+    onSuccess: (resp) => {
+      applyState(resp.state);
+      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      const title = t(OUTCOME_KEYS[resp.run.outcome]);
+      const detail = resp.run.message || undefined;
+      if (resp.run.outcome === 'ok') toast.success(title);
+      else if (resp.run.outcome === 'failed') toast.error(title, { detail });
+      else toast.warning(title, { detail });
+    },
+    onError: reportFailure('warmup.run_failed'),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => api.clearWarmupRuns([]),
+    onSuccess: (next) => {
+      applyState(next);
+      setIsShowingAllRuns(false);
+      toast.success(t('warmup.history_cleared'));
+    },
+    onError: reportFailure('warmup.clear_failed'),
+  });
+
+  const startCreate = () => {
+    setEditing({ id: null, draft: defaultWarmupTaskInput(catalog) });
+  };
+
+  const nextLabel = (task: WarmupTask): string => {
+    if (!task.enabled) return t('warmup.paused');
+    const iso = state.next[task.id];
+    if (iso) return t('warmup.row_next', { time: formatInstant(iso, timezone, locale) });
+    return task.trigger.kind === 'window' ? t('warmup.next_waiting') : '';
+  };
+
+  // Deleting a task deletes its runs, so a run's task is normally still listed.
+  const runTitle = (run: WarmupRun): string => views.get(run.task_id)?.title ?? (run.account || run.auth_index);
+
+  const shownRuns = isShowingAllRuns ? runs : runs.slice(0, RUNS_PREVIEW);
+  const canClearRuns = runs.length > 0 && !isDemo;
+
+  return (
+    <div className={styles['workspace']}>
+      <section className={styles['block']}>
+        <SectionHeading
+          level="label"
+          as="h4"
+          title={t('warmup.tasks')}
+          count={tasks.length || undefined}
+          extra={(
+            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={startCreate} disabled={isDemo} data-testid="warmup-add-task">
+              {t('warmup.add_task')}
+            </Button>
+          )}
+        />
+        {tasks.length === 0 ? (
+          <EmptyState size="compact" title={t('warmup.empty_tasks')} className={styles['empty']} />
+        ) : (
+          <ul className={styles['list']} data-testid="warmup-status">
+            {tasks.map((task) => {
+              const view = views.get(task.id)!;
+              const next = nextLabel(task);
+              const isRunning = runMutation.isPending && runMutation.variables === task.id;
+              return (
+                <li key={task.id} className={styles['task-row']} data-enabled={task.enabled} data-testid={`warmup-task-${task.id}`}>
+                  <CredentialMark className={styles['task-mark']} credential={{ provider: task.provider, hint: task.account }} size={20} />
+                  <div className={styles['task-copy']}>
+                    <span className={styles['task-title']} title={view.title}>{view.title}</span>
+                    <span className={styles['task-meta']}>{view.meta.join(' · ')}</span>
+                    {next && <span className={styles['task-next']}>{next}</span>}
+                  </div>
+                  <div className={styles['task-actions']}>
+                    <ToolButton
+                      size="small"
+                      type="text"
+                      icon={<PlayCircleOutlined />}
+                      label={t('warmup.run')}
+                      loading={isRunning}
+                      disabled={isDemo || (runMutation.isPending && !isRunning)}
+                      onClick={() => runMutation.mutate(task.id)}
+                    />
+                    <ToolButton
+                      size="small"
+                      type="text"
+                      icon={<EditOutlined />}
+                      label={t('warmup.edit_task')}
+                      disabled={isDemo}
+                      onClick={() => setEditing({ id: task.id, draft: taskToInput(task, timezone) })}
+                    />
+                    <ConfirmAction
+                      title={t('warmup.confirm_delete', { name: view.title })}
+                      confirmLabel={t('warmup.delete_task')}
+                      isDanger
+                      isConfirming={deleteMutation.isPending && deleteMutation.variables === task.id}
+                      tooltip={t('warmup.delete_task')}
+                      onConfirm={() => deleteMutation.mutateAsync(task.id)}
+                      disabled={isDemo || isRunning}
+                    >
+                      <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isDemo || isRunning} />
+                    </ConfirmAction>
+                    <Switch
+                      size="small"
+                      className={styles['task-switch']}
+                      aria-label={view.title}
+                      checked={task.enabled}
+                      loading={toggleMutation.isPending && toggleMutation.variables?.task.id === task.id}
+                      disabled={isDemo}
+                      onChange={(enabled) => toggleMutation.mutate({ task, enabled })}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className={styles['block']}>
+        <SectionHeading
+          level="label"
+          as="h4"
+          title={t('warmup.history')}
+          count={runs.length || undefined}
+          extra={canClearRuns && (
+            <ConfirmAction
+              title={t('warmup.confirm_clear_history', { count: runs.length })}
+              confirmLabel={t('warmup.clear_history')}
+              isDanger
+              isConfirming={clearMutation.isPending}
+              tooltip={t('warmup.clear_history')}
+              onConfirm={() => clearMutation.mutateAsync()}
+            >
+              <Button size="small" type="text" icon={<ClearOutlined />} aria-label={t('warmup.clear_history')} data-testid="warmup-clear-runs" />
+            </ConfirmAction>
+          )}
+        />
+        {runs.length === 0 ? (
+          <EmptyState size="compact" title={t('warmup.empty_runs')} className={styles['empty']} />
+        ) : (
+          <>
+            <ul className={styles['list']} data-testid="warmup-last-result">
+              {shownRuns.map((run) => {
+                const meta = [
+                  t(SOURCE_KEYS[run.source] ?? 'warmup.source_manual'),
+                  run.model,
+                  typeof run.ms === 'number' ? formatEventDuration(run.ms) : null,
+                ].filter(Boolean).join(' · ');
+                return (
+                  <li key={run.id} className={styles['run-row']}>
+                    <div className={styles['run-head']}>
+                      <StatusLabel tone={OUTCOME_TONES[run.outcome] ?? 'warn'}>
+                        {t(OUTCOME_KEYS[run.outcome] ?? 'warmup.outcome_unknown')}
+                      </StatusLabel>
+                      <span className={styles['run-task']}>{runTitle(run)}</span>
+                      <time className={styles['run-time']} dateTime={run.at}>{formatInstant(run.at, timezone, locale)}</time>
+                    </div>
+                    <span className={styles['run-meta']}>{meta}</span>
+                    {run.message && <span className={styles['run-message']}>{run.message}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+            {runs.length > RUNS_PREVIEW && !isShowingAllRuns && (
+              <Button type="link" size="small" className={styles['more']} onClick={() => setIsShowingAllRuns(true)}>
+                {t('warmup.show_all_runs', { count: runs.length })}
+              </Button>
+            )}
+          </>
+        )}
+      </section>
+
+      <TaskEditorModal
+        editing={editing}
+        catalog={catalog}
+        isSaving={saveMutation.isPending}
+        onChange={(draft) => setEditing((current) => (current ? { ...current, draft } : current))}
+        onSave={() => editing && saveMutation.mutate({ id: editing.id, input: editing.draft })}
+        onCancel={() => setEditing(null)}
+      />
     </div>
-    <dl className={styles['status-facts']}>
-      {isOn && credential.next_at_ms && <div><dt>{t('warmup.row_next')}</dt><dd>{formatInstant(credential.next_at_ms, credential.timezone, locale)}</dd></div>}
-      {result && !isConfirming && <div data-testid="warmup-last-result">
-        <dt>{t('warmup.row_last')}</dt>
-        <dd>
-          <span className={styles['last-line']}>
-            <StatusLabel tone={lastTone}>{t(`warmup.status_${result.status}`)}</StatusLabel>
-            <span className={styles['last-meta']}>{formatInstant(result.finished_at_ms ?? result.started_at_ms, credential.timezone, locale)} · {translateOr(t, `warmup.trigger_${result.trigger}`, result.trigger)}</span>
-          </span>
-          {result.status !== 'activated' && result.reason && <span className={styles['last-reason']}>{warmupReason(result.reason, t)}</span>}
-        </dd>
-      </div>}
-      <div><dt>{t('warmup.row_billing')}</dt><dd>{t(credential.provider === 'codex' ? 'warmup.billing_codex' : `warmup.billing_${paid}`)}</dd></div>
-    </dl>
-  </div>;
+  );
+}
+
+function WarmupBody({ isActive }: { isActive: boolean }) {
+  const t = useT();
+  const query = useQuery({
+    queryKey: WARMUP_QUERY_KEY,
+    queryFn: api.getWarmupSettings,
+    enabled: isActive,
+    retry: false,
+    refetchInterval: isActive ? 30_000 : false,
+  });
+  // A failed background refresh keeps the last answer on screen, and with it a draft being edited.
+  return (
+    <div className={styles['body']}>
+      <p className={styles['intro']}>{t('warmup.description')}</p>
+      {query.data ? (
+        <WarmupWorkspace state={query.data} />
+      ) : query.isError ? (
+        <LoadFailure title={t('warmup.load_failed')} error={describeError(query.error)} onRetry={() => void query.refetch()} />
+      ) : (
+        <ListPlaceholder rows={3} isFramed />
+      )}
+    </div>
+  );
 }
 
 export function WarmupSettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const t = useT(); const { modal } = App.useApp(); const toast = useToast(); const queryClient = useQueryClient();
-  const [provider, setProvider] = React.useState<'codex' | 'claude'>('codex');
-  const [draft, setDraft] = React.useState<WarmupPolicy>();
-  const draftRevision = React.useRef<string>();
-  const settingsQuery = useQuery({ queryKey: ['quota-warmup-settings'], queryFn: api.getWarmupSettings, enabled: open, retry: false });
-  const baseline = settingsQuery.data?.providers[provider];
-  const policy = draft ?? baseline ?? DEFAULT_WARMUP_POLICY;
-  const isDirty = Boolean(draft && JSON.stringify(draft) !== JSON.stringify(baseline));
-  const saveMutation = useMutation({
-    mutationFn: ({ policy, revision }: { policy: WarmupPolicy; revision: string }) => api.saveWarmupSettings(provider, policy, revision),
-    onSuccess: data => { queryClient.setQueryData<WarmupSettings>(['quota-warmup-settings'], previous => ({ ...data, models: previous?.models ?? data.models })); void queryClient.invalidateQueries({ queryKey: ['quota-warmup-settings'] }); setDraft(undefined); void queryClient.invalidateQueries({ queryKey: ['quota-warmup-credential'] }); toast.success(t('warmup.saved')); },
-    onError: error => toast.error(safeError(error, t)),
-  });
-  const attemptClose = React.useCallback(() => {
-    if (saveMutation.isPending) return;
-    if (!isDirty) { setDraft(undefined); onClose(); return; }
-    modal.confirm({ title: t('af.unsaved_confirm_title'), content: t('af.unsaved_confirm_desc'), okText: t('common.confirm'), cancelText: t('common.cancel'), onOk: () => { setDraft(undefined); onClose(); } });
-  }, [isDirty, modal, onClose, saveMutation.isPending, t]);
-  const save = () => {
-    if (!settingsQuery.data || !canSaveWarmupPolicy(policy)) return;
-    const revision = draftRevision.current ?? settingsQuery.data.revision; const selectedPolicy = { ...policy };
-    modal.confirm({ title: t('warmup.confirm_settings'), content: t('warmup.confirm_settings_desc'), okText: t('common.save'), cancelText: t('common.cancel'),
-      onOk: () => saveMutation.mutateAsync({ policy: selectedPolicy, revision }) });
-  };
-  return <AppDrawer widthKey="warmup_settings" open={open} onClose={attemptClose} title={t('warmup.settings')} destroyOnHidden
-    footer={<Space><Button onClick={() => setDraft(undefined)} disabled={!isDirty || saveMutation.isPending}>{t('common.cancel')}</Button>
-      <Button type="primary" onClick={save} loading={saveMutation.isPending} disabled={!isDirty || !canSaveWarmupPolicy(policy) || isDemoMode()}>{t('common.save')}</Button></Space>}>
-    <Tabs more={TAB_OVERFLOW} activeKey={provider} items={[{ key: 'codex', label: 'Codex', disabled: isDirty || saveMutation.isPending }, { key: 'claude', label: 'Claude', disabled: isDirty || saveMutation.isPending }]}
-      onChange={value => { setProvider(value as 'codex' | 'claude'); setDraft(undefined); }} />
-    {settingsQuery.isError ? <LoadFailure title={t('warmup.load_failed')} error={safeError(settingsQuery.error, t)} onRetry={() => void settingsQuery.refetch()} /> : settingsQuery.data ?
-      <div className={styles['warmup-section']}>
-        <Text type="secondary">{t('warmup.settings_description')}</Text>
-        <RuleEditor policy={policy} timezone={settingsQuery.data.timezone} models={settingsQuery.data.models[provider]} disabled={saveMutation.isPending || isDemoMode()}
-          onChange={policy => { if (!draft) draftRevision.current = settingsQuery.data!.revision; setDraft(policy); }} />
-        <Text type="secondary" className={styles['rule-hint']}>{t('warmup.daily_priority')}</Text>
-      </div> : <Text>{t('common.loading')}</Text>}
-  </AppDrawer>;
-}
-
-export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: string; onDirtyChange?: (isDirty: boolean) => void }) {
-  const t = useT(); const { modal } = App.useApp(); const toast = useToast(); const queryClient = useQueryClient();
-  const [draft, setDraft] = React.useState<{ inherit: boolean; policy: WarmupPolicy; revision: string }>();
-
-  const credentialQuery = useQuery({ queryKey: ['quota-warmup-credential', authIndex], queryFn: () => api.getWarmupCredential(authIndex), retry: false, refetchInterval: 60_000 });
-  const credential = credentialQuery.data;
-  // Switching back to the default must show the default, not the override being discarded.
-  const isInheritDraft = Boolean(draft?.inherit && credential && !credential.inherit);
-  const defaultsQuery = useQuery({ queryKey: ['quota-warmup-settings'], queryFn: api.getWarmupSettings, enabled: isInheritDraft, retry: false });
-  const values = draft ?? { inherit: credential?.inherit ?? true, policy: credential?.policy ?? DEFAULT_WARMUP_POLICY };
-  const isDirty = Boolean(draft && credential && (draft.inherit !== credential.inherit || JSON.stringify(draft.policy) !== JSON.stringify(credential.policy)));
-  React.useEffect(() => { onDirtyChange?.(isDirty); return () => onDirtyChange?.(false); }, [isDirty, onDirtyChange]);
-  const saveMutation = useMutation({
-    mutationFn: ({ inherit, policy, revision }: { inherit: boolean; policy: WarmupPolicy; revision: string }) => api.saveWarmupCredential(authIndex, inherit, policy, revision),
-    onSuccess: data => { queryClient.setQueryData(['quota-warmup-credential', authIndex], data); setDraft(undefined); toast.success(t('warmup.saved')); },
-    onError: error => toast.error(safeError(error, t)),
-  });
-  const runMutation = useMutation({
-    mutationFn: ({ requestId, revision }: { requestId: string; revision: string }) => api.runWarmup(authIndex, requestId, revision),
-    onSuccess: data => {
-      // A refused click leaves the durable run alone; only a sent request becomes the last result.
-      if (data.status !== 'skipped') queryClient.setQueryData<WarmupCredential>(['quota-warmup-credential', authIndex], previous => previous ? { ...previous, state: { ...previous.state, last_result: data } } : previous);
-      void queryClient.invalidateQueries({ queryKey: ['quota-warmup-credential', authIndex] });
-      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
-      const title = t(`warmup.status_${data.status}`); const detail = warmupReason(data.reason, t) || undefined;
-      if (data.status === 'activated') toast.success(title);
-      else if (data.status === 'failed') toast.error(title, { detail });
-      else if (data.status === 'uncertain') toast.warning(title, { detail });
-      else toast.info(title, { detail });
-    },
-    onError: error => toast.error(safeError(error, t)),
-  });
-  const isBusy = saveMutation.isPending || runMutation.isPending || isDemoMode();
-  const save = () => {
-    if (!credential) return;
-    const submitted = { ...values, policy: { ...values.policy }, revision: draft?.revision ?? credential.revision };
-    modal.confirm({ title: t('warmup.confirm_settings'), content: t('warmup.confirm_credential_desc'), okText: t('common.save'), cancelText: t('common.cancel'), onOk: () => saveMutation.mutateAsync(submitted) });
-  };
-  const run = () => {
-    if (!credential) return;
-    const requestId = createID('warmup'); const revision = credential.revision;
-    modal.confirm({ title: t('warmup.run'), content: t('warmup.confirm_run', { name: credential.name, model: credential.policy.model }), okText: t('warmup.run'), cancelText: t('common.cancel'),
-      onOk: () => runMutation.mutateAsync({ requestId, revision }) });
-  };
-  const runButton = credential && <Button size="small" onClick={run} loading={runMutation.isPending}
-    disabled={isDirty || saveMutation.isPending || !credential.policy.model || isDemoMode()}>{t('warmup.run')}</Button>;
-  return <section className={styles['warmup-section']} data-testid="credential-warmup">
-    <SectionHeading className={styles['warmup-heading']} title={t('warmup.title')} description={t('warmup.description')} extra={runButton} />
-    {credentialQuery.isError ? <LoadFailure title={t('warmup.load_failed')} error={safeError(credentialQuery.error, t)} onRetry={() => void credentialQuery.refetch()} /> : credential ? <>
-      <StatusCard credential={credential} result={credential.state.last_result} />
-      <div className={styles['rules-block']}>
-        <SectionHeading level="label" as="h4" title={t('warmup.rules')} extra={
-          <Segmented size="small" aria-label={t('warmup.policy_source')} value={values.inherit ? 'inherit' : 'override'} disabled={isBusy}
-            options={[{ value: 'inherit', label: t('warmup.inherit') }, { value: 'override', label: t('warmup.override') }]}
-            onChange={value => setDraft({ inherit: value === 'inherit', policy: { ...values.policy }, revision: draft?.revision ?? credential.revision })} />} />
-        {values.inherit ? (isInheritDraft && !defaultsQuery.data ? (defaultsQuery.isError
-          ? <LoadFailure title={t('warmup.load_failed')} error={safeError(defaultsQuery.error, t)} onRetry={() => void defaultsQuery.refetch()} />
-          : <Text type="secondary">{t('common.loading')}</Text>)
-          : <RuleSummary policy={isInheritDraft ? defaultsQuery.data!.providers[credential.provider] : credential.policy} provider={credential.provider} timezone={credential.timezone} />) :
-          <RuleEditor policy={values.policy} models={credential.models} timezone={credential.timezone} disabled={isBusy}
-            onChange={policy => setDraft({ inherit: false, policy, revision: draft?.revision ?? credential.revision })} />}
-        {isDirty && <div className={styles['actions']}>
-          <Button size="small" onClick={() => setDraft(undefined)} disabled={saveMutation.isPending}>{t('common.cancel')}</Button>
-          <Button size="small" type="primary" onClick={save} loading={saveMutation.isPending} disabled={!values.inherit && !canSaveWarmupPolicy(values.policy) || isInheritDraft && !defaultsQuery.data || isDemoMode()}>{t('common.save')}</Button>
-        </div>}
-      </div>
-    </> : <Text>{t('common.loading')}</Text>}
-  </section>;
+  const t = useT();
+  return (
+    <AppDrawer widthKey="warmup_settings" open={open} onClose={onClose} title={t('warmup.settings')} destroyOnHidden>
+      <WarmupBody isActive={open} />
+    </AppDrawer>
+  );
 }

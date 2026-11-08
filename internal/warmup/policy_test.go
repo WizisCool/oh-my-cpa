@@ -1,322 +1,205 @@
 package warmup
 
 import (
-	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 )
 
-func idleObservation(now time.Time) Observation {
-	return Observation{Provider: "claude", ObservedAtMS: now.UnixMilli(), PaidFallback: "disabled", FiveHour: Window{State: "idle", PeriodMS: FIVE_HOUR_MS}, Weekly: Window{State: "idle", PeriodMS: WEEK_MS}}
+func mustTime(t *testing.T, iso string) time.Time {
+	t.Helper()
+	parsed, ok := ParseISO(iso)
+	if !ok {
+		t.Fatalf("invalid ISO time %q", iso)
+	}
+	return parsed
 }
-func TestWarmupDecisions(t *testing.T) {
-	policy := Policy{ResetMode: "all", IsDailyEnabled: true, DailyTime: "06:00", Model: "haiku"}
-	for _, scenario := range []struct {
-		name                    string
-		hour, minute            int
-		isManual                bool
-		wantTrigger, wantReason string
-	}{
-		{"midnight reset fits", 0, 0, false, "reset", ""},
-		{"02 reset held", 2, 0, false, "", "waiting_daily"},
-		{"daily start", 6, 0, false, "daily", ""},
-		{"catchup", 6, 40, false, "daily", ""},
-		{"catchup boundary", 7, 0, false, "daily", ""},
-		{"missed catchup", 7, 1, false, "reset", ""},
-		{"manual bypasses calendar", 2, 0, true, "manual", ""},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			now := time.Date(2026, 10, 13, scenario.hour, scenario.minute, 0, 0, time.UTC)
-			observation := idleObservation(now)
-			trigger, reason, _, _ := Decide(policy, State{Observation: &observation}, now, scenario.isManual)
-			if trigger != scenario.wantTrigger || reason != scenario.wantReason {
-				t.Fatalf("%q %q", trigger, reason)
-			}
-		})
+
+func TestPickAutoModel(t *testing.T) {
+	models := []string{
+		"claude-opus-4-6",
+		"claude-sonnet-4-6",
+		"claude-haiku-4-5-20251001",
+		"claude-3-5-haiku-20241022",
+		"gpt-5",
+		"gpt-5-mini",
+		"gpt-5.1-codex-mini",
+		"gemini-2.0-flash",
+		"gemini-2.5-flash",
 	}
-	now := time.Date(2026, 10, 13, 6, 0, 0, 0, time.UTC)
-	observation := idleObservation(now)
-	observation.FiveHour.State = "active"
-	used := float64(0)
-	observation.FiveHour.UsedPercent = &used
-	trigger, reason, _, _ := Decide(policy, State{Observation: &observation}, now, false)
-	if trigger != "" || reason != "already_active" {
-		t.Fatalf("running daily window: %q %q", trigger, reason)
+	if got := PickAutoModel(models, nil); got != "gemini-2.5-flash" {
+		t.Fatalf("PickAutoModel = %q, want gemini-2.5-flash", got)
 	}
-	policy.IsDailyEnabled = false
-	policy.ResetMode = "off"
-	trigger, reason, _, _ = Decide(policy, State{Observation: &observation}, now, false)
-	if trigger != "" || reason != "disabled" {
-		t.Fatal("off consumed")
+
+	codexOnly := []string{"gpt-5", "gpt-5-codex", "gpt-5-mini", "gpt-5.1-codex-mini"}
+	if got := PickAutoModel(codexOnly, nil); got != "gpt-5.1-codex-mini" {
+		t.Fatalf("PickAutoModel(codex) = %q, want gpt-5.1-codex-mini", got)
 	}
-}
-func TestCodexWarmupIgnoresCreditStatus(t *testing.T) {
-	now := time.Now()
-	policy := Policy{ResetMode: "all", DailyTime: "06:00", Model: "codex"}
-	for _, credits := range []string{
-		`"credits":{"has_credits":false,"unlimited":false,"balance":null}`,
-		`"credits":{"has_credits":true,"unlimited":false,"balance":"10"}`,
-		`"credits":null`,
-	} {
-		raw := `{"rate_limit":{"primary_window":{"used_percent":0,"limit_window_seconds":18000,"reset_at":null},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_at":null}},` + credits + `}`
-		observation := ParseObservation("codex", []byte(raw), now.UnixMilli())
-		for _, manual := range []bool{false, true} {
-			trigger, reason, _, _ := Decide(policy, State{Observation: &observation}, now, manual)
-			if trigger == "" || reason != "" {
-				t.Errorf("credits %s manual %t: trigger=%q reason=%q", credits, manual, trigger, reason)
-			}
-		}
+
+	claudeOnly := []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-3-5-haiku-20241022", "claude-haiku-4-5-20251001"}
+	if got := PickAutoModel(claudeOnly, nil); got != "claude-haiku-4-5-20251001" {
+		t.Fatalf("PickAutoModel(claude) = %q, want claude-haiku-4-5-20251001", got)
 	}
-}
-func TestStrictPaidFallbackAndQuotaProtection(t *testing.T) {
-	now := time.Now()
-	policy := DefaultPolicy()
-	policy.Model = "haiku"
-	for _, scenario := range []struct {
-		name   string
-		mutate func(*Observation)
-		reason string
-	}{
-		{"paid enabled", func(observation *Observation) { observation.PaidFallback = "enabled" }, "paid_usage_enabled"},
-		{"paid unknown", func(observation *Observation) { observation.PaidFallback = "unknown" }, "paid_usage_unknown"},
-		{"stale", func(observation *Observation) { observation.ObservedAtMS = now.Add(-6 * time.Minute).UnixMilli() }, "quota_unknown"},
-		{"future", func(observation *Observation) { observation.ObservedAtMS = now.Add(time.Minute).UnixMilli() }, "quota_unknown"},
-		{"unknown window", func(observation *Observation) { observation.Weekly.State = "unknown" }, "quota_unknown"},
-		{"codex unknown window", func(observation *Observation) {
-			observation.Provider = "codex"
-			observation.PaidFallback = "unknown"
-			observation.Weekly.State = "unknown"
-		}, "quota_unknown"},
-		{"blocked", func(observation *Observation) { observation.IsBlocked = true }, "quota_exhausted"},
-		{"weekly exhausted", func(observation *Observation) {
-			observation.Weekly.State = "active"
-			used := float64(100)
-			observation.Weekly.UsedPercent = &used
-		}, "quota_exhausted"},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			observation := idleObservation(now)
-			scenario.mutate(&observation)
-			if reason := Eligibility(policy, &observation, now.UnixMilli()); reason != scenario.reason {
-				t.Fatalf("%s", reason)
-			}
-		})
+
+	// "minimax" must not match "mini" because of word boundaries.
+	noSpec := []string{"minimax-m1", "deepseek-r1", "qwen-max-2"}
+	sorted := SortModelsForAuto(noSpec, nil)
+	if !slices.Equal(sorted, []string{"qwen-max-2", "minimax-m1", "deepseek-r1"}) {
+		t.Fatalf("SortModelsForAuto(noSpec, nil) = %v", sorted)
 	}
-}
-func TestObservationNullMissingAndBillingTriState(t *testing.T) {
-	now := time.Now()
-	reset := now.Add(4 * time.Hour).Format(time.RFC3339)
-	fixtures := []struct{ provider, raw, paid, five string }{
-		{"claude", `{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":false}}`, "disabled", "idle"},
-		{"claude", `{"extra_usage":{"is_enabled":false}}`, "disabled", "unknown"},
-		{"claude", `{"five_hour":null,"seven_day":null}`, "unknown", "idle"},
-		{"claude", `{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":null}}`, "unknown", "idle"},
-		{"claude", `{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":true}}`, "enabled", "idle"},
-		{"claude", `{"five_hour":{"utilization":0,"resets_at":"` + reset + `"},"seven_day":null,"extra_usage":{"is_enabled":false}}`, "disabled", "active"},
-		{"codex", `{"rate_limit":{"primary_window":{"used_percent":0,"limit_window_seconds":18000,"reset_at":null},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_at":null}},"credits":{"has_credits":false,"unlimited":false,"balance":"0"}}`, "disabled", "idle"},
-		{"codex", `{"rate_limit":{},"credits":{"balance":0,"unlimited":false}}`, "unknown", "unknown"},
-		{"codex", `{"credits":{"has_credits":true,"unlimited":false,"balance":"0"}}`, "enabled", "unknown"},
-		{"codex", `{"credits":{"has_credits":false,"unlimited":true,"balance":0}}`, "enabled", "unknown"},
+
+	// An OAuth alias is an operator's name for another model: it ranks as the model it reaches,
+	// never by its own letters, and the alias is what gets sent.
+	if got := PickAutoModel([]string{"gpt-5.2", "zeta"}, map[string]string{"zeta": "gpt-5.1"}); got != "gpt-5.2" {
+		t.Fatalf("PickAutoModel(alias of an older model) = %q, want gpt-5.2", got)
 	}
-	for _, fixture := range fixtures {
-		observation := ParseObservation(fixture.provider, []byte(fixture.raw), now.UnixMilli())
-		if observation.PaidFallback != fixture.paid || observation.FiveHour.State != fixture.five {
-			t.Fatalf("%s: %+v", fixture.raw, observation)
-		}
+	if got := PickAutoModel([]string{"gpt-5.4", "alpha"}, map[string]string{"alpha": "gpt-5.4-mini"}); got != "alpha" {
+		t.Fatalf("PickAutoModel(alias of a mini model) = %q, want alpha", got)
 	}
-}
-func TestCycleEvidenceAndDurableDedup(t *testing.T) {
-	now := time.Now()
-	observation := idleObservation(now)
-	state := State{Observation: &observation, Generation: 3, LastCycle: "cycle/3"}
-	policy := DefaultPolicy()
-	policy.ResetMode = "all"
-	policy.Model = "haiku"
-	trigger, _, _, _ := Decide(policy, state, now, false)
-	if trigger != "" {
-		t.Fatal("duplicate cycle")
+
+	// A listed name that reaches no model at all ranks last instead of winning the descending
+	// tie-break on its letters, and it remains the answer when nothing else is listed.
+	if got := PickAutoModel([]string{"gpt-5.2", "gpt-5.2-codex", "retain"}, nil); got != "gpt-5.2-codex" {
+		t.Fatalf("PickAutoModel(unversioned name) = %q, want gpt-5.2-codex", got)
 	}
-	before := observation
-	before.FiveHour.State = "active"
-	before.ObservedAtMS--
-	state.Observation = &before
-	state = Reconcile(state, observation)
-	if state.Generation != 4 {
-		t.Fatal("reset generation missing")
+	if got := PickAutoModel([]string{"retain"}, nil); got != "retain" {
+		t.Fatalf("PickAutoModel(only an unversioned name) = %q, want retain", got)
 	}
-	trigger, _, _, _ = Decide(policy, state, now, false)
-	if trigger != "reset" {
-		t.Fatal("new reset ignored")
+	// The version check reads the ranked name, so an alias of a real model keeps that model's rank.
+	if got := PickAutoModel([]string{"gpt-5.2", "retain"}, map[string]string{"retain": "gpt-5.4"}); got != "retain" {
+		t.Fatalf("PickAutoModel(alias of a newer model) = %q, want retain", got)
 	}
-	raw, _ := json.Marshal(state)
-	var restored State
-	_ = json.Unmarshal(raw, &restored)
-	if restored.Generation != state.Generation || restored.LastCycle != state.LastCycle {
-		t.Fatal("restart loses dedup")
-	}
-}
-func TestCalendarAndDST(t *testing.T) {
-	location, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, now := range []time.Time{time.Date(2026, 3, 8, 1, 0, 0, 0, location), time.Date(2026, 11, 1, 0, 0, 0, 0, location)} {
-		next := NextDailyStart("06:00", now)
-		if next.Hour() != 6 || next.Location() != location || !next.After(now) {
-			t.Fatalf("%v", next)
-		}
-	}
-	first := time.Date(2026, 11, 1, 1, 30, 0, 0, location)
-	second := first.Add(time.Hour)
-	if DailyKey("01:30", first) != DailyKey("01:30", second) {
-		t.Fatal("DST duplicate daily key")
-	}
-	missing := DailyStart("02:30", time.Date(2026, 3, 8, 4, 0, 0, 0, location))
-	if missing.Hour() != 3 {
-		t.Fatalf("missing hour: %v", missing)
-	}
-}
-func TestPolicyValidation(t *testing.T) {
-	policy := DefaultPolicy()
-	if policy.Validate() != nil {
-		t.Fatal("default invalid")
-	}
-	for _, mutate := range []func(*Policy){func(policy *Policy) { policy.DailyTime = "24:00" }, func(policy *Policy) { policy.ResetMode = "bad" }, func(policy *Policy) { policy.IsDailyEnabled = true }, func(policy *Policy) { policy.Model = "token\nheader" }} {
-		invalid := policy
-		mutate(&invalid)
-		if invalid.Validate() == nil {
-			t.Fatal("invalid policy accepted")
-		}
+
+	if got := PickAutoModel(nil, nil); got != "" {
+		t.Fatalf("PickAutoModel(nil) = %q, want empty", got)
 	}
 }
 
-func TestSlidingIdleBoundaryIsNotAZeroUsageGuess(t *testing.T) {
-	now := time.Now()
-	zero := float64(0)
-	first := idleObservation(now)
-	first.FiveHour.State = "active"
-	first.FiveHour.UsedPercent = &zero
-	reset := now.UnixMilli() + FIVE_HOUR_MS
-	first.FiveHour.ResetAtMS = &reset
-	later := first
-	later.ObservedAtMS += 60000
-	shifted := reset + 60000
-	later.FiveHour.ResetAtMS = &shifted
-	reconciled := Reconcile(State{Observation: &first}, later)
-	if reconciled.Observation.FiveHour.State != "idle" {
-		t.Fatal("sliding unused window not detected")
+func TestFilterWarmupModels(t *testing.T) {
+	models := []string{
+		"gpt-5.4",
+		"gpt-image-1",
+		"gemini-2.5-flash-image",
+		"dall-e-3",
+		"imagen-4.0-generate-001",
+		"flux-1-dev",
+		"claude-haiku-4-5",
+		"deep-research-preview-04-2026",
+		"openai/gpt-image-2",
 	}
-	fixed := later
-	fixed.FiveHour.ResetAtMS = &reset
-	reconciled = Reconcile(State{Observation: &first}, fixed)
-	if reconciled.Observation.FiveHour.State != "active" {
-		t.Fatal("running zero-use fixed window treated idle")
+	want := []string{"gpt-5.4", "claude-haiku-4-5", "deep-research-preview-04-2026"}
+	if got := FilterWarmupModels(models, nil); !slices.Equal(got, want) {
+		t.Fatalf("FilterWarmupModels = %v, want %v", got, want)
 	}
-}
-
-func TestModelScopedExhaustionDoesNotActivateAnExcludedFamily(t *testing.T) {
-	now := time.Now()
-	observation := ParseObservation("claude", []byte(`{"five_hour":null,"seven_day":null,"seven_day_sonnet":{"utilization":100,"resets_at":"2099-01-01T00:00:00Z"},"extra_usage":{"is_enabled":false}}`), now.UnixMilli())
-	policy := DefaultPolicy()
-	policy.Model = "claude-sonnet-test"
-	if reason := Eligibility(policy, &observation, now.UnixMilli()); reason != "quota_exhausted" {
-		t.Fatalf("%s", reason)
+	if got := FilterWarmupModels([]string{"gpt-image-1"}, nil); len(got) != 0 {
+		t.Fatalf("FilterWarmupModels(image only) = %v, want empty", got)
 	}
-	policy.Model = "claude-haiku-test"
-	if reason := Eligibility(policy, &observation, now.UnixMilli()); reason != "" {
-		t.Fatalf("unrelated family blocked %s", reason)
+	// A call point is judged by the model it reaches, so a name that hides an image model is
+	// dropped as well.
+	if got := FilterWarmupModels([]string{"draw", "gpt-5.4"}, map[string]string{"draw": "openai/gpt-image-2"}); !slices.Equal(got, []string{"gpt-5.4"}) {
+		t.Fatalf("FilterWarmupModels(alias of an image model) = %v, want [gpt-5.4]", got)
 	}
 }
 
-func TestWarmupRetryStillHonoursDailyPriority(t *testing.T) {
-	now := time.Date(2026, 10, 13, 1, 5, 0, 0, time.UTC)
-	observation := idleObservation(now)
-	policy := Policy{Model: "haiku", ResetMode: "all", IsDailyEnabled: true, DailyTime: "06:00"}
-	state := State{Observation: &observation, Failures: 1, LastResult: &Result{Status: "failed", Reason: "rate_limited", Trigger: "reset"}}
-	trigger, reason, _, _ := Decide(policy, state, now, false)
-	if trigger != "" || reason != "waiting_daily" {
-		t.Fatalf("retry crossed start: %s %s", trigger, reason)
+func TestNextDailyAndDST(t *testing.T) {
+	after := mustTime(t, "2026-04-12T00:30:00.000Z") // 08:30 Asia/Shanghai
+	next, ok := NextDaily(after, "09:00", "Asia/Shanghai")
+	if !ok || FormatISO(next) != "2026-04-12T01:00:00.000Z" {
+		t.Fatalf("same day = %v %v", FormatISO(next), ok)
+	}
+
+	afterPassed := mustTime(t, "2026-04-12T01:00:00.000Z") // exact 09:00 Asia/Shanghai
+	next, ok = NextDaily(afterPassed, "09:00", "Asia/Shanghai")
+	if !ok || FormatISO(next) != "2026-04-13T01:00:00.000Z" {
+		t.Fatalf("next day = %v %v", FormatISO(next), ok)
+	}
+
+	// 2026-03-08 is US spring-forward day in America/New_York (02:00 jumps to 03:00).
+	dstAfter := mustTime(t, "2026-03-08T06:00:00.000Z")
+	next, ok = NextDaily(dstAfter, "02:30", "America/New_York")
+	if !ok || !next.After(dstAfter) {
+		t.Fatalf("DST gap = %v %v", FormatISO(next), ok)
 	}
 }
 
-func TestFableWarmupRequiresAvailableModelScopedQuota(t *testing.T) {
-	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
-	for _, scenario := range []struct {
-		name, modelLimits, wantReason string
-	}{
-		{"modern object", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":{}`, "quota_unknown"},
-		{"modern string", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":"invalid"`, "quota_unknown"},
-		{"modern null", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":null`, "quota_unknown"},
-		{"legacy exhausted", `"iguana_necktie":{"utilization":100,"resets_at":"2026-11-05T07:59:00Z"}`, "quota_exhausted"},
-		{"credit pool is not Fable", `"iguana_necktie":{"utilization":100,"limit_dollars":50,"used_dollars":50,"remaining_dollars":0,"resets_at":"2026-11-05T07:59:00Z"}`, ""},
-		{"modern exhausted", `"limits":[{"percent":100,"resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable 5"}}}]`, "quota_exhausted"},
-		{"modern malformed", `"limits":[{"percent":"invalid","resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable"}}}]`, "quota_unknown"},
-		{"modern overrides legacy", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":[{"percent":100,"resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable"}}}]`, "quota_exhausted"},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			raw := `{"five_hour":null,"seven_day":{"utilization":0,"resets_at":"2026-10-20T05:00:00Z"},"extra_usage":{"is_enabled":false},` + scenario.modelLimits + `}`
-			observation := ParseObservation("claude", []byte(raw), now.UnixMilli())
-			policy := DefaultPolicy()
-			policy.Model = "claude-fable-5"
-			if reason := Eligibility(policy, &observation, now.UnixMilli()); reason != scenario.wantReason {
-				t.Fatalf("Fable eligibility = %q; want %q", reason, scenario.wantReason)
-			}
-			policy.Model = "claude-haiku-4-5-20251001"
-			if reason := Eligibility(policy, &observation, now.UnixMilli()); reason != "" {
-				t.Fatalf("unrelated Haiku quota blocked: %s", reason)
-			}
-		})
+func TestNextEveryAndLastDue(t *testing.T) {
+	anchor := "2026-04-12T00:00:00.000Z"
+	next, ok := NextEvery(mustTime(t, "2026-04-12T05:00:00.000Z"), 5, anchor)
+	if !ok || FormatISO(next) != "2026-04-12T10:00:00.000Z" {
+		t.Fatalf("NextEvery exact boundary = %v %v", FormatISO(next), ok)
+	}
+
+	next, ok = NextEvery(mustTime(t, "2026-04-11T20:00:00.000Z"), 5, anchor)
+	if !ok || FormatISO(next) != anchor {
+		t.Fatalf("NextEvery before anchor = %v %v", FormatISO(next), ok)
+	}
+
+	due, ok := LastDue(mustTime(t, "2026-04-12T12:30:00.000Z"), Trigger{Kind: "every", Hours: 5, Anchor: anchor})
+	if !ok || FormatISO(due) != "2026-04-12T10:00:00.000Z" {
+		t.Fatalf("LastDue(every) = %v %v", FormatISO(due), ok)
+	}
+
+	due, ok = LastDue(mustTime(t, "2026-04-12T03:00:00.000Z"), Trigger{Kind: "daily", Time: "09:00", TimeZone: "Asia/Shanghai"})
+	if !ok || FormatISO(due) != "2026-04-12T01:00:00.000Z" {
+		t.Fatalf("LastDue(daily) = %v %v", FormatISO(due), ok)
 	}
 }
 
-func TestWarmupProtocolRefusalPausesMatchingAutomaticModel(t *testing.T) {
-	now := time.Now().UTC()
-	policy := DefaultPolicy()
-	policy.Model = "haiku"
-	policy.ResetMode = "all"
-	observation := idleObservation(now)
-	for _, reason := range []string{"protocol_unsupported", "unexpected_tool"} {
-		t.Run(reason, func(t *testing.T) {
-			currentObservation := observation
-			state := State{Observation: &currentObservation, LastResult: &Result{Status: "failed", Reason: reason, Model: policy.Model}}
-			trigger, pause, _, _ := Decide(policy, state, now, false)
-			if trigger != "" || pause != reason {
-				t.Fatalf("unsupported model admitted: %q %q", trigger, pause)
-			}
-			trigger, pause, _, _ = Decide(policy, state, now, true)
-			if trigger != "manual" || pause != "" {
-				t.Fatalf("confirmed manual recheck refused: %q %q", trigger, pause)
-			}
-			state.LastResult.Model = "previous-model"
-			trigger, pause, _, _ = Decide(policy, state, now, false)
-			if trigger != "reset" || pause != "" {
-				t.Fatalf("new model retained old refusal: %q %q", trigger, pause)
-			}
-			state.LastResult.Model = policy.Model
-			state.Observation.FiveHour.State, state.Observation.Weekly.State = "active", "active"
-			used := float64(0)
-			state.Observation.FiveHour.UsedPercent, state.Observation.Weekly.UsedPercent = &used, &used
-			trigger, pause, _, _ = Decide(policy, state, now, false)
-			if trigger != "" || pause != "already_active" {
-				t.Fatalf("active window hidden by protocol history: %q %q", trigger, pause)
-			}
+func TestWindowDueAndGuards(t *testing.T) {
+	zero := 0.0
+	used := 42.0
+	active := &QuotaWindow{ID: "five_hour", Label: "5h", UsedPercent: &used, ResetsAt: "2026-04-12T10:00:00.000Z"}
+	due := WindowDue(active, "2026-04-12T08:00:00.000Z")
+	if due == nil || due.Idle || due.At != "2026-04-12T10:00:30.000Z" || due.ResetKey != "2026-04-12T10:00:00.000Z" {
+		t.Fatalf("active WindowDue = %+v", due)
+	}
 
-		})
+	idle := &QuotaWindow{ID: "five_hour", Label: "5h", UsedPercent: &zero}
+	due = WindowDue(idle, "2026-04-12T08:23:45.000Z")
+	if due == nil || !due.Idle || due.At != "2026-04-12T08:23:45.000Z" || due.ResetKey != "idle:2026-04-12T08:00:00.000Z" {
+		t.Fatalf("idle WindowDue = %+v", due)
+	}
+
+	expired := &QuotaWindow{ID: "five_hour", Label: "5h", UsedPercent: &used, ResetsAt: "2026-04-12T08:00:00.000Z"}
+	due = WindowDue(expired, "2026-04-12T08:05:00.000Z")
+	if due == nil || !due.Idle || due.ResetKey != "idle:2026-04-12T08:00:00.000Z" {
+		t.Fatalf("expired WindowDue = %+v", due)
+	}
+
+	// CurrentWindowDue guards against stale idle readings within 60s of LastSent and against transient missing ResetsAt before LastReset.
+	task := Task{ID: "t1", Enabled: true, Trigger: Trigger{Kind: "window", Window: "five_hour"}}
+	account := &CatalogAccount{
+		AuthIndex:  "acc-1",
+		SnapshotAt: "2026-04-12T08:00:30.000Z",
+		Windows:    []QuotaWindow{*idle},
+	}
+	if got := CurrentWindowDue(task, account, TaskMarks{LastSent: "2026-04-12T08:00:00.000Z"}, mustTime(t, "2026-04-12T08:00:35.000Z")); got != nil {
+		t.Fatalf("expected stale idle reading within 60s of LastSent to be ignored, got %+v", got)
+	}
+	if got := CurrentWindowDue(task, account, TaskMarks{LastReset: "2026-04-12T09:00:00.000Z"}, mustTime(t, "2026-04-12T08:00:35.000Z")); got != nil {
+		t.Fatalf("expected future LastReset to suppress transient missing ResetsAt, got %+v", got)
+	}
+	if got := CurrentWindowDue(task, account, TaskMarks{LastReset: "2026-04-12T07:00:00.000Z"}, mustTime(t, "2026-04-12T08:00:35.000Z")); got == nil || !got.Idle {
+		t.Fatalf("expected passed LastReset to allow idle trigger, got %+v", got)
 	}
 }
 
-func TestWarmupPersistentProtocolPauseIsModelScoped(t *testing.T) {
-	now := time.Now().UTC()
-	observation := idleObservation(now)
-	policy := Policy{Model: "haiku", ResetMode: "all", DailyTime: "06:00"}
-	state := State{Observation: &observation, ProtocolPause: &ProtocolPause{Model: "haiku", Reason: "protocol_unsupported"}, LastResult: &Result{Model: "haiku", Status: "failed", Reason: "rate_limited"}}
-	trigger, reason, _, _ := Decide(policy, state, now, false)
-	if trigger != "" || reason != "protocol_unsupported" {
-		t.Fatalf("latest receipt erased pause: %s %s", trigger, reason)
+func TestValidateTask(t *testing.T) {
+	valid := TaskInput{
+		Provider:  "claude",
+		AuthIndex: "auth-1",
+		Trigger:   Trigger{Kind: "window", Window: "five_hour"},
 	}
-	policy.Model = "selected-other-model"
-	trigger, reason, _, _ = Decide(policy, state, now, false)
-	if trigger != "reset" || reason != "" {
-		t.Fatalf("pause crossed models: %s %s", trigger, reason)
+	if err := ValidateTask(valid); err != nil {
+		t.Fatalf("ValidateTask(valid) = %v", err)
+	}
+	if err := ValidateTask(TaskInput{Provider: "", AuthIndex: "auth-1", Trigger: Trigger{Kind: "window", Window: "five_hour"}}); err == nil {
+		t.Fatal("expected invalid provider error")
+	}
+	if err := ValidateTask(TaskInput{Provider: "claude", AuthIndex: "auth-1", Trigger: Trigger{Kind: "daily", Time: "25:00", TimeZone: "UTC"}}); err == nil {
+		t.Fatal("expected invalid clock error")
+	}
+	if err := ValidateTask(TaskInput{Provider: "codex", AuthIndex: "auth-1", Trigger: Trigger{Kind: "every", Hours: 0, Anchor: "2026-04-12T00:00:00Z"}}); err == nil {
+		t.Fatal("expected invalid interval hours error")
 	}
 }

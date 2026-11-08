@@ -3,9 +3,15 @@ package management
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
+
+// ErrCredentialOutcomeUnknown marks a verify request CPA may have run although its answer never
+// arrived, so a caller cannot read it as a refusal it may safely repeat.
+var ErrCredentialOutcomeUnknown = errors.New("CPA credential request outcome is unknown")
 
 // CredentialRecoverySummary keeps absent evidence distinct from a confirmed false.
 // It deliberately has no upstream free-form messages, account metadata or events.
@@ -85,7 +91,13 @@ func (c *Client) VerifyAuthFile(ctx context.Context, name, authIndex, model stri
 		Model     string `json:"model,omitempty"`
 	}{name, authIndex, model}
 	if err := c.doJSONBody(ctx, http.MethodPost, "/credentials/verify", payload, &outcome); err != nil {
-		return false, safeCredentialError(err)
+		safe := safeCredentialError(err)
+		// Verify runs an inference, so one CPA may have run without its answer arriving is not a
+		// refusal a caller may repeat. A cancellation keeps its own identity.
+		if !errors.Is(safe, context.Canceled) && !errors.Is(safe, context.DeadlineExceeded) && requestMayHaveRun(err) {
+			return false, ErrCredentialOutcomeUnknown
+		}
+		return false, safe
 	}
 	return outcome.Verified, nil
 }
@@ -107,4 +119,19 @@ func safeCredentialError(err error) error {
 		return context.DeadlineExceeded
 	}
 	return errors.New("CPA credential operation failed")
+}
+
+// requestMayHaveRun reports a failure after the request was handed over: the connection broke
+// before the answer did, or a 2xx answer could not be read. Only a connection never made proves
+// that CPA did nothing.
+func requestMayHaveRun(err error) bool {
+	if errors.Is(err, errUnreadableAnswer) {
+		return true
+	}
+	var dial *net.OpError
+	if errors.As(err, &dial) && dial.Op == "dial" {
+		return false
+	}
+	var transport *url.Error
+	return errors.As(err, &transport)
 }

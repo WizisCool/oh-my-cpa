@@ -25,7 +25,7 @@ External MCP clients → MCP adapter → the same capability executor
 | CPA integration | [`internal/cpa`](../internal/cpa): discovery, management and inference clients |
 | Persistence | [`internal/repository`](../internal/repository), [`migrations`](../migrations): transactions, retention and schema |
 | Usage and cost | [`internal/usage`](../internal/usage), [`internal/pricing`](../internal/pricing): ingestion, accounting and immutable quotes |
-| Credential observation | [`internal/quota`](../internal/quota), [`internal/warmup`](../internal/warmup): quota evidence and approved activation |
+| Credential observation | [`internal/quota`](../internal/quota), [`internal/warmup`](../internal/warmup): quota evidence and warmup task scheduling |
 | Automation | [`internal/agent`](../internal/agent), [`internal/capability`](../internal/capability), [`internal/mcpbridge`](../internal/mcpbridge) |
 | Updates | [`internal/release`](../internal/release) observes; [`internal/updater`](../internal/updater) installs |
 | Browser | [`web/src`](../web/src): route-owned pages, shared components, typed API and theme |

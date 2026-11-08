@@ -13,6 +13,19 @@ import styles from './SearchSelect.module.css';
 type OptionValue = string | number;
 
 /**
+ * One labelled run of options. antd groups a select's options as `{label, options}`; a list of
+ * plain options is a single unnamed group, which is what the sheet renders as a flat list.
+ */
+type OptionGroup<OptionType> = { label?: React.ReactNode; options: OptionType[] };
+
+function optionGroups<OptionType extends DefaultOptionType>(options: OptionType[]): OptionGroup<OptionType>[] {
+  if (!options.some((option) => Array.isArray(option.options))) return [{ options }];
+  return options.map((option) => (Array.isArray(option.options)
+    ? { label: option.label, options: option.options as OptionType[] }
+    : { options: [option] }));
+}
+
+/**
  * The antd props a sheet cannot honour are refused at the type, so a caller meets them when it
  * builds rather than as a blank row on a phone: an object-valued selection (`labelInValue`), a
  * selection the caller never sees (`defaultValue`), and options read through renamed fields.
@@ -156,28 +169,33 @@ function SheetPanel<ValueType, OptionType extends DefaultOptionType>({
   // here may open or select on it.
   const isInteractive = open !== false;
   const selected = React.useMemo<OptionValue[]>(() => (value === undefined || value === null ? [] : [value].flat() as OptionValue[]), [value]);
+  const groups = React.useMemo(() => optionGroups(options), [options]);
 
   // A value typed in tags mode has no option of its own, and antd lists it with the options.
   const listed = React.useMemo(() => {
-    if (mode !== 'tags') return options;
+    if (mode !== 'tags') return groups;
     const known = new Set(options.map((option) => option.value));
-    return [...selected.filter((entry) => !known.has(entry)).map((entry) => ({ value: entry, label: String(entry) }) as OptionType), ...options];
-  }, [mode, options, selected]);
-  const shown = React.useMemo(() => {
+    const typed = selected.filter((entry) => !known.has(entry)).map((entry) => ({ value: entry, label: String(entry) }) as OptionType);
+    if (typed.length === 0) return groups;
+    const [first, ...rest] = groups;
+    return first ? [{ ...first, options: [...typed, ...first.options] }, ...rest] : [{ options: typed }];
+  }, [groups, mode, options, selected]);
+  const listedOptions = React.useMemo(() => listed.flatMap((group) => group.options), [listed]);
+  const matchesQuery = React.useCallback((option: OptionType) => {
     const trimmed = query.trim();
-    if (!trimmed || search.filterOption === false) return listed;
-    if (typeof search.filterOption === 'function') {
-      const filter = search.filterOption;
-      return listed.filter((option) => filter(query, option));
-    }
+    if (!trimmed || search.filterOption === false) return true;
+    if (typeof search.filterOption === 'function') return search.filterOption(query, option);
     // antd's default: the named properties, or the value, contain the text in any case.
     const lower = trimmed.toLowerCase();
     const properties = [search.optionFilterProp ?? 'value'].flat();
-    return listed.filter((option) => properties.some((property) => String(option[property] ?? '').toLowerCase().includes(lower)));
-  }, [listed, query, search.filterOption, search.optionFilterProp]);
+    return properties.some((property) => String(option[property] ?? '').toLowerCase().includes(lower));
+  }, [query, search.filterOption, search.optionFilterProp]);
+  const shownGroups = React.useMemo(() => listed
+    .map((group) => ({ ...group, options: group.options.filter(matchesQuery) }))
+    .filter((group) => group.options.length > 0), [listed, matchesQuery]);
   const typed = query.trim();
   const isFull = maxCount !== undefined && selected.length >= maxCount;
-  const canAdd = mode === 'tags' && typed !== '' && !isFull && !listed.some((option) => String(option.value) === typed);
+  const canAdd = mode === 'tags' && typed !== '' && !isFull && !listedOptions.some((option) => String(option.value) === typed);
 
   const pick = (option: OptionType) => {
     const picked = option.value as OptionValue;
@@ -189,7 +207,7 @@ function SheetPanel<ValueType, OptionType extends DefaultOptionType>({
     }
     const isRemoval = selected.includes(picked);
     const next = isRemoval ? selected.filter((entry) => entry !== picked) : [...selected, picked];
-    const byValue = new Map(listed.map((entry) => [entry.value, entry]));
+    const byValue = new Map(listedOptions.map((entry) => [entry.value, entry]));
     onChange?.(next as ValueType, next.map((entry) => byValue.get(entry) ?? ({ value: entry, label: String(entry) } as OptionType)));
     if (isRemoval) onDeselect?.(picked as never, option);
     else {
@@ -245,24 +263,31 @@ function SheetPanel<ValueType, OptionType extends DefaultOptionType>({
         <span className={styles['option-label']}>{t('common.add_value', { value: typed })}</span>
         <PlusOutlined className={styles['option-mark']} aria-hidden="true" />
       </button>}
-      {shown.map((option, index) => {
-        const isSelected = selected.includes(option.value as OptionValue);
-        return <button
-          key={String(option.value)}
-          type="button"
-          role="option"
-          aria-selected={isSelected}
-          disabled={!isInteractive || option.disabled || (isFull && !isSelected)}
-          className={clsx(styles['option'], isSelected && styles['option-selected'])}
-          onClick={() => pick(option)}
-        >
-          <span className={styles['option-label']}>
-            {optionRender ? optionRender({ key: String(option.value), label: option.label, value: option.value as OptionValue, data: option }, { index }) : option.label}
-          </span>
-          {isSelected && <CheckOutlined className={styles['option-mark']} aria-hidden="true" />}
-        </button>;
-      })}
-      {shown.length === 0 && !canAdd && <div className={styles['empty']}>{notFoundContent ?? t('common.no_matches')}</div>}
+      {shownGroups.map((group, groupIndex) => (
+        <React.Fragment key={groupIndex}>
+          {group.label !== undefined && group.label !== null && (
+            <div className={styles['group']} role="presentation">{group.label}</div>
+          )}
+          {group.options.map((option, index) => {
+            const isSelected = selected.includes(option.value as OptionValue);
+            return <button
+              key={String(option.value)}
+              type="button"
+              role="option"
+              aria-selected={isSelected}
+              disabled={!isInteractive || option.disabled || (isFull && !isSelected)}
+              className={clsx(styles['option'], isSelected && styles['option-selected'])}
+              onClick={() => pick(option)}
+            >
+              <span className={styles['option-label']}>
+                {optionRender ? optionRender({ key: String(option.value), label: option.label, value: option.value as OptionValue, data: option }, { index }) : option.label}
+              </span>
+              {isSelected && <CheckOutlined className={styles['option-mark']} aria-hidden="true" />}
+            </button>;
+          })}
+        </React.Fragment>
+      ))}
+      {shownGroups.length === 0 && !canAdd && <div className={styles['empty']}>{notFoundContent ?? t('common.no_matches')}</div>}
     </div>
   </div>;
 }

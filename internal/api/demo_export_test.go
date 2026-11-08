@@ -176,9 +176,6 @@ func demoExportCases() []demoExportCase {
 		// for a state the fixture can describe.
 		{Name: "oauth-status", Path: "/api/v1/management/oauth/status?state=demo-idle"},
 		{Name: "warmup-settings", Path: "/api/v1/management/quota/warmup/settings"},
-		{Name: "warmup-codex", Path: "/api/v1/management/quota/warmup/credentials/auth-codex-01", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
-		{Name: "warmup-codex-secondary", Path: "/api/v1/management/quota/warmup/credentials/auth-codex-02", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
-		{Name: "warmup-claude", Path: "/api/v1/management/quota/warmup/credentials/auth-claude-01", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
 		{Name: "quota", Path: "/api/v1/management/quota"},
 		// One credential's quota detail, for the page the quota list links into.
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},
@@ -644,6 +641,13 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 		// Quota reads and their seeded history already use the fixed handler clock,
 		// including future reset bounds. Moving them again would expire valid cycles.
 		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) {
+			deltaMS = 0
+		}
+		// A warmup catalog account restates that same observation as instants - `snapshot_at`
+		// and `windows[].resets_at` - rather than as epoch milliseconds. It sits on the
+		// fixture's clock too, so the export's delta would move every reset bound by however
+		// long the export ran after the seed, and the dataset would differ on each run.
+		if typed["auth_index"] != nil && typed["snapshot_at"] != nil && typed["windows"] != nil {
 			deltaMS = 0
 		}
 		// The FX cache is seeded reference data, not an attempt made during export.

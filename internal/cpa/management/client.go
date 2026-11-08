@@ -140,6 +140,10 @@ func (c *Client) doBody(ctx context.Context, method, endpoint string, data []byt
 	return err
 }
 
+// errUnreadableAnswer marks a 2xx answer whose body could not be decoded: CPA took the request,
+// but what it did cannot be told.
+var errUnreadableAnswer = errors.New("decode CPA response")
+
 // do sends a gated request and decodes its JSON answer.
 func (c *Client) do(request *http.Request, output any) (ResponseMeta, error) {
 	if err := c.requireManagementV8(request.Context()); err != nil {
@@ -156,7 +160,7 @@ func (c *Client) do(request *http.Request, output any) (ResponseMeta, error) {
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 16*1024*1024))
 	if err := decoder.Decode(output); err != nil {
-		return meta, fmt.Errorf("decode CPA response: %w", err)
+		return meta, fmt.Errorf("%w: %w", errUnreadableAnswer, err)
 	}
 	return meta, nil
 }

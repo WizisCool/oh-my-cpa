@@ -2,8 +2,32 @@
   width: 440px;
   max-width: 100%;
   min-width: 0;
-  height: auto;
-  min-height: 52px;
+}
+
+.timezone-selected {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.timezone-selected-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timezone-selected .timezone-source {
+  flex: none;
+  white-space: nowrap;
+}
+
+.timezone-selected .timezone-offset {
+  flex: none;
+  margin-inline-start: auto;
 }
 
 .timezone-option {
@@ -33,26 +57,21 @@
 }
 
 .timezone-source {
-  color: var(--fg2);
+  color: var(--fg-2);
   font-size: var(--text-xs);
   line-height: 1.5;
 }
 
 .timezone-offset {
-  color: var(--fg2);
+  color: var(--fg-2);
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.timezone-select .timezone-option {
-  min-height: 36px;
-}
-
 .timezone-select :global(.ant-select-selection-item) {
   display: flex;
   align-items: center;
-  padding-block: 6px;
 }
 
 .timezone-popup {

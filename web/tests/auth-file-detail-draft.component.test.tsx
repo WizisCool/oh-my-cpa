@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { AuthFileDetailDrawer } from '../src/components/authFiles/AuthFileDetailDrawer';
@@ -9,71 +8,24 @@ import { renderWithOmc } from './support/render';
 const FILE: ManagementAuthFile = { recovery_supported: true, name: 'claude.json', auth_index: 'exact-claude', type: 'claude', provider: 'claude', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, note: 'Original note' };
 const FIELDS = { proxy_url: 'socks5h://%5Bredacted%5D@proxy.example.test:1080', name: FILE.name, note: FILE.note, disable_cooling: false, websockets: false, using_api: false, excluded_models: [], model_aliases: [] };
 
-function mountDetail() {
+it('saves credential field changes without sending redacted proxy URLs', async () => {
+  const api = installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }] });
   const onClose = vi.fn();
   const onSaved = vi.fn();
-  const onRecover = vi.fn();
-  const api = installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }] });
-  function Harness() {
-    const [hasDraft, setHasDraft] = React.useState(false);
-    const [warmupDraft, setWarmupDraft] = React.useState('');
-    return (
-      <AuthFileDetailDrawer
-        file={FILE}
-        open
-        canEdit
-        onRecover={onRecover}
-        initialSection="warmup"
-        hasExternalDraft={hasDraft}
-        onClose={onClose}
-        onSaved={onSaved}
-        onDownload={() => {}}
-        warmupContent={
-          <label>
-            Warmup draft
-            <input
-              aria-label="Warmup draft"
-              value={warmupDraft}
-              onChange={event => {
-                setWarmupDraft(event.target.value);
-                setHasDraft(Boolean(event.target.value));
-              }}
-            />
-          </label>
-        }
-      />
-    );
-  }
-  const surface = renderWithOmc(<Harness />, { isStrict: true });
-  return {
-    ...surface,
-    onClose,
-    onSaved,
-    onRecover,
-    get writes() {
-      return api.writes('/management/auth-files/fields').map(request => request.body);
-    },
-  };
-}
-
-it('keeps an external warmup draft when saving credential field changes and avoids sending redacted proxy URLs', async () => {
-  const surface = mountDetail();
+  const view = renderWithOmc(<AuthFileDetailDrawer file={FILE} open canEdit initialSection="configuration" onClose={onClose} onSaved={onSaved} onDownload={vi.fn()} />, { isStrict: true });
   try {
-    fireEvent.change(await screen.findByLabelText('Warmup draft'), { target: { value: 'Unsaved warmup policy' } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Configuration' }));
     const note = await screen.findByLabelText('Note');
     await waitFor(() => expect((screen.getByLabelText('Prefix') as HTMLInputElement).disabled).toBe(false));
     fireEvent.change(note, { target: { value: 'Updated note' } });
     const saveButton = screen.getByRole('button', { name: 'Save Fields' });
     await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(saveButton);
-    await waitFor(() => expect(surface.writes).toHaveLength(1));
-    await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
-    expect(surface.onClose).not.toHaveBeenCalled();
-    expect(surface.writes[0]).not.toHaveProperty('proxy_url');
-    expect((await screen.findByLabelText('Warmup draft') as HTMLInputElement).value).toBe('Unsaved warmup policy');
+    const writes = () => api.writes('/management/auth-files/fields').map(request => request.body);
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(writes()[0]).not.toHaveProperty('proxy_url');
   } finally {
-    surface.unmount();
+    view.unmount();
   }
 });
 

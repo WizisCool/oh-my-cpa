@@ -32,6 +32,14 @@ export const TimeZoneSelect: React.FC<TimeZoneSelectProps> = ({ value, onChange,
       <span className={styles['timezone-offset']}>{byZone.get(zone)?.offset}</span>
     </span>
   ), [serverTimezone, serverLabel, byZone]);
+  // The closed field keeps the control height of the fields beside it, so the zone reads on one line.
+  const renderSelected = (zone: string) => (
+    <span className={styles['timezone-selected']}>
+      <span className={styles['timezone-selected-name']}>{zone}</span>
+      {zone === serverTimezone && <span className={styles['timezone-source']}>{serverLabel}</span>}
+      <span className={styles['timezone-offset']}>{byZone.get(zone)?.offset}</span>
+    </span>
+  );
   return <SearchSelect
     id={id}
     disabled={isDisabled}
@@ -47,7 +55,7 @@ export const TimeZoneSelect: React.FC<TimeZoneSelectProps> = ({ value, onChange,
     value={value || serverTimezone || 'UTC'}
     onChange={onChange}
     options={options}
-    labelRender={({ value: zone }) => renderZone(String(zone))}
+    labelRender={({ value: zone }) => renderSelected(String(zone))}
     optionRender={(option) => renderZone(String(option.value))}
   />;
 };

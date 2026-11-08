@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 func TestScalarIntegersRejectTruncation(t *testing.T) {
@@ -130,6 +132,42 @@ func TestOAuthModelAliasCapabilityUsesSharedNormalizationAndRevision(t *testing.
 	}
 	if len(aliases["codex"]) != 1 || aliases["codex"][0].Alias != "fast" {
 		t.Fatalf("aliases: %+v", aliases)
+	}
+}
+
+// The Agent's preview checks the task the console's save would store, so an input the save accepts
+// is not refused before it reaches confirmation, and the confirmation names the zone it will run in.
+func TestWarmupTaskCapabilityPreviewsWhatTheSaveStores(t *testing.T) {
+	cipher, err := appcrypto.New(strings.Repeat("t", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{
+		Cipher: cipher,
+		NormalizeWarmupTask: func(input warmup.TaskInput) warmup.TaskInput {
+			if input.Trigger.Kind == "daily" && input.Trigger.TimeZone == "" {
+				input.Trigger.TimeZone = "Asia/Shanghai"
+			}
+			return input
+		},
+	}
+	registry := capability.NewRegistry()
+	if err := service.registerWarmup(registry); err != nil {
+		t.Fatal(err)
+	}
+	definition, err := registry.Lookup("quota_warmup_task_save", capability.Principal{Adapter: "agent", IsAdmin: true})
+	if err != nil || definition.Prepare == nil {
+		t.Fatalf("definition: %+v %v", definition, err)
+	}
+	preview, err := definition.Prepare(context.Background(), json.RawMessage(`{"name":"","enabled":true,"provider":"claude","auth_index":"exact-claude","account":"","model":"","trigger":{"kind":"daily","time":"08:55"}}`))
+	if err != nil {
+		t.Fatalf("a daily task without a zone was refused: %v", err)
+	}
+	if raw, _ := json.Marshal(preview.Changes); !strings.Contains(string(raw), `"time_zone":"Asia/Shanghai"`) {
+		t.Fatalf("preview changes = %s", raw)
+	}
+	if _, err := definition.Prepare(context.Background(), json.RawMessage(`{"name":"","enabled":true,"provider":"claude","auth_index":"exact-claude","account":"","model":"","trigger":{"kind":"daily","time":"08:55","time_zone":"Mars/Olympus"}}`)); err == nil || err.Error() != "invalid_parameters" {
+		t.Fatalf("an unknown zone was accepted: %v", err)
 	}
 }
 

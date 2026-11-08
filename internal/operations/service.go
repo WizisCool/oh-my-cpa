@@ -16,19 +16,18 @@ import (
 )
 
 type Service struct {
-	WarmupSettings       func(context.Context) (warmup.Settings, error)
-	WarmupCredential     func(context.Context, string) (warmup.Credential, error)
-	SaveWarmupSettings   func(context.Context, warmup.PolicyWrite) (warmup.Settings, error)
-	SaveWarmupCredential func(context.Context, string, warmup.CredentialWrite) (warmup.Credential, error)
-	RunWarmup            func(context.Context, string, string, string) (warmup.Result, error)
-	TLSSkipVerify        bool
-	Pricing              Pricing
-	Repo                 *repository.Repository
-	Cipher               *appcrypto.Cipher
-	Client               func(context.Context) (*management.Client, error)
-	Acquire              func(context.Context) error
-	Release              func()
-	Notify               func()
+	WarmupSettings   func(context.Context) (warmup.StateView, error)
+	SaveWarmupTask   func(context.Context, warmup.TaskSaveInput) (warmup.StateView, error)
+	DeleteWarmupTask func(context.Context, string) (warmup.StateView, error)
+	RunWarmupTask    func(context.Context, string) (warmup.RunResponse, error)
+	TLSSkipVerify    bool
+	Pricing          Pricing
+	Repo             *repository.Repository
+	Cipher           *appcrypto.Cipher
+	Client           func(context.Context) (*management.Client, error)
+	Acquire          func(context.Context) error
+	Release          func()
+	Notify           func()
 	// Existing normalized projections remain shared while HTTP adapters are narrowed.
 	SaveProvider               func(context.Context, ProviderMutation, string, string) (ProviderMutationResult, error)
 	DeleteProvider             func(context.Context, string, string) error
@@ -45,6 +44,7 @@ type Service struct {
 	NormalizeOAuthExclusions   func(string, []string) (string, []string, error)
 	SetOAuthExcludedModels     func(context.Context, string, []string, string) error
 	NormalizeCredentialFields  func(map[string]any) (map[string]any, error)
+	NormalizeWarmupTask        func(warmup.TaskInput) warmup.TaskInput
 	UpdateCredentialFields     func(context.Context, CredentialTarget, map[string]any, string) error
 	ReadRouting                func(context.Context) (RoutingBoard, error)
 	ApplyRouting               func(context.Context, NormalizedRoutingPlan) (RoutingOutcome, error)

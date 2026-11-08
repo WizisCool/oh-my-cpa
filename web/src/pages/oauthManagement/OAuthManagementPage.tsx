@@ -18,6 +18,7 @@ import {
   LoginOutlined,
   SearchOutlined,
   SyncOutlined,
+  TimerResetOutlined,
   UploadOutlined,
 } from '../../components/icons';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,7 +38,7 @@ import {
 } from '../../components/authFiles/authFileLogic';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
 import { useCredentialRename } from '../../components/authFiles/useCredentialRename';
-import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
+import { WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { SummaryStrip } from '../../components/common/SummaryStrip';
 import { oauthProviderChoices } from '../oauthProviderLogic';
@@ -425,7 +426,6 @@ export const OAuthManagementPage: React.FC = () => {
   }, [selectedIdentity, selectedRecord]);
 
   const [isWarmupSettingsOpen, setIsWarmupSettingsOpen] = React.useState(false);
- const [hasWarmupDraft, setHasWarmupDraft] = React.useState(false);
  const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
   const [isVertexImportOpen, setIsVertexImportOpen] = React.useState(false);
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
@@ -798,7 +798,7 @@ export const OAuthManagementPage: React.FC = () => {
         {/* The two collection actions travel as one group, so on a phone they share a row instead of
             each wrapping onto its own. */}
         <div className={styles['collection-actions']}>
-          <Button onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
+          <Button icon={<TimerResetOutlined />} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
           {/* The main segment refreshes the filtered set, which is what the list is showing; the
               caret offers the other scopes. */}
           <Space.Compact className={styles['refresh-quota']}>
@@ -1059,12 +1059,9 @@ export const OAuthManagementPage: React.FC = () => {
           onRecover={selectedRecord ? () => openConnectForRecord(selectedRecord) : undefined}
           initialSection={drawerSection}
           canEdit={Boolean(selectedRecord?.canEditFile)}
-          hasExternalDraft={hasWarmupDraft}
           provider={selectedRecord?.displayProvider}
           pluginLogos={pluginLogos}
           quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord) : undefined}
-          warmupContent={selectedRecord?.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider)
-            ? <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} /> : undefined}
         />
       </DeferredMount>
 

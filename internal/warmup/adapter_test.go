@@ -2,95 +2,58 @@ package warmup
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
-type recordingCaller struct {
-	request  management.ApiCallRequest
-	response management.ApiCallResponse
-	err      error
-}
+func TestSendDelegatesToCPAVerify(t *testing.T) {
+	file := management.AuthFile{Name: "claude.json", AuthIndex: "exact-credential"}
 
-func (caller *recordingCaller) ApiCall(_ context.Context, request management.ApiCallRequest) (management.ApiCallResponse, error) {
-	caller.request = request
-	return caller.response, caller.err
-}
-func TestAdaptersFixedTargetAndCompletion(t *testing.T) {
-	for _, provider := range []string{"codex", "claude"} {
-		t.Run(provider, func(t *testing.T) {
-			body := `{"type":"message","stop_reason":"end_turn","content":[{"type":"text","text":"OK"}],"usage":{"input_tokens":4,"output_tokens":1}}`
-			if provider == "codex" {
-				body = "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"message\"}],\"usage\":{\"input_tokens\":4,\"output_tokens\":1}}}\n\n"
-			}
-			encoded, _ := json.Marshal(body)
-			caller := &recordingCaller{response: management.ApiCallResponse{StatusCode: 200, Body: encoded}}
-			outcome := Send(context.Background(), caller, management.AuthFile{AuthIndex: "exact-target"}, provider, "selected-model")
-			if outcome.Status != "pending" || outcome.InputTokens == nil || *outcome.OutputTokens != 1 {
-				t.Fatalf("%+v", outcome)
-			}
-			expected := CLAUDE_ENDPOINT
-			if provider == "codex" {
-				expected = CODEX_ENDPOINT
-			}
-			if caller.request.AuthIndex != "exact-target" || caller.request.URL != expected || caller.request.Method != "POST" || caller.request.Header["Authorization"] != "Bearer $TOKEN$" {
-				t.Fatalf("wrong target: %+v", caller.request)
-			}
-			var payload map[string]any
-			if json.Unmarshal([]byte(caller.request.Data), &payload) != nil || payload["model"] != "selected-model" {
-				t.Fatal("model not explicit")
-			}
-			if len(payload["tools"].([]any)) != 0 || strings.Contains(caller.request.Data, "reset-credit") {
-				t.Fatal("unexpected side effect")
-			}
-		})
+	// The call point goes out whole: CPA strips the credential's own prefix and resolves an OAuth
+	// alias itself, and an alias may contain a slash.
+	var gotName, gotIndex, gotModel string
+	okOutcome := Send(context.Background(), func(_ context.Context, name, authIndex, model string) (bool, error) {
+		gotName, gotIndex, gotModel = name, authIndex, model
+		return true, nil
+	}, file, " team/claude-fast ")
+	if okOutcome.Status != "ok" || gotName != "claude.json" || gotIndex != "exact-credential" || gotModel != "team/claude-fast" {
+		t.Fatalf("okOutcome = %+v (%s %s %s)", okOutcome, gotName, gotIndex, gotModel)
 	}
-}
-func TestHTTPAndTerminalFailuresDoNotClaimActivation(t *testing.T) {
-	for _, scenario := range []struct {
-		name     string
-		response management.ApiCallResponse
-		err      error
-		status   string
-	}{
-		{"transport", management.ApiCallResponse{}, errors.New("secret-token"), "uncertain"},
-		{"server", management.ApiCallResponse{StatusCode: 500}, nil, "uncertain"},
-		{"rejected", management.ApiCallResponse{StatusCode: 429}, nil, "failed"},
-		{"empty2xx", management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{}`)}, nil, "uncertain"},
-		{"broken", management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`"data: {}\n\n"`)}, nil, "uncertain"},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			caller := &recordingCaller{response: scenario.response, err: scenario.err}
-			outcome := Send(context.Background(), caller, management.AuthFile{AuthIndex: "target"}, "codex", "model")
-			if outcome.Status != scenario.status || strings.Contains(outcome.Reason, "secret") {
-				t.Fatalf("%+v", outcome)
-			}
-		})
+
+	rateLimited := Send(context.Background(), func(_ context.Context, _, _, _ string) (bool, error) {
+		return false, &management.HTTPError{StatusCode: 429}
+	}, file, "claude-haiku-4-5")
+	if rateLimited.Status != "failed" || rateLimited.Reason != "HTTP 429" {
+		t.Fatalf("rateLimited = %+v", rateLimited)
+	}
+
+	timedOut := Send(context.Background(), func(_ context.Context, _, _, _ string) (bool, error) {
+		return false, context.DeadlineExceeded
+	}, file, "claude-haiku-4-5")
+	if timedOut.Status != "unknown" || timedOut.Reason != "timeout" {
+		t.Fatalf("timedOut = %+v", timedOut)
+	}
+
+	// A request CPA may have run without its answer arriving is uncertain; one the gateway refused
+	// before sending it is a plain failure.
+	noAnswer := Send(context.Background(), func(_ context.Context, _, _, _ string) (bool, error) {
+		return false, management.ErrCredentialOutcomeUnknown
+	}, file, "claude-haiku-4-5")
+	if noAnswer.Status != "unknown" || noAnswer.Reason != "no_answer" {
+		t.Fatalf("noAnswer = %+v", noAnswer)
+	}
+	refused := Send(context.Background(), func(_ context.Context, _, _, _ string) (bool, error) {
+		return false, management.ErrManagementV8Required
+	}, file, "claude-haiku-4-5")
+	if refused.Status != "failed" {
+		t.Fatalf("refused = %+v", refused)
 	}
 }
 
-// The Codex backend leaves response.completed.output empty and streams each
-// item separately; a metered completion must not read as an unknown outcome.
-func TestCodexCompletionReadsStreamedOutputItems(t *testing.T) {
-	for _, scenario := range []struct {
-		name, stream, status, reason string
-	}{
-		{"streamed-items", "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"reasoning\"}}\n\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":9,\"output_tokens\":2}}}\n\n", "pending", "activation_pending"},
-		{"streamed-tool", "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n", "uncertain", "unexpected_tool"},
-		{"failed", "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\n", "uncertain", "outcome_unknown"},
-		{"truncated", "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\n", "uncertain", "outcome_unknown"},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			encoded, _ := json.Marshal(scenario.stream)
-			caller := &recordingCaller{response: management.ApiCallResponse{StatusCode: 200, Body: encoded}}
-			outcome := Send(context.Background(), caller, management.AuthFile{AuthIndex: "target"}, "codex", "model")
-			if outcome.Status != scenario.status || outcome.Reason != scenario.reason {
-				t.Fatalf("%+v", outcome)
-			}
-		})
+func TestParseObservationPreservesIdleAndActiveWindows(t *testing.T) {
+	obs := ParseObservation("claude", []byte(`{"five_hour":null,"seven_day":{"utilization":15,"resets_at":"2026-04-15T00:00:00Z"}}`), 1_770_000_000_000)
+	if obs.FiveHour.State != "idle" || obs.Weekly.State != "active" {
+		t.Fatalf("unexpected claude observation: %+v", obs)
 	}
 }
