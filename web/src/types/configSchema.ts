@@ -714,6 +714,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     options: [
       { value: 'any', labelKey: 'cfg.affinity_rebind_any' },
       { value: 'quota', labelKey: 'cfg.affinity_rebind_quota' },
+      { value: 'never', labelKey: 'cfg.affinity_rebind_never' },
     ],
     keywords: ['affinity', 'session', 'rebind', 'failover'],
   },
