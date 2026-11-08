@@ -196,6 +196,19 @@ it('keeps background registry refresh separate from a manually requested update 
   await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(false));
 });
 
+it('heads the store with the navigation label that led there', async () => {
+  const server = installOmcApi();
+  server.on('GET', '/management/plugin-store', () => store);
+  const { container } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
+  expect(await screen.findByRole('heading', { level: 1, name: makeT('en')('nav.plugins') })).toBeTruthy();
+  fireEvent.click(screen.getByRole('radio', { name: makeT('en')('plugin.tab_store') }));
+  // Switching the tab lands on the store's own address, and the head follows it: the store is a
+  // navigation entry of its own, not a section the management title can name. Only the switch can
+  // show this - a derivation tested on its own stays green while the page stops calling it.
+  expect(await screen.findByRole('heading', { level: 1, name: makeT('en')('nav.plugin_store') })).toBeTruthy();
+  await waitFor(() => expect(container.querySelector('[data-plugin-panel="store"]')).not.toBeNull());
+});
+
 it('persists plugin moves across filters and remounts without changing gateway order', async () => {
   const plugins = [installed, { ...installed, id: 'hidden', metadata: { name: 'Hidden' } }, { ...installed, id: 'last', metadata: { name: 'Runtime last' } }];
   const server = installOmcApi({ preferences: { omc_plugin_order: { installed: plugins.map((plugin) => plugin.id) } } });

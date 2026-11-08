@@ -125,6 +125,11 @@ export const PluginsPage: React.FC = () => {
 
   const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
 
+  // The head names the destination, not the surface: the store is its own entry in the
+  // navigation (`/plugins/store`), so it reads as the store here while the installed list
+  // and settings stay under plugin management, which is the entry that owns them.
+  const pageTitle = tab === 'store' ? t('nav.plugin_store') : t('nav.plugins');
+
   const effectiveCount = plugins.filter((plugin) => plugin.effective_enabled).length;
   const activeError = tab === 'store' ? storeQuery.error : pluginsQuery.error;
   const isActiveError = tab === 'store' ? storeQuery.isError : pluginsQuery.isError;
@@ -132,7 +137,7 @@ export const PluginsPage: React.FC = () => {
   return (
     <div className="terminal-page terminal-page-stack plugins-page">
       <PageHeader
-        title={t('nav.plugins')}
+        title={pageTitle}
         mobileActions={(
           <>
             <Segmented className="plugins-tabs" value={tab} onChange={(value) => selectTab(value as PluginTab)} options={[
