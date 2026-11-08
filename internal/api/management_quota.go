@@ -28,6 +28,18 @@ type QuotaItemDTO struct {
 	LastRefresh      *QuotaRefreshAttemptDTO               `json:"last_refresh,omitempty"`
 }
 
+func projectModelCooldowns(records []repository.ActiveCooldownRecord) []quota.ActiveCooldown {
+	var result []quota.ActiveCooldown
+	for _, record := range records {
+		result = append(result, quota.ActiveCooldown{
+			IsActive: record.IsActive, Model: record.Model, Reason: record.Reason,
+			RecoverAtMS: record.RecoverAtMS, RetryAtMS: record.RetryAtMS,
+			CorrelatedAtMS: record.CorrelatedAtMS, BackoffLevel: record.BackoffLevel,
+		})
+	}
+	return result
+}
+
 func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -111,6 +123,12 @@ func (h *Handler) releaseRestoredCooldown(ctx context.Context, svc *quota.Servic
 	if err != nil || !hasEvidence {
 		return
 	}
+	// The CPA reset is credential-wide; a restored global reading cannot justify
+	// clearing another model's still-active cooldown.
+	hasModelEvidence, err := h.repo.HasActiveModelCooldownEvidence(ctx, authIndex, svc.Now().UnixMilli())
+	if err != nil || hasModelEvidence {
+		return
+	}
 	clearErr := svc.ClearCPACooldown(ctx, authIndex)
 	var evidenceErr error
 	if clearErr == nil {
@@ -123,6 +141,7 @@ func (h *Handler) releaseRestoredCooldown(ctx context.Context, svc *quota.Servic
 	}
 	// The reading carried the prior cooldown forward; the response must show what it is now.
 	reading.ActiveCooldown = nil
+	reading.ModelCooldowns = nil
 	quota.EvaluateStatusAndRecommendation(reading, svc.Now().UnixMilli())
 	if h.logger != nil {
 		h.logger.Info("CPA cooldown cleared after quota restored", "auth_index", authIndex, "status", reading.Status)
@@ -646,8 +665,13 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 					RecoverAtMS:       cooldown.RecoverAtMS,
 					RetryAfterSeconds: cooldown.RetryAfterSeconds,
 					CorrelatedAtMS:    cooldown.CorrelatedAtMS,
+					RetryAtMS:         cooldown.RetryAtMS,
+					BackoffLevel:      cooldown.BackoffLevel,
 				}
 			}
+		}
+		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
+			normalized.ModelCooldowns = projectModelCooldowns(cooldowns[authIndex])
 		}
 		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
 			if snapshot, ok := snapshots[authIndex]; ok {
@@ -732,6 +756,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 	nowMS := h.now().UnixMilli()
 	var latestSnapshots map[string]repository.QuotaSnapshotRecord
 	var activeCooldowns map[string]repository.ActiveCooldownRecord
+	var modelCooldowns map[string][]repository.ActiveCooldownRecord
 
 	if h.repo != nil && len(authIndexes) > 0 {
 		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes); err == nil {
@@ -739,6 +764,9 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 		}
 		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
 			activeCooldowns = cooldowns
+		}
+		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, authIndexes, nowMS); err == nil {
+			modelCooldowns = cooldowns
 		}
 	}
 	// Every row is read against the last attempt, because a reading alone cannot say whether the
@@ -783,11 +811,24 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 				RecoverAtMS:       cooldown.RecoverAtMS,
 				RetryAfterSeconds: cooldown.RetryAfterSeconds,
 				CorrelatedAtMS:    cooldown.CorrelatedAtMS,
+				RetryAtMS:         cooldown.RetryAtMS,
+				BackoffLevel:      cooldown.BackoffLevel,
 			}
 			if cooldown.RecoverAtMS != nil && *cooldown.RecoverAtMS > nowMS {
 				if soonestRecoveryMS == nil || *cooldown.RecoverAtMS < *soonestRecoveryMS {
 					soonestRecoveryMS = cooldown.RecoverAtMS
 				}
+			}
+		}
+
+		normalized.ModelCooldowns = projectModelCooldowns(modelCooldowns[authIndex])
+		for _, cooldown := range normalized.ModelCooldowns {
+			at := cooldown.RecoverAtMS
+			if cooldown.RetryAtMS != nil && (at == nil || *cooldown.RetryAtMS > *at) {
+				at = cooldown.RetryAtMS
+			}
+			if at != nil && *at > nowMS && (soonestRecoveryMS == nil || *at < *soonestRecoveryMS) {
+				soonestRecoveryMS = at
 			}
 		}
 
@@ -834,9 +875,20 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 		quota.ApplyReadingHealth(&normalized, attempt, hasStoredReading, nowMS)
 		h.attachWindowCapacity(ctx, &normalized, nowMS)
 
+		hasPartialCooldown := !normalized.Disabled && len(normalized.ModelCooldowns) > 0
 		switch normalized.Status {
 		case "healthy":
-			healthyCount++
+			if hasPartialCooldown {
+				warningCount++
+				attentionCount++
+			} else {
+				healthyCount++
+			}
+		case "idle", "unpublished":
+			if hasPartialCooldown {
+				warningCount++
+				attentionCount++
+			}
 		case "warning":
 			warningCount++
 			attentionCount++

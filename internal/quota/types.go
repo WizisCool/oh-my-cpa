@@ -159,6 +159,9 @@ type ActiveCooldown struct {
 	RecoverAtMS       *int64 `json:"recover_at_ms,omitempty"`
 	RetryAfterSeconds *int64 `json:"retry_after_seconds,omitempty"`
 	CorrelatedAtMS    *int64 `json:"correlated_at_ms,omitempty"`
+	RetryAtMS         *int64 `json:"retry_at_ms,omitempty"`
+	BackoffLevel      int    `json:"backoff_level,omitempty"`
+	Model             string `json:"model,omitempty"`
 }
 
 // QuotaRecommendation represents intelligent, actionable status and guidance.
@@ -206,6 +209,7 @@ type NormalizedQuota struct {
 	// quota, display-only: claiming one spends an entitlement and is out of scope.
 	ResetGrants    []ClaudeResetGrant  `json:"reset_grants,omitempty"`
 	ActiveCooldown *ActiveCooldown     `json:"active_cooldown,omitempty"`
+	ModelCooldowns []ActiveCooldown    `json:"model_cooldowns,omitempty"`
 	Recommendation QuotaRecommendation `json:"recommendation"`
 	Capabilities   QuotaCapabilities   `json:"capabilities"`
 	RawSignals     map[string]string   `json:"raw_signals,omitempty"`

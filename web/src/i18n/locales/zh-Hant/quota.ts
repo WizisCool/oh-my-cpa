@@ -2,6 +2,11 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/quota';
 
 export default {
+  'quota.retry_at': '重試時間：{time}',
+  'quota.clear_all_cooldowns': '清除此憑證的全部冷卻',
+  'quota.model_cooldown_status': '部分模型冷卻中',
+  'quota.model_cooldown': '{model} 正在 CPA 冷卻',
+  'quota.backoff_level': '退避等級：{level}',
   "quota.reset_estimated_hint": "基於上游計費週期推導的重置時間",
   "quota.reset_expiry_title_zoned": "重設積分到期時間（{zone}）",
   "quota.reset_grants_title_zoned": "Claude 重設授權（{zone}）",

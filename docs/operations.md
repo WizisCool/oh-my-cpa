@@ -456,8 +456,12 @@ workflow rejects tags whose snapshot is more than 30 days older than the tagged 
   endpoints (`internal/quota/service.go`) or CPA's plugin quota endpoint. **OMC Settings →
   Quota** (`omc_quota_auto_refresh`) controls automatic post-reset reads and scheduled
   sweeps, and automatically clears CPA cooldowns when all windows have room or recovery
-  times have passed. Claude quota reads serialize and respect `Retry-After` backoff; Meta
-  Muse credentials refresh only on manual request.
+  times have passed. That release is credential-wide, so it is withheld while any model on
+  the credential is still resting. Claude quota reads serialize and respect `Retry-After`
+  backoff; Meta Muse credentials refresh only on manual request.
+- **Cooldown scope**: CPA cools a credential or one of its models. The Quota page lists a
+  model-scoped cooldown with its own recovery and retry instant and the gateway's backoff
+  level, and reports it as partial: the credential keeps serving its other models.
 - **Credential window warmup**: OAuth management's **Warmup settings** drawer holds warmup
   tasks. A task names one credential and one trigger: after a quota window resets, daily at
   a chosen time and zone, or every N hours from an anchor. Its model stays empty by default:

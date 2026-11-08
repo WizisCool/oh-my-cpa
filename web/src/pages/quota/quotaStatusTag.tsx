@@ -29,6 +29,9 @@ export function quotaStatusTag(item: QuotaItem, t: TFunc): React.ReactNode {
       </Tooltip>
     );
   }
+  if ((item.model_cooldowns?.length ?? 0) > 0 && ['healthy', 'idle', 'unpublished', 'warning'].includes(item.status)) {
+    return <Tag tone="warn" icon={<HourglassOutlined />}>{t('quota.model_cooldown_status')}</Tag>;
+  }
   switch (item.status) {
     case 'healthy':
       return <Tag tone="success" icon={<CheckCircleOutlined />}>{t('quota.status_normal')}</Tag>;

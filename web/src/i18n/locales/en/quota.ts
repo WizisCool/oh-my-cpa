@@ -2,6 +2,11 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/quota';
 
 export default {
+  'quota.retry_at': 'Retry after: {time}',
+  'quota.clear_all_cooldowns': 'Clear all credential cooldowns',
+  'quota.model_cooldown_status': 'Model cooldown',
+  'quota.model_cooldown': '{model} is cooling down in CPA',
+  'quota.backoff_level': 'Backoff level: {level}',
   'quota.reset_estimated_hint': 'Reset timestamp estimated from upstream billing cycle',
   'quota.reset_expiry_title_zoned': 'Reset credit expiries ({zone})',
   'quota.reset_grants_title_zoned': 'Claude reset grants ({zone})',

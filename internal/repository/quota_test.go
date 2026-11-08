@@ -7,6 +7,88 @@ import (
 	"time"
 )
 
+func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := testRepository(t)
+	_, err := repo.SQL().ExecContext(ctx, `INSERT INTO cpa_instances (id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at) VALUES ('default', 'Default', 'http://127.0.0.1:8317', '127.0.0.1:8317', x'00', x'00', 'unknown', 0, 0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	payload := func(model string, retry time.Time, level int) string {
+		return fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-model","model":%q,"status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":%d},"model":{"name":%q,"next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":%d}}}}`, now.Format(time.RFC3339), model, retry.Format(time.RFC3339), level, model, retry.Format(time.RFC3339), retry.Format(time.RFC3339), level)
+	}
+	for _, raw := range []string{payload("model-a", now.Add(time.Hour), 6), payload("model-b", now.Add(2*time.Hour), 2)} {
+		if err := repo.CaptureErrorEvent(ctx, "default", raw, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = repo.SQL().ExecContext(ctx, `INSERT INTO error_events (instance_id,event_key,auth_index,quota_exceeded,next_retry_after_ms,timestamp_ms,created_at_ms) VALUES ('default','expired-retry','auth-retry',1,?,?,?)`, now.Add(-time.Second).UnixMilli(), now.Add(-time.Minute).UnixMilli(), now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-retry"}, now.UnixMilli())
+	if err != nil || retry["auth-retry"].IsActive {
+		t.Fatalf("expired retry received a grace period: %+v, %v", retry, err)
+	}
+	credential, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-model"}, now.UnixMilli())
+	if err != nil || credential["auth-model"].IsActive {
+		t.Fatalf("model cooldown must not block credential: %+v %v", credential, err)
+	}
+	models, err := repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.UnixMilli())
+	if err != nil || len(models["auth-model"]) != 2 {
+		t.Fatalf("model cooldowns = %+v, %v", models, err)
+	}
+	byModel := map[string]ActiveCooldownRecord{}
+	for _, record := range models["auth-model"] {
+		byModel[record.Model] = record
+	}
+	if got := byModel["model-a"]; !got.IsActive || got.BackoffLevel != 6 || got.RecoverAtMS == nil || *got.RecoverAtMS != now.Add(time.Hour).UnixMilli() || got.RetryAtMS == nil || *got.RetryAtMS != now.Add(time.Hour).UnixMilli() {
+		t.Fatalf("model-a = %+v", got)
+	}
+	models, err = repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.Add(90*time.Minute).UnixMilli())
+	if err != nil || len(models["auth-model"]) != 1 || models["auth-model"][0].Model != "model-b" {
+		t.Fatalf("independent expiry = %+v, %v", models, err)
+	}
+	// An event can carry both scopes; neither one may overwrite the other.
+	both := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-both","model":"request-model","auth_status":{"quota":{"exceeded":true,"reason":"global","next_recover_at":%q,"backoff_level":3},"model":{"name":"actual-model","quota":{"exceeded":true,"reason":"model","next_recover_at":%q,"backoff_level":6}}}}`, now.Format(time.RFC3339), now.Add(time.Hour).Format(time.RFC3339), now.Add(2*time.Hour).Format(time.RFC3339))
+	if err := repo.CaptureErrorEvent(ctx, "default", both, now); err != nil {
+		t.Fatal(err)
+	}
+	global, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-both"}, now.UnixMilli())
+	if err != nil || !global["auth-both"].IsActive || global["auth-both"].BackoffLevel != 3 || *global["auth-both"].RecoverAtMS != now.Add(time.Hour).UnixMilli() {
+		t.Fatalf("global cooldown = %+v, %v", global, err)
+	}
+	modelScope, err := repo.BatchModelCooldowns(ctx, []string{"auth-both"}, now.UnixMilli())
+	if err != nil || len(modelScope["auth-both"]) != 1 || modelScope["auth-both"][0].Model != "actual-model" || modelScope["auth-both"][0].BackoffLevel != 6 {
+		t.Fatalf("model scope = %+v, %v", modelScope, err)
+	}
+	// CPA also mirrors a credential quota onto the reporting model; that mirror
+	// must not be presented as an independently model-scoped limit.
+	inherited := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-global","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":4},"model":{"name":"model-a","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":4}}}}`, now.Format(time.RFC3339), now.Add(time.Hour).Format(time.RFC3339), now.Add(time.Hour).Format(time.RFC3339), now.Add(time.Hour).Format(time.RFC3339))
+	if err := repo.CaptureErrorEvent(ctx, "default", inherited, now); err != nil {
+		t.Fatal(err)
+	}
+	global, err = repo.BatchCorrelatedCooldowns(ctx, []string{"auth-global"}, now.UnixMilli())
+	if err != nil || !global["auth-global"].IsActive || global["auth-global"].BackoffLevel != 4 {
+		t.Fatalf("credential quota = %+v, %v", global, err)
+	}
+	modelScope, err = repo.BatchModelCooldowns(ctx, []string{"auth-global"}, now.UnixMilli())
+	if err != nil || len(modelScope["auth-global"]) != 0 {
+		t.Fatalf("inherited model should not appear independent: %+v, %v", modelScope, err)
+	}
+	if active, err := repo.HasActiveModelCooldownEvidence(ctx, "auth-global", now.UnixMilli()); err != nil || !active {
+		t.Fatalf("reset safety evidence = %v, %v", active, err)
+	}
+	if err := repo.ClearCooldownEvidence(ctx, "auth-model"); err != nil {
+		t.Fatal(err)
+	}
+	models, err = repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.UnixMilli())
+	if err != nil || len(models["auth-model"]) != 0 {
+		t.Fatalf("clear model evidence = %+v, %v", models, err)
+	}
+}
+
 func TestRepositoryQuotaSnapshots(t *testing.T) {
 	ctx := context.Background()
 	repo, _ := testRepository(t)

@@ -1,4 +1,5 @@
 import { renewalDetail, renewalKind, renewalLabel, renewalTone } from '../../src/components/authFiles/credentialRecovery.ts';
+import { buildCredentialQuotaBoard } from '../../src/components/dashboard/credentialQuotaLogic.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ManagementAuthFile } from '../../src/types/managementAuthFile.ts';
@@ -71,6 +72,20 @@ function quota(overrides: Partial<QuotaItem> = {}): QuotaItem {
     ...overrides,
   };
 }
+
+test('model cooldown requires attention without classifying the whole credential as blocked', () => {
+  const projection = buildOAuthWorkspaceProjection(
+    [file()],
+    [quota({ model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 6 }] })],
+    choices,
+  );
+  assert.equal(projection.records[0].quotaCondition, 'warning');
+  assert.equal(projection.records[0].canClearCooldown, true);
+  const board = buildCredentialQuotaBoard([file()], [quota({ model_cooldowns: [{ is_active: true, model: 'gpt-5' }] })]);
+  assert.equal(board.rows[0].state, 'model-cooldown');
+  assert.equal(board.blockedCount, 0);
+  assert.equal(board.servingCount, 1);
+});
 
 test('join: auth files own membership and unique exact indexes join their quota', () => {
   const projection = buildOAuthWorkspaceProjection(

@@ -164,6 +164,9 @@ export interface ActiveCooldown {
   recover_at_ms?: number;
   retry_after_seconds?: number;
   correlated_at_ms?: number;
+  retry_at_ms?: number;
+  backoff_level?: number;
+  model?: string;
 }
 
 export interface QuotaRecommendation {
@@ -204,6 +207,7 @@ export interface QuotaItem {
   reset_credits?: CodexResetCreditsInfo;
   reset_grants?: ClaudeResetGrant[];
   active_cooldown?: ActiveCooldown;
+  model_cooldowns?: ActiveCooldown[];
   recommendation: QuotaRecommendation;
   capabilities: QuotaCapabilities;
   raw_signals?: Record<string, string>;

@@ -36,6 +36,9 @@ type ActiveCooldownRecord struct {
 	RecoverAtMS       *int64 `json:"recover_at_ms,omitempty"`
 	RetryAfterSeconds *int64 `json:"retry_after_seconds,omitempty"`
 	CorrelatedAtMS    *int64 `json:"correlated_at_ms,omitempty"`
+	RetryAtMS         *int64 `json:"retry_at_ms,omitempty"`
+	BackoffLevel      int    `json:"backoff_level,omitempty"`
+	Model             string `json:"model,omitempty"`
 }
 
 // SaveQuotaSnapshot inserts a snapshot and trims the credential's history to the
@@ -364,7 +367,7 @@ func (r *Repository) HasCooldownEvidence(ctx context.Context, authIndex string) 
 	}
 	var exists bool
 	err := r.SQL().QueryRowContext(ctx, `
-		SELECT EXISTS (SELECT 1 FROM error_events WHERE auth_index = ? AND quota_exceeded = 1)
+		SELECT EXISTS (SELECT 1 FROM error_events WHERE auth_index = ? AND quota_exceeded = 1 AND auth_quota_aggregate = 0)
 	`, strings.TrimSpace(authIndex)).Scan(&exists)
 	return exists, err
 }
@@ -376,8 +379,9 @@ func (r *Repository) ClearCooldownEvidence(ctx context.Context, authIndex string
 	}
 	query := `
 		UPDATE error_events
-		SET quota_exceeded = 0, next_recover_at_ms = NULL, next_retry_after_ms = NULL
-		WHERE auth_index = ? AND quota_exceeded = 1
+		SET quota_exceeded = 0, next_recover_at_ms = NULL, next_retry_after_ms = NULL,
+		    model_quota_exceeded = 0, model_next_recover_at_ms = NULL, model_next_retry_after_ms = NULL
+		WHERE auth_index = ? AND (quota_exceeded = 1 OR model_quota_exceeded = 1)
 	`
 	_, err := r.SQL().ExecContext(ctx, query, strings.TrimSpace(authIndex))
 	return err
@@ -413,9 +417,9 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	}
 
 	query := fmt.Sprintf(`
-		SELECT auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms
+		SELECT auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms, backoff_level
 		FROM error_events
-		WHERE quota_exceeded = 1 AND (next_recover_at_ms > ? OR next_retry_after_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
+		WHERE quota_exceeded = 1 AND auth_quota_aggregate = 0 AND (next_recover_at_ms > ? OR next_retry_after_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
 		-- timestamp_ms is not unique, so tied rows would otherwise be returned in
 		-- whatever order the storage engine chose and report a different reason or
 		-- recovery time for identical data. rowid makes the newest inserted row win.
@@ -434,8 +438,9 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		var retryAfterMS sql.NullInt64
 		var recoverAtMS sql.NullInt64
 		var timestampMS int64
+		var backoffLevel int
 
-		if err := rows.Scan(&authIndex, &reason, &retryAfterMS, &recoverAtMS, &timestampMS); err != nil {
+		if err := rows.Scan(&authIndex, &reason, &retryAfterMS, &recoverAtMS, &timestampMS, &backoffLevel); err != nil {
 			return result, fmt.Errorf("scan batch cooldown: %w", err)
 		}
 
@@ -463,7 +468,7 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		}
 
 		// If no explicit recover/retry time, grace window of 5 minutes from error event
-		if recoverAt == nil && retryAfterSeconds == nil {
+		if recoverAt == nil && (!retryAfterMS.Valid || retryAfterMS.Int64 <= 0) {
 			if (nowMS - timestampMS) < 5*60*1000 {
 				isActive = true
 			}
@@ -481,6 +486,10 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 			RecoverAtMS:       recoverAt,
 			RetryAfterSeconds: retryAfterSeconds,
 			CorrelatedAtMS:    &timestampMS,
+			BackoffLevel:      backoffLevel,
+		}
+		if retryAfterMS.Valid && retryAfterMS.Int64 > 0 {
+			candidate.RetryAtMS = &retryAfterMS.Int64
 		}
 		// Prefer an active row over an inactive newer one. If two rows are both
 		// active, the query order already gives the newest timestamp priority.
@@ -547,6 +556,76 @@ func (r *Repository) QueryCredentialModelWindowUsage(ctx context.Context, authIn
 	return result, rows.Err()
 }
 
+// BatchModelCooldowns retains an independent cooldown for each model on a credential.
+func (r *Repository) BatchModelCooldowns(ctx context.Context, authIndexes []string, nowMS int64) (map[string][]ActiveCooldownRecord, error) {
+	return r.batchModelCooldowns(ctx, authIndexes, nowMS, false)
+}
+
+// HasActiveModelCooldownEvidence includes inherited states because a credential-wide reset
+// could also erase an independent model state hidden beneath CPA's propagated cooldown.
+func (r *Repository) HasActiveModelCooldownEvidence(ctx context.Context, authIndex string, nowMS int64) (bool, error) {
+	cooldowns, err := r.batchModelCooldowns(ctx, []string{authIndex}, nowMS, true)
+	return len(cooldowns[authIndex]) > 0, err
+}
+
+func (r *Repository) batchModelCooldowns(ctx context.Context, authIndexes []string, nowMS int64, includeInherited bool) (map[string][]ActiveCooldownRecord, error) {
+	result := make(map[string][]ActiveCooldownRecord)
+	if r == nil || r.SQL() == nil || len(authIndexes) == 0 {
+		return result, nil
+	}
+	args := make([]any, 0, len(authIndexes)+3)
+	for _, index := range authIndexes {
+		args = append(args, strings.TrimSpace(index))
+	}
+	args = append(args, nowMS, nowMS, nowMS-6*60*60*1000)
+	inheritedFilter := "AND model_quota_inherited = 0"
+	if includeInherited {
+		inheritedFilter = ""
+	}
+	query := fmt.Sprintf(`SELECT auth_index, cooldown_model, model_quota_reason,
+		model_next_retry_after_ms, model_next_recover_at_ms, model_backoff_level, timestamp_ms
+		FROM error_events WHERE model_quota_exceeded = 1 AND cooldown_model <> '' %s
+		AND auth_index IN (%s) AND (model_next_retry_after_ms > ? OR model_next_recover_at_ms > ? OR timestamp_ms >= ?)
+		ORDER BY timestamp_ms DESC, rowid DESC`, inheritedFilter, strings.TrimSuffix(strings.Repeat("?,", len(authIndexes)), ","))
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query model cooldowns: %w", err)
+	}
+	defer rows.Close()
+	seen := make(map[string]map[string]bool)
+	for rows.Next() {
+		var record ActiveCooldownRecord
+		var retry, recoverAt sql.NullInt64
+		var timestamp int64
+		if err := rows.Scan(&record.AuthIndex, &record.Model, &record.Reason, &retry, &recoverAt, &record.BackoffLevel, &timestamp); err != nil {
+			return nil, fmt.Errorf("scan model cooldown: %w", err)
+		}
+		if seen[record.AuthIndex] == nil {
+			seen[record.AuthIndex] = make(map[string]bool)
+		}
+		if seen[record.AuthIndex][record.Model] {
+			continue
+		}
+		record.CorrelatedAtMS = &timestamp
+		if retry.Valid && retry.Int64 > 0 {
+			record.RetryAtMS = &retry.Int64
+			record.IsActive = retry.Int64 > nowMS
+		}
+		if recoverAt.Valid && recoverAt.Int64 > 0 {
+			record.RecoverAtMS = &recoverAt.Int64
+			record.IsActive = record.IsActive || recoverAt.Int64 > nowMS
+		}
+		if record.RetryAtMS == nil && record.RecoverAtMS == nil {
+			record.IsActive = nowMS-timestamp < 5*60*1000
+		}
+		if record.IsActive {
+			seen[record.AuthIndex][record.Model] = true
+			result[record.AuthIndex] = append(result[record.AuthIndex], record)
+		}
+	}
+	return result, rows.Err()
+}
+
 // BatchExpiredCooldowns returns, per auth index, the latest recovery time of its stored
 // quota_exceeded evidence, but only when every such recovery time and retry time has already
 // passed. It has no lookback window, so a cooldown that expired days ago and was never cleared is
@@ -570,18 +649,22 @@ func (r *Repository) BatchExpiredCooldowns(ctx context.Context, authIndexes []st
 	for _, authIndex := range validIndexes {
 		args = append(args, authIndex)
 	}
-	args = append(args, nowMS, nowMS)
+	args = append(args, nowMS, nowMS, nowMS, nowMS, nowMS-5*60*1000)
 	// A newer cooldown that has not recovered yet keeps the credential blocked, even when an
 	// older one has already passed; so does a retry time still ahead.
 	query := fmt.Sprintf(`
 		SELECT auth_index, MAX(next_recover_at_ms)
 		FROM error_events
-		WHERE quota_exceeded = 1
+		WHERE quota_exceeded = 1 AND auth_quota_aggregate = 0
 		  AND auth_index IN (%s)
 		GROUP BY auth_index
 		HAVING MAX(COALESCE(next_recover_at_ms, 0)) > 0
 		  AND MAX(COALESCE(next_recover_at_ms, 0)) <= ?
 		  AND MAX(COALESCE(next_retry_after_ms, 0)) <= ?
+		  AND NOT EXISTS (SELECT 1 FROM error_events model_event
+		    WHERE model_event.auth_index = error_events.auth_index AND model_event.model_quota_exceeded = 1
+		      AND (model_event.model_next_recover_at_ms > ? OR model_event.model_next_retry_after_ms > ?
+		        OR (COALESCE(model_event.model_next_recover_at_ms, 0) = 0 AND COALESCE(model_event.model_next_retry_after_ms, 0) = 0 AND model_event.timestamp_ms > ?)))
 	`, placeholders)
 	rows, err := r.SQL().QueryContext(ctx, query, args...)
 	if err != nil {

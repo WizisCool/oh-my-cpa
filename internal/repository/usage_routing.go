@@ -112,8 +112,11 @@ func (r *Repository) activeRoutingCooldowns(ctx context.Context, instanceID stri
 		       MAX(COALESCE(x.next_retry_after_ms, 0), COALESCE(x.next_recover_at_ms, 0))
 		FROM error_events x
 		JOIN (
+			-- An aggregated row is CPA's rolled-up model quota, not a
+			-- credential-wide verdict, so it must not hide the credential
+			-- cooldown that preceded it by becoming the newest row.
 			SELECT auth_index, MAX(id) AS id FROM error_events
-			WHERE instance_id = ? AND auth_index <> '' AND timestamp_ms >= ?
+			WHERE instance_id = ? AND auth_index <> '' AND auth_quota_aggregate = 0 AND timestamp_ms >= ?
 			GROUP BY auth_index
 		) newest ON newest.id = x.id`, instanceID, nowMS-routingCooldownLookback)
 	if err != nil {
