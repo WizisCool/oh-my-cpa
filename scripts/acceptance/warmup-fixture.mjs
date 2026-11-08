@@ -91,6 +91,12 @@ export function createWarmupFixture({ initialTasks } = {}) {
       return { status: 201, json: structuredClone(state) };
     }
 
+    if (url.pathname.endsWith('/warmup/runs') && method === 'DELETE') {
+      const taskIds = url.searchParams.getAll('task_id');
+      state.runs = taskIds.length ? state.runs.filter((run) => !taskIds.includes(run.task_id)) : [];
+      return { status: 200, json: structuredClone(state) };
+    }
+
     const runMatch = url.pathname.match(/\/warmup\/tasks\/([^/]+)\/run$/);
     if (runMatch && method === 'POST') {
       const taskId = decodeURIComponent(runMatch[1]);

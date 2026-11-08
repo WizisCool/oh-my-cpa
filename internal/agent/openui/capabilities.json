@@ -4835,6 +4835,9 @@
                             "provider": {
                               "type": "string"
                             },
+                            "oauth_provider": {
+                              "type": "string"
+                            },
                             "email": {
                               "type": "string"
                             },
@@ -5183,6 +5186,9 @@
                           "type": "string"
                         },
                         "provider": {
+                          "type": "string"
+                        },
+                        "oauth_provider": {
                           "type": "string"
                         },
                         "email": {
@@ -5534,6 +5540,9 @@
                           "type": "string"
                         },
                         "provider": {
+                          "type": "string"
+                        },
+                        "oauth_provider": {
                           "type": "string"
                         },
                         "email": {
@@ -5936,6 +5945,9 @@
                           "type": "string"
                         },
                         "provider": {
+                          "type": "string"
+                        },
+                        "oauth_provider": {
                           "type": "string"
                         },
                         "email": {

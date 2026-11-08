@@ -21,6 +21,9 @@ var (
 		return out
 	}()
 	clockPattern = regexp.MustCompile(`^(\d{2}):(\d{2})$`)
+	// The families known to answer with an image rather than words. A warmup request is a text
+	// completion, so one of these can neither run it nor be the model Auto picks.
+	imageModelPattern = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:image|imagen|dall-?e|flux|stable-diffusion|sdxl|seedream|ideogram|midjourney|nano-banana)(?:[^a-z0-9]|$)`)
 )
 
 func lastSegment(id string) string {
@@ -93,9 +96,39 @@ func compareNaturalFold(a, b string) int {
 	}
 }
 
-// SortModelsForAuto orders models by lightness tier (flash < lite < mini < nano < small < turbo < haiku),
-// breaking ties by newer version first (descending natural sort on the last segment).
-func SortModelsForAuto(models []string) []string {
+// isVersionedID reports whether an id's name segment carries a version or date number.
+func isVersionedID(id string) bool {
+	for _, r := range lastSegment(id) {
+		if unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// Reached is the model a call point actually reaches: the upstream CPA resolves an alias to, or
+// the call point itself when no rule renames it.
+func Reached(callPoint string, upstream map[string]string) string {
+	if target := strings.TrimSpace(upstream[callPoint]); target != "" {
+		return target
+	}
+	return callPoint
+}
+
+// SortModelsForAuto orders a credential's call points by the lightness of the model each one
+// reaches (flash < lite < mini < nano < small < turbo < haiku), breaking ties by newer version
+// first (descending natural sort on the last segment).
+//
+// upstream maps a call point to the upstream model CPA resolves it to. An OAuth model alias is a
+// name the operator chose and says nothing about the model behind it, so ranking reads the
+// upstream while the call point stays what is sent: with fork=false the upstream name itself is
+// no longer callable. A call point missing from the map is its own upstream.
+//
+// Every model id is versioned, while a credential's list can also carry a name that reaches no
+// model at all. The descending tie-break would rank such a name by its letters alone and could
+// put it first, so versioned names come first and the unversioned answer is still returned when
+// nothing else is listed.
+func SortModelsForAuto(models []string, upstream map[string]string) []string {
 	out := make([]string, 0, len(models))
 	seen := make(map[string]struct{}, len(models))
 	for _, raw := range models {
@@ -109,19 +142,54 @@ func SortModelsForAuto(models []string) []string {
 		seen[trimmed] = struct{}{}
 		out = append(out, trimmed)
 	}
+	rankName := func(callPoint string) string { return Reached(callPoint, upstream) }
 	slices.SortFunc(out, func(a, b string) int {
-		ta, tb := specTier(a), specTier(b)
+		ra, rb := rankName(a), rankName(b)
+		if va, vb := isVersionedID(ra), isVersionedID(rb); va != vb {
+			if va {
+				return -1
+			}
+			return 1
+		}
+		ta, tb := specTier(ra), specTier(rb)
 		if ta != tb {
 			return ta - tb
 		}
-		return compareNaturalFold(lastSegment(b), lastSegment(a))
+		if order := compareNaturalFold(lastSegment(rb), lastSegment(ra)); order != 0 {
+			return order
+		}
+		// Two call points reaching one upstream: the upstream's own name before an alias of it.
+		return compareBool(a != ra, b != rb)
 	})
 	return out
 }
 
-// PickAutoModel selects the lightest candidate model from the credential's model list.
-func PickAutoModel(models []string) string {
-	sorted := SortModelsForAuto(models)
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	default:
+		return -1
+	}
+}
+
+// FilterWarmupModels drops the image-generation models from a credential's call points. A call
+// point is judged by the model it reaches, so an alias that names an image model is dropped too.
+func FilterWarmupModels(models []string, upstream map[string]string) []string {
+	kept := make([]string, 0, len(models))
+	for _, model := range models {
+		if !imageModelPattern.MatchString(lastSegment(Reached(model, upstream))) {
+			kept = append(kept, model)
+		}
+	}
+	return kept
+}
+
+// PickAutoModel selects the call point that reaches the lightest model; see SortModelsForAuto.
+func PickAutoModel(models []string, upstream map[string]string) string {
+	sorted := SortModelsForAuto(models, upstream)
 	if len(sorted) == 0 {
 		return ""
 	}
@@ -136,10 +204,7 @@ func ResolveModel(task Task, account *CatalogAccount) string {
 	if account == nil {
 		return ""
 	}
-	if account.AutoModel != "" {
-		return account.AutoModel
-	}
-	return PickAutoModel(account.Models)
+	return account.AutoModel
 }
 
 func ParseClock(clock string) (int, int, bool) {

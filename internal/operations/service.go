@@ -21,13 +21,13 @@ type Service struct {
 	DeleteWarmupTask func(context.Context, string) (warmup.StateView, error)
 	RunWarmupTask    func(context.Context, string) (warmup.RunResponse, error)
 	TLSSkipVerify    bool
-	Pricing              Pricing
-	Repo                 *repository.Repository
-	Cipher               *appcrypto.Cipher
-	Client               func(context.Context) (*management.Client, error)
-	Acquire              func(context.Context) error
-	Release              func()
-	Notify               func()
+	Pricing          Pricing
+	Repo             *repository.Repository
+	Cipher           *appcrypto.Cipher
+	Client           func(context.Context) (*management.Client, error)
+	Acquire          func(context.Context) error
+	Release          func()
+	Notify           func()
 	// Existing normalized projections remain shared while HTTP adapters are narrowed.
 	SaveProvider               func(context.Context, ProviderMutation, string, string) (ProviderMutationResult, error)
 	DeleteProvider             func(context.Context, string, string) error

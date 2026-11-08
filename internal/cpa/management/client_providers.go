@@ -271,9 +271,10 @@ type ConfiguredModelProvider struct {
 	ExcludedModels []string
 }
 
-// configuredModelFamily names the family a credential belongs to: CPA's own
-// provider label when the gateway reports one, else its type.
-func configuredModelFamily(file AuthFile) string {
+// ModelAliasFamily names the family a credential belongs to, the key its provider-wide OAuth
+// model aliases are stored under: CPA's own provider label when the gateway reports one, else
+// its type.
+func ModelAliasFamily(file AuthFile) string {
 	family := strings.ToLower(strings.TrimSpace(file.Provider))
 	if family == "" {
 		family = strings.ToLower(strings.TrimSpace(file.Type))
@@ -504,7 +505,7 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 				continue
 			}
 			file := authResp.Files[i]
-			family := configuredModelFamily(file)
+			family := ModelAliasFamily(file)
 			if file.Disabled {
 				continue
 			}
@@ -519,13 +520,7 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 				if callPoint == "" {
 					continue
 				}
-				target := callPoint
-				for _, alias := range rules {
-					if strings.EqualFold(alias.Alias, callPoint) {
-						target = alias.Name
-						break
-					}
-				}
+				target := ResolveOAuthModelAlias(callPoint, rules)
 				// The registered call point proves this rule is active. Its hidden
 				// upstream is billable even when fork=false, but is not a callable ID.
 				if target != callPoint {

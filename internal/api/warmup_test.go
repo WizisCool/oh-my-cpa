@@ -18,20 +18,29 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 type warmupFixture struct {
-	provider      string
-	models        []string
+	provider string
+	models   []string
+	// oauthProvider is the login portal CPA reports for the credential, when it reports one.
+	oauthProvider string
+	// credentialFile is what CPA serves when the credential file is downloaded (its model_aliases).
+	credentialFile string
+	// globalAliases is CPA's oauth model-alias map as JSON.
+	globalAliases string
 	onVerify      func(name, authIndex, model string)
 	verifyStatus  int
 	verifyReason  string
 	isTimedOut    bool
 	isActive      bool
+	isDisabled    bool
 	resetAt       time.Time
 	mu            sync.Mutex
 	sends         int
+	modelReads    int
 	usageReads    int
 	lastModel     string
 	lastAuthIndex string
@@ -63,8 +72,11 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/v8/management/credentials":
-			_, _ = fmt.Fprintf(writer, `{"files":[{"id":"%s-file","name":"%s.json","type":"%s","provider":"%s","auth_index":"exact-%s","source":"file"}]}`, provider, provider, provider, provider, provider)
+			_, _ = fmt.Fprintf(writer, `{"files":[{"id":"%s-file","name":"%s.json","type":"%s","provider":"%s","oauth_provider":"%s","auth_index":"exact-%s","source":"file","disabled":%t}]}`, provider, provider, provider, provider, fixture.oauthProvider, provider, fixture.isDisabled)
 		case "/v8/management/credentials/models":
+			fixture.mu.Lock()
+			fixture.modelReads++
+			fixture.mu.Unlock()
 			_, _ = writer.Write(modelsJSON)
 		case "/v8/management/credentials/verify":
 			var payload struct {
@@ -183,6 +195,18 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 				return
 			}
 			_, _ = writer.Write([]byte(`{"status_code":404,"body":{}}`))
+		case "/v8/management/credentials/download":
+			if fixture.credentialFile == "" {
+				writer.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = writer.Write([]byte(fixture.credentialFile))
+		case "/v8/management/config/oauth/model-alias":
+			if fixture.globalAliases == "" {
+				writer.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = writer.Write([]byte(fixture.globalAliases))
 		default:
 			writer.WriteHeader(http.StatusNotFound)
 		}
@@ -385,6 +409,19 @@ func TestWarmupTaskLifecycleAndManualExecution(t *testing.T) {
 	}
 	fixture.mu.Unlock()
 
+	// Clear run history for this task
+	req, _ = http.NewRequest(http.MethodDelete, baseURL+"/api/v1/management/quota/warmup/runs?task_id="+task.ID, nil)
+	resp, err = caller.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = warmup.StateView{}
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || len(state.Runs) != 0 || len(state.Tasks) != 1 {
+		t.Fatalf("clear runs failed: status=%d runs=%+v", resp.StatusCode, state.Runs)
+	}
+
 	// Delete task
 	req, _ = http.NewRequest(http.MethodDelete, baseURL+"/api/v1/management/quota/warmup/tasks/"+task.ID, nil)
 	resp, err = caller.Do(req)
@@ -395,6 +432,262 @@ func TestWarmupTaskLifecycleAndManualExecution(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || len(state.Tasks) != 0 {
 		t.Fatalf("delete failed: status=%d tasks=%+v", resp.StatusCode, state.Tasks)
+	}
+}
+
+func TestWarmupRefusesDisabledCredentialWithoutAskingCPAForModelsTwice(t *testing.T) {
+	fixture := &warmupFixture{provider: "codex", isDisabled: true}
+	handler := newWarmupHandler(t, fixture)
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	// A credential that lists no models is asked once, and the answer serves both the account
+	// and the provider scan of every later catalog build.
+	for range 2 {
+		resp, err := caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("settings status=%d", resp.StatusCode)
+		}
+	}
+	fixture.mu.Lock()
+	modelReads := fixture.modelReads
+	fixture.mu.Unlock()
+	if modelReads != 1 {
+		t.Fatalf("model reads = %d, want 1", modelReads)
+	}
+
+	createBody := `{"name":"","enabled":true,"provider":"codex","auth_index":"exact-codex","account":"codex.json","model":"","trigger":{"kind":"window","window":"five_hour"}}`
+	resp, err := caller.Post(baseURL+"/api/v1/management/quota/warmup/tasks", "application/json", strings.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || len(state.Tasks) != 1 {
+		t.Fatalf("create status=%d tasks=%+v", resp.StatusCode, state.Tasks)
+	}
+
+	// A credential the operator turned off is reported as such instead of being woken up.
+	resp, err = caller.Post(baseURL+"/api/v1/management/quota/warmup/tasks/"+state.Tasks[0].ID+"/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runOut warmup.RunResponse
+	_ = json.NewDecoder(resp.Body).Decode(&runOut)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || runOut.Run.Outcome != "failed" || runOut.Run.Message != "credential_disabled" {
+		t.Fatalf("disabled run status=%d run=%+v", resp.StatusCode, runOut.Run)
+	}
+	fixture.mu.Lock()
+	sends := fixture.sends
+	fixture.mu.Unlock()
+	if sends != 0 {
+		t.Fatalf("disabled credential received %d warmup requests", sends)
+	}
+}
+
+func TestWarmupAutoModelRanksOAuthAliasesByTheirUpstream(t *testing.T) {
+	// The operator's aliases are names of their own choosing: a provider-wide one renaming an
+	// older full model, and one in the credential file pointing at the mini model. By name alone
+	// "zeta" sorts first. Auto must judge each alias by the model it reaches, credential rules
+	// before provider ones, and still send the alias, the name CPA routes.
+	fixture := &warmupFixture{
+		provider:       "codex",
+		models:         []string{"gpt-5.2", "gpt-5.4", "zeta", "aaa"},
+		globalAliases:  `{"codex":[{"name":"gpt-5.1","alias":"zeta"}]}`,
+		credentialFile: `{"type":"codex","model_aliases":[{"name":"gpt-5.4-mini","alias":"aaa"}]}`,
+	}
+	handler := newWarmupHandler(t, fixture)
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	resp, err := caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	var autoModel string
+	for _, group := range state.Catalog.Providers {
+		for _, account := range group.Accounts {
+			if account.AuthIndex == "exact-codex" {
+				autoModel = account.AutoModel
+			}
+		}
+	}
+	if autoModel != "aaa" {
+		t.Fatalf("auto model = %q, want aaa (the alias of gpt-5.4-mini)", autoModel)
+	}
+}
+
+func TestWarmupCatalogExcludesImageGenerationModels(t *testing.T) {
+	fixture := &warmupFixture{provider: "codex", models: []string{"gpt-image-1", "gpt-5.4"}}
+	handler := newWarmupHandler(t, fixture)
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	resp, err := caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || state.Catalog == nil {
+		t.Fatalf("settings status=%d catalog=%+v", resp.StatusCode, state.Catalog)
+	}
+	codex := state.Catalog.Providers[0]
+	if len(codex.Accounts) != 1 {
+		t.Fatalf("accounts = %+v", codex.Accounts)
+	}
+	// Auto would otherwise rank the image model first on its letters alone.
+	if got := codex.Accounts[0].Models; !reflect.DeepEqual(got, []string{"gpt-5.4"}) {
+		t.Fatalf("models = %v, want [gpt-5.4]", got)
+	}
+	if got := codex.Accounts[0].AutoModel; got != "gpt-5.4" {
+		t.Fatalf("auto_model = %q, want gpt-5.4", got)
+	}
+}
+
+func TestWarmupAutoPrefersTheCheapestPricedModel(t *testing.T) {
+	// "turbo" reads as a light tier by name, and the price book is what says Luna is cheaper. The
+	// free model is not the answer either: a zero rate is a model that never starts a window.
+	fixture := &warmupFixture{provider: "codex", models: []string{"gpt-6.1-turbo", "gpt-6.1-luna", "codex-auto-review"}}
+	handler := newWarmupHandler(t, fixture)
+	ctx := context.Background()
+	if _, err := handler.repo.ReplacePricingModels(ctx, map[string]string{
+		"gpt-6.1-turbo":     "gpt-6.1-turbo",
+		"gpt-6.1-luna":      "gpt-6.1-luna",
+		"codex-auto-review": "codex-auto-review",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.repo.UpsertModelPrices(ctx, []pricing.ModelPrice{
+		{Model: "gpt-6.1-turbo", PromptPricePer1M: 2.5, CompletionPer1M: 15, PriceMultiplier: 1, Source: pricing.SourceManual},
+		{Model: "gpt-6.1-luna", PromptPricePer1M: 0.2, CompletionPer1M: 1.2, PriceMultiplier: 1, Source: pricing.SourceManual},
+		{Model: "codex-auto-review", PromptPricePer1M: 0, CompletionPer1M: 0, PriceMultiplier: 1, Source: pricing.SourceManual},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler.SetPricing(pricing.NewService(handler.repo, nil, nil))
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	if got := warmupAutoModel(t, caller, baseURL); got != "gpt-6.1-luna" {
+		t.Fatalf("auto_model = %q, want gpt-6.1-luna", got)
+	}
+
+	// A channel's own rate outranks the shared book for that provider.
+	if err := handler.repo.UpsertChannelModelPrice(ctx, pricing.ModelPrice{Channel: "codex", Model: "gpt-6.1-turbo",
+		PromptPricePer1M: 0, CompletionPer1M: 0.5, PriceMultiplier: 1, Source: pricing.SourceManual}); err != nil {
+		t.Fatal(err)
+	}
+	handler.warmupRuntime.mu.Lock()
+	handler.warmupRuntime.prices = nil
+	handler.warmupRuntime.mu.Unlock()
+	if got := warmupAutoModel(t, caller, baseURL); got != "gpt-6.1-turbo" {
+		t.Fatalf("auto_model with a channel rate = %q, want gpt-6.1-turbo", got)
+	}
+}
+
+// warmupAutoModel reads the Auto answer the settings endpoint reports for the fixture's credential.
+func warmupAutoModel(t *testing.T, caller *http.Client, baseURL string) string {
+	t.Helper()
+	resp, err := caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || state.Catalog == nil || len(state.Catalog.Providers) == 0 || len(state.Catalog.Providers[0].Accounts) != 1 {
+		t.Fatalf("settings status=%d catalog=%+v", resp.StatusCode, state.Catalog)
+	}
+	return state.Catalog.Providers[0].Accounts[0].AutoModel
+}
+
+func TestWarmupCatalogReportsTheIssuingPortal(t *testing.T) {
+	// A plugin that fronts several brands reports which login portal issued the credential, and the
+	// catalogue has to carry it: the row's mark is drawn from the portal, not from the family.
+	fixture := &warmupFixture{provider: "codex", oauthProvider: "codex-cn"}
+	handler := newWarmupHandler(t, fixture)
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	resp, err := caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || state.Catalog == nil || len(state.Catalog.Providers[0].Accounts) != 1 {
+		t.Fatalf("settings status=%d catalog=%+v", resp.StatusCode, state.Catalog)
+	}
+	if got := state.Catalog.Providers[0].Accounts[0].OAuthProvider; got != "codex-cn" {
+		t.Fatalf("oauth_provider = %q, want codex-cn", got)
+	}
+}
+
+func TestWarmupClearRunsScope(t *testing.T) {
+	fixture := &warmupFixture{provider: "claude"}
+	handler := newWarmupHandler(t, fixture)
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	createBody := `{"name":"","enabled":true,"provider":"claude","auth_index":"exact-claude","account":"claude.json","model":"","trigger":{"kind":"every","hours":5,"anchor":"2026-10-13T06:00:00Z"}}`
+	resp, err := caller.Post(baseURL+"/api/v1/management/quota/warmup/tasks", "application/json", strings.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || len(state.Tasks) != 1 {
+		t.Fatalf("create status=%d tasks=%+v", resp.StatusCode, state.Tasks)
+	}
+	resp, err = caller.Post(baseURL+"/api/v1/management/quota/warmup/tasks/"+state.Tasks[0].ID+"/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runBody warmup.RunResponse
+	_ = json.NewDecoder(resp.Body).Decode(&runBody)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || len(runBody.State.Runs) != 1 {
+		t.Fatalf("manual run status=%d runs=%+v", resp.StatusCode, runBody.State.Runs)
+	}
+
+	// A selection that names no task must not widen into "every task".
+	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/api/v1/management/quota/warmup/runs?task_id=", nil)
+	resp, err = caller.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("blank task_id status=%d, want 400", resp.StatusCode)
+	}
+	resp, err = caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if len(state.Runs) != 1 {
+		t.Fatalf("a refused clear removed runs: %+v", state.Runs)
+	}
+
+	// Without a selection the request means every task, which is what the settings drawer asks for.
+	req, _ = http.NewRequest(http.MethodDelete, baseURL+"/api/v1/management/quota/warmup/runs", nil)
+	resp, err = caller.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = warmup.StateView{}
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || len(state.Runs) != 0 {
+		t.Fatalf("clear all status=%d runs=%+v", resp.StatusCode, state.Runs)
 	}
 }
 

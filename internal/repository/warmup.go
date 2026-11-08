@@ -17,19 +17,6 @@ func warmupTaskTarget(taskID string) string {
 	return warmupTaskPrefix + strings.TrimSpace(taskID)
 }
 
-func warmupOutcomeStatus(outcome string) string {
-	switch outcome {
-	case "ok":
-		return "activated"
-	case "failed":
-		return "failed"
-	case "running":
-		return "executing"
-	default:
-		return "uncertain"
-	}
-}
-
 func (repository *Repository) ListWarmupTasks(ctx context.Context, instance string) ([]warmup.Task, error) {
 	rows, err := repository.SQL().QueryContext(ctx,
 		`SELECT document_json FROM credential_warmup_policies WHERE instance_id=? AND scope='credential' AND target LIKE 'task/%' ORDER BY updated_at_ms ASC, target ASC`,
@@ -211,6 +198,28 @@ func (repository *Repository) WriteWarmupRun(ctx context.Context, instance strin
 		instance, target, instance, target, warmup.MAX_RUNS_PER_TASK,
 	)
 	return err
+}
+
+// ClearWarmupRuns deletes the run history of the given tasks, or of every task when none is named.
+func (repository *Repository) ClearWarmupRuns(ctx context.Context, instance string, taskIDs []string) error {
+	if len(taskIDs) == 0 {
+		_, err := repository.SQL().ExecContext(ctx,
+			`DELETE FROM credential_warmup_runs WHERE instance_id=? AND auth_index LIKE 'task/%'`,
+			instance,
+		)
+		return err
+	}
+	tx, err := repository.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, id := range taskIDs {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM credential_warmup_runs WHERE instance_id=? AND auth_index=?`, instance, warmupTaskTarget(id)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (repository *Repository) RecoverWarmupRuns(ctx context.Context, instance string) error {

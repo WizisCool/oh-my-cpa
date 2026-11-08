@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
@@ -26,6 +27,9 @@ const (
 	warmupLoopInterval   = time.Minute
 	warmupModelCacheTTL  = 5 * time.Minute
 	warmupRequestTimeout = 30 * time.Second
+	// A failed quota read waits this long instead of repeating on the next minute tick, so a
+	// provider that stays unreachable does not cost one request per credential per minute.
+	warmupRefreshBackoff = 5 * time.Minute
 )
 
 var (
@@ -38,6 +42,35 @@ type warmupRuntime struct {
 	recovered   bool
 	runningTask map[string]bool
 	models      map[string]warmupModelCacheEntry
+	// fileModels caches one credential's model list by file name, because a catalog build
+	// asks for the same credential twice: once for the account and again for the provider scan.
+	fileModels map[string]warmupModelCacheEntry
+	// refreshBackoff holds the auth indices whose quota read failed, until the next attempt.
+	refreshBackoff map[string]time.Time
+	// aliasRules caches the OAuth model aliases CPA applies: one entry per credential file, read
+	// by downloading it, and the provider-wide map under warmupGlobalAliasKey.
+	aliasRules map[string]warmupAliasCacheEntry
+	// prices is the price book as warmup reads it, so a model choice costs no query per build.
+	prices *warmupPriceIndex
+}
+
+// warmupPriceIndex answers "what does one request cost" per model, which is what makes the
+// cheapest warmup model a price-book fact rather than a guess about its name.
+type warmupPriceIndex struct {
+	// shared and per-channel rates by normalized model identity, in USD per million tokens for
+	// one request's input and output together.
+	shared    map[string]float64
+	byChannel map[string]map[string]float64
+	expiresAt time.Time
+}
+
+// warmupGlobalAliasKey holds the provider-wide alias map; a credential file name is never empty.
+const warmupGlobalAliasKey = ""
+
+type warmupAliasCacheEntry struct {
+	credential []management.OAuthModelAlias
+	global     map[string][]management.OAuthModelAlias
+	expiresAt  time.Time
 }
 
 type warmupModelCacheEntry struct {
@@ -116,6 +149,30 @@ func (h *Handler) runWarmupTask(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	writeJSON(writer, http.StatusOK, result)
+}
+
+// clearWarmupRuns empties the run history; repeated task_id parameters narrow it to those tasks.
+func (h *Handler) clearWarmupRuns(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	requested, namesTasks := request.URL.Query()["task_id"]
+	taskIDs := make([]string, 0, len(requested))
+	for _, raw := range requested {
+		if id := strings.TrimSpace(raw); id != "" {
+			taskIDs = append(taskIDs, id)
+		}
+	}
+	// A request that names tasks has to name one: an empty selection would otherwise read as
+	// "every task" and delete the whole history.
+	if namesTasks && len(taskIDs) == 0 {
+		writeWarmupJSONError(writer, http.StatusBadRequest, "invalid_parameters")
+		return
+	}
+	state, err := h.removeWarmupRuns(request.Context(), taskIDs)
+	if err != nil {
+		h.writeWarmupError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, state)
 }
 
 func writeWarmupJSONError(writer http.ResponseWriter, status int, code string) {
@@ -347,6 +404,24 @@ func (h *Handler) removeWarmupTask(ctx context.Context, id string) (warmup.State
 	return h.warmupState(ctx)
 }
 
+func (h *Handler) removeWarmupRuns(ctx context.Context, taskIDs []string) (warmup.StateView, error) {
+	if h.cfg.IsDemoMode {
+		return warmup.StateView{}, errors.New("demo_operation_refused")
+	}
+	if h.repo == nil {
+		return warmup.StateView{}, errors.New("repository unavailable")
+	}
+	if err := h.writeWarmupAudit(ctx, "warmup.runs.clear", strings.Join(taskIDs, ","), map[string]any{
+		"task_ids": taskIDs,
+	}); err != nil {
+		return warmup.StateView{}, err
+	}
+	if err := h.repo.ClearWarmupRuns(ctx, warmupInstanceID, taskIDs); err != nil {
+		return warmup.StateView{}, err
+	}
+	return h.warmupState(ctx)
+}
+
 func (h *Handler) triggerWarmupTask(ctx context.Context, id string) (warmup.RunResponse, error) {
 	if h.cfg.IsDemoMode {
 		return warmup.RunResponse{}, errors.New("demo_operation_refused")
@@ -441,7 +516,11 @@ func (h *Handler) executeTaskRun(
 	if run.Model == "" {
 		run.Model = "Auto"
 	}
-	_ = h.repo.WriteWarmupRun(ctx, warmupInstanceID, run)
+	// The recorded intent is what proves this credential was about to be consumed, so a run
+	// that cannot write it must not reach CPA.
+	if err := h.repo.WriteWarmupRun(ctx, warmupInstanceID, run); err != nil {
+		return warmup.Run{}, err
+	}
 
 	finish := func(outcome, message string) warmup.Run {
 		elapsed := h.now().UTC().Sub(started).Milliseconds()
@@ -460,6 +539,12 @@ func (h *Handler) executeTaskRun(
 	}
 	if file == nil {
 		return finish("failed", "credential_not_found"), nil
+	}
+	if file.Disabled {
+		return finish("failed", "credential_disabled"), nil
+	}
+	if file.Unavailable {
+		return finish("failed", "credential_unavailable"), nil
 	}
 	if model == "" {
 		return finish("failed", "model_unavailable"), nil
@@ -547,10 +632,16 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 		if !ok || file.Disabled || file.Unavailable {
 			continue
 		}
+		if h.warmupRefreshBackoffActive(authIndex, now) {
+			continue
+		}
 		if needsWindowQuotaRefresh(task, account, marksMap[task.ID], now) {
 			refreshedIndices[authIndex] = struct{}{}
 			if h.refreshWarmupQuota(ctx, client, file) {
+				h.clearWarmupRefreshBackoff(authIndex)
 				refreshedAny = true
+			} else {
+				h.deferWarmupRefresh(authIndex, now)
 			}
 		}
 	}
@@ -588,7 +679,9 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 			if err := h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli()); err != nil {
 				continue
 			}
-			_, _ = h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, "schedule", due.At, due.ResetKey)
+			if _, err := h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, "schedule", due.At, due.ResetKey); err != nil {
+				h.reportSkippedWarmup(task, err)
+			}
 			continue
 		}
 
@@ -610,9 +703,22 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 		if err := h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli()); err != nil {
 			continue
 		}
-		_, _ = h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, source, dueISO, "")
+		if _, err := h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, source, dueISO, ""); err != nil {
+			h.reportSkippedWarmup(task, err)
+		}
 	}
 	return nil
+}
+
+// reportSkippedWarmup names a scheduled run that never left. The round has already advanced the
+// task's marks by the time the run is attempted, so a discarded error would hide both the cause
+// and the fact that this window or due slot was passed over.
+func (h *Handler) reportSkippedWarmup(task warmup.Task, err error) {
+	// A run already in flight is the round's own guard working, not a skipped slot.
+	if errors.Is(err, errWarmupTaskBusy) || h.logger == nil {
+		return
+	}
+	h.logger.Warn("warmup run was not sent", "task", task.ID, "error", err)
 }
 
 func needsWindowQuotaRefresh(task warmup.Task, account *warmup.CatalogAccount, marks warmup.TaskMarks, now time.Time) bool {
@@ -650,6 +756,35 @@ func (h *Handler) refreshWarmupQuota(ctx context.Context, client *management.Cli
 	}
 	_ = h.persistNormalizedQuotaSnapshot(ctx, reading)
 	return true
+}
+
+func (h *Handler) warmupRefreshBackoffActive(authIndex string, now time.Time) bool {
+	h.warmupRuntime.mu.Lock()
+	defer h.warmupRuntime.mu.Unlock()
+	until, ok := h.warmupRuntime.refreshBackoff[authIndex]
+	return ok && now.Before(until)
+}
+
+// deferWarmupRefresh records a failed read; the expired entries it drops on the way keep the
+// map as small as the credentials that currently fail.
+func (h *Handler) deferWarmupRefresh(authIndex string, now time.Time) {
+	h.warmupRuntime.mu.Lock()
+	defer h.warmupRuntime.mu.Unlock()
+	if h.warmupRuntime.refreshBackoff == nil {
+		h.warmupRuntime.refreshBackoff = make(map[string]time.Time)
+	}
+	for key, until := range h.warmupRuntime.refreshBackoff {
+		if !now.Before(until) {
+			delete(h.warmupRuntime.refreshBackoff, key)
+		}
+	}
+	h.warmupRuntime.refreshBackoff[authIndex] = now.Add(warmupRefreshBackoff)
+}
+
+func (h *Handler) clearWarmupRefreshBackoff(authIndex string) {
+	h.warmupRuntime.mu.Lock()
+	defer h.warmupRuntime.mu.Unlock()
+	delete(h.warmupRuntime.refreshBackoff, authIndex)
 }
 
 func (h *Handler) warmupCatalogWithFiles(ctx context.Context, client *management.Client) (warmup.Catalog, map[string]management.AuthFile) {
@@ -691,19 +826,22 @@ func (h *Handler) warmupCatalogWithFiles(ctx context.Context, client *management
 			continue
 		}
 		models := h.warmupModelsForFile(ctx, client, provider, file, filesResp.Files)
-		autoModel := warmup.PickAutoModel(models)
+		upstream := h.warmupModelUpstreams(ctx, client, file, models)
+		models = warmup.FilterWarmupModels(models, upstream)
+		autoModel := h.pickWarmupAutoModel(ctx, provider, models, upstream)
 		windows, snapshotAt := warmupAccountWindows(provider, idx, snapshots)
 		account := warmup.CatalogAccount{
-			AuthIndex:  idx,
-			Name:       firstNonEmpty(strings.TrimSpace(file.Name), idx),
-			Provider:   provider,
-			Email:      strings.TrimSpace(file.Email),
-			Status:     strings.TrimSpace(file.Status),
-			Disabled:   file.Disabled || file.Unavailable,
-			Models:     models,
-			AutoModel:  autoModel,
-			Windows:    windows,
-			SnapshotAt: snapshotAt,
+			AuthIndex:     idx,
+			Name:          firstNonEmpty(strings.TrimSpace(file.Name), idx),
+			Provider:      provider,
+			OAuthProvider: strings.TrimSpace(file.OAuthProvider),
+			Email:         strings.TrimSpace(file.Email),
+			Status:        strings.TrimSpace(file.Status),
+			Disabled:      file.Disabled || file.Unavailable,
+			Models:        models,
+			AutoModel:     autoModel,
+			Windows:       windows,
+			SnapshotAt:    snapshotAt,
 		}
 		byProvider[provider] = append(byProvider[provider], account)
 	}
@@ -831,10 +969,8 @@ func warmupProvider(file management.AuthFile) string {
 
 func (h *Handler) warmupModelsForFile(ctx context.Context, client *management.Client, provider string, file management.AuthFile, allFiles []management.AuthFile) []string {
 	candidates := modelIDs(file.Models)
-	if len(candidates) == 0 && client != nil && strings.TrimSpace(file.Name) != "" {
-		if models, err := client.AuthFileModels(ctx, file.Name); err == nil {
-			candidates = modelIDs(models)
-		}
+	if len(candidates) == 0 {
+		candidates = h.warmupAuthFileModels(ctx, client, file.Name)
 	}
 	if len(candidates) == 0 {
 		candidates = h.warmupModelsForProvider(ctx, client, provider, allFiles)
@@ -851,6 +987,197 @@ func (h *Handler) warmupModelsForFile(ctx context.Context, client *management.Cl
 	}
 	sort.Strings(filtered)
 	return filtered
+}
+
+// warmupModelUpstreams maps each call point the credential lists to the upstream model CPA
+// resolves it to, applying the credential's own aliases before its provider's as CPA does. A
+// rule source that cannot be read leaves its call points mapped to themselves.
+func (h *Handler) warmupModelUpstreams(ctx context.Context, client *management.Client, file management.AuthFile, models []string) map[string]string {
+	if client == nil || len(models) == 0 {
+		return nil
+	}
+	global := h.warmupAliasRules(warmupGlobalAliasKey, func() (warmupAliasCacheEntry, error) {
+		aliases, err := client.OAuthModelAliases(ctx)
+		return warmupAliasCacheEntry{global: aliases}, err
+	})
+	var credential warmupAliasCacheEntry
+	if name := strings.TrimSpace(file.Name); name != "" && !file.RuntimeOnly {
+		credential = h.warmupAliasRules(name, func() (warmupAliasCacheEntry, error) {
+			rules, err := client.CredentialModelAliases(ctx, name)
+			return warmupAliasCacheEntry{credential: rules}, err
+		})
+	}
+	rules := append(slices.Clone(credential.credential), global.global[management.ModelAliasFamily(file)]...)
+	if len(rules) == 0 {
+		return nil
+	}
+	upstream := make(map[string]string, len(models))
+	for _, callPoint := range models {
+		if target := management.ResolveOAuthModelAlias(callPoint, rules); target != callPoint {
+			upstream[callPoint] = target
+		}
+	}
+	return upstream
+}
+
+// warmupAliasRules serves one alias source from the cache, reading it when stale. A failed read
+// is not cached, so the next catalog build retries it.
+func (h *Handler) warmupAliasRules(key string, read func() (warmupAliasCacheEntry, error)) warmupAliasCacheEntry {
+	now := h.now()
+	h.warmupRuntime.mu.Lock()
+	if cached, ok := h.warmupRuntime.aliasRules[key]; ok && now.Before(cached.expiresAt) {
+		h.warmupRuntime.mu.Unlock()
+		return cached
+	}
+	h.warmupRuntime.mu.Unlock()
+
+	entry, err := read()
+	if err != nil {
+		return warmupAliasCacheEntry{}
+	}
+	entry.expiresAt = now.Add(warmupModelCacheTTL)
+	h.warmupRuntime.mu.Lock()
+	if h.warmupRuntime.aliasRules == nil {
+		h.warmupRuntime.aliasRules = make(map[string]warmupAliasCacheEntry)
+	}
+	h.warmupRuntime.aliasRules[key] = entry
+	h.warmupRuntime.mu.Unlock()
+	return entry
+}
+
+// warmupPrices reads the price book for a warmup model choice. A rate is the two ends of one
+// request per million tokens: the warmup prompt is tiny and the answer shorter, so their sum
+// orders models the way the bill does. A channel's own row wins over the shared book, as it does
+// on the price page. An unreadable book prices nothing, which is never zero.
+func (h *Handler) warmupPrices(ctx context.Context) *warmupPriceIndex {
+	if h.pricing == nil {
+		return nil
+	}
+	now := h.now()
+	h.warmupRuntime.mu.Lock()
+	cached := h.warmupRuntime.prices
+	h.warmupRuntime.mu.Unlock()
+	if cached != nil && now.Before(cached.expiresAt) {
+		return cached
+	}
+	rows, err := h.pricing.ListPrices(ctx)
+	if err != nil {
+		return nil
+	}
+	index := &warmupPriceIndex{
+		shared:    make(map[string]float64, len(rows)),
+		byChannel: make(map[string]map[string]float64),
+		expiresAt: now.Add(warmupModelCacheTTL),
+	}
+	for _, row := range rows {
+		recordWarmupRate(index.shared, row)
+	}
+	// Channel overrides refine the book rather than replace it, so a failed read leaves the
+	// shared rates in place.
+	if h.repo != nil {
+		if overrides, err := h.repo.ListChannelModelPrices(ctx); err == nil {
+			for _, row := range overrides {
+				channel := strings.ToLower(strings.TrimSpace(row.Channel))
+				if channel == "" {
+					continue
+				}
+				if index.byChannel[channel] == nil {
+					index.byChannel[channel] = make(map[string]float64)
+				}
+				recordWarmupRate(index.byChannel[channel], row)
+			}
+		}
+	}
+	h.warmupRuntime.mu.Lock()
+	h.warmupRuntime.prices = index
+	h.warmupRuntime.mu.Unlock()
+	return index
+}
+
+func recordWarmupRate(book map[string]float64, row pricing.ModelPrice) {
+	key := pricing.NormalizeModelKey(pricing.StripProviderPrefix(row.Model))
+	if key == "" {
+		return
+	}
+	// One model can be priced twice; the cheaper statement is the one to compare against.
+	rate := row.PromptPricePer1M + row.CompletionPer1M
+	if existing, ok := book[key]; ok && existing <= rate {
+		return
+	}
+	book[key] = rate
+}
+
+// rate is the price of calling a model on a provider's channel, preferring that channel's own row.
+func (index *warmupPriceIndex) rate(provider, reached string) (float64, bool) {
+	if index == nil {
+		return 0, false
+	}
+	key := pricing.NormalizeModelKey(pricing.StripProviderPrefix(reached))
+	if key == "" {
+		return 0, false
+	}
+	if book := index.byChannel[strings.ToLower(strings.TrimSpace(provider))]; book != nil {
+		if rate, ok := book[key]; ok {
+			return rate, true
+		}
+	}
+	rate, ok := index.shared[key]
+	return rate, ok
+}
+
+// pickWarmupAutoModel answers Auto with the cheapest model the price book prices. A zero rate is
+// skipped rather than preferred: a free model is one that never runs the metered request which
+// starts a window, so warming up on it would not open the window at all. The light name ranking
+// answers when the book prices none of the call points, and still orders models priced the same,
+// so the answer stays deterministic.
+func (h *Handler) pickWarmupAutoModel(ctx context.Context, provider string, models []string, upstream map[string]string) string {
+	index := h.warmupPrices(ctx)
+	cheapest, cheapestRate := "", 0.0
+	for _, model := range warmup.SortModelsForAuto(models, upstream) {
+		rate, ok := index.rate(provider, warmup.Reached(model, upstream))
+		if !ok || rate <= 0 {
+			continue
+		}
+		if cheapest == "" || rate < cheapestRate {
+			cheapest, cheapestRate = model, rate
+		}
+	}
+	if cheapest != "" {
+		return cheapest
+	}
+	return warmup.PickAutoModel(models, upstream)
+}
+
+// warmupAuthFileModels returns the models CPA reports for one credential, cached by file name.
+// An answer that lists nothing is cached too: a catalog build otherwise asks again for the same
+// credential from the provider-wide scan, which turns each tick into a request per credential.
+// A failed read is not cached, so the next tick retries it.
+func (h *Handler) warmupAuthFileModels(ctx context.Context, client *management.Client, name string) []string {
+	name = strings.TrimSpace(name)
+	if client == nil || name == "" {
+		return nil
+	}
+	now := h.now()
+	h.warmupRuntime.mu.Lock()
+	if cached, ok := h.warmupRuntime.fileModels[name]; ok && now.Before(cached.expiresAt) {
+		models := slices.Clone(cached.models)
+		h.warmupRuntime.mu.Unlock()
+		return models
+	}
+	h.warmupRuntime.mu.Unlock()
+
+	listed, err := client.AuthFileModels(ctx, name)
+	if err != nil {
+		return nil
+	}
+	models := modelIDs(listed)
+	h.warmupRuntime.mu.Lock()
+	if h.warmupRuntime.fileModels == nil {
+		h.warmupRuntime.fileModels = make(map[string]warmupModelCacheEntry)
+	}
+	h.warmupRuntime.fileModels[name] = warmupModelCacheEntry{models: slices.Clone(models), expiresAt: now.Add(warmupModelCacheTTL)}
+	h.warmupRuntime.mu.Unlock()
+	return models
 }
 
 func (h *Handler) warmupModelsForProvider(ctx context.Context, client *management.Client, provider string, files []management.AuthFile) []string {
@@ -880,10 +1207,8 @@ func (h *Handler) warmupModelsForProvider(ctx context.Context, client *managemen
 	for _, f := range files {
 		if warmupProvider(f) == provider {
 			add(modelIDs(f.Models))
-			if len(f.Models) == 0 && client != nil && strings.TrimSpace(f.Name) != "" {
-				if fileModels, err := client.AuthFileModels(ctx, f.Name); err == nil {
-					add(modelIDs(fileModels))
-				}
+			if len(f.Models) == 0 {
+				add(h.warmupAuthFileModels(ctx, client, f.Name))
 			}
 		}
 	}

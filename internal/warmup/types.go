@@ -94,16 +94,19 @@ type QuotaWindow struct {
 }
 
 type CatalogAccount struct {
-	AuthIndex  string        `json:"auth_index"`
-	Name       string        `json:"name"`
-	Provider   string        `json:"provider"`
-	Email      string        `json:"email,omitempty"`
-	Status     string        `json:"status,omitempty"`
-	Disabled   bool          `json:"disabled,omitempty"`
-	Models     []string      `json:"models"`
-	AutoModel  string        `json:"auto_model"`
-	Windows    []QuotaWindow `json:"windows"`
-	SnapshotAt string        `json:"snapshot_at,omitempty"`
+	AuthIndex string `json:"auth_index"`
+	Name      string `json:"name"`
+	Provider  string `json:"provider"`
+	// OAuthProvider is the login portal that issued the credential, for a plugin that declares
+	// several; a surface cannot draw the credential's brand without it.
+	OAuthProvider string        `json:"oauth_provider,omitempty"`
+	Email         string        `json:"email,omitempty"`
+	Status        string        `json:"status,omitempty"`
+	Disabled      bool          `json:"disabled,omitempty"`
+	Models        []string      `json:"models"`
+	AutoModel     string        `json:"auto_model"`
+	Windows       []QuotaWindow `json:"windows"`
+	SnapshotAt    string        `json:"snapshot_at,omitempty"`
 }
 
 type CatalogProvider struct {

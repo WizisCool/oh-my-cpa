@@ -369,6 +369,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPut, "/api/v1/management/quota/warmup/tasks/{id}", demoRefuse, "automatic consuming requests require a real operator"},
 	{http.MethodDelete, "/api/v1/management/quota/warmup/tasks/{id}", demoRefuse, "automatic consuming requests require a real operator"},
 	{http.MethodPost, "/api/v1/management/quota/warmup/tasks/{id}/run", demoRefuse, "warmup consumes real subscription entitlement"},
+	{http.MethodDelete, "/api/v1/management/quota/warmup/runs", demoRefuse, "clearing warmup history requires a real operator"},
 	{http.MethodPost, "/api/v1/management/quota/redeem-credit", demoRefuse, "redeeming a reset credit is disabled: it spends a real entitlement"},
 }
 

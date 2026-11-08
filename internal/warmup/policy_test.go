@@ -27,29 +27,77 @@ func TestPickAutoModel(t *testing.T) {
 		"gemini-2.0-flash",
 		"gemini-2.5-flash",
 	}
-	if got := PickAutoModel(models); got != "gemini-2.5-flash" {
+	if got := PickAutoModel(models, nil); got != "gemini-2.5-flash" {
 		t.Fatalf("PickAutoModel = %q, want gemini-2.5-flash", got)
 	}
 
 	codexOnly := []string{"gpt-5", "gpt-5-codex", "gpt-5-mini", "gpt-5.1-codex-mini"}
-	if got := PickAutoModel(codexOnly); got != "gpt-5.1-codex-mini" {
+	if got := PickAutoModel(codexOnly, nil); got != "gpt-5.1-codex-mini" {
 		t.Fatalf("PickAutoModel(codex) = %q, want gpt-5.1-codex-mini", got)
 	}
 
 	claudeOnly := []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-3-5-haiku-20241022", "claude-haiku-4-5-20251001"}
-	if got := PickAutoModel(claudeOnly); got != "claude-haiku-4-5-20251001" {
+	if got := PickAutoModel(claudeOnly, nil); got != "claude-haiku-4-5-20251001" {
 		t.Fatalf("PickAutoModel(claude) = %q, want claude-haiku-4-5-20251001", got)
 	}
 
 	// "minimax" must not match "mini" because of word boundaries.
 	noSpec := []string{"minimax-m1", "deepseek-r1", "qwen-max-2"}
-	sorted := SortModelsForAuto(noSpec)
+	sorted := SortModelsForAuto(noSpec, nil)
 	if !slices.Equal(sorted, []string{"qwen-max-2", "minimax-m1", "deepseek-r1"}) {
-		t.Fatalf("SortModelsForAuto(noSpec) = %v", sorted)
+		t.Fatalf("SortModelsForAuto(noSpec, nil) = %v", sorted)
 	}
 
-	if got := PickAutoModel(nil); got != "" {
+	// An OAuth alias is an operator's name for another model: it ranks as the model it reaches,
+	// never by its own letters, and the alias is what gets sent.
+	if got := PickAutoModel([]string{"gpt-5.2", "zeta"}, map[string]string{"zeta": "gpt-5.1"}); got != "gpt-5.2" {
+		t.Fatalf("PickAutoModel(alias of an older model) = %q, want gpt-5.2", got)
+	}
+	if got := PickAutoModel([]string{"gpt-5.4", "alpha"}, map[string]string{"alpha": "gpt-5.4-mini"}); got != "alpha" {
+		t.Fatalf("PickAutoModel(alias of a mini model) = %q, want alpha", got)
+	}
+
+	// A listed name that reaches no model at all ranks last instead of winning the descending
+	// tie-break on its letters, and it remains the answer when nothing else is listed.
+	if got := PickAutoModel([]string{"gpt-5.2", "gpt-5.2-codex", "retain"}, nil); got != "gpt-5.2-codex" {
+		t.Fatalf("PickAutoModel(unversioned name) = %q, want gpt-5.2-codex", got)
+	}
+	if got := PickAutoModel([]string{"retain"}, nil); got != "retain" {
+		t.Fatalf("PickAutoModel(only an unversioned name) = %q, want retain", got)
+	}
+	// The version check reads the ranked name, so an alias of a real model keeps that model's rank.
+	if got := PickAutoModel([]string{"gpt-5.2", "retain"}, map[string]string{"retain": "gpt-5.4"}); got != "retain" {
+		t.Fatalf("PickAutoModel(alias of a newer model) = %q, want retain", got)
+	}
+
+	if got := PickAutoModel(nil, nil); got != "" {
 		t.Fatalf("PickAutoModel(nil) = %q, want empty", got)
+	}
+}
+
+func TestFilterWarmupModels(t *testing.T) {
+	models := []string{
+		"gpt-5.4",
+		"gpt-image-1",
+		"gemini-2.5-flash-image",
+		"dall-e-3",
+		"imagen-4.0-generate-001",
+		"flux-1-dev",
+		"claude-haiku-4-5",
+		"deep-research-preview-04-2026",
+		"openai/gpt-image-2",
+	}
+	want := []string{"gpt-5.4", "claude-haiku-4-5", "deep-research-preview-04-2026"}
+	if got := FilterWarmupModels(models, nil); !slices.Equal(got, want) {
+		t.Fatalf("FilterWarmupModels = %v, want %v", got, want)
+	}
+	if got := FilterWarmupModels([]string{"gpt-image-1"}, nil); len(got) != 0 {
+		t.Fatalf("FilterWarmupModels(image only) = %v, want empty", got)
+	}
+	// A call point is judged by the model it reaches, so a name that hides an image model is
+	// dropped as well.
+	if got := FilterWarmupModels([]string{"draw", "gpt-5.4"}, map[string]string{"draw": "openai/gpt-image-2"}); !slices.Equal(got, []string{"gpt-5.4"}) {
+		t.Fatalf("FilterWarmupModels(alias of an image model) = %v, want [gpt-5.4]", got)
 	}
 }
 

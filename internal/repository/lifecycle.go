@@ -67,9 +67,9 @@ type TableLifecycle struct {
 var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"database_backup_automation": {Kind: LifecycleReplaced, Reason: "one encrypted schedule and bounded destination configuration, updated in place"},
 	"channel_model_prices":       {Kind: LifecycleReplaced, Reason: "operator prices keyed by the usage channel and upstream model; history lives in model_price_versions"},
-	"credential_warmup_policies": {Kind: LifecyclePermanent, Reason: "operator-approved scheduling policies, bound to instance and exact credential identity"},
-	"credential_warmup_state":    {Kind: LifecycleOwnerBounded, Reason: "one scheduling record per credential; preserved for restart deduplication"},
-	"credential_warmup_runs":     {Kind: LifecycleOwnerBounded, Reason: "newest 100 request receipts per credential, trimmed on write"},
+	"credential_warmup_policies": {Kind: LifecyclePermanent, Reason: "operator-approved warmup tasks, keyed by task id; rows written by the retired per-credential warmup are no longer read"},
+	"credential_warmup_state":    {Kind: LifecycleOwnerBounded, Reason: "one scheduling marks record per warmup task, keyed by task id; preserved for restart deduplication"},
+	"credential_warmup_runs":     {Kind: LifecycleOwnerBounded, Reason: "newest 50 request receipts per warmup task, trimmed on write; rows of the retired per-credential warmup are neither read nor trimmed"},
 	"usage_events": {Kind: LifecycleRolling, Reason: "request records; their usage survives in the facts",
 		Rules: []LifecycleRule{{Policy: LifecycleUsageDetail, Expired: `timestamp_ms < ?`, IsGatedByUsageFacts: true}}},
 	"error_events": {Kind: LifecycleRolling, Reason: "error detail shown beside request records",

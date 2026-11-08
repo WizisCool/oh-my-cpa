@@ -301,6 +301,18 @@ func (c *Client) OAuthModelAliases(ctx context.Context) (map[string][]OAuthModel
 	return sanitizeOAuthModelAliases(stored), nil
 }
 
+// ResolveOAuthModelAlias returns the upstream model a credential's call point reaches. Rules are
+// ordered as CPA resolves them: the credential's own before its provider's, first match wins.
+// A call point no rule renames is its own upstream.
+func ResolveOAuthModelAlias(callPoint string, rules []OAuthModelAlias) string {
+	for _, rule := range rules {
+		if strings.EqualFold(rule.Alias, callPoint) {
+			return rule.Name
+		}
+	}
+	return callPoint
+}
+
 // sanitizeOAuthModelAliases mirrors CPA's SanitizeOAuthModelAlias: providers
 // are lower-cased, and an alias without a name, equal to its model or repeated
 // within a provider is ignored. The stored document is what the operator
