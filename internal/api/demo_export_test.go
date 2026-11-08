@@ -146,6 +146,10 @@ func demoExportCases() []demoExportCase {
 		{Name: "plugins-settings", Path: "/api/v1/management/plugins/settings"},
 		// Each installed plugin's settings document, for the editor the list opens. The
 		// ids are the fixture's own, so the list and its editors cannot disagree.
+		{Name: "plugin-config-omc-qoder-oauth", Path: "/api/v1/management/plugins/omc-qoder-oauth/config", Route: "/api/v1/management/plugins/{id}/config"},
+		{Name: "plugin-config-omc-zcode-oauth", Path: "/api/v1/management/plugins/omc-zcode-oauth/config", Route: "/api/v1/management/plugins/{id}/config"},
+		{Name: "plugin-config-omc-workbuddy-oauth", Path: "/api/v1/management/plugins/omc-workbuddy-oauth/config", Route: "/api/v1/management/plugins/{id}/config"},
+		{Name: "plugin-config-omc-opencode-zen-free", Path: "/api/v1/management/plugins/omc-opencode-zen-free/config", Route: "/api/v1/management/plugins/{id}/config"},
 		{Name: "plugin-config-usage-exporter", Path: "/api/v1/management/plugins/usage-exporter/config", Route: "/api/v1/management/plugins/{id}/config"},
 		{Name: "plugin-config-prompt-redactor", Path: "/api/v1/management/plugins/prompt-redactor/config", Route: "/api/v1/management/plugins/{id}/config"},
 		{Name: "plugin-config-quota-notifier", Path: "/api/v1/management/plugins/quota-notifier/config", Route: "/api/v1/management/plugins/{id}/config"},
