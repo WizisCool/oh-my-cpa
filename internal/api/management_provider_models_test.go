@@ -464,12 +464,14 @@ func TestModelDirectoryTargetsFollowFamilyDialect(t *testing.T) {
 
 func TestFetchEndpointModelsAsksTheFamilyDialectFirst(t *testing.T) {
 	for _, testCase := range []struct {
-		name   string
-		family string
-		path   string
-		query  string
-		body   string
-		want   []string
+		name    string
+		family  string
+		path    string
+		query   string
+		status  int
+		body    string
+		want    []string
+		wantErr string
 	}{
 		{
 			name:   "anthropic messages",
@@ -487,11 +489,23 @@ func TestFetchEndpointModelsAsksTheFamilyDialectFirst(t *testing.T) {
 			body:   `{"models":[{"name":"models/gemini-2.5-pro"},{"name":"models/gemini-2.5-flash"}]}`,
 			want:   []string{"gemini-2.5-pro", "gemini-2.5-flash"},
 		},
+		{
+			// Only a 404 means this path is not the directory. A refusal is the
+			// upstream's answer about the request, and the same key must not be
+			// presented again at another path on that host.
+			name:    "a refused request ends the ladder",
+			family:  "claude",
+			path:    "/v1/models",
+			query:   "limit=1000",
+			status:  http.StatusForbidden,
+			wantErr: "HTTP 403",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			var paths []string
+			var requested []string
 			var query string
 			upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				requested = append(requested, request.URL.Path)
 				// Anything this dialect does not publish is refused the way the
 				// Google host refuses another path: not with a 404 a fallback could
 				// step over, but with a refusal that ends the search.
@@ -499,25 +513,34 @@ func TestFetchEndpointModelsAsksTheFamilyDialectFirst(t *testing.T) {
 					http.Error(writer, "not this dialect's directory", http.StatusForbidden)
 					return
 				}
-				paths = append(paths, request.URL.Path)
 				query = request.URL.RawQuery
+				if testCase.status != 0 {
+					http.Error(writer, "refused", testCase.status)
+					return
+				}
 				writer.Header().Set("Content-Type", "application/json")
 				_, _ = writer.Write([]byte(testCase.body))
 			}))
 			defer upstream.Close()
 
 			models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", testCase.family, nil)
+			if !slices.Equal(requested, []string{testCase.path}) {
+				t.Fatalf("requested %v, want exactly [%s]", requested, testCase.path)
+			}
+			if query != testCase.query {
+				t.Fatalf("query = %q, want %q", query, testCase.query)
+			}
+			if testCase.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+					t.Fatalf("error = %v, want %q", err, testCase.wantErr)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("pull from %s: %v", testCase.family, err)
 			}
 			if !slices.Equal(models, testCase.want) {
 				t.Fatalf("models = %v, want %v", models, testCase.want)
-			}
-			if !slices.Equal(paths, []string{testCase.path}) {
-				t.Fatalf("requested %v, want exactly [%s]", paths, testCase.path)
-			}
-			if query != testCase.query {
-				t.Fatalf("query = %q, want %q", query, testCase.query)
 			}
 		})
 	}
