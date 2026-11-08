@@ -62,6 +62,7 @@ import {
   type QuotaPeriod,
 } from './credentialSections';
 import { maskAccount } from '../../utils/maskAccount';
+import { MaskedText } from '../../components/common/MaskedText';
 import styles from './CredentialSection.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
 import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../../components/common/InlineName';
@@ -344,27 +345,22 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
   const isDemo = isDemoMode();
   const { file, quota } = record;
   const identity = deriveAuthFileIdentity(file);
-  // Who an account belongs to is masked until the operator asks, so a screen share or a screenshot of
-  // the list does not publish every address; the reveal is per row and lasts until clicked again.
-  const [isRevealed, setIsRevealed] = React.useState(false);
   const [isRenaming, setIsRenaming] = React.useState(false);
   const account = identity.isAccountPrimary ? identity.primary : '';
-  const shownAccount = account && !isRevealed ? maskAccount(account) : account;
   // The operator's own name leads the row; the account it stands for drops to the line under it,
   // where it keeps its mask and its reveal.
   const displayName = file.display_name?.trim() ?? '';
   const canRename = !file.runtime_only && record.hasUniqueFileName;
+  // Who an account belongs to is masked until the operator asks, so a screen share or a screenshot
+  // of the list does not publish every address; the reveal is per row and lasts until clicked again.
   const accountToggle = account ? (
-    <button
-      type="button"
-      className={displayName ? clsx(styles['meta-account'], styles['primary-toggle']) : clsx(styles.primary, styles['primary-toggle'])}
-      onClick={() => setIsRevealed((value) => !value)}
-      aria-pressed={isRevealed}
-      title={t(isRevealed ? 'omc.account_hide' : 'omc.account_reveal')}
-      data-account-masked={isRevealed ? undefined : 'true'}
-    >
-      {shownAccount}
-    </button>
+    <MaskedText
+      className={displayName ? styles['meta-account'] : styles.primary}
+      masked={maskAccount(account)}
+      value={account}
+      revealLabel={t('omc.account_reveal')}
+      hideLabel={t('omc.account_hide')}
+    />
   ) : null;
   const isDisabled = isAuthFileDisabled(file);
   const status = credentialStatusOf(record, isDisabled, isAuthFileProblem(file));

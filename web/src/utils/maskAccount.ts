@@ -39,3 +39,18 @@ export function maskAccountIn(text: string, account: string): string {
   // local part may legally contain one.
   return text.replace(new RegExp(escaped, 'giu'), () => mask);
 }
+
+/** The local and domain shape an address is recognised by when the credential is not at hand. */
+const ADDRESS = /[A-Za-z0-9._%+'\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * Masks every address-shaped token in a label, for a surface holding the label but not the
+ * credential that would name the address. A label with no address is left whole, so a gateway's
+ * own name for a credential is not mangled while the credential read is pending or failed.
+ * An address already carrying the mask is left as it is, so a caller may apply this after the
+ * credential's own identities without masking the same name twice.
+ */
+export function maskEmailAddresses(text: string): string {
+  return text.replace(ADDRESS, (address, offset: number, source: string) =>
+    source[offset - 1] === ACCOUNT_MASK[0] ? address : maskAccount(address));
+}

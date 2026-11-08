@@ -17,7 +17,8 @@ import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { useProviderBranding } from '../../hooks/useProviderBranding';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { isDemoMode } from '../../types/demoMode';
-import type { RoutingBoard, RoutingMember, RoutingOutcome, RoutingPlanRequest, RoutingSettingKey } from '../../types/routing';
+import type { RoutingBoard, RoutingOutcome, RoutingPlanRequest, RoutingSettingKey } from '../../types/routing';
+import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import {
   diffPlan,
   draftFromBoard,
@@ -32,7 +33,9 @@ import {
   type RoutingTier,
 } from '../../types/routingPlan';
 import { PolicyStrip } from './PolicyStrip';
-import { TierLadder } from './TierLadder';
+import { TierLadder, type MemberLabel } from './TierLadder';
+import { maskCredentialIdentities } from '../../types/usageEventIdentity';
+import { maskEmailAddresses } from '../../utils/maskAccount';
 import styles from './RoutingPage.module.css';
 
 const renderModelMark = (_key: string, model: string) => <ModelMark model={model} size={16} />;
@@ -63,14 +66,13 @@ function describeValue(t: TFunc, value: unknown): string {
   return String(value);
 }
 
-function describeChange(t: TFunc, change: RoutingChange, members: ReadonlyMap<string, RoutingMember>): string {
+function describeChange(t: TFunc, change: RoutingChange, displayName: (key: string) => string): string {
   const from = describeValue(t, change.from);
   const to = describeValue(t, change.to);
   if (change.kind === 'setting') {
     return t('orch.change_setting', { name: t(SETTING_LABELS[change.field as RoutingSettingKey]), from, to });
   }
-  const name = members.get(change.key)?.name ?? change.key;
-  return t(change.kind === 'priority' ? 'orch.change_priority' : 'orch.change_weight', { name, from, to });
+  return t(change.kind === 'priority' ? 'orch.change_priority' : 'orch.change_weight', { name: displayName(change.key), from, to });
 }
 
 /**
@@ -127,6 +129,21 @@ export function RoutingPage() {
     queryFn: () => api.getRoutingModels(),
     staleTime: 30_000,
   });
+  // A credential's board name is the gateway's label for it, which may be the account itself. The
+  // auth-file read supplies the identities to mask out of that name, as every other surface that
+  // names a credential does; the board stays the same for every reader, the Agent included.
+  const authFilesQuery = useQuery({
+    queryKey: ['management-auth-files'],
+    queryFn: () => api.getManagementAuthFiles(),
+    staleTime: 60_000,
+  });
+  const credentialFiles = React.useMemo(() => {
+    const byName = new Map<string, ManagementAuthFile>();
+    for (const file of authFilesQuery.data?.files ?? []) {
+      if (file.name) byName.set(file.name, file);
+    }
+    return byName;
+  }, [authFilesQuery.data]);
   const modelOptions = React.useMemo(() => {
     const names = new Set<string>();
     for (const models of Object.values(modelsQuery.data?.models ?? {})) {
@@ -142,6 +159,24 @@ export function RoutingPage() {
   }, [modelsQuery.data]);
 
   const members = React.useMemo(() => new Map((baseline?.members ?? []).map((member) => [member.key, member])), [baseline]);
+  // A credential whose name repeats an identity the file reports is printed masked, with the full
+  // name one click away on its card; a name that repeats nothing is printed whole and is no toggle.
+  const labels = React.useMemo(() => {
+    const shown = new Map<string, MemberLabel>();
+    for (const member of baseline?.members ?? []) {
+      if (member.kind !== 'credential') continue;
+      // The credential's own identities mask first, keeping a prefix the name carries; an address
+      // the name still holds is masked from the name itself, so a pending or failed auth-file read
+      // cannot publish one.
+      const masked = maskEmailAddresses(maskCredentialIdentities(member.name, credentialFiles.get(member.id)));
+      if (masked !== member.name) shown.set(member.key, { masked, full: member.name });
+    }
+    return shown;
+  }, [baseline, credentialFiles]);
+  const displayName = React.useCallback(
+    (key: string) => labels.get(key)?.masked ?? members.get(key)?.name ?? key,
+    [labels, members],
+  );
   // The route is always drawn; a chosen model narrows it once the members' models are read.
   const lens = React.useMemo(
     () => (lensModel && modelsQuery.data ? { model: lensModel, models: modelsQuery.data } : null),
@@ -167,7 +202,7 @@ export function RoutingPage() {
     }
     setDraft(arrangement);
     setLandedKey(key);
-    setAnnouncement(t('orch.moved', { name: members.get(key)?.name ?? key, n: tierIndexOf(tiers, key) + 1 }));
+    setAnnouncement(t('orch.moved', { name: displayName(key), n: tierIndexOf(tiers, key) + 1 }));
   };
 
   const applyMutation = useMutation({
@@ -195,7 +230,7 @@ export function RoutingPage() {
         items: outcome.results
           .filter((result) => result.status !== 'applied')
           .map((result) => ({
-            name: result.key === 'settings' ? t('orch.settings_target') : members.get(result.key)?.name ?? result.key,
+            name: result.key === 'settings' ? t('orch.settings_target') : displayName(result.key),
             group: t(RESULT_GROUPS[result.status] ?? 'orch.result_failed'),
           })),
       });
@@ -272,7 +307,7 @@ export function RoutingPage() {
       placement="topLeft"
       content={(
         <ul className={styles['review']}>
-          {diff.changes.map((change, index) => <li key={index}>{describeChange(t, change, members)}</li>)}
+          {diff.changes.map((change, index) => <li key={index}>{describeChange(t, change, displayName)}</li>)}
         </ul>
       )}
     >
@@ -300,6 +335,7 @@ export function RoutingPage() {
             <TierLadder branding={branding}
               tiers={draft.tiers}
               members={members}
+              labels={labels}
               tierPriorities={diff.tierPriorities}
               strategy={draft.settings.strategy}
               weights={draft.weights}

@@ -5,6 +5,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { RoutingPage } from '../src/pages/routing/RoutingPage';
 import type { RoutingBoard, RoutingMember } from '../src/types/routing';
+import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 
@@ -71,4 +72,40 @@ it('reports a plan refused for a changed board and offers a reload', async () =>
   await arrangeAndApply(json({ error: 'changed', code: 'routing_conflict' }, 409));
   expect(await screen.findByText('Routing changed elsewhere. Reload and arrange again.')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+});
+
+const authFile = (name: string, email: string, displayName?: string): ManagementAuthFile => ({
+  name, email, display_name: displayName, type: 'zcode', provider: 'zcode',
+  disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0,
+});
+
+it('masks an account a credential is named after and reveals it on click', async () => {
+  const account = 'operator@example.com';
+  const api = installOmcApi({
+    authFiles: [
+      { file: authFile('zcode-acct.json', account), fields: {} },
+      { file: authFile('zcode-named.json', account, 'Team seat'), fields: {} },
+    ],
+  });
+  api.on('GET', '/management/routing', () => ({
+    ...board,
+    members: [
+      { ...member('credential:zcode-acct.json', account, 10), family: 'zcode' },
+      { ...member('credential:zcode-named.json', 'Team seat', 0), family: 'zcode' },
+      member('provider:claude-0', 'Anthropic Claude', 0, 'provider'),
+    ],
+  }));
+  renderRoutingPage();
+
+  const card = await screen.findByRole('listitem', { name: 'op•••r@example.com' });
+  expect(screen.queryByText(account)).toBeNull();
+
+  fireEvent.click(within(card).getByText('op•••r@example.com'));
+  expect(within(card).getByText(account)).toBeTruthy();
+  // Revealing the card's text does not republish the name in the card's accessible name.
+  expect(screen.getByRole('listitem', { name: 'op•••r@example.com' })).toBeTruthy();
+
+  // The operator's own name for a credential is not identity material, so it stays whole and is no toggle.
+  const named = screen.getByRole('listitem', { name: 'Team seat' });
+  expect(within(named).queryByTitle('Show account')).toBeNull();
 });
