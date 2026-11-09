@@ -161,6 +161,7 @@ export default {
   'audit.action.quota.refresh': '刷新配额',
   'audit.action.quota.clear_cooldown': '解除冷却',
   'audit.action.quota.redeem_credit': '兑换额度',
+  'audit.action.quota.codex_reset_policy': '更改自动重置授权',
   'audit.action.quota.reset': '重置配额',
   'audit.action.pricing.sync.start': '同步模型价格',
   'audit.action.pricing.models.update': '修改模型价格',

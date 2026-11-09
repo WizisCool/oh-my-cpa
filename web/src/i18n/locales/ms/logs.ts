@@ -164,6 +164,7 @@ export default {
   "audit.action.quota.refresh": "Menyegarkan kuota",
   "audit.action.quota.clear_cooldown": "Mengosongkan tempoh bertenang",
   "audit.action.quota.redeem_credit": "Menebus kredit",
+  "audit.action.quota.codex_reset_policy": "Mengubah persetujuan tetapan semula automatik",
   "audit.action.quota.reset": "Menetapkan semula kuota",
   "audit.action.pricing.sync.start": "Menyegerakkan harga model",
   "audit.action.pricing.models.update": "Mengemas kini harga model",

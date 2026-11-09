@@ -359,6 +359,8 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/management/quota/clear-cooldown", h.clearCredentialCooldown)
 				v1.Post("/management/quota/refresh", h.refreshCredentialQuota)
 				v1.Post("/management/quota/redeem-credit", h.redeemCodexResetCredit)
+				v1.Get("/management/quota/codex-reset-policy", h.codexResetPolicy)
+				v1.Put("/management/quota/codex-reset-policy", h.codexResetPolicy)
 				v1.Get("/management/quota/warmup/settings", h.getWarmupSettings)
 				v1.Post("/management/quota/warmup/tasks", h.createWarmupTask)
 				v1.Put("/management/quota/warmup/tasks/{id}", h.updateWarmupTask)

@@ -7,6 +7,7 @@ import type { QuotaItem } from '../../types/quota';
 import { formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey, quotaPayloadSummary } from './quotaFormat';
 import { QuotaWindowCards } from './QuotaWindowCards';
 import { QuotaResetCards } from './QuotaResetCards';
+import { CodexAutoReset } from './CodexAutoReset';
 import { ToolButton } from '../../components/common/ToolButton';
 import { AppModal } from '../../components/common/AppModal';
 import { orderQuotaWindows } from './quotaWindowSelection';
@@ -284,6 +285,10 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         isDemo={isDemo}
         onRedeem={canRedeem ? () => onRedeemCredit?.(item.auth_index) : undefined}
       />
+
+      {item.provider === 'codex' && onRedeemCredit && !isDemo && (
+        <CodexAutoReset key={item.auth_index} authIndex={item.auth_index} isDisabled={item.disabled} />
+      )}
 
       {balances.length > 0 && (
         <div className={styles.section} data-quota-balances="true">

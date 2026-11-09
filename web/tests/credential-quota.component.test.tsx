@@ -13,7 +13,8 @@ import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { App as AntdApp } from 'antd';
 import { CredentialSection, type CredentialRowActions } from '../src/pages/oauthManagement/CredentialSection';
 import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
-import { installOmcApi } from './support/omcApi';
+import { installOmcApi, json } from './support/omcApi';
+import { CodexAutoReset } from '../src/pages/quota/CodexAutoReset';
 import { renderWithOmc } from './support/render';
 import { buildCredentialSections } from '../src/pages/oauthManagement/credentialSections';
 import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
@@ -75,6 +76,96 @@ const panelState = () => screen.getByTestId('dashboard-credential-quota').getAtt
 
 beforeEach(() => {
   window.localStorage.setItem('omc-lang', 'en');
+});
+
+describe('Codex automatic reset consent', () => {
+  const path = '/management/quota/codex-reset-policy';
+  const policy = {
+    account_key: `codex-reset:${'a'.repeat(64)}`, enabled: false, before_expiry_seconds: 3600,
+    pending: false, result: 'disabled', last_reset_at: 0, last_checked_at: 0, next_check_at: 0,
+  };
+
+  it('requires confirmation, binds consent to the account, and reads it again after remount', async () => {
+    const server = installOmcApi();
+    let saved = { ...policy };
+    server.on('GET', path, () => saved);
+    server.on('PUT', path, request => {
+      expect(request.query.get('auth_index')).toBe('account & one');
+      expect(request.body).toEqual({ account_key: policy.account_key, enabled: true, before_expiry_seconds: 3600 });
+      saved = { ...saved, enabled: true, result: 'waiting' };
+      return saved;
+    });
+    const mounted = renderWithOmc(<CodexAutoReset authIndex="account & one" />);
+    const toggle = await screen.findByRole('switch', { name: 'Automatic reset' });
+    await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(false));
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(server.requests.filter(request => request.method === 'PUT')).toHaveLength(0);
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(server.requests.filter(request => request.method === 'PUT')).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(true));
+    mounted.unmount();
+    renderWithOmc(<CodexAutoReset authIndex="account & one" />);
+    await waitFor(() => expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true'));
+  });
+
+  it('blocks unresolved redemption and unavailable backends without offering a retry debit', async () => {
+    const server = installOmcApi();
+    server.on('GET', path, () => ({ ...policy, pending: true, result: 'unknown' }));
+    const mounted = renderWithOmc(<CodexAutoReset authIndex="one" />);
+    await screen.findByText('Redemption needs operator reconciliation');
+    expect(screen.getByRole('switch').hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(true);
+    mounted.unmount();
+    server.on('GET', path, () => json({ code: 'capability_missing' }, 501));
+    renderWithOmc(<CodexAutoReset authIndex="unsupported" />);
+    await screen.findByText('Automatic resets require CPA support and persistent KV storage');
+    expect(screen.getByRole('switch').hasAttribute('disabled')).toBe(true);
+    expect(server.requests.filter(request => request.method === 'PUT')).toHaveLength(0);
+  });
+
+  it('drops a consent draft when the credential changes identity and reports save failures', async () => {
+    const server = installOmcApi();
+    let current = { ...policy };
+    server.on('GET', path, () => current);
+    server.on('PUT', path, () => json({ code: 'conflict' }, 409));
+    const mounted = renderWithOmc(<CodexAutoReset authIndex="one" />);
+    const toggle = await screen.findByRole('switch');
+    await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(toggle);
+    current = { ...policy, account_key: `codex-reset:${'b'.repeat(64)}` };
+    await mounted.client.invalidateQueries({ queryKey: ['codex-reset-policy', 'one'] });
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    await screen.findByRole('alert');
+    expect(server.requests.filter(request => request.method === 'PUT')[0].body).toEqual({
+      account_key: current.account_key, enabled: true, before_expiry_seconds: 3600,
+    });
+    mounted.unmount();
+    renderWithOmc(<CodexAutoReset authIndex="one" />);
+    await waitFor(() => expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false'));
+  });
+
+  it('allows disabling an unresolved policy without resetting its journal', async () => {
+    const server = installOmcApi();
+    server.on('GET', path, () => ({ ...policy, enabled: true, pending: true, result: 'unknown' }));
+    server.on('PUT', path, request => {
+      expect(request.body).toEqual({ account_key: policy.account_key, enabled: false, before_expiry_seconds: 3600 });
+      return { ...policy, pending: true, result: 'unknown' };
+    });
+    renderWithOmc(<CodexAutoReset authIndex="one" />);
+    const toggle = await screen.findByRole('switch');
+    await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(true));
+    expect(screen.getByText('Redemption needs operator reconciliation')).toBeTruthy();
+  });
 });
 
 describe('credential quota board', () => {

@@ -48,7 +48,7 @@ import {
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse, SIWCBindingStart, SIWCBindingStatus } from '../types/oauth';
-import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem, QuotaCapacityHistory } from '../types/quota';
+import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem, QuotaCapacityHistory, CodexResetPolicy } from '../types/quota';
 import {
   SystemInfoResponse,
   SystemReleasesResponse,
@@ -1401,6 +1401,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ auth_index: authIndex }),
     });
+  },
+
+  async getCodexResetPolicy(authIndex: string): Promise<CodexResetPolicy> {
+    return request(`/management/quota/codex-reset-policy?auth_index=${encodeURIComponent(authIndex)}`, { method: 'GET' });
+  },
+
+  async putCodexResetPolicy(authIndex: string, consent: Pick<CodexResetPolicy, 'account_key' | 'enabled' | 'before_expiry_seconds'>): Promise<CodexResetPolicy> {
+    return request(`/management/quota/codex-reset-policy?auth_index=${encodeURIComponent(authIndex)}`, { method: 'PUT', body: JSON.stringify(consent) });
   },
 
   async getCredentialQuotaDetail(authIndex: string): Promise<CredentialQuotaDetailResponse> {

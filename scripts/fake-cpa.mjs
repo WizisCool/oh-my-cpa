@@ -178,6 +178,10 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     },
   ];
   let authFiles = JSON.parse(JSON.stringify(initialAuthFiles));
+  let codexResetPolicy = {
+    account_key: `codex-reset:${'a'.repeat(64)}`, enabled: false, before_expiry_seconds: 3600,
+    pending: false, result: 'disabled', last_reset_at: 0, last_checked_at: 0, next_check_at: 0,
+  };
   let oauthModelAliases = {
     codex: [{ name: 'gpt-e2e', alias: 'gpt-e2e-preview', fork: true, 'force-mapping': false, 'display-name': 'GPT E2E Preview' }],
     claude: [{ name: 'claude-3-5-sonnet', alias: 'sonnet-latest' }],
@@ -518,6 +522,22 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
 
     if (request.method === 'GET' && path === '/credentials') {
       json(response, 200, { files: authFiles });
+      return;
+    }
+    if (path === '/routing/codex-reset-policy') {
+      if (url.searchParams.get('auth_index') !== 'auth-index-e2e-1') {
+        json(response, 400, { error: 'unsupported fixture credential' });
+        return;
+      }
+      if (request.method === 'PUT') {
+        const consent = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if (consent.account_key !== codexResetPolicy.account_key || typeof consent.enabled !== 'boolean') {
+          json(response, 409, { error: 'identity changed' });
+          return;
+        }
+        codexResetPolicy = { ...codexResetPolicy, ...consent, result: consent.enabled ? 'waiting' : 'disabled' };
+      }
+      json(response, 200, codexResetPolicy);
       return;
     }
     if (request.method === 'GET' && path === '/credentials/models') {

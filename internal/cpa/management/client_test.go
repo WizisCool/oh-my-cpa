@@ -12,6 +12,34 @@ import (
 	"time"
 )
 
+func TestCodexResetPolicyRejectsIncompleteOrChangedIdentity(t *testing.T) {
+	key := "codex-reset:" + strings.Repeat("a", 64)
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{"absent consent", `{"account_key":"` + key + `","before_expiry_seconds":3600,"pending":false}`},
+		{"absent journal status", `{"account_key":"` + key + `","before_expiry_seconds":3600,"enabled":false}`},
+		{"unsupported interval", `{"account_key":"` + key + `","before_expiry_seconds":0,"enabled":false,"pending":false}`},
+		{"changed identity", `{"account_key":"codex-reset:` + strings.Repeat("b", 64) + `","before_expiry_seconds":3600,"enabled":true,"pending":false}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := newV8Server(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+			client, err := NewClient(server.URL, "management-secret", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			enabled := true
+			if _, err = client.CodexResetPolicy(context.Background(), "one", &CodexResetConsent{AccountKey: key, Enabled: &enabled, BeforeExpirySeconds: 3600}); err == nil {
+				t.Fatal("accepted invalid reset policy")
+			}
+		})
+	}
+}
+
 func TestClientUsesManagementAuthorizationAndDecodesResponses(t *testing.T) {
 	const key = "management-secret"
 	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

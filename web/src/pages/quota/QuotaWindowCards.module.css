@@ -4,6 +4,13 @@
   gap: 14px;
 }
 
+.auto-reset-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .group {
   display: flex;
   flex-direction: column;

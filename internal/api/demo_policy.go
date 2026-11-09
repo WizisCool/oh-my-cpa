@@ -274,6 +274,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/oauth/providers", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/oauth/status", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/quota", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/quota/codex-reset-policy", demoRefuse, "automatic resets require a real CPA instance"},
 	{http.MethodGet, "/api/v1/management/quota/{authIndex}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/quota/{authIndex}/capacity", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/quota/refresh", demoAllow, ""},
@@ -374,6 +375,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/quota/warmup/tasks/{id}/run", demoRefuse, "warmup consumes real subscription entitlement"},
 	{http.MethodDelete, "/api/v1/management/quota/warmup/runs", demoRefuse, "clearing warmup history requires a real operator"},
 	{http.MethodPost, "/api/v1/management/quota/redeem-credit", demoRefuse, "redeeming a reset credit is disabled: it spends a real entitlement"},
+	{http.MethodPut, "/api/v1/management/quota/codex-reset-policy", demoRefuse, "automatic reset consent requires a real operator"},
 }
 
 // demoPolicyConsole is the console itself and the assets it loads.

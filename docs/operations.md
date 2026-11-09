@@ -455,6 +455,14 @@ workflow rejects tags whose snapshot is more than 30 days older than the tagged 
 
 ## Quota observation and window warmup
 
+- **Expiring Codex reset credits**: A Codex credential's details offer **Automatic reset**
+  when CPA implements `/v8/management/routing/codex-reset-policy` (upstream
+  [CLIProxyAPI#7391](https://github.com/router-for-me/CLIProxyAPI/pull/7391)) and has persistent
+  KV storage. The policy defaults off; saving explicitly confirms consent and the lead time.
+  CPA owns expiry checks and redemption even with the browser closed. OMC only shows policy,
+  checks and confirmed reset times, and preserves manual redemption. An unresolved redemption
+  requires upstream reconciliation; toggling consent never clears its journal. Back up CPA's
+  KV store with its credentials: OMC's SQLite backup does not contain that journal.
 - **Quota refresh**: Quota observations are initiated server-side against fixed provider
   endpoints (`internal/quota/service.go`) or CPA's plugin quota endpoint. **OMC Settings →
   Quota** (`omc_quota_auto_refresh`) controls automatic post-reset reads and scheduled

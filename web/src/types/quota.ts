@@ -276,3 +276,14 @@ export interface CredentialQuotaDetailResponse {
   model_quotas?: Record<string, ManagementQuotaObservation>;
   last_refresh?: QuotaRefreshAttempt;
 }
+
+export interface CodexResetPolicy {
+  account_key: string;
+  enabled: boolean;
+  before_expiry_seconds: number;
+  pending: boolean;
+  result: string;
+  next_check_at: number;
+  last_checked_at: number;
+  last_reset_at: number;
+}
