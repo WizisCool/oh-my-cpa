@@ -69,7 +69,9 @@ export function SearchInput({ value, onChange, label, placeholder, className, on
         commit(event.target.value);
       }}
       // A composition the browser announces starts from the text already in the field; one it only
-      // flags on its input event is caught above. Either way the draft is the field's own.
+      // flags on its input event is caught above. Either way the draft is the field's own. The
+      // commit is announced here rather than only on the input, because Chromium's last input can
+      // still belong to the composition: this is the event that says the text is finished.
       onCompositionStart={() => setDraft(value)}
       onCompositionEnd={(event) => commit(event.currentTarget.value)}
       onBlur={(event) => {

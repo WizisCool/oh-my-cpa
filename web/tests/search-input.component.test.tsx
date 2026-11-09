@@ -58,6 +58,38 @@ describe('SearchInput', () => {
     expect((input as HTMLInputElement).value).toBe('cla');
   });
 
+  it('commits a composition through compositionend, with no input after it', () => {
+    const onChange = vi.fn();
+    render(<Field onChange={onChange} />);
+    const input = screen.getByRole('textbox', { name: 'Search' });
+
+    // Chromium's commit path: the last input still belongs to the composition, and the end of the
+    // composition is the only thing left to tell the page the text is finished.
+    fireEvent.compositionStart(input);
+    typeInto(input, 'nihao', true);
+    fireEvent.compositionEnd(input);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith('nihao');
+  });
+
+  it('does not hear the input that ends a composition as a second edit', () => {
+    const onChange = vi.fn();
+    render(<Field onChange={onChange} />);
+    const input = screen.getByRole('textbox', { name: 'Search' });
+
+    fireEvent.compositionStart(input);
+    typeInto(input, 'ni', true);
+    typeInto(input, '你好', true);
+    fireEvent.compositionEnd(input);
+    // The input a composition ends with carries the text the page already heard; the page hears
+    // one edit, not two.
+    typeInto(input, '你好', false);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith('你好');
+  });
+
   it('commits a draft the input method ended without announcing', () => {
     const onChange = vi.fn();
     render(<Field onChange={onChange} />);
