@@ -23,6 +23,7 @@ import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
 import { preloadRoute } from '../../routePreload';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
+import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
 import { buildNavGroups } from './navigation';
 import { navEntryLabel, type NavEntry, type NavGroup } from '../../types/sidebarNav';
 import { usePreference } from '../../hooks/usePreference';
@@ -163,7 +164,10 @@ export const AppLayout: React.FC = () => {
 
   const logoutMutation = useMutation({
     mutationFn: api.logout,
-    onSuccess: () => window.location.reload(),
+    onSuccess: () => {
+      clearMirroredCPAMCCredential();
+      window.location.reload();
+    },
     onError: (err: Error) => toast.error(t('shell.logout_failed', { msg: err.message })),
   });
 

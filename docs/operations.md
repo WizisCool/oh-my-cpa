@@ -409,7 +409,9 @@ requires typing the plugin ID to confirm running code inside the gateway.
 
 Installed plugin pages open through OMC's authenticated same-origin host; CPA does not
 need to be reachable from the browser. Treat installation as granting trusted code access:
-native management responses can include configuration credentials. Configuration-affecting
+native management responses can include configuration credentials, and a page written for
+CPAMC reads the gateway credential from browser storage, where the console mirrors it
+before the page loads and withdraws it when the session ends. Configuration-affecting
 calls through the Plugin Host are audited, serialized and backed up. See
 [Architecture](architecture.md#trusted-plugin-pages) for fixed-origin and header boundaries.
 

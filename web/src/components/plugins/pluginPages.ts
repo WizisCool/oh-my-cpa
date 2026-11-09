@@ -5,8 +5,9 @@ import { pluginDisplayName, type PluginItem } from '../../types/plugin';
  *
  * A plugin page is an HTML resource the plugin serves from CPA. The console lists every
  * running plugin's pages in its navigation and shows each one in a frame whose document
- * comes through the console's plugin host, so the page is loaded with the console session
- * and never needs CPA's management key in the browser.
+ * comes through the console's plugin host, so the page is loaded with the console session.
+ * A page written for CPAMC reads the gateway credential from browser storage, which the
+ * console mirrors there in CPAMC's own shape before the frame loads.
  */
 
 export const PLUGIN_PAGE_ROUTE_PREFIX = '/plugin-pages';

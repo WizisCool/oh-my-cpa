@@ -6,6 +6,7 @@ import {
   pluginPageRoute,
 } from '../../src/components/plugins/pluginPages.ts';
 import { pluginRuntimeStatus, waitForPluginRuntime } from '../../src/components/plugins/pluginRuntime.ts';
+import { CPAMC_AUTH_STORAGE_KEY, mirrorCPAMCCredential } from '../../src/components/plugins/pluginHostCredential.ts';
 import { isSecretPluginField, buildPluginConfigDraft, composePluginConfig, readPluginInstallRecord, undeclaredPluginKeys } from '../../src/components/plugins/pluginConfigForm.ts';
 import type { PluginItem, PluginsResponse } from '../../src/types/plugin.ts';
 import { test } from 'vitest';
@@ -62,6 +63,32 @@ test('plugin pages', async () => {
   // The frame reads through the console's plugin host, under whatever sub-path the console is served from.
   assert.equal(pluginPageFrameURL('/omc/api/v1', '/v0/resource/plugins/bridge/console'), '/omc/api/v1/plugin-host/v0/resource/plugins/bridge/console');
   assert.equal(pluginPageFrameURL('/api/v1/', '/v0/resource/plugins/bridge/console'), '/api/v1/plugin-host/v0/resource/plugins/bridge/console');
+
+  // ── the gateway credential a CPAMC-native plugin page reads ──────────────────
+  // CKB and the pages written like it de-obfuscate CPAMC's stored connection state and
+  // read `state.managementKey` from it, so the mirror has to be readable by that code.
+  const readAsCPAMCNativePage = (raw: string, host: string) => {
+    assert.ok(raw.startsWith('enc::v2::'), `not a CPAMC v2 entry: ${raw}`);
+    const bytes = Uint8Array.from(atob(raw.slice('enc::v2::'.length)), (char) => char.charCodeAt(0));
+    const secret = new TextEncoder().encode(`cli-proxy-api-webui::secure-storage|${host}`);
+    return JSON.parse(new TextDecoder().decode(bytes.map((byte, index) => byte ^ secret[index % secret.length])));
+  };
+  const stored = new Map<string, string>();
+  const storage = {
+    setItem: (key: string, value: string) => void stored.set(key, value),
+    removeItem: (key: string) => void stored.delete(key),
+  };
+  mirrorCPAMCCredential(storage, 'https://console.example:8443', 'cpa-management-key');
+  const mirrored = stored.get(CPAMC_AUTH_STORAGE_KEY);
+  assert.ok(mirrored);
+  const connection = readAsCPAMCNativePage(mirrored, 'console.example:8443');
+  assert.equal(connection.state.managementKey, 'cpa-management-key');
+  // The console's own origin is the API base a page should call; the host proxy rebases it.
+  assert.equal(connection.state.apiBase, 'https://console.example:8443');
+  assert.equal(connection.state.rememberPassword, true);
+  // An empty key withdraws the entry rather than writing one a page would send as a bearer token.
+  mirrorCPAMCCredential(storage, 'https://console.example:8443', '');
+  assert.equal(stored.has(CPAMC_AUTH_STORAGE_KEY), false);
 
   // ── waiting for the gateway to act on a switch ────────────────────────────────
   function list(overrides: Partial<PluginItem>, isSystemEnabled = true): PluginsResponse {

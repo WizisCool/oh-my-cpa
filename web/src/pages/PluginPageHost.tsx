@@ -3,7 +3,7 @@ import { Button } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { useT } from '../i18n';
+import { languageLocale, useI18n } from '../i18n';
 import { getAppConfig } from '../types/config';
 import { useTheme } from '../theme/ThemeContext';
 import { ExternalLinkOutlined, ReloadOutlined, SettingOutlined } from '../components/icons';
@@ -11,6 +11,7 @@ import { ListLoading } from '../components/common/PageLoading';
 import { LoadFailure } from '../components/feedback';
 import { PluginLogo } from '../components/plugins/PluginParts';
 import { collectPluginPages, findPluginPage, pluginPageFrameURL } from '../components/plugins/pluginPages';
+import { mirrorCPAMCCredential } from '../components/plugins/pluginHostCredential';
 import styles from '../components/plugins/PluginPageHost.module.css';
 import shellURL from '../components/plugins/pluginFrameShell.html?url&no-inline';
 import { EmptyState } from '../components/common/EmptyState';
@@ -23,14 +24,16 @@ import { Tooltip } from '../components/common/Tooltip';
  * console supplies the place, the heading and the way back to the plugin's settings, and
  * the plugin supplies everything inside. The frame is same-origin with the console, as it
  * is in CPA's management centre, because plugin pages build their requests from
- * `location.origin` and read the host's colour scheme from their parent.
+ * `location.origin` and read the host's colour scheme and reading language from their
+ * parent.
  */
 export const PluginPageHost: React.FC = () => {
-  const t = useT();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
   const { pluginId, pageIndex } = useParams();
   const { themeMode } = useTheme();
   const frameTheme: 'dark' | 'light' = themeMode === 'dark' ? 'dark' : 'light';
+  const frameLanguage = languageLocale(lang);
   const [reloadCount, setReloadCount] = React.useState(0);
   const [frameState, setFrameState] = React.useState<'loading' | 'ready' | 'failed'>('loading');
   const isFrameLoading = frameState === 'loading';
@@ -44,20 +47,45 @@ export const PluginPageHost: React.FC = () => {
   const entries = React.useMemo(() => collectPluginPages(pluginsQuery.data?.plugins), [pluginsQuery.data]);
   const entry = findPluginPage(entries, pluginId, pageIndex);
 
+  // A page written for CPAMC reads the gateway credential from browser storage, so the
+  // console puts it there before the frame loads. The reveal is audited, and it is kept
+  // for the session: every page after the first one opens without another read.
+  const credentialQuery = useQuery({
+    queryKey: ['cpa-credential'],
+    enabled: Boolean(entry),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const credential = await api.getCPACredential();
+      try {
+        mirrorCPAMCCredential(window.localStorage, window.location.origin, credential.management_key);
+      } catch {
+        // A browser that refuses storage leaves the plugin to ask for its own sign-in.
+      }
+      return credential;
+    },
+  });
+
   const frameURL = entry ? pluginPageFrameURL(getAppConfig().apiBaseUrl, entry.resourcePath) : '';
   const frameTitle = entry?.navLabel ?? '';
 
-  const latestTheme = React.useRef(frameTheme);
-  const stateFrameTheme = React.useCallback((theme: 'dark' | 'light') => {
+  // The shell document is the parent a plugin page reads the console's presentation from,
+  // as CPAMC's own console document is. Both the colour mode and the reading language live
+  // there, so a page that inherits them needs no host-specific knowledge.
+  const latestShellContext = React.useRef({ theme: frameTheme, language: frameLanguage });
+  const stateShellContext = React.useCallback(() => {
     const shellRoot = shellRef.current?.contentDocument?.documentElement;
     if (!shellRoot) return;
+    const { theme, language } = latestShellContext.current;
     shellRoot.setAttribute('data-theme', theme);
     shellRoot.style.colorScheme = theme;
+    shellRoot.setAttribute('lang', language);
   }, []);
   React.useEffect(() => {
-    latestTheme.current = frameTheme;
-    stateFrameTheme(frameTheme);
-  }, [frameTheme, stateFrameTheme]);
+    latestShellContext.current = { theme: frameTheme, language: frameLanguage };
+    stateShellContext();
+  }, [frameTheme, frameLanguage, stateShellContext]);
 
   React.useEffect(() => {
     setFrameState('loading');
@@ -80,6 +108,9 @@ export const PluginPageHost: React.FC = () => {
       </div>
     );
   }
+  // The frame waits for the credential mirror, so the plugin's first paint already sees it.
+  // A re-read the reload control started keeps it waiting the same way.
+  if (credentialQuery.isFetching) return <ListLoading />;
 
   return (
     <div className={styles.page} data-plugin-page={entry.pluginId}>
@@ -94,7 +125,17 @@ export const PluginPageHost: React.FC = () => {
         </div>
         <span className={styles.actions}>
           <Tooltip title={t('plugin.page_reload')}>
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => setReloadCount((count) => count + 1)} aria-label={t('plugin.page_reload')} />
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              // A page whose credential could not be read recovers through the control the
+              // operator already has: read it again, then load the plugin's document afresh.
+              onClick={() => {
+                if (credentialQuery.isError) void credentialQuery.refetch();
+                setReloadCount((count) => count + 1);
+              }}
+              aria-label={t('plugin.page_reload')}
+            />
           </Tooltip>
           <Tooltip title={t('plugin.page_open_new_tab')}>
             <Button size="small" icon={<ExternalLinkOutlined />} href={frameURL} target="_blank" rel="noreferrer" aria-label={t('plugin.page_open_new_tab')} />
@@ -137,11 +178,11 @@ export const PluginPageHost: React.FC = () => {
                   setFrameState('failed');
                   return;
                 }
-                stateFrameTheme(latestTheme.current);
+                stateShellContext();
                 pluginFrame.title = frameTitle;
                 pluginFrame.onload = () => {
                   setFrameState('ready');
-                  stateFrameTheme(latestTheme.current);
+                  stateShellContext();
                 };
                 pluginFrame.src = frameURL;
               }}

@@ -322,6 +322,8 @@ var demoPolicy = []demoPolicyRule{
 
 	// Plugin execution.
 	{http.MethodPost, "/api/v1/management/plugin-store/{id}/install", demoRefuse, "installing a plugin is disabled: plugins execute inside the gateway"},
+	// The demonstration's gateway credential is a fixture value; it is not the demo's to hand out.
+	{http.MethodGet, "/api/v1/management/cpa-credential", demoRefuse, "the demonstration has no gateway credential to read"},
 	{http.MethodPatch, "/api/v1/management/plugins/{id}/enabled", demoRefuse, "changing a plugin's status is disabled: plugins execute inside the gateway"},
 	{http.MethodPut, "/api/v1/management/plugins/settings", demoRefuse, "changing the plugin system settings is disabled: plugins execute inside the gateway"},
 	{http.MethodDelete, "/api/v1/management/plugins/{id}", demoRefuse, "removing a plugin is disabled"},

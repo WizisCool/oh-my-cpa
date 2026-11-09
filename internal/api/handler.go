@@ -409,6 +409,8 @@ func (h *Handler) routes() chi.Router {
 				v1.Put("/management/plugins/{id}/config", h.setPluginConfig)
 				v1.Get("/management/plugin-store", h.listPluginStore)
 				v1.Post("/management/plugin-store/{id}/install", h.installPlugin)
+				// The credential a CPAMC-native plugin page reads from browser storage.
+				v1.Get("/management/cpa-credential", h.getCPACredential)
 				// A plugin's own page and the plugin routes its script calls.
 				v1.Get(PLUGIN_HOST_ROUTE+"/v0/resource/plugins/*", h.servePluginResource)
 				for _, prefix := range []string{management.PluginRoutePrefix, management.PluginRouteV8Prefix} {

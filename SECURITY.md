@@ -74,8 +74,11 @@ so Agent and Playground event parsing is what to exercise when changing it.
 
 Installing a plugin authorizes its same-origin page to act as the signed-in operator.
 The authenticated Plugin Host intentionally exposes native v0/v8 management responses,
-including provider and client secrets, but never injects the stored management key into
-page resources or browser storage. An explicit page management credential is compared with the stored key inside OMC and
+including provider and client secrets. A plugin page written for CPAMC expects the
+management credential in browser storage, so the console mirrors the stored key into
+CPAMC's own connection entry (`cli-proxy-auth`) before the frame loads and withdraws it
+when the session ends; that entry is the only copy of the key the browser holds. An
+explicit page management credential is compared with the stored key inside OMC and
 never forwarded, so a wrong one cannot spend CPA's failed-attempt ban;
 model-directory requests receive only the page's client Authorization. All API reads and
 writes are audited without request payloads, path suffixes or queries, and are uncached.

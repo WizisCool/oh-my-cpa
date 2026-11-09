@@ -18,6 +18,7 @@ import { Placeholder } from './Placeholder';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { isMotionReduced } from '../../utils/motionPreference';
 import { SignInStage, type SignInStageState } from './SignInStage';
+import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
 import { readKeepSignedIn, writeKeepSignedIn } from './keepSignedIn';
 import styles from './AuthGate.module.css';
 
@@ -67,6 +68,12 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [error, setError] = React.useState<string>();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isKeptSignedIn, setIsKeptSignedIn] = React.useState(readKeepSignedIn);
+  // The mirrored gateway credential belongs to the session that read it: sign-out withdraws
+  // both the browser copy and the one this document holds, so the next sign-in reads it again.
+  const forgetGatewayCredential = React.useCallback(() => {
+    clearMirroredCPAMCCredential();
+    queryClient.removeQueries({ queryKey: ['cpa-credential'] });
+  }, [queryClient]);
   // Counts refused attempts, so each one replays the field's shake and the gateway's flash.
   const [failures, setFailures] = React.useState(0);
   const fieldRef = React.useRef<HTMLDivElement>(null);
@@ -80,27 +87,38 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const checkSession = React.useCallback(async () => {
     try {
       const session = await api.getSession();
+      if (!session.authenticated) forgetGatewayCredential();
       setStatus(session.authenticated ? 'authenticated' : 'unauthenticated');
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) setStatus('unauthenticated');
-      else {
+      // Only a refused session withdraws the credential. A gateway that is briefly
+      // unreachable says nothing about whether the session is still valid.
+      if (err instanceof ApiError && err.status === 401) {
+        forgetGatewayCredential();
+        setStatus('unauthenticated');
+      } else {
         setError(err instanceof Error ? err.message : t('auth.connect_failed'));
         setStatus('unauthenticated');
       }
     }
-  }, [t]);
+  }, [t, forgetGatewayCredential]);
 
   React.useEffect(() => {
-    setUnauthorizedHandler(() => setStatus('unauthenticated'));
+    setUnauthorizedHandler(() => {
+      forgetGatewayCredential();
+      setStatus('unauthenticated');
+    });
     void checkSession();
     return () => setUnauthorizedHandler(undefined);
-  }, [checkSession]);
+  }, [checkSession, forgetGatewayCredential]);
 
   const login = async (values: { password: string }) => {
     setIsSubmitting(true);
     setError(undefined);
     try {
       await api.login(values.password, isKeptSignedIn);
+      // A new session reads its own credential; nothing the previous one revealed is reused,
+      // which also covers a key rotated while this tab kept an older one cached.
+      forgetGatewayCredential();
       await queryClient.invalidateQueries();
       enterConsole(() => setStatus('authenticated'));
       toast.success(t('auth.success'));

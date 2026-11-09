@@ -1156,6 +1156,14 @@ export const api = {
     return request<PluginsResponse>('/management/plugins', { method: 'GET' });
   },
 
+  /**
+   * The gateway credential the console mirrors into browser storage for plugin
+   * pages, which is where a page written for CPAMC looks for it.
+   */
+  async getCPACredential(): Promise<{ management_key: string }> {
+    return request<{ management_key: string }>('/management/cpa-credential', { method: 'GET' });
+  },
+
   async setPluginEnabled(id: string, enabled: boolean): Promise<{ status: string; id: string; enabled: boolean }> {
     return request<{ status: string; id: string; enabled: boolean }>(`/management/plugins/${encodeURIComponent(id)}/enabled`, {
       method: 'PATCH',
