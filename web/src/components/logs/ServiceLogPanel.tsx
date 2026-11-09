@@ -109,22 +109,24 @@ export const ServiceLogPanel: React.FC = () => {
             </button>
           ))}
         </div>
-        <Text className="logs-counts">
-          {t('logs.service_counts', { shown: rows.length, total: tail.records.length })}
-          {tail.capacity && tail.startedAtMS
-            ? ` · ${t('logs.service_retention', { capacity: tail.capacity, since: dayjs(tail.startedAtMS).format('MM-DD HH:mm') })}`
-            : ''}
-        </Text>
-        <div className={styles['toolbar-actions']}>
-          <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
-            <Button
-              icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-              disabled={isBlocked}
-              onClick={() => tail.setPaused(!tail.paused)}
-              aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
-            />
-          </Tooltip>
-          <RefreshButton label={t('logs.reload')} onRefresh={tail.reload} />
+        <div className={styles['toolbar-summary']}>
+          <Text className="logs-counts">
+            {t('logs.service_counts', { shown: rows.length, total: tail.records.length })}
+            {tail.capacity && tail.startedAtMS
+              ? ` · ${t('logs.service_retention', { capacity: tail.capacity, since: dayjs(tail.startedAtMS).format('MM-DD HH:mm') })}`
+              : ''}
+          </Text>
+          <div className={styles['toolbar-actions']}>
+            <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
+              <Button
+                icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                disabled={isBlocked}
+                onClick={() => tail.setPaused(!tail.paused)}
+                aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
+              />
+            </Tooltip>
+            <RefreshButton label={t('logs.reload')} onRefresh={tail.reload} />
+          </div>
         </div>
       </Toolbar>
 

@@ -3,17 +3,23 @@
   min-width: 0;
 }
 
-.toolbar-actions {
-  display: inline-flex;
+/* The count and the actions on the list travel as one group: the toolbar wraps them
+   together, so a phone never squeezes the count in beside the level chips or strands the
+   refresh button on a row of its own. */
+.toolbar-summary {
+  display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   margin-left: auto;
 }
 
-/* The counts already push right; when they are present the actions follow them rather
-   than claiming a second auto margin. */
-:global(.logs-counts) + .toolbar-actions {
-  margin-left: 0;
+.toolbar-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 /* ── request filters: disclosed below the toolbar, one labelled field per filter ── */
@@ -177,9 +183,15 @@
     order: -1;
   }
 
+  .toolbar-summary {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
   .panel :global(.logs-counts) {
     flex: 1 1 0;
     width: auto;
+    min-width: 0;
   }
 
   .filter-field,
@@ -190,10 +202,6 @@
 
   .filter-clear {
     margin-left: 0;
-  }
-
-  .toolbar-actions {
-    margin-left: auto;
   }
 }
 

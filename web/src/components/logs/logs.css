@@ -18,7 +18,7 @@
 .log-level-chip.is-active { color: var(--fg); background: color-mix(in srgb, var(--fg) 9%, transparent); }
 .log-level-chip.is-warn.is-active { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .log-level-chip.is-error.is-active, .log-level-chip.is-fatal.is-active { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
-.logs-counts { margin-left: auto; color: var(--meta); font-size: var(--text-sm); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.logs-counts { color: var(--meta); font-size: var(--text-sm); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
 .logs-tail { position: relative; }
 .logs-alert { margin-bottom: 10px; }
 .log-list {
@@ -89,7 +89,6 @@
 .log-state { padding: 24px 12px; color: var(--muted); font-size: var(--text-sm); }
 @media (max-width: 900px) {
   .logs-search { width: 148px; }
-  .logs-counts { margin-left: 0; width: 100%; }
   .log-list { height: calc(100vh - 380px); height: calc(100dvh - 380px); }
 }
 @media (pointer: coarse) and (max-height: 640px) {

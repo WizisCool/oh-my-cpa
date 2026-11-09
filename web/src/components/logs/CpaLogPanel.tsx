@@ -405,56 +405,60 @@ export const CpaLogPanel: React.FC = () => {
                 >
                   {activeFilterCount > 0 ? t('logs.filters_active', { n: activeFilterCount }) : t('events.more_filters')}
                 </Button>
+              </>
+            )}
+            <div className={styles['toolbar-summary']}>
+              {isTail && (
                 <Text className="logs-counts">
                   {t('logs.counts', { shown: rows.length, total: parsed.length })}
                   {tail.dropped > 0 ? ` · ${t('logs.dropped', { n: tail.dropped })}` : ''}
                 </Text>
-              </>
-            )}
-            <div className={styles['toolbar-actions']}>
-              {isTail && (
-                <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
+              )}
+              <div className={styles['toolbar-actions']}>
+                {isTail && (
+                  <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
+                    <Button
+                      icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                      disabled={isBlocked}
+                      onClick={() => tail.setPaused(!tail.paused)}
+                      aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
+                    />
+                  </Tooltip>
+                )}
+                {isTail && (
+                  <Tooltip title={t('logs.wrap')}>
+                    <Button
+                      icon={<WrapTextOutlined />}
+                      type={filters.wrapLines ? 'primary' : 'default'}
+                      aria-pressed={filters.wrapLines}
+                      aria-label={t('logs.wrap')}
+                      onClick={() => patchFilters({ wrapLines: !filters.wrapLines })}
+                    />
+                  </Tooltip>
+                )}
+                <Tooltip title={isFullscreen ? t('logs.fullscreen_exit') : t('logs.fullscreen')}>
                   <Button
-                    icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-                    disabled={isBlocked}
-                    onClick={() => tail.setPaused(!tail.paused)}
-                    aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
+                    icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                    aria-pressed={isFullscreen}
+                    aria-label={isFullscreen ? t('logs.fullscreen_exit') : t('logs.fullscreen')}
+                    onClick={() => setIsFullscreen(!isFullscreen)}
                   />
                 </Tooltip>
-              )}
-              {isTail && (
-                <Tooltip title={t('logs.wrap')}>
-                  <Button
-                    icon={<WrapTextOutlined />}
-                    type={filters.wrapLines ? 'primary' : 'default'}
-                    aria-pressed={filters.wrapLines}
-                    aria-label={t('logs.wrap')}
-                    onClick={() => patchFilters({ wrapLines: !filters.wrapLines })}
-                  />
-                </Tooltip>
-              )}
-              <Tooltip title={isFullscreen ? t('logs.fullscreen_exit') : t('logs.fullscreen')}>
-                <Button
-                  icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-                  aria-pressed={isFullscreen}
-                  aria-label={isFullscreen ? t('logs.fullscreen_exit') : t('logs.fullscreen')}
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                />
-              </Tooltip>
-              <RefreshButton label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
-              {/* Truncating the file is irreversible, so it asks first - in the same popover every
-                  other destructive action in the console uses. */}
-              <ConfirmAction
-                title={t('logs.clear_hint')}
-                confirmLabel={t('logs.clear_confirm')}
-                isDanger
-                isConfirming={truncate.isPending}
-                onConfirm={() => truncate.mutate()}
-                disabled={isDemo}
-                tooltip={isDemo ? t('demo.blocked') : t('logs.clear')}
-              >
-                <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
-              </ConfirmAction>
+                <RefreshButton label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
+                {/* Truncating the file is irreversible, so it asks first - in the same popover every
+                    other destructive action in the console uses. */}
+                <ConfirmAction
+                  title={t('logs.clear_hint')}
+                  confirmLabel={t('logs.clear_confirm')}
+                  isDanger
+                  isConfirming={truncate.isPending}
+                  onConfirm={() => truncate.mutate()}
+                  disabled={isDemo}
+                  tooltip={isDemo ? t('demo.blocked') : t('logs.clear')}
+                >
+                  <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
+                </ConfirmAction>
+              </div>
             </div>
           </Toolbar>
 
