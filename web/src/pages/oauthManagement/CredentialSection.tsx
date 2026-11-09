@@ -43,7 +43,7 @@ import {
   summarizeAuthFileStatusMessage,
 } from '../../components/authFiles/authFileLogic';
 import { SIWC_BADGE_LABEL_KEYS, type SIWCBadgeState } from '../../components/authFiles/siwcBadge';
-import { formatObservedAgo, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown, quotaResetText } from '../quota/quotaFormat';
+import { formatObservedAgo, formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown, quotaResetText } from '../quota/quotaFormat';
 import { quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
 import { compactQuotaCapacity, describeCompactQuotaCapacity } from '../quota/quotaCapacity';
@@ -339,6 +339,7 @@ interface CredentialRowProps {
   actions: CredentialRowActions;
 }
 
+/** A credential's identity, state and limits, followed by provider-reported summary tags. */
 function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowMS, actions }: CredentialRowProps) {
   const t = useT();
   const { modal } = AntdApp.useApp();
@@ -367,6 +368,8 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
   const isBusy = actions.isBusy(record);
   const isRefreshing = actions.isRefreshingQuota(record);
   const lines = quotaLinesOf(record, provider);
+  // Keep summary amounts in the list's quota cell, beneath the window readings.
+  const quotaMetrics = quota?.plan?.metrics ?? [];
   const siwc = actions.siwcBadge(record);
   const isStale = record.quotaCondition === 'stale' || record.quotaCondition === 'error';
   const warning = hasAuthFileStatusWarning(file) && file.status_message ? file.status_message : undefined;
@@ -537,7 +540,18 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
       </td>
       {hasQuota && (
         <td colSpan={2} className={styles['td-quota']}>
-          <QuotaLines lines={lines} provider={record.displayProvider} isStale={isStale || isDisabled} nowMS={nowMS} />
+          {(lines.length > 0 || quotaMetrics.length === 0) && (
+            <QuotaLines lines={lines} provider={record.displayProvider} isStale={isStale || isDisabled} nowMS={nowMS} />
+          )}
+          {quotaMetrics.length > 0 && (
+            <div className={clsx(styles['quota-metrics'], (isStale || isDisabled) && styles['quota-stale'])}>
+              {quotaMetrics.map((metric, index) => (
+                <Tag size="small" className={styles['quota-metric']} key={`${metric.key}-${index}`} data-quota-metric={metric.key}>
+                  {metric.label}: {formatQuotaMetric(metric)}
+                </Tag>
+              ))}
+            </div>
+          )}
         </td>
       )}
       {!hasQuota && <td className={styles['td-filler']} aria-hidden="true" />}
