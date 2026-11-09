@@ -37,7 +37,9 @@ import (
 )
 
 type Handler struct {
-	agent           agentState
+	agent agentState
+	// modelSquare holds non-secret provenance shared by HTTP and Agent reads.
+	modelSquare     modelSquareCache
 	browserRuns     browserRuns
 	playgroundSlots chan struct{}
 	cfg             config.Config

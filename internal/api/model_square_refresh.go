@@ -24,6 +24,7 @@ type modelCatalogOutcomeDTO struct {
 	ErrorCode        string   `json:"error_code,omitempty"`
 }
 
+// refreshModelSquareCatalogs updates CPA catalogs and provenance before the page re-reads.
 func (h *Handler) refreshModelSquareCatalogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, isReady := h.managementClientOrError(writer, request)
@@ -35,6 +36,13 @@ func (h *Handler) refreshModelSquareCatalogs(writer http.ResponseWriter, request
 		return
 	}
 	result, meta, err := client.RefreshModelCatalogs(request.Context())
+	// A partial or unreadable catalog response can still have changed membership.
+	// Publish refreshed provenance before returning so the button's re-read sees it.
+	provenanceErr := h.RefreshModelSquareProvenance(request.Context())
+	if provenanceErr != nil {
+		// Preserve the last good cache and retry independently of this request.
+		h.requestModelSquareProvenanceRefresh()
+	}
 	if err != nil {
 		code := "catalog_refresh_failed"
 		status := http.StatusBadGateway
@@ -44,11 +52,16 @@ func (h *Handler) refreshModelSquareCatalogs(writer http.ResponseWriter, request
 			status = http.StatusNotImplemented
 			message = "CPA does not support model catalog refresh"
 		}
-		h.recordModelCatalogRefreshOutcome(request, "failure", map[string]any{"code": code})
+		h.recordModelCatalogRefreshOutcome(request, "failure", map[string]any{"code": code, "provenance_refreshed": provenanceErr == nil})
 		writeJSON(writer, status, map[string]string{"error": message, "code": code})
 		return
 	}
 	dto := projectModelCatalogRefresh(result, meta.StatusCode)
+	if provenanceErr != nil && dto.OK {
+		dto.OK = false
+		dto.Code = "catalog_refresh_failed"
+		dto.Error = "Model provenance cache refresh failed"
+	}
 	outcome := "success"
 	status := http.StatusOK
 	if !dto.OK {
@@ -56,7 +69,7 @@ func (h *Handler) refreshModelSquareCatalogs(writer http.ResponseWriter, request
 		status = http.StatusBadGateway
 	}
 	h.recordModelCatalogRefreshOutcome(request, outcome, map[string]any{
-		"catalogs": dto.Catalogs, "changed_providers": dto.ChangedProviders,
+		"catalogs": dto.Catalogs, "changed_providers": dto.ChangedProviders, "provenance_refreshed": provenanceErr == nil,
 	})
 	writeJSON(writer, status, dto)
 }

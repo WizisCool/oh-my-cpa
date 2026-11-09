@@ -261,6 +261,12 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		releaseService.CheckAll(ctx)
 		handler.SetRelease(releaseService)
 		handler.CheckPluginUpdates(ctx)
+		// Populate provenance from the local fixture before serving demo pages;
+		// demonstrations do not run the periodic background workers.
+		if err := handler.RefreshModelSquareProvenance(ctx); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("load demo model provenance: %w", err)
+		}
 	} else {
 		releaseService, err = release.New(release.Options{
 			Repository:    repo,
@@ -551,6 +557,7 @@ func (a *App) Run(ctx context.Context) error {
 				run  func(context.Context) error
 			}{
 				{"pricing", a.pricing.Run}, {"exchange_rates", a.exchangeRates.Run},
+				{"model_provenance", a.handler.RunModelSquareProvenance},
 			} {
 				workers.Add(1)
 				go func() {

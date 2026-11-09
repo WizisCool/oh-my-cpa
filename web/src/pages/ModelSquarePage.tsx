@@ -377,7 +377,13 @@ export const ModelSquarePage: React.FC = () => {
   const closeDetails = React.useCallback(() => setSelectedIdentity(undefined), []);
   const detailsRef = React.useRef<HTMLDivElement>(null);
 
-  const directory = useQuery({ queryKey: ['model-square'], queryFn: () => api.getModelSquare(), staleTime: 30_000 });
+  const directory = useQuery({
+    queryKey: ['model-square'],
+    queryFn: () => api.getModelSquare(),
+    staleTime: 30_000,
+    // Pick up the first background sweep promptly, then follow periodic cache refreshes.
+    refetchInterval: query => query.state.data?.partial.includes('routes') ? 5_000 : 60_000,
+  });
   const allEntries = React.useMemo(() => directory.data ? buildModelSquareEntries(directory.data, '') : [], [directory.data]);
   const searched = React.useMemo(() => directory.data ? buildModelSquareEntries(directory.data, search) : [], [directory.data, search]);
   // The maker strip counts what the search leaves, so a count is what selecting that maker will
