@@ -75,7 +75,7 @@ function QuotaWindowCard({ window, name, nowMS, owner }: {
       {window.description && <span className={styles.description} title={window.description}>{window.description}</span>}
       <span className={styles.foot}>
         <span className={styles.estimate}>
-          {estimate && <><span className={styles['estimate-label']}>{t('quota.capacity_estimate')}</span> <b>{estimate}</b></>}
+          {estimate && <>{t('quota.capacity_estimate')} <b>{estimate}</b></>}
         </span>
         {reset && <span className={styles.reset} title={resetTitle}>{reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
       </span>

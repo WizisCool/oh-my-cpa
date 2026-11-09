@@ -164,7 +164,6 @@ export default {
   'omc.quota_unobserved': 'Unobserved',
   'omc.quota_unsupported': 'Live probe unsupported',
   'omc.quota_credit_applicable': 'Applicable {n}',
-  'omc.quota_credit_applicable_hint': 'Reset credits currently applicable to this credential',
   'omc.quota_credit_available_hint': 'Reset credits currently available on this credential’s upstream account',
   'omc.quota_diagnostics': 'Raw quota diagnostics',
   'omc.tab_quota': 'Quota',

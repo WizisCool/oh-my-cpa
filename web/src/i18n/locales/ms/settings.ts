@@ -164,7 +164,6 @@ export default {
   "omc.quota_unobserved": "Belum diperhati",
   "omc.quota_unsupported": "Probe langsung tidak disokong",
   "omc.quota_credit_applicable": "Berkenaan {n}",
-  "omc.quota_credit_applicable_hint": "Kredit set semula yang kini berkenaan dengan kredensial ini",
   "omc.quota_credit_available_hint": "Kredit set semula yang tersedia pada akaun huluan kredensial ini",
   "omc.quota_diagnostics": "Diagnostik kuota mentah",
   "omc.tab_quota": "Kuota",
