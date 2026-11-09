@@ -25,8 +25,27 @@ export interface ProviderListFilters {
 
 export const DEFAULT_PROVIDER_FILTERS: ProviderListFilters = { status: 'all', family: 'all', search: '' };
 
-export function providerModelCount(provider: ProviderItem): number {
-  return provider.model_entries?.length || provider.models?.length || 0;
+/** A model a row publishes: the name a client requests, and the request model it maps onto. */
+export interface ProviderCallPoint {
+  name: string;
+  /** The request model behind an alias; absent when the entry publishes that model as itself. */
+  upstream?: string;
+}
+
+/**
+ * providerCallPoints lists what a provider publishes to clients, one entry per configured model:
+ * its alias when it has one, else its request model. The request model follows an alias, because
+ * the pair is what the entry maps and several entries can publish one upstream model under
+ * different aliases.
+ */
+export function providerCallPoints(provider: ProviderItem): ProviderCallPoint[] {
+  if (provider.model_entries?.length) {
+    return provider.model_entries.map(({ alias, name }) => {
+      const callPoint = alias || name;
+      return callPoint === name ? { name: callPoint } : { name: callPoint, upstream: name };
+    });
+  }
+  return (provider.models ?? []).map((name) => ({ name }));
 }
 
 export function providerKeyCount(provider: ProviderItem): number {
