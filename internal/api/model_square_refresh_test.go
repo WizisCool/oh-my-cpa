@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/testkit"
 )
 
@@ -30,6 +31,21 @@ func TestModelCatalogRefreshHTTP(t *testing.T) {
 		fixture.handler.SetPricing(priceSync)
 		var posts atomic.Int32
 		upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			// Manual refresh now rebuilds provenance before returning its catalog result.
+			if request.Method == http.MethodGet {
+				switch {
+				case request.URL.Path == "/v8/management/credentials":
+					io.WriteString(writer, `{"files":[]}`)
+				case request.URL.Path == "/v8/management/config/oauth/model-alias",
+					request.URL.Path == "/v0/management/openai-compatibility",
+					strings.HasPrefix(request.URL.Path, "/v0/management/") && strings.HasSuffix(request.URL.Path, "-api-key"):
+					io.WriteString(writer, `{}`)
+				default:
+					t.Errorf("unexpected provenance read: %s", request.URL.Path)
+					writer.WriteHeader(http.StatusNotFound)
+				}
+				return
+			}
 			if request.Method != http.MethodPost || request.URL.Path != "/v8/management/routing/model-definitions/refresh" || request.URL.RawQuery != "" {
 				t.Errorf("unexpected CPA operation: %s %s", request.Method, request.URL)
 			}
@@ -88,6 +104,110 @@ func TestModelCatalogRefreshHTTP(t *testing.T) {
 			Audits []auditDTO      `json:"audits"`
 		}{response.StatusCode, body, audits}
 	})
+}
+
+// TestModelCatalogRefreshPublishesProvenanceBeforeResponse exercises the button's
+// POST-then-GET contract and the failure response, audit flag and background retry.
+func TestModelCatalogRefreshPublishesProvenanceBeforeResponse(t *testing.T) {
+	for _, shouldFail := range []bool{false, true} {
+		name := "cache updated"
+		if shouldFail {
+			name = "cache retained after failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			fixture := newProviderTestFixture(t)
+			var hasRefreshedCatalog atomic.Bool
+			upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				switch request.URL.Path {
+				case "/v8/management/routing/model-definitions/refresh":
+					if request.Method != http.MethodPost {
+						t.Errorf("catalog refresh method=%s", request.Method)
+					}
+					hasRefreshedCatalog.Store(true)
+					io.WriteString(writer, `{"ok":true,"catalogs":{"catalog":{"refreshed":true},"codex-catalog":{"refreshed":true},"devin-catalog":{"refreshed":true}}}`)
+				case "/v8/management/config":
+					io.WriteString(writer, `{"access":{"api-keys":["refresh-cache-fixture"]}}`)
+				case "/v1/models":
+					io.WriteString(writer, `{"data":[{"id":"old-model"},{"id":"new-model"}]}`)
+				case "/v8/management/credentials":
+					model := "old-model"
+					if hasRefreshedCatalog.Load() {
+						if shouldFail {
+							writer.WriteHeader(http.StatusServiceUnavailable)
+							io.WriteString(writer, `{"error":"private-refresh-error"}`)
+							return
+						}
+						model = "new-model"
+					}
+					json.NewEncoder(writer).Encode(map[string]any{"files": []map[string]any{{"provider": "deepseek", "models": []map[string]string{{"id": model}}}}})
+				default:
+					io.WriteString(writer, `{}`)
+				}
+			}))
+			defer upstream.Close()
+			pointPlaygroundAt(t, fixture.handler, upstream.URL)
+			if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			response, body := postJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square/refresh-catalogs")
+			var result modelCatalogRefreshDTO
+			if err := json.Unmarshal(body, &result); err != nil {
+				t.Fatal(err)
+			}
+			wantStatus, wantModel := http.StatusOK, "new-model"
+			if shouldFail {
+				wantStatus, wantModel = http.StatusBadGateway, "old-model"
+				if result.Code != "catalog_refresh_failed" || result.Error != "Model provenance cache refresh failed" {
+					t.Fatalf("cache failure contract: %s", body)
+				}
+			}
+			if response.StatusCode != wantStatus || result.OK == shouldFail || len(result.Catalogs) != 3 || strings.Contains(string(body), "private-refresh-error") {
+				t.Fatalf("manual refresh: %d %s", response.StatusCode, body)
+			}
+			hasRetry := false
+			select {
+			case <-fixture.handler.modelSquareRefreshSignal():
+				hasRetry = true
+			default:
+			}
+			if hasRetry != shouldFail {
+				t.Fatalf("retry queued=%t, want=%t", hasRetry, shouldFail)
+			}
+			response, body = getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
+			var directory operations.ModelSquareDirectory
+			if err := json.Unmarshal(body, &directory); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK || len(directory.Models) != 2 || len(directory.Routes) != 2 || len(directory.Providers) != 1 || slices.Contains(directory.Partial, "routes") != shouldFail {
+				t.Fatalf("directory after manual refresh: %d %s", response.StatusCode, body)
+			}
+			if !slices.ContainsFunc(directory.Routes, func(route operations.ModelSquareRoute) bool {
+				return route.CallPoint == wantModel && route.ProviderID == "oauth:deepseek"
+			}) {
+				t.Fatalf("published cache model=%s missing: %s", wantModel, body)
+			}
+			events, err := fixture.handler.repo.ListAuditEvents(context.Background(), 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantOutcome := "success"
+			if shouldFail {
+				wantOutcome = "failure"
+			}
+			hasOutcome := false
+			for _, event := range events {
+				if event.Action == "model_catalog.refresh" && event.Result == wantOutcome {
+					hasOutcome = true
+					if event.Details["provenance_refreshed"] != !shouldFail {
+						t.Fatalf("provenance refresh audit flag: %#v", event.Details)
+					}
+				}
+			}
+			if !hasOutcome {
+				t.Fatalf("missing %s refresh audit", wantOutcome)
+			}
+		})
+	}
 }
 
 func TestModelCatalogRefreshRequiresSessionOriginAndAudit(t *testing.T) {

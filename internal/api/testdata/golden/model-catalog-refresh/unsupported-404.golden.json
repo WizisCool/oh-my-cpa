@@ -18,7 +18,8 @@
       "target_id": "all",
       "result": "failure",
       "details": {
-        "code": "catalog_refresh_unsupported"
+        "code": "catalog_refresh_unsupported",
+        "provenance_refreshed": true
       }
     }
   ]

@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -19,7 +21,6 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/testkit"
 )
 
 func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
@@ -27,11 +28,17 @@ func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
 	var mutex sync.Mutex
 	keys := []string{"directory-fixture-first", "directory-fixture-second"}
 	var authorization string
+	var hasCachedProvenance atomic.Bool
 	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		mutex.Lock()
 		defer mutex.Unlock()
 		if request.Method != http.MethodGet {
 			t.Errorf("directory triggered mutation: %s %s", request.Method, request.URL.Path)
+		}
+		if hasCachedProvenance.Load() && request.URL.Path != "/v8/management/config" && request.URL.Path != "/v1/models" {
+			t.Errorf("page request bypassed provenance cache: %s", request.URL.Path)
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			return
 		}
 		switch request.URL.Path {
 		case "/v8/management/config":
@@ -60,6 +67,10 @@ func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
 	}))
 	defer upstream.Close()
 	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	hasCachedProvenance.Store(true)
 	path := fixture.baseURL + "/omc/api/v1/management/model-square"
 	response, body := getJSON(t, fixture.client, path)
 	if response.StatusCode != 200 {
@@ -121,6 +132,9 @@ func TestModelSquareLiveDirectorySurvivesEnrichmentFailure(t *testing.T) {
 	}))
 	defer upstream.Close()
 	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err == nil {
+		t.Fatal("unavailable provenance unexpectedly refreshed")
+	}
 	response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
 	var directory operations.ModelSquareDirectory
 	if err := json.Unmarshal(body, &directory); err != nil {
@@ -135,6 +149,7 @@ func TestModelSquareLiveDirectorySurvivesEnrichmentFailure(t *testing.T) {
 			fixture := newProviderTestFixture(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			var shouldCancel atomic.Bool
 			upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				switch request.URL.Path {
 				case "/v8/management/config":
@@ -144,35 +159,49 @@ func TestModelSquareLiveDirectorySurvivesEnrichmentFailure(t *testing.T) {
 				case "/v8/management/credentials":
 					io.WriteString(writer, `{"files":[{"provider":"claude","models":[{"id":"scale-alias"}]},{"provider":"grok","models":[{"id":"scale-alias"}]},{"provider":"codex","name":"slow.json"}]}`)
 				case "/v8/management/config/oauth/model-alias":
-					if !hasAliases {
+					if shouldCancel.Load() && !hasAliases {
 						writer.WriteHeader(http.StatusServiceUnavailable)
 					}
 					io.WriteString(writer, `{"claude":[{"name":"scale-first","alias":"scale-alias"}],"grok":[{"name":"scale-second","alias":"scale-alias"}]}`)
 				case "/v8/management/credentials/models":
-					// Cancel after alias rules and inline membership are already observed.
-					cancel()
-					<-request.Context().Done()
+					// Cancel a later sweep after it has observed different membership.
+					if shouldCancel.Load() {
+						cancel()
+					}
+					io.WriteString(writer, `{"models":[{"id":"scale-unresolved"}]}`)
 				default:
 					io.WriteString(writer, `{}`)
 				}
 			}))
 			defer upstream.Close()
 			pointPlaygroundAt(t, fixture.handler, upstream.URL)
+			if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			path := fixture.baseURL + "/omc/api/v1/management/model-square"
+			beforeResponse, before := getJSON(t, fixture.client, path)
+			if beforeResponse.StatusCode != http.StatusOK {
+				t.Fatalf("primed directory: %d %s", beforeResponse.StatusCode, before)
+			}
+			shouldCancel.Store(true)
+			if err := fixture.handler.RefreshModelSquareProvenance(ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancelled refresh error = %v", err)
+			}
 			recorder := httptest.NewRecorder()
-			fixture.handler.listModelSquare(recorder, httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx))
+			fixture.handler.listModelSquare(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("cancelled enrichment: %d %s", recorder.Code, recorder.Body)
 			}
-			var directory any
-			if err := json.Unmarshal(recorder.Body.Bytes(), &directory); err != nil {
-				t.Fatal(err)
+			if recorder.Body.String() != string(before) {
+				t.Fatalf("cancelled sweep changed published directory: before=%s after=%s", before, recorder.Body.String())
 			}
-			testkit.Golden(t, fmt.Sprintf("testdata/golden/model-square/cancelled-aliases-%t.golden.json", hasAliases), directory)
 		})
 	}
 }
 
-func TestModelSquareBoundsCredentialEnrichment(t *testing.T) {
+// TestModelSquareCachesEveryCredentialWithoutPageEnrichment proves late credentials
+// are resolved by the background sweep and subsequent page reads do no model discovery.
+func TestModelSquareCachesEveryCredentialWithoutPageEnrichment(t *testing.T) {
 	fixture := newProviderTestFixture(t)
 	var modelReads atomic.Int64
 	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -186,7 +215,7 @@ func TestModelSquareBoundsCredentialEnrichment(t *testing.T) {
 			for index := range 32 {
 				files = append(files, map[string]any{"name": fmt.Sprintf("scale-%d.json", index), "provider": "grok"})
 			}
-			// Inline membership after the lookup budget still has to survive.
+			// Both the last queried credential and inline membership must survive the sweep.
 			files = append(files, map[string]any{"provider": "codex", "models": []map[string]string{{"id": "scale-inline"}}})
 			json.NewEncoder(writer).Encode(map[string]any{"files": files})
 		case "/v8/management/credentials/models":
@@ -206,18 +235,32 @@ func TestModelSquareBoundsCredentialEnrichment(t *testing.T) {
 	}))
 	defer upstream.Close()
 	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("directory: %d %s", response.StatusCode, body)
 	}
-	if reads := modelReads.Load(); reads > 8 {
-		t.Fatalf("credential-model reads = %d, want at most 8 independent of credential count", reads)
+	if reads := modelReads.Load(); reads != 32 {
+		t.Fatalf("credential-model reads = %d, want one background read for each of 32 credentials", reads)
 	}
-	var directory any
+	var directory operations.ModelSquareDirectory
 	if err := json.Unmarshal(body, &directory); err != nil {
 		t.Fatal(err)
 	}
-	testkit.Golden(t, "testdata/golden/model-square/bounded-enrichment.golden.json", directory)
+	if len(directory.Models) != 4 || len(directory.Routes) != 4 || len(directory.Providers) != 3 || len(directory.Partial) != 0 {
+		t.Fatalf("full provenance: %s", body)
+	}
+	for _, route := range directory.Routes {
+		if route.ProviderID == "" || route.UpstreamModel == "" {
+			t.Fatalf("unresolved credential route: %#v", route)
+		}
+	}
+	response, body = getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
+	if response.StatusCode != http.StatusOK || modelReads.Load() != 32 {
+		t.Fatalf("cached re-read: status=%d model reads=%d body=%s", response.StatusCode, modelReads.Load(), body)
+	}
 
 	// Pricing must still visit the late credential with a different account tier.
 	client, err := management.NewClient(upstream.URL, "catalog-scale-fixture", time.Second, false)
@@ -228,7 +271,7 @@ func TestModelSquareBoundsCredentialEnrichment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Models["scale-paid"] != "scale-paid" || modelReads.Load() != 40 {
+	if snapshot.Models["scale-paid"] != "scale-paid" || modelReads.Load() != 64 {
 		t.Fatalf("pricing discovery was bounded: paid=%q, total model reads=%d", snapshot.Models["scale-paid"], modelReads.Load())
 	}
 }
@@ -262,6 +305,9 @@ func TestModelSquareNativeDefaultsRespectPrefixAndExclusions(t *testing.T) {
 	}))
 	defer upstream.Close()
 	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
 	var directory operations.ModelSquareDirectory
 	if err := json.Unmarshal(body, &directory); err != nil {
@@ -269,6 +315,102 @@ func TestModelSquareNativeDefaultsRespectPrefixAndExclusions(t *testing.T) {
 	}
 	if response.StatusCode != 200 || len(directory.Routes) != 2 || directory.Routes[0].UpstreamModel != "gpt-5" || directory.Routes[1].UpstreamModel != "" || len(directory.Partial) != 0 {
 		t.Fatalf("native defaults: %d %s", response.StatusCode, body)
+	}
+}
+
+// TestModelSquareRefreshDistinguishesMissingDefinitionsFromFailedReads keeps optional
+// capability gaps from hiding other providers while preserving last-good data on outages.
+func TestModelSquareRefreshDistinguishesMissingDefinitionsFromFailedReads(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented, http.StatusServiceUnavailable, http.StatusUnauthorized} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			fixture := newProviderTestFixture(t)
+			var definitionStatus atomic.Int32
+			definitionStatus.Store(http.StatusOK)
+			var definitionReads atomic.Int32
+			upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				switch request.URL.Path {
+				case "/v8/management/config":
+					io.WriteString(writer, `{"access":{"api-keys":["directory-capability-fixture"]}}`)
+				case "/v1/models":
+					io.WriteString(writer, `{"data":[{"id":"plugin-model"},{"id":"gpt-5"}]}`)
+				case "/v8/management/credentials":
+					io.WriteString(writer, `{"files":[{"provider":"deepseek","models":[{"id":"plugin-model"}]}]}`)
+				case "/v0/management/codex-api-key":
+					io.WriteString(writer, `{"codex-api-key":[{"api-key":"first-fixture"},{"api-key":"second-fixture"}]}`)
+				case "/v8/management/routing/model-definitions/codex":
+					definitionReads.Add(1)
+					writer.WriteHeader(int(definitionStatus.Load()))
+					io.WriteString(writer, `{"models":[{"id":"gpt-5"}]}`)
+				default:
+					io.WriteString(writer, `{}`)
+				}
+			}))
+			defer upstream.Close()
+			pointPlaygroundAt(t, fixture.handler, upstream.URL)
+			if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			definitionStatus.Store(int32(status))
+			err := fixture.handler.RefreshModelSquareProvenance(context.Background())
+			isMissing := status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusNotImplemented
+			if (err == nil) != isMissing {
+				t.Fatalf("refresh status=%d err=%v", status, err)
+			}
+			response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
+			var directory operations.ModelSquareDirectory
+			if err := json.Unmarshal(body, &directory); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK || len(directory.Models) != 2 || definitionReads.Load() != 2 {
+				t.Fatalf("partial directory: status=%d reads=%d body=%s", response.StatusCode, definitionReads.Load(), body)
+			}
+			if isMissing {
+				if len(directory.Providers) != 1 || len(directory.Routes) != 2 || !slices.Equal(directory.Partial, []string{"provider_models"}) {
+					t.Fatalf("missing definitions hid plugin provenance: %s", body)
+				}
+			} else if len(directory.Providers) != 3 || len(directory.Routes) != 3 || !slices.Equal(directory.Partial, []string{"routes"}) {
+				t.Fatalf("failed refresh discarded cached provenance: %s", body)
+			}
+			if !slices.ContainsFunc(directory.Routes, func(route operations.ModelSquareRoute) bool {
+				return route.CallPoint == "plugin-model" && route.ProviderID == "oauth:deepseek"
+			}) {
+				t.Fatalf("plugin source missing: %s", body)
+			}
+		})
+	}
+}
+
+// TestModelSquareDoesNotReuseAnotherGatewayCache checks the HTTP projection after a gateway switch.
+func TestModelSquareDoesNotReuseAnotherGatewayCache(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	serve := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v8/management/config":
+			io.WriteString(writer, `{"access":{"api-keys":["directory-switch-fixture"]}}`)
+		case "/v1/models":
+			io.WriteString(writer, `{"data":[{"id":"shared-model"}]}`)
+		case "/v8/management/credentials":
+			io.WriteString(writer, `{"files":[{"provider":"deepseek","models":[{"id":"shared-model"}]}]}`)
+		default:
+			io.WriteString(writer, `{}`)
+		}
+	})
+	first := newFakeCPA(serve)
+	defer first.Close()
+	second := newFakeCPA(serve)
+	defer second.Close()
+	pointPlaygroundAt(t, fixture.handler, first.URL)
+	if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	pointPlaygroundAt(t, fixture.handler, second.URL)
+	response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
+	var directory operations.ModelSquareDirectory
+	if err := json.Unmarshal(body, &directory); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || len(directory.Providers) != 0 || len(directory.Models) != 1 || len(directory.Routes) != 1 || directory.Routes[0].ProviderID != "" || directory.Routes[0].UpstreamModel != "" || !slices.Equal(directory.Partial, []string{"routes"}) {
+		t.Fatalf("previous gateway leaked into new directory: %d %s", response.StatusCode, body)
 	}
 }
 

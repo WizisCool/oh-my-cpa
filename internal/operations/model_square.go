@@ -169,7 +169,8 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 }
 
 // LoadModelSquareProvenance builds a non-secret cache entry from every credential.
-// A failed sweep is refused so the caller can retain the last successful entry.
+// Missing definition capabilities produce partial provenance; operational failures
+// refuse the sweep so the caller can retain the last successful entry.
 func LoadModelSquareProvenance(ctx context.Context, client *management.Client) (ModelSquareDirectory, error) {
 	snapshot, err := client.ListAllConfiguredModelProvenance(ctx)
 	if err != nil {
@@ -193,7 +194,15 @@ func LoadModelSquareProvenance(ctx context.Context, client *management.Client) (
 		if !hasDefinitions {
 			models, err = client.StaticModelDefinitions(ctx, provider.Family)
 			if err != nil {
-				return ModelSquareDirectory{}, err
+				if ctx.Err() != nil {
+					return ModelSquareDirectory{}, ctx.Err()
+				}
+				if !management.IsMissingCapability(err) {
+					return ModelSquareDirectory{}, err
+				}
+				// Older gateways can omit a definition channel. Keep other providers
+				// and remember this missing family so the sweep stays partially useful.
+				models = nil
 			}
 			definitions[provider.Family] = models
 		}

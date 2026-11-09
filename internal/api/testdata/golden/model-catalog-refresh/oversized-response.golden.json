@@ -18,7 +18,8 @@
       "target_id": "all",
       "result": "failure",
       "details": {
-        "code": "catalog_refresh_failed"
+        "code": "catalog_refresh_failed",
+        "provenance_refreshed": true
       }
     }
   ]
