@@ -10,6 +10,7 @@ import type { Capability } from './state';
 import styles from './AgentPage.module.css';
 import { LoadFailure } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
+import { FilterItem, FilterTransition } from '../../motion/filter';
 
 /** The pip each permission group carries: reading is not a verdict, changing is a caution, destroying is the alarm. */
 const PERMISSION_TONE: Record<string, string> = { read: 'default', write: 'warning', destructive: 'error' };
@@ -75,36 +76,38 @@ export const CapabilityDirectory = React.memo(function CapabilityDirectory({ cap
             <span className={styles['count']}>{group.items.length}</span>
           </h3>
           <ul className={styles['capabilities']}>
-            {group.items.map(capability => {
-              const isExpanded = expanded === capability.name;
-              const title = capabilityTitle(capability.name, t);
-              const description = capabilityDescription(capability.name, capability.description, t);
-              return (
-                <li key={capability.name} className={styles['capability']}>
-                  <button
-                    type="button"
-                    className={styles['capability-body']}
-                    aria-expanded={isExpanded}
-                    onClick={() => setExpanded(isExpanded ? '' : capability.name)}
-                  >
-                    <span className={styles['capability-title']}>
-                      <span className={styles['capability-label']}>{title}</span>
-                      {title !== capability.name && <code className={styles['capability-name']}>{capability.name}</code>}
-                    </span>
-                    <span className={clsx(styles['capability-description'], isExpanded && styles['is-expanded'])}>
-                      {description}
-                    </span>
-                    {isExpanded && description !== capability.description && (
-                      <span className={styles['capability-model']}>
-                        <span className={styles['capability-model-label']}>{t('agent.directory.model_description')}</span>
-                        <span lang="en">{capability.description}</span>
+            <FilterTransition itemKeys={group.items.map((capability) => capability.name)}>
+              {group.items.map(capability => {
+                const isExpanded = expanded === capability.name;
+                const title = capabilityTitle(capability.name, t);
+                const description = capabilityDescription(capability.name, capability.description, t);
+                return (
+                  <FilterItem as="li" key={capability.name} className={styles['capability']}>
+                    <button
+                      type="button"
+                      className={styles['capability-body']}
+                      aria-expanded={isExpanded}
+                      onClick={() => setExpanded(isExpanded ? '' : capability.name)}
+                    >
+                      <span className={styles['capability-title']}>
+                        <span className={styles['capability-label']}>{title}</span>
+                        {title !== capability.name && <code className={styles['capability-name']}>{capability.name}</code>}
                       </span>
-                    )}
-                  </button>
-                  <CopyButton text={capability.name} label={`${t('agent.directory.copy_name')}: ${capability.name}`} />
-                </li>
-              );
-            })}
+                      <span className={clsx(styles['capability-description'], isExpanded && styles['is-expanded'])}>
+                        {description}
+                      </span>
+                      {isExpanded && description !== capability.description && (
+                        <span className={styles['capability-model']}>
+                          <span className={styles['capability-model-label']}>{t('agent.directory.model_description')}</span>
+                          <span lang="en">{capability.description}</span>
+                        </span>
+                      )}
+                    </button>
+                    <CopyButton text={capability.name} label={`${t('agent.directory.copy_name')}: ${capability.name}`} />
+                  </FilterItem>
+                );
+              })}
+            </FilterTransition>
           </ul>
         </section>
       ))}

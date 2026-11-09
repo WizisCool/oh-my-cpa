@@ -219,9 +219,13 @@ export function storeSections(store: PluginStoreResponse | undefined, entries: r
 /** How many cards a registry shows while the whole store is in view; the rest are a click away. */
 export const STORE_SECTION_PREVIEW = 6;
 
-/** The cards one section shows: all of them once its registry is chosen or a search narrows the store. */
-export function storeSectionPreview(section: StoreSection, isWholeStore: boolean): StorePluginItem[] {
-  return isWholeStore ? section.entries.slice(0, STORE_SECTION_PREVIEW) : section.entries;
+/**
+ * The cards one section shows: a shelf of its first entries, or all of them once the operator chose
+ * that registry. A search narrows the shelves it already draws - it never lengthens them, because
+ * every card that appears where there was none is work the field being typed into has to wait for.
+ */
+export function storeSectionPreview(section: StoreSection, isSourceChosen: boolean): StorePluginItem[] {
+  return isSourceChosen ? section.entries : section.entries.slice(0, STORE_SECTION_PREVIEW);
 }
 
 /** The registry an entry was listed by, as the console names it. */

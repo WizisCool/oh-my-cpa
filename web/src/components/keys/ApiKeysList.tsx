@@ -274,6 +274,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         isLoading={isLoading}
         isBlocked={isBlocked}
         emptyText={emptyText}
+        isFilterAnimated
         phone={{ identity: 'name', actions: ['actions'] }}
         tableProps={{ className: 'config-api-keys-table', scroll: { x: 'max-content' } }}
       />

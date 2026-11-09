@@ -17,6 +17,7 @@ import {
 } from './oauthExcludedModelLogic';
 import styles from './OAuthModelRulesDrawer.module.css';
 import { SearchInput } from '../common/SearchInput';
+import { FilterItem, FilterTransition } from '../../motion/filter';
 import { SectionHeading } from '../common/SectionHeading';
 import { Toolbar } from '../common/Toolbar';
 import { Meter } from '../common/Meter';
@@ -215,38 +216,40 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
               <p className={styles['hint']}>{t('af.excluded_catalog_no_match', { query: query.trim() })}</p>
             ) : (
               <ul className={`${styles['rows']} ${styles['catalog']}`} data-testid="oauth-excluded-models-catalog">
-                {visibleModels.map((model) => {
-                  const meta = catalogModelMeta(model, t);
-                  // A row only a pattern covers cannot be cleared here: its rule is
-                  // above, and unchecking would change nothing the gateway does.
-                  const isHeldByPattern = Boolean(model.patternRule) && !model.isExactlyExcluded;
-                  return (
-                    <li key={model.id} className={styles['row']} data-model={model.id}>
-                      <Checkbox
-                        className={styles['row-check']}
-                        checked={model.isExcluded}
-                        disabled={isDisabled || isHeldByPattern}
-                        onChange={(event) => {
-                          if (event.target.checked && rules.length >= OAUTH_EXCLUDED_MODEL_RULE_LIMIT) {
-                            setRuleError('too_many');
-                            return;
-                          }
-                          setRuleError(undefined);
-                          onChange(setExcludedModelRule(rules, model.id, event.target.checked));
-                        }}
-                      >
-                        <span className={styles['row-copy']}>
-                          <span className={styles['row-id']}>{model.id}</span>
-                          {(model.displayName || meta) && (
-                            <span className={styles['row-meta']}>
-                              {[model.displayName, meta].filter(Boolean).join(' · ')}
-                            </span>
-                          )}
-                        </span>
-                      </Checkbox>
-                    </li>
-                  );
-                })}
+                <FilterTransition itemKeys={visibleModels.map((model) => model.id)}>
+                  {visibleModels.map((model) => {
+                    const meta = catalogModelMeta(model, t);
+                    // A row only a pattern covers cannot be cleared here: its rule is
+                    // above, and unchecking would change nothing the gateway does.
+                    const isHeldByPattern = Boolean(model.patternRule) && !model.isExactlyExcluded;
+                    return (
+                      <FilterItem as="li" key={model.id} className={styles['row']} data-model={model.id}>
+                        <Checkbox
+                          className={styles['row-check']}
+                          checked={model.isExcluded}
+                          disabled={isDisabled || isHeldByPattern}
+                          onChange={(event) => {
+                            if (event.target.checked && rules.length >= OAUTH_EXCLUDED_MODEL_RULE_LIMIT) {
+                              setRuleError('too_many');
+                              return;
+                            }
+                            setRuleError(undefined);
+                            onChange(setExcludedModelRule(rules, model.id, event.target.checked));
+                          }}
+                        >
+                          <span className={styles['row-copy']}>
+                            <span className={styles['row-id']}>{model.id}</span>
+                            {(model.displayName || meta) && (
+                              <span className={styles['row-meta']}>
+                                {[model.displayName, meta].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </span>
+                        </Checkbox>
+                      </FilterItem>
+                    );
+                  })}
+                </FilterTransition>
               </ul>
             )}
           </>

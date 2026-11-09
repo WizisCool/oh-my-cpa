@@ -18,10 +18,12 @@ import { applyKeyOrder, moveKey, type DropSide } from '../../types/displayOrder'
 
 interface ReorderState {
   isEnabled: boolean;
+  /** A row is in hand: its place belongs to the drag until it is let go. */
+  isHeld: boolean;
   onStep: (key: string, direction: -1 | 1) => void;
 }
 
-const ReorderContext = React.createContext<ReorderState>({ isEnabled: false, onStep: () => undefined });
+const ReorderContext = React.createContext<ReorderState>({ isEnabled: false, isHeld: false, onStep: () => undefined });
 
 /** The list runs one way and has two ends: a row travels up or down, and no further than the list. */
 const alongTheList: Modifier = ({ transform, draggingNodeRect, containerNodeRect }) => {
@@ -53,9 +55,18 @@ export interface RowReorderProps {
 export function RowReorder({ items, isEnabled, onMove, onStep, children }: RowReorderProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const ids = React.useMemo(() => [...items], [items]);
+  // Held rows are moved by the pointer's own transforms; the list's animation has to keep out of
+  // their way until they are let go, or the two write the same transform.
+  const [isHeld, setIsHeld] = React.useState(false);
 
-  const handleStart = () => document.body.classList.add('is-row-dragging');
-  const finish = () => document.body.classList.remove('is-row-dragging');
+  const handleStart = () => {
+    document.body.classList.add('is-row-dragging');
+    setIsHeld(true);
+  };
+  const finish = () => {
+    document.body.classList.remove('is-row-dragging');
+    setIsHeld(false);
+  };
   const handleEnd = ({ active, over }: DragEndEvent) => {
     finish();
     if (!over || over.id === active.id) return;
@@ -71,7 +82,7 @@ export function RowReorder({ items, isEnabled, onMove, onStep, children }: RowRe
     const index = ids.indexOf(key);
     if (index >= 0 && ids[index + direction] !== undefined) onStep(key, direction);
   }, [ids, onStep]);
-  const value = React.useMemo(() => ({ isEnabled, onStep: step }), [isEnabled, step]);
+  const value = React.useMemo(() => ({ isEnabled, isHeld, onStep: step }), [isEnabled, isHeld, step]);
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={MODIFIERS} onDragStart={handleStart} onDragEnd={handleEnd} onDragCancel={finish}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy} disabled={!isEnabled}>
@@ -129,11 +140,13 @@ export interface ReorderRow {
   };
   /** Passed to the row's `ReorderHandle`. */
   handle: ReorderHandleProps;
+  /** A row of this list is in hand; the list's own animation waits until it is let go. */
+  isHeld: boolean;
 }
 
 /** One row's part in the reorder: the row's props and its handle's. */
 export function useReorderRow(key: string): ReorderRow {
-  const { isEnabled, onStep } = React.useContext(ReorderContext);
+  const { isEnabled, isHeld, onStep } = React.useContext(ReorderContext);
   const motion = useSortableMotion();
   const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: key, disabled: !isEnabled, ...motion });
   const style: React.CSSProperties | undefined = transform || transition
@@ -153,6 +166,7 @@ export function useReorderRow(key: string): ReorderRow {
       onPointerDown: listeners?.onPointerDown as React.PointerEventHandler | undefined,
       onStep: (direction) => onStep(key, direction),
     },
+    isHeld,
   };
 }
 

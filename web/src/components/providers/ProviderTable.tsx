@@ -33,6 +33,8 @@ import { InlineNameEditor, inlineNameEditableClass, inlineNamePersistentClass, R
 import { RowContextHandle, RowHandleContext, RowReorder, useReorderList, useReorderRow } from '../common/RowReorder';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import type { DropSide } from '../../types/displayOrder';
+import { useFilterItemMotion } from '../../motion/filter';
+import { m } from '../../motion';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -598,6 +600,7 @@ export function ProviderTable({
           isLoading={providersLoading}
           isBlocked={isBlocked}
           emptyText={emptyText}
+          isFilterAnimated
           phone={{ render: renderPhoneCard }}
           tableProps={{ components: REORDERABLE_BODY, tableLayout: 'fixed' }}
           phoneRowWrapper={ReorderablePhoneRow}
@@ -619,7 +622,9 @@ function endpointHost(baseURL: string | undefined): string {
   }
 }
 
-type BodyRowProps = React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: React.Key };
+type BodyRowProps = Omit<React.HTMLAttributes<HTMLTableRowElement>,
+  // Motion owns these handlers; the row's own drag is dnd-kit's, not the DOM's.
+  'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'> & { 'data-row-key'?: React.Key };
 
 /** A data row the operator can hold and move; the table's placeholder rows carry no key and stay put. */
 function BodyRow(props: BodyRowProps) {
@@ -628,10 +633,11 @@ function BodyRow(props: BodyRowProps) {
 }
 
 function ReorderableBodyRow({ rowKey, ...props }: BodyRowProps & { rowKey: string }) {
-  const { row, handle } = useReorderRow(rowKey);
+  const { row, handle, isHeld } = useReorderRow(rowKey);
+  const filterMotion = useFilterItemMotion({ isHeld });
   return (
     <RowHandleContext.Provider value={handle}>
-      <tr {...props} {...row} />
+      <m.tr {...filterMotion} {...props} {...row} />
     </RowHandleContext.Provider>
   );
 }
@@ -639,10 +645,11 @@ function ReorderableBodyRow({ rowKey, ...props }: BodyRowProps & { rowKey: strin
 const REORDERABLE_BODY = { body: { row: BodyRow } };
 
 function ReorderablePhoneRow({ rowKey, children }: { rowKey: string; children: React.ReactNode }) {
-  const { row, handle } = useReorderRow(rowKey);
+  const { row, handle, isHeld } = useReorderRow(rowKey);
+  const filterMotion = useFilterItemMotion({ isHeld });
   return (
     <RowHandleContext.Provider value={handle}>
-      <div {...row}>{children}</div>
+      <m.div {...filterMotion} {...row}>{children}</m.div>
     </RowHandleContext.Provider>
   );
 }

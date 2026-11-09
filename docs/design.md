@@ -161,6 +161,19 @@ stable across renders; a fresh object reads as a new target and fights a running
 A height fold animates a wrapper with no padding or border and the visible box sits inside it:
 Motion measures `auto` in the state it is heading for, so padding folding alongside would stall
 the motion short of its end and snap the rest.
+
+A list that a search or a status filter narrows animates through the same layer
+([`motion/filter.tsx`](../web/src/motion/filter.tsx)): what remains glides to the place the shorter
+list gives it, and what starts to match fades in where it now belongs, as one move. A row the filter
+drops leaves at once - holding it for a fade before the rest close up reads as a pause, and the
+operator is already typing again by the end of it. Only a change that keeps something is drawn as a
+move; another page or another provider's rows replace the list and arrive as they are.
+
+The list itself owns how much is on screen, because a filter that mounts hundreds of rows is slow
+however it is drawn: pages that can grow paginate, and the plugin store keeps a shelf of each
+registry with the rest one deliberate, interruptible click away. A list long enough that moving it
+would cost more than a frame is drawn in its new shape at once, so a large catalogue answers with
+the row it was searched for rather than with motion.
 Library overlays (drawers, dialogs, menus) keep the CSS motion tokens in `index.css`.
 
 Honor reduced motion and visibility changes. Timers, observers, animation frames,
@@ -181,6 +194,11 @@ Use visible labels, keyboard navigation, clear focus indicators and appropriate 
 areas. Do not make hover the only route to information or an action. On coarse pointers,
 keep editable text large enough to avoid browser focus zoom. A phone layout must retain
 the same information and capabilities as the desktop layout.
+
+A field a hand types into with an input method composes before it commits: pinyin, kana or an
+accented letter is drawn as a draft that may become different text. The field draws that draft and
+commits only the finished text to the page, so a half-typed romanisation never filters a list or
+redraws the field under the hand.
 
 ## Finishing a UI change
 

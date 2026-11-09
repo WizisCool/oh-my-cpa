@@ -33,6 +33,7 @@ import {
 import { LoadFailure, Notice, useToast } from './feedback';
 import styles from './CustomIconLibrary.module.css';
 import { SearchInput } from './common/SearchInput';
+import { FilterItem, FilterTransition } from '../motion/filter';
 import { FileDropzone } from './common/FileDropzone';
 
 interface Props {
@@ -542,82 +543,85 @@ export const CustomIconLibrary: React.FC<Props> = ({
         </div>
       ) : (
         <div className={styles['grid']}>
-          {visibleIcons.map((icon) => {
-            const isSelected = currentIcon === `custom:${icon.id}`;
-            return (
-              <article
-                key={icon.id}
-                className={[
-                  styles['tile'],
-                  isSelected || savedID === icon.id
-                    ? styles['tile-highlighted']
-                    : '',
-                ].join(' ')}
-                data-custom-icon-id={icon.id}
-              >
-                <button
-                  className={styles['pick']}
-                  data-icon-id={`custom:${icon.id}`}
-                  disabled={isSelecting || isBusy}
-                  aria-pressed={isSelected}
-                  onClick={() => void onSelect(`custom:${icon.id}`)}
-                  title={icon.name}
+          <FilterTransition itemKeys={visibleIcons.map((icon) => icon.id)}>
+            {visibleIcons.map((icon) => {
+              const isSelected = currentIcon === `custom:${icon.id}`;
+              return (
+                <FilterItem
+                  as="article"
+                  key={icon.id}
+                  className={[
+                    styles['tile'],
+                    isSelected || savedID === icon.id
+                      ? styles['tile-highlighted']
+                      : '',
+                  ].join(' ')}
+                  data-custom-icon-id={icon.id}
                 >
-                  <span className={styles['tile-artwork']}>
-                    <LobeIcon
-                      iconId={`custom:${icon.id}`}
-                      size={40}
-                      loading="lazy"
-                    />
-                    {isSelected && (
-                      <CheckOutlined className={styles['selected-mark']} />
-                    )}
-                  </span>
-                  <span className={styles['name']}>{icon.name}</span>
-                </button>
-                <div className={styles['tile-meta']}>
-                  <span>
-                    {icon.mime_type
-                      .replace('image/', '')
-                      .replace('svg+xml', 'SVG')
-                      .toUpperCase()}
-                  </span>
-                  <span>
-                    {t(
-                      icon.reference_count
-                        ? 'icons.references'
-                        : 'icons.unused',
-                      { n: icon.reference_count },
-                    )}
-                  </span>
-                </div>
-                <div className={styles['actions']}>
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<EditOutlined />}
-                    disabled={isDemo || isBusy || isSelecting}
-                    onClick={() => openEditor(icon)}
+                  <button
+                    className={styles['pick']}
+                    data-icon-id={`custom:${icon.id}`}
+                    disabled={isSelecting || isBusy}
+                    aria-pressed={isSelected}
+                    onClick={() => void onSelect(`custom:${icon.id}`)}
+                    title={icon.name}
                   >
-                    {t('common.edit')}
-                  </Button>
-                  <Button
-                    size="small"
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    aria-label={t('common.delete')}
-                    title={t('icons.delete_action')}
-                    disabled={isDemo || isBusy || isSelecting}
-                    onClick={() => {
-                      setError('');
-                      setDeletingIcon(icon);
-                    }}
-                  />
-                </div>
-              </article>
-            );
-          })}
+                    <span className={styles['tile-artwork']}>
+                      <LobeIcon
+                        iconId={`custom:${icon.id}`}
+                        size={40}
+                        loading="lazy"
+                      />
+                      {isSelected && (
+                        <CheckOutlined className={styles['selected-mark']} />
+                      )}
+                    </span>
+                    <span className={styles['name']}>{icon.name}</span>
+                  </button>
+                  <div className={styles['tile-meta']}>
+                    <span>
+                      {icon.mime_type
+                        .replace('image/', '')
+                        .replace('svg+xml', 'SVG')
+                        .toUpperCase()}
+                    </span>
+                    <span>
+                      {t(
+                        icon.reference_count
+                          ? 'icons.references'
+                          : 'icons.unused',
+                        { n: icon.reference_count },
+                      )}
+                    </span>
+                  </div>
+                  <div className={styles['actions']}>
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<EditOutlined />}
+                      disabled={isDemo || isBusy || isSelecting}
+                      onClick={() => openEditor(icon)}
+                    >
+                      {t('common.edit')}
+                    </Button>
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      aria-label={t('common.delete')}
+                      title={t('icons.delete_action')}
+                      disabled={isDemo || isBusy || isSelecting}
+                      onClick={() => {
+                        setError('');
+                        setDeletingIcon(icon);
+                      }}
+                    />
+                  </div>
+                </FilterItem>
+              );
+            })}
+          </FilterTransition>
         </div>
       )}
     </section>

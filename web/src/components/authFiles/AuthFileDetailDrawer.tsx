@@ -67,6 +67,7 @@ import {
   type VertexOpenAPIProblem,
 } from './vertexOpenAPI';
 import { SearchInput } from '../common/SearchInput';
+import { FilterItem, FilterTransition } from '../../motion/filter';
 import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
 import { Tag } from '../common/Tag';
@@ -572,45 +573,48 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           label={t('omc.models_search_placeholder')}
           style={{ marginBottom: 12 }}
         />
-        <Table<ManagementAuthFileModel>
-          size="small"
-          rowKey="id"
-          pagination={false}
-          dataSource={filteredModels}
-          columns={[
-            {
-              title: t('af.model_id'),
-              dataIndex: 'id',
-              key: 'id',
-              render: (id: string) => <span className="mono-num">{id}</span>,
-            },
-            {
-              title: t('af.model_name'),
-              dataIndex: 'display_name',
-              key: 'display_name',
-              render: (name: string) => name || '-',
-            },
-            {
-              title: '',
-              key: 'copy',
-              width: 52,
-              render: (_, model) => (
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<CopyOutlined />}
-                  aria-label={`${t('common.copy')}: ${model.id}`}
-                  onClick={() => {
-                    void copyText(model.id).then((copied) => {
-                      if (copied) toast.success(t('common.copied'));
-                      else toast.error(t('common.copy_failed'));
-                    });
-                  }}
-                />
-              ),
-            },
-          ]}
-        />
+        <FilterTransition itemKeys={filteredModels.map((model) => model.id)}>
+          <Table<ManagementAuthFileModel>
+            size="small"
+            rowKey="id"
+            pagination={false}
+            components={{ body: { row: ModelTableRow } }}
+            dataSource={filteredModels}
+            columns={[
+              {
+                title: t('af.model_id'),
+                dataIndex: 'id',
+                key: 'id',
+                render: (id: string) => <span className="mono-num">{id}</span>,
+              },
+              {
+                title: t('af.model_name'),
+                dataIndex: 'display_name',
+                key: 'display_name',
+                render: (name: string) => name || '-',
+              },
+              {
+                title: '',
+                key: 'copy',
+                width: 52,
+                render: (_, model) => (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined />}
+                    aria-label={`${t('common.copy')}: ${model.id}`}
+                    onClick={() => {
+                      void copyText(model.id).then((copied) => {
+                        if (copied) toast.success(t('common.copied'));
+                        else toast.error(t('common.copy_failed'));
+                      });
+                    }}
+                  />
+                ),
+              },
+            ]}
+          />
+        </FilterTransition>
       </div>
     );
   };
@@ -1019,3 +1023,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     </AppDrawer>
   );
 };
+
+
+/** The drawer's model rows, which a search narrows around. */
+const ModelTableRow: React.FC<React.HTMLAttributes<HTMLTableRowElement>> = (props) => <FilterItem as="tr" {...props} />;

@@ -461,6 +461,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
                   rowKey="id"
                   isLoading={false}
                   emptyText={null}
+                  isFilterAnimated
                   phone={AUDIT_PHONE_LAYOUT}
                   tableProps={{
                     size: 'small',

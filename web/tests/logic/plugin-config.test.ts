@@ -302,10 +302,11 @@ test('plugin config', () => {
       ['custom', 'down', [], '503'],
     ],
   );
-  // A long registry shows its first cards while the whole store is in view, all of them once chosen.
+  // A long registry shows its first cards while the whole store is in view, and all of them once
+  // its registry is chosen; a search only ever narrows those shelves.
   const longSection = { kind: 'custom' as const, sourceId: 'long', name: 'long', entries: Array.from({ length: STORE_SECTION_PREVIEW + 2 }, (_, index) => entry({ id: `p${index}` })) };
-  assert.equal(storeSectionPreview(longSection, true).length, STORE_SECTION_PREVIEW);
-  assert.equal(storeSectionPreview(longSection, false).length, STORE_SECTION_PREVIEW + 2);
+  assert.equal(storeSectionPreview(longSection, false).length, STORE_SECTION_PREVIEW);
+  assert.equal(storeSectionPreview(longSection, true).length, STORE_SECTION_PREVIEW + 2);
   // A tag narrows to the entries carrying it as the card shows it, in any case.
   assert.deepEqual(filterStorePlugins(STORE, '', 'all', 'en', 'Network').map((item) => item.store_id), ['official/limiter']);
   assert.deepEqual(
