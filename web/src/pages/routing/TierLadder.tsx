@@ -649,13 +649,15 @@ const WeightControl: React.FC<{
 }> = ({ member, name, weights, isLocked, onChange }) => {
   const t = useT();
   const total = weights.reduce<number>((sum, weight) => sum + (weight ?? 1), 0);
-  // A member with one key is weighted from its chip too: the wheel over it steps the weight, as it
-  // does over the field the chip opens. Several keys have no one weight to step.
+  // A member with one key is weighted from its chip too, once its editor is open: the wheel steps
+  // the weight while the numbers it changes are on screen, so a scroll across the board leaves the
+  // routing alone. Several keys have no one weight to step.
+  const [isEditorOpen, setIsEditorOpen] = React.useState(false);
   const [chip, setChip] = React.useState<HTMLButtonElement | null>(null);
   useWheelStep(chip, (isUp) => {
     const next = Math.min(Math.max((weights[0] ?? 1) + (isUp ? 1 : -1), 0), MAX_WEIGHT);
     if (next !== (weights[0] ?? 1)) onChange([next]);
-  }, !isLocked && weights.length === 1);
+  }, isEditorOpen && !isLocked && weights.length === 1);
   const content = (
     <div className={styles['weight-editor']}>
       {weights.map((weight, index) => (
@@ -677,7 +679,13 @@ const WeightControl: React.FC<{
     </div>
   );
   return (
-    <Popover trigger="click" placement="bottomRight" content={content}>
+    <Popover
+      open={isEditorOpen}
+      onOpenChange={setIsEditorOpen}
+      trigger="click"
+      placement="bottomRight"
+      content={content}
+    >
       <button type="button" ref={setChip} className={styles['weight-chip']} aria-label={t('orch.weight_named', { name })}>
         ×{total}
       </button>

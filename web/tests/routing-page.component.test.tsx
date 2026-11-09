@@ -74,6 +74,28 @@ it('reports a plan refused for a changed board and offers a reload', async () =>
   expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
 });
 
+it('steps a weight from its chip only while its editor is open', async () => {
+  const api = installOmcApi();
+  api.on('GET', '/management/routing', () => ({
+    ...board,
+    settings: { ...board.settings, strategy: 'weighted-round-robin' },
+  }));
+  renderRoutingPage();
+
+  // One key, so the card carries one weight, and its editor is closed.
+  const chip = await screen.findByRole('button', { name: 'Weight of Primary seat' });
+  expect(chip.textContent).toBe('×1');
+
+  // A wheel crossing the board belongs to its scroll: a routing weight does not change under a
+  // reader who never opened it.
+  fireEvent.wheel(chip, { deltaY: -100 });
+  expect(chip.textContent).toBe('×1');
+
+  fireEvent.click(chip);
+  fireEvent.wheel(chip, { deltaY: -100 });
+  expect(chip.textContent).toBe('×2');
+});
+
 const authFile = (name: string, email: string, displayName?: string): ManagementAuthFile => ({
   name, email, display_name: displayName, type: 'zcode', provider: 'zcode',
   disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0,
