@@ -421,7 +421,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       response.end([
         '<!doctype html><html><head><meta charset="utf-8"><title>Logger Console</title></head><body>',
-        '<h1 id="plugin-title">Logger Console</h1><p id="plugin-status">loading</p><p id="plugin-theme"></p>',
+        '<h1 id="plugin-title">Logger Console</h1><p id="plugin-status">loading</p><p id="plugin-theme"></p><p id="plugin-language"></p>',
         '<p id="plugin-contract">loading</p><p id="plugin-credential-status"></p><p id="plugin-provider"></p>',
         "<script>const parts = window.location.pathname.split('/').filter(Boolean);window.fixturePluginProvider = parts[0] === 'v0' && parts[1] === 'resource' && parts[2] === 'plugins' ? parts[3] : 'unrecognized';document.getElementById('plugin-provider').textContent = window.fixturePluginProvider;</script>",
         '<script src="/v0/resource/plugins/fixture-logger/console.js"></script>',
@@ -433,6 +433,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       response.end([
         "document.getElementById('plugin-theme').textContent = window.parent.document.documentElement.getAttribute('data-theme') || '';",
+        "document.getElementById('plugin-language').textContent = window.parent.document.documentElement.lang || '';",
         "fetch(new URL('/v0/management/fixture-logger/status', location.origin))",
         "  .then((reply) => reply.json())",
         "  .then((body) => { document.getElementById('plugin-status').textContent = body.state; })",

@@ -65,10 +65,23 @@ export async function runPluginHostedPageAcceptance({ appURL, page, check }) {
     return reply.status;
   }, hostedConfigURL);
   check('already hosted URLs retain session access with omitted credentials', hostedConfigStatus === 200);
-  const storedPluginData = await pluginFrame.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
-  check('the host does not write a management credential to browser storage', !storedPluginData.includes(FAKE_CPA_MANAGEMENT_KEY));
+  const mirroredCredential = await pluginFrame.evaluate(() => {
+    const raw = localStorage.getItem('cli-proxy-auth') || '';
+    if (!raw.startsWith('enc::v2::')) return null;
+    const bytes = Uint8Array.from(atob(raw.slice('enc::v2::'.length)), (char) => char.charCodeAt(0));
+    const secret = new TextEncoder().encode('cli-proxy-api-webui::secure-storage|' + location.host);
+    const decoded = bytes.map((byte, index) => byte ^ secret[index % secret.length]);
+    return JSON.parse(new TextDecoder().decode(decoded));
+  });
+  // A page written for CPAMC reads the credential from this entry; without it the page
+  // opens its own sign-in prompt in a console that is already signed in.
+  check('the console mirrors the gateway credential where a CPAMC-native plugin page reads it',
+    mirroredCredential?.state?.managementKey === FAKE_CPA_MANAGEMENT_KEY, JSON.stringify(mirroredCredential));
   const frameTheme = await pluginDocument.locator('#plugin-theme').innerText();
   check('the plugin page reads the console colour mode from its parent', frameTheme === 'dark' || frameTheme === 'light', frameTheme);
+  const consoleLanguage = await page.evaluate(() => document.documentElement.lang);
+  const frameLanguage = await pluginDocument.locator('#plugin-language').innerText();
+  check('the plugin page reads the console reading language from its parent', frameLanguage === consoleLanguage, `${frameLanguage} != ${consoleLanguage}`);
 }
 
 // Native plugin APIs intentionally return secrets. Match only their exact

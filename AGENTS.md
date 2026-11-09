@@ -75,7 +75,7 @@ and operator procedures.
   - `types/`: Domain models and pure state/derivation helpers.
   - `theme/` & `i18n/`: Tokenized palette/theme projection and 4-locale catalogs (`zh`, `en`, `zh-Hant`, `ms`).
 - **Security & data invariants**:
-  - Never expose raw keys, OAuth tokens or auth files in ordinary DTOs, logs, preferences or browser storage. Caller keys use masks and keyed-HMAC identities, never masks as join keys.
+  - Never expose raw keys, OAuth tokens or auth files in ordinary DTOs, logs, preferences or browser storage. Caller keys use masks and keyed-HMAC identities, never masks as join keys. CPA's management key is the one deliberate exception: the console mirrors it into the CPAMC-compatible browser storage that plugin pages written for CPAMC read, and puts it nowhere else.
   - Sensitive operations fail closed when their required audit record cannot be written.
   - CPA configuration writes serialize, check revisions, name changed paths, and save a restorable encrypted pre-write backup before mutating upstream state.
   - Availability probes authenticate without popping usage records.

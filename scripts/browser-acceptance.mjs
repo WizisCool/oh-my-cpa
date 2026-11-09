@@ -125,6 +125,10 @@ async function browserStorage(page) {
  * carries the management key or OAuth credential material. Routes whose contract does
  * not include plaintext provider keys also exclude those (`pageSecrets`).
  *
+ * A plugin page is the one surface that receives the gateway credential, in the storage
+ * entry a CPAMC-native page reads; that contract is asserted in acceptance/plugin-host.mjs,
+ * and no console route swept here mirrors it.
+ *
  * `routes` is a list of `[route, selector, options?]`.
  */
 async function auditRoutes(page, responseBodies, routes) {

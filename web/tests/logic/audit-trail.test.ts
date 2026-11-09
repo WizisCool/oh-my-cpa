@@ -33,6 +33,8 @@ test('a category covers every action prefix it names, and nothing that merely st
   assert.equal(categoryOf('oauth_model_alias.update'), 'credentials');
   assert.equal(categoryOf('oauth_excluded_models.update'), 'credentials');
   assert.equal(categoryOf('auth_file.delete'), 'credentials');
+  // The gateway credential a plugin page inherits is the console's own credential read.
+  assert.equal(categoryOf('cpa_credential.reveal'), 'credentials');
   assert.equal(categoryOf('model_catalog.refresh'), 'providers');
   assert.equal(categoryOf('auth.login'), 'access');
   assert.equal(categoryOf('capability.usage_aggregate'), 'agent');

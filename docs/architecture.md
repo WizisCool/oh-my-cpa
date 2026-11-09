@@ -42,11 +42,12 @@ CPA's management key verifies sign-in on the server. Browser sessions use signed
 HttpOnly, SameSite=Strict cookies; browser mutations require the origin check.
 A session lasts a working day, or a month when the operator asks to stay signed in;
 the expiry is signed into the cookie, and rotating the key ends every session. Keep the
-management key out of browser persistence and ordinary DTOs. The sign-in form is a
+management key out of ordinary DTOs, logs and preferences. The sign-in form is a
 standard one (an account field and a `current-password` field), so the browser's
 password manager or an extension may offer to save the key; that is the operator's own
-manager, acting with their consent. The console never writes the key to page storage
-or hands it to a credential API.
+manager, acting with their consent. The console writes the key to browser storage in
+exactly one place - the entry a CPAMC-native plugin page reads (see
+[Trusted plugin pages](#trusted-plugin-pages)) - and withdraws it when the session ends.
 
 Facade responses are handwritten allowlists. Default credential reads return
 masks and keyed-HMAC identities. Dedicated editing/reveal/export paths can expose
@@ -86,6 +87,17 @@ Reject traversal, malformed paths and arbitrary targets. The outbound `api-call`
 bridges and descendants are blocked. Cookies do not cross; redirects are not followed.
 An explicit management credential, even empty, is validated locally before CPA is
 called. The server key is injected only when neither management header was supplied.
+
+A plugin page written for CPAMC reads the gateway credential from browser storage
+rather than from its host, so the console mirrors the stored key into the entry CPAMC
+keeps its own connection in (`cli-proxy-auth`, obfuscated the way CPAMC obfuscates it)
+before the frame loads. Sign-out, a refused session check and the next sign-in withdraw
+it; a session that expires while no console tab is open leaves the entry in place until
+the console is next opened. That entry is the only
+copy of the key the browser holds; ordinary DTOs, logs and preferences still never
+carry it, and the plugin host still judges a page's own credential before CPA sees it.
+The frame's parent document also carries the console's colour mode and reading
+language, which is what CPAMC's own document supplies to a page it embeds.
 
 API reads and writes record fixed surface/method/status, not caller path suffixes,
 queries, bodies, credentials or upstream transport errors. Responses are `no-store`.
