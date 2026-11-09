@@ -15,39 +15,6 @@
   margin-bottom: 12px;
 }
 
-.session-strip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  padding: 8px 10px;
-  margin: 12px 0;
-}
-
-.session-strip-label {
-  color: var(--meta);
-  font-size: var(--text-xs);
-}
-
-.session-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  padding: 3px 8px;
-  background: var(--hover-inset);
-  font-size: var(--text-sm);
-}
-
-.session-pill :global(.ant-btn-link) {
-  padding-inline: 2px;
-}
-
 .sections {
   display: flex;
   flex-direction: column;
@@ -177,10 +144,6 @@
 
   .pagination {
     justify-content: center;
-  }
-
-  .session-strip {
-    align-items: flex-start;
   }
 
   /* Settings keeps its label's width; the refresh takes the rest of the row, its main segment

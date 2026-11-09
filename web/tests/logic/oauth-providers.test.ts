@@ -5,6 +5,8 @@ import {
   XAI_CALLBACK_URL,
   builtinOAuthProviderChoices,
   lookupOAuthProvider,
+  oauthProviderChoices,
+  oauthProviderGroups,
   pluginOAuthProviderChoices,
   normalizeOAuthFlow,
   normalizeOAuthStatus,
@@ -12,6 +14,8 @@ import {
   resolveXaiCallback,
   validateDevinCallback,
 } from '../../src/pages/oauthProviderLogic.ts';
+import { storeListingsByPluginId } from '../../src/components/plugins/pluginStoreLogic.ts';
+import type { PluginItem, StorePluginItem } from '../../src/types/plugin.ts';
 import { BUILTIN_OAUTH_IDS, OAUTH_PROVIDER_PATTERN, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 
@@ -428,4 +432,60 @@ test('unknown plugin flow labels use successful response fields without inventin
   assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'redirect', user_code: 'ABCD' }), 'manual-callback');
   assert.equal(resolveStartedOAuthFlow('device', { flow: 'custom' }), 'device');
   assert.equal(resolveStartedOAuthFlow('manual-callback', { flow: 'custom', user_code: 'ABCD' }), 'manual-callback');
+});
+
+test('provider choices are grouped by who publishes them, from the store the plugins page reads', () => {
+  const t = ((key: string, args?: { name?: string }) => args?.name || key) as Parameters<typeof builtinOAuthProviderChoices>[0];
+  const listing = (overrides: Partial<StorePluginItem>): StorePluginItem => ({
+    store_id: 'omc/plugin', source_id: 'omc', source_name: 'Oh My CPA', id: 'plugin', name: 'Plugin',
+    tags: [], platforms: [], is_official: false, is_official_repository: false, is_omc: true,
+    is_omc_repository: true, auth_required: false, auth_configured: false, installed: true,
+    install_source_status: 'matched', effective_enabled: true, update_available: false, ...overrides,
+  });
+  const plugins: PluginItem[] = [
+    // OMC maintains this one and its own registry supplied the installed copy.
+    { id: 'omc-portal', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['omc-login'], config_fields: [] },
+    // Another registry's listing of the same id is not provenance for the running copy.
+    { id: 'mirror-portal', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['mirror-login'], config_fields: [] },
+    { id: 'community-portal', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['community-login'], config_fields: [] },
+    // Installed, but no listing has been read for it.
+    { id: 'unlisted-portal', enabled: true, effective_enabled: true, supports_oauth: true, oauth_providers: ['unlisted-login'], config_fields: [] },
+  ];
+  const catalog = storeListingsByPluginId([
+    listing({ id: 'omc-portal' }),
+    listing({ id: 'mirror-portal', source_id: 'mirror', is_omc: false, is_omc_repository: false, install_source_status: 'different' }),
+    listing({ id: 'community-portal', source_id: 'omc', is_omc_repository: false }),
+  ]);
+
+  const choices = oauthProviderChoices(plugins, t, catalog);
+  const groupOf = (id: string) => choices.find((choice) => choice.id === id)?.group;
+  assert.equal(groupOf('codex'), 'builtin', 'the sign-ins the console ships are built in');
+  assert.equal(groupOf('omc-login'), 'plugin', 'an OMC portal is offered beside every other plugin portal');
+  assert.equal(groupOf('community-login'), 'plugin');
+
+  // Ownership is a mark on the card, not a section of its own: one plugin cannot split the
+  // list an operator is scanning into two.
+  const omcMarked = (id: string) => choices.find((choice) => choice.id === id)?.isOmcPlugin === true;
+  assert.equal(omcMarked('omc-login'), true, 'OMC maintains this plugin and supplied the installed copy');
+  assert.equal(omcMarked('community-login'), false, 'OMC\'s registry curates community code; it does not claim it');
+  assert.equal(omcMarked('mirror-login'), false, 'a listing from another registry proves nothing about the running copy');
+  assert.equal(omcMarked('unlisted-login'), false, 'an unread store is not evidence that a plugin is somebody else\'s');
+  assert.equal(omcMarked('codex'), false, 'a built-in sign-in belongs to no plugin');
+
+  const t3 = oauthProviderChoices(plugins, t);
+  assert.equal(t3.find((choice) => choice.id === 'omc-login')?.isOmcPlugin, false, 'without the store no portal claims OMC');
+
+  // Two sections, in the promised order; a section with nothing to offer is not drawn.
+  assert.deepEqual(
+    oauthProviderGroups(choices).map((section) => [section.group, section.choices.map((choice) => choice.id)]),
+    [
+      ['builtin', BUILTIN_OAUTH_PROVIDERS.map((provider) => provider.id)],
+      ['plugin', ['omc-login', 'mirror-login', 'community-login', 'unlisted-login']],
+    ],
+  );
+  assert.deepEqual(
+    oauthProviderGroups(choices.filter((choice) => choice.group === 'plugin')).map((section) => section.group),
+    ['plugin'],
+    'a group with nothing to offer is not drawn',
+  );
 });

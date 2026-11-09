@@ -125,6 +125,20 @@ export function storePluginOrigin(entry: StorePluginItem): StorePluginOrigin {
 }
 
 /**
+ * Where an installed plugin came from, when its store listing can prove it.
+ *
+ * Only the registry the running copy was installed from can say whose code it is: two
+ * registries listing the same id are two offers, and a listing the operator installed from
+ * somewhere else describes an entry this console never installed. Every surface that names
+ * an installed plugin's provenance reads this one answer - the installed list, the plugin's
+ * settings head, and the login card a plugin-declared OAuth portal is drawn on - so the
+ * same plugin cannot read as OMC's on one page and as somebody else's on the next.
+ */
+export function installedPluginOrigin(listing: StorePluginItem | undefined): StorePluginOrigin | undefined {
+  return listing?.install_source_status === 'matched' ? storePluginOrigin(listing) : undefined;
+}
+
+/**
  * The acknowledgement installing an entry of this origin requires, or `undefined` when it
  * requires none.
  *

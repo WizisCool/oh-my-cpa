@@ -11,6 +11,7 @@ import {
 import {
   filterInstalledPlugins,
   filterStorePlugins,
+  installedPluginOrigin,
   normalizePluginSettingsDraft,
   STORE_INSTALL_WARNINGS,
   storeFilterCounts,
@@ -242,6 +243,12 @@ test('plugin config', () => {
   assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { en: Object.assign({ name: 'Translated' }, { id: 'evil', source_id: 'evil', is_official: true }) } }, 'en'), { ...baseMetadata, name: 'Translated' });
   assert.equal(storeInstallConfirmToken(localizedEntry), 'localized');
   assert.equal(storePluginOrigin(localizedEntry), storePluginOrigin({ ...localizedEntry, locales: undefined }));
+  // An installed plugin's provenance is the listing that supplied the running copy; another
+  // registry's offer for the same id is not it, and an unread store says nothing at all.
+  assert.equal(installedPluginOrigin(entry({ id: 'own', is_official: false, is_omc: true, is_omc_repository: true, install_source_status: 'matched' })), 'omc');
+  assert.equal(installedPluginOrigin(entry({ install_source_status: 'different' })), undefined);
+  assert.equal(installedPluginOrigin(entry({ install_source_status: undefined })), undefined);
+  assert.equal(installedPluginOrigin(undefined), undefined);
   // The listing an installed card borrows is the one it was installed from.
   assert.equal(storeListingsByPluginId(STORE).get('logger')?.store_id, 'official/logger');
 

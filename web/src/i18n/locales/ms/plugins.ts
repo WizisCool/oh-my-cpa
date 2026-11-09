@@ -35,7 +35,7 @@ export default {
   "plugin.badge_quota": "Kuota",
   "plugin.badge_official": "Rasmi CPA",
   "plugin.badge_official_source": "Komuniti CPA",
-  "plugin.badge_omc": "Rasmi OMC",
+  "plugin.badge_omc": "OMC",
   "plugin.badge_third_party": "Pihak ketiga",
   "plugin.badge_update": "Kemas kini tersedia",
   "plugin.badge_installed": "Dipasang",

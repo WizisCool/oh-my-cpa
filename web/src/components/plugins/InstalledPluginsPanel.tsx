@@ -9,7 +9,7 @@ import { useI18n, useT } from '../../i18n';
 import { selectInstalledPluginMetadata } from '../../types/pluginStoreMetadata';
 import type { PluginItem, StorePluginItem } from '../../types/plugin';
 import { safeExternalURL } from '../../utils/externalUrl';
-import { filterInstalledPlugins, isStoreInstallBlocked, matchesInstalledState, storePluginOrigin, type InstalledStateFilter } from './pluginStoreLogic';
+import { filterInstalledPlugins, installedPluginOrigin, isStoreInstallBlocked, matchesInstalledState, type InstalledStateFilter } from './pluginStoreLogic';
 import type { MessageKey } from '../../i18n/catalog';
 import { PluginInstallModal } from './PluginInstallModal';
 import { PluginUpdateAllModal } from './PluginUpdateAllModal';
@@ -233,7 +233,7 @@ export function InstalledPluginsPanel({
             {visible.map((plugin) => {
               const listing = catalog.get(plugin.id);
               // Only the registry that supplied the installed copy can say whose code it is.
-              const provenance = listing?.install_source_status === 'matched' ? listing : undefined;
+              const origin = installedPluginOrigin(listing);
               const metadata = selectInstalledPluginMetadata(plugin, listing, lang);
               const name = metadata.name;
               const logo = plugin.logo || plugin.metadata?.logo || listing?.logo;
@@ -267,7 +267,7 @@ export function InstalledPluginsPanel({
                         <span className={styles['installed-name']}>{name}</span>
                         <span className={styles.badges}>
                           <PluginStateLabel plugin={plugin} isPluginSystemEnabled={isPluginSystemEnabled} />
-                          {provenance && <PluginOriginBadge origin={storePluginOrigin(provenance)} />}
+                          {origin && <PluginOriginBadge origin={origin} />}
                           {!plugin.registered && <span className={styles.badge}>{t('plugin.badge_not_registered')}</span>}
                           {plugin.supports_oauth && <span className={styles.badge}>{t('plugin.badge_auth_provider')}</span>}
                           {plugin.supports_quota && <span className={styles.badge}>{t('plugin.badge_quota')}</span>}

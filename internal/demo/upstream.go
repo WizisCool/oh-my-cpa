@@ -257,29 +257,35 @@ func newUpstreamState(now time.Time) *upstreamState {
 	storePlugins := make([]map[string]any, 0, len(pluginStoreCatalog()))
 	for _, plugin := range pluginStoreCatalog() {
 		local, isInstalled := installed[plugin.id]
+		// Every installed plugin in the fixture is the copy the registry listing it supplied.
+		installSourceStatus := ""
+		if isInstalled {
+			installSourceStatus = "matched"
+		}
 		storePlugins = append(storePlugins, map[string]any{
-			"store_id":          plugin.sourceID + "/" + plugin.id,
-			"source_id":         plugin.sourceID,
-			"source_name":       sourceNames[plugin.sourceID],
-			"source_url":        sourceURLs[plugin.sourceID],
-			"id":                plugin.id,
-			"name":              plugin.name,
-			"description":       plugin.description,
-			"author":            plugin.author,
-			"version":           plugin.version,
-			"repository":        plugin.repository,
-			"homepage":          "",
-			"license":           plugin.license,
-			"tags":              plugin.tags,
-			"logo":              plugin.logo,
-			"install_type":      "github_release",
-			"platforms":         []map[string]any{{"goos": "linux", "goarch": "amd64"}, {"goos": "linux", "goarch": "arm64"}},
-			"auth_required":     plugin.sourceID == "community",
-			"auth_configured":   plugin.sourceID == "community",
-			"installed":         isInstalled,
-			"installed_version": plugin.installedVersion,
-			"effective_enabled": isInstalled && local.isEnabled,
-			"update_available":  isInstalled && plugin.installedVersion != plugin.version,
+			"store_id":              plugin.sourceID + "/" + plugin.id,
+			"source_id":             plugin.sourceID,
+			"source_name":           sourceNames[plugin.sourceID],
+			"source_url":            sourceURLs[plugin.sourceID],
+			"id":                    plugin.id,
+			"name":                  plugin.name,
+			"description":           plugin.description,
+			"author":                plugin.author,
+			"version":               plugin.version,
+			"repository":            plugin.repository,
+			"homepage":              "",
+			"license":               plugin.license,
+			"tags":                  plugin.tags,
+			"logo":                  plugin.logo,
+			"install_type":          "github_release",
+			"platforms":             []map[string]any{{"goos": "linux", "goarch": "amd64"}, {"goos": "linux", "goarch": "arm64"}},
+			"auth_required":         plugin.sourceID == "community",
+			"auth_configured":       plugin.sourceID == "community",
+			"installed":             isInstalled,
+			"installed_version":     plugin.installedVersion,
+			"install_source_status": installSourceStatus,
+			"effective_enabled":     isInstalled && local.isEnabled,
+			"update_available":      isInstalled && plugin.installedVersion != plugin.version,
 		})
 	}
 	store := map[string]any{

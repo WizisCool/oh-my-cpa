@@ -269,41 +269,46 @@ export function useOAuthSessions(
 
   // Both explicit cancellation and incomplete-start cleanup keep the same CPA
   // completion race and retry behavior. Only the caller chooses the cancelled UI.
+  //
+  // The outcome is reported rather than collapsed into a boolean, because CPA refusing
+  // is not a failure: a session it will not cancel may already have saved a credential,
+  // and the operator has to hear that instead of watching a silent wait.
   const cancelAttempt = React.useCallback(async (
     providerId: string,
     token: string,
     generation: number,
-  ): Promise<boolean> => {
+  ): Promise<'cancelled' | 'refused' | 'failed' | 'abandoned'> => {
     updateProviderState(providerId, { cancelling: true, cancelError: undefined });
 
     try {
       const response = token
         ? await api.cancelOAuthSession(token)
         : { status: 'ok', cancelled: true };
-      if (disposedRef.current || generationRef.current[providerId] !== generation) return false;
+      if (disposedRef.current || generationRef.current[providerId] !== generation) return 'abandoned';
       clearProviderTimers(providerId);
       if (response.cancelled) {
         delete attemptUsesProxyRef.current[providerId];
-        return true;
+        return 'cancelled';
       }
 
       // CPA says the session could not be cancelled, which means it may already
       // have completed. Re-read it instead of painting a false cancellation.
       updateProviderState(providerId, { cancelling: false, status: 'waiting' });
       const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, true));
-      if (disposedRef.current) return false;
+      if (disposedRef.current) return 'abandoned';
       if (isPollingOutcome(outcome) && generationRef.current[providerId] === generation) {
         updateProviderState(providerId, { polling: true });
         scheduleStatusPoll(providerId, token, generation);
       }
+      return 'refused';
     } catch (error: unknown) {
-      if (disposedRef.current || generationRef.current[providerId] !== generation) return false;
+      if (disposedRef.current || generationRef.current[providerId] !== generation) return 'abandoned';
       const errorMessage = describeError(error);
       updateProviderState(providerId, { cancelling: false, cancelError: errorMessage, polling: Boolean(token) });
       if (token) scheduleStatusPoll(providerId, token, generation);
       toast.error(t('oauth.cancel_failed', { msg: errorMessage }));
+      return 'failed';
     }
-    return false;
   }, [clearProviderTimers, enqueueCheck, toast, performStatusCheck, scheduleStatusPoll, t, updateProviderState]);
 
   const startAttempt = React.useCallback(async (
@@ -350,8 +355,8 @@ export function useOAuthSessions(
             error: errorMessage,
             requiresProxyReentry: Boolean(proxyUrl?.trim()),
           });
-          const wasCancelled = await cancelAttempt(providerId, token, generation);
-          if (!wasCancelled || disposedRef.current || generationRef.current[providerId] !== generation) return;
+          const outcome = await cancelAttempt(providerId, token, generation);
+          if (outcome !== 'cancelled' || disposedRef.current || generationRef.current[providerId] !== generation) return;
           updateProviderState(providerId, { state: undefined, cancelling: false });
         }
         throw new Error(errorMessage);
@@ -399,15 +404,19 @@ export function useOAuthSessions(
   );
 
   const cancel = React.useCallback(async (providerId: string) => {
-    const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
-    if (!choice) return;
     const token = (states[providerId]?.state ?? '').trim();
     const generation = (generationRef.current[providerId] ?? 0) + 1;
     generationRef.current[providerId] = generation;
-    const wasCancelled = await cancelAttempt(providerId, token, generation);
-    if (!wasCancelled || disposedRef.current || generationRef.current[providerId] !== generation) return;
-    setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
-    toast.info(t('oauth.session_cancelled'));
+    const outcome = await cancelAttempt(providerId, token, generation);
+    if (outcome === 'abandoned' || disposedRef.current || generationRef.current[providerId] !== generation) return;
+    if (outcome === 'cancelled') {
+      setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
+      toast.info(t('oauth.session_cancelled'));
+      return;
+    }
+    // The attempt is still live and being re-read, so the waiting state stays: saying it
+    // was cancelled would hide a sign-in that may yet save a credential.
+    if (outcome === 'refused') toast.info(t('oauth.cancel_refused'));
   }, [cancelAttempt, states, t, toast]);
 
   const setCallbackUrl = React.useCallback((providerId: string, value: string) => {

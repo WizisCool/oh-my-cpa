@@ -29,6 +29,7 @@ import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
+import { storeListingsByPluginId } from '../../components/plugins/pluginStoreLogic';
 import { providerFilterTabs } from '../../types/credentialProviders';
 import type { AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import {
@@ -51,6 +52,7 @@ import { useOAuthSectionOrder } from './useOAuthSectionOrder';
 import { RowReorder } from '../../components/common/RowReorder';
 import { moveKey, type DropSide } from '../../types/displayOrder';
 import { useOAuthSessions } from './useOAuthSessions';
+import { OAuthSessionStrip } from './OAuthSessionStrip';
 import { isSIWCPending, siwcTargetKey, useSIWCBindings } from '../../hooks/useSIWCBindings';
 import { siwcBadgeState } from '../../components/authFiles/siwcBadge';
 import { useOAuthWorkspaceActions } from './useOAuthWorkspaceActions';
@@ -118,6 +120,7 @@ export const OAuthManagementPage: React.FC = () => {
   const { searchParams, setSearchParams, queryState, setSearch, isViewLoaded } = useOAuthManagementViewState();
   const visibleNow = useVisibleNow();
   const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
+  const [isConnectOpen, setIsConnectOpen] = React.useState(false);
   const [quotaColumnSorts, setQuotaColumnSorts] = React.useState<Partial<Record<string, QuotaColumnSort>>>({});
   const isDemo = isDemoMode();
   React.useEffect(() => {
@@ -148,10 +151,21 @@ export const OAuthManagementPage: React.FC = () => {
     queryFn: api.getPlugins,
     staleTime: 30_000,
   });
+  // Which plugin published a sign-in is a store fact, so the login cards read the same
+  // catalogue the plugin management page reads, under the same query key. It is enabled
+  // only while the drawer is open: the catalogue is what its groups and badges are drawn
+  // from, and a registry read is not worth making before there are cards to draw.
+  const storeQuery = useQuery({
+    queryKey: ['management-plugin-store'],
+    queryFn: ({ signal }) => api.getPluginStore({ signal }),
+    enabled: isConnectOpen && Boolean(pluginsQuery.data?.plugins.length),
+    staleTime: 5 * 60_000,
+  });
+  const pluginCatalog = React.useMemo(() => storeListingsByPluginId(storeQuery.data?.plugins), [storeQuery.data]);
 
   const choices = React.useMemo(
-    () => oauthProviderChoices(pluginsQuery.data?.plugins, t),
-    [pluginsQuery.data?.plugins, t],
+    () => oauthProviderChoices(pluginsQuery.data?.plugins, t, pluginCatalog),
+    [pluginsQuery.data?.plugins, t, pluginCatalog],
   );
   const pluginTitles = React.useMemo(() => pluginOAuthProviderTitles(pluginsQuery.data?.plugins), [pluginsQuery.data?.plugins]);
   const pluginLogos = React.useMemo(
@@ -260,7 +274,6 @@ export const OAuthManagementPage: React.FC = () => {
     setSearchParams(consumeOneShotIntent(searchParams), { replace: true });
   }, [queryState.action, queryState.connectProvider, queryState.focus, searchParams, setSearchParams]);
 
-  const [isConnectOpen, setIsConnectOpen] = React.useState(false);
   const [connectProviderId, setConnectProviderId] = React.useState('');
   const [connectRecoveryTarget, setConnectRecoveryTarget] = React.useState<OAuthRecoveryTarget>();
   React.useEffect(() => {
@@ -552,14 +565,6 @@ export const OAuthManagementPage: React.FC = () => {
   // must reveal against the records on screen when it is clicked, not when the toast opened.
   announceCompletionRef.current = announceCompletion;
 
-  const sessionEntries = Object.entries(sessions.states)
-    .filter(([, state]) => state.status === 'starting' || state.status === 'waiting' || state.status === 'error')
-    .map(([providerId, state]) => ({
-      providerId,
-      state,
-      choice: choices.find((choice) => choice.id === providerId),
-    }));
-
   const quotaBodyForRecord = (record: OAuthWorkspaceRecord): React.ReactNode => {
     if (record.quota) {
       const isRefreshing = Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex));
@@ -693,35 +698,15 @@ export const OAuthManagementPage: React.FC = () => {
         </SummaryStrip>
       </PageHeader>
 
-      {sessionEntries.length > 0 && (
-        <div className={styles['session-strip']} aria-live="polite">
-          <span className={styles['session-strip-label']}>{t('omc.active_authorizations')}</span>
-          {sessionEntries.map(({ providerId, state, choice }) => (
-            <span className={styles['session-pill']} data-testid="oauth-session-pill" key={providerId}>
-              <span>{choice?.title ?? providerId}</span>
-              <span>·</span>
-              <span>
-                {state.status === 'error'
-                  ? t('omc.session_failed')
-                  : state.status === 'starting'
-                    ? t('common.loading')
-                    : t('omc.session_waiting')}
-              </span>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  setConnectRecoveryTarget(state.recoveryTarget);
-                  setConnectProviderId(providerId);
-                  setIsConnectOpen(true);
-                }}
-              >
-                {state.status === 'error' ? t('common.retry') : t('common.details')}
-              </Button>
-            </span>
-          ))}
-        </div>
-      )}
+      <OAuthSessionStrip
+        sessions={sessions}
+        choices={choices}
+        onOpen={(providerId, recoveryTarget) => {
+          setConnectRecoveryTarget(recoveryTarget);
+          setConnectProviderId(providerId);
+          setIsConnectOpen(true);
+        }}
+      />
 
       {(projection.duplicateAuthIndexes.length > 0
         || projection.duplicateFileNames.length > 0

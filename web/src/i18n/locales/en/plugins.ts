@@ -35,7 +35,7 @@ export default {
   'plugin.badge_quota': 'Quota',
   'plugin.badge_official': 'CPA Official',
   'plugin.badge_official_source': 'CPA Community',
-  'plugin.badge_omc': 'OMC Official',
+  'plugin.badge_omc': 'OMC',
   'plugin.badge_third_party': 'Third-party',
   'plugin.badge_update': 'Update available',
   'plugin.badge_installed': 'Installed',
