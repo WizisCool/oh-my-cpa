@@ -109,7 +109,7 @@ export const PolicyStrip: React.FC<PolicyStripProps> = ({ settings, onChange, di
         onClick={() => setIsFailoverOpen((isOpen) => !isOpen)}
       >
         {isFailoverOpen ? <DownOutlined /> : <RightOutlined />}
-        {t('orch.failover')}
+        <span>{t('orch.failover')}</span>
         <span className={styles['policy-hint']}>
           {t('orch.failover_summary', { rounds: settings.request_retry })}
         </span>
