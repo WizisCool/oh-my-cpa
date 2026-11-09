@@ -96,6 +96,7 @@ export default {
   "af.clear_selection": "Kosongkan Pilihan",
   "af.runtime_only_badge": "Masa Jalan Sahaja",
   "af.warning_status": "Amaran Status",
+  "af.warning_raw": "Respons huluan",
   "af.detail_file_name": "Nama Fail",
   "af.detail_provider": "Penyedia",
   "af.detail_auth_index": "Indeks Pengesahan",

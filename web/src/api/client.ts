@@ -48,7 +48,7 @@ import {
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse, SIWCBindingStart, SIWCBindingStatus } from '../types/oauth';
-import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
+import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem, QuotaCapacityHistory } from '../types/quota';
 import {
   SystemInfoResponse,
   SystemReleasesResponse,
@@ -1405,6 +1405,12 @@ export const api = {
 
   async getCredentialQuotaDetail(authIndex: string): Promise<CredentialQuotaDetailResponse> {
     return request<CredentialQuotaDetailResponse>(`/management/quota/${encodeURIComponent(authIndex)}`, {
+      method: 'GET',
+    });
+  },
+
+  async getQuotaCapacityHistory(authIndex: string, windowId: string): Promise<QuotaCapacityHistory> {
+    return request<QuotaCapacityHistory>(`/management/quota/${encodeURIComponent(authIndex)}/capacity?window=${encodeURIComponent(windowId)}`, {
       method: 'GET',
     });
   },

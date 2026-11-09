@@ -161,7 +161,6 @@ export default {
   'omc.quota_unobserved': '未观测',
   'omc.quota_unsupported': '不支持实时探测',
   'omc.quota_credit_applicable': '适用 {n} 个',
-  'omc.quota_credit_applicable_hint': '当前可在此凭据上使用的重置积分数量',
   'omc.quota_credit_available_hint': '该凭据的上游账户当前可用的重置积分数量',
   'omc.quota_diagnostics': '原始配额诊断',
   'omc.tab_quota': '配额',

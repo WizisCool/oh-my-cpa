@@ -96,6 +96,7 @@ export default {
   "af.clear_selection": "取消選擇",
   "af.runtime_only_badge": "執行時虛擬",
   "af.warning_status": "狀態告警",
+  "af.warning_raw": "上游原文",
   "af.detail_file_name": "檔名",
   "af.detail_provider": "供應商",
   "af.detail_auth_index": "認證索引",

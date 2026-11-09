@@ -172,7 +172,7 @@ describe('credential quota body details', () => {
   const renderBody = (item: QuotaItem) => render(
     <MemoryRouter>
       <I18nProvider>
-        <CredentialQuotaBody item={item} nowMS={NOW_MS} isDemo={false} />
+        <CredentialQuotaBody item={item} credentialLabel={item.name} nowMS={NOW_MS} isDemo={false} />
       </I18nProvider>
     </MemoryRouter>,
   );
@@ -193,7 +193,7 @@ describe('credential quota body details', () => {
       },
     }));
     expect(screen.getByText('Weekly Reset')).toBeTruthy();
-    expect(screen.getByText(/1 of 2 left/)).toBeTruthy();
+    expect(document.querySelector('[data-quota-reset="grant"]')?.textContent).toMatch(/left\s*1\s*\/\s*2/);
     expect(screen.queryByText('Spent')).toBeNull();
     expect(screen.getByText('Cloud session credits')).toBeTruthy();
     expect(screen.getByText(/\$35\.00 left/)).toBeTruthy();
@@ -209,6 +209,7 @@ describe('credential quota body details', () => {
               recommendation: { status: 'needs_reauth', priority: 'critical', action: 'reauth', reason: 'reauthorize' },
               last_refresh: { attempted_at_ms: NOW_MS - 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
             })}
+            credentialLabel="codex-main"
             nowMS={NOW_MS}
             isDemo={false}
           />

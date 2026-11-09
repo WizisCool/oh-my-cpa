@@ -71,6 +71,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"pricing_upstream_catalog":      nil,
 	"quota_refresh_attempts":        nil,
 	"quota_snapshots":               nil,
+	"quota_capacity_cycles":         nil,
 	"release_check_state":           nil,
 	"release_index":                 nil,
 	"resource_overrides":            nil,

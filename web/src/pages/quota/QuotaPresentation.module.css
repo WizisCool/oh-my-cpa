@@ -54,24 +54,10 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  padding: 5px 10px;
+  padding: 8px 12px;
   font-size: var(--text-xs);
-  background: var(--hover-inset);
-  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
   border-radius: var(--radius-md);
-}
-
-.windows-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.window-divider {
-  height: 1px;
-  /* --border-soft equals --surface in dark mode, which would hide the line */
-  background: var(--border);
-  margin: 2px 0;
 }
 
 .no-window {
@@ -81,174 +67,10 @@
   text-align: center;
 }
 
-.progress-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-}
-
-.progress-label-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: var(--text-xs);
-}
-
-.progress-label {
-  color: var(--fg-2);
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.progress-sub-label {
-  color: var(--meta);
-  margin-left: 6px;
-}
-
-.progress-value {
-  flex: none;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--fg);
-}
-
-.progress-reset {
-  flex: 1;
-  text-align: right;
-  color: var(--meta);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* What is left of the window sits at the start and its whole size at the end - before an
-   estimate, what was recorded and why there is none yet. On a narrow Drawer the two wrap onto
-   their own lines instead of truncating a figure. */
-/* A plugin's own words for the window, one line under the bar; the title has the rest. */
-.window-description {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--fg-2);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capacity-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 12px;
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
-
-.capacity-part {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 5px;
-  min-width: 0;
-}
-
-.capacity-part-end {
-  margin-left: auto;
-  text-align: right;
-}
-
-.capacity-label,
-.capacity-note,
-.capacity-tokens {
-  color: var(--meta);
-}
-
-.capacity-value {
-  color: var(--fg-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.capacity-value-strong {
-  color: var(--fg);
-  font-weight: 600;
-}
-
-.capacity-tokens {
-  font-variant-numeric: tabular-nums;
-}
-
-.capacity-hint {
-  font-size: var(--text-2xs);
-  line-height: 1.5;
-  color: var(--meta);
-}
-
-.rec-banner {
-  background: var(--hover-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-  font-size: var(--text-xs);
-  display: flex;
-  /* A wide Drawer keeps the action beside the text; a phone wraps it onto the next line, where
-   * it no longer squeezes the model name and its countdown into half a row. */
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.rec-action {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  max-width: 100%;
-}
-
-.rec-banner-danger {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
-}
-
-.rec-text {
-  color: var(--fg-2);
-  line-height: 1.4;
-  flex: 1;
-  /* A provider's own reason can be one long token; the banner wraps it instead of pushing the
-   * refresh beside it out of the row. */
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.banner-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.rec-sub-danger {
-  font-size: var(--text-2xs);
-  color: var(--danger);
-  margin-top: 2px;
-}
-
 .card-meta-time {
   font-size: var(--text-xs);
   color: var(--meta);
   font-family: var(--font-mono);
-}
-
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .quota-body {
@@ -262,8 +84,26 @@
 .quota-status-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.quota-status-tags,
+.quota-tools {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.quota-tools {
+  margin-left: auto;
+  gap: 2px;
+}
+
+.quota-tools .card-meta-time {
+  margin-right: 6px;
 }
 
 .quota-diagnostic-alert {
@@ -271,14 +111,7 @@
 }
 
 .quota-diagnostics {
-  border-top: 1px solid var(--border-soft);
-  padding-top: 8px;
   font-size: var(--text-xs);
-  color: var(--meta);
-}
-
-.quota-diagnostics summary {
-  cursor: pointer;
   color: var(--fg-2);
 }
 
@@ -290,50 +123,74 @@
   overflow-wrap: anywhere;
 }
 
-.quota-body-footer {
+/* An estimate that opens its details: it keeps the text it replaces, and only a hover wash and the
+   pointer say it can be opened. */
+.capacity-trigger {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.capacity-trigger:hover {
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--fg);
+}
+
+.capacity-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A state that holds the credential back: a tinted wash with its reason and when it ends, and the
+   one action that lifts it at the far end. Several resting models share one callout. */
+.callout {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  border-top: 1px solid var(--border-soft);
-  padding-top: 10px;
-  margin-top: auto;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
 }
 
-@media (max-width: 640px) {
-  .quota-body-footer {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .card-actions {
-    flex-wrap: wrap;
-  }
-
-  .rec-action {
-    flex: 1 0 100%;
-  }
-
-  .rec-action > :first-child {
-    width: 100%;
-  }
-
-  /* The label takes a line of its own so the percentage and the reset time share the next one:
-   * side by side they leave the countdown a few characters wide, which breaks it between a
-   * number and its unit. */
-  .progress-label-row {
-    flex-wrap: wrap;
-  }
-
-  .progress-label {
-    flex: 1 0 100%;
-  }
-}
-
-
-.progress-label,
-.progress-reset {
-  white-space: normal;
+.callout-text {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 
+.callout-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.callout-title {
+  color: var(--fg);
+}
+
+.callout-sub {
+  color: var(--danger);
+}
+
+.callout-action {
+  flex: none;
+  margin-left: auto;
+}

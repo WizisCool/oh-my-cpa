@@ -60,6 +60,7 @@ import {
   buildOAuthWorkspaceProjection,
   consumeOneShotIntent,
   filterOAuthWorkspaceRecords,
+  maskedCredentialLabel,
   resolveAuthorizationProviderId,
   sortOAuthWorkspaceRecords,
   DEFAULT_OAUTH_SORT,
@@ -70,6 +71,7 @@ import {
   type OAuthWorkspaceSortKey,
 } from './oauthWorkspaceLogic';
 import styles from './OAuthManagementPage.module.css';
+import { CredentialMark } from '../../components/LobeIcon';
 import { PageHeader } from '../../components/common/PageHeader';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -572,6 +574,8 @@ export const OAuthManagementPage: React.FC = () => {
       return (
         <CredentialQuotaBody
           item={record.quota}
+          credentialLabel={maskedCredentialLabel(record)}
+          credentialMark={<CredentialMark credential={{ provider: record.displayProvider, hint: record.file.name }} pluginLogos={pluginLogos} size={22} />}
           nowMS={visibleNow}
           isDemo={isDemo}
           isRefreshing={isRefreshing}

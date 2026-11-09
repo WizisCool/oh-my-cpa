@@ -164,7 +164,6 @@ export default {
   "omc.quota_unobserved": "未觀測",
   "omc.quota_unsupported": "不支援即時探測",
   "omc.quota_credit_applicable": "適用 {n} 個",
-  "omc.quota_credit_applicable_hint": "目前可在此憑證上使用的重設積分數量",
   "omc.quota_credit_available_hint": "此憑證的上游帳戶目前可用的重設積分數量",
   "omc.quota_diagnostics": "原始配額診斷",
   "omc.tab_quota": "配額",

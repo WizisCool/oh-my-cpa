@@ -152,6 +152,9 @@ const REQUEST_EVENT_DETAIL = '/api/v1/usage/events/{id}';
 /** One installed plugin's settings document. */
 const PLUGIN_CONFIG = '/api/v1/management/plugins/{id}/config';
 
+/** One quota window's capacity details. */
+const QUOTA_CAPACITY = '/api/v1/management/quota/{authIndex}/capacity';
+
 /** One model's price editor read. */
 const PRICING_MODEL = '/api/v1/pricing/models/{model}';
 
@@ -193,6 +196,16 @@ const PARAMETERISED_ROUTES = [
   { path: '/api/v1/management/oauth/status', resolve: () => 'oauth-status' },
   { path: '/api/v1/management/logs', resolve: () => 'logs' },
   { path: '/api/v1/management/quota/auth-codex-01', resolve: () => 'quota-codex' },
+  // One window's capacity details, captured for the windows the dataset estimates. Another
+  // window has no answer rather than a different window's history.
+  {
+    path: QUOTA_CAPACITY,
+    pattern: /^\/api\/v1\/management\/quota\/[A-Za-z0-9._-]+\/capacity$/,
+    resolve: (url) => {
+      const name = `quota-capacity-${url.pathname.split('/').at(-2)}-${url.searchParams.get('window') ?? ''}`;
+      return Object.hasOwn(dataset.responses, name) ? name : undefined;
+    },
+  },
   // One installed plugin's settings document, captured per fixture plugin. A plugin the
   // dataset does not hold has no answer rather than another plugin's settings.
   {

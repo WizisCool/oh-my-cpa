@@ -42,8 +42,9 @@ type ActiveCooldownRecord struct {
 	Model             string `json:"model,omitempty"`
 }
 
-// SaveQuotaSnapshot inserts a snapshot and trims the credential's history to the
-// recent readings plus the cycle anchors capacity estimates are measured from.
+// SaveQuotaSnapshot inserts a snapshot, trims the credential's history to the
+// recent readings, and folds the reading into the capacity evidence that
+// outlives snapshot retention.
 func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapshotRecord) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
@@ -71,7 +72,12 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 			windows_json, reset_credits_json, reset_grants_json, warmup_json, observed_at_ms, created_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err := r.SQL().ExecContext(ctx, query,
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin quota snapshot transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, query,
 		snapshot.ID,
 		snapshot.AuthIndex,
 		snapshot.Provider,
@@ -85,63 +91,34 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 		snapshot.WarmupJSON,
 		snapshot.ObservedAtMS,
 		snapshot.CreatedAtMS,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("insert quota snapshot: %w", err)
 	}
-
 	// Trim synchronously so a stuck writer cannot accumulate snapshots without
 	// bound.
-	_ = r.trimQuotaSnapshots(ctx, snapshot.AuthIndex, 50)
-
+	if err := trimQuotaSnapshots(ctx, tx, snapshot.AuthIndex, 50); err != nil {
+		return err
+	}
+	if err := recordCapacityCycles(ctx, tx, snapshot); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit quota snapshot: %w", err)
+	}
 	return nil
 }
 
-func (r *Repository) trimQuotaSnapshots(ctx context.Context, authIndex string, keepCount int) error {
-	if r == nil || r.SQL() == nil {
-		return nil
+// trimQuotaSnapshots keeps a credential's newest readings for the console's
+// history views; capacity evidence lives in its own table.
+func trimQuotaSnapshots(ctx context.Context, tx *sql.Tx, authIndex string, keepCount int) error {
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM quota_snapshots WHERE auth_index = ? AND id NOT IN (
+			SELECT id FROM quota_snapshots WHERE auth_index = ?
+			ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC LIMIT ?
+		)`, authIndex, authIndex, keepCount); err != nil {
+		return fmt.Errorf("trim quota snapshots: %w", err)
 	}
-	// Frequent refreshes must not evict the first reading or the preceding
-	// cycle's final reading. Retain at most 50 anchors from three cycles per
-	// window, beside the recent tail; malformed JSON is not an anchor. A derived
-	// reset instant is computed from a relative duration and drifts between
-	// refreshes, so instants within a second are one cycle, as in the capacity
-	// code's boundary comparison.
-	trimQuery := `
-		WITH records AS (
-			SELECT *, rowid AS sequence FROM quota_snapshots WHERE auth_index = ?
-		), recent AS (
-			SELECT id FROM records ORDER BY observed_at_ms DESC, created_at_ms DESC, sequence DESC LIMIT ?
-		), windows AS (
-			SELECT records.id, observed_at_ms, created_at_ms, sequence, provider, plan_type, plan_tier,
-			       json_extract(value, '$.id') AS window_id,
-			       json_extract(value, '$.reset_at_ms') AS reset_at_ms
-			FROM records, json_each(CASE WHEN json_valid(windows_json) THEN windows_json ELSE '[]' END)
-			WHERE json_extract(value, '$.reset_at_ms') IS NOT NULL
-		), boundaries AS (
-			SELECT *,
-			       CASE WHEN reset_at_ms - LAG(reset_at_ms) OVER (PARTITION BY provider, plan_type, plan_tier, window_id ORDER BY reset_at_ms) > 1000 THEN 1 ELSE 0 END AS starts_cycle
-			FROM windows
-		), cycles AS (
-			SELECT *,
-			       SUM(starts_cycle) OVER (PARTITION BY provider, plan_type, plan_tier, window_id ORDER BY reset_at_ms ROWS UNBOUNDED PRECEDING) AS cycle_id
-			FROM boundaries
-		), ranked AS (
-			SELECT *,
-			       DENSE_RANK() OVER (PARTITION BY provider, plan_type, plan_tier, window_id ORDER BY cycle_id DESC) AS cycle_rank,
-			       ROW_NUMBER() OVER (PARTITION BY provider, plan_type, plan_tier, window_id, cycle_id ORDER BY observed_at_ms, created_at_ms, sequence) AS first_reading,
-			       ROW_NUMBER() OVER (PARTITION BY provider, plan_type, plan_tier, window_id, cycle_id ORDER BY observed_at_ms DESC, created_at_ms DESC, sequence DESC) AS last_reading
-			FROM cycles
-		), anchors AS (
-			SELECT DISTINCT id, observed_at_ms FROM ranked
-			WHERE cycle_rank <= 3 AND (first_reading = 1 OR last_reading = 1)
-			ORDER BY observed_at_ms DESC LIMIT 50
-		)
-		DELETE FROM quota_snapshots WHERE auth_index = ?
-		AND id NOT IN (SELECT id FROM recent UNION SELECT id FROM anchors)
-	`
-	_, err := r.SQL().ExecContext(ctx, trimQuery, authIndex, keepCount, authIndex)
-	return err
+	return nil
 }
 
 // GetLatestQuotaSnapshots retrieves the most recent snapshot for each specified auth index in a single batch query.
@@ -499,61 +476,6 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		}
 	}
 
-	return result, rows.Err()
-}
-
-// CredentialWindowUsage is the traffic recorded for one credential in a range.
-type CredentialWindowUsage struct {
-	Requests       int64
-	PricedRequests int64
-	Tokens         int64
-	CostNanos      int64
-}
-
-// QueryCredentialWindowUsage sums the requests a credential served in
-// [fromMS, toMS). It spans every instance, as quota observations do: both are
-// keyed by the credential's auth index alone.
-func (r *Repository) QueryCredentialWindowUsage(ctx context.Context, authIndex string, fromMS, toMS int64) (CredentialWindowUsage, error) {
-	var usage CredentialWindowUsage
-	if r == nil || r.SQL() == nil {
-		return usage, errors.New("repository is not initialized")
-	}
-	err := r.SQL().QueryRowContext(ctx, `
-		SELECT COUNT(1), COALESCE(SUM(cost_nanos IS NOT NULL), 0),
-		       COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_nanos), 0)
-		FROM usage_events
-		WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
-	`, strings.TrimSpace(authIndex), fromMS, toMS).Scan(&usage.Requests, &usage.PricedRequests, &usage.Tokens, &usage.CostNanos)
-	if err != nil {
-		return usage, fmt.Errorf("query credential window usage: %w", err)
-	}
-	return usage, nil
-}
-
-// CredentialModelWindowUsage uses the served identity when CPA published it;
-// otherwise the scope resolver must decide whether the requested id is usable.
-type CredentialModelWindowUsage struct {
-	Model string
-	CredentialWindowUsage
-}
-
-func (r *Repository) QueryCredentialModelWindowUsage(ctx context.Context, authIndex string, fromMS, toMS int64) ([]CredentialModelWindowUsage, error) {
-	if r == nil || r.SQL() == nil {
-		return nil, errors.New("repository is not initialized")
-	}
-	rows, err := r.SQL().QueryContext(ctx, `SELECT COALESCE(NULLIF(response_model, ''), model), COUNT(1), COALESCE(SUM(cost_nanos IS NOT NULL),0), COALESCE(SUM(total_tokens),0), COALESCE(SUM(cost_nanos),0) FROM usage_events WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ? GROUP BY COALESCE(NULLIF(response_model, ''), model) ORDER BY 1`, strings.TrimSpace(authIndex), fromMS, toMS)
-	if err != nil {
-		return nil, fmt.Errorf("query credential model window usage: %w", err)
-	}
-	defer rows.Close()
-	result := []CredentialModelWindowUsage{}
-	for rows.Next() {
-		var group CredentialModelWindowUsage
-		if err := rows.Scan(&group.Model, &group.Requests, &group.PricedRequests, &group.Tokens, &group.CostNanos); err != nil {
-			return nil, fmt.Errorf("scan credential model window usage: %w", err)
-		}
-		result = append(result, group)
-	}
 	return result, rows.Err()
 }
 
