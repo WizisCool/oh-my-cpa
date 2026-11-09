@@ -568,6 +568,7 @@ export const PricingPage: React.FC = () => {
                   columns={priceColumns} dataSource={group.rows} rowKey={row => JSON.stringify([row.channel, row.model])}
                   isLoading={result.isLoading} isBlocked={result.isError && !data}
                   emptyText={t('pricing.table.empty_filter')}
+                  isFilterAnimated
                   phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small', className: groupIndex === 0 ? undefined : 'data-table-head-hidden' }}
                 />
               </section>

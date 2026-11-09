@@ -44,6 +44,8 @@ import {
 import styles from './ModelSquarePage.module.css';
 import selectionStyles from '../components/common/selection.module.css';
 import { SearchInput } from '../components/common/SearchInput';
+import { FilterTransition, useFilterItemMotion } from '../motion/filter';
+import { m } from '../motion';
 import { EmptyState } from '../components/common/EmptyState';
 import { SectionHeading } from '../components/common/SectionHeading';
 import { AppDrawer } from '../components/common/AppDrawer';
@@ -141,6 +143,7 @@ interface ModelRowProps {
 
 const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers, branding, onOpen, onSetPrice }) => {
   const t = useT();
+  const filterMotion = useFilterItemMotion();
   const reference = resolveEntryReference(entry);
   const connections = entryProviders(entry, providers).map(provider => describeProvider(provider, branding));
   const upstream = entry.profiles[0].identity;
@@ -151,7 +154,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
   else if (upstream !== entry.identity) caption = upstream;
   const { price } = ledger;
 
-  return <li className={styles['model-row']}>
+  return <m.li {...filterMotion} className={styles['model-row']}>
     <span className={styles['model-name']}>
       <CopyModelName identity={entry.identity} />
       {caption && <span className={styles['model-caption']}>{caption}</span>}
@@ -180,7 +183,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
     <button type="button" className={styles['model-details']} data-model-identity={entry.identity} onClick={() => onOpen(entry.identity)} aria-label={t('models.details_for', { model: entry.identity })}>
       <RightOutlined />
     </button>
-  </li>;
+  </m.li>;
 });
 ModelRow.displayName = 'ModelRow';
 
@@ -487,7 +490,9 @@ export const ModelSquarePage: React.FC = () => {
             </div>
           </div>
           <ul className={styles['model-rows']}>
-            {group.entries.map(entry => <ModelRow branding={branding} key={entry.identity} entry={entry} ledger={ledger.entryFor(entry.identity)} providers={providers} onOpen={setSelectedIdentity} onSetPrice={openPriceEditor} />)}
+            <FilterTransition itemKeys={group.entries.map((entry) => entry.identity)}>
+              {group.entries.map(entry => <ModelRow branding={branding} key={entry.identity} entry={entry} ledger={ledger.entryFor(entry.identity)} providers={providers} onOpen={setSelectedIdentity} onSetPrice={openPriceEditor} />)}
+            </FilterTransition>
           </ul>
         </li>)}
       </ul>}

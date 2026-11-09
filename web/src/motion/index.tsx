@@ -26,6 +26,12 @@ export const SPRINGS = {
   settle: { type: 'spring', visualDuration: 0.22, bounce: 0 },
   /** Something leaving goes a little quicker than something arriving, out of the reader's way. */
   leave: { type: 'spring', visualDuration: 0.16, bounce: 0 },
+  /**
+   * The answer to a keystroke: a filtered list settling where it stands. It is the shortest of the
+   * three because it runs under the hand that is still typing - a list that is still moving when the
+   * next character lands reads as lag, not as grace.
+   */
+  answer: { type: 'spring', visualDuration: 0.14, bounce: 0 },
 } as const satisfies Record<string, Transition>;
 
 export type SpringName = keyof typeof SPRINGS;

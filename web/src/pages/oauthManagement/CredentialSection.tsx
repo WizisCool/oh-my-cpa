@@ -67,6 +67,8 @@ import styles from './CredentialSection.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
 import { InlineNameEditor, inlineNameEditableClass, RenameButton } from '../../components/common/InlineName';
 import { ReorderHandle, RowReorder, useReorderList, useReorderRow, type ReorderRow } from '../../components/common/RowReorder';
+import { FilterTransition, useFilterItemMotion } from '../../motion/filter';
+import { m } from '../../motion';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import type { DropSide } from '../../types/displayOrder';
 
@@ -176,6 +178,7 @@ function readingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
  */
 export function CredentialSection({ section, title, pluginLogos, selectedKeys, nowMS, actions, columnSort, onSort, onReorder, sectionRow }: CredentialSectionProps) {
   const t = useT();
+  const filterMotion = useFilterItemMotion({ isHeld: Boolean(sectionRow?.isHeld) });
   const metadata = getCredentialProviderMetadata(section.provider);
   const records = section.records;
   const selectable = section.records.filter((record) => record.canSelectForFileBatch);
@@ -208,7 +211,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
     else void write(key, neighbour.key, side);
   };
   return (
-    <section {...sectionRow?.row} className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
+    <m.section {...filterMotion} {...sectionRow?.row} className={styles.section} data-testid="oauth-credential-section" data-provider={section.provider}>
       <header
         className={styles.head}
         data-draggable={canDragSection ? 'true' : undefined}
@@ -293,23 +296,25 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
               </tr>
             </thead>
             <tbody>
-              {reorder.ordered.map((record) => (
-                <CredentialRow
-                  key={record.key}
-                  record={record}
-                  provider={section.provider}
-                  hasQuota={hasQuota}
-                  hasHandle={canReorder}
-                  isSelected={selectedKeys.has(record.key)}
-                  nowMS={nowMS}
-                  actions={actions}
-                />
-              ))}
+              <FilterTransition itemKeys={rowKeys}>
+                {reorder.ordered.map((record) => (
+                  <CredentialRow
+                    key={record.key}
+                    record={record}
+                    provider={section.provider}
+                    hasQuota={hasQuota}
+                    hasHandle={canReorder}
+                    isSelected={selectedKeys.has(record.key)}
+                    nowMS={nowMS}
+                    actions={actions}
+                  />
+                ))}
+              </FilterTransition>
             </tbody>
           </table>
         </div>
       </RowReorder>
-    </section>
+    </m.section>
   );
 }
 
@@ -383,13 +388,15 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
   const credits = quota?.reset_credits?.available_count ?? 0;
 
   const reorder = useReorderRow(record.key);
+  const filterMotion = useFilterItemMotion({ isHeld: reorder.isHeld });
   // The grip leads the row on a wide screen; a card keeps its name over its state line, so there the
   // grip closes the glyph strip at the card's edge, where a phone list keeps its reorder control.
   const isPhone = useIsPhoneViewport();
   const handle = <ReorderHandle {...reorder.handle} name={maskedCredentialLabel(record)} variant={isPhone ? 'inline' : 'edge'} />;
 
   return (
-    <tr
+    <m.tr
+      {...filterMotion}
       {...reorder.row}
       className={clsx(styles.row, isSelected && styles['row-selected'], isDisabled && styles['row-disabled'])}
       data-testid="oauth-credential-record"
@@ -636,7 +643,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
         </Dropdown>
         {hasHandle && isPhone && handle}
       </td>
-    </tr>
+    </m.tr>
   );
 }
 

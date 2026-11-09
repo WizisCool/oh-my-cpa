@@ -79,6 +79,7 @@ import { ToolButton } from '../../components/common/ToolButton';
 import { Pager } from '../../components/common/Pager';
 
 import { DeferredMount } from '../../components/common/DeferredMount';
+import { FilterTransition } from '../../motion/filter';
 import { createRouteLoader } from '../../utils/routeLoader';
 
 const AuthFileDetailDrawer = React.lazy(createRouteLoader(() =>
@@ -935,30 +936,34 @@ export const OAuthManagementPage: React.FC = () => {
                 }
               }}
             >
-              {sections.map((section) => (
-                <ReorderableCredentialSection
-                  key={section.provider}
-                  section={section}
-                  title={providerDisplayName(section.provider, pluginTitles)}
-                  pluginLogos={pluginLogos}
-                  selectedKeys={selectedKeySet}
-                  nowMS={visibleNow}
-                  actions={rowActions}
-                  columnSort={quotaColumnSorts[section.provider]}
-                  onReorder={credentialOrder.loaded ? reorderCredential : undefined}
-                  onSort={(key) => {
-                    setQuotaColumnSorts((current) => {
-                      const next = { ...current };
-                      const sort = current[section.provider];
-                      if (sort?.key !== key) next[section.provider] = { key, direction: 'asc' };
-                      else if (sort.direction === 'asc') next[section.provider] = { key, direction: 'desc' };
-                      else delete next[section.provider];
-                      return next;
-                    });
-                    setSearch({ page: null });
-                  }}
-                />
-              ))}
+              {/* A filter narrows the sections the way it narrows their rows: the providers that
+                  remain close up as the ones a search left go. */}
+              <FilterTransition itemKeys={sections.map((section) => section.provider)}>
+                {sections.map((section) => (
+                  <ReorderableCredentialSection
+                    key={section.provider}
+                    section={section}
+                    title={providerDisplayName(section.provider, pluginTitles)}
+                    pluginLogos={pluginLogos}
+                    selectedKeys={selectedKeySet}
+                    nowMS={visibleNow}
+                    actions={rowActions}
+                    columnSort={quotaColumnSorts[section.provider]}
+                    onReorder={credentialOrder.loaded ? reorderCredential : undefined}
+                    onSort={(key) => {
+                      setQuotaColumnSorts((current) => {
+                        const next = { ...current };
+                        const sort = current[section.provider];
+                        if (sort?.key !== key) next[section.provider] = { key, direction: 'asc' };
+                        else if (sort.direction === 'asc') next[section.provider] = { key, direction: 'desc' };
+                        else delete next[section.provider];
+                        return next;
+                      });
+                      setSearch({ page: null });
+                    }}
+                  />
+                ))}
+              </FilterTransition>
             </RowReorder>
           </div>
           <div className={styles.pagination}>

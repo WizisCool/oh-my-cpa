@@ -32,6 +32,8 @@ import { BrandArtwork } from '../common/BrandArtwork';
 import { Count } from '../common/Count';
 import { FilterDisclosure } from '../common/FilterDisclosure';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { FilterTransition, useFilterItemMotion } from '../../motion/filter';
+import { m } from '../../motion';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
@@ -67,6 +69,9 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
   const { lang } = useI18n();
   const isPhone = useIsPhoneViewport();
   const [query, setQuery] = React.useState('');
+  // What the operator typed draws the field at once; what it leaves is filtered, cut to a shelf and
+  // drawn again only when the main thread is free, so a large registry can never stall a keystroke.
+  const filteredQuery = React.useDeferredValue(query);
   const [filter, setFilter] = React.useState<PluginStoreFilter>('all');
   const [tag, setTag] = React.useState<string | undefined>();
   const [facet, setFacet] = React.useState<string>(ALL_SOURCES);
@@ -75,23 +80,24 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
 
   const entries = React.useMemo(() => store?.plugins ?? [], [store]);
   const counts = React.useMemo(() => storeFilterCounts(entries), [entries]);
-  const visible = React.useMemo(() => filterStorePlugins(entries, query, filter, lang, tag), [entries, query, filter, lang, tag]);
+  const visible = React.useMemo(() => filterStorePlugins(entries, filteredQuery, filter, lang, tag), [entries, filteredQuery, filter, lang, tag]);
   const sections = React.useMemo(() => storeSections(store, visible), [store, visible]);
   // Every source the store has, whatever a search leaves of it: a narrowed-away source stays chosen.
   const allSections = React.useMemo(() => storeSections(store, entries), [store, entries]);
-  const isNarrowed = query.trim() !== '' || filter !== 'all' || tag !== undefined;
+  const isNarrowed = filteredQuery.trim() !== '' || filter !== 'all' || tag !== undefined;
   // A registry that is no longer read cannot stay chosen.
   const activeFacet = facet === ALL_SOURCES || allSections.some((section) => section.sourceId === facet) ? facet : ALL_SOURCES;
-  const isWholeStore = activeFacet === ALL_SOURCES && !isNarrowed;
+  // One registry in view is the operator's own choice, and it is drawn whole.
+  const isSourceChosen = activeFacet !== ALL_SOURCES;
 
-  const toggleDescription = (storeId: string) => {
+  const toggleDescription = React.useCallback((storeId: string) => {
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(storeId)) next.delete(storeId);
       else next.add(storeId);
       return next;
     });
-  };
+  }, []);
 
   if (isLoading) {
     return <ListLoading className={styles.empty} />;
@@ -138,14 +144,15 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
     entry,
     isExpanded: expanded.has(entry.store_id),
     isDemo,
-    onToggleDescription: () => toggleDescription(entry.store_id),
-    onInstall: () => setInstalling(entry),
-    onManage: () => onManage(entry.id),
-    onSelectTag: (selected: string) => setTag(selected),
+    onToggleDescription: toggleDescription,
+    onInstall: setInstalling,
+    onManage,
+    onSelectTag: setTag,
   });
   const showAll = (section: StoreSection) => (
-    isWholeStore && section.entries.length > STORE_SECTION_PREVIEW ? (
-      <Button type="link" size="small" className={styles['show-all']} onClick={() => setFacet(section.sourceId)}>
+    !isSourceChosen && section.entries.length > STORE_SECTION_PREVIEW ? (
+      // Opening a registry of hundreds of cards is one deliberate step, and one React may interrupt.
+      <Button type="link" size="small" className={styles['show-all']} onClick={() => React.startTransition(() => setFacet(section.sourceId))}>
         {t('plugin.section_show_all', { n: section.entries.length })}
       </Button>
     ) : undefined
@@ -219,7 +226,9 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
 
       {isOmcShown && (
         <OmcShowcase section={omcSection} isDemo={isDemo} shouldHideEmpty={isNarrowed || sections.some((section) => section.kind === 'omc-community' && section.entries.length > 0)} onOpenSettings={onOpenSettings} extra={omcSection && showAll(omcSection)}>
-          {omcSection && storeSectionPreview(omcSection, isWholeStore).map((entry) => <StoreCard key={storeCardKey(entry)} isFeatured {...cardProps(entry)} />)}
+          <FilterTransition itemKeys={omcSection ? storeSectionPreview(omcSection, isSourceChosen).map(storeCardKey) : []}>
+            {omcSection && storeSectionPreview(omcSection, isSourceChosen).map((entry) => <StoreCard key={storeCardKey(entry)} isFeatured {...cardProps(entry)} />)}
+          </FilterTransition>
         </OmcShowcase>
       )}
 
@@ -239,7 +248,9 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
           {section.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} />}
           {section.entries.length > 0 && (
             <div className={styles['card-grid']}>
-              {storeSectionPreview(section, isWholeStore).map((entry) => <StoreCard key={storeCardKey(entry)} {...cardProps(entry)} />)}
+              <FilterTransition itemKeys={storeSectionPreview(section, isSourceChosen).map(storeCardKey)}>
+                {storeSectionPreview(section, isSourceChosen).map((entry) => <StoreCard key={storeCardKey(entry)} {...cardProps(entry)} />)}
+              </FilterTransition>
             </div>
           )}
         </section>
@@ -366,14 +377,21 @@ interface StoreCardProps {
   isFeatured?: boolean;
   isExpanded: boolean;
   isDemo: boolean;
-  onToggleDescription: () => void;
-  onInstall: () => void;
-  onManage: () => void;
+  /** The panel's own handlers, kept stable so an unchanged card is not redrawn as the search narrows. */
+  onToggleDescription: (storeId: string) => void;
+  onInstall: (entry: StorePluginItem) => void;
+  onManage: (pluginId: string) => void;
   onSelectTag: (tag: string) => void;
 }
 
-function StoreCard({ entry, isFeatured = false, isExpanded, isDemo, onToggleDescription, onInstall, onManage, onSelectTag }: StoreCardProps) {
+/**
+ * One store entry. Memoized because a keystroke in the search redraws the whole store otherwise: the
+ * cards that a narrower search keeps are the same cards, and only the grid places them differently -
+ * which the layout transition draws without React touching them.
+ */
+const StoreCard = React.memo(function StoreCard({ entry, isFeatured = false, isExpanded, isDemo, onToggleDescription, onInstall, onManage, onSelectTag }: StoreCardProps) {
   const t = useT();
+  const filterMotion = useFilterItemMotion();
   const { lang } = useI18n();
   const metadata = selectStorePluginMetadata(entry, lang);
   const origin = storePluginOrigin(entry);
@@ -390,7 +408,8 @@ function StoreCard({ entry, isFeatured = false, isExpanded, isDemo, onToggleDesc
   const tags = isFeatured ? metadata.tags.filter((tag) => !/^(omc|oh[- ]?my[- ]?cpa)$/i.test(tag)) : metadata.tags;
 
   return (
-    <article
+    <m.article
+      {...filterMotion}
       className={`${styles['store-card']} ${isFeatured ? styles['store-card-featured'] : ''}`}
       data-store-id={entry.store_id}
       data-plugin-id={entry.id}
@@ -427,7 +446,7 @@ function StoreCard({ entry, isFeatured = false, isExpanded, isDemo, onToggleDesc
         <>
           <p className={`${styles['card-description']} ${isExpanded ? styles['card-description-expanded'] : ''}`}>{description}</p>
           {isLong && (
-            <button type="button" className={styles['text-toggle']} onClick={onToggleDescription} aria-expanded={isExpanded}>
+            <button type="button" className={styles['text-toggle']} onClick={() => onToggleDescription(entry.store_id)} aria-expanded={isExpanded}>
               {isExpanded ? t('plugin.show_less') : t('plugin.show_more')}
             </button>
           )}
@@ -450,26 +469,26 @@ function StoreCard({ entry, isFeatured = false, isExpanded, isDemo, onToggleDesc
         <span className={styles['card-actions']}>
           {!entry.installed && (
             <Tooltip title={actionTitle}>
-              <Button type="primary" size="small" icon={<DownloadOutlined />} disabled={isDemo || blocked !== undefined} onClick={onInstall}>
+              <Button type="primary" size="small" icon={<DownloadOutlined />} disabled={isDemo || blocked !== undefined} onClick={() => onInstall(entry)}>
                 {t('plugin.install')}
               </Button>
             </Tooltip>
           )}
           {isUpdate && (
             <Tooltip title={actionTitle}>
-              <Button type="primary" size="small" icon={<UpgradeOutlined />} disabled={isDemo || blocked !== undefined} onClick={onInstall}>
+              <Button type="primary" size="small" icon={<UpgradeOutlined />} disabled={isDemo || blocked !== undefined} onClick={() => onInstall(entry)}>
                 {t('plugin.update')}
               </Button>
             </Tooltip>
           )}
           {entry.installed && (
-            <Button size="small" icon={<SettingOutlined />} onClick={onManage}>
+            <Button size="small" icon={<SettingOutlined />} onClick={() => onManage(entry.id)}>
               {t('plugin.manage')}
             </Button>
           )}
         </span>
         <PluginLinks repositoryURL={entry.repository_url} homepage={metadata.homepage} />
       </div>
-    </article>
+    </m.article>
   );
-}
+});

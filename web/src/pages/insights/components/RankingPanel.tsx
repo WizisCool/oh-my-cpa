@@ -6,6 +6,7 @@ import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { SearchInput } from '../../../components/common/SearchInput';
+import { FilterItem, FilterTransition } from '../../../motion/filter';
 import { RightOutlined } from '../../../components/icons';
 import { InsightsValue } from './InsightsValue';
 import { PanelNarrowing } from './PanelNarrowing';
@@ -95,50 +96,52 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
         <div className={styles['filter-values-empty']}>{t('insights.filter_no_values')}</div>
       ) : (
         <ol className={clsx(styles['ranking-list'], !hasComparison && styles['ranking-list-plain'], isExpanded && styles['ranking-list-expanded'])}>
-          {shown.map((group) => {
-            const color = colorOf?.(group.id);
-            const comparison = group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON;
-            const isSelected = selected.includes(group.id);
-            const width = top > 0 && group.value !== null ? Math.max(2, (group.value / top) * 100) : 0;
-            return (
-              <li key={group.id} data-dimmed={isNarrowed && !isSelected ? 'true' : undefined}>
-                <RowElement
-                  {...(onSelect ? {
-                    type: 'button' as const,
-                    'aria-pressed': isSelected,
-                    onClick: () => onSelect(dimension, group.id),
-                    title: t(isSelected ? 'insights.click_to_unfilter' : 'insights.click_to_filter'),
-                  } : {})}
-                  className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'], isSelected && styles['ranking-row-selected'])}
-                >
-                  <InsightsValue dimension={dimension} id={group.id} labels={labels} hasDetail />
-                  <span className={styles['ranking-value']} title={formatMetricExact(ranking, group.value)}>
-                    {formatMetric(ranking, group.value, style)}
-                  </span>
-                  <span className={styles['ranking-share']}>
-                    <span className={styles['ranking-bar']} aria-hidden="true">
-                      <span style={{ transform: `scaleX(${width / 100})`, background: color }} />
-                    </span>
-                    {formatShare(group.share)}
-                  </span>
-                  {hasComparison && (
-                    <ComparisonText comparison={comparison} compare={compare} className={styles['ranking-change']} />
-                  )}
-                </RowElement>
-                {onOpen && labels.isNonKey(group.id) === false && (
-                  <button
-                    type="button"
-                    className={styles['ranking-open']}
-                    onClick={() => onOpen(group.id)}
-                    aria-label={t('insights.open_detail')}
-                    title={t('insights.open_detail')}
+          <FilterTransition itemKeys={shown.map((group) => group.id)}>
+            {shown.map((group) => {
+              const color = colorOf?.(group.id);
+              const comparison = group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON;
+              const isSelected = selected.includes(group.id);
+              const width = top > 0 && group.value !== null ? Math.max(2, (group.value / top) * 100) : 0;
+              return (
+                <FilterItem as="li" key={group.id} data-dimmed={isNarrowed && !isSelected ? 'true' : undefined}>
+                  <RowElement
+                    {...(onSelect ? {
+                      type: 'button' as const,
+                      'aria-pressed': isSelected,
+                      onClick: () => onSelect(dimension, group.id),
+                      title: t(isSelected ? 'insights.click_to_unfilter' : 'insights.click_to_filter'),
+                    } : {})}
+                    className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'], isSelected && styles['ranking-row-selected'])}
                   >
-                    <RightOutlined />
-                  </button>
-                )}
-              </li>
-            );
-          })}
+                    <InsightsValue dimension={dimension} id={group.id} labels={labels} hasDetail />
+                    <span className={styles['ranking-value']} title={formatMetricExact(ranking, group.value)}>
+                      {formatMetric(ranking, group.value, style)}
+                    </span>
+                    <span className={styles['ranking-share']}>
+                      <span className={styles['ranking-bar']} aria-hidden="true">
+                        <span style={{ transform: `scaleX(${width / 100})`, background: color }} />
+                      </span>
+                      {formatShare(group.share)}
+                    </span>
+                    {hasComparison && (
+                      <ComparisonText comparison={comparison} compare={compare} className={styles['ranking-change']} />
+                    )}
+                  </RowElement>
+                  {onOpen && labels.isNonKey(group.id) === false && (
+                    <button
+                      type="button"
+                      className={styles['ranking-open']}
+                      onClick={() => onOpen(group.id)}
+                      aria-label={t('insights.open_detail')}
+                      title={t('insights.open_detail')}
+                    >
+                      <RightOutlined />
+                    </button>
+                  )}
+                </FilterItem>
+              );
+            })}
+          </FilterTransition>
         </ol>
       )}
       {groups.length > limit && (

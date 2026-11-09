@@ -4,6 +4,7 @@ import { useT } from '../../i18n';
 import { filterModelOptions } from '../../utils/modelOptions';
 import styles from './ModelPickerModal.module.css';
 import { SearchInput } from '../common/SearchInput';
+import { FilterItem, FilterTransition } from '../../motion/filter';
 import { AppModal } from '../common/AppModal';
 
 interface ModelPickerModalProps {
@@ -97,24 +98,27 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
         {visible.length === 0 ? (
           <div className={styles['empty']}>{t('pro.no_matching_models')}</div>
         ) : (
-          visible.map((name) => {
-            const isConfigured = configured.has(name);
-            return (
-              <div
-                key={name}
-                className={`${styles['row']} ${isConfigured ? styles['row-configured'] : ''}`}
-              >
-                <Checkbox
-                  checked={isConfigured || picked.has(name)}
-                  disabled={isConfigured}
-                  onChange={(event) => togglePicked(name, event.target.checked)}
+          <FilterTransition itemKeys={visible}>
+            {visible.map((name) => {
+              const isConfigured = configured.has(name);
+              return (
+                <FilterItem
+                  as="div"
+                  key={name}
+                  className={`${styles['row']} ${isConfigured ? styles['row-configured'] : ''}`}
                 >
-                  <span className={styles['name']}>{name}</span>
-                </Checkbox>
-                {isConfigured && <span className={styles['configured-tag']}>{t('pro.model_added')}</span>}
-              </div>
-            );
-          })
+                  <Checkbox
+                    checked={isConfigured || picked.has(name)}
+                    disabled={isConfigured}
+                    onChange={(event) => togglePicked(name, event.target.checked)}
+                  >
+                    <span className={styles['name']}>{name}</span>
+                  </Checkbox>
+                  {isConfigured && <span className={styles['configured-tag']}>{t('pro.model_added')}</span>}
+                </FilterItem>
+              );
+            })}
+          </FilterTransition>
         )}
       </div>
     </AppModal>

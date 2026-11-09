@@ -3,6 +3,8 @@ import { Table } from 'antd';
 import type { TableProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { FilterTransition, useFilterItemMotion } from '../../motion/filter';
+import { m } from '../../motion';
 import { ListLoading } from './PageLoading';
 import { TablePlaceholder } from './ContentPlaceholder';
 import { PhoneRow } from './PhoneRow';
@@ -54,6 +56,12 @@ export interface ResponsiveListProps<T extends object> {
   phoneRowWrapper?: React.ComponentType<{ rowKey: string; children: React.ReactNode }>;
   /** Passed to the wide rendering's table: its size, class and scroll behaviour. */
   tableProps?: Omit<TableProps<T>, 'columns' | 'dataSource' | 'rowKey' | 'loading' | 'pagination'>;
+  /**
+   * True when a search or a filter narrows this list: its rows then glide to the place the shorter
+   * list gives them and a row that starts to match fades in, rather than the list being replaced.
+   * A list whose rows stream in, such as a log tail, leaves it off.
+   */
+  isFilterAnimated?: boolean;
 }
 
 function keyOf<T extends object>(record: T, rowKey: ResponsiveListProps<T>['rowKey']): React.Key {
@@ -88,6 +96,7 @@ export function ResponsiveList<T extends object>({
   phone,
   phoneRowWrapper: PhoneRowWrapper,
   tableProps,
+  isFilterAnimated = false,
 }: ResponsiveListProps<T>) {
   const isPhone = useIsPhoneViewport();
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -107,14 +116,29 @@ export function ResponsiveList<T extends object>({
 
   const empty = isBlocked ? null : <EmptyState size="compact" title={emptyText} />;
   const isFirstRead = isLoading && dataSource.length === 0;
+  // The rows drawn, which is what the transition watches: the table's own paginator draws one page
+  // of `dataSource`, and a page turn replaces every row rather than narrowing the list.
+  const drawn = pageSize === false
+    ? dataSource
+    : dataSource.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const drawnKeys = drawn.map((record) => String(keyOf(record, rowKey)));
+  // A caller that draws its own rows has already given them their motion; the default rows take it
+  // from here. A table that scrolls its body itself replaces `body` with a component, which is not
+  // a row to wrap.
+  const ownBody = tableProps?.components?.body;
+  const ownRow = ownBody && typeof ownBody === 'object' ? ownBody.row : undefined;
+  const tableComponents = isFilterAnimated && !ownRow
+    ? { ...tableProps?.components, body: { ...(ownBody && typeof ownBody === 'object' ? ownBody : undefined), row: MotionBodyRow } }
+    : tableProps?.components;
 
   if (!isPhone) {
     // A first read keeps the column header and draws rows under it, where a spinner over an empty
     // table would show a frame of the wrong height. A later read keeps its rows on screen.
-    return (
+    const table = (
       <div className="table-scroll data-table" ref={listRef}>
         <Table<T>
           {...tableProps}
+          components={tableComponents}
           columns={columns}
           dataSource={dataSource as T[]}
           rowKey={rowKey as TableProps<T>['rowKey']}
@@ -123,17 +147,17 @@ export function ResponsiveList<T extends object>({
         />
       </div>
     );
+    // A list that does not animate never loads the animation's features.
+    return isFilterAnimated ? <FilterTransition itemKeys={drawnKeys}>{table}</FilterTransition> : table;
   }
 
   if (isFirstRead) return <ListLoading />;
   if (dataSource.length === 0) return empty;
 
-  const visible = pageSize === false
-    ? dataSource
-    : dataSource.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const visible = drawn;
   const offset = pageSize === false ? 0 : (safePage - 1) * pageSize;
 
-  return (
+  const rows = (
     <div className="responsive-list" ref={listRef}>
       {visible.map((record, localIndex) => {
         const index = offset + localIndex;
@@ -141,13 +165,34 @@ export function ResponsiveList<T extends object>({
         const row = 'render' in phone
           ? <React.Fragment key={key}>{phone.render(record, (columnKey) => renderedCell(columns, columnKey, record, index))}</React.Fragment>
           : <FieldsPhoneRow key={key} columns={columns} record={record} index={index} layout={phone} />;
-        return PhoneRowWrapper ? <PhoneRowWrapper key={key} rowKey={String(key)}>{row}</PhoneRowWrapper> : row;
+        if (PhoneRowWrapper) return <PhoneRowWrapper key={key} rowKey={String(key)}>{row}</PhoneRowWrapper>;
+        return isFilterAnimated
+          ? <MotionPhoneRow key={key} rowKey={String(key)}>{row}</MotionPhoneRow>
+          : row;
       })}
       {pageSize !== false && (
         <Pager variant="stepped" page={safePage} pageSize={pageSize} total={dataSource.length} onChange={changePage} />
       )}
     </div>
   );
+  return isFilterAnimated ? <FilterTransition itemKeys={drawnKeys}>{rows}</FilterTransition> : rows;
+}
+
+/**
+ * A row that the list narrows around. The props are the table's own, minus the handlers Motion
+ * inherits, so a row keeps its selection, its class and its data attributes.
+ */
+type MotionRowProps = Omit<React.HTMLAttributes<HTMLTableRowElement>,
+  'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'>;
+
+function MotionBodyRow(props: MotionRowProps) {
+  const filterMotion = useFilterItemMotion();
+  return <m.tr {...filterMotion} {...props} />;
+}
+
+function MotionPhoneRow({ rowKey, children }: { rowKey: string; children: React.ReactNode }) {
+  const filterMotion = useFilterItemMotion();
+  return <m.div {...filterMotion} data-row-key={rowKey}>{children}</m.div>;
 }
 
 function FieldsPhoneRow<T extends object>({ columns, record, index, layout }: {
