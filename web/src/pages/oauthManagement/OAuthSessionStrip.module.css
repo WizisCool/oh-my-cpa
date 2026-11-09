@@ -1,0 +1,56 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 8px 10px;
+  margin: 12px 0;
+}
+
+.label {
+  color: var(--meta);
+  font-size: var(--text-xs);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  background: var(--hover-inset);
+  font-size: var(--text-sm);
+}
+
+/* A portal title can be a plugin name and an identifier; it wraps inside the pill instead of
+   pushing the actions past the strip's trailing edge. */
+.pill-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+
+.pill-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.pill-actions :global(.ant-btn-link) {
+  padding-inline: 2px;
+}
+
+@media (max-width: 640px) {
+  .strip {
+    align-items: flex-start;
+  }
+}

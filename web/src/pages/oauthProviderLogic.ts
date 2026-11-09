@@ -1,7 +1,8 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
+import { installedPluginOrigin } from '../components/plugins/pluginStoreLogic';
 import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
 import type { MessageKey, TFunc } from '../i18n';
-import type { PluginItem } from '../types/plugin';
+import type { PluginItem, StorePluginItem } from '../types/plugin';
 import { BUILTIN_OAUTH_IDS, pluginOAuthProviderIds, pluginOAuthProviderLogos, pluginPortalTitles } from '../types/pluginOAuthProviders';
 
 /**
@@ -327,6 +328,10 @@ export function lookupOAuthProvider(id: string): OAuthProviderDefinition | undef
 export interface OAuthProviderChoice extends BrandMark {
   id: string;
   flow: OAuthFlowKind;
+  /** The picker's section: a sign-in this console ships, or one a plugin declares. */
+  group: OAuthProviderGroup;
+  /** A plugin-declared portal this project maintains; its card carries OMC's own mark. */
+  isOmcPlugin?: boolean;
   iconId: string;
   title: string;
   description: string;
@@ -339,9 +344,32 @@ export interface OAuthProviderChoice extends BrandMark {
   callback?: OAuthCallbackRules;
 }
 
+/**
+ * The picker's two sections: the sign-ins this console ships itself, and the ones a plugin
+ * declares. Ownership is not a section - an OMC plugin's portal sits beside every other
+ * plugin's and carries OMC's own mark instead - because who maintains a plugin does not
+ * change what the operator is choosing between.
+ */
+export type OAuthProviderGroup = 'builtin' | 'plugin';
+
+export const OAUTH_PROVIDER_GROUPS: readonly OAuthProviderGroup[] = ['builtin', 'plugin'];
+
+export interface OAuthProviderGroupSection {
+  group: OAuthProviderGroup;
+  choices: OAuthProviderChoice[];
+}
+
+/** The picker's sections in publication order; a group with nothing to offer is not drawn. */
+export function oauthProviderGroups(choices: readonly OAuthProviderChoice[]): OAuthProviderGroupSection[] {
+  return OAUTH_PROVIDER_GROUPS
+    .map((group) => ({ group, choices: choices.filter((choice) => choice.group === group) }))
+    .filter((section) => section.choices.length > 0);
+}
+
 export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
   return BUILTIN_OAUTH_PROVIDERS.map((provider) => ({
     id: provider.id,
+    group: 'builtin',
     flow: provider.flow,
     iconId: provider.iconId,
     fallbackIconId: provider.iconId,
@@ -367,6 +395,11 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
  * `${name} · ${id}` label and the plugin's mark, which is what makes the extra identifier
  * in the title necessary at all.
  *
+ * `catalog` is the store's listing by plugin id. It is what tells an operator's own plugin
+ * apart from one OMC maintains, so a card is badged as the plugin management page badges
+ * it. Without it - the store has not been read, or could not be - every plugin portal is
+ * simply a plugin portal: a missing read is not evidence that a plugin is somebody else's.
+ *
  * CPA fills an empty entry name from the plugin's own metadata, so a portal that
  * published no name of its own arrives carrying the plugin's. A name that only repeats
  * the plugin is that fallback arriving as text, and the card keeps the identifier suffix
@@ -376,6 +409,7 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
 export function pluginOAuthProviderChoices(
   plugins: PluginItem[] | undefined,
   t: TFunc,
+  catalog?: ReadonlyMap<string, StorePluginItem>,
 ): OAuthProviderChoice[] {
   const seen = new Set<string>(BUILTIN_OAUTH_IDS);
   const pages = collectPluginPages(plugins);
@@ -387,6 +421,7 @@ export function pluginOAuthProviderChoices(
     const logos = pluginOAuthProviderLogos([plugin]);
     const portalTitle = pluginPortalTitles(plugin, providerIds);
     const pluginPageRoute = pages.find((page) => page.pluginId === plugin.id)?.route;
+    const isOmcPlugin = installedPluginOrigin(catalog?.get(plugin.id)) === 'omc';
     for (const providerId of providerIds) {
       if (seen.has(providerId)) continue;
       seen.add(providerId);
@@ -394,6 +429,8 @@ export function pluginOAuthProviderChoices(
       choices.push({
         id: providerId,
         flow: 'plugin',
+        group: 'plugin',
+        isOmcPlugin,
         pluginPageRoute,
         ...resolveCredentialMark({ provider: providerId, hint: title }, logos),
         title: t('oauth.plugin_title', { name: title }),
@@ -413,6 +450,10 @@ export function pluginOAuthProviderChoices(
   return choices;
 }
 
-export function oauthProviderChoices(plugins: PluginItem[] | undefined, t: TFunc): OAuthProviderChoice[] {
-  return [...builtinOAuthProviderChoices(t), ...pluginOAuthProviderChoices(plugins, t)];
+export function oauthProviderChoices(
+  plugins: PluginItem[] | undefined,
+  t: TFunc,
+  catalog?: ReadonlyMap<string, StorePluginItem>,
+): OAuthProviderChoice[] {
+  return [...builtinOAuthProviderChoices(t), ...pluginOAuthProviderChoices(plugins, t, catalog)];
 }

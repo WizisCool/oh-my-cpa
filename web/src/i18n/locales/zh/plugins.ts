@@ -32,7 +32,7 @@ export default {
   'plugin.badge_quota': '配额',
   'plugin.badge_official': 'CPA 官方',
   'plugin.badge_official_source': 'CPA 社区',
-  'plugin.badge_omc': 'OMC 官方',
+  'plugin.badge_omc': 'OMC',
   'plugin.badge_third_party': '第三方',
   'plugin.badge_update': '有更新',
   'plugin.badge_installed': '已安装',

@@ -3,17 +3,18 @@ import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import type { OAuthRecoveryTarget } from '../src/types/oauth';
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { useT } from '../src/i18n';
+import { useT, makeT } from '../src/i18n';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OAuthConnectPanel } from '../src/pages/oauthManagement/OAuthConnectPanel';
+import { OAuthSessionStrip } from '../src/pages/oauthManagement/OAuthSessionStrip';
 import { useOAuthSessions } from '../src/pages/oauthManagement/useOAuthSessions';
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../src/pages/oauthProviderLogic';
 import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 
 const CHOICES: OAuthProviderChoice[] = ['codex', 'anthropic'].map(id => ({
-  id, title: id, description: '', iconId: '', flow: 'manual-callback', loginLabel: id,
+  id, title: id, description: '', iconId: '', flow: 'manual-callback', group: 'builtin', loginLabel: id,
 }));
 
 function ConnectWorkspace({ choices = CHOICES, recovery, isRecoverySupported = true }: { choices?: OAuthProviderChoice[]; recovery?: OAuthRecoveryTarget; isRecoverySupported?: boolean } = {}) {
@@ -151,5 +152,56 @@ it('keeps targeted recovery pinned across failure/minimizing and verifies creden
     await act(async () => { fireEvent.click(within(confirmation).getByRole('button', { name: 'Verify inference (uses tokens)' })); });
     await waitFor(() => expect(server.writes('/management/auth-files/verify').map(request => request.body)).toEqual([{ name: 'selected.json', auth_index: 'selected' }]));
     await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+  } finally { surface.unmount(); }
+});
+
+/**
+ * The drawer is not the only place an attempt exists: a session outlives it, so the strip
+ * beside the page is where a closed panel's sign-in is answered.
+ */
+function SessionWorkspace() {
+  const sessions = useOAuthSessions(CHOICES);
+  return <>
+    <button data-testid="start" onClick={() => void sessions.start('codex')} />
+    <output data-testid="sessions">{JSON.stringify(sessions.states)}</output>
+    <OAuthSessionStrip sessions={sessions} choices={CHOICES} onOpen={() => {}} />
+  </>;
+}
+
+it('cancels a waiting sign-in from outside the collapsed drawer', async () => {
+  const server = installOmcApi();
+  server.on('POST', '/management/oauth/start', () => ({ url: 'https://auth.example.test/authorize', state: 'codex-login' }));
+  server.on('GET', '/management/oauth/status', () => ({ status: 'wait' }));
+  server.on('DELETE', '/management/oauth/session', () => ({ status: 'ok', cancelled: true }));
+  const surface = renderWithOmc(<SessionWorkspace />, { route: '/omc/oauth-management' });
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).codex;
+  try {
+    fireEvent.click(screen.getByTestId('start'));
+    await waitFor(() => expect(session().status).toBe('waiting'));
+    expect(screen.getByTestId('oauth-session-pill')).toBeTruthy();
+
+    await act(async () => { fireEvent.click(surface.baseElement.querySelector('[data-oauth-cancel="codex"]')!); });
+    await waitFor(() => expect(server.writes('/management/oauth/session').map(request => request.method)).toEqual(['DELETE']));
+    await waitFor(() => expect(session().status).toBe('idle'));
+    expect(screen.queryByTestId('oauth-session-pill')).toBeNull();
+  } finally { surface.unmount(); }
+});
+
+it('keeps a refused cancellation waiting and says so', async () => {
+  const server = installOmcApi();
+  server.on('POST', '/management/oauth/start', () => ({ url: 'https://auth.example.test/authorize', state: 'codex-login' }));
+  server.on('GET', '/management/oauth/status', () => ({ status: 'wait' }));
+  // CPA answers that the session is already past cancelling, so a false "cancelled" would
+  // hide a sign-in that may still save a credential.
+  server.on('DELETE', '/management/oauth/session', () => ({ status: 'ok', cancelled: false }));
+  const surface = renderWithOmc(<SessionWorkspace />, { route: '/omc/oauth-management' });
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).codex;
+  try {
+    fireEvent.click(screen.getByTestId('start'));
+    await waitFor(() => expect(session().status).toBe('waiting'));
+    await act(async () => { fireEvent.click(surface.baseElement.querySelector('[data-oauth-cancel="codex"]')!); });
+    await waitFor(() => expect(screen.getByText(makeT('en')('oauth.cancel_refused'))).toBeTruthy());
+    expect(session().status).toBe('waiting');
+    expect(screen.getByTestId('oauth-session-pill')).toBeTruthy();
   } finally { surface.unmount(); }
 });

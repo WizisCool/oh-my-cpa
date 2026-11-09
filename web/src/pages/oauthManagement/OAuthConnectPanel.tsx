@@ -23,14 +23,36 @@ import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { isDemoMode } from '../../types/demoMode';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
-import type { OAuthProviderChoice } from '../oauthProviderLogic';
+import { oauthProviderGroups, type OAuthProviderChoice, type OAuthProviderGroup } from '../oauthProviderLogic';
 import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
 import { useToast } from '../../components/feedback';
 import { AppDrawer } from '../../components/common/AppDrawer';
 import { SearchSelect } from '../../components/common/SearchSelect';
+import { SectionHeading } from '../../components/common/SectionHeading';
 import { SecretInput } from '../../components/common/SecretInput';
 import { Tag } from '../../components/common/Tag';
+import { PluginOriginBadge } from '../../components/plugins/PluginParts';
+
+const GROUP_TITLES: Record<OAuthProviderGroup, MessageKey> = {
+  builtin: 'oauth.group_builtin',
+  plugin: 'oauth.group_plugin',
+};
+
+/**
+ * What kind of publisher a sign-in belongs to, on the card itself.
+ *
+ * A portal an OMC plugin declares is badged exactly as the plugin management page badges
+ * the plugin, so the same provider reads the same on both surfaces; another plugin's portal
+ * is plainly a plugin portal. The console's own sign-ins carry no tag: they are the section
+ * they sit in.
+ */
+function ProviderKindTag({ choice }: { choice: OAuthProviderChoice }) {
+  const t = useT();
+  if (choice.isOmcPlugin) return <PluginOriginBadge origin="omc" />;
+  if (choice.group === 'plugin') return <Tag>{t('oauth.plugin_tag')}</Tag>;
+  return null;
+}
 
 interface OAuthConnectPanelProps {
   recoveryTarget?: OAuthRecoveryTarget;
@@ -60,6 +82,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   const toast = useToast();
   const isDemo = isDemoMode();
   const choice = choices.find((candidate) => candidate.id === selectedProviderId);
+  const groups = React.useMemo(() => oauthProviderGroups(choices), [choices]);
   const session = selectedProviderId ? sessions.states[selectedProviderId] : undefined;
   const flow = session?.flow ?? choice?.flow;
   const isWaiting = session?.status === 'waiting';
@@ -118,7 +141,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
       <Space size={8}>
         <ProviderBrandIcon mark={candidate} size={18} />
         <span>{candidate.title}</span>
-        {candidate.pluginId && <Tag className={styles['plugin-tag']}>{t('oauth.plugin_tag')}</Tag>}
+        <ProviderKindTag choice={candidate} />
       </Space>
     ),
   }));
@@ -159,39 +182,42 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
             </div>
 
             <div className={styles['provider-grid-section']}>
-              <div className={styles['grid-header']}>
-                <span className={styles['grid-title']}>{t('oauth.providers_title')}</span>
-                <span className={styles['grid-count']}>{choices.length}</span>
-              </div>
-              <div className={styles['provider-grid']}>
-                {choices.map((candidate) => (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    className={styles['provider-tile']}
-                    data-oauth-card={candidate.id}
-                    onClick={() => onSelectProvider(candidate.id)}
-                  >
-                    <div className={styles['tile-icon']}>
-                      <ProviderBrandIcon mark={candidate} size={22} />
-                    </div>
-                    <div className={styles['tile-copy']}>
-                      <div className={styles['tile-title-row']}>
-                        <span className={styles['tile-title']}>{candidate.title}</span>
-                        <Tag>
-                          {t(candidate.flow === 'plugin' ? 'omc.flow_plugin' : candidate.flow === 'device' ? 'omc.flow_device' : 'omc.flow_redirect')}
-                        </Tag>
-                        {candidate.pluginId && (
-                          <Tag className={styles['plugin-tag']}>{t('oauth.plugin_tag')}</Tag>
-                        )}
-                      </div>
-                      <span className={styles['tile-desc']} title={candidate.description}>
-                        {candidate.description}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <SectionHeading title={t('oauth.providers_title')} count={choices.length} />
+              {groups.map((section) => (
+                <section key={section.group} className={styles['provider-group']} aria-labelledby={`oauth-group-${section.group}`}>
+                  <SectionHeading
+                    as="h4"
+                    level="label"
+                    id={`oauth-group-${section.group}`}
+                    title={t(GROUP_TITLES[section.group])}
+                    count={section.choices.length}
+                  />
+                  <div className={styles['provider-grid']}>
+                    {section.choices.map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        className={styles['provider-tile']}
+                        data-oauth-card={candidate.id}
+                        onClick={() => onSelectProvider(candidate.id)}
+                      >
+                        <div className={styles['tile-icon']}>
+                          <ProviderBrandIcon mark={candidate} size={22} />
+                        </div>
+                        <div className={styles['tile-copy']}>
+                          <div className={styles['tile-title-row']}>
+                            <span className={styles['tile-title']}>{candidate.title}</span>
+                            <ProviderKindTag choice={candidate} />
+                          </div>
+                          <span className={styles['tile-desc']} title={candidate.description}>
+                            {candidate.description}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </div>
           </>
         ) : (
@@ -232,8 +258,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <div className={styles['connect-copy']}>
                 <div className={styles['connect-title-row']}>
                   <h3 className={styles['connect-title']}>{choice.title}</h3>
-                  <Tag>{t(flow === 'plugin' ? 'omc.flow_plugin' : flow === 'device' ? 'omc.flow_device' : 'omc.flow_redirect')}</Tag>
-                  {choice.pluginId && <Tag className={styles['plugin-tag']}>{t('oauth.plugin_tag')}</Tag>}
+                  <ProviderKindTag choice={choice} />
                 </div>
                 <p className={styles['connect-desc']}>{choice.description}</p>
               </div>

@@ -11,7 +11,7 @@ import { api, describeError } from '../../api/client';
 import { useI18n, useT } from '../../i18n';
 import type { PluginConfigField, PluginItem, StorePluginItem } from '../../types/plugin';
 import { selectInstalledPluginMetadata } from '../../types/pluginStoreMetadata';
-import { storePluginOrigin } from './pluginStoreLogic';
+import { installedPluginOrigin } from './pluginStoreLogic';
 import { PluginConfigEditor } from './PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual, pluginConfigSummary } from './pluginConfig';
 import {
@@ -187,7 +187,7 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
   const name = metadata?.name ?? '';
   const version = formatPluginVersion(plugin?.metadata?.version || listing?.installed_version);
   // Only the registry that supplied the installed copy can say whose code it is.
-  const provenance = listing?.install_source_status === 'matched' ? listing : undefined;
+  const origin = installedPluginOrigin(listing);
   const pages = React.useMemo(() => (plugin ? collectPluginPages([plugin]) : []), [plugin]);
   const installRecord = mode === 'form' ? readPluginInstallRecord(base) : undefined;
   const openPage = (route: string) => {
@@ -238,7 +238,7 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
                 <span className={styles['config-hero-name']}>{name}</span>
                 <span className={styles.badges}>
                   <PluginStateLabel plugin={plugin} isPluginSystemEnabled={isPluginSystemEnabled} />
-                  {provenance && <PluginOriginBadge origin={storePluginOrigin(provenance)} />}
+                  {origin && <PluginOriginBadge origin={origin} />}
                 </span>
               </div>
               <PluginMeta items={[<span key="id" className={styles['plugin-id']}>{plugin.id}</span>, version && <span key="v" className={styles['meta-strong']}>{version}</span>, metadata?.author]} />

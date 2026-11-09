@@ -7,6 +7,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* The provider grid answers the panel's own width: a drawer dragged narrow holds the same
+     surface as a phone, and a phone's sheet is one column either way. */
+  container: oauthconnect / inline-size;
 }
 
 .field-label {
@@ -26,26 +29,15 @@
 .provider-grid-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   margin-top: 4px;
 }
 
-.grid-header {
+.provider-group {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.grid-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.grid-count {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--meta);
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
 .provider-grid {
@@ -404,21 +396,21 @@
 }
 
 @media (max-width: 640px) {
-  .provider-grid {
-    grid-template-columns: 1fr;
-  }
-
   .connect-actions {
-    justify-content: stretch;
+    /* The action that finishes the sign-in lands under the thumb, with the secondary
+       route above it, rather than wrapping into a ragged row. */
+    flex-direction: column-reverse;
+    flex-wrap: nowrap;
+    align-items: stretch;
   }
 
   .connect-actions > * {
-    flex: 1 1 auto;
+    width: 100%;
   }
 }
 
-
-.plugin-tag {
-  border-color: var(--accent);
-  background: var(--surface);
+@container oauthconnect (max-width: 560px) {
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
 }
