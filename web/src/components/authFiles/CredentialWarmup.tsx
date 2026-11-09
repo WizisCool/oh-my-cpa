@@ -279,6 +279,7 @@ function TaskEditorModal({
             <Segmented
               block
               vertical
+              classNames={{ label: styles['window-option-label'] }}
               aria-label={t('warmup.window_select')}
               value={draft.trigger.window || windows[0]}
               disabled={isDisabled}
