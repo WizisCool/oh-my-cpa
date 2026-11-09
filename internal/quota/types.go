@@ -23,9 +23,6 @@ type QuotaWindow struct {
 	Description string `json:"description,omitempty"`
 
 	ModelFamilies []string `json:"model_families,omitempty"`
-	// Reset evidence survives snapshot retention until this scheduled cycle ends.
-	HasMidCycleReset     bool `json:"has_mid_cycle_reset,omitempty"`
-	HasIncompleteHistory bool `json:"has_incomplete_history,omitempty"`
 
 	// The three fields below are joined from recorded usage when a quota is
 	// read and are never part of a stored snapshot: usage keeps arriving after

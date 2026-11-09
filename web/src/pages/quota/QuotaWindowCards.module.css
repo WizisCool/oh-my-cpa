@@ -1,0 +1,155 @@
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group-name {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* Two limits to a line on a Drawer, one on a phone: each is a card of its own, so where one
+   limit ends and the next begins is never a question. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  font-variant-numeric: tabular-nums;
+}
+
+button.card {
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+button.card:hover {
+  border-color: var(--muted);
+}
+
+button.card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.head,
+.foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.value b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.description {
+  overflow: hidden;
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.foot {
+  font-size: var(--text-xs);
+}
+
+.estimate {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estimate b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.reset {
+  flex: none;
+  color: var(--meta);
+  white-space: nowrap;
+}
+
+.value-prefix {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.detail {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A provider's own sentence about a grant: quiet, two lines at most, the rest in its title. */
+.note {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--meta);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* A grant's name is the provider's sentence: it wraps to two lines rather than losing its end. */
+.grant-name {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

@@ -93,6 +93,7 @@ export default {
   'af.clear_selection': '取消选择',
   'af.runtime_only_badge': '运行时虚拟',
   'af.warning_status': '状态告警',
+  'af.warning_raw': '上游原文',
   'af.detail_file_name': '文件名',
   'af.detail_provider': '提供商',
   'af.detail_auth_index': '认证索引',

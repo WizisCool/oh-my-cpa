@@ -96,6 +96,7 @@ export default {
   'af.clear_selection': 'Clear Selection',
   'af.runtime_only_badge': 'Runtime Only',
   'af.warning_status': 'Status Warning',
+  'af.warning_raw': 'Upstream response',
   'af.detail_file_name': 'File Name',
   'af.detail_provider': 'Provider',
   'af.detail_auth_index': 'Auth Index',

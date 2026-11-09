@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import type { TFunc } from '../../i18n';
-import type { QuotaCapacityUnavailableReason, QuotaWindow } from '../../types/quota';
+import type { QuotaCapacityUnavailableReason, QuotaWindow, QuotaWindowUsage } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
 import { formatTokens, type TokenNumberStyle } from '../../types/tokenDisplay';
 
@@ -74,12 +74,7 @@ export function describeQuotaCapacity(window: CapacityWindow, tokenStyle: TokenN
     : { value: `≈ ${formatEstimatedUsd(costNanos / NANOS_PER_USD, capacity?.error_percent ?? 0)}`, tokens: tokens(tokenCount) };
 
   const whole = capacity ? estimate(capacity.cost_nanos, capacity.tokens) : null;
-  let recorded: CapacityFigure | null = null;
-  if (!whole && usage && usage.requests > 0) {
-    recorded = usage.priced_requests >= usage.requests * MIN_PRICED_SHARE
-      ? { value: formatUsd(usage.cost_nanos / NANOS_PER_USD), tokens: tokens(usage.tokens) }
-      : { value: tokens(usage.tokens), tokens: null };
-  }
+  const recorded = !whole && usage && usage.requests > 0 ? recordedFigure(usage, tokenStyle, t) : null;
   const reasonKey = !capacity && reason ? REASON_KEYS[reason] : null;
   const note = reasonKey ? t(reasonKey) : null;
 
@@ -100,4 +95,12 @@ export function describeCompactQuotaCapacity(window: CapacityWindow, tokenStyle:
   const reading = describeQuotaCapacity(window, tokenStyle, t);
   if (!reading?.capacity) return null;
   return `${t('quota.capacity_estimate')} ${formatCapacityFigure(reading.capacity, t)}`;
+}
+
+/** What a cycle recorded: its cost with the tokens beside it, or the tokens alone when too much is unpriced. */
+export function recordedFigure(usage: QuotaWindowUsage, tokenStyle: TokenNumberStyle, t: TFunc): CapacityFigure {
+  const tokens = t('quota.capacity_tokens', { n: formatTokens(usage.tokens, tokenStyle) });
+  return usage.priced_requests >= usage.requests * MIN_PRICED_SHARE
+    ? { value: formatUsd(usage.cost_nanos / NANOS_PER_USD), tokens }
+    : { value: tokens, tokens: null };
 }

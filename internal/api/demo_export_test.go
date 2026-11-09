@@ -179,6 +179,12 @@ func demoExportCases() []demoExportCase {
 		{Name: "quota", Path: "/api/v1/management/quota"},
 		// One credential's quota detail, for the page the quota list links into.
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},
+		// The capacity details of the windows whose estimates the list shows. The second
+		// Codex credential carries a previous cycle beside a fresh one.
+		{Name: "quota-capacity-auth-codex-01-five_hour", Path: "/api/v1/management/quota/auth-codex-01/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-codex-01-weekly", Path: "/api/v1/management/quota/auth-codex-01/capacity?window=weekly", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-codex-02-five_hour", Path: "/api/v1/management/quota/auth-codex-02/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-claude-01-five_hour", Path: "/api/v1/management/quota/auth-claude-01/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "logs", Path: "/api/v1/management/logs?limit=200"},
 		{Name: "logs-status", Path: "/api/v1/management/logs/status"},
 		{Name: "service-logs", Path: "/api/v1/management/service-logs"},

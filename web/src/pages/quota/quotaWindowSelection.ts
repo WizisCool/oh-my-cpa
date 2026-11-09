@@ -1,4 +1,6 @@
+import type { TFunc } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
+import { quotaWindowLabel } from './quotaFormat';
 
 /**
  * Which window a reading describes.
@@ -64,4 +66,21 @@ export function orderQuotaWindows(windows: QuotaWindow[]): QuotaWindow[] {
     groups.get(quotaWindowGroupKey(left))! - groups.get(quotaWindowGroupKey(right))!
       || windowRank(quotaWindowKindOf(left)) - windowRank(quotaWindowKindOf(right))
   ));
+}
+
+/** The model group a window belongs to, by the provider's own name; null for a plan's own window. */
+export function quotaWindowGroupName(window: QuotaWindow): string | null {
+  return window.scope === 'group' ? window.label.split(' · ')[0] : null;
+}
+
+/**
+ * A window's name without its group: the period in the reader's language for a plan's window or a
+ * group's, the provider's label for a model's own limit.
+ */
+export function quotaWindowName(window: QuotaWindow, t: TFunc): string {
+  if (window.scope === 'group') {
+    const period = window.label.split(' · ').slice(1).join(' · ');
+    return quotaWindowLabel(quotaWindowKindOf(window), period || window.label, t);
+  }
+  return window.scope === 'model' ? window.label : quotaWindowLabel(window.kind, window.label, t);
 }

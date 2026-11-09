@@ -464,33 +464,10 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 	if isUsable, _ := quota.ReadOutcome(q, nil); !isUsable {
 		return nil
 	}
-	// Carry observed resets through the raw snapshots so calibration can
-	// separate pre-reset traffic even after the detailed history is trimmed.
-	var history []quota.ObservedWindows
-	hasIncompleteHistory := false
-	for _, window := range q.Windows {
-		if !quota.SupportsWindowCapacity(q.Provider, window) {
-			continue
-		}
-		var err error
-		history, err = h.loadObservedWindows(ctx, q.AuthIndex, q.Provider)
-		if err != nil {
-			hasIncompleteHistory = true
-			if h.logger != nil {
-				h.logger.Warn("quota capacity history unavailable while saving observation", "provider", q.Provider, "error", err)
-			}
-		}
-		break
-	}
 	windows := append([]quota.QuotaWindow(nil), q.Windows...)
 	for i := range windows {
 		window := &windows[i]
 		window.Usage, window.Capacity, window.CapacityUnavailable = nil, nil, ""
-		fromMS, toMS, reason := quota.WindowCycleRange(*window, q.ObservedAtMS, q.ObservedAtMS)
-		if reason == "" && quota.SupportsWindowCapacity(q.Provider, *window) {
-			window.HasIncompleteHistory = hasIncompleteHistory || quota.HasIncompleteWindowHistory(*window, history, fromMS, toMS)
-			window.HasMidCycleReset = quota.HasWindowCycleReset(*window, history, fromMS, toMS)
-		}
 	}
 	q.Windows = windows
 	winJSON := "[]"

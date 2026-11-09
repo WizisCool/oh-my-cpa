@@ -1,4 +1,5 @@
-import { matchesStatusFilter, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
+import { deriveAuthFileIdentity, matchesStatusFilter, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
+import { maskAccount } from '../../utils/maskAccount';
 import { canonicalDisplayProviderKey } from '../../types/credentialIdentity';
 import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -593,3 +594,15 @@ export function legacyOAuthManagementRedirect(
 }
 
 export { quotaRefreshOutcomeKind } from '../../utils/quotaRefreshOutcome';
+
+/**
+ * What the row's headline says before the operator reveals the account: the operator's own name, or
+ * the masked account, or the file's identity. The drag chip, the handle's label and the capacity
+ * details repeat it, so none of them publishes an address the row keeps masked.
+ */
+export function maskedCredentialLabel(record: OAuthWorkspaceRecord): string {
+  const displayName = record.file.display_name?.trim();
+  if (displayName) return displayName;
+  const identity = deriveAuthFileIdentity(record.file);
+  return identity.isAccountPrimary ? maskAccount(identity.primary) : identity.primary;
+}

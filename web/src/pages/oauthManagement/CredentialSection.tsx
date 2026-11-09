@@ -47,10 +47,11 @@ import { formatObservedAgo, formatQuotaMetric, quotaRemainingPercent, quotaRemai
 import { quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
 import { compactQuotaCapacity, describeCompactQuotaCapacity } from '../quota/quotaCapacity';
+import { QuotaCapacityButton, type QuotaCapacityButtonProps } from '../quota/QuotaCapacityButton';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
 import { describeQuotaCooldown } from '../quota/quotaCooldown';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
+import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import {
   credentialStatusOf,
   packQuotaLines,
@@ -307,6 +308,7 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
                     isSelected={selectedKeys.has(record.key)}
                     nowMS={nowMS}
                     actions={actions}
+                    pluginLogos={pluginLogos}
                   />
                 ))}
               </FilterTransition>
@@ -318,19 +320,9 @@ export function CredentialSection({ section, title, pluginLogos, selectedKeys, n
   );
 }
 
-/**
- * What the row's headline says before the operator reveals the account: the operator's own name, or
- * the masked account, or the file's identity. The drag chip and the handle's label repeat it, so
- * neither publishes an address the row keeps masked.
- */
-function maskedCredentialLabel(record: OAuthWorkspaceRecord): string {
-  const displayName = record.file.display_name?.trim();
-  if (displayName) return displayName;
-  const identity = deriveAuthFileIdentity(record.file);
-  return identity.isAccountPrimary ? maskAccount(identity.primary) : identity.primary;
-}
-
 const recordKey = (record: OAuthWorkspaceRecord) => record.key;
+
+type QuotaCapacityOwner = QuotaCapacityButtonProps['owner'];
 
 interface CredentialRowProps {
   record: OAuthWorkspaceRecord;
@@ -342,10 +334,11 @@ interface CredentialRowProps {
   isSelected: boolean;
   nowMS: number;
   actions: CredentialRowActions;
+  pluginLogos?: PluginOAuthLogos;
 }
 
 /** A credential's identity, state and limits, followed by provider-reported summary tags. */
-function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowMS, actions }: CredentialRowProps) {
+function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowMS, actions, pluginLogos }: CredentialRowProps) {
   const t = useT();
   const { modal } = AntdApp.useApp();
   const isDemo = isDemoMode();
@@ -548,7 +541,7 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
       {hasQuota && (
         <td colSpan={2} className={styles['td-quota']}>
           {(lines.length > 0 || quotaMetrics.length === 0) && (
-            <QuotaLines lines={lines} provider={record.displayProvider} isStale={isStale || isDisabled} nowMS={nowMS} />
+            <QuotaLines lines={lines} provider={record.displayProvider} isStale={isStale || isDisabled} nowMS={nowMS} owner={file.auth_index ? { authIndex: file.auth_index, credentialName: maskedCredentialLabel(record), mark: <CredentialMark credential={{ provider, hint: file.name }} pluginLogos={pluginLogos} size={22} /> } : undefined} />
           )}
           {quotaMetrics.length > 0 && (
             <div className={clsx(styles['quota-metrics'], (isStale || isDisabled) && styles['quota-stale'])}>
@@ -653,11 +646,12 @@ function CredentialRow({ record, provider, hasQuota, hasHandle, isSelected, nowM
  * across both. The readings share one grid whose tracks are the two columns the cell spans, so
  * every reading stands under its header and under the reading above it.
  */
-function QuotaLines({ lines, provider, isStale, nowMS }: {
+function QuotaLines({ lines, provider, isStale, nowMS, owner }: {
   lines: QuotaLine[];
   provider: string;
   isStale: boolean;
   nowMS: number;
+  owner?: QuotaCapacityOwner;
 }) {
   const t = useT();
   if (lines.length === 0) {
@@ -675,6 +669,7 @@ function QuotaLines({ lines, provider, isStale, nowMS }: {
           provider={provider}
           isStale={isStale}
           nowMS={nowMS}
+          owner={owner}
         />
       ))}
     </div>
@@ -687,12 +682,13 @@ function QuotaLines({ lines, provider, isStale, nowMS }: {
  * unknown usage keeps a countdown. The window's label, reset instant, accuracy and the estimate's
  * basis remain in its tooltip.
  */
-function QuotaReading({ cell, name, provider, isStale, nowMS }: {
+function QuotaReading({ cell, name, provider, isStale, nowMS, owner }: {
   cell: QuotaLineCell;
   name: string;
   provider: string;
   isStale: boolean;
   nowMS: number;
+  owner?: QuotaCapacityOwner;
 }) {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
@@ -735,7 +731,11 @@ function QuotaReading({ cell, name, provider, isStale, nowMS }: {
             <b style={remaining != null && remaining < 70 ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
           </span>
           <Meter className={styles['quota-meter']} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
-          {estimate && <span className={styles['quota-estimate']}>{estimate}</span>}
+          {estimate && (owner && window.capacity ? (
+            <span className={styles['quota-estimate']}>
+              <QuotaCapacityButton owner={owner} window={window}>{estimate}</QuotaCapacityButton>
+            </span>
+          ) : <span className={styles['quota-estimate']}>{estimate}</span>)}
           {reset && <span className={styles['quota-reset']}>{reset}</span>}
         </div>
       </Tooltip>

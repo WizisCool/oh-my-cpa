@@ -15,7 +15,7 @@ const t = ((key: string, params?: Record<string, unknown>) =>
 
 const usage = { from_ms: 0, to_ms: 1, requests: 40, priced_requests: 40, tokens: 480_000, cost_nanos: 1_200_000_000 };
 const capacity: QuotaWindowCapacity = {
-  tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10, basis: 'observed_delta',
+  requests: 800, tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10, basis: 'observed_delta',
   remaining_tokens: 7_200_000, remaining_cost_nanos: 18_000_000_000,
 };
 const dated = { ...capacity, remaining_tokens: undefined, remaining_cost_nanos: undefined };

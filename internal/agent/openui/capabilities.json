@@ -4036,12 +4036,6 @@
                         "type": "string"
                       }
                     },
-                    "has_mid_cycle_reset": {
-                      "type": "boolean"
-                    },
-                    "has_incomplete_history": {
-                      "type": "boolean"
-                    },
                     "usage": {
                       "type": [
                         "null",
@@ -4083,6 +4077,9 @@
                         "object"
                       ],
                       "properties": {
+                        "requests": {
+                          "type": "integer"
+                        },
                         "tokens": {
                           "type": "integer"
                         },
@@ -4121,6 +4118,7 @@
                         }
                       },
                       "required": [
+                        "requests",
                         "tokens",
                         "basis",
                         "observed_at_ms",
@@ -4359,12 +4357,6 @@
                   "type": "string"
                 }
               },
-              "has_mid_cycle_reset": {
-                "type": "boolean"
-              },
-              "has_incomplete_history": {
-                "type": "boolean"
-              },
               "usage": {
                 "type": [
                   "null",
@@ -4406,6 +4398,9 @@
                   "object"
                 ],
                 "properties": {
+                  "requests": {
+                    "type": "integer"
+                  },
                   "tokens": {
                     "type": "integer"
                   },
@@ -4444,6 +4439,7 @@
                   }
                 },
                 "required": [
+                  "requests",
                   "tokens",
                   "basis",
                   "observed_at_ms",

@@ -534,8 +534,12 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       description={
         <>
           <div>{summarizeAuthFileStatusMessage(file.status_message)}</div>
+          {/* The upstream body backs the summary; it stays folded so the warning reads as one line. */}
           {summarizeAuthFileStatusMessage(file.status_message) !== file.status_message.trim() && (
-            <pre className={styles['identity-alert-raw']}>{file.status_message}</pre>
+            <details className={styles['identity-alert-details']}>
+              <summary>{t('af.warning_raw')}</summary>
+              <pre className={styles['identity-alert-raw']}>{file.status_message}</pre>
+            </details>
           )}
         </>
       }

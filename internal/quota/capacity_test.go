@@ -19,6 +19,17 @@ func capacityWindow(usedPercent float64) QuotaWindow {
 	}
 }
 
+// point is a reading at the given hour with the tokens recorded since the cycle
+// start; every request is priced at one nano per token.
+func point(hour, used float64, requests, tokens int64) CalibrationPoint {
+	return CalibrationPoint{ObservedAtMS: int64(hour * float64(hourMS)), UsedPercent: used, Requests: requests, PricedRequests: requests, Tokens: tokens, CostNanos: tokens}
+}
+
+// cycle is the five-hour cycle that capacityWindow reads, from 5h to 10h.
+func cycle(points ...CalibrationPoint) CycleCalibration {
+	return CycleCalibration{WindowKey: "codex|five_hour|standard|", CycleResetAtMS: 10 * hourMS, PeriodHours: 5, Points: points}
+}
+
 func TestSupportsWindowCapacity(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -90,114 +101,129 @@ func TestWindowCycleRange(t *testing.T) {
 }
 
 func TestEstimateWindowCapacity(t *testing.T) {
-	usage := WindowUsage{Requests: 40, PricedRequests: 40, Tokens: 2_000_000, CostNanos: 3_000_000_000}
+	estimate := func(used float64, cycles ...CycleCalibration) (*WindowCapacity, string) {
+		return EstimateWindowCapacity(capacityWindow(used), nil, 9*hourMS, cycles)
+	}
 
-	capacity, reason := EstimateWindowCapacity(capacityWindow(25), usage, nil)
-	if reason != "" || capacity == nil {
-		t.Fatalf("estimate = %v reason %q, want an estimate", capacity, reason)
+	// Two points of rounding on a 2% reading is too coarse to state on its own.
+	if capacity, reason := estimate(2, cycle(point(6, 2, 1, 200_000))); capacity != nil || reason != CapacityReasonLowUsage {
+		t.Fatalf("2%% climb = %+v %q, want low_usage", capacity, reason)
 	}
-	if capacity.Tokens != 8_000_000 {
-		t.Errorf("tokens = %d, want 8000000", capacity.Tokens)
+	// Only the ends of a climb carry rounding, and the cycle start none.
+	capacity, reason := estimate(20, cycle(point(6, 3, 1, 300_000), point(7, 10, 2, 900_000), point(8, 20, 4, 2_000_000)))
+	if capacity == nil || reason != "" || capacity.Basis != "current_cycle" || capacity.Tokens != 10_000_000 || capacity.Requests != 20 || capacity.ErrorPercent != 2.6 {
+		t.Fatalf("climb = %+v %q, want 2M over 20 points from the cycle start", capacity, reason)
 	}
-	if capacity.CostNanos == nil || *capacity.CostNanos != 12_000_000_000 {
-		t.Errorf("cost = %v, want 12000000000", capacity.CostNanos)
+	if capacity.CostNanos == nil || *capacity.CostNanos != 10_000_000 || capacity.FromMS != 5*hourMS || capacity.ObservedAtMS != 8*hourMS || capacity.ResetAtMS != 10*hourMS {
+		t.Fatalf("climb = %+v, want its cost and the cycle's dates", capacity)
 	}
-	if capacity.ErrorPercent != 2 {
-		t.Errorf("error = %v, want 2 (half a point of 25)", capacity.ErrorPercent)
+	// A stale reading is measured with the evidence it had.
+	stale, _ := EstimateWindowCapacity(capacityWindow(10), nil, 7*hourMS, []CycleCalibration{cycle(point(6, 3, 1, 300_000), point(7, 10, 2, 900_000), point(8, 20, 4, 2_000_000))})
+	if stale == nil || stale.Tokens != 9_000_000 {
+		t.Fatalf("stale reading = %+v, want the climb up to its own instant", stale)
 	}
-	remainingOnly := capacityWindow(0)
-	remainingOnly.UsedPercent, remainingOnly.RemainingPercent = nil, floatPtr(75)
-	if capacity, reason := EstimateWindowCapacity(remainingOnly, usage, nil); reason != "" || capacity == nil || capacity.Tokens != 8000000 {
-		t.Fatalf("remaining-only percentage lost: %+v %q", capacity, reason)
+
+	// Rises the gateway recorded nothing for were spent elsewhere and are left
+	// out with their share.
+	capacity, _ = estimate(50, cycle(point(6, 30, 0, 0), point(7, 40, 1, 1_000_000), point(8, 50, 1, 1_000_000), point(8.5, 60, 2, 2_000_000)))
+	if capacity == nil || capacity.Basis != "observed_delta" || capacity.Tokens != 10_000_000 || capacity.ErrorPercent != 11.1 {
+		t.Fatalf("partly external climb = %+v, want 2M over the 20 recorded points", capacity)
+	}
+	if capacity, reason := estimate(40, cycle(point(6, 40, 0, 0))); capacity != nil || reason != CapacityReasonNoTraffic {
+		t.Fatalf("external climb = %+v %q, want no_traffic", capacity, reason)
+	}
+
+	// A dollar figure needs nearly every request priced.
+	unpriced := point(8, 20, 4, 2_000_000)
+	unpriced.PricedRequests = 3
+	if capacity, _ := estimate(20, cycle(unpriced)); capacity == nil || capacity.CostNanos != nil || capacity.Tokens != 10_000_000 {
+		t.Fatalf("unpriced climb = %+v, want tokens without a cost", capacity)
+	}
+
+	if capacity, reason := EstimateWindowCapacity(QuotaWindow{ID: "five_hour", Scope: "standard"}, nil, 9*hourMS, nil); capacity != nil || reason != CapacityReasonNoReading {
+		t.Fatalf("no reading = %+v %q", capacity, reason)
 	}
 }
 
-func TestEstimateWindowCapacityStartsWithPositiveUsage(t *testing.T) {
-	usage := WindowUsage{Requests: 2, PricedRequests: 2, Tokens: 1000, CostNanos: 1000}
-	for _, percent := range []float64{0.2, 1, 4.9} {
-		capacity, reason := EstimateWindowCapacity(capacityWindow(percent), usage, nil)
-		if capacity == nil || reason != "" || capacity.Tokens != int64(100000/percent+0.5) {
-			t.Fatalf("%g%%: capacity=%+v reason=%q", percent, capacity, reason)
-		}
+func TestEstimateWindowCapacityAfterReset(t *testing.T) {
+	climb := []CalibrationPoint{point(6, 10, 1, 1_000_000), point(7, 50, 5, 5_000_000)}
+
+	// Right after a mid-cycle reset the new climb has nothing to measure; the
+	// climb before it still sizes the plan.
+	reset := cycle(append(climb, point(8, 0, 5, 5_000_000))...)
+	capacity, _ := EstimateWindowCapacity(capacityWindow(0), nil, 9*hourMS, []CycleCalibration{reset})
+	if capacity == nil || capacity.Basis != "previous_cycle" || capacity.Tokens != 10_000_000 || capacity.ErrorPercent != 5 {
+		t.Fatalf("after the reset = %+v, want the earlier climb as the reference", capacity)
+	}
+	// A small new climb is weighted by its precision, not handed over to.
+	resumed := cycle(append(climb, point(8, 0, 5, 5_000_000), point(8.5, 2, 6, 5_300_000))...)
+	capacity, _ = EstimateWindowCapacity(capacityWindow(2), nil, 9*hourMS, []CycleCalibration{resumed})
+	if capacity == nil || capacity.Basis != "blended" || capacity.Tokens <= 10_000_000 || capacity.Tokens > 10_020_000 {
+		t.Fatalf("resumed climb = %+v, want 10M nudged toward the 15M sample", capacity)
+	}
+	if capacity, reason := EstimateWindowCapacity(capacityWindow(0), nil, 9*hourMS, []CycleCalibration{cycle(point(6, 30, 0, 0), point(7, 0, 0, 0))}); capacity != nil || reason != CapacityReasonResetMidCycle {
+		t.Fatalf("reset without a reference = %+v %q", capacity, reason)
+	}
+
+	// A new cycle that has not been used leans on the previous one, on the same
+	// plan only.
+	previous := cycle(climb...)
+	previous.CycleResetAtMS, previous.PlanType = 5*hourMS, "plus"
+	plus := &QuotaPlan{PlanType: "plus"}
+	if capacity, _ := EstimateWindowCapacity(capacityWindow(0), plus, 9*hourMS, []CycleCalibration{previous}); capacity == nil || capacity.Basis != "previous_cycle" || capacity.Tokens != 10_000_000 {
+		t.Fatalf("unused cycle = %+v, want the previous cycle's size", capacity)
+	}
+	if capacity, reason := EstimateWindowCapacity(capacityWindow(0), &QuotaPlan{PlanType: "pro"}, 9*hourMS, []CycleCalibration{previous}); capacity != nil || reason != CapacityReasonLowUsage {
+		t.Fatalf("another plan = %+v %q, want no reference", capacity, reason)
 	}
 }
 
-func TestEstimateWindowCapacityWithholds(t *testing.T) {
-	usage := WindowUsage{Requests: 10, PricedRequests: 10, Tokens: 1000, CostNanos: 1000}
-
-	noReading := capacityWindow(0)
-	noReading.UsedPercent = nil
-
-	cases := []struct {
-		name        string
-		window      QuotaWindow
-		usage       WindowUsage
-		earlierPeak *float64
-		want        string
+func TestNextCalibrationCycle(t *testing.T) {
+	stored := cycle(point(6, 10, 1, 100))
+	advance := func(latest *CycleCalibration, window QuotaWindow, observedAtMS int64) (CycleCalibration, bool) {
+		return NextCalibrationCycle(latest, "codex", window, nil, observedAtMS)
+	}
+	for _, tc := range []struct {
+		name   string
+		window QuotaWindow
+		atMS   int64
+		want   bool
 	}{
-		{"no used share", noReading, usage, nil, CapacityReasonNoReading},
-		{"zero used share", capacityWindow(0), usage, nil, CapacityReasonLowUsage},
-		{"nothing recorded", capacityWindow(30), WindowUsage{}, nil, CapacityReasonNoTraffic},
-		{"earlier reading was higher", capacityWindow(30), usage, floatPtr(60), CapacityReasonResetMidCycle},
-		// A reset outranks missing traffic: after a reset the gateway may well
-		// have recorded nothing yet, and "spent elsewhere" would be the wrong story.
-		{"reset with nothing recorded since", capacityWindow(30), WindowUsage{}, floatPtr(60), CapacityReasonResetMidCycle},
-	}
-	for _, tc := range cases {
-		capacity, reason := EstimateWindowCapacity(tc.window, tc.usage, tc.earlierPeak)
-		if capacity != nil || reason != tc.want {
-			t.Errorf("%s: estimate = %v reason %q, want none with %q", tc.name, capacity, reason, tc.want)
+		{"idle refresh", capacityWindow(10), 7 * hourMS, false},
+		{"rise below a whole point", capacityWindow(10.5), 7 * hourMS, false},
+		{"rise of a point", capacityWindow(11), 7 * hourMS, true},
+		{"reset", capacityWindow(2), 7 * hourMS, true},
+		{"out of order", capacityWindow(20), 6 * hourMS, false},
+	} {
+		if _, got := advance(&stored, tc.window, tc.atMS); got != tc.want {
+			t.Errorf("%s: adds evidence = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 
-	if capacity, reason := EstimateWindowCapacity(capacityWindow(5), usage, nil); capacity == nil || reason != "" {
-		t.Errorf("at the threshold: estimate = %v reason %q, want an estimate", capacity, reason)
+	// A derived boundary drifts between refreshes within one cycle.
+	drifted := capacityWindow(20)
+	drifted.ResetAtMS, drifted.ResetAccuracy = int64Ptr(10*hourMS+30_000), "derived"
+	if next, ok := advance(&stored, drifted, 7*hourMS); !ok || len(next.Points) != 1 || next.CycleResetAtMS != 10*hourMS {
+		t.Fatalf("drifted boundary = %+v %v, want the stored cycle extended", next, ok)
 	}
-	// Upstream rounding can move a reading down by a point without any reset.
-	if capacity, reason := EstimateWindowCapacity(capacityWindow(30), usage, floatPtr(31)); capacity == nil || reason != "" {
-		t.Errorf("one point lower: estimate = %v reason %q, want an estimate", capacity, reason)
-	}
-}
-
-func TestEstimateWindowCapacityDropsCostWhenUnpriced(t *testing.T) {
-	usage := WindowUsage{Requests: 100, PricedRequests: 94, Tokens: 1000, CostNanos: 5000}
-	capacity, reason := EstimateWindowCapacity(capacityWindow(50), usage, nil)
-	if reason != "" || capacity == nil {
-		t.Fatalf("estimate = %v reason %q, want a token estimate", capacity, reason)
-	}
-	if capacity.CostNanos != nil {
-		t.Errorf("cost = %d, want none with 6%% of requests unpriced", *capacity.CostNanos)
-	}
-	if capacity.Tokens != 2000 {
-		t.Errorf("tokens = %d, want 2000", capacity.Tokens)
+	// A reading without a boundary still extends the live cycle it belongs to.
+	unbounded := capacityWindow(20)
+	unbounded.ResetAtMS = nil
+	if next, ok := advance(&stored, unbounded, 7*hourMS); !ok || next.CycleResetAtMS != 10*hourMS {
+		t.Fatalf("unbounded reading = %+v %v, want the stored cycle extended", next, ok)
 	}
 
-	usage.PricedRequests = 95
-	if capacity, _ = EstimateWindowCapacity(capacityWindow(50), usage, nil); capacity == nil || capacity.CostNanos == nil || *capacity.CostNanos != 10000 {
-		t.Errorf("95%% priced: want a cost estimate, got %v", capacity)
+	// An unused window opens no cycle: its boundary can roll with every refresh.
+	nextCycle := capacityWindow(0)
+	nextCycle.ResetAtMS = int64Ptr(15 * hourMS)
+	if _, ok := advance(&stored, nextCycle, 11*hourMS); ok {
+		t.Fatal("an unused window opened a cycle")
 	}
-}
-
-func TestBlendWindowCapacityAndRemaining(t *testing.T) {
-	current := &WindowCapacity{Tokens: 100000, CostNanos: int64Ptr(1000000), SamplePercent: 1, ObservedAtMS: 7000}
-	reference := &WindowCapacity{Tokens: 400000, CostNanos: int64Ptr(4000000), ObservedAtMS: 3000}
-	blended := BlendWindowCapacity(current, reference)
-	if blended.Tokens != 340000 || blended.Basis != "blended" || blended.ObservedAtMS != 7000 || *blended.CostNanos != 3400000 {
-		t.Fatalf("blend=%+v", blended)
+	nextCycle.UsedPercent = floatPtr(3)
+	if next, ok := advance(&stored, nextCycle, 11*hourMS); !ok || len(next.Points) != 0 || next.CycleResetAtMS != 15*hourMS {
+		t.Fatalf("used new cycle = %+v %v, want a new empty cycle", next, ok)
 	}
-	AttachRemainingCapacity(blended, capacityWindow(25), true)
-	if blended.RemainingTokens == nil || *blended.RemainingTokens != 255000 || blended.RemainingCostNanos == nil || *blended.RemainingCostNanos != 2550000 {
-		t.Fatalf("remaining=%+v", blended)
-	}
-	AttachRemainingCapacity(blended, capacityWindow(25), false)
-	if blended.RemainingTokens != nil || blended.RemainingCostNanos != nil {
-		t.Fatal("old percentage presented as current remaining capacity")
-	}
-	current.SamplePercent = 5
-	if BlendWindowCapacity(current, reference) != current {
-		t.Fatal("a calibrated sample still depends on a historical number")
-	}
-	if current.Tokens != 100000 || reference.Tokens != 400000 {
-		t.Fatal("blend mutated its evidence")
+	if _, ok := NextCalibrationCycle(nil, "codex", QuotaWindow{ID: "code_review", Scope: "code_review", UsedPercent: floatPtr(5)}, nil, 7*hourMS); ok {
+		t.Fatal("an unsupported window gathered evidence")
 	}
 }

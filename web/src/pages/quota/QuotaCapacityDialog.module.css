@@ -1,0 +1,202 @@
+/* Three cards drawn the way every card in the console is: the page's ground inside the dialog's
+   elevated fill, one --border hairline, a PanelTitle head over a rule. Nothing here names a colour;
+   the theme's tokens carry every palette, light or dark. The forecast is told apart the way a
+   selected tile is, by an accent frame, and its figures by their "≈". */
+.dialog-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mark-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The cards share the grid's row tracks, so a head or label that wraps in a longer language
+   lowers that part in all three cards and the figures stay level across them. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  column-gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.card {
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--bg);
+}
+
+.card[data-tone='forecast'] {
+  border-color: var(--accent);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.caption {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--meta);
+  font-size: var(--text-2xs);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 14px 12px;
+}
+
+.label,
+.row dt {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.lead-value {
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rows {
+  margin: 0;
+  padding: 0 14px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.row dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* With no reading the card keeps its rows, and the dashes in the quiet ink stand in for figures. */
+.card[data-empty] .lead-value,
+.card[data-empty] .row dd {
+  color: var(--meta);
+  font-weight: 400;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--meta);
+  font-size: var(--text-2xs);
+}
+
+.meter {
+  flex: 1;
+}
+
+.foot-figure {
+  flex: none;
+}
+
+.foot-tag {
+  flex: none;
+  margin-left: auto;
+}
+
+.foot-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--meta);
+  font-size: var(--text-2xs);
+  line-height: 1.6;
+}
+
+.note-glyph {
+  flex: none;
+  margin-top: 3px;
+}
+
+@media (max-width: 640px) {
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    grid-row: auto;
+  }
+
+  .lead {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .lead-value {
+    font-size: var(--text-lg);
+  }
+}

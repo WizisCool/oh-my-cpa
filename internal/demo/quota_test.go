@@ -49,27 +49,19 @@ func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
 	if err := json.Unmarshal([]byte(latest["auth-codex-02"].WindowsJSON), &windows); err != nil {
 		t.Fatal(err)
 	}
-	records, err := repo.GetQuotaSnapshotHistory(ctx, "auth-codex-02", 50)
+	// The previous cycle is calibrated by real recorded usage and stays the
+	// reference the current cycle's small climb leans on.
+	cycles, err := repo.LoadCapacityCycles(ctx, "auth-codex-02")
 	if err != nil {
 		t.Fatal(err)
 	}
-	history := []quota.ObservedWindows{}
-	for _, record := range records {
-		var observed []quota.QuotaWindow
-		if err := json.Unmarshal([]byte(record.WindowsJSON), &observed); err != nil {
-			t.Fatal(err)
-		}
-		history = append(history, quota.ObservedWindows{ObservedAtMS: record.ObservedAtMS, Windows: observed})
+	evidence := cycles[quota.CapacityWindowKey("codex", windows[0])]
+	if len(evidence) != 2 || len(evidence[1].Points) == 0 || evidence[1].Points[0].Requests == 0 {
+		t.Fatalf("demo previous cycle has no recorded evidence: %+v", evidence)
 	}
-	points := quota.CapacityReferencePoints(windows[0], history, latest["auth-codex-02"].ObservedAtMS)
-	if len(points) == 0 {
-		t.Fatal("demo has no historical capacity observation")
-	}
-	previous, observedAtMS := points[0].Window, points[0].ObservedAtMS
-	fromMS, toMS, reason := quota.WindowCycleRange(previous, observedAtMS, observedAtMS)
-	usage, err := repo.QueryCredentialWindowUsage(ctx, "auth-codex-02", fromMS, toMS)
-	if err != nil || reason != "" || usage.Requests == 0 {
-		t.Fatalf("demo previous reading has no real usage: %+v %q %v", usage, reason, err)
+	capacity, reason := quota.EstimateWindowCapacity(windows[0], nil, latest["auth-codex-02"].ObservedAtMS, evidence)
+	if capacity == nil || capacity.Basis != "blended" && capacity.Basis != "previous_cycle" {
+		t.Fatalf("demo current cycle does not lean on the previous one: %+v %q", capacity, reason)
 	}
 }
 

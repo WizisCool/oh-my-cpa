@@ -68,8 +68,9 @@ unpublished, stale and failed are not interchangeable with exhausted or zero.
 tokens and API-equivalent cost, with an estimated remaining amount. It informs the
 operator; availability and routing use upstream quota readings.
 
-**Capacity Reference**: A recent estimate for the same credential and quota scope,
-used while a new window accumulates usage evidence.
+**Capacity Reference**: The size measured by the latest earlier climb of the same
+credential, quota scope and plan, blended into the current climb's estimate by
+relative precision until the current readings carry comparable weight.
 
 **Window Warmup**: A policy-approved request intended to activate a credential's
 billing window. An uncertain attempt is not permission to issue another one.
