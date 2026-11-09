@@ -2,6 +2,48 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <!-- The document paints the console's own ground before its stylesheet arrives. A phone that
+         discarded a backgrounded tab returns to a fresh navigation, and the window between the
+         HTML arriving and the bundle mounting is spent on this element alone: the default white
+         canvas is a bright flash in a dark console. The two values are the shipped palettes' page
+         ground (`theme/palette.ts`); `web/tests/logic/theme-boot.test.ts` holds them to it. -->
+    <style>
+      html { background-color: #121214; color-scheme: dark; }
+      html[data-theme-mode='light'] { background-color: #ffffff; color-scheme: light; }
+    </style>
+    <!-- The mode this browser last chose, read while the document parses, so the stylesheet's light
+         block applies on its first paint rather than after the bundle mounts. The stored document
+         is `omc-theme`, whose shape and legacy forms `theme/themePreference.ts` owns; an unreadable
+         one leaves the dark ground the console ships. -->
+    <script id="omc-theme-boot">
+      (function () {
+        // The preset-only document `theme/themePreference.ts` still migrates: `light` and `dark` are
+        // modes themselves, and a bare palette id answers with the mode it belongs to. `midnight`
+        // and `porcelain` are the two withdrawn ids its reader maps to `pewter` and `fog`; a palette
+        // added to that registry belongs here too, and the boot test answers the same values.
+        var legacyPaletteModes = {
+          'omc-dark': 'dark', pewter: 'dark', forest: 'dark', midnight: 'dark',
+          'omc-light': 'light', fog: 'light', sandstone: 'light', porcelain: 'light'
+        };
+        try {
+          var stored = window.localStorage.getItem('omc-theme');
+          if (!stored) return;
+          var mode;
+          if (stored.charAt(0) === '{') {
+            mode = JSON.parse(stored).mode;
+          } else {
+            mode = stored.trim().toLowerCase();
+            if (legacyPaletteModes[mode]) mode = legacyPaletteModes[mode];
+          }
+          if (mode === 'system') {
+            mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          if (mode === 'light' || mode === 'dark') document.documentElement.dataset.themeMode = mode;
+        } catch (error) {
+          // The bundle reads the same preference and paints the console once it mounts.
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <!-- Every URL in the manifest is relative, and start_url, scope and the icon sources resolve
          against the MANIFEST's URL, so one committed file is correct at the site root and under
