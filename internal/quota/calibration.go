@@ -82,14 +82,17 @@ func isSameCycle(cycle CycleCalibration, window QuotaWindow) bool {
 	return -tolerance <= difference && difference <= tolerance
 }
 
-// NextCalibrationCycle decides whether a reading adds evidence. It returns the
-// cycle the reading extends, or a new empty cycle when the boundary moved; the
+// NextCalibrationCycle decides whether a reading adds evidence. cycles are the
+// stored ones, newest first: a reading saved after a later one, across a reset,
+// still extends its own cycle rather than replacing it with a fresh one. It
+// returns the cycle the reading extends, or a new empty cycle when the boundary
+// moved; the
 // caller appends the point with the usage recorded up to the reading. A reading
 // adds nothing when the share did not rise by a whole point or drop at a reset:
 // idle refreshes therefore leave the evidence, and every estimate, untouched.
 // An unused window starts no cycle, since an idle window's boundary can roll
 // forward with every refresh.
-func NextCalibrationCycle(latest *CycleCalibration, provider string, window QuotaWindow, plan *QuotaPlan, observedAtMS int64) (CycleCalibration, bool) {
+func NextCalibrationCycle(cycles []CycleCalibration, provider string, window QuotaWindow, plan *QuotaPlan, observedAtMS int64) (CycleCalibration, bool) {
 	if !SupportsWindowCapacity(provider, window) {
 		return CycleCalibration{}, false
 	}
@@ -99,9 +102,8 @@ func NextCalibrationCycle(latest *CycleCalibration, provider string, window Quot
 	}
 	_, _, boundaryReason := WindowCycleRange(window, observedAtMS, observedAtMS)
 	hasBoundary := boundaryReason == ""
-	// A reading without a boundary of its own still belongs to a live stored cycle.
-	isLatestCycle := latest != nil && (hasBoundary && isSameCycle(*latest, window) || window.ResetAtMS == nil && latest.CycleResetAtMS > observedAtMS)
-	if isLatestCycle && len(latest.Points) > 0 {
+	if index := liveCycleIndex(window, observedAtMS, cycles); index >= 0 && len(cycles[index].Points) > 0 {
+		latest := &cycles[index]
 		last := latest.Points[len(latest.Points)-1]
 		isRise := used >= last.UsedPercent+1-1e-9
 		isReset := used < last.UsedPercent-capacityResetTolerancePercent

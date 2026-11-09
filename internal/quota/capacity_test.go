@@ -181,7 +181,7 @@ func TestEstimateWindowCapacityAfterReset(t *testing.T) {
 func TestNextCalibrationCycle(t *testing.T) {
 	stored := cycle(point(6, 10, 1, 100))
 	advance := func(latest *CycleCalibration, window QuotaWindow, observedAtMS int64) (CycleCalibration, bool) {
-		return NextCalibrationCycle(latest, "codex", window, nil, observedAtMS)
+		return NextCalibrationCycle([]CycleCalibration{*latest}, "codex", window, nil, observedAtMS)
 	}
 	for _, tc := range []struct {
 		name   string
@@ -222,6 +222,12 @@ func TestNextCalibrationCycle(t *testing.T) {
 	nextCycle.UsedPercent = floatPtr(3)
 	if next, ok := advance(&stored, nextCycle, 11*hourMS); !ok || len(next.Points) != 0 || next.CycleResetAtMS != 15*hourMS {
 		t.Fatalf("used new cycle = %+v %v, want a new empty cycle", next, ok)
+	}
+	// A reading saved after the next cycle's first one still extends its own cycle.
+	newer := cycle(point(11, 3, 1, 100))
+	newer.CycleResetAtMS = 15 * hourMS
+	if next, ok := NextCalibrationCycle([]CycleCalibration{newer, stored}, "codex", capacityWindow(20), nil, 7*hourMS); !ok || next.CycleResetAtMS != 10*hourMS || len(next.Points) != 1 {
+		t.Fatalf("late reading = %+v %v, want its own stored cycle extended", next, ok)
 	}
 	if _, ok := NextCalibrationCycle(nil, "codex", QuotaWindow{ID: "code_review", Scope: "code_review", UsedPercent: floatPtr(5)}, nil, 7*hourMS); ok {
 		t.Fatal("an unsupported window gathered evidence")

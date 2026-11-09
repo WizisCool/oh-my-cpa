@@ -36,15 +36,11 @@ func recordCapacityCycles(ctx context.Context, tx *sql.Tx, snapshot QuotaSnapsho
 	plan := &quota.QuotaPlan{PlanType: snapshot.PlanType, Tier: snapshot.PlanTier}
 	for _, window := range windows {
 		key := quota.CapacityWindowKey(snapshot.Provider, window)
-		stored, err := queryCapacityCycles(ctx, tx, snapshot.AuthIndex, key, 1)
+		stored, err := queryCapacityCycles(ctx, tx, snapshot.AuthIndex, key, capacityRetainedCycles)
 		if err != nil {
 			return err
 		}
-		var latest *quota.CycleCalibration
-		if len(stored) > 0 {
-			latest = &stored[0]
-		}
-		cycle, isEvidence := quota.NextCalibrationCycle(latest, snapshot.Provider, window, plan, snapshot.ObservedAtMS)
+		cycle, isEvidence := quota.NextCalibrationCycle(stored, snapshot.Provider, window, plan, snapshot.ObservedAtMS)
 		if !isEvidence {
 			continue
 		}
