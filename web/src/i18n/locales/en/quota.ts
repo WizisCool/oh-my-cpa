@@ -82,7 +82,7 @@ export default {
   'quota.capacity_reason_scope_unknown': 'No usage of this window\'s models recorded yet',
   'quota.capacity_reason_history_unavailable': 'History could not be read; refresh to retry',
   'quota.capacity_reason_usage_unavailable': 'Usage records could not be read; refresh to retry',
-  'quota.capacity_reason_boundary_unknown': 'Use the credential, then refresh to estimate from the change',
+  'quota.capacity_reason_boundary_unknown': 'Estimation starts once the quota changes',
   'quota.capacity_reason_expired': 'Refresh quota to see the new cycle',
   'quota.capacity_reason_low_usage': 'Estimation starts with further use',
   'quota.capacity_reason_no_traffic': 'Send a request with this credential to start estimating',

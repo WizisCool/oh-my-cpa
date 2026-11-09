@@ -82,7 +82,7 @@ export default {
   "quota.capacity_reason_scope_unknown": "Belum ada penggunaan model tetingkap ini yang direkodkan",
   "quota.capacity_reason_history_unavailable": "Sejarah tidak dapat dibaca; muat semula untuk mencuba lagi",
   "quota.capacity_reason_usage_unavailable": "Rekod penggunaan tidak dapat dibaca; muat semula untuk mencuba lagi",
-  "quota.capacity_reason_boundary_unknown": "Gunakan kelayakan, kemudian muat semula untuk menganggar daripada perubahan",
+  "quota.capacity_reason_boundary_unknown": "Anggaran bermula selepas kuota berubah",
   "quota.capacity_reason_expired": "Muat semula kuota untuk melihat kitaran baharu",
   "quota.capacity_reason_low_usage": "Anggaran bermula dengan penggunaan lanjut",
   "quota.capacity_reason_no_traffic": "Hantar permintaan dengan kelayakan ini untuk memulakan anggaran",

@@ -82,7 +82,7 @@ export default {
   "quota.capacity_reason_scope_unknown": "尚未記錄到此視窗計額模型的用量",
   "quota.capacity_reason_history_unavailable": "歷史記錄讀取失敗，重新整理後重試",
   "quota.capacity_reason_usage_unavailable": "用量記錄讀取失敗，重新整理後重試",
-  "quota.capacity_reason_boundary_unknown": "使用後再次重新整理，即可按額度變化估算",
+  "quota.capacity_reason_boundary_unknown": "額度變化後開始估算",
   "quota.capacity_reason_expired": "重新整理額度以查看新週期",
   "quota.capacity_reason_low_usage": "繼續使用後開始估算",
   "quota.capacity_reason_no_traffic": "透過此憑證發起請求後開始估算",

@@ -79,7 +79,7 @@ export default {
   'quota.capacity_reason_scope_unknown': '尚未记录到此窗口计额模型的用量',
   'quota.capacity_reason_history_unavailable': '历史记录读取失败，刷新后重试',
   'quota.capacity_reason_usage_unavailable': '用量记录读取失败，刷新后重试',
-  'quota.capacity_reason_boundary_unknown': '使用后再次刷新，即可按额度变化估算',
+  'quota.capacity_reason_boundary_unknown': '额度变化后开始估算',
   'quota.capacity_reason_expired': '刷新额度以查看新周期',
   'quota.capacity_reason_low_usage': '继续使用后开始估算',
   'quota.capacity_reason_no_traffic': '通过此凭据发起请求后开始估算',
