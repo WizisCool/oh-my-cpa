@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -65,11 +66,15 @@ func TestRouterSeparatesSPAFromAPIAndRedirectsBasePath(t *testing.T) {
 	if contentType := response.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/html") {
 		t.Fatalf("SPA content type = %q", contentType)
 	}
-	body := make([]byte, 4096)
-	n, _ := response.Body.Read(body)
+	body, readErr := io.ReadAll(response.Body)
 	response.Body.Close()
-	if !strings.Contains(string(body[:n]), `"basePath":"/omc"`) && !strings.Contains(string(body[:n]), `basePath: "/omc"`) {
-		t.Fatalf("SPA did not include runtime base path: %s", string(body[:n]))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	// The whole document, not a prefix: the runtime config sits after the installable-app and
+	// theme preamble, whose length is the document's business rather than this assertion's.
+	if !strings.Contains(string(body), `"basePath":"/omc"`) && !strings.Contains(string(body), `basePath: "/omc"`) {
+		t.Fatalf("SPA did not include runtime base path: %.512s", body)
 	}
 
 	// The application API is protected, while the static shell remains public.
