@@ -40,6 +40,42 @@ func projectModelCooldowns(records []repository.ActiveCooldownRecord) []quota.Ac
 	return result
 }
 
+// oauthGlobalAliasRules is the provider-wide OAuth model alias document every catalog build
+// needs: the warmup task model list and each quota read ask for the same rules.
+func (h *Handler) oauthGlobalAliasRules(ctx context.Context, client *management.Client) map[string][]management.OAuthModelAlias {
+	if client == nil {
+		return nil
+	}
+	return h.cachedAliasRules(globalAliasCacheKey, func() (aliasCacheEntry, error) {
+		aliases, err := client.OAuthModelAliases(ctx)
+		return aliasCacheEntry{global: aliases}, err
+	}).global
+}
+
+// modelCooldownKeyResolver folds the spellings stored in error_events onto the model CPA keys
+// them under. A rule recorded before CPA resolved it to its upstream leaves the alias behind, so
+// without this one resting model would be listed once per spelling it was ever reported under.
+// When the alias document cannot be read, spellings alone still group the rows.
+func (h *Handler) modelCooldownKeyResolver(ctx context.Context, client *management.Client, files map[string]management.AuthFile) repository.ModelCooldownKeyResolver {
+	aliases := h.oauthGlobalAliasRules(ctx, client)
+	if len(aliases) == 0 {
+		return nil
+	}
+	rules := make(map[string][]management.OAuthModelAlias, len(files))
+	for authIndex, file := range files {
+		// Rules resolve the way CPA resolves a call point: this credential's provider first.
+		if family := management.ModelAliasFamily(file); len(aliases[family]) > 0 {
+			rules[authIndex] = aliases[family]
+		}
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	return func(authIndex, model string) string {
+		return management.ResolveOAuthModelAlias(model, rules[authIndex])
+	}
+}
+
 func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -657,6 +693,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	hasStoredReading := false
 
 	if h.repo != nil {
+		cooldownKeys := h.modelCooldownKeyResolver(ctx, client, map[string]management.AuthFile{authIndex: *targetFile})
 		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
 			if cooldown, ok := cooldowns[authIndex]; ok && cooldown.IsActive {
 				normalized.ActiveCooldown = &quota.ActiveCooldown{
@@ -670,7 +707,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 				}
 			}
 		}
-		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
+		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, []string{authIndex}, nowMS, cooldownKeys); err == nil {
 			normalized.ModelCooldowns = projectModelCooldowns(cooldowns[authIndex])
 		}
 		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
@@ -759,13 +796,15 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 	var modelCooldowns map[string][]repository.ActiveCooldownRecord
 
 	if h.repo != nil && len(authIndexes) > 0 {
+		// One alias read serves the whole fleet: it is what a stored cooldown spelling resolves to.
+		cooldownKeys := h.modelCooldownKeyResolver(ctx, client, fileMap)
 		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes); err == nil {
 			latestSnapshots = snapshots
 		}
 		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
 			activeCooldowns = cooldowns
 		}
-		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, authIndexes, nowMS); err == nil {
+		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, authIndexes, nowMS, cooldownKeys); err == nil {
 			modelCooldowns = cooldowns
 		}
 	}

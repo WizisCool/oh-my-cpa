@@ -87,6 +87,8 @@ export function validateOAuthModelAliasDrafts(
       return { ok: false, error: 'alias_same', alias };
     }
     const aliasKey = alias.toLowerCase();
+    // Only the alias is unique: CPA resolves a rule by the call point it names, so several
+    // aliases may reach one upstream model, and a Vertex rule may map it once per API shape.
     if (seenAliases.has(aliasKey)) {
       return { ok: false, error: 'alias_duplicate', alias };
     }

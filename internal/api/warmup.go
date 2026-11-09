@@ -48,8 +48,9 @@ type warmupRuntime struct {
 	// refreshBackoff holds the auth indices whose quota read failed, until the next attempt.
 	refreshBackoff map[string]time.Time
 	// aliasRules caches the OAuth model aliases CPA applies: one entry per credential file, read
-	// by downloading it, and the provider-wide map under warmupGlobalAliasKey.
-	aliasRules map[string]warmupAliasCacheEntry
+	// by downloading it, and the provider-wide map under globalAliasCacheKey. Both the warmup
+	// catalog and every quota read ask for the provider-wide map.
+	aliasRules map[string]aliasCacheEntry
 	// prices is the price book as warmup reads it, so a model choice costs no query per build.
 	prices *warmupPriceIndex
 }
@@ -64,10 +65,10 @@ type warmupPriceIndex struct {
 	expiresAt time.Time
 }
 
-// warmupGlobalAliasKey holds the provider-wide alias map; a credential file name is never empty.
-const warmupGlobalAliasKey = ""
+// globalAliasCacheKey holds the provider-wide alias map; a credential file name is never empty.
+const globalAliasCacheKey = ""
 
-type warmupAliasCacheEntry struct {
+type aliasCacheEntry struct {
 	credential []management.OAuthModelAlias
 	global     map[string][]management.OAuthModelAlias
 	expiresAt  time.Time
@@ -1021,15 +1022,15 @@ func (h *Handler) warmupModelUpstreams(ctx context.Context, client *management.C
 	if client == nil || len(models) == 0 {
 		return nil
 	}
-	global := h.warmupAliasRules(warmupGlobalAliasKey, func() (warmupAliasCacheEntry, error) {
+	global := h.cachedAliasRules(globalAliasCacheKey, func() (aliasCacheEntry, error) {
 		aliases, err := client.OAuthModelAliases(ctx)
-		return warmupAliasCacheEntry{global: aliases}, err
+		return aliasCacheEntry{global: aliases}, err
 	})
-	var credential warmupAliasCacheEntry
+	var credential aliasCacheEntry
 	if name := strings.TrimSpace(file.Name); name != "" && !file.RuntimeOnly {
-		credential = h.warmupAliasRules(name, func() (warmupAliasCacheEntry, error) {
+		credential = h.cachedAliasRules(name, func() (aliasCacheEntry, error) {
 			rules, err := client.CredentialModelAliases(ctx, name)
-			return warmupAliasCacheEntry{credential: rules}, err
+			return aliasCacheEntry{credential: rules}, err
 		})
 	}
 	rules := append(slices.Clone(credential.credential), global.global[management.ModelAliasFamily(file)]...)
@@ -1045,9 +1046,9 @@ func (h *Handler) warmupModelUpstreams(ctx context.Context, client *management.C
 	return upstream
 }
 
-// warmupAliasRules serves one alias source from the cache, reading it when stale. A failed read
+// cachedAliasRules serves one alias source from the cache, reading it when stale. A failed read
 // is not cached, so the next catalog build retries it.
-func (h *Handler) warmupAliasRules(key string, read func() (warmupAliasCacheEntry, error)) warmupAliasCacheEntry {
+func (h *Handler) cachedAliasRules(key string, read func() (aliasCacheEntry, error)) aliasCacheEntry {
 	now := h.now()
 	h.warmupRuntime.mu.Lock()
 	if cached, ok := h.warmupRuntime.aliasRules[key]; ok && now.Before(cached.expiresAt) {
@@ -1058,12 +1059,12 @@ func (h *Handler) warmupAliasRules(key string, read func() (warmupAliasCacheEntr
 
 	entry, err := read()
 	if err != nil {
-		return warmupAliasCacheEntry{}
+		return aliasCacheEntry{}
 	}
 	entry.expiresAt = now.Add(warmupModelCacheTTL)
 	h.warmupRuntime.mu.Lock()
 	if h.warmupRuntime.aliasRules == nil {
-		h.warmupRuntime.aliasRules = make(map[string]warmupAliasCacheEntry)
+		h.warmupRuntime.aliasRules = make(map[string]aliasCacheEntry)
 	}
 	h.warmupRuntime.aliasRules[key] = entry
 	h.warmupRuntime.mu.Unlock()

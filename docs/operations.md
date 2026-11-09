@@ -464,7 +464,9 @@ workflow rejects tags whose snapshot is more than 30 days older than the tagged 
   backoff; Meta Muse credentials refresh only on manual request.
 - **Cooldown scope**: CPA cools a credential or one of its models. The Quota page lists a
   model-scoped cooldown with its own recovery and retry instant and the gateway's backoff
-  level, and reports it as partial: the credential keeps serving its other models.
+  level, and reports it as partial: the credential keeps serving its other models. Spellings
+  that resolve to one upstream model - a mixed-case id, or an OAuth alias recorded before CPA
+  resolved it - are listed once, keeping the later recovery time.
 - **Credential window warmup**: OAuth management's **Warmup settings** drawer holds warmup
   tasks. A task names one credential and one trigger: after a quota window resets, daily at
   a chosen time and zone, or every N hours from an anchor. Its model stays empty by default:
