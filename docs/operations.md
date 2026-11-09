@@ -411,7 +411,8 @@ Installed plugin pages open through OMC's authenticated same-origin host; CPA do
 need to be reachable from the browser. Treat installation as granting trusted code access:
 native management responses can include configuration credentials, and a page written for
 CPAMC reads the gateway credential from browser storage, where the console mirrors it
-before the page loads and withdraws it when the session ends. Configuration-affecting
+before the page loads. Sign-out, a refused session check and the next sign-in withdraw it.
+Configuration-affecting
 calls through the Plugin Host are audited, serialized and backed up. See
 [Architecture](architecture.md#trusted-plugin-pages) for fixed-origin and header boundaries.
 

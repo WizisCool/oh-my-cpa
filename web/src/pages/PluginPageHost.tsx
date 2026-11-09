@@ -108,9 +108,10 @@ export const PluginPageHost: React.FC = () => {
       </div>
     );
   }
-  // The frame waits for the credential mirror, so the plugin's first paint already sees it.
-  // A re-read the reload control started keeps it waiting the same way.
-  if (credentialQuery.isFetching) return <ListLoading />;
+  // The frame waits for the first credential read, so the plugin's first paint already
+  // sees the mirror. A background refresh leaves a loaded page alone rather than
+  // unmounting it.
+  if (credentialQuery.isLoading) return <ListLoading />;
 
   return (
     <div className={styles.page} data-plugin-page={entry.pluginId}>
@@ -131,8 +132,8 @@ export const PluginPageHost: React.FC = () => {
               // A page whose credential could not be read recovers through the control the
               // operator already has: read it again, then load the plugin's document afresh.
               onClick={() => {
-                if (credentialQuery.isError) void credentialQuery.refetch();
-                setReloadCount((count) => count + 1);
+                const reread = credentialQuery.isError ? credentialQuery.refetch() : Promise.resolve();
+                void reread.finally(() => setReloadCount((count) => count + 1));
               }}
               aria-label={t('plugin.page_reload')}
             />

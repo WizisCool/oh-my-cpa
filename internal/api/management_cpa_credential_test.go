@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,31 @@ func TestCPACredentialRevealServesTheStoredKeyAndAuditsIt(t *testing.T) {
 	refused, refusedBody := doJSON(t, anonymous, http.MethodGet, baseURL+"/omc/api/v1/management/cpa-credential", "")
 	if refused.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated cpa credential status = %d body %s", refused.StatusCode, refusedBody)
+	}
+}
+
+// The reveal is a credential read: an audit store that cannot record it withholds the key.
+func TestCPACredentialRevealWithholdsTheKeyWhenTheAuditFails(t *testing.T) {
+	client, baseURL, repo, _ := startPluginTestServer(t)
+
+	if _, err := repo.SQL().Exec("DROP TABLE audit_events"); err != nil {
+		t.Fatalf("drop audit_events: %v", err)
+	}
+	response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/cpa-credential", "")
+	if response.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("cpa credential with an unhealthy audit store status = %d body %s", response.StatusCode, body)
+	}
+	var refusal struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &refusal); err != nil {
+		t.Fatalf("cpa credential refusal is not JSON: %v (%s)", err, body)
+	}
+	if refusal.Code != auditWriteFailedCode || !strings.Contains(refusal.Error, "audit") {
+		t.Fatalf("cpa credential refusal = %#v, want an audit error with code %q", refusal, auditWriteFailedCode)
+	}
+	if strings.Contains(string(body), "cpa-secret-key") {
+		t.Fatalf("cpa credential leaked the stored key while the audit write failed: %s", body)
 	}
 }

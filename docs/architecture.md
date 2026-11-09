@@ -91,7 +91,9 @@ called. The server key is injected only when neither management header was suppl
 A plugin page written for CPAMC reads the gateway credential from browser storage
 rather than from its host, so the console mirrors the stored key into the entry CPAMC
 keeps its own connection in (`cli-proxy-auth`, obfuscated the way CPAMC obfuscates it)
-before the frame loads, and withdraws it when the session ends. That entry is the only
+before the frame loads. Sign-out, a refused session check and the next sign-in withdraw
+it; a session that expires while no console tab is open leaves the entry in place until
+the console is next opened. That entry is the only
 copy of the key the browser holds; ordinary DTOs, logs and preferences still never
 carry it, and the plugin host still judges a page's own credential before CPA sees it.
 The frame's parent document also carries the console's colour mode and reading
