@@ -17,10 +17,24 @@
          one leaves the dark ground the console ships. -->
     <script id="omc-theme-boot">
       (function () {
+        // The preset-only document `theme/themePreference.ts` still migrates: `light` and `dark` are
+        // modes themselves, and a bare palette id answers with the mode it belongs to. `midnight`
+        // and `porcelain` are the two withdrawn ids its reader maps to `pewter` and `fog`; a palette
+        // added to that registry belongs here too, and the boot test answers the same values.
+        var legacyPaletteModes = {
+          'omc-dark': 'dark', pewter: 'dark', forest: 'dark', midnight: 'dark',
+          'omc-light': 'light', fog: 'light', sandstone: 'light', porcelain: 'light'
+        };
         try {
           var stored = window.localStorage.getItem('omc-theme');
           if (!stored) return;
-          var mode = stored.charAt(0) === '{' ? JSON.parse(stored).mode : stored;
+          var mode;
+          if (stored.charAt(0) === '{') {
+            mode = JSON.parse(stored).mode;
+          } else {
+            mode = stored.trim().toLowerCase();
+            if (legacyPaletteModes[mode]) mode = legacyPaletteModes[mode];
+          }
           if (mode === 'system') {
             mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
           }

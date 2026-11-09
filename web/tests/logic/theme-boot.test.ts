@@ -10,8 +10,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
-import { getBuiltInPalette } from '../../src/theme/palette.ts';
-import { THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
+import { BUILT_IN_PALETTES, getBuiltInPalette } from '../../src/theme/palette.ts';
+import { migrateLegacyThemeValue, THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
 
 const indexHTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
@@ -68,8 +68,31 @@ test('the document grounds each shipped mode in its own page colour, before the 
 test('the mode this browser chose is restored before the first paint', () => {
   assert.equal(groundedMode(JSON.stringify({ mode: 'dark', palettes: {}, custom: {} })), 'dark');
   assert.equal(groundedMode(JSON.stringify({ mode: 'light', dirty: true })), 'light');
-  // The preset-only form, still held by a browser that has not loaded the console since.
-  assert.equal(groundedMode('light'), 'light');
+});
+
+/**
+ * A preset-only document predates the JSON shape, and `themePreference.ts` still migrates it: a bare
+ * mode, or a bare palette id whose own mode is the answer. The document has to reach the same mode,
+ * or the console it paints first is the wrong one. The theme module supplies the expected answer for
+ * every id the registry carries, so a new palette that the boot script misses fails here.
+ */
+test('every legacy form the theme module migrates grounds the page in the same mode', () => {
+  const legacy = [
+    ...BUILT_IN_PALETTES.map((palette) => palette.id),
+    // The withdrawn ids, whose successor palettes decide the mode.
+    'midnight',
+    'porcelain',
+    // The reader trims and lowercases a preset-only value, and so does the document.
+    ' Fog ',
+    'OMC-DARK',
+    'light',
+    'dark',
+  ];
+  for (const stored of legacy) {
+    const expected = migrateLegacyThemeValue(stored)?.mode;
+    assert.ok(expected, `themePreference.ts no longer migrates ${JSON.stringify(stored)}`);
+    assert.equal(groundedMode(stored), expected, `legacy ${JSON.stringify(stored)}`);
+  }
 });
 
 test('following the system resolves against what the system reports', () => {
