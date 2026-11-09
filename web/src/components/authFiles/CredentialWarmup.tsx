@@ -273,8 +273,12 @@ function TaskEditorModal({
         {draft.trigger.kind === 'window' && (
           <div className={styles['field']}>
             <span className={styles['field-label']}>{t('warmup.window_select')}</span>
+            {/* A window's label is the provider's own, such as "Gemini Models · 5小时限制", so the
+                options do not fit one row at any dialog width: laid out as a row each one was
+                truncated to its middle, which left two families' five-hour windows reading alike. */}
             <Segmented
               block
+              vertical
               aria-label={t('warmup.window_select')}
               value={draft.trigger.window || windows[0]}
               disabled={isDisabled}

@@ -62,6 +62,10 @@ it('creates a new warmup task from the settings drawer', async () => {
 
   fireEvent.click(screen.getByTestId('warmup-add-task'));
   const dialog = await screen.findByTestId('warmup-task-editor');
+  // A window's label is the provider's own ("Gemini Models · 5小时限制"), which does not fit one row
+  // of options: laid out as a row, each label was truncated to its middle and two providers'
+  // five-hour windows read alike.
+  expect(within(dialog).getByRole('radiogroup', { name: 'Target window' }).getAttribute('aria-orientation')).toBe('vertical');
   fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Morning Claude Warmup' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await screen.findByText('Morning Claude Warmup');
