@@ -35,7 +35,7 @@ func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
 	if err != nil || credential["auth-model"].IsActive {
 		t.Fatalf("model cooldown must not block credential: %+v %v", credential, err)
 	}
-	models, err := repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.UnixMilli())
+	models, err := repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.UnixMilli(), nil)
 	if err != nil || len(models["auth-model"]) != 2 {
 		t.Fatalf("model cooldowns = %+v, %v", models, err)
 	}
@@ -46,7 +46,7 @@ func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
 	if got := byModel["model-a"]; !got.IsActive || got.BackoffLevel != 6 || got.RecoverAtMS == nil || *got.RecoverAtMS != now.Add(time.Hour).UnixMilli() || got.RetryAtMS == nil || *got.RetryAtMS != now.Add(time.Hour).UnixMilli() {
 		t.Fatalf("model-a = %+v", got)
 	}
-	models, err = repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.Add(90*time.Minute).UnixMilli())
+	models, err = repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.Add(90*time.Minute).UnixMilli(), nil)
 	if err != nil || len(models["auth-model"]) != 1 || models["auth-model"][0].Model != "model-b" {
 		t.Fatalf("independent expiry = %+v, %v", models, err)
 	}
@@ -59,7 +59,7 @@ func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
 	if err != nil || !global["auth-both"].IsActive || global["auth-both"].BackoffLevel != 3 || *global["auth-both"].RecoverAtMS != now.Add(time.Hour).UnixMilli() {
 		t.Fatalf("global cooldown = %+v, %v", global, err)
 	}
-	modelScope, err := repo.BatchModelCooldowns(ctx, []string{"auth-both"}, now.UnixMilli())
+	modelScope, err := repo.BatchModelCooldowns(ctx, []string{"auth-both"}, now.UnixMilli(), nil)
 	if err != nil || len(modelScope["auth-both"]) != 1 || modelScope["auth-both"][0].Model != "actual-model" || modelScope["auth-both"][0].BackoffLevel != 6 {
 		t.Fatalf("model scope = %+v, %v", modelScope, err)
 	}
@@ -73,7 +73,7 @@ func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
 	if err != nil || !global["auth-global"].IsActive || global["auth-global"].BackoffLevel != 4 {
 		t.Fatalf("credential quota = %+v, %v", global, err)
 	}
-	modelScope, err = repo.BatchModelCooldowns(ctx, []string{"auth-global"}, now.UnixMilli())
+	modelScope, err = repo.BatchModelCooldowns(ctx, []string{"auth-global"}, now.UnixMilli(), nil)
 	if err != nil || len(modelScope["auth-global"]) != 0 {
 		t.Fatalf("inherited model should not appear independent: %+v, %v", modelScope, err)
 	}
@@ -83,9 +83,73 @@ func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
 	if err := repo.ClearCooldownEvidence(ctx, "auth-model"); err != nil {
 		t.Fatal(err)
 	}
-	models, err = repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.UnixMilli())
+	models, err = repo.BatchModelCooldowns(ctx, []string{"auth-model"}, now.UnixMilli(), nil)
 	if err != nil || len(models["auth-model"]) != 0 {
 		t.Fatalf("clear model evidence = %+v, %v", models, err)
+	}
+}
+
+// One upstream model can be stored under several spellings: CPA compared model cooldown keys
+// case-insensitively only after the events were written, and an alias recorded before the
+// mapping existed kept the name the operator typed. Each one must read as one resting model.
+func TestModelCooldownSpellingsCollapse(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := testRepository(t)
+	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO cpa_instances (id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at) VALUES ('default', 'Default', 'http://127.0.0.1:8317', '127.0.0.1:8317', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 9, 4, 52, 0, 0, time.UTC)
+	insert := func(eventKey, authIndex, model string, recordedAt, recoveringAt time.Time) {
+		t.Helper()
+		if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO error_events (instance_id,event_key,auth_index,cooldown_model,model_quota_exceeded,model_next_retry_after_ms,model_next_recover_at_ms,model_backoff_level,timestamp_ms,created_at_ms) VALUES ('default',?,?,?,1,?,?,6,?,?)`,
+			eventKey, authIndex, model, recoveringAt.UnixMilli(), recoveringAt.UnixMilli(), recordedAt.UnixMilli(), now.UnixMilli()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	one := func(authIndex string, resolve ModelCooldownKeyResolver) []ActiveCooldownRecord {
+		t.Helper()
+		records, err := repo.BatchModelCooldowns(ctx, []string{authIndex}, now.UnixMilli(), resolve)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return records[authIndex]
+	}
+
+	// A mixed-case spelling is the same model, and the newer row may recover sooner than the
+	// older one: the countdown must not end early.
+	insert("case-old", "auth-case", "DeepSeek-V4.1-flash-sg", now.Add(-10*time.Minute), now.Add(2*time.Hour))
+	insert("case-new", "auth-case", "deepseek-v4.1-flash-sg", now, now.Add(10*time.Minute))
+	collapsed := one("auth-case", nil)
+	if len(collapsed) != 1 {
+		t.Fatalf("mixed-case spellings = %+v", collapsed)
+	}
+	if collapsed[0].Model != "deepseek-v4.1-flash-sg" || !collapsed[0].IsActive || collapsed[0].RecoverAtMS == nil || *collapsed[0].RecoverAtMS != now.Add(2*time.Hour).UnixMilli() || collapsed[0].BackoffLevel != 6 {
+		t.Fatalf("merged cooldown = %+v", collapsed[0])
+	}
+
+	// The newest spelling may already have recovered while the older one is still resting.
+	insert("expired-new", "auth-expired", "model-x", now.Add(-time.Minute), now.Add(-time.Minute))
+	insert("resting-old", "auth-expired", "MODEL-X", now.Add(-20*time.Minute), now.Add(time.Hour))
+	resting := one("auth-expired", nil)
+	if len(resting) != 1 || resting[0].Model != "model-x" || !resting[0].IsActive || resting[0].RecoverAtMS == nil || *resting[0].RecoverAtMS != now.Add(time.Hour).UnixMilli() {
+		t.Fatalf("recovered newest spelling = %+v", resting)
+	}
+
+	// An alias recorded before CPA resolved it is the upstream model it reaches; without the
+	// alias table the two spellings stay apart rather than merging on a guess.
+	insert("alias-old", "auth-alias", "DeepSeek V4.1 flash", now.Add(-30*time.Minute), now.Add(time.Hour))
+	insert("alias-new", "auth-alias", "deepseek-v4.1-flash-sg", now.Add(-20*time.Minute), now.Add(2*time.Hour))
+	if unfolded := one("auth-alias", nil); len(unfolded) != 2 {
+		t.Fatalf("alias without rules = %+v", unfolded)
+	}
+	resolved := one("auth-alias", func(_ string, model string) string {
+		if model == "DeepSeek V4.1 flash" {
+			return "deepseek-v4.1-flash-sg"
+		}
+		return model
+	})
+	if len(resolved) != 1 || resolved[0].Model != "deepseek-v4.1-flash-sg" || resolved[0].RecoverAtMS == nil || *resolved[0].RecoverAtMS != now.Add(2*time.Hour).UnixMilli() {
+		t.Fatalf("alias resolved = %+v", resolved)
 	}
 }
 

@@ -85,6 +85,10 @@ func newQuotaAutoRefreshHandler(t *testing.T, fixture *quotaAutoRefreshFixture) 
 				"plan_type": "pro",
 				"rate_limit": {"primary_window": {"used_percent": %d, "limit_window_seconds": 18000, "reset_after_seconds": 18000}}
 			}}`, usedPercent)
+		case "/v8/management/config/oauth/model-alias":
+			// One provider-wide rule, so a cooldown stored before CPA resolved it is read as the
+			// upstream model it reaches.
+			_, _ = writer.Write([]byte(`{"codex":[{"name":"gpt-5","alias":"GPT-5-Fast"}]}`))
 		case "/v8/management/routing/cooldown/reset":
 			var payload struct {
 				AuthIndex string `json:"auth_index"`
@@ -437,6 +441,64 @@ func TestQuotaOverviewReportsModelCooldownWithoutBlockingCredential(t *testing.T
 		}
 		if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil || len(detail.Quota.ModelCooldowns) != 1 || detail.Quota.ModelCooldowns[0].Model != "gpt-5" || detail.Quota.ModelCooldowns[0].BackoffLevel != 6 {
 			t.Fatalf("detail = %+v, %v", detail, err)
+		}
+		return
+	}
+	t.Fatal("missing codex-unread")
+}
+
+// CPA keys a model cooldown by the model an alias reaches, and only compared those keys without
+// case after OMC had already stored events: both spellings of one model must read as one
+// resting model, with the later recovery time and the newest spelling.
+func TestQuotaOverviewMergesCooldownSpellingsOfOneModel(t *testing.T) {
+	ctx := context.Background()
+	handler := newQuotaAutoRefreshHandler(t, &quotaAutoRefreshFixture{reads: map[string]int{}})
+	nowMS := time.Now().UnixMilli()
+	insertCooldown := func(eventKey, model string, recordedAtMS, recoverAtMS int64) {
+		t.Helper()
+		if _, err := handler.repo.SQL().ExecContext(ctx, `INSERT INTO error_events (instance_id,event_key,auth_index,cooldown_model,model_quota_exceeded,model_next_recover_at_ms,model_backoff_level,timestamp_ms,created_at_ms) VALUES ('default',?,'codex-unread',?,1,?,6,?,?)`,
+			eventKey, model, recoverAtMS, recordedAtMS, nowMS); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertCooldown("alias-row", "GPT-5-Fast", nowMS-60_000, nowMS+30*60_000)
+	insertCooldown("canonical-row", "gpt-5", nowMS-30_000, nowMS+10*60_000)
+
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := handler.buildQuotaOverview(ctx, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range overview.Quotas {
+		if item.AuthIndex != "codex-unread" {
+			continue
+		}
+		if len(item.ModelCooldowns) != 1 || item.ModelCooldowns[0].Model != "gpt-5" || item.ModelCooldowns[0].RecoverAtMS == nil || *item.ModelCooldowns[0].RecoverAtMS != nowMS+30*60_000 {
+			t.Fatalf("overview model cooldowns = %+v", item.ModelCooldowns)
+		}
+		router := chi.NewRouter()
+		router.Get("/quota/{authIndex}", handler.getCredentialQuotaDetail)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/quota/codex-unread", nil))
+		var detail struct {
+			Quota struct {
+				ModelCooldowns []struct {
+					Model       string `json:"model"`
+					RecoverAtMS *int64 `json:"recover_at_ms"`
+				} `json:"model_cooldowns"`
+			} `json:"quota"`
+		}
+		if response.Code != http.StatusOK {
+			t.Fatalf("detail HTTP status = %d, body = %s", response.Code, response.Body.String())
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil || len(detail.Quota.ModelCooldowns) != 1 {
+			t.Fatalf("detail = %+v, %v", detail, err)
+		}
+		if got := detail.Quota.ModelCooldowns[0]; got.Model != "gpt-5" || got.RecoverAtMS == nil || *got.RecoverAtMS != nowMS+30*60_000 {
+			t.Fatalf("detail model cooldown = %+v", got)
 		}
 		return
 	}

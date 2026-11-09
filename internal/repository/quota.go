@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -556,19 +557,28 @@ func (r *Repository) QueryCredentialModelWindowUsage(ctx context.Context, authIn
 	return result, rows.Err()
 }
 
-// BatchModelCooldowns retains an independent cooldown for each model on a credential.
-func (r *Repository) BatchModelCooldowns(ctx context.Context, authIndexes []string, nowMS int64) (map[string][]ActiveCooldownRecord, error) {
-	return r.batchModelCooldowns(ctx, authIndexes, nowMS, false)
+// ModelCooldownKeyResolver maps a stored cooldown spelling onto the key CPA now resolves it
+// under: the upstream model a call point names, or the spelling itself when nothing renames it.
+// A nil resolver groups by spelling alone.
+type ModelCooldownKeyResolver func(authIndex string, model string) string
+
+// BatchModelCooldowns retains one cooldown for each upstream model on a credential. Rows that
+// name one model under different spellings - a mixed-case id, or an alias recorded before CPA
+// resolved it - collapse into the newest row's spelling, extended to the later instant so a live
+// cooldown is never shortened.
+func (r *Repository) BatchModelCooldowns(ctx context.Context, authIndexes []string, nowMS int64, resolve ModelCooldownKeyResolver) (map[string][]ActiveCooldownRecord, error) {
+	return r.batchModelCooldowns(ctx, authIndexes, nowMS, false, resolve)
 }
 
 // HasActiveModelCooldownEvidence includes inherited states because a credential-wide reset
-// could also erase an independent model state hidden beneath CPA's propagated cooldown.
+// could also erase an independent model state hidden beneath CPA's propagated cooldown. It asks
+// whether any model is resting, which grouping cannot change, so it groups by spelling alone.
 func (r *Repository) HasActiveModelCooldownEvidence(ctx context.Context, authIndex string, nowMS int64) (bool, error) {
-	cooldowns, err := r.batchModelCooldowns(ctx, []string{authIndex}, nowMS, true)
+	cooldowns, err := r.batchModelCooldowns(ctx, []string{authIndex}, nowMS, true, nil)
 	return len(cooldowns[authIndex]) > 0, err
 }
 
-func (r *Repository) batchModelCooldowns(ctx context.Context, authIndexes []string, nowMS int64, includeInherited bool) (map[string][]ActiveCooldownRecord, error) {
+func (r *Repository) batchModelCooldowns(ctx context.Context, authIndexes []string, nowMS int64, includeInherited bool, resolve ModelCooldownKeyResolver) (map[string][]ActiveCooldownRecord, error) {
 	result := make(map[string][]ActiveCooldownRecord)
 	if r == nil || r.SQL() == nil || len(authIndexes) == 0 {
 		return result, nil
@@ -592,19 +602,15 @@ func (r *Repository) batchModelCooldowns(ctx context.Context, authIndexes []stri
 		return nil, fmt.Errorf("query model cooldowns: %w", err)
 	}
 	defer rows.Close()
-	seen := make(map[string]map[string]bool)
+	// Each key holds the position of the row it first appeared as, so a later spelling of the
+	// same model extends that row instead of adding a second countdown beside it.
+	seen := make(map[string]map[string]int)
 	for rows.Next() {
 		var record ActiveCooldownRecord
 		var retry, recoverAt sql.NullInt64
 		var timestamp int64
 		if err := rows.Scan(&record.AuthIndex, &record.Model, &record.Reason, &retry, &recoverAt, &record.BackoffLevel, &timestamp); err != nil {
 			return nil, fmt.Errorf("scan model cooldown: %w", err)
-		}
-		if seen[record.AuthIndex] == nil {
-			seen[record.AuthIndex] = make(map[string]bool)
-		}
-		if seen[record.AuthIndex][record.Model] {
-			continue
 		}
 		record.CorrelatedAtMS = &timestamp
 		if retry.Valid && retry.Int64 > 0 {
@@ -618,12 +624,56 @@ func (r *Repository) batchModelCooldowns(ctx context.Context, authIndexes []stri
 		if record.RetryAtMS == nil && record.RecoverAtMS == nil {
 			record.IsActive = nowMS-timestamp < 5*60*1000
 		}
-		if record.IsActive {
-			seen[record.AuthIndex][record.Model] = true
-			result[record.AuthIndex] = append(result[record.AuthIndex], record)
+		if seen[record.AuthIndex] == nil {
+			seen[record.AuthIndex] = make(map[string]int)
+		}
+		key := modelCooldownKey(record.AuthIndex, record.Model, resolve)
+		if position, exists := seen[record.AuthIndex][key]; exists {
+			// The rows arrive newest first, so the kept row already holds the spelling and the
+			// reason to display; an older row may still be resting longer.
+			mergeModelCooldown(&result[record.AuthIndex][position], record)
+			continue
+		}
+		seen[record.AuthIndex][key] = len(result[record.AuthIndex])
+		result[record.AuthIndex] = append(result[record.AuthIndex], record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Active is decided after merging: a spelling CPA no longer has can still be the row that
+	// was resting longest, and the row kept for display may be one that already recovered.
+	for authIndex, records := range result {
+		result[authIndex] = slices.DeleteFunc(records, func(record ActiveCooldownRecord) bool { return !record.IsActive })
+	}
+	return result, nil
+}
+
+// modelCooldownKey is the identity CPA keys one model's cooldown under: the upstream model the
+// spelling resolves to, compared without case.
+func modelCooldownKey(authIndex, model string, resolve ModelCooldownKeyResolver) string {
+	if resolve != nil {
+		if resolved := resolve(authIndex, model); resolved != "" {
+			model = resolved
 		}
 	}
-	return result, rows.Err()
+	return strings.ToLower(strings.TrimSpace(model))
+}
+
+// mergeModelCooldown keeps the newer row's identity and takes the later instant of the two.
+func mergeModelCooldown(existing *ActiveCooldownRecord, candidate ActiveCooldownRecord) {
+	existing.IsActive = existing.IsActive || candidate.IsActive
+	existing.RetryAtMS = laterInstantMS(existing.RetryAtMS, candidate.RetryAtMS)
+	existing.RecoverAtMS = laterInstantMS(existing.RecoverAtMS, candidate.RecoverAtMS)
+}
+
+func laterInstantMS(left, right *int64) *int64 {
+	switch {
+	case right == nil:
+		return left
+	case left == nil || *right > *left:
+		return right
+	}
+	return left
 }
 
 // BatchExpiredCooldowns returns, per auth index, the latest recovery time of its stored

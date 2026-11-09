@@ -224,6 +224,8 @@ func normalizeManagementOAuthModelAliases(entries []managementOAuthModelAlias) (
 			return nil, errors.New("model alias must differ from the upstream model name")
 		}
 		aliasKey := strings.ToLower(alias)
+		// Only the alias is unique: CPA resolves a rule by the call point it names, so several
+		// aliases may reach one upstream model, and a Vertex rule may map it once per API shape.
 		if _, exists := seenAlias[aliasKey]; exists {
 			return nil, fmt.Errorf("model alias %q is duplicated", alias)
 		}
