@@ -131,3 +131,24 @@ it('masks an account a credential is named after and reveals it on click', async
   const named = screen.getByRole('listitem', { name: 'Team seat' });
   expect(within(named).queryByTitle('Show account')).toBeNull();
 });
+
+it('opens the failover disclosure after a translator rewrote the toggle text', async () => {
+  const api = installOmcApi();
+  api.on('GET', '/management/routing', () => board);
+  renderRoutingPage();
+
+  const toggle = await screen.findByRole('button', { name: /Failover/ });
+  // Chrome Translate replaces each text node with a <font> that holds the translation, while React
+  // still refers to the original node when it swaps the chevron icon in front of it.
+  const walker = document.createTreeWalker(toggle, NodeFilter.SHOW_TEXT);
+  let text: Node | null = null;
+  while (walker.nextNode()) if (walker.currentNode.textContent === 'Failover') text = walker.currentNode;
+  expect(text).toBeTruthy();
+  const font = document.createElement('font');
+  text!.parentNode!.replaceChild(font, text!);
+  font.appendChild(text!);
+
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  expect(await screen.findByLabelText('Request Retries')).toBeTruthy();
+});
