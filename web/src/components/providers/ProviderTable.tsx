@@ -20,9 +20,9 @@ import { StatusLabel } from '../common/StatusLabel';
 import styles from './ProviderTable.module.css';
 import type { useProviderManagement } from './useProviderManagement';
 import {
+  providerCallPoints,
   providerHeaderCount,
   providerKeyCount,
-  providerModelCount,
   type ProviderTraffic,
 } from './providerOverview';
 import { Tag } from '../common/Tag';
@@ -314,14 +314,16 @@ export function ProviderTable({
       // on one line; counts too long for it wrap rather than run into the traffic column.
       width: columnWidth('models_headers'),
       render: (_, record) => {
-        const modelCount = providerModelCount(record);
+        // The badge counts what the row publishes, so a model behind an alias is listed as the alias
+        // a client requests; the request model follows it, because that is what the alias maps onto.
+        const callPoints = providerCallPoints(record);
         const keyCount = providerKeyCount(record);
         const headerCount = providerHeaderCount(record);
-        const modelNames = record.model_entries?.length ? record.model_entries.map((m) => m.name) : record.models ?? [];
+        const callPointNames = callPoints.map(({ name, upstream }) => (upstream ? `${name} ← ${upstream}` : name));
         return (
           <div className={styles['count-badges']}>
-            <GlyphBadge glyph={<BoxOutlined />} label={t('pro.model_count_pill', { n: modelCount })} items={modelNames}>
-              <span>{modelCount}</span>
+            <GlyphBadge glyph={<BoxOutlined />} label={t('pro.model_count_pill', { n: callPoints.length })} items={callPointNames}>
+              <span>{callPoints.length}</span>
             </GlyphBadge>
             {/* A switched-on row without a key cannot serve, so its key count is the badge that
                 says why the row counts toward "needs attention". */}

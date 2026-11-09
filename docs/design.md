@@ -86,8 +86,9 @@ leading edge drags to resize it and a click restores the opening width. The widt
 server preference per `widthKey`, so panels that show the same kind of thing share one.
 Keep semantic HTML, labels,
 focus management and accessible names when adapting a library component. Number fields
-use [`NumberInput`](../web/src/components/common/NumberInput.tsx): the wheel steps the
-field under the pointer by its own step and bounds, without a click.
+use [`NumberInput`](../web/src/components/common/NumberInput.tsx): once it holds the
+caret, the wheel steps the field by its own step and bounds. A value never changes for a
+pointer that merely crosses the control, so a wheel scrolls the page it was meant for.
 
 In form grids (such as `.settings-form-grid`), controls must maintain consistent horizontal
 alignment across columns. Field labels sit at the top of each cell, input controls sit directly

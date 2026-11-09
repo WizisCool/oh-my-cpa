@@ -12,6 +12,10 @@ const WHEEL_STEP_PX = 50;
  * summed and steps once per `WHEEL_STEP_PX`, so one swipe on a touchpad does not race through the
  * range.
  *
+ * Being over the element is not on its own a request for a change: `isEnabled` and `canStep` are
+ * where a caller says the reader has engaged the control - a field holding the caret, an editor
+ * that is open - so a wheel that merely crosses the control still scrolls the page.
+ *
  * `canStep` is asked on every wheel event, before the page's scroll is taken: a control that is
  * disabled by something other than its own props (a disabled form around it) leaves the page
  * scrolling instead of swallowing the wheel for a step it cannot take.

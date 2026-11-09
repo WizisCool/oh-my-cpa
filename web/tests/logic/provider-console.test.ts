@@ -16,6 +16,7 @@ import {
   DEFAULT_PROVIDER_FILTERS,
   matchesProviderSearch,
   needsAttention,
+  providerCallPoints,
   providerTrafficById,
   summarizeProviders,
   totalProviderTraffic,
@@ -359,6 +360,23 @@ test('provider console', () => {
   assert.equal(matchesProviderSearch(overviewRows[0], 'GPT-5'), true);
   assert.equal(matchesProviderSearch(overviewRows[0], 'relay.example'), true);
   assert.equal(matchesProviderSearch(overviewRows[0], 'claude'), false);
+
+  // The list publishes call points, not request models: an entry behind an alias is named by the
+  // alias a client requests, and the request model follows because that is what it maps onto. Two
+  // entries can publish one upstream model under different aliases, which the names alone cannot
+  // tell apart.
+  assert.deepEqual(providerCallPoints(overviewRows[0]), [{ name: 'gpt-5' }], 'an entry without an alias publishes its request model');
+  assert.deepEqual(
+    providerCallPoints({
+      ...overviewRows[0],
+      model_entries: [{ name: 'gpt-5.6-luna', alias: 'gpt-5.6-luna' }, { name: 'gpt-5.6-luna', alias: 'codex-auto-review' }, { name: 'o3' }],
+    }),
+    [{ name: 'gpt-5.6-luna' }, { name: 'codex-auto-review', upstream: 'gpt-5.6-luna' }, { name: 'o3' }],
+    'an alias is the call point, and only a differing one carries its request model',
+  );
+  // A row written before model entries existed still publishes its plain model list.
+  assert.deepEqual(providerCallPoints({ ...overviewRows[1], models: ['gpt-5.4', 'claude-sonnet-4'] }), [{ name: 'gpt-5.4' }, { name: 'claude-sonnet-4' }]);
+  assert.deepEqual(providerCallPoints(overviewRows[2]), [], 'a row with no models publishes none');
 
   // Each facet counts under the other facet's selection, so a tile says what choosing it shows.
   const everything = summarizeProviders(overviewRows, DEFAULT_PROVIDER_FILTERS, enabledOf, overviewTraffic);

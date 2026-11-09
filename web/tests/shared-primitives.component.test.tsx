@@ -9,6 +9,7 @@ import { AppDrawer } from '../src/components/common/AppDrawer';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
 import { Meter } from '../src/components/common/Meter';
+import { NumberInput } from '../src/components/common/NumberInput';
 import { Pager } from '../src/components/common/Pager';
 import { SearchInput } from '../src/components/common/SearchInput';
 import { SectionHeading } from '../src/components/common/SectionHeading';
@@ -225,6 +226,39 @@ describe('SelectionBar', () => {
     expect(container.querySelector('.selection-bar.is-framed')).toBeTruthy();
     expect(container.querySelector('.selection-bar-note')?.textContent).toBe('2 on other pages');
     expect(container.querySelector('.selection-bar-actions button')?.textContent).toBe('Delete');
+  });
+});
+
+describe('NumberInput', () => {
+  /** Dispatches one notch over the field; a prevented wheel is one the field took for itself. */
+  const wheelOver = (input: HTMLElement, deltaY: number) =>
+    input.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
+
+  it('steps the field only once the caret is in it, so a wheel crossing it still scrolls', () => {
+    const onChange = vi.fn();
+    render(<NumberInput value={2} onChange={onChange} />);
+    const input = screen.getByRole('spinbutton');
+
+    // A wheel that only crosses the field belongs to the page: the value holds, the caret stays out,
+    // and the event is left uncancelled so the scroll it was meant for still happens.
+    expect(wheelOver(input, -100)).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(input);
+
+    act(() => input.focus());
+
+    // Holding the caret, the field takes the notch as its own step.
+    expect(wheelOver(input, -100)).toBe(false);
+    expect(onChange.mock.calls).toEqual([[3]]);
+  });
+
+  it('leaves the wheel to the page when it is disabled', () => {
+    const onChange = vi.fn();
+    render(<NumberInput value={2} onChange={onChange} disabled />);
+    const input = screen.getByRole('spinbutton');
+
+    expect(wheelOver(input, -100)).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
