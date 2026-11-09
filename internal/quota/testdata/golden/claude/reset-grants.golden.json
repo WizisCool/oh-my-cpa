@@ -17,6 +17,13 @@
       ]
     },
     {
+      "id": "grant-3",
+      "label": "New model launch: one Fable reset for Pro and Team Standard, launch week only",
+      "resets_total": 1,
+      "resets_left": 1,
+      "ends_at_ms": 1791417600000
+    },
+    {
       "id": "grant-2",
       "resets_total": 1,
       "resets_left": 0

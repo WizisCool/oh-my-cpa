@@ -99,8 +99,8 @@ type ClaudeResetGrant struct {
 	Clears      []string `json:"clears,omitempty"`
 }
 
-// claudeResetGrantWindows are the usage windows a grant can clear. Windows the
-// provider adds later are dropped, never guessed.
+// claudeResetGrantWindows are the usage windows a grant can clear. A grant that
+// names any other window keeps none: its own label is then the only description.
 var claudeResetGrantWindows = map[string]bool{
 	"five_hour": true, "seven_day": true, "seven_day_overage_included": true,
 }
@@ -163,11 +163,17 @@ func ParseClaudeResetGrants(raw []byte) []ClaudeResetGrant {
 			}
 			endsAtMS = &parsed
 		}
-		clears := make([]string, 0)
+		// A grant that names a window this parser does not know is not partly
+		// described by the windows it does know: a launch grant for one model's
+		// weekly limit listed only as "five_hour" would tell the operator it
+		// restores something else. Its clears are then withheld as a whole.
+		clears := make([]string, 0, len(rawGrant.Clears))
 		for _, window := range rawGrant.Clears {
-			if claudeResetGrantWindows[window] {
-				clears = append(clears, window)
+			if !claudeResetGrantWindows[window] {
+				clears = clears[:0]
+				break
 			}
+			clears = append(clears, window)
 		}
 		grants = append(grants, ClaudeResetGrant{
 			ID:          rawGrant.ID,
