@@ -137,7 +137,7 @@
   align-items: center;
   gap: 10px;
   min-height: 38px;
-  padding: 0 14px;
+  padding: 8px 14px;
   border-top: 1px solid var(--border);
   background: var(--surface);
   color: var(--meta);
@@ -157,10 +157,12 @@
   margin-left: auto;
 }
 
+/* A note too long for the foot wraps beside the tag instead of pushing it out of the card. */
 .foot-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .note {
