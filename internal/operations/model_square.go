@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
@@ -28,8 +27,6 @@ type ModelSquareProvider struct {
 	IsOAuth      bool   `json:"is_oauth"`
 	IconID       string `json:"icon_id,omitempty"`
 }
-
-const MODEL_SQUARE_ENRICHMENT_TIMEOUT = 5 * time.Second
 
 var ErrClientKeyRequired = errors.New("client_key_required")
 
@@ -103,6 +100,7 @@ func ProjectModelSquare(snapshot management.ConfiguredModelSnapshot, aliases map
 	return directory
 }
 
+// ListModelSquare combines live availability with cached provider provenance.
 func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (ModelSquareDirectory, error) {
 	client, err := s.Client(ctx)
 	if err != nil {
@@ -130,60 +128,11 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 	if err != nil {
 		return ModelSquareDirectory{}, err
 	}
-	// Availability has already been read. All optional provenance shares one
-	// budget, so credential count and slow follow-up reads cannot consume the
-	// HTTP server's write timeout or hide advertised models.
-	enrichmentCtx, cancelEnrichment := context.WithTimeout(ctx, MODEL_SQUARE_ENRICHMENT_TIMEOUT)
-	defer cancelEnrichment()
-	snapshot, snapshotErr := client.ListConfiguredModelProvenance(enrichmentCtx)
-	// A native API-key entry may rely on CPA's built-in catalog rather than listing
-	// every model in configuration. Resolve only those configured families, never the
-	// OpenRouter universe, and apply that entry's exclusions before publishing routes.
-	hasMissingModels := false
-	definitions := map[string][]management.AuthModel{}
-	for index := range snapshot.Providers {
-		provider := &snapshot.Providers[index]
-		if provider.IsOAuth || len(provider.Routes) > 0 {
-			continue
-		}
-		if provider.Family == "openai-compatibility" {
-			hasMissingModels = true
-			continue
-		}
-		models, hasDefinitions := definitions[provider.Family]
-		if !hasDefinitions {
-			models, err = client.StaticModelDefinitions(enrichmentCtx, provider.Family)
-			if err != nil {
-				models = nil
-			}
-			definitions[provider.Family] = models
-		}
-		if models == nil {
-			hasMissingModels = true
-			continue
-		}
-		for _, model := range models {
-			if IsModelExcluded(model.ID, provider.ExcludedModels) {
-				continue
-			}
-			callPoint := model.ID
-			if provider.Prefix != "" {
-				callPoint = strings.TrimSuffix(provider.Prefix, "/") + "/" + callPoint
-			}
-			provider.Routes = append(provider.Routes, management.ConfiguredModelRoute{UpstreamModel: model.ID, CallPoint: callPoint})
-		}
-	}
-	// Alias rules observed before the budget expires remain valid provenance.
-	// Re-reading them here could erase resolved identities after a later timeout.
-	aliases, hasAliases := snapshot.OAuthAliases, snapshot.HasOAuthAliases
-	if !hasAliases {
-		var aliasErr error
-		aliases, aliasErr = client.OAuthModelAliases(enrichmentCtx)
-		hasAliases = aliasErr == nil
-	}
-	directory := ProjectModelSquare(snapshot, aliases, hasAliases)
-	if snapshotErr != nil {
-		directory.Partial = append(directory.Partial, "routes")
+	// Live availability remains authoritative; provenance never performs gateway
+	// reads on the page request, including while the first background sweep runs.
+	directory := ModelSquareDirectory{Providers: []ModelSquareProvider{}, Routes: []ModelSquareRoute{}, Partial: []string{"routes"}}
+	if s.ModelSquareProvenance != nil {
+		directory = s.ModelSquareProvenance(client.BaseURL())
 	}
 	directory = RetainAdvertisedModels(directory, advertised)
 	identities := []string{}
@@ -196,9 +145,6 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 	}
 	directory.ModelInfo = modelcatalog.DEFAULT_CATALOG.Select(identities)
 	directory.MetadataUpdatedAt = modelcatalog.DEFAULT_CATALOG.UpdatedAt
-	if hasMissingModels {
-		directory.Partial = append(directory.Partial, "provider_models")
-	}
 	if s.Repo != nil {
 		names := map[string]string{}
 		icons := map[string]string{}
@@ -218,6 +164,76 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 			}
 			provider.IconID = icons[provider.ID]
 		}
+	}
+	return directory, nil
+}
+
+// LoadModelSquareProvenance builds a non-secret cache entry from every credential.
+// Missing definition capabilities produce partial provenance; operational failures
+// refuse the sweep so the caller can retain the last successful entry.
+func LoadModelSquareProvenance(ctx context.Context, client *management.Client) (ModelSquareDirectory, error) {
+	snapshot, err := client.ListAllConfiguredModelProvenance(ctx)
+	if err != nil {
+		return ModelSquareDirectory{}, err
+	}
+	// A native API-key entry may rely on CPA's built-in catalog rather than listing
+	// every model in configuration. Resolve only those configured families, never the
+	// OpenRouter universe, and apply that entry's exclusions before publishing routes.
+	hasMissingModels := false
+	definitions := map[string][]management.AuthModel{}
+	for index := range snapshot.Providers {
+		provider := &snapshot.Providers[index]
+		if provider.IsOAuth || len(provider.Routes) > 0 {
+			continue
+		}
+		if provider.Family == "openai-compatibility" {
+			hasMissingModels = true
+			continue
+		}
+		models, hasDefinitions := definitions[provider.Family]
+		if !hasDefinitions {
+			models, err = client.StaticModelDefinitions(ctx, provider.Family)
+			if err != nil {
+				if ctx.Err() != nil {
+					return ModelSquareDirectory{}, ctx.Err()
+				}
+				if !management.IsMissingCapability(err) {
+					return ModelSquareDirectory{}, err
+				}
+				// Older gateways can omit a definition channel. Keep other providers
+				// and remember this missing family so the sweep stays partially useful.
+				models = nil
+			}
+			definitions[provider.Family] = models
+		}
+		if models == nil {
+			hasMissingModels = true
+			continue
+		}
+		for _, model := range models {
+			if IsModelExcluded(model.ID, provider.ExcludedModels) {
+				continue
+			}
+			callPoint := model.ID
+			if provider.Prefix != "" {
+				callPoint = strings.TrimSuffix(provider.Prefix, "/") + "/" + callPoint
+			}
+			provider.Routes = append(provider.Routes, management.ConfiguredModelRoute{UpstreamModel: model.ID, CallPoint: callPoint})
+		}
+	}
+	// Reuse aliases captured by the sweep, including a valid empty alias map.
+	aliases, hasAliases := snapshot.OAuthAliases, snapshot.HasOAuthAliases
+	if !hasAliases {
+		var aliasErr error
+		aliases, aliasErr = client.OAuthModelAliases(ctx)
+		if aliasErr != nil {
+			return ModelSquareDirectory{}, aliasErr
+		}
+		hasAliases = true
+	}
+	directory := ProjectModelSquare(snapshot, aliases, hasAliases)
+	if hasMissingModels {
+		directory.Partial = append(directory.Partial, "provider_models")
 	}
 	return directory, nil
 }

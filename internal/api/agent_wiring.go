@@ -120,10 +120,12 @@ func (h *Handler) inferenceClient(ctx context.Context, fingerprint string) (*gat
 }
 func (h *Handler) operationsService() *operations.Service {
 	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: h.providerWrites.acquire, Release: h.providerWrites.release, Notify: func() {
+		h.requestModelSquareProvenanceRefresh()
 		if h.pricing != nil {
 			h.pricing.NotifyModelsChanged()
 		}
 	}}
+	service.ModelSquareProvenance = h.cachedModelSquareProvenance
 	service.ListProviders = func(ctx context.Context) ([]operations.Provider, error) {
 		client, err := h.capabilityClient(ctx)
 		if err != nil {

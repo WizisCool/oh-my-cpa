@@ -1,13 +1,112 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 )
+
+// modelSquareCache retains only projected provenance, never credential material.
+type modelSquareCache struct {
+	// refreshMu serializes manual and scheduled sweeps through cache publication.
+	refreshMu sync.Mutex
+	// mu protects publication and isolates each reader's mutable projection.
+	mu sync.RWMutex
+	// baseURL prevents a newly selected gateway from using the old one's routes.
+	baseURL string
+	// directory is replaced atomically after a successful full sweep.
+	directory operations.ModelSquareDirectory
+	// isIncomplete reports a failed refresh while preserving the last good entry.
+	isIncomplete bool
+	// once initializes the coalescing wake channel for zero-value handlers too.
+	once sync.Once
+	// refresh queues a background sweep after a model configuration change.
+	refresh chan struct{}
+}
+
+// modelSquareRefreshSignal returns the shared, lazily initialized wake channel.
+func (h *Handler) modelSquareRefreshSignal() chan struct{} {
+	h.modelSquare.once.Do(func() { h.modelSquare.refresh = make(chan struct{}, 1) })
+	return h.modelSquare.refresh
+}
+
+// requestModelSquareProvenanceRefresh coalesces changes without blocking writes.
+func (h *Handler) requestModelSquareProvenanceRefresh() {
+	select {
+	case h.modelSquareRefreshSignal() <- struct{}{}:
+	default:
+	}
+}
+
+// cachedModelSquareProvenance gives callers their own slices for filtering and branding.
+func (h *Handler) cachedModelSquareProvenance(baseURL string) operations.ModelSquareDirectory {
+	h.modelSquare.mu.RLock()
+	defer h.modelSquare.mu.RUnlock()
+	if h.modelSquare.baseURL != baseURL {
+		return operations.ModelSquareDirectory{Providers: []operations.ModelSquareProvider{}, Routes: []operations.ModelSquareRoute{}, Partial: []string{"routes"}}
+	}
+	directory := h.modelSquare.directory
+	directory.Providers = append([]operations.ModelSquareProvider{}, directory.Providers...)
+	directory.Routes = append([]operations.ModelSquareRoute{}, directory.Routes...)
+	directory.Partial = append([]string{}, directory.Partial...)
+	if h.modelSquare.isIncomplete {
+		directory.Partial = append(directory.Partial, "routes")
+	}
+	return directory
+}
+
+// RunModelSquareProvenance refreshes every credential at startup and once a minute.
+// The application owns cancellation; page requests only read the last published entry.
+func (h *Handler) RunModelSquareProvenance(ctx context.Context) error {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	refresh := h.modelSquareRefreshSignal()
+	for {
+		_ = h.RefreshModelSquareProvenance(ctx)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		case <-refresh:
+		}
+	}
+}
+
+// RefreshModelSquareProvenance publishes a full sweep or retains the last good entry.
+// Demo startup also uses this once against its local fixture, without starting a loop.
+func (h *Handler) RefreshModelSquareProvenance(ctx context.Context) error {
+	h.modelSquare.refreshMu.Lock()
+	defer h.modelSquare.refreshMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	client, err := h.capabilityClient(ctx)
+	var directory operations.ModelSquareDirectory
+	if err == nil {
+		directory, err = operations.LoadModelSquareProvenance(ctx, client)
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	h.modelSquare.mu.Lock()
+	defer h.modelSquare.mu.Unlock()
+	if err != nil && !h.modelSquare.isIncomplete && h.logger != nil {
+		// Upstream error text can include credential identities; keep the log non-secret.
+		h.logger.Warn("model provenance refresh failed; keeping cached sources")
+	}
+	h.modelSquare.isIncomplete = err != nil
+	if err == nil {
+		h.modelSquare.baseURL = client.BaseURL()
+		h.modelSquare.directory = directory
+	}
+	return err
+}
 
 func (h *Handler) listModelSquare(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")

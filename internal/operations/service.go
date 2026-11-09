@@ -28,6 +28,10 @@ type Service struct {
 	Acquire          func(context.Context) error
 	Release          func()
 	Notify           func()
+
+	// ModelSquareProvenance reads the background cache for the current gateway.
+	ModelSquareProvenance func(string) ModelSquareDirectory
+
 	// Existing normalized projections remain shared while HTTP adapters are narrowed.
 	SaveProvider               func(context.Context, ProviderMutation, string, string) (ProviderMutationResult, error)
 	DeleteProvider             func(context.Context, string, string) error

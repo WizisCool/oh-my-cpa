@@ -325,7 +325,7 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 // ListConfiguredModelSnapshot is exhaustive and refuses partial results because
 // pricing replaces persisted membership from it. A failed source must not prune rates.
 func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredModelSnapshot, error) {
-	snapshot, err := c.listConfiguredModelSnapshot(ctx, -1)
+	snapshot, err := c.listConfiguredModelSnapshot(ctx, -1, true)
 	if err != nil {
 		return ConfiguredModelSnapshot{}, err
 	}
@@ -341,10 +341,18 @@ const MODEL_PROVENANCE_READ_LIMIT = 8
 // must never use this snapshot to replace a persisted catalog. The caller owns
 // the deadline shared with its other enrichment reads.
 func (c *Client) ListConfiguredModelProvenance(ctx context.Context) (ConfiguredModelSnapshot, error) {
-	return c.listConfiguredModelSnapshot(ctx, MODEL_PROVENANCE_READ_LIMIT)
+	return c.listConfiguredModelSnapshot(ctx, MODEL_PROVENANCE_READ_LIMIT, false)
 }
 
-func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads int) (ConfiguredModelSnapshot, error) {
+// ListAllConfiguredModelProvenance visits every credential for background enrichment.
+// It reads reported membership without downloading credential files for pricing aliases.
+// Like the bounded display read, a failed sweep can return partial membership.
+func (c *Client) ListAllConfiguredModelProvenance(ctx context.Context) (ConfiguredModelSnapshot, error) {
+	return c.listConfiguredModelSnapshot(ctx, -1, false)
+}
+
+// listConfiguredModelSnapshot shares discovery while keeping pricing-only file reads optional.
+func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads int, readCredentialAliases bool) (ConfiguredModelSnapshot, error) {
 	if c == nil {
 		return ConfiguredModelSnapshot{}, errors.New("CPA client is not initialized")
 	}
@@ -427,10 +435,9 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 					continue
 				}
 				needsModels := len(file.Models) == 0
-				// Credential aliases are read only for the catalog that replaces persisted
-				// membership. The bounded provenance read enriches a display and would
-				// otherwise spend its budget on a credential file per page load.
-				needsAliases := maxModelReads < 0 && !file.RuntimeOnly && file.Name != ""
+				// Only pricing needs credential-local aliases; display provenance uses
+				// gateway-reported membership without downloading credential material.
+				needsAliases := readCredentialAliases && !file.RuntimeOnly && file.Name != ""
 				// A reported list is membership the gateway already answered for, so it
 				// survives a budget that has no room for the optional alias read.
 				if !needsModels {

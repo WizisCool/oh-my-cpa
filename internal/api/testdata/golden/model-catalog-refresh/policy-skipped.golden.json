@@ -52,7 +52,8 @@
             "status": "skipped"
           }
         ],
-        "changed_providers": []
+        "changed_providers": [],
+        "provenance_refreshed": true
       }
     }
   ]

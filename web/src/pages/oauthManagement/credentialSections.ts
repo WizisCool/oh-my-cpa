@@ -316,7 +316,8 @@ export function buildCredentialSections(
   return orderSections([...sections.entries()], sectionOrder)
     .map(([provider, records]) => {
       const providerRecords = visibleRecords.filter((record) => record.displayProvider === provider);
-      const hasQuota = providerRecords.some((record) => quotaLinesOf(record, provider).length > 0);
+      // Summary-only plugin quotas also need the quota cell, even without limit windows.
+      const hasQuota = providerRecords.some((record) => quotaLinesOf(record, provider).length > 0 || (record.quota?.plan?.metrics?.length ?? 0) > 0);
       return { provider, records, visibleRecords: providerRecords, hasQuota };
     });
 }

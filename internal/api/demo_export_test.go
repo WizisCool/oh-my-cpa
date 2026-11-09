@@ -1015,6 +1015,10 @@ func demoExportRouter(t *testing.T) (http.Handler, time.Time) {
 	handler.SetPricing(pricingService)
 	handler.SetRelease(releaseService)
 	handler.CheckPluginUpdates(context.Background())
+	// Match demo startup: page requests consume the cache rather than loading provenance.
+	if err := handler.RefreshModelSquareProvenance(context.Background()); err != nil {
+		t.Fatalf("load export model provenance: %v", err)
+	}
 	// The service log is the fixture's rather than this process's: the export's own
 	// log names loopback ports and runs at the wall clock, so it would differ on
 	// every run and describe the export rather than a deployment.

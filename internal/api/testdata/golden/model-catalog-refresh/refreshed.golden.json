@@ -68,7 +68,8 @@
         "changed_providers": [
           "claude",
           "codex"
-        ]
+        ],
+        "provenance_refreshed": true
       }
     }
   ]
