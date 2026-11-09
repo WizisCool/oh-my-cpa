@@ -122,7 +122,9 @@ Refresh failure projection retains only allowlisted codes and an HTTP status, ne
 provider messages, OAuth codes, account profiles or native credential bodies.
 
 Selected-credential sign-in resolves the name/index pair before asking CPA to pin the
-account. Lifecycle fields are required evidence of support, and the auth-url response
+account. The sign-in provider must be the credential's own provider or the issuing
+login entry CPA reports for it (`oauth_provider`); any other provider or entry is
+refused. Lifecycle fields are required evidence of support, and the auth-url response
 must acknowledge the same target ID before OMC releases the login URL: a provider
 handler can otherwise ignore the selectors even on a gateway with lifecycle fields.
 Missing support, acknowledgement or endpoints must refuse recovery, never restart it

@@ -20,7 +20,9 @@ func (s *Service) StartOAuth(ctx context.Context, provider string, options manag
 		if err != nil {
 			return management.OAuthAuthURLResponse{}, err
 		}
-		if !sameOAuthProvider(provider, file.Provider) {
+		// A multi-entry plugin files its credentials under one family; the login
+		// entry that issued the credential is an equally valid recovery provider.
+		if !sameOAuthProvider(provider, file.Provider) && !sameOAuthProvider(provider, file.OAuthProvider) {
 			return management.OAuthAuthURLResponse{}, management.ErrInvalidOAuthTarget
 		}
 		if !file.RecoverySupported() {

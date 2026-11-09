@@ -13,6 +13,11 @@ import (
 
 const recoveryCredentialFixture = `{"id":"runtime-codex-id","name":"codex.json","auth_index":"idx-1","provider":"codex","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"sign_in_required","access_token_expires_at":"2026-11-02T01:00:00+01:00","next_refresh_after":"2026-11-01T01:00:00Z","adopted":true,"inference_verified":false,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"OPAQUE-SECRET https://provider.test/?code=PRIVATE-CODE","access_token":"OPAQUE-SECRET","failure_stage":"PRIVATE-STAGE","receipt":"PRIVATE-RECEIPT","journal":{"refresh_token":"OPAQUE-SECRET"}},"next_action":"sign_in","recovery_hint":"OPAQUE-SECRET","renewal_event":{"account":"OPAQUE-SECRET"},"refresh_token":"OPAQUE-SECRET"}`
 
+// A multi-entry plugin files its credentials under one family (zcode) while each
+// login entry (zcode-zai, zcode-bigmodel) issues its own; CPA reports the issuing
+// entry beside the family.
+const recoveryPluginCredentialFixture = `{"id":"runtime-zcode-id","name":"zcode-demo.json","auth_index":"idx-z","provider":"zcode","oauth_provider":"zcode-zai","requires_sign_in":true,"renewal_state":"sign_in_required"}`
+
 func TestCredentialRecoveryProjectionAndVerification(t *testing.T) {
 	for _, test := range []struct{ code, wantCode string }{
 		{"invalid_grant", "invalid_grant"},
@@ -70,8 +75,16 @@ func TestCredentialRecoveryProjectionAndVerification(t *testing.T) {
 }
 
 func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
-	for _, scenario := range []string{"targeted", "opt_in", "stale", "provider_mismatch", "old_cpa", "missing_endpoint", "missing_state", "missing_target", "different_target", "wrong_account"} {
+	for _, scenario := range []string{"targeted", "opt_in", "stale", "provider_mismatch", "old_cpa", "missing_endpoint", "missing_state", "missing_target", "different_target", "wrong_account", "plugin_entry", "plugin_family", "plugin_sibling_entry", "plugin_entry_unreported"} {
 		t.Run(scenario, func(t *testing.T) {
+			isPlugin := strings.HasPrefix(scenario, "plugin_")
+			fixture := recoveryCredentialFixture
+			if isPlugin {
+				fixture = recoveryPluginCredentialFixture
+				if scenario == "plugin_entry_unreported" {
+					fixture = strings.Replace(fixture, `,"oauth_provider":"zcode-zai"`, "", 1)
+				}
+			}
 			client, base, recorder := startAuthFilesTestServer(t, "management-secret-value", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
@@ -79,7 +92,7 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 					if scenario == "old_cpa" {
 						fmt.Fprint(w, `{"files":[{"name":"codex.json","auth_index":"idx-1","provider":"codex"}]}`)
 					} else {
-						fmt.Fprintf(w, `{"files":[%s]}`, recoveryCredentialFixture)
+						fmt.Fprintf(w, `{"files":[%s]}`, fixture)
 					}
 				case "/v8/management/oauth/auth-url":
 					if scenario == "missing_endpoint" {
@@ -96,6 +109,9 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 						return
 					}
 					targetID := "runtime-codex-id"
+					if isPlugin {
+						targetID = "runtime-zcode-id"
+					}
 					if scenario == "missing_target" {
 						targetID = ""
 					} else if scenario == "different_target" {
@@ -107,8 +123,18 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 				}
 			})
 			body := `{"provider":"codex","name":"codex.json","auth_index":"idx-1"}`
+			if isPlugin {
+				body = `{"provider":"zcode-zai","name":"zcode-demo.json","auth_index":"idx-z"}`
+			}
 			wantStatus, wantCalls := 200, 1
 			switch scenario {
+			case "plugin_family":
+				body = `{"provider":"zcode","name":"zcode-demo.json","auth_index":"idx-z"}`
+			case "plugin_sibling_entry":
+				body = `{"provider":"zcode-bigmodel","name":"zcode-demo.json","auth_index":"idx-z"}`
+				wantStatus, wantCalls = 400, 0
+			case "plugin_entry_unreported":
+				wantStatus, wantCalls = 400, 0
 			case "opt_in":
 				body = `{"provider":"codex","name":"codex.json","auth_index":"idx-1","verify":true}`
 			case "stale":
@@ -130,10 +156,18 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 			if response.StatusCode != wantStatus || recorder.count(http.MethodPost, "/v8/management/oauth/auth-url") != wantCalls || recorder.count(http.MethodGet, "/v8/management/oauth/auth-url") != 0 || strings.Contains(string(raw), "OPAQUE-SECRET") {
 				t.Fatalf("targeted recovery: %d %s, calls=%+v", response.StatusCode, raw, recorder.all())
 			}
-			if scenario == "targeted" || scenario == "opt_in" {
+			if scenario == "targeted" || scenario == "opt_in" || scenario == "plugin_entry" || scenario == "plugin_family" {
+				wantName, wantIndex, wantProvider := "codex.json", "idx-1", "codex"
+				if isPlugin {
+					wantName, wantIndex = "zcode-demo.json", "idx-z"
+					wantProvider = "zcode-zai"
+					if scenario == "plugin_family" {
+						wantProvider = "zcode"
+					}
+				}
 				var forwarded map[string]any
 				json.Unmarshal([]byte(recorder.last(t, http.MethodPost, "/v8/management/oauth/auth-url").Body), &forwarded)
-				if forwarded["name"] != "codex.json" || forwarded["auth_index"] != "idx-1" || forwarded["verify"] != (scenario == "opt_in") {
+				if forwarded["provider"] != wantProvider || forwarded["name"] != wantName || forwarded["auth_index"] != wantIndex || forwarded["verify"] != (scenario == "opt_in") {
 					t.Fatalf("target/opt-in lost: %+v", forwarded)
 				}
 			}
