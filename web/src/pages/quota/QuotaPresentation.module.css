@@ -197,9 +197,19 @@
   padding: 8px 10px;
   font-size: var(--text-xs);
   display: flex;
+  /* A wide Drawer keeps the action beside the text; a phone wraps it onto the next line, where
+   * it no longer squeezes the model name and its countdown into half a row. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.rec-action {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  max-width: 100%;
 }
 
 .rec-banner-danger {
@@ -298,6 +308,25 @@
 
   .card-actions {
     flex-wrap: wrap;
+  }
+
+  .rec-action {
+    flex: 1 0 100%;
+  }
+
+  .rec-action > :first-child {
+    width: 100%;
+  }
+
+  /* The label takes a line of its own so the percentage and the reset time share the next one:
+   * side by side they leave the countdown a few characters wide, which breaks it between a
+   * number and its unit. */
+  .progress-label-row {
+    flex-wrap: wrap;
+  }
+
+  .progress-label {
+    flex: 1 0 100%;
   }
 }
 

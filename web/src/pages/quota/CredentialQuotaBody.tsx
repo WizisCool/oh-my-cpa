@@ -271,15 +271,17 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             {!!item.active_cooldown.backoff_level && <div>{t('quota.backoff_level', { level: item.active_cooldown.backoff_level })}</div>}
           </div>
           {onClearCooldown && (
-            <Button
-              size="small"
-              danger
-              disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
-              title={isDemo ? t('demo.blocked') : undefined}
-              onClick={() => onClearCooldown(item.auth_index)}
-            >
-              {t('quota.clear_cooldown')}
-            </Button>
+            <div className={styles['rec-action']}>
+              <Button
+                size="small"
+                danger
+                disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
+                title={isDemo ? t('demo.blocked') : undefined}
+                onClick={() => onClearCooldown(item.auth_index)}
+              >
+                {t('quota.clear_cooldown')}
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -302,11 +304,13 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             {!!cooldown.backoff_level && <div>{t('quota.backoff_level', { level: cooldown.backoff_level })}</div>}
           </div>
           {index === 0 && !item.active_cooldown?.is_active && onClearCooldown && (
-            <Button size="small" danger disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
-              title={isDemo ? t('demo.blocked') : t('quota.clear_all_cooldowns')}
-              onClick={() => onClearCooldown(item.auth_index)}>
-              {t('quota.clear_all_cooldowns')}
-            </Button>
+            <div className={styles['rec-action']}>
+              <Button size="small" danger disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
+                title={isDemo ? t('demo.blocked') : t('quota.clear_all_cooldowns')}
+                onClick={() => onClearCooldown(item.auth_index)}>
+                {t('quota.clear_all_cooldowns')}
+              </Button>
+            </div>
           )}
         </div>
       ))}
