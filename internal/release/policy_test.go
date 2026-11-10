@@ -18,6 +18,8 @@ func TestUpdateCheckSettingsAreStrictOnWriteAndLenientOnRead(t *testing.T) {
 		`{"interval_minutes":"60"}`,
 		`{"interval_minutes":null}`,
 		`{"interval_minutes":60} trailing`,
+		`{"interval_minutes":60,"use_proxy_for_image_pull":"true"}`,
+		`{"interval_minutes":60,"use_proxy_for_image_pull":null}`,
 	} {
 		if _, err := ParseUpdateCheckSettings([]byte(raw)); !errors.Is(err, ErrInvalidUpdateCheckSettings) {
 			t.Fatalf("ParseUpdateCheckSettings(%s) = %v, want ErrInvalidUpdateCheckSettings", raw, err)
@@ -37,6 +39,20 @@ func TestUpdateCheckSettingsAreStrictOnWriteAndLenientOnRead(t *testing.T) {
 	defaults := DefaultUpdateCheckSettings()
 	if defaults.IntervalMinutes != DefaultUpdateCheckIntervalMinutes {
 		t.Fatalf("default interval = %d, want %d", defaults.IntervalMinutes, DefaultUpdateCheckIntervalMinutes)
+	}
+
+	// Both new and existing deployments keep the daemon's ordinary pull route until opted in.
+	if defaults.UseProxyForImagePull || settings.UseProxyForImagePull {
+		t.Fatal("proxy image downloads must default to off")
+	}
+
+	proxySettings, err := ParseUpdateCheckSettings([]byte(`{"interval_minutes":120,"use_proxy_for_image_pull":true}`))
+	if err != nil || !proxySettings.UseProxyForImagePull || proxySettings.Interval() != 2*time.Hour {
+		t.Fatalf("proxy settings = %+v, error = %v", proxySettings, err)
+	}
+
+	if got := ResolveUpdateCheckSettings(`{"interval_minutes":120,"use_proxy_for_image_pull":true}`, true); got != proxySettings {
+		t.Fatalf("resolved settings = %+v, want %+v", got, proxySettings)
 	}
 	for _, stored := range []struct {
 		raw      string

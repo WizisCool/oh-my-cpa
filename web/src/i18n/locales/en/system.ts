@@ -88,6 +88,9 @@ export default {
   'sys.update_already_current': '{product} already runs the latest image',
   'sys.update_rolled_back': '{product} update failed and the previous version was restored: {msg}',
   'sys.update_failed': '{product} update failed: {msg}',
+
+  'sys.image_pull_proxy_unavailable': 'The CPA network proxy is unavailable. Check the proxy on the configuration page.',
+  'sys.image_pull_proxy_unsupported': 'Upgrade the updater to a version that supports proxy image downloads first.',
   'sys.update_outcome_unknown': 'The result of the {product} update could not be retrieved; the version shown is what runs now',
   'sys.update_stage.pulling': 'Pulling the new image…',
   'sys.update_stage.stopping': 'Stopping the current container…',

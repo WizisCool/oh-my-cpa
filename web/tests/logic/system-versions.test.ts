@@ -172,10 +172,23 @@ test('a running update reports the step it has reached, in the order the updater
 
 
 test('the scheduled update check keeps an interval the sweep can honour and ignores the rest', () => {
-  assert.deepEqual(parseUpdateCheck({ interval_minutes: 360 }), { interval_minutes: 360 });
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 360 }), {
+    interval_minutes: 360,
+    use_proxy_for_image_pull: false,
+  });
+
   // A document a newer build wrote keeps its known field; the server's write validation is
   // strict, so this is the read path only.
-  assert.deepEqual(parseUpdateCheck({ interval_minutes: 60, future_field: true }), { interval_minutes: 60 });
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 60, future_field: true }), {
+    interval_minutes: 60,
+    use_proxy_for_image_pull: false,
+  });
+
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 120, use_proxy_for_image_pull: true }), {
+    interval_minutes: 120,
+    use_proxy_for_image_pull: true,
+  });
+
   for (const raw of [
     undefined,
     null,
@@ -185,10 +198,16 @@ test('the scheduled update check keeps an interval the sweep can honour and igno
     { interval_minutes: 1441 },
     { interval_minutes: '60' },
     { interval_minutes: 60.5 },
+    { interval_minutes: 60, use_proxy_for_image_pull: 'true' },
+    { interval_minutes: 60, use_proxy_for_image_pull: null },
   ]) {
     assert.equal(parseUpdateCheck(raw), undefined);
   }
+
   // Parity with `release.DefaultUpdateCheckSettings`, which is what a deployment that never
   // chose an interval actually runs.
-  assert.deepEqual(DEFAULT_UPDATE_CHECK, { interval_minutes: 60 });
+  assert.deepEqual(DEFAULT_UPDATE_CHECK, {
+    interval_minutes: 60,
+    use_proxy_for_image_pull: false,
+  });
 });

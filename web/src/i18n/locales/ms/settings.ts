@@ -30,6 +30,9 @@ export default {
   "omc.update_check_minutes": "Setiap {n} min",
   "omc.update_check_hours": "Setiap {n} jam",
   "omc.update_check_invalid": "Selang semakan mestilah antara 15 minit dan 24 jam",
+
+  "omc.image_pull_proxy": "Gunakan proksi untuk menarik imej Docker",
+  "omc.image_pull_proxy_desc": "Memuat turun imej kemas kini melalui proksi dalam Konfigurasi CPA → Rangkaian.",
   "omc.section_display": "Paparan data",
   "omc.section_appearance": "Rupa",
   "omc.section_sidebar": "Bar sisi",

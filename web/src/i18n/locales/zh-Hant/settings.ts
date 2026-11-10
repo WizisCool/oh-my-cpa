@@ -30,6 +30,9 @@ export default {
   "omc.update_check_minutes": "每 {n} 分鐘",
   "omc.update_check_hours": "每 {n} 小時",
   "omc.update_check_invalid": "檢查間隔需介於 15 分鐘到 24 小時之間",
+
+  "omc.image_pull_proxy": "使用代理拉取 Docker 映像",
+  "omc.image_pull_proxy_desc": "透過 CPA 設定面板 → 網路設定中的代理下載更新映像。",
   "omc.section_display": "資料顯示",
   "omc.section_appearance": "介面外觀",
   "omc.section_sidebar": "側邊欄",

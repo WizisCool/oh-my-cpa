@@ -9,6 +9,7 @@ import { MotionPreferenceSync, MotionProvider, useReducedMotionPreference } from
 import { usePrefersReducedMotion } from '../src/hooks/usePrefersReducedMotion';
 import { isMotionReduced, REDUCED_MOTION_QUERY } from '../src/utils/motionPreference';
 import { ContextReadout } from '../src/components/workspace/ContextReadout';
+import { UpdateCheckGroup } from '../src/pages/OmcSettingsPage';
 
 function deferred<Value>() {
   let resolve!: (value: Value) => void;
@@ -82,6 +83,28 @@ afterEach(async () => {
 });
 
 describe('real preference hook and cache integration', () => {
+  it('keeps proxy pulls off for existing settings and rolls back a refused opt-in', async () => {
+    stored.omc_update_check = { interval_minutes: 120 };
+    mount(<UpdateCheckGroup />);
+
+    const toggle = await screen.findByRole('switch', { name: 'Use proxy to pull Docker images' });
+    await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false));
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    // Editing the route keeps the operator's interval, including when the save is refused.
+    fireEvent.click(toggle);
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].value).toEqual({ interval_minutes: 120, use_proxy_for_image_pull: true });
+    await completeWrite(0, 503);
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(writes).toHaveLength(2));
+    await completeWrite(1);
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+    expect(stored.omc_update_check).toEqual({ interval_minutes: 120, use_proxy_for_image_pull: true });
+  });
+
   it('waits for a held read, shares one StrictMode query and publishes optimistic updates to both readers', async () => {
     const read = api.hold('GET', '/preferences');
     mount(<><PreferenceControl name="first" /><PreferenceControl name="second" /></>);

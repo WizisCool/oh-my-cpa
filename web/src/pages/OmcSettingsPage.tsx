@@ -385,20 +385,16 @@ const QuotaAutoRefreshGroup: React.FC = () => {
   );
 };
 
-/**
- * UpdateCheckGroup is the scheduled update check the server's sweep reads.
- *
- * It changes what the deployment does on its own: the interval decides how often the sweep
- * spends GitHub requests on the release feeds and the plugin store. The token those reads carry
- * is the gateway's own, set on the configuration panel, so GitHub is configured once.
- */
-const UpdateCheckGroup: React.FC = () => {
+/** Configure the scheduled checks and the opt-in image download route in one stored document. */
+export const UpdateCheckGroup: React.FC = () => {
   const t = useT();
   const preference = usePreference<UpdateCheckSettings>(UPDATE_CHECK_PREFERENCE, DEFAULT_UPDATE_CHECK, parseUpdateCheck);
   const settings = preference.value;
+
   // A value written elsewhere is kept selectable, so the control never shows a preset the
   // deployment is not actually running.
   const intervals: number[] = [...UPDATE_CHECK_INTERVALS];
+
   if (!intervals.includes(settings.interval_minutes)) {
     intervals.push(settings.interval_minutes);
     intervals.sort((left, right) => left - right);
@@ -406,6 +402,7 @@ const UpdateCheckGroup: React.FC = () => {
   const formatInterval = (minutes: number) => (minutes % 60 === 0
     ? t('omc.update_check_hours', { n: minutes / 60 })
     : t('omc.update_check_minutes', { n: minutes }));
+
   return (
     <div className="settings-group omc-settings-group">
       <SectionHeading className="settings-group-head" title={t('omc.section_update_check')} />
@@ -417,9 +414,28 @@ const UpdateCheckGroup: React.FC = () => {
             value={settings.interval_minutes}
             disabled={!preference.loaded}
             options={intervals.map((minutes) => ({ value: minutes, label: formatInterval(minutes) }))}
-            onChange={(minutes) => { void preference.set({ interval_minutes: minutes }); }}
+            onChange={(minutes) => {
+              // Both controls share one document; changing the interval preserves the route.
+              void preference.set({ ...settings, interval_minutes: minutes });
+            }}
             aria-label={t('omc.update_check_interval')}
             popupMatchSelectWidth={false}
+          />
+        }
+      />
+
+      <SettingRow
+        label={t('omc.image_pull_proxy')}
+        description={t('omc.image_pull_proxy_desc')}
+        control={
+          <Switch
+            checked={settings.use_proxy_for_image_pull}
+            disabled={!preference.loaded}
+            onChange={(checked) => {
+              // Store the choice only; the server reads proxy credentials when updating.
+              void preference.set({ ...settings, use_proxy_for_image_pull: checked });
+            }}
+            aria-label={t('omc.image_pull_proxy')}
           />
         }
       />
