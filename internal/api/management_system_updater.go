@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -205,7 +207,7 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 		writeJSON(writer, status, map[string]string{"error": message, "code": code})
 	}
 
-	dto, _ := h.updaterStatus(ctx)
+	dto, sidecar := h.updaterStatus(ctx)
 	if dto.State != updaterReady {
 		refuse(http.StatusConflict, "rejected", "updater_"+dto.State, "updates cannot be applied from the console in this deployment")
 		return
@@ -218,6 +220,32 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 	}
 
 	update := updater.UpdateRequest{Product: body.Product}
+
+	// Persist only the opt-in choice. Read the current CPA proxy for each admitted update.
+	raw, isStored, err := h.repo.GetPreference(ctx, repository.PreferenceUpdateCheck)
+	if err != nil {
+		refuse(http.StatusServiceUnavailable, "failure", "image_pull_proxy_unavailable", "the image download settings could not be read")
+		return
+	}
+
+	if release.ResolveUpdateCheckSettings(raw, isStored).UseProxyForImagePull {
+		if sidecar == nil || !sidecar.ProxyPullSupported {
+			refuse(http.StatusConflict, "rejected", "image_pull_proxy_unsupported", "the updater must be upgraded to support proxy image downloads")
+			return
+		}
+
+		proxyURL, err := h.readImagePullProxy(ctx)
+		if err != nil {
+			refuse(
+				http.StatusBadGateway, "failure", "image_pull_proxy_unavailable",
+				"CPA's network configuration must provide a usable HTTP or SOCKS5 proxy",
+			)
+			return
+		}
+
+		update.ProxyURL = proxyURL
+	}
+
 	details := map[string]any{}
 	if body.Product == release.ProductOMC {
 		// The console is only ever moved to the release the page is offering, and only
@@ -272,6 +300,34 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 		h.recordUpdateOutcome(job.ID)
 	}()
 	writeJSON(writer, http.StatusAccepted, SystemUpdaterDTO{State: updaterReady, Products: dto.Products, Job: updaterJobDTO(&job)})
+}
+
+// readImagePullProxy resolves proxy credentials on the server without exposing them to preferences or DTOs.
+func (h *Handler) readImagePullProxy(ctx context.Context) (string, error) {
+	instance, err := h.repo.GetInstance(ctx, defaultInstanceID())
+	if err != nil {
+		return "", err
+	}
+
+	client, err := h.clientForInstance(ctx, instance)
+	if err != nil {
+		return "", err
+	}
+
+	view, _, err := client.ConfigView(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// Resolve the same field the Configuration → Network control edits, including credentials.
+	raw, _ := management.ValueAt(view, []string{"requests", "proxy-url"})
+	value, _ := raw.(string)
+	proxyURL := strings.TrimSpace(value)
+	if _, err := updater.ParseImagePullProxy(proxyURL); err != nil {
+		return "", err
+	}
+
+	return proxyURL, nil
 }
 
 // releaseStatus reads one product's stored version answer.

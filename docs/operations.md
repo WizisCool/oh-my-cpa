@@ -299,8 +299,24 @@ that were already stopped before the update are not started by this process.
 Network use: applying an Oh My CPA update makes the console download
 `release-manifest.json` and its `.sig` from the release's assets on `github.com`,
 following redirects only to GitHub's own asset hosts over HTTPS, through the same proxy
-settings as the update check. The image pull is made by the Docker daemon with its own
+settings as the update check. By default, the Docker daemon pulls images using its own
 registry and proxy configuration.
+
+**OMC Settings → Update checks → Use proxy to pull Docker images** opts into downloading
+both products' update images through CPA's **Configuration → Network** proxy
+(`requests.proxy-url`). The switch defaults to off. Each update reads the current proxy;
+only the switch is stored in preferences. For a local proxy container on the console's
+networks, a standalone updater temporarily joins a shared network for the download and
+detaches before container replacement, on success or failure. Existing network attachments
+are preserved. External proxies use the updater's existing egress route; shared and host
+network namespaces use their owner's routing.
+
+With this route enabled, the updater downloads the registry manifest and image layers,
+selects the Docker daemon's platform, and streams a verified archive into the local
+daemon. OMC's signed index digest and the image content hashes are verified before a
+container is replaced. This route leaves the daemon's global configuration unchanged.
+Missing or unusable proxies fail the update without a direct retry. An older updater
+must be upgraded to a build supporting proxy image downloads before enabling the switch.
 
 Audit: `system.update.apply` records the admission, or the refusal with its reason,
 before the updater is asked; `system.update.completed` records how that admission ended:

@@ -88,6 +88,9 @@ export default {
   "sys.update_already_current": "{product} 已是最新映像",
   "sys.update_rolled_back": "{product} 更新失敗，已還原原版本：{msg}",
   "sys.update_failed": "{product} 更新失敗：{msg}",
+
+  "sys.image_pull_proxy_unavailable": "無法使用 CPA 的網路代理，請檢查設定面板中的代理設定。",
+  "sys.image_pull_proxy_unsupported": "請先將更新器升級至支援代理映像下載的版本。",
   "sys.update_outcome_unknown": "{product} 的更新結果未能取回，請以目前版本號為準",
   "sys.update_stage.pulling": "正在拉取新映像…",
   "sys.update_stage.stopping": "正在停止目前容器…",

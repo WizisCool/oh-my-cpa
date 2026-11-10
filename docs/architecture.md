@@ -135,11 +135,20 @@ redaction after a query is not a substitute for denying sensitive columns.
 ### Container updates
 
 The console is socket-free, read-only and unprivileged. Only the updater sidecar has
-Docker authority. Its authenticated API accepts a product name, not a caller-supplied
-image, container or command. OMC replacements verify the signed manifest using the
+Docker authority. Its authenticated API accepts a product name and an optional network
+proxy resolved from CPA's configuration; the updater chooses the image and container.
+OMC replacements verify the signed manifest using the
 compiled-in public key and pull its digest; a missing/invalid key never falls back
 to trust. CPA replacements pull the running container's configured tag because OMC
 cannot sign upstream releases. Version/digest pins are never upgraded.
+
+Opt-in proxy image downloads run in the updater, which verifies the registry content and
+streams an image archive to the local daemon. Only the boolean choice is stored in
+preferences; proxy credentials travel in the authenticated control request and are
+redacted from job errors and logs. The console remains socket-free.
+An independently networked updater can temporarily join the console's network containing
+the configured proxy container. It removes that attachment before replacement or handover,
+while preserving networks it already belonged to.
 
 A failed replacement health check restores the previous container and image tag.
 Namespace dependents require coordinated rebinding; recovery details and limits are

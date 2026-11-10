@@ -1,9 +1,11 @@
 package updater
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 )
 
 type updaterTransport func(*http.Request) (*http.Response, error)
@@ -37,6 +41,12 @@ type fakeDaemon struct {
 	socketPath string
 	// unavailableList models failure of namespace discovery before any mutation.
 	unavailableList bool
+
+	// Proxy download tests distinguish local imports from daemon-managed registry pulls.
+	arch      string
+	pulls     int
+	loads     int
+	loadError string
 }
 
 type fakeImage struct {
@@ -282,6 +292,52 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 	segments := strings.Split(strings.Trim(path, "/"), "/")
 
 	switch {
+	case path == "/version":
+		arch := d.arch
+		if arch == "" {
+			arch = "amd64"
+		}
+
+		reply(http.StatusOK, map[string]string{"Os": "linux", "Arch": arch})
+	case path == "/images/load":
+		d.loads++
+		if d.loadError != "" {
+			reply(http.StatusOK, map[string]string{"error": d.loadError})
+			return
+		}
+
+		// Parse the real archive sent over the unix socket, including its configuration identity.
+		archive, err := io.ReadAll(request.Body)
+		if err != nil {
+			reply(http.StatusBadRequest, map[string]string{"message": "incomplete image archive"})
+			return
+		}
+
+		image, err := tarball.Image(func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(archive)), nil
+		}, nil)
+		if err != nil {
+			reply(http.StatusOK, map[string]string{"error": err.Error()})
+			return
+		}
+
+		imageID, err := image.ConfigName()
+		if err != nil {
+			reply(http.StatusOK, map[string]string{"error": err.Error()})
+			return
+		}
+
+		config, err := image.ConfigFile()
+		if err != nil {
+			reply(http.StatusOK, map[string]string{"error": err.Error()})
+			return
+		}
+
+		encoded, _ := json.Marshal(config.Config)
+		var fields map[string]any
+		_ = json.Unmarshal(encoded, &fields)
+		d.images[imageID.String()] = fakeImage{ID: imageID.String(), Config: fields}
+		reply(http.StatusOK, map[string]string{"stream": "Loaded image ID: " + imageID.String()})
 	case path == "/containers/json":
 		if d.unavailableList {
 			reply(http.StatusServiceUnavailable, map[string]string{"message": "container discovery unavailable"})
@@ -355,6 +411,7 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 			writer.WriteHeader(http.StatusNoContent)
 		}
 	case path == "/images/create":
+		d.pulls++
 		image, exists := d.registry[query.Get("fromImage")]
 		if !exists {
 			reply(http.StatusOK, map[string]string{"error": "manifest unknown"})
@@ -400,6 +457,17 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 			endpoint = map[string]any{}
 		}
 		container.Networks[segments[1]] = endpoint
+		writer.WriteHeader(http.StatusOK)
+	case segments[0] == "networks" && segments[2] == "disconnect":
+		var payload map[string]any
+		_ = json.NewDecoder(request.Body).Decode(&payload)
+		container := d.find(stringField(payload, "Container"))
+		if container == nil {
+			missing()
+			return
+		}
+
+		delete(container.Networks, segments[1])
 		writer.WriteHeader(http.StatusOK)
 	default:
 		missing()

@@ -88,6 +88,9 @@ export default {
   "sys.update_already_current": "{product} sudah menjalankan imej terkini",
   "sys.update_rolled_back": "Kemas kini {product} gagal dan versi sebelumnya dipulihkan: {msg}",
   "sys.update_failed": "Kemas kini {product} gagal: {msg}",
+
+  "sys.image_pull_proxy_unavailable": "Proksi rangkaian CPA tidak tersedia. Semak proksi pada halaman Konfigurasi.",
+  "sys.image_pull_proxy_unsupported": "Naik taraf pengemas kini kepada versi yang menyokong muat turun imej melalui proksi dahulu.",
   "sys.update_outcome_unknown": "Hasil kemas kini {product} tidak dapat diperoleh; versi yang dipaparkan ialah yang sedang berjalan",
   "sys.update_stage.pulling": "Menarik imej baharu…",
   "sys.update_stage.stopping": "Menghentikan kontena semasa…",

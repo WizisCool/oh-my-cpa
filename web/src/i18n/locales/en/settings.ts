@@ -30,6 +30,9 @@ export default {
   'omc.update_check_minutes': 'Every {n} min',
   'omc.update_check_hours': 'Every {n} h',
   'omc.update_check_invalid': 'The check interval must be between 15 minutes and 24 hours',
+
+  'omc.image_pull_proxy': 'Use proxy to pull Docker images',
+  'omc.image_pull_proxy_desc': 'Downloads update images through the proxy in CPA Configuration → Network.',
   'omc.section_display': 'Data display',
   'omc.section_appearance': 'Appearance',
   'omc.section_sidebar': 'Sidebar',

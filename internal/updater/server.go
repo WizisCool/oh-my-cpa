@@ -18,9 +18,13 @@ const MAX_REQUEST_BYTES = 64 << 10
 
 // StatusResponse is the control interface's view of the deployment.
 type StatusResponse struct {
-	UpdaterVersion string   `json:"updater_version"`
-	Products       []Target `json:"products"`
-	Job            *Job     `json:"job"`
+	UpdaterVersion string `json:"updater_version"`
+
+	// ProxyPullSupported lets the console refuse proxy downloads on older sidecars.
+	ProxyPullSupported bool `json:"proxy_pull_supported,omitempty"`
+
+	Products []Target `json:"products"`
+	Job      *Job     `json:"job"`
 }
 
 // UpdateRequest asks for one product to be replaced. It deliberately has no field for
@@ -30,6 +34,9 @@ type UpdateRequest struct {
 	Product   string `json:"product"`
 	Manifest  string `json:"manifest"`
 	Signature string `json:"signature"`
+
+	// ProxyURL carries CPA's proxy only within the authenticated control request.
+	ProxyURL string `json:"proxy_url,omitempty"`
 }
 
 // Handler serves the control interface.
@@ -42,9 +49,10 @@ func (s *Service) Handler(version string) http.Handler {
 	})
 	mux.Handle("GET /v1/status", s.authenticated(func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(writer, http.StatusOK, StatusResponse{
-			UpdaterVersion: version,
-			Products:       s.Targets(request.Context()),
-			Job:            s.LastJob(),
+			UpdaterVersion:     version,
+			ProxyPullSupported: true,
+			Products:           s.Targets(request.Context()),
+			Job:                s.LastJob(),
 		})
 	}))
 	mux.Handle("POST /v1/update", s.authenticated(func(writer http.ResponseWriter, request *http.Request) {
@@ -53,7 +61,9 @@ func (s *Service) Handler(version string) http.Handler {
 			writeError(writer, http.StatusBadRequest, "invalid_request", "the request body is not valid JSON")
 			return
 		}
-		job, err := s.Start(request.Context(), body.Product, []byte(body.Manifest), body.Signature)
+		job, err := s.Start(
+			request.Context(), body.Product, []byte(body.Manifest), body.Signature, body.ProxyURL,
+		)
 		var unavailable *UnavailableError
 		switch {
 		case err == nil:
