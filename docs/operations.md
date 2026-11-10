@@ -317,7 +317,8 @@ applying the OMC setting reconciles it.
 
 A selected proxy applies to OMC's release and manifest reads, price and currency sync,
 font downloads, and provider probes without their own proxy. OMC exclusions apply to
-OMC HTTP requests only; CPA's proxy configuration does not support this exclusion list.
+the console's requests; CPA's proxy configuration does not support this exclusion list,
+and an image download sends every registry request through the proxy.
 Browser-loaded plugin artwork and independently operated clients use their own networks.
 The proxy address must be reachable from OMC, CPA, and updater namespaces: `localhost`
 inside one container is not another container. Only an encrypted OMC settings record is
@@ -329,7 +330,9 @@ OMC's signed index digest and image content hashes are verified before replaceme
 daemon's proxy configuration is not changed. A standalone updater can temporarily join
 a console network containing the proxy container and removes its own attachment before
 replacement. Proxy failure never triggers a direct retry. The console and updater both
-need builds supporting the selected route; an older updater needs an independent upgrade.
+need builds supporting the selected route; an older updater needs an independent upgrade —
+rerun its install command, or switch to the deployment default route, update the console,
+and switch back.
 The authenticated console-to-updater control connection uses HTTP by default, so place
 that network on trusted infrastructure or provide transport encryption.
 

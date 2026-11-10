@@ -88,7 +88,7 @@ export default {
   'sys.update_failed': '{product} 更新失败：{msg}',
 
   'sys.outbound_proxy_unavailable': '网络设置不可用，请检查 OMC 设置。',
-  'sys.image_pull_proxy_unsupported': '请先将更新器升级到支持所选镜像下载路径的版本。',
+  'sys.image_pull_proxy_unsupported': '更新器不支持所选的镜像下载路径。',
   'sys.update_outcome_unknown': '{product} 的更新结果未能取回，请以当前版本号为准',
   'sys.update_stage.pulling': '正在拉取新镜像…',
   'sys.update_stage.stopping': '正在停止当前容器…',

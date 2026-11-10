@@ -91,7 +91,7 @@ export default {
   'sys.update_failed': '{product} update failed: {msg}',
 
   'sys.outbound_proxy_unavailable': 'Outbound network settings are unavailable. Check OMC Settings.',
-  'sys.image_pull_proxy_unsupported': 'Upgrade the updater to use the selected image download route.',
+  'sys.image_pull_proxy_unsupported': 'The updater does not support the selected image download route.',
   'sys.update_outcome_unknown': 'The result of the {product} update could not be retrieved; the version shown is what runs now',
   'sys.update_stage.pulling': 'Pulling the new image…',
   'sys.update_stage.stopping': 'Stopping the current container…',

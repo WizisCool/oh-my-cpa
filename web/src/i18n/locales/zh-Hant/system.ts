@@ -91,7 +91,7 @@ export default {
   "sys.update_failed": "{product} 更新失敗：{msg}",
 
   'sys.outbound_proxy_unavailable': '網路設定無法使用，請檢查 OMC 設定。',
-  'sys.image_pull_proxy_unsupported': '請先將更新器升級至支援所選映像下載路徑的版本。',
+  'sys.image_pull_proxy_unsupported': '更新器不支援所選的映像下載路徑。',
   "sys.update_outcome_unknown": "{product} 的更新結果未能取回，請以目前版本號為準",
   "sys.update_stage.pulling": "正在拉取新映像…",
   "sys.update_stage.stopping": "正在停止目前容器…",

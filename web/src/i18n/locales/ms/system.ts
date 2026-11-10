@@ -91,7 +91,7 @@ export default {
   "sys.update_failed": "Kemas kini {product} gagal: {msg}",
 
   'sys.outbound_proxy_unavailable': 'Tetapan rangkaian tidak tersedia. Semak Tetapan OMC.',
-  'sys.image_pull_proxy_unsupported': 'Naik taraf pengemas kini untuk menggunakan laluan muat turun imej yang dipilih.',
+  'sys.image_pull_proxy_unsupported': 'Pengemas kini tidak menyokong laluan muat turun imej yang dipilih.',
   "sys.update_outcome_unknown": "Hasil kemas kini {product} tidak dapat diperoleh; versi yang dipaparkan ialah yang sedang berjalan",
   "sys.update_stage.pulling": "Menarik imej baharu…",
   "sys.update_stage.stopping": "Menghentikan kontena semasa…",
