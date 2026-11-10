@@ -226,6 +226,10 @@ try {
       OMCPA_LISTEN_ADDR: `127.0.0.1:${appPort}`,
       OMCPA_BASE_PATH: '/omc',
       OMCPA_DATA_DIR: path.join(temporary, 'data'),
+      // The console would otherwise read in whatever language Chromium asks for, which is the
+      // runner's locale rather than anything this suite asserts. Pinning it keeps a run
+      // reproducible on a developer's machine and in CI alike.
+      OMCPA_DEFAULT_LANGUAGE: 'zh',
       OMCPA_MASTER_KEY: MASTER_KEY,
       OMCPA_CPA_BASE_URL: `http://127.0.0.1:${cpaPort}`,
       OMCPA_CPA_MANAGEMENT_KEY: FAKE_CPA_MANAGEMENT_KEY,

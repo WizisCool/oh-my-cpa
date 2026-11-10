@@ -1,8 +1,9 @@
 import React from 'react';
 import type { Catalog, TFunc } from './catalog';
 import { formatMessage } from './format';
-import { DEFAULT_LANG, isLang, languageLocale, type Lang } from './language';
+import { DEFAULT_LANG, languageLocale, resolveInitialLang, type Lang } from './language';
 import { ANTD_LOCALES, CATALOGS } from './resources';
+import { getAppConfig } from '../types/config';
 
 export { LANGUAGES, languageLocale, isChineseLanguage } from './language';
 export type { Lang } from './language';
@@ -74,22 +75,38 @@ function isDeferredLanguage(lang: Lang): boolean {
 const LANG_KEY = 'omc-lang';
 
 /**
- * The reading language the console falls back to when the stored one cannot be fetched.
+ * The reading language the console falls back to when the preferred one cannot be fetched.
  *
- * It is the same language `readInitialLang` picks for an unrecognized stored id, so a console that
- * cannot read its stored preference still lands somewhere deliberate instead of nowhere.
+ * It is the language bundled with the entry, so a console whose preferred catalog never
+ * arrives still lands somewhere deliberate instead of nowhere.
  */
 const FALLBACK_LANG: Lang = DEFAULT_LANG;
-function readInitialLang(): Lang {
-  if (typeof window === 'undefined') return DEFAULT_LANG;
+
+function readStoredLang(): unknown {
   try {
-    const stored = window.localStorage.getItem(LANG_KEY);
-    return isLang(stored) ? stored : DEFAULT_LANG;
+    return window.localStorage.getItem(LANG_KEY);
   } catch {
     // Storage can be blocked by the browser or a sandboxed frame. The console
-    // still has to render its default reading language.
-    return DEFAULT_LANG;
+    // still has to render a language it has.
+    return undefined;
   }
+}
+
+function readBrowserLanguages(): readonly string[] {
+  if (typeof navigator === 'undefined') return [];
+  // `languages` is the reader's own order of preference. A browser that reports neither list is
+  // rare, and a console that throws while resolving its language paints nothing at all, so both
+  // reads are guarded.
+  const preferred = navigator.languages;
+  if (preferred && preferred.length > 0) return preferred;
+  return navigator.language ? [navigator.language] : [];
+}
+
+function readInitialLang(): Lang {
+  if (typeof window === 'undefined') return DEFAULT_LANG;
+  // The deployment's pin is read from the page the server rendered, so it applies to the sign-in
+  // page too - a visitor who cannot sign in yet has made no request of their own.
+  return resolveInitialLang(readStoredLang(), getAppConfig().defaultLanguage, readBrowserLanguages());
 }
 
 interface I18nContextValue {
@@ -106,12 +123,17 @@ const I18nContext = React.createContext<I18nContextValue>({
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [initialLang] = React.useState<Lang>(readInitialLang);
-  // Two languages, because a reader's choice and what the console can print are not the same thing
-  // while a catalog is on its way. `requestedLang` is what they picked and what gets stored; `lang` is
-  // what is rendered, and it is `null` only until the chosen catalog arrives - so the first paint is
-  // never a reading language the reader did not ask for.
+  // Two languages, because what the console should read and what it can print are not the same
+  // thing while a catalog is on its way. `requestedLang` is the language resolved for this visit -
+  // the reader's own choice or the deployment's default; `lang` is what is rendered, and it is
+  // `null` only until that catalog arrives - so the first paint is never a language no preference
+  // named.
   const [requestedLang, setRequestedLang] = React.useState<Lang>(initialLang);
   const [lang, setLangState] = React.useState<Lang | null>(() => (isDeferredLanguage(initialLang) ? null : initialLang));
+  // Whether the reader picked a language themselves. Only their own choice is stored: a deployment
+  // that later changes its default has to reach everyone who never chose one, and a default stored
+  // on a first visit would keep serving that browser the default it had at the time.
+  const [isReaderChoice, setIsReaderChoice] = React.useState(false);
   const languageRequest = React.useRef(0);
 
   React.useEffect(() => {
@@ -122,10 +144,11 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!cancelled && languageRequest.current === 0) setLangState(initialLang);
       },
       () => {
-        // A stored catalog whose chunk cannot be fetched - a tab older than the deployment serving it
-        // is the usual reason - leaves the console in the default reading language rather than blank.
+        // A preferred catalog whose chunk cannot be fetched - a tab older than the deployment serving
+        // it is the usual reason - leaves the console in the built-in reading language rather than
+        // blank.
         // That is the whole point: a blank page is a console with nothing on it to act from, and the
-        // settings page is where a reader picks a language that is still there. The stored preference
+        // settings page is where a reader picks a language that is still there. Any stored preference
         // is left alone, so the next load returns them to the language they chose.
         if (!cancelled && languageRequest.current === 0) setLangState(FALLBACK_LANG);
       },
@@ -136,6 +159,9 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [initialLang]);
 
   const setLang = React.useCallback((next: Lang) => {
+    // Asking for a language is what makes a preference worth storing, whether or not its catalog
+    // is already here.
+    setIsReaderChoice(true);
     // Every switch invalidates an in-flight one, deferred or not, so a catalog that lands late cannot
     // take the console back to a language the reader has already left.
     const request = languageRequest.current + 1;
@@ -159,20 +185,22 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const activeLang = lang ?? FALLBACK_LANG;
 
-  React.useEffect(() => {
+  // A layout effect, not a passive one: the document's own language is what a screen reader picks
+  // its voice from, and it has to be right on the first painted frame rather than one frame later.
+  React.useLayoutEffect(() => {
     if (lang === null) return;
     // The document's own language is what is *rendered* - a fallback is still what a screen reader
-    // has to read - while only the reader's own choice is stored. Writing the fallback would replace
-    // the preference the next successful load is meant to restore.
+    // has to read - while only the reader's own choice is stored. Writing what the deployment pinned
+    // would pin this browser too, on the day of its first visit, and writing a fallback would
+    // replace the preference the next successful load is meant to restore.
     document.documentElement.lang = languageLocale(lang);
-    if (lang === requestedLang) {
-      try {
-        window.localStorage.setItem(LANG_KEY, lang);
-      } catch {
-        // A blocked storage backend must not break a language switch.
-      }
+    if (!isReaderChoice || lang !== requestedLang) return;
+    try {
+      window.localStorage.setItem(LANG_KEY, lang);
+    } catch {
+      // A blocked storage backend must not break a language switch.
     }
-  }, [lang, requestedLang]);
+  }, [isReaderChoice, lang, requestedLang]);
 
   const value = React.useMemo<I18nContextValue>(
     () => ({

@@ -172,6 +172,7 @@ under the top-level `volumes:` key:
       TZ: ${TZ:-UTC}
       OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/}
       OMCPA_DATA_DIR: /data
+      OMCPA_DEFAULT_LANGUAGE: ${OMCPA_DEFAULT_LANGUAGE:-}
       OMCPA_CPA_BASE_URL: ${OMCPA_CPA_BASE_URL:-http://cli-proxy-api:8317}
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
@@ -261,6 +262,7 @@ Compose reads `.env` from the directory containing `compose.yml`. Relative host 
 | `OMCPA_PUBLIC_URL` | empty | External browser origin (for example `https://omc.example.com`). An `https://` URL marks the session cookie `Secure` |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | empty | Comma-separated reverse-proxy IPs/CIDRs trusted for `X-Forwarded-For` client IP throttling |
 | `OMCPA_BASE_PATH` | `/` | URL prefix when serving OMC under a sub-path such as `/omc` |
+| `OMCPA_DEFAULT_LANGUAGE` | empty | Pins the console's reading language for every visitor: `zh`, `zh-Hant`, `en`, `ms`, or `auto`. Empty and `auto` follow each visitor's browser. A language chosen in the console is saved in that browser and outranks it |
 | `OMCPA_NETWORK_NAME` | `oh-my-cpa` / `oh-my-cpa-standalone` | Docker network name |
 | `OMCPA_NETWORK_EXTERNAL` | `false` | Set `true` in `compose.omc.yml` to attach OMC to an existing Docker network |
 | `CPA_CONFIG_PATH`, `CPA_AUTH_PATH`, `CPA_LOG_PATH`, `CPA_PLUGIN_PATH` | `./config.yaml`, `./auths`, `./logs`, `./plugins` | Host paths for CPA's files in `compose.full.yml` |

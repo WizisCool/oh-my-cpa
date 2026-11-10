@@ -40,6 +40,12 @@ type Config struct {
 	// TrustedProxyCIDRs are the direct peer networks whose forwarding headers
 	// may be used for per-client login throttling. Empty means trust none.
 	TrustedProxyCIDRs []string
+	// DefaultLanguage pins the console's reading language for every visitor
+	// (OMCPA_DEFAULT_LANGUAGE). Empty follows each visitor's browser, which is what a
+	// deployment that configures nothing gets. The console's own registry
+	// (web/src/i18n/language.ts) owns the set; a value outside it fails the boot rather
+	// than leaving every visitor in a language the operator did not ask for.
+	DefaultLanguage string
 	// IsDemoMode turns this process into the public demonstration build: the
 	// console is served from fixtures, so it needs no CPA, no management key and
 	// no provider credential, and the server refuses every operator surface that
@@ -106,6 +112,31 @@ const (
 // DemoModeEnv is the switch that turns a self-hosted deployment into the public
 // demonstration. The default is deliberately off.
 const DemoModeEnv = "OMCPA_DEMO_MODE"
+
+// DefaultLanguageEnv pins the console's reading language. A deployment that names none,
+// or names "auto", follows each visitor's browser.
+const DefaultLanguageEnv = "OMCPA_DEFAULT_LANGUAGE"
+
+// ConsoleLanguages are the reading languages the console registers, in the order its
+// language menu lists them. The console's registry (web/src/i18n/language.ts) is the
+// source of truth; a test reads it so this list cannot drift out of it and reject a
+// language the console already reads.
+var ConsoleLanguages = []string{"zh", "zh-Hant", "en", "ms"}
+
+// loadDefaultLanguage returns the language the operator pinned, or "" when the console
+// follows each visitor's browser.
+func loadDefaultLanguage() (string, error) {
+	raw := strings.TrimSpace(os.Getenv(DefaultLanguageEnv))
+	if raw == "" || raw == "auto" {
+		return "", nil
+	}
+	for _, id := range ConsoleLanguages {
+		if raw == id {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("%s must be auto or one of %s: %q", DefaultLanguageEnv, strings.Join(ConsoleLanguages, ", "), raw)
+}
 
 // UsageConfig controls the request-record pipeline that backs the dashboard and
 // every later analytics feature.
@@ -252,6 +283,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	defaultLanguage, err := loadDefaultLanguage()
+	if err != nil {
+		return Config{}, err
+	}
 	if demoMode {
 		// The fixture database is the whole history, and there is no CPA queue to
 		// drain: leaving capture on would only poll an upstream that does not
@@ -296,6 +331,7 @@ func Load() (Config, error) {
 		Release:           releaseConfig,
 		Updater:           updaterConfig,
 		GoogleFontsURL:    strings.TrimSpace(os.Getenv("OMCPA_GOOGLE_FONTS_URL")),
+		DefaultLanguage:   defaultLanguage,
 		CPA:               cpa,
 		IsDemoMode:        demoMode,
 	}, nil

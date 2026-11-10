@@ -1053,6 +1053,11 @@ func injectRuntimeConfig(indexHTML string, cfg config.Config) (string, error) {
 		"mediaBaseUrl": mediaBase,
 		"appName":      "Oh My CPA",
 		"demo":         cfg.IsDemoMode,
+		// The reading language a visitor who has not chosen one gets, so the
+		// sign-in page already reads in the deployment's language: the configuration
+		// arrives with the document rather than from a request a signed-out visitor
+		// cannot make.
+		"defaultLanguage": cfg.DefaultLanguage,
 		// The running build's own version, so the playground's User-Agent placeholder
 		// and its copied cURL name the version this deployment actually is instead of
 		// a second copy of the number maintained in TypeScript.

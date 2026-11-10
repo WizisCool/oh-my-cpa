@@ -13,8 +13,8 @@ type AntdLocale = NonNullable<ConfigProviderProps['locale']>;
 /**
  * Where each registered language's copy comes from.
  *
- * Simplified Chinese and English are bundled with the entry: Simplified Chinese is the default
- * reading and the fallback when another catalog cannot be fetched, and English is what most
+ * Simplified Chinese and English are bundled with the entry: Simplified Chinese is the built-in
+ * default and the fallback when another catalog cannot be fetched, and English is what most
  * readers outside it choose, so neither waits on a second request before the first paint. The
  * other catalogs are large enough that bundling them would make every reader pay for languages
  * they did not choose, so each is its own chunk, fetched when selected.
