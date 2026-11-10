@@ -42,11 +42,58 @@ export const LANGUAGES = [
 
 export type Lang = (typeof LANGUAGES)[number]['id'];
 
-/** The language a first visit reads, and the one a catalog that cannot be fetched falls back to. */
+/**
+ * The language a visit reads when nothing else names one: no choice saved in this browser, no
+ * language pinned by the deployment, and a browser asking for a language the console does not
+ * read. It is shipped with the entry, which is what makes it a fallback at all: a deferred
+ * catalog that failed is exactly the one that could not be fetched.
+ */
 export const DEFAULT_LANG: Lang = 'zh';
 
 export function isLang(value: unknown): value is Lang {
   return LANGUAGES.some((language) => language.id === value);
+}
+
+/**
+ * The registered language a browser's preferred tags ask for, or `undefined` when they name none.
+ *
+ * Tags are matched by primary subtag, because a region is not a reading language: `en-GB` and
+ * `en-US` both read `en`, and `ms-SG` reads `ms`. Chinese is the one language whose two catalogs
+ * are two scripts rather than two regions, so the tags that ask for the Traditional script -
+ * `zh-Hant*`, and the regions that write it, Taiwan, Hong Kong and Macao - read `zh-Hant`, and
+ * every other Chinese tag reads `zh`.
+ */
+export function matchBrowserLanguage(tags: readonly string[]): Lang | undefined {
+  for (const tag of tags) {
+    const normalized = tag.trim().toLowerCase();
+    if (!normalized) continue;
+    const primary = normalized.split('-')[0];
+    if (primary === 'zh') {
+      return /(^|-)hant(-|$)/.test(normalized) || /^zh-(tw|hk|mo)(-|$)/.test(normalized) ? 'zh-Hant' : 'zh';
+    }
+    const match = LANGUAGES.find((language) => language.locale.toLowerCase().split('-')[0] === primary);
+    if (match) return match.id;
+  }
+  return undefined;
+}
+
+/**
+ * The reading language a visit starts in: the choice this browser saved, else the language the
+ * deployment pinned (`OMCPA_DEFAULT_LANGUAGE`), else the first language the browser asks for that
+ * the console reads, else the built-in one.
+ *
+ * An unrecognized value falls through to the next source, so a stale stored id, or a document
+ * served without runtime configuration, still renders a language the console has rather than
+ * nothing.
+ */
+export function resolveInitialLang(
+  stored: unknown,
+  configuredDefault: unknown,
+  browserLanguages: readonly string[],
+): Lang {
+  if (isLang(stored)) return stored;
+  if (isLang(configuredDefault)) return configuredDefault;
+  return matchBrowserLanguage(browserLanguages) ?? DEFAULT_LANG;
 }
 
 /**

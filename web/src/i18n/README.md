@@ -61,7 +61,10 @@ capabilities; other families are not, so adding the sentence is part of the serv
 ## Adding a language
 
 1. Add a row to `web/src/i18n/language.ts`. The registry is the only place a language is listed;
-   the compiler then names what else must learn about it.
+   the compiler then names what else must learn about it, and a Go test in `internal/config` fails
+   until `OMCPA_DEFAULT_LANGUAGE` accepts the new id. `matchBrowserLanguage` in the same file decides
+   which `Accept-Language` tags read it, so a language whose script or region varies must be taught
+   there too.
 2. Add its catalog under `locales/<id>/`, one file per source area, each typed against `zh/`.
 3. Add the antd locale and the deferral decision to `resources.ts` if the language's catalog should
    not be part of the first paint (see `CATALOGS`, and `web/vite.config.ts` for the chunk name the
@@ -76,8 +79,8 @@ capabilities; other families are not, so adding the sentence is part of the serv
 | --- | --- |
 | `catalog.ts` | `MessageKey`, `Catalog`, `Translation`, `TFunc`, and the helpers that answer a key or `undefined` |
 | `format.ts` | Placeholder filling and ICU plural selection, in the reading language's rules |
-| `language.ts` | The registry: id, endonym, glyph, flag, `Intl` locale |
+| `language.ts` | The registry: id, endonym, glyph, flag, `Intl` locale, and the rule that picks the language a visit starts in |
 | `resources.ts` | Which catalog and antd locale each language loads, and whether it is deferred |
-| `index.tsx` | The provider, the translator, and the `hasMessage`/`messageKey`/`translateOr` helpers |
+| `index.tsx` | The provider that resolves and stores a reading language, the translator, and the `hasMessage`/`messageKey`/`translateOr` helpers |
 | `GLOSSARY.md` | The word for each concept, and the variants the gate refuses |
 | `STYLE.md` | How a sentence reads |

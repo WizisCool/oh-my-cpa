@@ -338,6 +338,19 @@ func TestInjectRuntimeConfigReplacesTemplateScript(t *testing.T) {
 	}
 }
 
+// The reading language a deployment configured travels with the document, so the sign-in page a
+// visitor who has made no request of their own already reads in it.
+func TestInjectRuntimeConfigCarriesTheDeploymentLanguage(t *testing.T) {
+	input := `<html><head><script>if (!window.__OMCPA_CONFIG__) { window.__OMCPA_CONFIG__ = {}; }</script></head></html>`
+	output, err := injectRuntimeConfig(input, config.Config{DefaultLanguage: "en"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, `"defaultLanguage":"en"`) {
+		t.Fatalf("configured language missing from the injected configuration: %s", output)
+	}
+}
+
 // The console marks itself as a demonstration from the injected configuration
 // rather than from an API call, so the marker is right in the first frame and a
 // visitor never sees a non-demo layout flash before it.

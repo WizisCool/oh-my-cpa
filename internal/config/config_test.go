@@ -3,6 +3,9 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,7 +71,7 @@ func clearConfigEnv(t *testing.T) {
 		"OMCPA_BASE_PATH", "OMCPA_DATA_DIR", "OMCPA_LISTEN_ADDR", "OMCPA_MASTER_KEY",
 		"OMCPA_PUBLIC_URL", "OMCPA_VERSION", "OMCPA_CPA_BASE_URL", "OMCPA_CPA_USAGE_ADDR",
 		"OMCPA_CPA_MANAGEMENT_KEY", "OMCPA_TRUSTED_PROXY_CIDRS", DemoModeEnv, "PORT",
-		"OMCPA_UPDATE_CHECK_ENABLED", "OMCPA_OMC_REPO", "OMCPA_CPA_REPO",
+		"OMCPA_UPDATE_CHECK_ENABLED", "OMCPA_OMC_REPO", "OMCPA_CPA_REPO", DefaultLanguageEnv,
 	} {
 		t.Setenv(name, "")
 	}
@@ -316,6 +319,69 @@ func TestReleaseCheckConfigReportsAMalformedSwitch(t *testing.T) {
 	}
 	if cfg.Release.CPARepository != "someone/fork" {
 		t.Fatalf("fork override = %q, want someone/fork", cfg.Release.CPARepository)
+	}
+}
+
+// A deployment that pins no language leaves the reading language to each visitor's browser, so
+// the console follows the reader instead of making them open the language menu.
+func TestLoadReadsTheConsoleDefaultLanguage(t *testing.T) {
+	clearConfigEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DefaultLanguage != "" {
+		t.Fatalf("default language = %q, want every visitor's browser", cfg.DefaultLanguage)
+	}
+
+	t.Setenv(DefaultLanguageEnv, "auto")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DefaultLanguage != "" {
+		t.Fatalf("an explicit auto = %q, want every visitor's browser", cfg.DefaultLanguage)
+	}
+
+	t.Setenv(DefaultLanguageEnv, "en")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DefaultLanguage != "en" {
+		t.Fatalf("configured default language = %q, want en", cfg.DefaultLanguage)
+	}
+}
+
+// A configured language the console cannot read is an operator mistake the page would show to every
+// visitor, so it stops the boot and names the variable rather than being ignored silently.
+func TestLoadRejectsAnUnknownConsoleDefaultLanguage(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv(DefaultLanguageEnv, "english")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("an unregistered language was accepted")
+	}
+	if !strings.Contains(err.Error(), DefaultLanguageEnv) {
+		t.Fatalf("error does not name the variable: %v", err)
+	}
+}
+
+// The console's registry is authoritative for which ids exist, and the console keeps no copy of
+// this list that could be checked from its own side. An operator may configure any language the
+// console reads, so this list has to move with the registry instead of rejecting a new one at boot.
+func TestConsoleLanguagesMatchTheConsoleRegistry(t *testing.T) {
+	source, err := os.ReadFile("../../web/src/i18n/language.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches := regexp.MustCompile(`\{ id: '([^']+)'`).FindAllStringSubmatch(string(source), -1)
+	registered := make([]string, 0, len(matches))
+	for _, match := range matches {
+		registered = append(registered, match[1])
+	}
+	if !slices.Equal(registered, ConsoleLanguages) {
+		t.Fatalf("console languages = %v, but the registry registers %v", ConsoleLanguages, registered)
 	}
 }
 

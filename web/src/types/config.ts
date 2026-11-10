@@ -15,6 +15,13 @@ export interface AppConfig {
    * wire cannot disagree about which build is being identified.
    */
   version?: string;
+  /**
+   * The reading language the deployment pins for every visitor (`OMCPA_DEFAULT_LANGUAGE`). It
+   * arrives with the document, so the sign-in page already reads in it. Empty or absent pins
+   * nothing and each visitor's browser decides; the value is unvalidated here because the language
+   * registry owns which ids the console reads, and the server refuses to boot on an unknown one.
+   */
+  defaultLanguage?: string;
 }
 
 declare global {
@@ -65,5 +72,8 @@ export function getAppConfig(): AppConfig {
     appName,
     demo: injected?.demo === true,
     ...(typeof injected?.version === 'string' && injected.version.trim() ? { version: injected.version.trim() } : {}),
+    ...(typeof injected?.defaultLanguage === 'string' && injected.defaultLanguage.trim()
+      ? { defaultLanguage: injected.defaultLanguage.trim() }
+      : {}),
   };
 }

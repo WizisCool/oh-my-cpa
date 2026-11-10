@@ -19,6 +19,8 @@ function validateTopology(document, isFullStack) {
   assert.equal(console.environment.OMCPA_PUBLIC_URL, '${OMCPA_PUBLIC_URL:-}');
   assert.equal(console.environment.OMCPA_TRUSTED_PROXY_CIDRS, '${OMCPA_TRUSTED_PROXY_CIDRS:-}');
   assert.equal(console.environment.OMCPA_USAGE_INGEST_MODE, '${OMCPA_USAGE_INGEST_MODE:-auto}');
+  assert.equal(console.environment.OMCPA_DEFAULT_LANGUAGE, '${OMCPA_DEFAULT_LANGUAGE:-}',
+    'An empty default is what lets an upgraded install follow each visitor\'s browser without editing a file');
   assert.equal(console.environment.OMCPA_VERSION, undefined);
   assert.equal(console.healthcheck, undefined, 'The image owns its canonical health probe');
   assert.deepEqual(console.volumes, ['${OMCPA_DATA_PATH:-oh-my-cpa-data}:/data']);

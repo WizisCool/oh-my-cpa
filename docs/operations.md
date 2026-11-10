@@ -25,6 +25,11 @@ directory (`OMCPA_ENV_FILE` names another file); real environment variables win.
 `internal/config/config.go` is authoritative, and a malformed value stops start-up with
 a message naming the variable.
 
+A container receives only the variables its Compose file names under `environment:`. The
+supplied files list the ones this release reads; a variable added to `.env` alone reaches a
+native install, which reads that file itself, but not a container whose Compose file was
+copied from an earlier release. Add the line to that service's `environment:` as well.
+
 ### Required
 
 | Variable | Purpose |
@@ -40,6 +45,7 @@ a message naming the variable.
 | `OMCPA_VERSION` | embedded stable tag; `v0.1.0-dev` for untagged source builds | Optional display/User-Agent version override; does not change the installed build |
 | `OMCPA_LISTEN_ADDR` | `:8080` | Process listen address (`deploy/native.env.example` sets `127.0.0.1:8080`; Docker bridge deployments change host port via `OMCPA_BIND` instead) |
 | `OMCPA_BASE_PATH` | `/` | URL prefix. The default serves the console at the root; a configured sub-path is normalised without a trailing slash |
+| `OMCPA_DEFAULT_LANGUAGE` | unset: each visitor's browser | Pins the console's reading language for every visitor: `zh`, `zh-Hant`, `en`, `ms`, or `auto` to follow each visitor's browser. A language chosen in the console is saved in that browser and outranks it, so changing the pin reaches every visitor who never chose one and leaves the others alone. Any other value stops start-up |
 | `OMCPA_DATA_DIR` | `/data` (image) / `./data` (binary) | Directory holding `oh-my-cpa.db`. Local disk only |
 | `OMCPA_PUBLIC_URL` | unset | The address browsers use. An `https://` value marks the session cookie `Secure` |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | unset | Comma-separated CIDRs of reverse proxies whose forwarding headers may be trusted for login throttling |
