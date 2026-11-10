@@ -13,6 +13,7 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
 import { usePreference } from '../hooks/usePreference';
+import { useLiveRevision } from '../hooks/useLiveRevision';
 import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
@@ -227,21 +228,33 @@ export const DashboardPage: React.FC = () => {
     placeholderData: keepPreviousData,
   });
 
-  const { data: tail } = useQuery({
-    queryKey: ['dashboard-tail', query],
+  const tailEnabled = rangeReady && sliding && Boolean(full) && !isPlaceholderData;
+  const tailBusyRef = React.useRef(false);
+  const { revision: tailRevision, notifySettled: notifyTailSettled } = useLiveRevision({
+    isEnabled: tailEnabled,
+    fallbackPollMs: (full && livePollInterval(full.window.bucket_ms)) || 15_000,
+    isBusyRef: tailBusyRef,
+  });
+
+  const { data: tail, isFetching: isTailFetching } = useQuery({
+    queryKey: ['dashboard-tail', query, tailRevision],
     queryFn: () => api.getDashboardTail(query),
     // While a preset switch is still in flight, `full` is the *previous*
     // window held by keepPreviousData — patching a new tail onto it would mix
     // two windows on screen.
-    enabled: rangeReady && sliding && Boolean(full) && !isPlaceholderData,
-    // Paced to the resolution being served, and paused while the tab is hidden
-    // (react-query's default). Coming back from a long sleep is handled below:
-    // the splice refuses to leave a hole and asks for the full window instead.
+    enabled: tailEnabled,
+    // Keep the bucket-paced interval so sliding "now" windows advance across
+    // quiet periods, while `tailRevision` wakes immediately on pushed SSE usage.
     refetchInterval: full ? livePollInterval(full.window.bucket_ms) : false,
     refetchOnWindowFocus: false,
+    gcTime: 15_000,
     meta: { silent: true },
     staleTime: 0,
   });
+  tailBusyRef.current = isTailFetching;
+  React.useEffect(() => {
+    if (!isTailFetching) notifyTailSettled();
+  }, [isTailFetching, notifyTailSettled]);
 
   const merged = React.useMemo(() => (full ? applyTail(full, tail) : undefined), [full, tail]);
   const data = merged?.data;

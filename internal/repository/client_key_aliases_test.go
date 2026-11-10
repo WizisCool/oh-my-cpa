@@ -472,3 +472,42 @@ func TestUsageClientKeyFingerprintMatchesIngestionPurpose(t *testing.T) {
 		t.Fatalf("fingerprint %q lacks the hmac prefix the storage path recognises", first)
 	}
 }
+
+func TestClientKeyMasksForPicksNewestNonEmptyMaskPerKey(t *testing.T) {
+	repo := fingerprintTestRepository(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)
+
+	fpA, err := repo.UsageClientKeyFingerprint("sk-alpha-secret-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fpB, err := repo.UsageClientKeyFingerprint("sk-bravo-secret-0002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldMask := security.MaskSecret("sk-alpha-secret-old1")
+	newMask := security.MaskSecret("sk-alpha-secret-new2")
+	bMask := security.MaskSecret("sk-bravo-secret-0002")
+	rows := []usage.Event{
+		{InstanceID: "default", EventKey: "a-old", APIGroupKey: fpA, APIGroupLabel: "api_key", APIKeyMask: oldMask, TimestampMS: base.UnixMilli()},
+		{InstanceID: "default", EventKey: "a-new", APIGroupKey: fpA, APIGroupLabel: "api_key", APIKeyMask: newMask, TimestampMS: base.Add(2 * time.Minute).UnixMilli()},
+		// Newer row with empty mask must not erase the last non-empty mask.
+		{InstanceID: "default", EventKey: "a-empty", APIGroupKey: fpA, APIGroupLabel: "api_key", APIKeyMask: "", TimestampMS: base.Add(3 * time.Minute).UnixMilli()},
+		{InstanceID: "default", EventKey: "b-only", APIGroupKey: fpB, APIGroupLabel: "api_key", APIKeyMask: bMask, TimestampMS: base.Add(time.Minute).UnixMilli()},
+	}
+	if _, err := repo.InsertUsageEvents(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	// Duplicates and missing fingerprints should be handled cleanly.
+	masks, err := repo.ClientKeyMasksFor(ctx, "default", []string{fpA, fpA, fpB, "hmac:never-seen", ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if masks[fpA] != newMask || masks[fpB] != bMask {
+		t.Fatalf("unexpected masks: %+v (want %q, %q)", masks, newMask, bMask)
+	}
+	if _, exists := masks["hmac:never-seen"]; exists {
+		t.Fatalf("unexpected entry for unseen fingerprint: %+v", masks)
+	}
+}

@@ -572,3 +572,84 @@ func TestImageOutputPriceSyncKeepsHistoricalCosts(t *testing.T) {
 		}
 	}
 }
+
+func TestPricingUsageSurvivesDetailRetentionAndCountsTailOnce(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{
+		{Model: "gpt-5", PromptPricePer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	day0 := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
+	// Sub-15m edge record, whole-day records, and unpriced record.
+	events := []usage.Event{
+		{InstanceID: "default", EventKey: "edge", Model: "gpt-5", Provider: "codex", TimestampMS: day0.Add(7 * time.Minute).UnixMilli(), InputTokens: 500_000},
+		{InstanceID: "default", EventKey: "day1", Model: "gpt-5", Provider: "codex", TimestampMS: day0.Add(26 * time.Hour).UnixMilli(), InputTokens: 1_000_000},
+		{InstanceID: "default", EventKey: "unpriced", Model: "mystery", Provider: "claude", TimestampMS: day0.Add(27 * time.Hour).UnixMilli(), InputTokens: 1_000_000},
+	}
+	if _, err := r.InsertUsageEvents(ctx, events); err != nil {
+		t.Fatal(err)
+	}
+	since := day0.Add(5 * time.Minute).UnixMilli()
+	wantModel := map[string]PricingUsage{
+		"gpt-5":   {Requests: 2, PricedRequests: 2, CostNanos: 3_000_000_000},
+		"mystery": {Requests: 1, PricedRequests: 0, CostNanos: 0},
+	}
+	wantChannel := map[string]PricingUsage{
+		"codex":  {Requests: 2, PricedRequests: 2, CostNanos: 3_000_000_000},
+		"claude": {Requests: 1, PricedRequests: 0, CostNanos: 0},
+	}
+	assertPricingUsage := func(stage string, expect map[string]PricingUsage, expectCh map[string]PricingUsage) {
+		t.Helper()
+		gotModel, err := r.QueryPricingUsageByModel(ctx, since)
+		if err != nil {
+			t.Fatalf("%s model usage: %v", stage, err)
+		}
+		if len(gotModel) != len(expect) {
+			t.Fatalf("%s model usage = %+v, want %+v", stage, gotModel, expect)
+		}
+		for k, v := range expect {
+			if gotModel[k] != v {
+				t.Fatalf("%s model[%s] = %+v, want %+v", stage, k, gotModel[k], v)
+			}
+		}
+		gotCh, err := r.QueryPricingUsageByChannel(ctx, since)
+		if err != nil {
+			t.Fatalf("%s channel usage: %v", stage, err)
+		}
+		for k, v := range expectCh {
+			if gotCh[k] != v {
+				t.Fatalf("%s channel[%s] = %+v, want %+v", stage, k, gotCh[k], v)
+			}
+		}
+	}
+	assertPricingUsage("before fold", wantModel, wantChannel)
+	if _, err := r.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	assertPricingUsage("after fold", wantModel, wantChannel)
+
+	// Append unfolded tail traffic and expire aged detail rows; permanent facts + tail stay exact.
+	if _, err := r.InsertUsageEvents(ctx, []usage.Event{
+		{InstanceID: "default", EventKey: "tail", Model: "gpt-5", Provider: "codex", TimestampMS: day0.Add(72 * time.Hour).UnixMilli(), InputTokens: 500_000},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Expire day0..day2 detail rows (note: sub-15m edge aligns down to 00:00 once behind horizon).
+	horizon := day0.Add(48 * time.Hour).UnixMilli()
+	for pass := 0; pass < 3; pass++ {
+		if _, err := r.RunLifecycle(ctx, map[string]int64{LifecycleUsageDetail: horizon}, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantAfterRetention := map[string]PricingUsage{
+		"gpt-5":   {Requests: 3, PricedRequests: 3, CostNanos: 4_000_000_000},
+		"mystery": {Requests: 1, PricedRequests: 0, CostNanos: 0},
+	}
+	wantChAfterRetention := map[string]PricingUsage{
+		"codex":  {Requests: 3, PricedRequests: 3, CostNanos: 4_000_000_000},
+		"claude": {Requests: 1, PricedRequests: 0, CostNanos: 0},
+	}
+	assertPricingUsage("after retention + unfolded tail", wantAfterRetention, wantChAfterRetention)
+}

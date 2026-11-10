@@ -136,7 +136,13 @@ const COMMON_ALIASES: Record<string, string> = {
   'vertex': 'Google',
 };
 
+const COMMON_ALIAS_ENTRIES: ReadonlyArray<readonly [string, string, string]> = Object.entries(COMMON_ALIASES).map(
+  ([kw, iconId]) => [kw, kw.replace(/[\s\-_]/g, ''), iconId] as const,
+);
+
 const KNOWN_PROVIDER_ICONS = PROVIDER_ICON_IDS;
+const MAX_PROVIDER_ICON_CACHE = 512;
+const providerIconCache = new Map<string, string | undefined>();
 
 /**
  * resolveProviderIcon resolves a provider to a brand mark, or undefined when no
@@ -152,7 +158,20 @@ export function resolveProviderIcon(family: string, name?: string, baseURL?: str
   const f = (family || '').toLowerCase().trim();
   const n = (name || '').toLowerCase().trim();
   const url = (baseURL || '').toLowerCase().trim();
+  const cacheKey = `${f}\u0000${n}\u0000${url}`;
+  if (providerIconCache.has(cacheKey)) {
+    return providerIconCache.get(cacheKey);
+  }
 
+  const resolved = computeProviderIcon(f, n, url);
+  if (providerIconCache.size >= MAX_PROVIDER_ICON_CACHE) {
+    providerIconCache.clear();
+  }
+  providerIconCache.set(cacheKey, resolved);
+  return resolved;
+}
+
+function computeProviderIcon(f: string, n: string, url: string): string | undefined {
   // 1. If name is provided and matches a known provider family directly
   if (n && KNOWN_PROVIDER_ICONS[n]) {
     return KNOWN_PROVIDER_ICONS[n];
@@ -171,8 +190,7 @@ export function resolveProviderIcon(family: string, name?: string, baseURL?: str
         return c.iconId;
       }
     }
-    for (const [kw, iconId] of Object.entries(COMMON_ALIASES)) {
-      const cleanKw = kw.replace(/[\s\-_]/g, '');
+    for (const [kw, cleanKw, iconId] of COMMON_ALIAS_ENTRIES) {
       if (n.includes(kw) || cleanName.includes(cleanKw)) {
         return iconId;
       }
@@ -190,8 +208,7 @@ export function resolveProviderIcon(family: string, name?: string, baseURL?: str
         return c.iconId;
       }
     }
-    for (const [kw, iconId] of Object.entries(COMMON_ALIASES)) {
-      const cleanKw = kw.replace(/[\s\-_]/g, '');
+    for (const [kw, cleanKw, iconId] of COMMON_ALIAS_ENTRIES) {
       if (combined.includes(kw) || normalized.includes(cleanKw)) {
         return iconId;
       }

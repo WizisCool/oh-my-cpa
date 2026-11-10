@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 func performanceRepository(tb testing.TB, n int) *Repository {
@@ -210,5 +213,235 @@ func BenchmarkUsageFactsCube(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func BenchmarkCommitUsageDecoded(b *testing.B) {
+	ctx := context.Background()
+	repo := performanceRepository(b, 0)
+	if err := repo.UpsertModelPrices(ctx, []pricing.ModelPrice{
+		{Model: "gpt-5", PromptPricePer1M: 1.25, CompletionPer1M: 10, CacheReadPer1M: 0.125, CacheWritePer1M: 1.25, PriceMultiplier: 1, Source: pricing.SourceOpenRouter},
+		{Model: "claude-sonnet-4-5", PromptPricePer1M: 3, CompletionPer1M: 15, CacheReadPer1M: 0.3, CacheWritePer1M: 3.75, PriceMultiplier: 1, Source: pricing.SourceOpenRouter},
+	}); err != nil {
+		b.Fatal(err)
+	}
+	if err := repo.UpsertChannelMultiplier(ctx, pricing.ChannelMultiplier{Channel: "codex", Multiplier: 0.8}); err != nil {
+		b.Fatal(err)
+	}
+	const batchSize = 200
+	payloads := make([]string, batchSize)
+	for i := range payloads {
+		payloads[i] = `{"request_id":"req"}`
+	}
+	accounting := &usage.TokenAccounting{
+		Version: 2,
+		Status:  "complete",
+		RawTokens: usage.TokenStats{
+			InputTokens:  1200,
+			OutputTokens: 300,
+			TotalTokens:  1500,
+		},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		if _, err := repo.AppendUsageInbox(ctx, "default", "subscribe", payloads, time.UnixMilli(1700000000000)); err != nil {
+			b.Fatal(err)
+		}
+		inbox, err := repo.ClaimUsageInboxBatch(ctx, batchSize)
+		if err != nil || len(inbox) != batchSize {
+			b.Fatalf("claim batch: len=%d err=%v", len(inbox), err)
+		}
+		decoded := make([]UsageDecoded, batchSize)
+		for idx, item := range inbox {
+			model := "gpt-5"
+			provider := "codex"
+			if idx%2 == 1 {
+				model = "claude-sonnet-4-5"
+				provider = "claude"
+			}
+			decoded[idx] = UsageDecoded{
+				InboxID: item.ID,
+				Event: usage.Event{
+					InstanceID:      "default",
+					EventKey:        fmt.Sprintf("ev-%d-%d", i, idx),
+					RequestID:       fmt.Sprintf("req-%d-%d", i, idx),
+					APIGroupKey:     fmt.Sprintf("hmac:key-%d", idx%10),
+					APIGroupLabel:   "api_key",
+					APIKeyMask:      "sk-••••1234",
+					Provider:        provider,
+					AuthType:        "apikey",
+					AuthIndex:       fmt.Sprintf("auth-%d", idx%6),
+					Model:           model,
+					TimestampMS:     1700000000000 + int64(i*batchSize+idx)*100,
+					Generate:        true,
+					LatencyMS:       420,
+					InputTokens:     1000,
+					CacheReadTokens: 200,
+					OutputTokens:    300,
+					TotalTokens:     1500,
+					Accounting:      accounting,
+				},
+			}
+		}
+		b.StartTimer()
+		if committed, err := repo.CommitUsageDecoded(ctx, decoded); err != nil || committed != batchSize {
+			b.Fatalf("commit decoded: committed=%d err=%v", committed, err)
+		}
+	}
+}
+
+func BenchmarkAggregateUsageFacts(b *testing.B) {
+	ctx := context.Background()
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		b.Fatal(err)
+	}
+	const batchSize = 20000
+	repo := performanceRepository(b, 0)
+	repo.Timezone().Apply(shanghai)
+	if _, err := repo.EnsureLocalUsageFacts(ctx); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n <= ?)
+		INSERT INTO usage_events (
+			instance_id, event_key, api_group_key, model, model_alias, auth_index, provider, auth_type,
+			timestamp_ms, created_at_ms, input_tokens, output_tokens, total_tokens, cost_nanos, pricing_status, token_accounting
+		)
+		SELECT 'default', 'ev-' || n, 'hmac:key-' || (n % 20), 'model-' || (n % 12),
+			CASE WHEN n % 3 = 0 THEN 'fast' ELSE NULL END, 'auth-' || (n % 8), 'provider-' || (n % 4), 'apikey',
+			1700006400000 + n * 3000, 1700006400000, 1000, 250, 1250, 500000, 'priced',
+			'{"version":2,"status":"complete","raw_tokens":{"input_tokens":1000,"output_tokens":250,"total_tokens":1250}}'
+		FROM seq`, batchSize); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		if _, err := repo.SQL().Exec(`
+			DELETE FROM usage_facts_15m;
+			DELETE FROM usage_facts_daily;
+			DELETE FROM usage_facts_local_daily;
+			UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 0 WHERE name = ?`, CheckpointFacts); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+		folded, err := repo.AggregateUsageFacts(ctx, batchSize)
+		if err != nil || folded != batchSize {
+			b.Fatalf("folded=%d err=%v", folded, err)
+		}
+	}
+}
+
+func BenchmarkListUsageEventsWithArrivedCount(b *testing.B) {
+	ctx := context.Background()
+	const n = 100000
+	repo := performanceRepository(b, n)
+	if _, err := repo.SQL().Exec(`
+		UPDATE usage_events
+		SET api_group_key = 'hmac:key-' || (id % 20),
+		    api_group_label = 'api_key',
+		    api_key_mask = 'sk-••••1234',
+		    model = 'model-' || (id % 12),
+		    provider = 'provider-' || (id % 4),
+		    auth_index = 'auth-' || (id % 16),
+		    timestamp_ms = 1700000000000 + id * 500`); err != nil {
+		b.Fatal(err)
+	}
+	for idx := 0; idx < 64; idx++ {
+		if _, err := repo.SQL().Exec(`
+			INSERT INTO discovered_resources (
+				id, instance_id, resource_key, cpa_resource_type, cpa_auth_index, cpa_resource_name,
+				cpa_driver, protocol_driver, protocol_display, status, last_seen_at, created_at, updated_at
+			) VALUES (?, 'default', ?, 'auth_file', ?, ?, 'codex', 'codex', 'Codex', 'triaged', 0, 0, 0)`,
+			fmt.Sprintf("res-%d", idx), fmt.Sprintf("key-%d", idx), fmt.Sprintf("auth-%d", idx), fmt.Sprintf("cred-%d.json", idx)); err != nil {
+			b.Fatal(err)
+		}
+	}
+	filter := UsageEventFilter{
+		InstanceID: "default",
+		FromMS:     1700000000000,
+		ToMS:       1700060000000,
+		SinceID:    int64(n - 5),
+		Limit:      100,
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		page, err := repo.ListUsageEvents(ctx, filter)
+		if err != nil || len(page.Items) != 100 || page.ArrivedCount != 5 {
+			b.Fatalf("items=%d arrived=%d err=%v", len(page.Items), page.ArrivedCount, err)
+		}
+	}
+}
+
+func BenchmarkClientKeyMasksFor(b *testing.B) {
+	ctx := context.Background()
+	const n = 100000
+	repo := performanceRepository(b, n)
+	if _, err := repo.SQL().Exec(`
+		UPDATE usage_events
+		SET api_group_key = 'hmac:key-' || (id % 20),
+		    api_group_label = 'api_key',
+		    api_key_mask = 'sk-••••' || printf('%04d', id % 20),
+		    timestamp_ms = 1700000000000 + id * 500`); err != nil {
+		b.Fatal(err)
+	}
+	fingerprints := make([]string, 20)
+	for i := range fingerprints {
+		fingerprints[i] = fmt.Sprintf("hmac:key-%d", i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		masks, err := repo.ClientKeyMasksFor(ctx, "default", fingerprints)
+		if err != nil || len(masks) != 20 {
+			b.Fatalf("masks=%d err=%v", len(masks), err)
+		}
+	}
+}
+
+func BenchmarkPricingUsage(b *testing.B) {
+	ctx := context.Background()
+	const n = 100000
+	repo := performanceRepository(b, 0)
+	fromMS := int64(1700006400000)
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k <= ?)
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, model, provider, timestamp_ms, created_at_ms, cost_nanos, pricing_status)
+		SELECT 'default', 'event-'||k, 'group', 'model-'||(k%25), 'provider-'||(k%6),
+			? + k * 20000, 1700000000000,
+			CASE WHEN k % 5 = 0 THEN NULL ELSE 250000 END,
+			CASE WHEN k % 5 = 0 THEN 'unpriced' ELSE 'priced' END
+		FROM seq`, n, fromMS); err != nil {
+		b.Fatal(err)
+	}
+	// Fold all but the newest 500 records so the database matches normal steady-state operation.
+	for {
+		folded, err := repo.AggregateUsageFacts(ctx, 20000)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if folded < 20000 {
+			break
+		}
+	}
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k <= 500)
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, model, provider, timestamp_ms, created_at_ms, cost_nanos, pricing_status)
+		SELECT 'default', 'tail-'||k, 'group', 'model-'||(k%25), 'provider-'||(k%6), ? + (? + k) * 20000, 1700000000000, 250000, 'priced'
+		FROM seq`, fromMS, n); err != nil {
+		b.Fatal(err)
+	}
+	querySince := fromMS + 3*DayBucketMS + 7*60*1000 // non-midnight 30d rolling cutoff
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		byModel, err := repo.QueryPricingUsageByModel(ctx, querySince)
+		if err != nil || len(byModel) != 25 {
+			b.Fatalf("byModel=%d err=%v", len(byModel), err)
+		}
+		byChannel, err := repo.QueryPricingUsageByChannel(ctx, querySince)
+		if err != nil || len(byChannel) != 6 {
+			b.Fatalf("byChannel=%d err=%v", len(byChannel), err)
+		}
 	}
 }

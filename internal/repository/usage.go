@@ -263,6 +263,7 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 
 	createdMS := time.Now().UnixMilli()
 	prices := newPriceBook(tx)
+	args := make([]any, 0, usageEventColumnCount)
 	committed := 0
 	for _, item := range decoded {
 		event := r.sanitizeUsageEvent(item.Event)
@@ -270,7 +271,8 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 		if err != nil {
 			return 0, err
 		}
-		if _, errExec := insert.ExecContext(ctx, usageEventValues(event, locked, createdMS)...); errExec != nil {
+		args = appendUsageEventValues(args[:0], event, locked, createdMS)
+		if _, errExec := insert.ExecContext(ctx, args...); errExec != nil {
 			return 0, fmt.Errorf("insert usage event %s: %w", event.EventKey, errExec)
 		}
 		if _, errExec := mark.ExecContext(ctx, event.EventKey, createdMS, item.InboxID); errExec != nil {
@@ -290,14 +292,36 @@ func (r *Repository) MarkUsageUndecodable(ctx context.Context, ids []int64, reas
 	if r == nil || r.SQL() == nil {
 		return 0, errors.New("repository is not initialized")
 	}
-	marked := 0
-	for _, id := range ids {
-		if err := r.MarkUsageInboxFailure(ctx, id, reason); err != nil {
-			return marked, err
-		}
-		marked++
+	if len(ids) == 0 {
+		return 0, nil
 	}
-	return marked, nil
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin undecodable inbox update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		UPDATE usage_inboxes
+		SET attempt_count = attempt_count + 1,
+		    last_error = ?,
+		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END
+		WHERE id = ?`)
+	if err != nil {
+		return 0, fmt.Errorf("prepare undecodable inbox update: %w", err)
+	}
+	defer stmt.Close()
+
+	redacted := security.RedactText(truncate(reason, 500))
+	for index, id := range ids {
+		if _, errExec := stmt.ExecContext(ctx, redacted, maxInboxAttempts, InboxDiscarded, InboxPending, id); errExec != nil {
+			return index, fmt.Errorf("mark usage inbox failure: %w", errExec)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit undecodable inbox update: %w", err)
+	}
+	return len(ids), nil
 }
 
 // MarkUsageInboxProcessed links a captured payload to the event it produced.
@@ -354,11 +378,13 @@ func (r *Repository) StatsUsagePipeline(ctx context.Context) (UsagePipelineStats
 	if r == nil || r.SQL() == nil {
 		return stats, errors.New("repository is not initialized")
 	}
+	// Standalone COUNT(*) uses SQLite's page-level OP_Count counter rather than
+	// stepping every row, and endpoint seeks read the first/last B-tree entry in O(1).
 	var firstMS, lastMS int64
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT (SELECT COUNT(*) FROM usage_events),
-		       COALESCE((SELECT MIN(timestamp_ms) FROM usage_events), 0),
-		       COALESCE((SELECT MAX(timestamp_ms) FROM usage_events), 0)`).Scan(&stats.Events, &firstMS, &lastMS)
+		       COALESCE((SELECT timestamp_ms FROM usage_events ORDER BY timestamp_ms ASC LIMIT 1), 0),
+		       COALESCE((SELECT timestamp_ms FROM usage_events ORDER BY timestamp_ms DESC LIMIT 1), 0)`).Scan(&stats.Events, &firstMS, &lastMS)
 	if err != nil {
 		return stats, fmt.Errorf("read usage event stats: %w", err)
 	}
@@ -420,16 +446,7 @@ func (r *Repository) CaptureErrorEvent(ctx context.Context, instanceID, raw stri
 
 // PendingUsageInboxCount reports backlog for the ingest status endpoint.
 func (r *Repository) PendingUsageInboxCount(ctx context.Context) (int64, error) {
-	if r == nil || r.SQL() == nil {
-		return 0, errors.New("repository is not initialized")
-	}
-	var count int64
-	err := r.SQL().QueryRowContext(ctx, `
-		SELECT COUNT(1) FROM usage_inboxes WHERE status = ?`, InboxPending).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("count pending usage inboxes: %w", err)
-	}
-	return count, nil
+	return r.CountPendingUsageInbox(ctx)
 }
 
 // usageEventInsertPrefix and usageEventValues are the one column list both insert
@@ -451,8 +468,19 @@ const usageEventColumnCount = 52
 
 var usageEventPlaceholders = "(" + strings.TrimSuffix(strings.Repeat("?, ", usageEventColumnCount), ", ") + ")"
 
-func usageEventValues(event usage.Event, locked lockedPrice, createdMS int64) []any {
-	return []any{
+// 8 rows * 52 columns = 416 bind parameters, dividing the 200-row inbox batch evenly.
+const usageEventInsertChunkRows = 8
+
+func appendUsageEventValues(dst []any, event usage.Event, locked lockedPrice, createdMS int64) []any {
+	var accountingVal any
+	if event.Accounting != nil {
+		accountingVal = encodeTokenAccounting(event.Accounting)
+	}
+	var structuredVal any
+	if event.StructuredUsage != nil {
+		structuredVal = structuredUsageValue{details: event.StructuredUsage}
+	}
+	return append(dst,
 		event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 		event.Provider, event.Endpoint,
 		event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
@@ -464,8 +492,52 @@ func usageEventValues(event usage.Event, locked lockedPrice, createdMS int64) []
 		event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
 		locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
 		event.FailStatusCode, event.FailBody, event.FailCode, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey),
-		locked.serviceTier, locked.serviceTierSource, encodeTokenAccounting(event.Accounting), structuredUsageValue{details: event.StructuredUsage},
+		locked.serviceTier, locked.serviceTierSource, accountingVal, structuredVal,
+	)
+}
+
+func (r *Repository) insertSanitizedUsageEventsTx(ctx context.Context, tx *sql.Tx, sanitized []usage.Event, createdMS int64) (int64, error) {
+	prices := newPriceBook(tx)
+	var fullChunkStmt *sql.Stmt
+	if len(sanitized) >= usageEventInsertChunkRows {
+		fullChunkSQL := usageEventInsertPrefix + strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", usageEventInsertChunkRows), ", ")
+		stmt, errPrep := tx.PrepareContext(ctx, fullChunkSQL)
+		if errPrep != nil {
+			return 0, fmt.Errorf("prepare usage event insert: %w", errPrep)
+		}
+		defer stmt.Close()
+		fullChunkStmt = stmt
 	}
+	var lastID int64
+	args := make([]any, 0, min(len(sanitized), usageEventInsertChunkRows)*usageEventColumnCount)
+	for start := 0; start < len(sanitized); start += usageEventInsertChunkRows {
+		chunk := sanitized[start:min(start+usageEventInsertChunkRows, len(sanitized))]
+		args = args[:0]
+		for _, event := range chunk {
+			locked, err := lockUsagePrice(ctx, prices, event)
+			if err != nil {
+				return 0, err
+			}
+			args = appendUsageEventValues(args, event, locked, createdMS)
+		}
+		var (
+			result  sql.Result
+			errExec error
+		)
+		if len(chunk) == usageEventInsertChunkRows && fullChunkStmt != nil {
+			result, errExec = fullChunkStmt.ExecContext(ctx, args...)
+		} else {
+			result, errExec = tx.ExecContext(ctx, usageEventInsertPrefix+strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", len(chunk)), ", "), args...)
+		}
+		if errExec != nil {
+			return lastID, fmt.Errorf("insert usage event: %w", errExec)
+		}
+		// Rows of one statement take consecutive ids, so the last one is the highest.
+		if id, errLast := result.LastInsertId(); errLast == nil && id > lastID {
+			lastID = id
+		}
+	}
+	return lastID, nil
 }
 
 // InsertUsageEvents stores decoded events and returns the highest row id, which
@@ -484,47 +556,13 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 	defer func() { _ = tx.Rollback() }()
 
 	createdMS := time.Now().UnixMilli()
-	prices := newPriceBook(tx)
-	const chunkRows = 8
-	var fullChunkStmt *sql.Stmt
-	if len(events) >= chunkRows {
-		fullChunkSQL := usageEventInsertPrefix + strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", chunkRows), ", ")
-		stmt, errPrep := tx.PrepareContext(ctx, fullChunkSQL)
-		if errPrep != nil {
-			return 0, fmt.Errorf("prepare usage event insert: %w", errPrep)
-		}
-		defer stmt.Close()
-		fullChunkStmt = stmt
+	sanitized := make([]usage.Event, len(events))
+	for i, event := range events {
+		sanitized[i] = r.sanitizeUsageEvent(event)
 	}
-	var lastID int64
-	args := make([]any, 0, chunkRows*usageEventColumnCount)
-	for start := 0; start < len(events); start += chunkRows {
-		chunk := events[start:min(start+chunkRows, len(events))]
-		args = args[:0]
-		for _, event := range chunk {
-			event = r.sanitizeUsageEvent(event)
-			locked, err := lockUsagePrice(ctx, prices, event)
-			if err != nil {
-				return 0, err
-			}
-			args = append(args, usageEventValues(event, locked, createdMS)...)
-		}
-		var (
-			result  sql.Result
-			errExec error
-		)
-		if len(chunk) == chunkRows && fullChunkStmt != nil {
-			result, errExec = fullChunkStmt.ExecContext(ctx, args...)
-		} else {
-			result, errExec = tx.ExecContext(ctx, usageEventInsertPrefix+strings.TrimSuffix(strings.Repeat(usageEventPlaceholders+", ", len(chunk)), ", "), args...)
-		}
-		if errExec != nil {
-			return lastID, fmt.Errorf("insert usage event: %w", errExec)
-		}
-		// Rows of one statement take consecutive ids, so the last one is the highest.
-		if id, errLast := result.LastInsertId(); errLast == nil && id > lastID {
-			lastID = id
-		}
+	lastID, err := r.insertSanitizedUsageEventsTx(ctx, tx, sanitized, createdMS)
+	if err != nil {
+		return lastID, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit usage event insert: %w", err)

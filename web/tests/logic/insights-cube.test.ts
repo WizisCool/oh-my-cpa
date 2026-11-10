@@ -293,4 +293,32 @@ test('insights cube', () => {
   const DAY = 86_400_000;
   assert.equal(canShowWeekView({ from: 0, to: DAY - 1 }), false, 'a day cannot show a weekday pattern');
   assert.equal(canShowWeekView({ from: 0, to: 7 * DAY - 1 }), true, 'a whole week can');
+
+  // When no API-key credential maps to a configured provider, attributeServingProviders
+  // preserves the decoded cube identity without mutating dictionaries.
+  const unchanged = attributeServingProviders(cube, () => undefined);
+  assert.equal(unchanged, cube);
+
+  // Re-attributed dictionary entries that map two credentials onto the same provider
+  // merge cleanly across groupTotals, buildMatrix, and buildFlow.
+  const mergedAttr = attributeServingProviders(
+    decodeInsightsCube({
+      ...response,
+      dims: {
+        ...response.dims,
+        credentials: [
+          { auth_index: 'k1', auth_type: 'apikey' },
+          { auth_index: 'k2', auth_type: 'apikey' },
+        ],
+      },
+    }),
+    () => 'openai-compat-shared',
+  );
+  const providerTotals = groupTotals(mergedAttr, mergedAttr.rows, 'provider');
+  assert.deepEqual([...providerTotals.keys()], ['openai-compat-shared']);
+  assert.equal(providerTotals.get('openai-compat-shared')?.requests, 20);
+  const mergedMatrix = buildMatrix(mergedAttr, mergedAttr.rows, 'key', 'provider', 'requests', 5, 5);
+  assert.equal(mergedMatrix.cells.get(matrixCellKey('hmac:a', 'openai-compat-shared'))?.value, 15);
+  const mergedFlow = buildFlow(mergedAttr, mergedAttr.rows, ['key', 'model', 'provider'], 'requests', 5);
+  assert.equal(mergedFlow.links.filter((l) => l.target === '2:openai-compat-shared').reduce((s, l) => s + l.value, 0), 20);
 });

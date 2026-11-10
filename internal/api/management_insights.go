@@ -236,27 +236,33 @@ func (dictionary *insightsDictionary) bucketedRows(facts []repository.UsageFactR
 	for index, start := range starts {
 		positions[start] = int64(index)
 	}
-	merged := map[string][]int64{}
-	order := []string{}
+	needsRealign := bucket == insightsBucketMonth
+	rows := make([][]int64, 0, len(facts))
+	merged := make(map[[6]int64]int, len(facts))
 	for _, fact := range facts {
-		position, onGrid := positions[bucket.bucketStart(time.UnixMilli(fact.StartMS), zone).UnixMilli()]
+		startMS := fact.StartMS
+		if needsRealign {
+			startMS = bucket.bucketStart(time.UnixMilli(startMS), zone).UnixMilli()
+		}
+		position, onGrid := positions[startMS]
 		if !onGrid {
-			continue
+			position, onGrid = positions[bucket.bucketStart(time.UnixMilli(fact.StartMS), zone).UnixMilli()]
+			if !onGrid {
+				continue
+			}
 		}
 		encoded := dictionary.row(position, fact)
-		identity := fmt.Sprint(encoded[:6])
-		if existing, seen := merged[identity]; seen {
+		var identity [6]int64
+		copy(identity[:], encoded[:6])
+		if rowIdx, seen := merged[identity]; seen {
+			existing := rows[rowIdx]
 			for column := 6; column < len(encoded); column++ {
 				existing[column] += encoded[column]
 			}
 			continue
 		}
-		merged[identity] = encoded
-		order = append(order, identity)
-	}
-	rows := make([][]int64, 0, len(order))
-	for _, identity := range order {
-		rows = append(rows, merged[identity])
+		merged[identity] = len(rows)
+		rows = append(rows, encoded)
 	}
 	return rows
 }

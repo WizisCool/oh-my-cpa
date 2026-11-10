@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import {
+  pluginOAuthProviderKeys,
   pluginOAuthProviderLogos,
   pluginOAuthProviderTitles,
   pluginMultiPortalKeys,
@@ -40,6 +41,22 @@ export function usePluginOAuthTitles(): ReadonlyMap<string, string> {
 export function usePluginMultiPortalKeys(): ReadonlySet<string> {
   const { data } = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000 });
   return useMemo(() => pluginMultiPortalKeys(data?.plugins), [data]);
+}
+
+export function usePluginOAuthIds(): Set<string> {
+  const { data } = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000 });
+  return useMemo(() => {
+    const ids = new Set<string>();
+    if (!data?.plugins) return ids;
+    for (const plugin of data.plugins) {
+      const keys = pluginOAuthProviderKeys(plugin);
+      for (const key of keys) ids.add(key);
+      if (keys.length && plugin.metadata?.name) {
+        ids.add(plugin.metadata.name.toLowerCase().trim());
+      }
+    }
+    return ids;
+  }, [data]);
 }
 
 export function usePluginProviderOwnership(providerKeys: readonly (string | undefined)[], isEnabled: boolean) {

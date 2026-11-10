@@ -488,32 +488,51 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	if grid != nil && !isDailyUsable && grid.unit != UsageCalendarHour {
 		planLocalDays(&plan, grid.location)
 	}
+	hasLocalMarker := false
+	if plan.localMarker != "" {
+		if err := r.SQL().QueryRowContext(ctx, `
+			SELECT EXISTS (SELECT 1 FROM usage_aggregation_checkpoints WHERE name = ?)`,
+			plan.localMarker).Scan(&hasLocalMarker); err != nil {
+			return result, fmt.Errorf("read local usage fact marker: %w", err)
+		}
+	}
 	result.FromMS, result.ToMS, result.BucketMS = plan.fromMS, plan.toMS, plan.bucketMS
 	if grid != nil {
 		result.BucketMS = 0
 	}
 
-	statement, args := buildUsageFactStatement(plan, query, grid)
+	statement, args := buildUsageFactStatement(plan, query, grid, hasLocalMarker, true)
 	rows, err := r.SQL().QueryContext(ctx, statement, args...)
 	if err != nil {
 		return result, fmt.Errorf("read usage facts: %w", err)
 	}
 	defer rows.Close()
+	dimCount := len(query.Dimensions)
+	var factRequests int64
+	targets := make([]any, dimCount+1+len(usageFactMeasures)+1)
+	targets[dimCount+1+len(usageFactMeasures)] = &factRequests
+	var instantCache map[int64]int64
+	if grid != nil {
+		instantCache = make(map[int64]int64, 128)
+	}
 	for rows.Next() {
-		row := UsageFactRow{Keys: make([]string, len(query.Dimensions))}
-		var factRequests int64
-		targets := make([]any, 0, len(query.Dimensions)+len(usageFactMeasures)+2)
-		for index := range row.Keys {
-			targets = append(targets, &row.Keys[index])
+		row := UsageFactRow{Keys: make([]string, dimCount)}
+		for index := 0; index < dimCount; index++ {
+			targets[index] = &row.Keys[index]
 		}
-		targets = append(targets, &row.StartMS)
-		targets = append(targets, usageMeasureTargets(&row.UsageMeasures)...)
-		targets = append(targets, &factRequests)
+		targets[dimCount] = &row.StartMS
+		fillUsageMeasureTargets(targets[dimCount+1:dimCount+1+len(usageFactMeasures)], &row.UsageMeasures)
 		if errScan := rows.Scan(targets...); errScan != nil {
 			return result, fmt.Errorf("scan usage fact row: %w", errScan)
 		}
 		if grid != nil {
-			row.StartMS = grid.instant(row.StartMS)
+			if converted, ok := instantCache[row.StartMS]; ok {
+				row.StartMS = converted
+			} else {
+				converted = grid.instant(row.StartMS)
+				instantCache[row.StartMS] = converted
+				row.StartMS = converted
+			}
 		}
 		result.FactRequests += factRequests
 		result.DetailRequests += row.Requests - factRequests
@@ -525,11 +544,16 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	return result, nil
 }
 
-func usageMeasureTargets(measures *UsageMeasures) []any {
-	return append(scanTargets(&measures.UsageTotals),
-		&measures.CostNanos, &measures.PricedRequests, &measures.CostedRequests,
-		&measures.Accounting.CanonicalRequests, &measures.Accounting.UnresolvedRequests,
-		&measures.Accounting.RawInputTokens, &measures.Accounting.RawOutputTokens, &measures.Accounting.RawTotalTokens)
+func fillUsageMeasureTargets(dst []any, measures *UsageMeasures) {
+	t := &measures.UsageTotals
+	dst[0], dst[1] = &t.Requests, &t.Failures
+	dst[2], dst[3], dst[4] = &t.InputTokens, &t.OutputTokens, &t.ReasoningTokens
+	dst[5], dst[6], dst[7] = &t.CachedTokens, &t.CacheReadTokens, &t.CacheCreationTokens
+	dst[8] = &t.TotalTokens
+	dst[9], dst[10], dst[11] = &t.LatencySumMS, &t.TTFTSumMS, &t.TTFTCount
+	dst[12], dst[13], dst[14] = &measures.CostNanos, &measures.PricedRequests, &measures.CostedRequests
+	dst[15], dst[16] = &measures.Accounting.CanonicalRequests, &measures.Accounting.UnresolvedRequests
+	dst[17], dst[18], dst[19] = &measures.Accounting.RawInputTokens, &measures.Accounting.RawOutputTokens, &measures.Accounting.RawTotalTokens
 }
 
 // ClientKeyFilter narrows a read to one client key fingerprint, or to nothing
@@ -564,7 +588,7 @@ func usageFilterClause(filters map[UsageDimension][]string) (string, []any) {
 	return clause.String(), args
 }
 
-func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *calendarGrid) (string, []any) {
+func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *calendarGrid, hasLocalMarker, includeTailArm bool) (string, []any) {
 	aligned := func(column string) string {
 		if grid != nil {
 			return grid.bucket(column)
@@ -585,6 +609,17 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	if len(keyColumns) > 0 {
 		keySelect = strings.Join(keyColumns, ", ") + ", "
 	}
+	const eventMeasuresFast = `
+		1 AS requests, failed AS failures, input_tokens, output_tokens, reasoning_tokens,
+		cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+		latency_ms AS latency_sum_ms, COALESCE(ttft_ms, 0) AS ttft_sum_ms,
+		(ttft_ms IS NOT NULL) AS ttft_count, COALESCE(cost_nanos, 0) AS cost_nanos,
+		(pricing_status = 'priced') AS priced_requests, (cost_nanos IS NOT NULL) AS costed_requests,
+		CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') = 'complete' THEN 1 ELSE 0 END AS canonical_requests,
+		CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') <> 'complete' THEN 1 ELSE 0 END AS unresolved_accounting_requests,
+		CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0) END AS raw_input_tokens,
+		CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0) END AS raw_output_tokens,
+		CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0) END AS raw_total_tokens`
 	filterClause, filterArgs := usageFilterClause(query.Filters)
 	withFilters := func(args ...any) []any { return append(args, filterArgs...) }
 
@@ -606,27 +641,32 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	// every retained record.
 	eventArm := func(index, predicate string, predicateArgs ...any) {
 		parts = append(parts, `
-			SELECT 0 AS from_facts, `+keySelect+aligned("timestamp_ms")+` AS aligned, `+usageEventMeasures+`
+			SELECT 0 AS from_facts, `+keySelect+aligned("timestamp_ms")+` AS aligned, `+eventMeasuresFast+`
 			FROM usage_events INDEXED BY `+index+`
 			WHERE instance_id = ? AND `+predicate+filterClause)
 		args = append(args, withFilters(append([]any{query.InstanceID}, predicateArgs...)...)...)
 	}
-	const checkpoint = `(SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = '` + CheckpointFacts + `')`
+	const checkpoint = `(SELECT COALESCE((SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = '` + CheckpointFacts + `'), 0))`
 
 	if plan.fineFrom < plan.fineTo && plan.localFrom < plan.localTo {
 		factArm(usageFactsFineTable, plan.fineFrom, plan.localFrom)
 		factArm(usageFactsFineTable, plan.localTo, plan.fineTo)
-		// The whole local days come from the local grain when it is built for this
-		// zone and from the quarter hours otherwise. Both arms test the marker in
-		// this statement, so a rebuild for another zone committing just before the
-		// read cannot leave the days counted by neither.
+		// When the local-day grain is complete for this zone, read whole local days
+		// directly from usage_facts_local_daily (already one row per local day and
+		// dimension tuple) without also scanning the 96x larger quarter-hour table.
+		// Keep both the EXISTS arm and a NOT EXISTS fallback inside the same SQL
+		// snapshot so a concurrent timezone rebuild that swaps markers mid-flight
+		// still reads a complete partition; NOT EXISTS short-circuits before
+		// touching usage_facts_15m whenever the marker row is present.
 		const marker = ` AND EXISTS (SELECT 1 FROM usage_aggregation_checkpoints WHERE name = ?)`
-		parts = append(parts, `
+		if hasLocalMarker {
+			parts = append(parts, `
 			SELECT 1 AS from_facts, `+keySelect+grid.bucketFromWall("day_wall_ms")+` AS aligned, `+strings.Join(usageFactMeasures, ", ")+`
 			FROM `+usageFactsLocalTable+`
 			WHERE instance_id = ? AND zone = ? AND day_wall_ms >= ? AND day_wall_ms < ?`+filterClause+marker)
-		args = append(args, withFilters(query.InstanceID, grid.location.String(), plan.wallFrom, plan.wallTo)...)
-		args = append(args, plan.localMarker)
+			args = append(args, withFilters(query.InstanceID, grid.location.String(), plan.wallFrom, plan.wallTo)...)
+			args = append(args, plan.localMarker)
+		}
 		parts = append(parts, `
 			SELECT 1 AS from_facts, `+keySelect+aligned("bucket_start_ms")+` AS aligned, `+strings.Join(usageFactMeasures, ", ")+`
 			FROM `+usageFactsFineTable+`
@@ -653,8 +693,10 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 			`timestamp_ms >= ? AND timestamp_ms <= ? AND id <= `+checkpoint, plan.fromMS, plan.toMS)
 	}
 	// Everything not folded yet, wherever in the window it falls.
-	eventArm("idx_usage_events_instance_id",
-		`id > `+checkpoint+` AND timestamp_ms >= ? AND timestamp_ms <= ?`, plan.fromMS, plan.toMS)
+	if includeTailArm {
+		eventArm("idx_usage_events_instance_id",
+			`id > `+checkpoint+` AND timestamp_ms >= ? AND timestamp_ms <= ?`, plan.fromMS, plan.toMS)
+	}
 
 	sums := make([]string, 0, len(usageFactMeasures))
 	for _, measure := range usageFactMeasures {
@@ -703,9 +745,11 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 	}
 	var highID sql.NullInt64
 	var absorbed int
+	var minTS, maxTS sql.NullInt64
 	err = tx.QueryRowContext(ctx, `
-		SELECT MAX(id), COUNT(1) FROM (SELECT id FROM usage_events WHERE id > ? ORDER BY id ASC LIMIT ?)`,
-		lastID, batchSize).Scan(&highID, &absorbed)
+		SELECT MAX(id), COUNT(1), MIN(timestamp_ms), MAX(timestamp_ms)
+		FROM (SELECT id, timestamp_ms FROM usage_events WHERE id > ? ORDER BY id ASC LIMIT ?)`,
+		lastID, batchSize).Scan(&highID, &absorbed, &minTS, &maxTS)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("find usage fold high water: %w", err)
 	}
@@ -714,39 +758,72 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 	}
 
 	updates := make([]string, 0, len(usageFactMeasures))
+	sums := make([]string, 0, len(usageFactMeasures))
 	for _, measure := range usageFactMeasures {
 		updates = append(updates, measure+" = "+measure+" + excluded."+measure)
+		sums = append(sums, "SUM("+measure+")")
 	}
-	for _, grain := range []struct {
-		table    string
-		bucketMS int64
-	}{{usageFactsFineTable, QuarterHourBucketMS}, {usageFactsDailyTable, DayBucketMS}} {
-		// INSERT..SELECT keeps the fold inside SQLite: the records never cross into Go.
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO `+grain.table+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+strings.Join(usageFactMeasures, ", ")+`)
-			SELECT instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
-			       auth_index, provider, auth_type,
-			       COUNT(1), SUM(failed), SUM(input_tokens), SUM(output_tokens), SUM(reasoning_tokens),
-			       SUM(cached_tokens), SUM(cache_read_tokens), SUM(cache_creation_tokens), SUM(total_tokens),
-			       SUM(latency_ms), SUM(COALESCE(ttft_ms, 0)), SUM(ttft_ms IS NOT NULL),
-			       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL),
-		       SUM(COALESCE(json_extract(token_accounting, '$.status'), '') = 'complete'),
-		       SUM(token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') <> 'complete'),
-		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0)),
-		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0)),
-		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0))
-			FROM usage_events
-			WHERE id > ?2 AND id <= ?3
-			GROUP BY instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
-			         auth_index, provider, auth_type
-			ON CONFLICT DO UPDATE SET `+strings.Join(updates, ", "),
-			grain.bucketMS, lastID, highID.Int64)
-		if err != nil {
-			return 0, fmt.Errorf("fold usage into %s: %w", grain.table, err)
-		}
+	updateSet := strings.Join(updates, ", ")
+	sumSelect := strings.Join(sums, ", ")
+	measureColumns := strings.Join(usageFactMeasures, ", ")
+
+	// Materialize the 15-minute grain of this batch once into a connection-local
+	// TEMP table, short-circuiting json_extract when token_accounting is NULL.
+	// Because every civil UTC offset is a multiple of 15 minutes, 15m, UTC-daily,
+	// and local-daily all roll up from this single scan of usage_events.
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE IF NOT EXISTS _omc_usage_fold_15m AS
+		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`
+		FROM `+usageFactsFineTable+` WHERE 0`); err != nil {
+		return 0, fmt.Errorf("prepare temp usage fold buffer: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`); err != nil {
+		return 0, fmt.Errorf("reset temp usage fold buffer: %w", err)
+	}
+	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`) }()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO temp._omc_usage_fold_15m (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
+		       auth_index, provider, auth_type,
+		       COUNT(1), SUM(failed), SUM(input_tokens), SUM(output_tokens), SUM(reasoning_tokens),
+		       SUM(cached_tokens), SUM(cache_read_tokens), SUM(cache_creation_tokens), SUM(total_tokens),
+		       SUM(latency_ms), SUM(COALESCE(ttft_ms, 0)), SUM(ttft_ms IS NOT NULL),
+		       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL),
+		       SUM(CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') = 'complete' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') <> 'complete' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0) END),
+		       SUM(CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0) END),
+		       SUM(CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0) END)
+		FROM usage_events
+		WHERE id > ?2 AND id <= ?3
+		GROUP BY instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
+		         auth_index, provider, auth_type`,
+		QuarterHourBucketMS, lastID, highID.Int64)
+	if err != nil {
+		return 0, fmt.Errorf("stage usage fold batch: %w", err)
 	}
 
-	if err := foldLocalUsageFacts(ctx, tx, lastID, highID.Int64); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO `+usageFactsFineTable+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`
+		FROM temp._omc_usage_fold_15m
+		WHERE true
+		ON CONFLICT DO UPDATE SET `+updateSet); err != nil {
+		return 0, fmt.Errorf("fold usage into %s: %w", usageFactsFineTable, err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO `+usageFactsDailyTable+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, (bucket_start_ms / ?1) * ?1, `+usageFactDimensions+`, `+sumSelect+`
+		FROM temp._omc_usage_fold_15m
+		GROUP BY instance_id, (bucket_start_ms / ?1) * ?1, `+usageFactDimensions+`
+		ON CONFLICT DO UPDATE SET `+updateSet,
+		DayBucketMS); err != nil {
+		return 0, fmt.Errorf("fold usage into %s: %w", usageFactsDailyTable, err)
+	}
+
+	if err := foldLocalUsageFactsFromStaged(ctx, tx, (minTS.Int64/QuarterHourBucketMS)*QuarterHourBucketMS, (maxTS.Int64/QuarterHourBucketMS)*QuarterHourBucketMS, measureColumns, sumSelect, updateSet); err != nil {
 		return 0, err
 	}
 
@@ -798,11 +875,11 @@ func builtLocalZone(ctx context.Context, querier interface {
 	return location, nil
 }
 
-// foldLocalUsageFacts adds one fold batch to the local grain, inside the fold's
-// own transaction, when the grain is built. A grain that is not built is left
-// alone: the rebuild that creates it reads the quarter hours, which already hold
-// this batch by the time it runs.
-func foldLocalUsageFacts(ctx context.Context, tx *sql.Tx, lastID, highID int64) error {
+// foldLocalUsageFactsFromStaged adds one staged 15-minute fold batch to the local
+// grain, inside the fold's own transaction, when the grain is built. A grain that
+// is not built is left alone: the rebuild that creates it reads the quarter hours,
+// which already hold this batch by the time it runs.
+func foldLocalUsageFactsFromStaged(ctx context.Context, tx *sql.Tx, fromBucketMS, toBucketMS int64, measureColumns, sumSelect, updateSet string) error {
 	location, err := builtLocalZone(ctx, tx)
 	if errors.Is(err, errUnknownLocalGrainZone) {
 		// Derived rows cannot be extended without their calendar. Drop their claim
@@ -815,38 +892,17 @@ func foldLocalUsageFacts(ctx context.Context, tx *sql.Tx, lastID, highID int64) 
 	if err != nil || location == nil {
 		return err
 	}
-	var fromMS, toMS int64
-	if err := tx.QueryRowContext(ctx, `
-		SELECT MIN(timestamp_ms), MAX(timestamp_ms) FROM usage_events WHERE id > ? AND id <= ?`,
-		lastID, highID).Scan(&fromMS, &toMS); err != nil {
-		return fmt.Errorf("bound local usage fold: %w", err)
-	}
-	day, err := localFactsSelect(location, "timestamp_ms", fromMS, toMS)
+	day, err := localFactsSelect(location, "bucket_start_ms", fromBucketMS, toBucketMS)
 	if err != nil {
 		return err
 	}
-	updates := make([]string, 0, len(usageFactMeasures))
-	for _, measure := range usageFactMeasures {
-		updates = append(updates, measure+" = "+measure+" + excluded."+measure)
-	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO `+usageFactsLocalTable+` (instance_id, zone, day_wall_ms, `+usageFactDimensions+`, `+strings.Join(usageFactMeasures, ", ")+`)
-		SELECT instance_id, ?1, `+day+`, api_group_key, model, COALESCE(model_alias, ''),
-		       auth_index, provider, auth_type,
-		       COUNT(1), SUM(failed), SUM(input_tokens), SUM(output_tokens), SUM(reasoning_tokens),
-		       SUM(cached_tokens), SUM(cache_read_tokens), SUM(cache_creation_tokens), SUM(total_tokens),
-		       SUM(latency_ms), SUM(COALESCE(ttft_ms, 0)), SUM(ttft_ms IS NOT NULL),
-		       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL),
-		       SUM(COALESCE(json_extract(token_accounting, '$.status'), '') = 'complete'),
-		       SUM(token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') <> 'complete'),
-		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0)),
-		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0)),
-		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0))
-		FROM usage_events
-		WHERE id > ?2 AND id <= ?3
-		GROUP BY instance_id, `+day+`, api_group_key, model, COALESCE(model_alias, ''), auth_index, provider, auth_type
-		ON CONFLICT DO UPDATE SET `+strings.Join(updates, ", "),
-		location.String(), lastID, highID)
+		INSERT INTO `+usageFactsLocalTable+` (instance_id, zone, day_wall_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, ?1, `+day+`, `+usageFactDimensions+`, `+sumSelect+`
+		FROM temp._omc_usage_fold_15m
+		GROUP BY instance_id, `+day+`, `+usageFactDimensions+`
+		ON CONFLICT DO UPDATE SET `+updateSet,
+		location.String())
 	if err != nil {
 		return fmt.Errorf("fold usage into %s: %w", usageFactsLocalTable, err)
 	}

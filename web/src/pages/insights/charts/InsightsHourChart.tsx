@@ -53,7 +53,7 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({ values, peakH
       ]),
     };
     return {
-      grid: { left: 4, right: 8, top: 22, bottom: 4, containLabel: true },
+      grid: { left: 4, right: 8, top: 22, bottom: 4, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
       xAxis: { type: 'category', data: HOUR_LABELS, axisLabel: { interval: 2 } },
       yAxis: { type: 'value', splitNumber: 3, axisLabel: { formatter: (value: number) => formatMetric(metric, value, style) } },
       tooltip: {

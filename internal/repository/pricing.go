@@ -377,6 +377,12 @@ func (r *Repository) requirePricingReviewSchema(ctx context.Context) error {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return err
 	}
+	r.pricingSchemaCacheMu.Lock()
+	ready := r.pricingReviewReady
+	r.pricingSchemaCacheMu.Unlock()
+	if ready {
+		return nil
+	}
 	var applied int
 	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, pricingReviewMigration).Scan(&applied); err != nil {
 		return fmt.Errorf("pricing review schema check: %w", err)
@@ -384,6 +390,9 @@ func (r *Repository) requirePricingReviewSchema(ctx context.Context) error {
 	if applied == 0 {
 		return fmt.Errorf("pricing match review migration %d is not applied", pricingReviewMigration)
 	}
+	r.pricingSchemaCacheMu.Lock()
+	r.pricingReviewReady = true
+	r.pricingSchemaCacheMu.Unlock()
 	return nil
 }
 
@@ -438,6 +447,12 @@ func (r *Repository) requirePricingSchema(ctx context.Context) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
 	}
+	r.pricingSchemaCacheMu.Lock()
+	ready := r.pricingSchemaReady
+	r.pricingSchemaCacheMu.Unlock()
+	if ready {
+		return nil
+	}
 	var applied int
 	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = 29`).Scan(&applied); err != nil {
 		return fmt.Errorf("pricing schema check: %w", err)
@@ -445,6 +460,9 @@ func (r *Repository) requirePricingSchema(ctx context.Context) error {
 	if applied == 0 {
 		return errors.New("model pricing schema migration 29 is not applied")
 	}
+	r.pricingSchemaCacheMu.Lock()
+	r.pricingSchemaReady = true
+	r.pricingSchemaCacheMu.Unlock()
 	return nil
 }
 
