@@ -234,6 +234,8 @@ export interface CoalescedSignalGate {
   onSignal: () => void;
   /** Called when an in-flight read settles so any held signal flushes once. */
   onSettled: () => void;
+  /** Called when document visibility changes so signals received while hidden flush upon foregrounding. */
+  onVisibilityChange: () => void;
   /** Evaluates one fallback poll tick when no SSE stream is active. */
   onFallbackTick: (isLive: boolean) => void;
   reset: () => void;
@@ -300,6 +302,10 @@ export function createCoalescedSignalGate(options: CoalescedSignalGateOptions): 
     },
     onSettled() {
       if (!hasPending || options.isBusy()) return;
+      tryFlush();
+    },
+    onVisibilityChange() {
+      if (!hasPending || options.isBusy() || !isVisible()) return;
       tryFlush();
     },
     onFallbackTick(isLive) {

@@ -79,7 +79,7 @@ import {
 import { LoadFailure, useToast } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { Panel } from '../components/common/Panel';
-import { Placeholder } from '../components/common/Placeholder';
+import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
 import { ToolButton } from '../components/common/ToolButton';
 import '../components/dashboard/dashboard.css';
 import { Tooltip } from '../components/common/Tooltip';
@@ -670,13 +670,18 @@ export const DashboardPage: React.FC = () => {
       )}
 
       <ModelSeriesFocusProvider>
-        <DashboardBoard
-          layout={layout}
-          isEditing={isArranging}
-          isPhone={isPhone}
-          renderWidget={renderWidget}
-          onChange={setLayoutDraft}
-        />
+        {(() => {
+          const board = (
+            <DashboardBoard
+              layout={layout}
+              isEditing={isArranging}
+              isPhone={isPhone}
+              renderWidget={renderWidget}
+              onChange={setLayoutDraft}
+            />
+          );
+          return data ? board : <LoadingRegion>{board}</LoadingRegion>;
+        })()}
       </ModelSeriesFocusProvider>
 
       {data && !data.coverage.has_usage && data.partial_errors.length === 0 && (

@@ -61,8 +61,17 @@ export function useLiveRevision({
       onSignal: () => gate.onSignal(),
       onState: setLiveState,
     });
+    const onVisibility = () => {
+      gate.onVisibilityChange();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
     return () => {
       unsubscribe();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
       gate.reset();
     };
   }, [isEnabled, gate]);

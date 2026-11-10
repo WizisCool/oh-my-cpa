@@ -249,6 +249,7 @@ test('stream store bounds ring buffer, coalesces bursts per frame, and pauses wh
 test('coalesced signal gate fires immediately when idle and coalesces 25Hz SSE bursts without overlapping fetches', () => {
   let clock = 1_000;
   let busy = false;
+  let visible = true;
   let emitted = 0;
   const timers: Array<{ ms: number; cb: () => void }> = [];
 
@@ -256,6 +257,7 @@ test('coalesced signal gate fires immediately when idle and coalesces 25Hz SSE b
     coalesceMs: 250,
     now: () => clock,
     isBusy: () => busy,
+    isVisible: () => visible,
     setTimer: (cb, ms) => {
       const entry = { ms, cb };
       timers.push(entry);
@@ -289,9 +291,16 @@ test('coalesced signal gate fires immediately when idle and coalesces 25Hz SSE b
   assert.equal(timers.length, 1);
   assert.equal(timers[0].ms, 50);
 
+  // If the tab goes hidden before the trailing timer fires, pending stays queued until visible again.
+  visible = false;
   clock += 50;
   timers.shift()!.cb();
-  assert.equal(emitted, 2, 'entire 20-signal burst produces exactly one trailing refresh');
+  assert.equal(emitted, 1, 'hidden tab defers trailing flush');
+
+  visible = true;
+  clock += 300;
+  gate.onVisibilityChange();
+  assert.equal(emitted, 2, 'foregrounding flushes held signal immediately without waiting for fallback poll');
   gate.reset();
 });
 

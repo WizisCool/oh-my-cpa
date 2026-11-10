@@ -578,6 +578,7 @@ interface TargetNodeProps extends TileLightProps {
 }
 
 function TargetNode({ target, phase, delayMs, containerRef, onMotion, tileRef, nowMs, skewMs, sources, washRef, haloRef }: TargetNodeProps) {
+  const t = useT();
   const ref = React.useRef<HTMLDivElement>(null);
   useRowMotion(ref, containerRef, { phase, away: awayFrom(1, containerRef.current), delayMs, onMotion });
   const identity = targetIdentity(target.sample, sources);
@@ -600,6 +601,9 @@ function TargetNode({ target, phase, delayMs, containerRef, onMotion, tileRef, n
         </span>
         <span className={styles['row-meta']} title={identity.credential || undefined}>
           {identity.credential || target.sample.model || '—'}
+          {target.failures > 0 && (
+            <span className={styles['row-failures']}> · {t('routing.failed_count', { count: target.failures })}</span>
+          )}
         </span>
       </span>
     </div>
