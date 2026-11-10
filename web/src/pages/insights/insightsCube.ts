@@ -42,14 +42,6 @@ export interface Measures {
   costedRequests: number;
 }
 
-const MEASURE_COLUMNS: ReadonlyArray<[keyof Measures, string]> = [
-  ['requests', 'requests'], ['failures', 'failures'], ['inputTokens', 'input_tokens'],
-  ['outputTokens', 'output_tokens'], ['reasoningTokens', 'reasoning_tokens'],
-  ['totalTokens', 'total_tokens'], ['latencySumMs', 'latency_sum_ms'], ['ttftSumMs', 'ttft_sum_ms'],
-  ['ttftCount', 'ttft_count'], ['costNanos', 'cost_nanos'], ['pricedRequests', 'priced_requests'],
-  ['costedRequests', 'costed_requests'],
-];
-
 export function emptyMeasures(): Measures {
   return {
     requests: 0, failures: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
@@ -59,7 +51,18 @@ export function emptyMeasures(): Measures {
 }
 
 function addInto(target: Measures, source: Measures): void {
-  for (const [name] of MEASURE_COLUMNS) target[name] += source[name];
+  target.requests += source.requests;
+  target.failures += source.failures;
+  target.inputTokens += source.inputTokens;
+  target.outputTokens += source.outputTokens;
+  target.reasoningTokens += source.reasoningTokens;
+  target.totalTokens += source.totalTokens;
+  target.latencySumMs += source.latencySumMs;
+  target.ttftSumMs += source.ttftSumMs;
+  target.ttftCount += source.ttftCount;
+  target.costNanos += source.costNanos;
+  target.pricedRequests += source.pricedRequests;
+  target.costedRequests += source.costedRequests;
 }
 
 export interface CubeRow {
@@ -94,14 +97,44 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
     if (index === undefined) throw new Error(`insights cube is missing the ${name} column`);
     return index;
   };
-  const dimensionColumns = INSIGHTS_DIMENSIONS.map(require);
-  const measureColumns = MEASURE_COLUMNS.map(([name, column]) => [name, require(column)] as const);
+  const [d0, d1, d2, d3, d4] = INSIGHTS_DIMENSIONS.map(require);
+  const cRequests = require('requests');
+  const cFailures = require('failures');
+  const cInput = require('input_tokens');
+  const cOutput = require('output_tokens');
+  const cReasoning = require('reasoning_tokens');
+  const cTotal = require('total_tokens');
+  const cLatency = require('latency_sum_ms');
+  const cTtftSum = require('ttft_sum_ms');
+  const cTtftCount = require('ttft_count');
+  const cCost = require('cost_nanos');
+  const cPriced = require('priced_requests');
+  const cCosted = require('costed_requests');
   const bucketColumn = require('bucket');
-  const decode = (cells: readonly number[], offset: number, bucket: number): CubeRow => {
-    const measures = emptyMeasures();
-    for (const [name, column] of measureColumns) measures[name] = cells[column - offset] ?? 0;
-    return { bucket, dims: dimensionColumns.map((column) => cells[column - offset] ?? 0), measures };
-  };
+  const decode = (cells: readonly number[], offset: number, bucket: number): CubeRow => ({
+    bucket,
+    dims: [
+      cells[d0 - offset] ?? 0,
+      cells[d1 - offset] ?? 0,
+      cells[d2 - offset] ?? 0,
+      cells[d3 - offset] ?? 0,
+      cells[d4 - offset] ?? 0,
+    ],
+    measures: {
+      requests: cells[cRequests - offset] ?? 0,
+      failures: cells[cFailures - offset] ?? 0,
+      inputTokens: cells[cInput - offset] ?? 0,
+      outputTokens: cells[cOutput - offset] ?? 0,
+      reasoningTokens: cells[cReasoning - offset] ?? 0,
+      totalTokens: cells[cTotal - offset] ?? 0,
+      latencySumMs: cells[cLatency - offset] ?? 0,
+      ttftSumMs: cells[cTtftSum - offset] ?? 0,
+      ttftCount: cells[cTtftCount - offset] ?? 0,
+      costNanos: cells[cCost - offset] ?? 0,
+      pricedRequests: cells[cPriced - offset] ?? 0,
+      costedRequests: cells[cCosted - offset] ?? 0,
+    },
+  });
   return {
     window: response.window,
     compare: response.compare_window,
@@ -168,6 +201,9 @@ export function attributeServingProviders(
   // credentials, and the answer is the credential's alone.
   const claimed = cube.values.credential.map((authIndex, index) =>
     authIndex && isAPIKeyCredential(cube.credentialTypes[index]) ? providerIDOf(authIndex) : undefined);
+  if (!claimed.some((id) => id !== undefined)) {
+    return cube;
+  }
   const identityOf = (row: CubeRow): string =>
     claimed[row.dims[DIMENSION_POSITION.credential]] ?? rowValue(cube, row, 'provider');
 
@@ -198,16 +234,37 @@ export function filterRows(
   except?: InsightsDimension | readonly InsightsDimension[],
 ): CubeRow[] {
   const exempt: readonly InsightsDimension[] = except === undefined ? [] : typeof except === 'string' ? [except] : except;
-  const active = INSIGHTS_DIMENSIONS.flatMap((dimension) => {
+  const active: Array<readonly [number, Uint8Array]> = [];
+  for (const dimension of INSIGHTS_DIMENSIONS) {
     const selected = filters[dimension];
-    if (exempt.includes(dimension) || !selected || selected.length === 0) return [];
+    if (exempt.includes(dimension) || !selected || selected.length === 0) continue;
+    const dict = cube.values[dimension];
     const wanted = new Set(selected);
-    const admitted = new Set<number>();
-    cube.values[dimension].forEach((value, index) => { if (wanted.has(value)) admitted.add(index); });
-    return [[DIMENSION_POSITION[dimension], admitted] as const];
-  });
-  if (active.length === 0) return rows.slice();
-  return rows.filter((row) => active.every(([position, admitted]) => admitted.has(row.dims[position])));
+    const mask = new Uint8Array(dict.length);
+    let anyMatch = false;
+    for (let i = 0; i < dict.length; i += 1) {
+      if (wanted.has(dict[i])) {
+        mask[i] = 1;
+        anyMatch = true;
+      }
+    }
+    if (!anyMatch) return [];
+    active.push([DIMENSION_POSITION[dimension], mask] as const);
+  }
+  if (active.length === 0) return rows as CubeRow[];
+  const activeCount = active.length;
+  const out: CubeRow[] = [];
+  outer: for (let r = 0; r < rows.length; r += 1) {
+    const row = rows[r];
+    const dims = row.dims;
+    for (let a = 0; a < activeCount; a += 1) {
+      const [pos, mask] = active[a];
+      const idx = dims[pos];
+      if (idx < 0 || idx >= mask.length || mask[idx] === 0) continue outer;
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 export function sumMeasures(rows: readonly CubeRow[]): Measures {
@@ -290,15 +347,38 @@ export interface GroupTotal {
 }
 
 export function groupTotals(cube: InsightsCube, rows: readonly CubeRow[], dimension: InsightsDimension): Map<string, Measures> {
-  const groups = new Map<string, Measures>();
-  for (const row of rows) {
-    const id = rowValue(cube, row, dimension);
-    let measures = groups.get(id);
-    if (!measures) {
-      measures = emptyMeasures();
-      groups.set(id, measures);
+  const dimPos = DIMENSION_POSITION[dimension];
+  const dict = cube.values[dimension];
+  const byIndex: Array<Measures | undefined> = new Array(dict.length);
+  let fallbackEmpty: Measures | undefined;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const idx = row.dims[dimPos];
+    if (idx >= 0 && idx < dict.length) {
+      let acc = byIndex[idx];
+      if (!acc) {
+        acc = emptyMeasures();
+        byIndex[idx] = acc;
+      }
+      addInto(acc, row.measures);
+    } else {
+      if (!fallbackEmpty) fallbackEmpty = emptyMeasures();
+      addInto(fallbackEmpty, row.measures);
     }
-    addInto(measures, row.measures);
+  }
+  const groups = new Map<string, Measures>();
+  for (let idx = 0; idx < byIndex.length; idx += 1) {
+    const acc = byIndex[idx];
+    if (!acc) continue;
+    const id = dict[idx] ?? '';
+    const existing = groups.get(id);
+    if (existing) addInto(existing, acc);
+    else groups.set(id, acc);
+  }
+  if (fallbackEmpty) {
+    const existing = groups.get('');
+    if (existing) addInto(existing, fallbackEmpty);
+    else groups.set('', fallbackEmpty);
   }
   return groups;
 }
@@ -376,13 +456,33 @@ export function trendSeries(
 ): TrendGroup[] {
   const bucketCount = cube.bucketStarts.length;
   const order = dimension === null ? ['all'] : [...topIds, FOLDED_ID];
-  const position = new Map(order.map((id, index) => [id, index]));
+  const foldedIndex = order.length - 1;
   const cells: Measures[][] = order.map(() => Array.from({ length: bucketCount }, emptyMeasures));
-  for (const row of rows) {
-    if (row.bucket < 0 || row.bucket >= bucketCount) continue;
-    const id = dimension === null ? 'all' : rowValue(cube, row, dimension);
-    const index = position.get(id) ?? position.get(FOLDED_ID)!;
-    addInto(cells[index][row.bucket], row.measures);
+  if (dimension === null) {
+    const allSeries = cells[0];
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      const b = row.bucket;
+      if (b < 0 || b >= bucketCount) continue;
+      addInto(allSeries[b], row.measures);
+    }
+  } else {
+    const dimPos = DIMENSION_POSITION[dimension];
+    const dict = cube.values[dimension];
+    const positionById = new Map(order.map((id, index) => [id, index]));
+    const slotByDictIndex = new Int32Array(dict.length);
+    for (let idx = 0; idx < dict.length; idx += 1) {
+      slotByDictIndex[idx] = positionById.get(dict[idx] ?? '') ?? foldedIndex;
+    }
+    const emptySlot = positionById.get('') ?? foldedIndex;
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      const b = row.bucket;
+      if (b < 0 || b >= bucketCount) continue;
+      const dIdx = row.dims[dimPos];
+      const slot = dIdx >= 0 && dIdx < slotByDictIndex.length ? slotByDictIndex[dIdx] : emptySlot;
+      addInto(cells[slot][b], row.measures);
+    }
   }
   const isAdditive = isAdditiveMetric(metric);
   return order.map((id, index) => ({
@@ -405,31 +505,70 @@ export function groupSparklines(
 ): Map<string, number[]> {
   const ranking = rankingMetric(metric);
   const bucketCount = cube.bucketStarts.length;
-  const measuresByGroup = new Map<string, Measures[]>();
-  for (const row of rows) {
-    if (row.bucket < 0 || row.bucket >= bucketCount) continue;
-    const id = rowValue(cube, row, dimension);
-    let series = measuresByGroup.get(id);
-    if (!series) {
-      series = Array.from({ length: bucketCount }, emptyMeasures);
-      measuresByGroup.set(id, series);
+  const dimPos = DIMENSION_POSITION[dimension];
+  const dict = cube.values[dimension];
+  const byDict: Array<Float64Array | undefined> = new Array(dict.length);
+  let fallback: Float64Array | undefined;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const b = row.bucket;
+    if (b < 0 || b >= bucketCount) continue;
+    const v = metricValue(row.measures, ranking) ?? 0;
+    const idx = row.dims[dimPos];
+    if (idx >= 0 && idx < dict.length) {
+      let series = byDict[idx];
+      if (!series) {
+        series = new Float64Array(bucketCount);
+        byDict[idx] = series;
+      }
+      series[b] += v;
+    } else {
+      if (!fallback) fallback = new Float64Array(bucketCount);
+      fallback[b] += v;
     }
-    addInto(series[row.bucket], row.measures);
   }
   const result = new Map<string, number[]>();
-  for (const [id, series] of measuresByGroup) result.set(id, series.map((measures) => metricValue(measures, ranking) ?? 0));
+  const mergeSeries = (id: string, arr: Float64Array) => {
+    const existing = result.get(id);
+    if (existing) {
+      for (let b = 0; b < bucketCount; b += 1) existing[b] += arr[b];
+    } else {
+      result.set(id, Array.from(arr));
+    }
+  };
+  for (let idx = 0; idx < byDict.length; idx += 1) {
+    const arr = byDict[idx];
+    if (arr) mergeSeries(dict[idx] ?? '', arr);
+  }
+  if (fallback) mergeSeries('', fallback);
   return result;
 }
 
 /** The start of the last bucket a group was active in, or null. */
 export function lastActiveBuckets(cube: InsightsCube, rows: readonly CubeRow[], dimension: InsightsDimension): Map<string, number> {
-  const last = new Map<string, number>();
-  for (const row of rows) {
+  const dimPos = DIMENSION_POSITION[dimension];
+  const dict = cube.values[dimension];
+  const maxBucketByDict = new Int32Array(dict.length).fill(-1);
+  let fallbackBucket = -1;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
     if (row.measures.requests <= 0 || row.bucket < 0) continue;
-    const id = rowValue(cube, row, dimension);
-    const start = cube.bucketStarts[row.bucket];
-    if (start !== undefined && start > (last.get(id) ?? -Infinity)) last.set(id, start);
+    const idx = row.dims[dimPos];
+    if (idx >= 0 && idx < dict.length) {
+      if (row.bucket > maxBucketByDict[idx]) maxBucketByDict[idx] = row.bucket;
+    } else if (row.bucket > fallbackBucket) {
+      fallbackBucket = row.bucket;
+    }
   }
+  const last = new Map<string, number>();
+  const recordStart = (id: string, bucketIdx: number) => {
+    const start = cube.bucketStarts[bucketIdx];
+    if (start !== undefined && start > (last.get(id) ?? -Infinity)) last.set(id, start);
+  };
+  for (let idx = 0; idx < maxBucketByDict.length; idx += 1) {
+    if (maxBucketByDict[idx] >= 0) recordStart(dict[idx] ?? '', maxBucketByDict[idx]);
+  }
+  if (fallbackBucket >= 0) recordStart('', fallbackBucket);
   return last;
 }
 
@@ -470,27 +609,50 @@ export function buildMatrix(
   const columnTotals = groupTotals(cube, rows, columnDimension);
   const rowIds = rankGroups(rowTotals, metric).slice(0, rowLimit).map((group) => group.id);
   const columnIds = rankGroups(columnTotals, metric).slice(0, columnLimit).map((group) => group.id);
-  const wantedRows = new Set(rowIds);
-  const wantedColumns = new Set(columnIds);
-  const cellMeasures = new Map<string, Measures>();
-  for (const row of rows) {
-    const rowId = rowValue(cube, row, rowDimension);
-    const columnId = rowValue(cube, row, columnDimension);
-    if (!wantedRows.has(rowId) || !wantedColumns.has(columnId)) continue;
-    const key = matrixCellKey(rowId, columnId);
-    let measures = cellMeasures.get(key);
+  const rowSlotById = new Map(rowIds.map((id, idx) => [id, idx]));
+  const colSlotById = new Map(columnIds.map((id, idx) => [id, idx]));
+  const rowDimPos = DIMENSION_POSITION[rowDimension];
+  const colDimPos = DIMENSION_POSITION[columnDimension];
+  const rowDict = cube.values[rowDimension];
+  const colDict = cube.values[columnDimension];
+  const rowSlotByDict = new Int32Array(rowDict.length).fill(-1);
+  for (let idx = 0; idx < rowDict.length; idx += 1) {
+    rowSlotByDict[idx] = rowSlotById.get(rowDict[idx] ?? '') ?? -1;
+  }
+  const colSlotByDict = new Int32Array(colDict.length).fill(-1);
+  for (let idx = 0; idx < colDict.length; idx += 1) {
+    colSlotByDict[idx] = colSlotById.get(colDict[idx] ?? '') ?? -1;
+  }
+  const emptyRowSlot = rowSlotById.get('') ?? -1;
+  const emptyColSlot = colSlotById.get('') ?? -1;
+  const colLen = columnIds.length;
+  const grid: Array<Measures | undefined> = new Array(rowIds.length * colLen);
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const rIdx = row.dims[rowDimPos];
+    const rSlot = rIdx >= 0 && rIdx < rowSlotByDict.length ? rowSlotByDict[rIdx] : emptyRowSlot;
+    if (rSlot < 0) continue;
+    const cIdx = row.dims[colDimPos];
+    const cSlot = cIdx >= 0 && cIdx < colSlotByDict.length ? colSlotByDict[cIdx] : emptyColSlot;
+    if (cSlot < 0) continue;
+    const cellIdx = rSlot * colLen + cSlot;
+    let measures = grid[cellIdx];
     if (!measures) {
       measures = emptyMeasures();
-      cellMeasures.set(key, measures);
+      grid[cellIdx] = measures;
     }
     addInto(measures, row.measures);
   }
   const cells = new Map<string, MatrixCell>();
   let max = 0;
-  for (const [key, measures] of cellMeasures) {
-    const value = metricValue(measures, metric);
-    cells.set(key, { measures, value });
-    if (value !== null && value > max) max = value;
+  for (let r = 0; r < rowIds.length; r += 1) {
+    for (let c = 0; c < colLen; c += 1) {
+      const measures = grid[r * colLen + c];
+      if (!measures) continue;
+      const value = metricValue(measures, metric);
+      cells.set(matrixCellKey(rowIds[r], columnIds[c]), { measures, value });
+      if (value !== null && value > max) max = value;
+    }
   }
   return { rowIds, columnIds, cells, rowTotals, columnTotals, max };
 }
@@ -522,37 +684,81 @@ export function buildFlow(
   metric: InsightsMetric,
   limitPerLevel: number,
 ): { nodes: FlowNode[]; links: FlowLink[] } {
+  const levelCount = levels.length;
+  if (levelCount < 2) return { nodes: [], links: [] };
   const weight = rankingMetric(metric);
-  const tops = levels.map((dimension) =>
-    new Set(rankGroups(groupTotals(cube, rows, dimension), weight).slice(0, limitPerLevel).map((group) => group.id)));
-  const nodeOf = (level: number, row: CubeRow) => {
-    const value = rowValue(cube, row, levels[level]);
-    return tops[level].has(value) ? `${level}:${value}` : `${level}:${FOLDED_ID}`;
-  };
-  const linkWeights = new Map<string, number>();
-  const seenNodes = new Set<string>();
-  for (const row of rows) {
+  const levelNodeIds: string[][] = [];
+  const levelDimPos = new Int32Array(levelCount);
+  const levelSlotsByDict: Int32Array[] = [];
+  const levelEmptySlot = new Int32Array(levelCount);
+  for (let level = 0; level < levelCount; level += 1) {
+    const dimension = levels[level];
+    levelDimPos[level] = DIMENSION_POSITION[dimension];
+    const topValues = rankGroups(groupTotals(cube, rows, dimension), weight)
+      .slice(0, limitPerLevel)
+      .map((group) => group.id);
+    const nodeIds = [...topValues.map((value) => `${level}:${value}`), `${level}:${FOLDED_ID}`];
+    const foldedSlot = nodeIds.length - 1;
+    const slotByValue = new Map(topValues.map((value, idx) => [value, idx]));
+    const dict = cube.values[dimension];
+    const slots = new Int32Array(dict.length);
+    for (let idx = 0; idx < dict.length; idx += 1) {
+      slots[idx] = slotByValue.get(dict[idx] ?? '') ?? foldedSlot;
+    }
+    levelNodeIds.push(nodeIds);
+    levelSlotsByDict.push(slots);
+    levelEmptySlot[level] = slotByValue.get('') ?? foldedSlot;
+  }
+
+  const seenNodeMasks = levelNodeIds.map((ids) => new Uint8Array(ids.length));
+  const linkGrids = levelNodeIds.slice(0, -1).map((ids, level) => new Float64Array(ids.length * levelNodeIds[level + 1].length));
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
     const amount = metricValue(row.measures, weight) ?? 0;
     if (amount <= 0) continue;
-    for (let level = 0; level < levels.length - 1; level += 1) {
-      const source = nodeOf(level, row);
-      const target = nodeOf(level + 1, row);
-      seenNodes.add(source);
-      seenNodes.add(target);
-      const key = `${source}\u0001${target}`;
-      linkWeights.set(key, (linkWeights.get(key) ?? 0) + amount);
+    const d0 = row.dims[levelDimPos[0]];
+    const s0Map = levelSlotsByDict[0];
+    let prevSlot = d0 >= 0 && d0 < s0Map.length ? s0Map[d0] : levelEmptySlot[0];
+    seenNodeMasks[0][prevSlot] = 1;
+    for (let level = 0; level < levelCount - 1; level += 1) {
+      const nextPos = levelDimPos[level + 1];
+      const nextDictIdx = row.dims[nextPos];
+      const nextSlots = levelSlotsByDict[level + 1];
+      const nextSlot = nextDictIdx >= 0 && nextDictIdx < nextSlots.length ? nextSlots[nextDictIdx] : levelEmptySlot[level + 1];
+      seenNodeMasks[level + 1][nextSlot] = 1;
+      linkGrids[level][prevSlot * levelNodeIds[level + 1].length + nextSlot] += amount;
+      prevSlot = nextSlot;
     }
   }
-  const nodes = [...seenNodes].map((id) => {
-    const separator = id.indexOf(':');
-    const level = Number(id.slice(0, separator));
-    const value = id.slice(separator + 1);
-    return { id, level, dimension: levels[level], value, folded: value === FOLDED_ID };
-  }).sort((left, right) => left.level - right.level || left.id.localeCompare(right.id));
-  const links = [...linkWeights.entries()].map(([key, value]) => {
-    const [source, target] = key.split('\u0001');
-    return { source, target, value };
-  });
+
+  const nodes: FlowNode[] = [];
+  for (let level = 0; level < levelCount; level += 1) {
+    const ids = levelNodeIds[level];
+    const mask = seenNodeMasks[level];
+    const levelNodes: FlowNode[] = [];
+    for (let slot = 0; slot < ids.length; slot += 1) {
+      if (mask[slot] === 0) continue;
+      const id = ids[slot];
+      const separator = id.indexOf(':');
+      const value = id.slice(separator + 1);
+      levelNodes.push({ id, level, dimension: levels[level], value, folded: value === FOLDED_ID });
+    }
+    levelNodes.sort((left, right) => left.id.localeCompare(right.id));
+    nodes.push(...levelNodes);
+  }
+
+  const links: FlowLink[] = [];
+  for (let level = 0; level < levelCount - 1; level += 1) {
+    const srcIds = levelNodeIds[level];
+    const dstIds = levelNodeIds[level + 1];
+    const grid = linkGrids[level];
+    for (let s = 0; s < srcIds.length; s += 1) {
+      for (let t = 0; t < dstIds.length; t += 1) {
+        const value = grid[s * dstIds.length + t];
+        if (value > 0) links.push({ source: srcIds[s], target: dstIds[t], value });
+      }
+    }
+  }
   return { nodes, links };
 }
 

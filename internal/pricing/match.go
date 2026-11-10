@@ -157,11 +157,18 @@ type indexedEntry struct {
 	kind  string
 }
 
+type suggestEntry struct {
+	model   UpstreamModel
+	slugKey string
+	tokens  map[string]struct{}
+}
+
 type catalogIndex struct {
 	byID       map[string]UpstreamModel
 	exact      map[string][]indexedEntry
 	normalized map[string][]indexedEntry
 	dated      map[string][]indexedEntry
+	suggest    []suggestEntry
 }
 
 // NewCatalog indexes a snapshot once; lookups are then map reads.
@@ -171,6 +178,7 @@ func NewCatalog(models []UpstreamModel, fetchedAt time.Time) Catalog {
 		exact:      make(map[string][]indexedEntry, len(models)*2),
 		normalized: make(map[string][]indexedEntry, len(models)*2),
 		dated:      make(map[string][]indexedEntry, len(models)),
+		suggest:    make([]suggestEntry, 0, len(models)),
 	}
 	add := func(target map[string][]indexedEntry, key string, entry indexedEntry) {
 		if key == "" {
@@ -186,6 +194,12 @@ func NewCatalog(models []UpstreamModel, fetchedAt time.Time) Catalog {
 	for _, model := range models {
 		index.byID[strings.ToLower(model.ID)] = model
 		slug := upstreamSlug(model.ID)
+		slugNorm := NormalizeModelKey(slug)
+		index.suggest = append(index.suggest, suggestEntry{
+			model:   model,
+			slugKey: slugNorm,
+			tokens:  modelTokens(slug),
+		})
 		canonical := upstreamSlug(model.CanonicalSlug)
 		exactKind, canonicalKind, normalizedKind, datedKind := MatchExact, MatchCanonical, MatchNormalized, MatchDateStripped
 		if model.IsAlias() {
@@ -197,7 +211,7 @@ func NewCatalog(models []UpstreamModel, fetchedAt time.Time) Catalog {
 			add(index.normalized, NormalizeModelKey(canonical), indexedEntry{model, normalizedKind})
 			add(index.dated, NormalizeModelKey(stripDateSuffix(canonical)), indexedEntry{model, datedKind})
 		}
-		add(index.normalized, NormalizeModelKey(slug), indexedEntry{model, normalizedKind})
+		add(index.normalized, slugNorm, indexedEntry{model, normalizedKind})
 		add(index.dated, NormalizeModelKey(stripDateSuffix(slug)), indexedEntry{model, datedKind})
 	}
 	return Catalog{FetchedAt: fetchedAt, Models: models, index: index}
@@ -318,23 +332,25 @@ func (c Catalog) Suggest(model string, limit int) []UpstreamModel {
 		official bool
 	}
 	wanted := modelTokens(StripProviderPrefix(model))
+	index := c.ensureIndex()
 	var ranked []scored
-	for _, candidate := range c.Models {
-		slugKey := NormalizeModelKey(upstreamSlug(candidate.ID))
-		prefix := commonPrefix(key, slugKey)
-		if candidate.ID != preferredID && (prefix < 4 || prefix*2 < len(slugKey)) {
+	for _, entry := range index.suggest {
+		candidate := entry.model
+		prefix := commonPrefix(key, entry.slugKey)
+		if candidate.ID != preferredID && (prefix < 4 || prefix*2 < len(entry.slugKey)) {
 			continue
 		}
 		official := false
 		for _, author := range officials {
 			if author == candidate.Author {
 				official = true
+				break
 			}
 		}
 		if len(officials) > 0 && !official {
 			continue
 		}
-		ranked = append(ranked, scored{candidate, prefix, tokenOverlap(wanted, modelTokens(upstreamSlug(candidate.ID))), official})
+		ranked = append(ranked, scored{candidate, prefix, tokenOverlap(wanted, entry.tokens), official})
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		left, right := ranked[i], ranked[j]

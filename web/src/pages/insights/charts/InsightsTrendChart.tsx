@@ -206,7 +206,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
       },
     };
     return {
-      grid: { left: 8, right: 12, top: 16, bottom: 4, containLabel: true },
+      grid: { left: 8, right: 12, top: 16, bottom: 4, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
       xAxis: {
         type: 'category',
         data: categories,

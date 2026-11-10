@@ -329,31 +329,60 @@ func (r *Repository) ClientKeyMasksFor(ctx context.Context, instanceID string, k
 	if r == nil || r.SQL() == nil {
 		return resolved, errors.New("repository is not initialized")
 	}
-	for start := 0; start < len(keyFingerprints); start += maxSQLiteParameters {
-		chunk := keyFingerprints[start:min(start+maxSQLiteParameters, len(keyFingerprints))]
-		args := make([]any, 0, len(chunk)+1)
-		args = append(args, instanceID)
-		for _, fingerprint := range chunk {
-			args = append(args, fingerprint)
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return resolved, nil
+	}
+	unique := make([]string, 0, len(keyFingerprints))
+	seen := make(map[string]struct{}, len(keyFingerprints))
+	for _, fingerprint := range keyFingerprints {
+		trimmed := strings.TrimSpace(fingerprint)
+		if trimmed == "" {
+			continue
 		}
-		// SQLite takes the bare column from the row MAX() picked: the newest mask.
-		rows, err := r.SQL().QueryContext(ctx, `
-			SELECT api_group_key, api_key_mask, MAX(id)
-			FROM usage_events
-			WHERE instance_id = ? AND api_key_mask <> '' AND api_group_key IN (`+
-			strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")+`)
-			GROUP BY api_group_key`, args...)
+		if _, duplicate := seen[trimmed]; duplicate {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		unique = append(unique, trimmed)
+	}
+	if len(unique) == 0 {
+		return resolved, nil
+	}
+	// Each fingerprint resolves via a single top-of-index probe on
+	// idx_usage_events_group_time(api_group_key, timestamp_ms DESC) rather than
+	// scanning every historical row of each caller key.
+	const maskChunk = 64
+	args := make([]any, 0, maskChunk*3)
+	var sqlBuf strings.Builder
+	for start := 0; start < len(unique); start += maskChunk {
+		chunk := unique[start:min(start+maskChunk, len(unique))]
+		args = args[:0]
+		sqlBuf.Reset()
+		for idx, fingerprint := range chunk {
+			if idx > 0 {
+				sqlBuf.WriteString(" UNION ALL ")
+			}
+			sqlBuf.WriteString(`SELECT ?, COALESCE((
+				SELECT api_key_mask FROM usage_events
+				WHERE api_group_key = ? AND instance_id = ? AND api_key_mask <> ''
+				ORDER BY timestamp_ms DESC, id DESC LIMIT 1
+			), '')`)
+			args = append(args, fingerprint, fingerprint, instanceID)
+		}
+		rows, err := r.SQL().QueryContext(ctx, sqlBuf.String(), args...)
 		if err != nil {
 			return nil, fmt.Errorf("resolve client key masks: %w", err)
 		}
 		for rows.Next() {
 			var fingerprint, mask string
-			var id int64
-			if errScan := rows.Scan(&fingerprint, &mask, &id); errScan != nil {
+			if errScan := rows.Scan(&fingerprint, &mask); errScan != nil {
 				rows.Close()
 				return nil, fmt.Errorf("scan client key mask: %w", errScan)
 			}
-			resolved[fingerprint] = mask
+			if mask != "" {
+				resolved[fingerprint] = mask
+			}
 		}
 		errRows := rows.Err()
 		rows.Close()

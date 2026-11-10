@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -728,6 +730,93 @@ func TestPricingChannelModelReadFailureReturnsInternalError(t *testing.T) {
 		response, payload := getJSON(t, client, baseURL+"/omc/api/v1"+target)
 		if response.StatusCode != http.StatusInternalServerError || strings.Contains(string(payload), `"price"`) || strings.Contains(string(payload), `"models"`) {
 			t.Fatalf("an unreadable override must not expose a fallback price: %d %s", response.StatusCode, payload)
+		}
+	}
+}
+
+func BenchmarkListPricingHandler(b *testing.B) {
+	ctx := context.Background()
+	db, err := repository.Open(ctx, dashboardMemoryDSN("pricing_bench"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = db.Close() })
+	repo := repository.New(db)
+	if _, err := db.SQL.Exec(`INSERT INTO cpa_instances
+		(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+		VALUES ('default','Default','http://localhost','localhost',x'00',x'00','ok',0,0)`); err != nil {
+		b.Fatal(err)
+	}
+	upstream := make([]pricing.UpstreamModel, 300)
+	for i := range upstream {
+		prompt := 2.5
+		upstream[i] = pricing.UpstreamModel{
+			ID:               fmt.Sprintf("openrouter/vendor-%d/model-%d", i%10, i),
+			CanonicalSlug:    fmt.Sprintf("vendor-%d/model-%d", i%10, i),
+			Name:             fmt.Sprintf("Model %d", i),
+			Author:           fmt.Sprintf("vendor-%d", i%10),
+			ContextLength:    200000,
+			PromptPricePer1M: 1.5,
+			CompletionPer1M:  6.0,
+			CacheReadPer1M:   0.15,
+			CacheWritePer1M:  1.875,
+			Tiers:            []pricing.PriceTier{{MinPromptTokens: 128000, PromptPricePer1M: &prompt}},
+		}
+	}
+	if err := repo.ReplaceUpstreamCatalog(ctx, upstream); err != nil {
+		b.Fatal(err)
+	}
+	configured := make(map[string]string, 40)
+	priced := make([]pricing.ModelPrice, 0, 25)
+	modelList := make([]string, 0, 40)
+	for i := 0; i < 40; i++ {
+		name := fmt.Sprintf("custom-gateway-model-%d", i)
+		configured[name] = name
+		modelList = append(modelList, name)
+		if i < 25 {
+			priced = append(priced, pricing.ModelPrice{
+				Model: name, PromptPricePer1M: 2, CompletionPer1M: 8,
+				CacheReadPer1M: 0.2, CacheWritePer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual,
+			})
+		}
+	}
+	if _, err := repo.ReplacePricingModels(ctx, configured, pricing.CatalogProvider{
+		ID: "openai-compat-0", Name: "Primary Relay", Family: "openai-compatibility", Channel: "openai-compatible-primary", Models: modelList,
+	}); err != nil {
+		b.Fatal(err)
+	}
+	if err := repo.UpsertModelPrices(ctx, priced); err != nil {
+		b.Fatal(err)
+	}
+	baseMS := int64(1700006400000)
+	if _, err := db.SQL.Exec(`
+		WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n <= 50000)
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, model, provider, timestamp_ms, created_at_ms, cost_nanos, pricing_status)
+		SELECT 'default', 'ev-'||n, 'group', 'custom-gateway-model-'||(n%40), 'openai-compatible-primary',
+			?1 + n * 20000, ?1, CASE WHEN n%40 < 25 THEN 250000 ELSE NULL END, CASE WHEN n%40 < 25 THEN 'priced' ELSE 'unpriced' END
+		FROM seq`, baseMS); err != nil {
+		b.Fatal(err)
+	}
+	for {
+		folded, err := repo.AggregateUsageFacts(ctx, 20000)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if folded < 20000 {
+			break
+		}
+	}
+	svc := pricing.NewService(repo, nil, nil)
+	now := baseMS + 50000*20000 + 60000
+	handler := &Handler{repo: repo, pricing: svc}
+	handler.nowFn = func() time.Time { return time.UnixMilli(now).UTC() }
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pricing", nil)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rec := httptest.NewRecorder()
+		handler.listPricing(rec, req)
+		if rec.Code != http.StatusOK {
+			b.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
 	}
 }

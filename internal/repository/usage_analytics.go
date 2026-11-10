@@ -94,15 +94,6 @@ func (r *Repository) QueryUsageAnalyticsFiltered(ctx context.Context, instanceID
 	return result, nil
 }
 
-func scanTargets(totals *UsageTotals) []any {
-	return []any{
-		&totals.Requests, &totals.Failures, &totals.InputTokens, &totals.OutputTokens,
-		&totals.ReasoningTokens, &totals.CachedTokens, &totals.CacheReadTokens,
-		&totals.CacheCreationTokens, &totals.TotalTokens, &totals.LatencySumMS,
-		&totals.TTFTSumMS, &totals.TTFTCount,
-	}
-}
-
 // UsageDayWindow is one local calendar day, expressed as the exact instant range it
 // covers on the viewer's calendar.
 //

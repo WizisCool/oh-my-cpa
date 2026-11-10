@@ -696,4 +696,15 @@ test('dashboard providers', () => {
     { startMs: 1 * minute, endMs: 2 * minute, total: 0, failure: 0, successRate: null },
     { startMs: 2 * minute, endMs: 3 * minute, total: 1, failure: 1, successRate: 0 },
   ]);
+
+  // Unsettled provider catalog propagates isIdentityUnknown onto configured rows so
+  // positional IDs do not borrow stale custom icons during a refetch.
+  const unsettledRows = aggregateProviders({
+    overviewProviders: mockOverviewProviders,
+    configuredProviders: mockConfiguredProviders,
+    isProviderCatalogUnknown: true,
+  });
+  const unsettledCline = unsettledRows.find((p) => p.providerId === 'openai-compat-0');
+  assert.ok(unsettledCline);
+  assert.equal(unsettledCline.isIdentityUnknown, true);
 });

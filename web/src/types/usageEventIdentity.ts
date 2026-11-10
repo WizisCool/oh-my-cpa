@@ -176,11 +176,25 @@ export interface ProviderLookupEntry {
  */
 export const PROVIDER_KEY_PREFIX = 'openai-compatible-';
 
+type ProviderResolverFn = (providerKey: string | null | undefined, authIndex?: string) => ProviderLookupEntry | undefined;
+
+const providerResolverCache = new WeakMap<readonly ProviderLookupEntry[], ProviderResolverFn>();
+
 /**
  * Rows and facets share the same identity claims. Display names and resource
  * names are presentation, not proof that a current provider served a request.
+ *
+ * Cached by catalog array identity (`WeakMap`) so resolving hundreds of request
+ * rows during a render builds the claim maps once per catalog snapshot instead
+ * of once per row.
  */
-function createProviderResolver(configured: readonly ProviderLookupEntry[]) {
+function createProviderResolver(configured: readonly ProviderLookupEntry[]): ProviderResolverFn {
+  if (configured.length === 0) {
+    return () => undefined;
+  }
+  const cached = providerResolverCache.get(configured);
+  if (cached) return cached;
+
   const providerClaims = new Map<string, ProviderLookupEntry | null>();
   const credentialClaims = new Map<string, ProviderLookupEntry | null>();
   const claim = (claims: Map<string, ProviderLookupEntry | null>, key: string, provider: ProviderLookupEntry) => {
@@ -198,7 +212,7 @@ function createProviderResolver(configured: readonly ProviderLookupEntry[]) {
     }
   }
 
-  return (providerKey: string | null | undefined, authIndex?: string): ProviderLookupEntry | undefined => {
+  const resolver: ProviderResolverFn = (providerKey, authIndex) => {
     // A missing or ambiguous credential cannot be replaced by a weaker label:
     // that would transfer history after deletion, rotation or name reuse.
     const credentialKey = authIndex?.trim();
@@ -207,6 +221,8 @@ function createProviderResolver(configured: readonly ProviderLookupEntry[]) {
     const rawKey = providerKey?.trim().toLowerCase() || '';
     return providerClaims.get(rawKey) ?? undefined;
   };
+  providerResolverCache.set(configured, resolver);
+  return resolver;
 }
 
 /**

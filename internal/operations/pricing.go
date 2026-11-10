@@ -396,9 +396,21 @@ func (s *Service) OverviewPricing(ctx context.Context, input OffsetInput) (Prici
 	if input.Offset < len(unpriced) {
 		end := min(input.Offset+pricingPageSize, len(unpriced))
 		output.HasMore = end < len(unpriced)
-		for _, model := range unpriced[input.Offset:end] {
+		slice := unpriced[input.Offset:end]
+		var batched map[string][]pricing.UpstreamModel
+		if batcher, ok := s.Pricing.(interface {
+			SuggestionsBatch(context.Context, []string, int) (map[string][]pricing.UpstreamModel, error)
+		}); ok {
+			batched, _ = batcher.SuggestionsBatch(ctx, slice, 2)
+		}
+		for _, model := range slice {
 			item := UnpricedModel{Model: model, Usage: projectPriceUsage(usage[model]), Suggestions: []UpstreamRef{}}
-			suggestions, _ := s.Pricing.Suggestions(ctx, model, 2)
+			var suggestions []pricing.UpstreamModel
+			if batched != nil {
+				suggestions = batched[model]
+			} else {
+				suggestions, _ = s.Pricing.Suggestions(ctx, model, 2)
+			}
 			for _, suggestion := range suggestions {
 				item.Suggestions = append(item.Suggestions, UpstreamRef{ID: suggestion.ID, Name: suggestion.Name,
 					PromptPricePer1M: suggestion.PromptPricePer1M, CompletionPer1M: suggestion.CompletionPer1M})

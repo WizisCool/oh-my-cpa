@@ -50,7 +50,7 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
   const option = React.useMemo(() => {
     const totals = rows.map((_, row) => values.reduce((sum, series) => sum + (series[row] ?? 0), 0));
     return {
-      grid: { left: 4, right: 16, top: 4, bottom: 4, containLabel: true },
+      grid: { left: 4, right: 16, top: 4, bottom: 4, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
       xAxis: { type: 'value', splitNumber: 4, axisLabel: { formatter: (value: number) => formatMetric(metric, value, style) } },
       yAxis: {
         type: 'category',

@@ -61,8 +61,8 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
     [columnDimension, cube, partMetric, rows],
   );
   const tableMatrix = React.useMemo(
-    () => buildMatrix(cube, rows, 'key', columnDimension, metric, 20, 10),
-    [columnDimension, cube, metric, rows],
+    () => (view === 'table' ? buildMatrix(cube, rows, 'key', columnDimension, metric, 20, 10) : null),
+    [columnDimension, cube, metric, rows, view],
   );
 
   const composition = React.useMemo(() => {
@@ -153,7 +153,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
         </>
       ) : (
         <MatrixTable
-          matrix={tableMatrix}
+          matrix={tableMatrix!}
           rowDimension="key"
           columnDimension={columnDimension}
           metric={metric}

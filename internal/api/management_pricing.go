@@ -266,10 +266,35 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 		models = append(models, dto)
 	}
 	attention := make([]pricingUnpricedDTO, 0, len(unpriced))
+	var batchedSuggestions map[string][]pricing.UpstreamModel
+	useBatch := false
+	if batcher, ok := h.pricing.(interface {
+		SuggestionsBatch(context.Context, []string, int) (map[string][]pricing.UpstreamModel, error)
+	}); ok && len(unpriced) > 0 {
+		useBatch = true
+		var errBatch error
+		batchedSuggestions, errBatch = batcher.SuggestionsBatch(ctx, unpriced, pricingSuggestionLimit)
+		if errBatch != nil {
+			slog.Warn("pricing suggestions unavailable", "error", errBatch)
+			// One retry covers a transient store hiccup without re-reading the
+			// catalog once per unpriced model when the store is persistently down.
+			batchedSuggestions, _ = batcher.SuggestionsBatch(ctx, unpriced, pricingSuggestionLimit)
+		}
+	}
+	suggestFailed := false
 	for _, model := range unpriced {
-		suggestions, err := h.pricing.Suggestions(ctx, model, pricingSuggestionLimit)
-		if err != nil {
-			slog.Warn("pricing suggestions unavailable", "model", model, "error", err)
+		var suggestions []pricing.UpstreamModel
+		if useBatch {
+			if batchedSuggestions != nil {
+				suggestions = batchedSuggestions[model]
+			}
+		} else if !suggestFailed {
+			var errSuggest error
+			suggestions, errSuggest = h.pricing.Suggestions(ctx, model, pricingSuggestionLimit)
+			if errSuggest != nil {
+				slog.Warn("pricing suggestions unavailable", "model", model, "error", errSuggest)
+				suggestFailed = true
+			}
 		}
 		if suggestions == nil {
 			suggestions = []pricing.UpstreamModel{}

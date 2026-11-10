@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
@@ -232,5 +234,139 @@ func TestInsightsCubeCarriesEveryDimensionWithoutKeys(t *testing.T) {
 	response, _ = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?preset=30d&bucket=hour")
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("hourly buckets over 30 days answered %d", response.StatusCode)
+	}
+}
+
+func TestInsightsCubeFoldsDailyFactsIntoCalendarMonths(t *testing.T) {
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 21, 14, 30, 0, 0, shanghai)
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+	repo.Timezone().Apply(shanghai)
+
+	mkEvent := func(id string, at time.Time, tokens int64) repository.UsageDecoded {
+		ev := eventFor(id, at, usage.TokenStats{InputTokens: tokens / 2, OutputTokens: tokens / 2, TotalTokens: tokens}, false)
+		ev.APIGroupKey, ev.Model, ev.APIKeyMask = "sk-alpha-secret-0001", "gpt-5", security.MaskSecret("sk-alpha-secret-0001")
+		return repository.UsageDecoded{Event: ev}
+	}
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		mkEvent("aug-1", time.Date(2026, 8, 5, 10, 0, 0, 0, shanghai), 100),
+		mkEvent("sep-1", time.Date(2026, 9, 3, 11, 0, 0, 0, shanghai), 200),
+		mkEvent("sep-2", time.Date(2026, 9, 28, 16, 0, 0, 0, shanghai), 300),
+		mkEvent("oct-1", time.Date(2026, 10, 2, 9, 0, 0, 0, shanghai), 400),
+		mkEvent("oct-2", time.Date(2026, 10, 12, 18, 0, 0, 0, shanghai), 500),
+		mkEvent("oct-3", time.Date(2026, 10, 21, 8, 0, 0, 0, shanghai), 600),
+	})
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.EnsureLocalUsageFacts(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	fromMS := time.Date(2026, 8, 1, 0, 0, 0, 0, shanghai).UnixMilli()
+	toMS := now.UnixMilli()
+	urlStr := baseURL + "/omc/api/v1/management/insights/cube?bucket=month&from=" +
+		jsonNumber(fromMS) + "&to=" + jsonNumber(toMS)
+	response, payload := getJSON(t, client, urlStr)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status %d: %s", response.StatusCode, payload)
+	}
+	var body insightsCubeResponse
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Window.Bucket != insightsBucketMonth || len(body.BucketStarts) != 3 {
+		t.Fatalf("window=%+v bucket_starts=%v", body.Window, body.BucketStarts)
+	}
+	col := map[string]int{}
+	for idx, name := range body.Columns {
+		col[name] = idx
+	}
+	requestsByBucket := make([]int64, len(body.BucketStarts))
+	for _, row := range body.Rows {
+		requestsByBucket[row[col["bucket"]]] += row[col["requests"]]
+	}
+	want := []int64{1, 2, 3}
+	if !reflect.DeepEqual(requestsByBucket, want) {
+		t.Fatalf("requests per month bucket = %v, want %v", requestsByBucket, want)
+	}
+}
+
+func jsonNumber(v int64) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+func BenchmarkInsightsCubeHandler(b *testing.B) {
+	ctx := context.Background()
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		b.Fatal(err)
+	}
+	db, err := repository.Open(ctx, dashboardMemoryDSN("insights_bench"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = db.Close() })
+	repo := repository.New(db)
+	repo.Timezone().Apply(shanghai)
+	if _, err := db.SQL.Exec(`INSERT INTO cpa_instances
+		(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+		VALUES ('default','Default','http://localhost','localhost',x'00',x'00','ok',0,0)`); err != nil {
+		b.Fatal(err)
+	}
+	const days = 90
+	const combinations = 40
+	fromMS := int64(1700006400000)
+	dayMS := int64(24 * 60 * 60 * 1000)
+	for _, grain := range []struct {
+		table    string
+		bucketMS int64
+	}{{"usage_facts_15m", repository.QuarterHourBucketMS}, {"usage_facts_daily", dayMS}} {
+		if _, err := db.SQL.Exec(`
+			WITH RECURSIVE buckets(start_ms) AS (
+				SELECT ?1 UNION ALL SELECT start_ms + ?2 FROM buckets WHERE start_ms + ?2 < ?1 + ?3
+			), combos(n) AS (
+				SELECT 0 UNION ALL SELECT n + 1 FROM combos WHERE n + 1 < ?4
+			)
+			INSERT INTO `+grain.table+` (instance_id, bucket_start_ms, api_group_key, model, model_alias, auth_index,
+				provider, auth_type, requests, input_tokens, output_tokens, total_tokens, cost_nanos, priced_requests, costed_requests)
+			SELECT 'default', start_ms, 'hmac:key-' || (n % 20), 'model-' || (n % 8), 'alias-' || (n % 5),
+				'auth-' || (n % 10), 'provider-' || (n % 3), 'apikey', 3, 300, 200, 500, 1000, 3, 3
+			FROM buckets, combos`,
+			fromMS, grain.bucketMS, int64(days)*dayMS, combinations); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if _, err := db.SQL.Exec(`
+		WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n < 20000)
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, api_group_label, api_key_mask, model, provider, timestamp_ms, created_at_ms)
+		SELECT 'default', 'ev-'||n, 'hmac:key-'||(n%20), 'api_key', 'sk-••••'||printf('%04d', n%20),
+			'model-'||(n%8), 'provider-'||(n%3), ?1 + n * 1000, ?1
+		FROM seq`, fromMS); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.SQL.Exec(`
+		UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 20000 WHERE name = ?`, repository.CheckpointFacts); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := repo.EnsureLocalUsageFacts(ctx); err != nil {
+		b.Fatal(err)
+	}
+	now := time.UnixMilli(fromMS + int64(days)*dayMS - 1).In(shanghai)
+	handler := &Handler{repo: repo, nowFn: func() time.Time { return now }}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/management/insights/cube?preset=90d", nil)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rec := httptest.NewRecorder()
+		handler.insightsCube(rec, req)
+		if rec.Code != http.StatusOK {
+			b.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
 	}
 }

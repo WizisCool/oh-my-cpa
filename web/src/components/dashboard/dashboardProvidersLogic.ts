@@ -198,6 +198,8 @@ export interface AggregateProvidersOptions {
   pluginLogos?: PluginOAuthLogos;
   /** Titles plugins publish for the providers they register, keyed by provider key */
   pluginTitles?: ReadonlyMap<string, string>;
+  /** Whether the sanitized provider catalog read is unsettled (error, missing, or refetching). */
+  isProviderCatalogUnknown?: boolean;
 }
 
 /**
@@ -230,6 +232,7 @@ export function aggregateProviders({
   pluginOAuthIds,
   pluginLogos = {},
   pluginTitles,
+  isProviderCatalogUnknown = false,
 }: AggregateProvidersOptions): AggregatedProvider[] {
   const result: AggregatedProvider[] = [];
   // Once the tally has been read it is the only evidence an OAuth channel exists: the live
@@ -536,7 +539,7 @@ export function aggregateProviders({
       ? providerDisplayName(identity, pluginTitles)
       : (cp.name || cp.upstream_name || cp.id);
 
-    const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
+    const mark = resolveProviderMark({ ...cp, family: isOAuth ? normIdentity : cp.family, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos, isProviderCatalogUnknown });
 
     let configuredCreds = 0;
     if (cp.key_entries && cp.key_entries.length > 0) {
@@ -606,7 +609,7 @@ export function aggregateProviders({
 
     const meta = OAUTH_CHANNEL_META[normType];
     const name = providerDisplayName(item.type, pluginTitles);
-    const mark = resolveProviderMark({ id: item.type, family: item.type, name: item.type, is_oauth: true, aliases: [normType] }, { providerIcons: customIcons, pluginLogos });
+    const mark = resolveProviderMark({ id: item.type, family: item.type, name: item.type, is_oauth: true, aliases: [normType] }, { providerIcons: customIcons, pluginLogos, isProviderCatalogUnknown });
 
     const traffic = resolveTraffic([item.type]);
 
@@ -647,7 +650,7 @@ export function aggregateProviders({
     if (isOAuth && hasCredentialTally) continue;
     const meta = isOAuth ? OAUTH_CHANNEL_META[normId] : undefined;
     const name = providerDisplayName(op.id, pluginTitles);
-    const mark = resolveProviderMark({ id: op.id, family: normId, name: op.id, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos });
+    const mark = resolveProviderMark({ id: op.id, family: normId, name: op.id, is_oauth: isOAuth }, { providerIcons: customIcons, pluginLogos, isProviderCatalogUnknown });
 
     const traffic = resolveTraffic([op.id]);
 

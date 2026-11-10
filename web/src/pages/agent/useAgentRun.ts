@@ -197,7 +197,12 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
         frameRef.current = applyAgentEvent(frameRef.current, event);
         // A capability that changed something names the views it invalidated; refreshing them
         // here is what keeps the rest of the console consistent with what the agent just did.
-        for (const key of invalidatedKeys(event)) void queryClient.invalidateQueries({ queryKey: [key] });
+        for (const key of invalidatedKeys(event)) {
+          void queryClient.invalidateQueries({ queryKey: [key] });
+          if (key === 'management-providers') {
+            void queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] });
+          }
+        }
         schedule();
       }
       if (controllerRef.current !== controller) return;
