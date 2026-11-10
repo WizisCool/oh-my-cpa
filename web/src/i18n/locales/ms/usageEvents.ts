@@ -281,6 +281,7 @@ export default {
   "events.reset_columns": "Tetapkan Semula Lajur",
   "events.select_row": "Pilih permintaan {id}",
   "events.select_all": "Pilih semua di halaman ini",
+  "events.select_requests": "Pilih permintaan",
   "events.selection": "Permintaan dipilih",
   "events.selected_count": "{n} dipilih",
   "events.clear_selection": "Kosongkan pilihan",

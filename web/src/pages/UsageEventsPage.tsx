@@ -65,6 +65,9 @@ import {
 import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
+import { ToolButton } from '../components/common/ToolButton';
+import type { SelectionAnchor } from '../types/rowSelection';
+import { CheckSquareOutlined } from '../components/icons';
 import { LoadFailure, Notice } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { FactList } from '../components/common/FactList';
@@ -97,6 +100,15 @@ export const UsageEventsPage: React.FC = () => {
     isEnabled,
   } = useUsageEventViewState();
 
+  // The records picked for export, kept as the rows themselves rather than their
+  // ids: a selection outlives the page it was made on, and a poll may replace the
+  // loaded rows before the image is drawn.
+  const [selection, setSelection] = React.useState<ReadonlyMap<number, UsageEvent>>(() => new Map());
+  // A choice is under way from the toolbar's button or the first pick until it is cleared; only then
+  // does the list carry a selection column, and a plain click on a row picks it.
+  const [isSelectMode, setIsSelectMode] = React.useState(false);
+  const isSelecting = isSelectMode || selection.size > 0;
+
   const {
     colWidths,
     gridTemplate,
@@ -108,7 +120,7 @@ export const UsageEventsPage: React.FC = () => {
     handleResetColumn,
     handleResetAllColumns,
     handleResizeKeyDown,
-  } = useRequestColumnLayout();
+  } = useRequestColumnLayout(isSelecting);
 
   // The sync hook's poll reads the list's in-flight state through this ref rather
   // than closing over it; the interval it installs explains why the dependency
@@ -166,13 +178,9 @@ export const UsageEventsPage: React.FC = () => {
   } = liveEdge;
   const [selected, setSelected] = React.useState<number | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
-  // The records picked for export, kept as the rows themselves rather than their
-  // ids: a selection outlives the page it was made on, and a poll may replace the
-  // loaded rows before the image is drawn.
-  const [selection, setSelection] = React.useState<ReadonlyMap<number, UsageEvent>>(() => new Map());
   const [isExportOpen, setIsExportOpen] = React.useState(false);
-  /** The row last clicked without Shift, which a Shift click extends from. */
-  const selectionAnchorRef = React.useRef<number | null>(null);
+  /** The row last picked without Shift, which a Shift click runs from. */
+  const selectionAnchorRef = React.useRef<SelectionAnchor<number> | null>(null);
 
   const isQueryEnabled = isEnabled;
   const facetParams = usageEventParams(facetWindow);
@@ -296,22 +304,29 @@ export const UsageEventsPage: React.FC = () => {
   // poll would re-render every memoized row on screen.
   const eventsRef = React.useRef(events);
   eventsRef.current = events;
+  const selectionRef = React.useRef(selection);
+  selectionRef.current = selection;
   const handleToggleSelect = React.useCallback((id: number, isRange: boolean) => {
-    const anchorId = selectionAnchorRef.current;
-    setSelection((previous) => toggleSelection(previous, eventsRef.current, id, anchorId, isRange));
-    if (!isRange || anchorId === null) selectionAnchorRef.current = id;
+    const pick = toggleSelection(selectionRef.current, eventsRef.current, id, selectionAnchorRef.current, isRange);
+    selectionAnchorRef.current = pick.anchor;
+    setSelection(pick.selection);
   }, []);
   const handleToggleAll = React.useCallback((isSelected: boolean) => {
+    selectionAnchorRef.current = null;
     setSelection((previous) => setLoadedSelection(previous, eventsRef.current, isSelected));
   }, []);
-  const clearSelection = React.useCallback(() => {
+  const clearSelectedRows = React.useCallback(() => {
     selectionAnchorRef.current = null;
     setSelection((previous) => (previous.size === 0 ? previous : new Map()));
   }, []);
+  const clearSelection = React.useCallback(() => {
+    clearSelectedRows();
+    setIsSelectMode(false);
+  }, [clearSelectedRows]);
   // A selection belongs to the view it was made in. Paging keeps it; a different
   // filter or window shows other records, and rows nobody can see must not ride
   // along into an export.
-  React.useEffect(clearSelection, [clearSelection, signature]);
+  React.useEffect(clearSelectedRows, [clearSelectedRows, signature]);
   const pendingCount = pendingArrivals(result.data?.arrived_count);
 
   // Safe file metadata only: never download credential contents for the stream.
@@ -591,6 +606,14 @@ export const UsageEventsPage: React.FC = () => {
                   {t('events.reset_columns')}
                 </Button>
               )}
+              <ToolButton
+                icon={<CheckSquareOutlined />}
+                label={t('events.select_requests')}
+                type={isSelecting ? 'primary' : 'default'}
+                ghost={isSelecting}
+                aria-pressed={isSelecting}
+                onClick={() => (isSelecting ? clearSelection() : setIsSelectMode(true))}
+              />
               <RequestFoldToggle collapse={collapse} onToggle={handleToggleExpand} />
               <RefreshButton
                 isRefreshing={isSyncing || result.isFetching}
@@ -666,7 +689,7 @@ export const UsageEventsPage: React.FC = () => {
       </RequestCollapsibleHeader>
       <section
         ref={streamRef}
-        className="request-stream"
+        className={clsx('request-stream', isSelecting && 'is-selecting')}
         data-folded-columns={foldedColumns}
         aria-label={t('events.title')}
         aria-busy={result.isFetching}
@@ -677,7 +700,7 @@ export const UsageEventsPage: React.FC = () => {
           } as React.CSSProperties
         }
       >
-        {selection.size > 0 && (
+        {isSelecting && (
           <RequestSelectionBar
             count={selection.size}
             isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
@@ -692,6 +715,7 @@ export const UsageEventsPage: React.FC = () => {
             handleResizeStart={handleResizeStart}
             handleResetColumn={handleResetColumn}
             handleResizeKeyDown={handleResizeKeyDown}
+            isSelecting={isSelecting}
             selectionState={loadedSelectionState(selection, events)}
             onToggleAll={handleToggleAll}
           />
@@ -724,6 +748,7 @@ export const UsageEventsPage: React.FC = () => {
                     onOpen={setSelected}
                     isSelected={selected === event.id}
                     isChecked={selection.has(event.id)}
+                    isSelecting={isSelecting}
                     onToggleSelect={handleToggleSelect}
                   />
                 )}

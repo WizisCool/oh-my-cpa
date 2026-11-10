@@ -180,25 +180,107 @@
   margin-top: 3px;
 }
 
+/* A phone reads the dialog top to bottom, so the forecast - what the dialog is opened for - leads,
+   this window's usage that it is built on follows, and the window before closes; each card folds into one block: its name and span on one line, its three figures side by
+   side, and the share used. A card with no reading keeps only its head, whose caption says why. */
 @media (max-width: 640px) {
   .cards {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 10px;
   }
 
   .card {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: none;
     grid-row: auto;
   }
 
-  .lead {
+  /* Newest first: the forecast, this window so far, then the window before it (the first card). */
+  .card[data-tone='forecast'] {
+    order: -1;
+  }
+
+  .card:first-child {
+    order: 1;
+  }
+
+  .head {
+    grid-column: 1 / -1;
     flex-direction: row;
     align-items: baseline;
     justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
   }
 
-  .lead-value {
+  .caption {
+    font-size: var(--text-xs);
+    text-align: right;
+  }
+
+  .rows {
+    display: contents;
+  }
+
+  .lead,
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    border-top: 0;
+  }
+
+  .row + .row,
+  .lead + .rows .row:first-child {
+    border-left: 1px solid var(--border);
+  }
+
+  .lead-value,
+  .row dd {
+    max-width: 100%;
+    font-size: var(--text-base);
+    line-height: 1.3;
+  }
+
+  .card[data-tone='forecast'] .lead-value,
+  .card[data-tone='forecast'] .row dd {
     font-size: var(--text-lg);
+    font-weight: 600;
+  }
+
+  .foot {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    min-height: 0;
+    padding: 8px 12px;
+  }
+
+  .card[data-empty] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card[data-empty] .head {
+    border-bottom: 0;
+  }
+
+  .card[data-empty]:not([data-tone='forecast']) .lead,
+  .card[data-empty]:not([data-tone='forecast']) .rows,
+  .card[data-empty]:not([data-tone='forecast']) .foot,
+  .card[data-tone='forecast'][data-empty] .lead,
+  .card[data-tone='forecast'][data-empty] .rows {
+    display: none;
+  }
+
+  .card[data-tone='forecast'][data-empty] .head {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .note {
+    margin-top: 12px;
   }
 }

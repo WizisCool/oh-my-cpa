@@ -28,6 +28,7 @@ import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQu
 import type { QuotaWindow } from '../../src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
+import { healthBucketOf, healthCounts, matchesHealthLens, parseHealthLens, providerSummaries } from '../../src/pages/oauthManagement/fleetPresentation.ts';
 import { siwcBadgeState } from '../../src/components/authFiles/siwcBadge.ts';
 import type { TFunc } from '../../src/i18n/index.tsx';
 
@@ -219,9 +220,9 @@ test('quota conditions: capability is independent from observed health and authe
   );
   const record = projection.records[0];
   assert.equal(record.isQuotaUnsupported, true);
-  assert.equal(record.isQuotaAttention, true);
+  assert.equal(record.isQuotaAttention, false, 'a low but usable reading is not a credential that needs a look');
   assert.equal(matchesQuotaFilter(record, 'unsupported'), true);
-  assert.equal(matchesQuotaFilter(record, 'attention'), true);
+  assert.equal(matchesQuotaFilter(record, 'attention'), false);
   assert.equal(matchesQuotaFilter(record, 'warning'), true);
 });
 
@@ -688,6 +689,49 @@ test('a row pairs further single limits two to a line and draws a leftover one a
   );
   // The first line keeps its columns even when it has one limit: it is what the headers describe.
   assert.deepEqual(placement([plan('seven_day', 168), model('Sonnet'), model('Opus')]), ['seven_day:span', 'seven_day_Sonnet:short', 'seven_day_Opus:long']);
+});
+
+test('every credential lands in one health bucket, most demanding first', () => {
+  const projection = buildOAuthWorkspaceProjection([
+    file({ name: 'ok', auth_index: 'ok' }),
+    file({ name: 'off', auth_index: 'off', disabled: true }),
+    file({ name: 'broken', auth_index: 'broken', status: 'error' }),
+    file({ name: 'cooling', auth_index: 'cooling' }),
+    file({ name: 'old', auth_index: 'old' }),
+    file({ name: 'off-cooling', auth_index: 'off-cooling', disabled: true }),
+    file({ name: 'key', auth_index: 'key', runtime_only: true }),
+  ], [
+    quota({ auth_index: 'ok', name: 'ok' }),
+    quota({ auth_index: 'cooling', name: 'cooling', status: 'cooldown' }),
+    quota({ auth_index: 'old', name: 'old', status: 'stale' }),
+    quota({ auth_index: 'off-cooling', name: 'off-cooling', status: 'cooldown' }),
+  ], choices);
+  const buckets = Object.fromEntries(projection.records.map((record) => [record.fileName, healthBucketOf(record)]));
+  assert.deepEqual(buckets, { ok: 'healthy', off: 'disabled', broken: 'attention', cooling: 'attention', old: 'stale', 'off-cooling': 'disabled', key: 'disabled' });
+  const counts = healthCounts(projection.records);
+  assert.deepEqual(counts, { attention: 2, stale: 1, healthy: 1, disabled: 3 });
+  assert.equal(projection.records.filter((record) => matchesHealthLens(record, 'attention')).length, counts.attention);
+  assert.equal(parseHealthLens('stale'), 'stale');
+  assert.equal(parseHealthLens('bogus'), 'all');
+});
+
+test('the provider column lists providers with credentials in the arranged order, with their exceptions', () => {
+  const projection = buildOAuthWorkspaceProjection([
+    file({ name: 'a', auth_index: 'a', type: 'codex', provider: 'codex' }),
+    file({ name: 'b', auth_index: 'b', type: 'codex', provider: 'codex', status: 'error' }),
+    file({ name: 'c', auth_index: 'c', type: 'claude', provider: 'claude', disabled: true }),
+  ], [], choices);
+  assert.deepEqual(providerSummaries(projection.records, ['gemini', 'codex', 'claude']), [
+    { provider: 'codex', total: 2, attention: 1, disabled: 0 },
+    { provider: 'claude', total: 1, attention: 0, disabled: 1 },
+  ]);
+});
+
+test('the workspace query keeps its layout, health lens and quota orders', () => {
+  const query = parseOAuthWorkspaceQuery(new URLSearchParams('layout=cards&health=attention&sort=quota-desc'));
+  assert.deepEqual([query.layout, query.health, query.sort], ['cards', 'attention', 'quota-desc']);
+  const fallback = parseOAuthWorkspaceQuery(new URLSearchParams('layout=grid&health=everything'));
+  assert.deepEqual([fallback.layout, fallback.health], ['list', 'all']);
 });
 
 test('section columns: a repeated window id is one reading', () => {

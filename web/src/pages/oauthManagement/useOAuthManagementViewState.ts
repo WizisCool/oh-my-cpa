@@ -18,7 +18,7 @@ export function useOAuthManagementViewState() {
   // Links override only the dimensions they name; the saved view supplies the rest.
   const resolvedParams = React.useMemo(() => {
     const next = new URLSearchParams(searchParams);
-    for (const key of ['status', 'quota', 'sort'] as const) {
+    for (const key of ['status', 'quota', 'sort', 'layout'] as const) {
       if (!next.has(key)) next.set(key, preference.value[key]);
     }
     if (!next.has('page_size')) next.set('page_size', String(preference.value.pageSize));
@@ -31,10 +31,10 @@ export function useOAuthManagementViewState() {
   const setSearch = React.useCallback((changes: Record<string, string | number | null | undefined>, options?: ViewChangeOptions) => {
     const intent = ++intentRef.current;
     const nextParams = updateWorkspaceSearch(searchParams, changes);
-    const viewKeys = ['status', 'quota', 'sort', 'page_size'];
+    const viewKeys = ['status', 'quota', 'sort', 'page_size', 'layout'];
     if (preference.loaded && viewKeys.some((key) => key in changes)) {
       const next = parseOAuthWorkspaceQuery(updateWorkspaceSearch(resolvedParams, changes));
-      void preference.set({ pageSize: next.pageSize, status: next.status, quota: next.quota, sort: next.sort }).then(({ ok }) => {
+      void preference.set({ pageSize: next.pageSize, layout: next.layout, status: next.status, quota: next.quota, sort: next.sort }).then(({ ok }) => {
         // An unsaved URL override must not hide the preference's rollback. A later
         // edit or navigation owns the URL by then and must never be undone here.
         if (ok || intentRef.current !== intent) return;

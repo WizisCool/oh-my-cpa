@@ -278,6 +278,7 @@ export default {
   'events.reset_columns': '恢复默认列宽',
   'events.select_row': '选择请求 {id}',
   'events.select_all': '全选本页',
+  'events.select_requests': '选择请求',
   'events.selection': '已选请求',
   'events.selected_count': '已选 {n} 条',
   'events.clear_selection': '取消选择',

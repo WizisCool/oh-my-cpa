@@ -281,6 +281,7 @@ export default {
   "events.reset_columns": "恢復預設列寬",
   "events.select_row": "選擇請求 {id}",
   "events.select_all": "全選本頁",
+  "events.select_requests": "選擇請求",
   "events.selection": "已選請求",
   "events.selected_count": "已選 {n} 筆",
   "events.clear_selection": "取消選擇",

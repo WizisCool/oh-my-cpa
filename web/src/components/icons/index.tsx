@@ -106,6 +106,7 @@ export const LayersOutlined = createIcon(Lucide.Layers, 'anticon-layers');
 export const LayoutOutlined = createIcon(Lucide.PanelRight, 'anticon-layout');
 export const LeftOutlined = createIcon(Lucide.ChevronLeft, 'anticon-left');
 export const LineChartOutlined = createIcon(Lucide.ChartLine, 'anticon-line-chart');
+export const ListOutlined = createIcon(Lucide.List, 'anticon-list');
 export const LinkOutlined = createIcon(Lucide.Link, 'anticon-link');
 export const LoadingOutlined = (props: AntdIconProps) => <SpinningLoader spin {...props} />;
 export const LockOutlined = createIcon(Lucide.Lock, 'anticon-lock');
