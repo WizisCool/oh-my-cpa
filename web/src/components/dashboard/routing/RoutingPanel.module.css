@@ -455,6 +455,7 @@
 @container routingmap (max-width: 620px) {
   .map {
     --tile-size: 34px;
+
     grid-template-columns: minmax(0, 1fr) 80px;
     grid-template-rows: auto auto;
     column-gap: 34px;

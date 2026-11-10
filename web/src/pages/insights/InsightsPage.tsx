@@ -162,6 +162,7 @@ export const InsightsPage: React.FC = () => {
     staleTime: 10_000,
     refetchInterval: (query) => insightsPollInterval(query.state.data?.window),
   });
+  const [wasCubeWarm] = React.useState(() => Boolean(cubeQuery.data));
   const { configuredProviders } = useProviderBranding();
   // A provider's own name is the identity of the connection that answered, and the credential that
   // served a row is what says which connection that was: CPA labels an API-key request with its
@@ -579,7 +580,7 @@ export const InsightsPage: React.FC = () => {
       {!isPhone && (
         <DeferredPanel
           priority="p1"
-          immediate={Boolean(cube)}
+          immediate={wasCubeWarm}
           fallback={<Panel className={styles['trend-panel']}><ChartFallback height={280} /></Panel>}
         >
           <KeyCompositionPanel
@@ -613,7 +614,7 @@ export const InsightsPage: React.FC = () => {
       {flow && flow.links.length > 0 && (
         <DeferredPanel
           priority="p2"
-          immediate={Boolean(cube)}
+          immediate={wasCubeWarm}
           fallback={<Panel className={styles['trend-panel']}><ChartFallback height={320} /></Panel>}
         >
           <Panel

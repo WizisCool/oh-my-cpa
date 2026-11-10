@@ -25,8 +25,8 @@ function useCooldownNow(initialNowMs: number, skewMs: number, untilAtMs: number)
       setNowMs(current);
       const remainingMs = untilAtMs - current;
       if (remainingMs <= 0) return;
-      // Sub-minute cooldowns step each second; longer cooldowns step every 15s.
-      const stepMs = remainingMs <= 65_000 ? 1_000 : 15_000;
+      // Cooldowns shown in seconds (under 120s) step each second; longer cooldowns step every 15s.
+      const stepMs = remainingMs <= 120_000 ? 1_000 : 15_000;
       timer = setTimeout(schedule, stepMs);
     };
     const onVisibility = () => {

@@ -211,12 +211,12 @@ export const AppLayout: React.FC = () => {
 
   const selectPage = ({ key }: { key: string }) => {
     setIsMobileNavOpen(false);
-    if (key !== location.pathname) navigateTo(key);
+    if (key !== `${location.pathname}${location.search}`) navigateTo(key);
   };
 
   const goToDashboard = () => {
     setIsMobileNavOpen(false);
-    if (location.pathname !== '/dashboard') navigateTo('/dashboard');
+    if (`${location.pathname}${location.search}` !== '/dashboard') navigateTo('/dashboard');
   };
 
   React.useEffect(() => {

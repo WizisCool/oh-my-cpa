@@ -196,8 +196,8 @@ export const RoutingPanel = React.memo(function RoutingPanel() {
     void refetchRouting();
   }, [revision, refetchRouting]);
 
-  isFetchingRef.current = routing.isFetching;
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
+    isFetchingRef.current = routing.isFetching;
     if (!routing.isFetching) notifySettled();
   }, [routing.isFetching, notifySettled]);
 

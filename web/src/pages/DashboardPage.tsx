@@ -44,7 +44,10 @@ import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_M
 import { DashboardBoard, preloadDashboardBoardEditor } from '../components/dashboard/DashboardBoard';
 import { DashboardKpiTilePlaceholder } from '../components/dashboard/DashboardSkeleton';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
+import { withGroupBy } from '../types/dashboardModels';
 import {
+  dashboardHeatmapSwr,
+  dashboardModelsSwr,
   dashboardTailSwr,
   dashboardWindowSwr,
   managementOverviewSwr,
@@ -368,10 +371,8 @@ export const DashboardPage: React.FC = () => {
   }
 
   const hasWarmRouting = Boolean(queryClient.getQueryData(ROUTING_WINDOW_CACHE_KEY));
-  const hasWarmModels = Boolean(
-    queryClient.getQueryData([DASHBOARD_MODELS_QUERY_KEY, `${query}${query ? '&' : ''}group_by=${modelView}`]),
-  );
-  const hasWarmHeatmap = Boolean(queryClient.getQueryData([TOKEN_HEATMAP_QUERY_KEY, timeZone]));
+  const hasWarmModels = Boolean(dashboardModelsSwr.readSnapshot(queryClient, withGroupBy(query, modelView)));
+  const hasWarmHeatmap = Boolean(dashboardHeatmapSwr.readSnapshot(queryClient, timeZone));
   const hasWarmQuota = Boolean(queryClient.getQueryData([CREDENTIAL_FILES_QUERY_KEY]));
   const hasModelUsageHidden = layout.some((item) => item.id === 'model_usage' && item.hidden);
 

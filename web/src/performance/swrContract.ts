@@ -175,11 +175,10 @@ export async function invalidateSwrScopes(
   const list = typeof scopesOrTags === 'string' ? [scopesOrTags] : scopesOrTags;
   const prefixes = new Set<string>();
   for (const entry of list) {
+    prefixes.add(entry);
     const tagged = TAG_REGISTRY.get(entry);
-    if (tagged && tagged.size > 0) {
+    if (tagged) {
       for (const scope of tagged) prefixes.add(scope);
-    } else {
-      prefixes.add(entry);
     }
   }
   await Promise.all(

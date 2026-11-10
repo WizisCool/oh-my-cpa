@@ -254,7 +254,9 @@ export function useSharedResizeObserver<T extends Element>(
   options?: ResizeSubscriptionOptions & { enabled?: boolean },
 ): void {
   const callbackRef = React.useRef(onResize);
-  callbackRef.current = onResize;
+  React.useLayoutEffect(() => {
+    callbackRef.current = onResize;
+  });
   const enabled = options?.enabled ?? true;
   const freezeOnTransition = options?.freezeOnTransition ?? true;
   const epsilonPx = options?.epsilonPx ?? 0.5;

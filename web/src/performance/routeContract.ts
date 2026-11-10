@@ -166,18 +166,25 @@ export function createRouteRegistry(
   };
 }
 
+export interface RouteTransitionStoreOptions {
+  readonly requestFrame?: (callback: () => void) => unknown;
+  readonly pokeScheduler?: () => void;
+}
+
 /**
  * Lightweight external store tracking active route transitions so frame-budgeted mounts and
  * `ResizeObserver` notifications yield while a view change commits.
  */
-function createRouteTransitionStore() {
+export function createRouteTransitionStore(options: RouteTransitionStoreOptions = {}) {
+  const requestFrame = options.requestFrame
+    ?? ((cb: () => void) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => cb()) : cb()));
+  const pokeScheduler = options.pokeScheduler ?? (() => sharedFrameScheduler.poke());
   let activeCount = 0;
-  let settleFrame: number | undefined;
   const listeners = new Set<() => void>();
 
   const notify = () => {
     for (const listener of listeners) listener();
-    sharedFrameScheduler.poke();
+    pokeScheduler();
   };
 
   return {
@@ -189,10 +196,6 @@ function createRouteTransitionStore() {
       };
     },
     markTransitionStart(): () => void {
-      if (settleFrame !== undefined && typeof cancelAnimationFrame === 'function') {
-        cancelAnimationFrame(settleFrame);
-        settleFrame = undefined;
-      }
       activeCount += 1;
       if (activeCount === 1) notify();
       let ended = false;
@@ -200,16 +203,10 @@ function createRouteTransitionStore() {
         if (ended) return;
         ended = true;
         clearTimeout(safetyTimer);
-        const finalize = () => {
-          settleFrame = undefined;
+        requestFrame(() => {
           activeCount = Math.max(0, activeCount - 1);
           if (activeCount === 0) notify();
-        };
-        if (typeof requestAnimationFrame === 'function') {
-          settleFrame = requestAnimationFrame(finalize);
-        } else {
-          finalize();
-        }
+        });
       };
       // Safety ceiling guarantees an interrupted navigation never leaves background mounts frozen.
       const safetyTimer = setTimeout(release, 1200);

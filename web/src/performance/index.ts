@@ -42,6 +42,7 @@ export {
 export {
   bindActiveRouteRegistry,
   createRouteRegistry,
+  createRouteTransitionStore,
   preloadRegisteredRoute,
   routeTransitionStore,
   useTransitionNavigate,

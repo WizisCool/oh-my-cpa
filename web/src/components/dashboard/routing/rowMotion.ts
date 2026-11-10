@@ -40,7 +40,9 @@ export function useFlip(
   const animationRef = React.useRef<Animation>();
   const topRef = React.useRef<number | undefined>(undefined);
   const onMotionRef = React.useRef(onMotion);
-  onMotionRef.current = onMotion;
+  React.useLayoutEffect(() => {
+    onMotionRef.current = onMotion;
+  });
 
   React.useLayoutEffect(() => {
     const element = ref.current;
@@ -79,7 +81,9 @@ export function useRowMotion(
   const isReducedMotion = usePrefersReducedMotion();
   const entranceRef = React.useRef<Animation>();
   const onMotionRef = React.useRef(onMotion);
-  onMotionRef.current = onMotion;
+  React.useLayoutEffect(() => {
+    onMotionRef.current = onMotion;
+  });
 
   React.useLayoutEffect(() => {
     const element = ref.current;

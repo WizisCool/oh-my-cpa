@@ -14,10 +14,13 @@ const PRIORITY_ORDER: readonly MountPriority[] = ['p0', 'p1', 'p2'];
 export interface FrameBudgetSchedulerOptions {
   /**
    * Soft execution budget per animation-frame slice in milliseconds.
-   * Multiple fast mounts batch into one commit while their cumulative work stays under this budget;
-   * once exceeded, remaining work yields to the browser's next paint and input cycle.
+   * Multiple fast mounts within the same priority tier batch into one commit while their
+   * cumulative work stays under both `frameBudgetMs` and `maxJobsPerSlice`; lower priority tiers
+   * always yield to the next slice so React commits and paints higher-priority work first.
    */
   frameBudgetMs?: number;
+  /** Maximum number of queued mount jobs executed in one slice before yielding to paint. Defaults to `4`. */
+  maxJobsPerSlice?: number;
   now?: () => number;
   /** Schedules a post-paint execution slice and returns its cancellation function. */
   scheduleSlice?: (run: () => void) => () => void;
@@ -73,6 +76,7 @@ function defaultScheduleSlice(run: () => void): () => void {
  */
 export function createFrameBudgetScheduler(options: FrameBudgetSchedulerOptions = {}): FrameBudgetScheduler {
   const frameBudgetMs = options.frameBudgetMs ?? 8;
+  const maxJobsPerSlice = Math.max(1, options.maxJobsPerSlice ?? 4);
   const now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
   const scheduleSlice = options.scheduleSlice ?? defaultScheduleSlice;
   const batchUpdates = options.batchUpdates ?? ((fn) => fn());
@@ -103,7 +107,7 @@ export function createFrameBudgetScheduler(options: FrameBudgetSchedulerOptions 
     cancelScheduled = undefined;
   };
 
-  const nextJob = (): QueuedJob | undefined => {
+  const peekJob = (): QueuedJob | undefined => {
     const transitioning = isTransitionPending();
     for (const tier of PRIORITY_ORDER) {
       if (transitioning && tier !== 'p0') continue;
@@ -111,8 +115,11 @@ export function createFrameBudgetScheduler(options: FrameBudgetSchedulerOptions 
       while (bucket.size > 0) {
         const candidate = bucket.values().next().value as QueuedJob | undefined;
         if (!candidate) break;
-        bucket.delete(candidate);
-        if (!candidate.cancelled) return candidate;
+        if (candidate.cancelled) {
+          bucket.delete(candidate);
+          continue;
+        }
+        return candidate;
       }
     }
     return undefined;
@@ -132,14 +139,23 @@ export function createFrameBudgetScheduler(options: FrameBudgetSchedulerOptions 
     let hasError = false;
 
     batchUpdates(() => {
-      let ranAny = false;
+      let ranCount = 0;
+      let ranTier: MountPriority | undefined;
       while (hasRunnableWork()) {
-        // Always execute at least one ready job per slice so an expensive initialization makes
-        // forward progress without livelocking; subsequent jobs run only while budget remains.
-        if (ranAny && now() - sliceStart >= frameBudgetMs) break;
-        const job = nextJob();
+        // Jobs typically enqueue React state updates whose subtree render cost lands after this
+        // batch returns: cap per-slice job count and stop at tier boundaries so higher-priority
+        // commits paint before lower-priority mounts begin.
+        if (ranCount > 0 && (ranCount >= maxJobsPerSlice || now() - sliceStart >= frameBudgetMs)) {
+          break;
+        }
+        const job = peekJob();
         if (!job) break;
-        ranAny = true;
+        if (ranTier !== undefined && job.priority !== ranTier) {
+          break;
+        }
+        queues[job.priority].delete(job);
+        ranTier = job.priority;
+        ranCount += 1;
         try {
           job.run();
         } catch (error) {

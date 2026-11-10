@@ -7,6 +7,7 @@ import {
   createFrameBudgetScheduler,
   createResizeObserverHub,
   createRouteRegistry,
+  createRouteTransitionStore,
   createStreamStore,
   defineSwrQuery,
   invalidateSwrScopes,
@@ -14,7 +15,7 @@ import {
 } from '../../src/performance/index.ts';
 import { dashboardWidgetSpec } from '../../src/types/dashboardLayout.ts';
 
-test('frame scheduler runs p0 before p1/p2, batches within frameBudgetMs, and yields across frames', () => {
+test('frame scheduler separates priority tiers across slices, caps per-slice jobs, and yields across frames', () => {
   let clock = 0;
   let hidden = false;
   let transitioning = false;
@@ -24,6 +25,7 @@ test('frame scheduler runs p0 before p1/p2, batches within frameBudgetMs, and yi
 
   const scheduler = createFrameBudgetScheduler({
     frameBudgetMs: 8,
+    maxJobsPerSlice: 2,
     now: () => clock,
     isHidden: () => hidden,
     isTransitionPending: () => transitioning,
@@ -41,43 +43,56 @@ test('frame scheduler runs p0 before p1/p2, batches within frameBudgetMs, and yi
   });
 
   scheduler.schedule('p2', () => {
-    clock += 3;
+    clock += 1;
     executed.push('p2-a');
   });
   const cancelCancelled = scheduler.schedule('p1', () => {
     executed.push('cancelled');
   });
   scheduler.schedule('p1', () => {
-    clock += 6;
+    clock += 1;
     executed.push('p1-a');
   });
+  scheduler.schedule('p1', () => {
+    clock += 1;
+    executed.push('p1-b');
+  });
+  scheduler.schedule('p1', () => {
+    clock += 1;
+    executed.push('p1-c');
+  });
   scheduler.schedule('p0', () => {
-    clock += 4;
+    clock += 1;
     executed.push('p0-a');
   });
   cancelCancelled();
 
   assert.equal(slices.length, 1);
-  // Slice 1 runs p0-a (4ms) + p1-a (4+6 = 10ms >= 8ms budget), then yields before p2-a.
-  const firstSlice = slices.shift()!;
-  firstSlice();
-  assert.deepEqual(executed, ['p0-a', 'p1-a']);
+  // Slice 1 runs p0-a and stops at the p0 -> p1 tier boundary without dequeuing p1-a.
+  slices.shift()!();
+  assert.deepEqual(executed, ['p0-a']);
   assert.equal(batches, 1);
-  assert.equal(slices.length, 1, 'remaining p2 work schedules a follow-up frame slice');
+  assert.equal(slices.length, 1);
 
-  // While a route transition is pending, p2 work yields while p0 still runs immediately.
+  // Slice 2 runs at most maxJobsPerSlice (2) jobs from p1 in FIFO order, keeping p1-c queued.
+  slices.shift()!();
+  assert.deepEqual(executed, ['p0-a', 'p1-a', 'p1-b']);
+  assert.equal(batches, 2);
+  assert.equal(slices.length, 1);
+
+  // While a route transition is pending, p1/p2 work yields while p0 still runs immediately.
   transitioning = true;
   scheduler.schedule('p0', () => {
     clock += 1;
     executed.push('p0-urgent');
   });
-  const secondSlice = slices.shift()!;
-  secondSlice();
-  assert.deepEqual(executed, ['p0-a', 'p1-a', 'p0-urgent']);
+  slices.shift()!();
+  assert.deepEqual(executed, ['p0-a', 'p1-a', 'p1-b', 'p0-urgent']);
+  assert.equal(scheduler.pendingCount('p1'), 1);
   assert.equal(scheduler.pendingCount('p2'), 1);
-  assert.equal(slices.length, 0, 'no idle spin while transition blocks p2');
+  assert.equal(slices.length, 0, 'no idle spin while transition blocks p1/p2');
 
-  // Completing the transition resumes queued p2 work; hiding pauses it again.
+  // Completing the transition resumes p1-c, then yields at the p1 -> p2 boundary for p2-a.
   hidden = true;
   transitioning = false;
   scheduler.poke();
@@ -87,7 +102,10 @@ test('frame scheduler runs p0 before p1/p2, batches within frameBudgetMs, and yi
   scheduler.poke();
   assert.equal(slices.length, 1);
   slices.shift()!();
-  assert.deepEqual(executed, ['p0-a', 'p1-a', 'p0-urgent', 'p2-a']);
+  assert.deepEqual(executed, ['p0-a', 'p1-a', 'p1-b', 'p0-urgent', 'p1-c']);
+  assert.equal(slices.length, 1);
+  slices.shift()!();
+  assert.deepEqual(executed, ['p0-a', 'p1-a', 'p1-b', 'p0-urgent', 'p1-c', 'p2-a']);
   assert.equal(scheduler.pendingCount(), 0);
   scheduler.dispose();
 });
@@ -309,10 +327,47 @@ test('SWR query contract prevents stale out-of-order snapshot rollbacks and scop
   );
   assert.equal(contract.readSnapshot(queryClient, { window: 'preset=1h' })?.revision, 5);
 
+  queryClient.setQueryData(['perf-test-usage', 'untagged'], { ok: true });
   await invalidateSwrScopes(queryClient, 'perf-test-usage');
   const state = queryClient.getQueryState(['perf-test-dashboard', 'preset=1h']);
+  const directScopeState = queryClient.getQueryState(['perf-test-usage', 'untagged']);
   assert.equal(state?.isInvalidated, true);
+  assert.equal(directScopeState?.isInvalidated, true);
   queryClient.clear();
+});
+
+test('route transition store reaches zero after overlapping transition starts before a prior settle frame runs', () => {
+  const frames: Array<() => void> = [];
+  let notifications = 0;
+  const store = createRouteTransitionStore({
+    requestFrame: (cb) => {
+      frames.push(cb);
+      return frames.length;
+    },
+    pokeScheduler: () => undefined,
+  });
+  const unsub = store.subscribe(() => { notifications += 1; });
+
+  const releaseA = store.markTransitionStart();
+  assert.equal(store.isPending(), true);
+  assert.equal(notifications, 1);
+
+  releaseA();
+  // Start B before A's scheduled settle frame runs.
+  const releaseB = store.markTransitionStart();
+  assert.equal(store.isPending(), true);
+  assert.equal(notifications, 1, 'no premature idle notification between A and B');
+
+  // A's settle frame decrements 2 -> 1; store stays pending while B is active.
+  frames.shift()!();
+  assert.equal(store.isPending(), true);
+
+  // B releases and its settle frame decrements 1 -> 0.
+  releaseB();
+  frames.shift()!();
+  assert.equal(store.isPending(), false);
+  assert.equal(notifications, 2);
+  unsub();
 });
 
 test('route registry resolves exact and prefix routes, respects intent cooldown, and prewarms critical/high routes on idle', async () => {

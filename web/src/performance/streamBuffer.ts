@@ -192,26 +192,28 @@ export function useStreamSelector<TItem, TState, TSlice>(
   selector: (state: TState) => TSlice,
   isEqual: (left: TSlice, right: TSlice) => boolean = Object.is,
 ): TSlice {
-  const selectorRef = React.useRef(selector);
-  selectorRef.current = selector;
-  const equalRef = React.useRef(isEqual);
-  equalRef.current = isEqual;
-  const cacheRef = React.useRef<{ hasValue: boolean; state?: TState; slice?: TSlice }>({ hasValue: false });
+  const cacheRef = React.useRef<{
+    hasValue: boolean;
+    state?: TState;
+    selector?: (state: TState) => TSlice;
+    slice?: TSlice;
+  }>({ hasValue: false });
 
   const getSelection = React.useCallback((): TSlice => {
     const currentState = store.getSnapshot();
     const cached = cacheRef.current;
-    if (cached.hasValue && Object.is(cached.state, currentState)) {
+    if (cached.hasValue && Object.is(cached.state, currentState) && Object.is(cached.selector, selector)) {
       return cached.slice as TSlice;
     }
-    const nextSlice = selectorRef.current(currentState);
-    if (cached.hasValue && equalRef.current(cached.slice as TSlice, nextSlice)) {
+    const nextSlice = selector(currentState);
+    if (cached.hasValue && isEqual(cached.slice as TSlice, nextSlice)) {
       cached.state = currentState;
+      cached.selector = selector;
       return cached.slice as TSlice;
     }
-    cacheRef.current = { hasValue: true, state: currentState, slice: nextSlice };
+    cacheRef.current = { hasValue: true, state: currentState, selector, slice: nextSlice };
     return nextSlice;
-  }, [store]);
+  }, [store, selector, isEqual]);
 
   return React.useSyncExternalStore(store.subscribe, getSelection, getSelection);
 }

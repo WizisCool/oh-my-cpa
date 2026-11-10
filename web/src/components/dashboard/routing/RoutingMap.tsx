@@ -29,7 +29,8 @@ interface Point { x: number; y: number }
 const PRESENCE_SHIFT_PX = 12;
 const COMPACT_SPINE_MAX_WIDTH = 620;
 const awayFrom = (side: 1 | -1, container: HTMLElement | null) => {
-  const effectiveSide = side === 1 && container && container.clientWidth > 0 && container.clientWidth <= COMPACT_SPINE_MAX_WIDTH
+  const panel = container?.closest<HTMLElement>('[data-testid="dashboard-routing"]') ?? container;
+  const effectiveSide = side === 1 && panel && panel.clientWidth > 0 && panel.clientWidth <= COMPACT_SPINE_MAX_WIDTH
     ? -1
     : side;
   return `translateX(${effectiveSide * PRESENCE_SHIFT_PX}px)`;

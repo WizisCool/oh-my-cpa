@@ -90,7 +90,9 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
   };
   React.useEffect(() => () => cancelAnimationFrame(announceFrame.current), []);
   const latestLayout = React.useRef(layout);
-  latestLayout.current = layout;
+  React.useLayoutEffect(() => {
+    latestLayout.current = layout;
+  }, [layout]);
 
   const isMounted = React.useCallback(
     (item: DashboardLayoutItem) => !(isPhone && dashboardWidgetSpec(item.id).isPhoneOmitted),
