@@ -25,17 +25,17 @@ func (h *Handler) loadProviderNamesStrict(ctx context.Context) (map[string]strin
 
 // applyProviderMetadata persists the name and website overlays atomically after
 // CPA accepted the write.
-func (h *Handler) applyProviderMetadata(ctx context.Context, id, name, website string, isWebsiteProvided bool) error {
-	if id == "" || (name == "" && !isWebsiteProvided) {
+func (h *Handler) applyProviderMetadata(ctx context.Context, id, name, website string, isWebsiteProvided bool, testModel *string) error {
+	if id == "" || (name == "" && !isWebsiteProvided && testModel == nil) {
 		return nil
 	}
-	return h.applyProviderMetadataForIDs(ctx, "", []string{id}, name, website, isWebsiteProvided)
+	return h.applyProviderMetadataForIDs(ctx, "", []string{id}, name, website, isWebsiteProvided, testModel)
 }
 
 // Appended credential rows inherit the edited row's identity without re-keying
 // any neighbour. All overlays describe the same accepted CPA write and commit in
 // one local transaction, including inherited icons when a save expands a row.
-func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID string, ids []string, name, website string, isWebsiteProvided bool) error {
+func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID string, ids []string, name, website string, isWebsiteProvided bool, testModel *string) error {
 	updates := make(map[string]map[string]string, len(positionalProviderOverlays))
 	for _, preference := range positionalProviderOverlays {
 		if preference == repository.PreferenceProviderNames {
@@ -47,6 +47,9 @@ func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID stri
 			}
 		}
 		if preference == repository.PreferenceProviderWebsites && !isWebsiteProvided && sourceID == "" {
+			continue
+		}
+		if preference == repository.PreferenceProviderTestModels && testModel == nil && sourceID == "" {
 			continue
 		}
 		// The console-written overlays follow the edited row only when a save expands it into
@@ -65,6 +68,9 @@ func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID stri
 		}
 		if preference == repository.PreferenceProviderWebsites && isWebsiteProvided {
 			value = website
+		}
+		if preference == repository.PreferenceProviderTestModels && testModel != nil {
+			value = strings.TrimSpace(*testModel)
 		}
 		for _, id := range ids {
 			key := keyPrefix + id
@@ -90,6 +96,7 @@ func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID stri
 var positionalProviderOverlays = []string{
 	repository.PreferenceProviderNames,
 	repository.PreferenceProviderWebsites,
+	repository.PreferenceProviderTestModels,
 	repository.PreferenceProviderIcons,
 	repository.PreferenceProviderOrder,
 	repository.PreferenceRoutingCardOrder,
@@ -150,7 +157,7 @@ func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix
 
 // moveProviderMetadata shifts the source family's positional overlays and copies
 // the moved row's identity to every destination row in the same local transaction.
-func (h *Handler) moveProviderMetadata(ctx context.Context, oldID string, newIDs []string, name, website string, isWebsiteProvided bool) error {
+func (h *Handler) moveProviderMetadata(ctx context.Context, oldID string, newIDs []string, name, website string, isWebsiteProvided bool, testModel *string) error {
 	family, index, err := parseProviderID(oldID)
 	if err != nil {
 		return err
@@ -169,6 +176,9 @@ func (h *Handler) moveProviderMetadata(ctx context.Context, oldID string, newIDs
 		}
 		if preference == repository.PreferenceProviderWebsites && isWebsiteProvided {
 			value = website
+		}
+		if preference == repository.PreferenceProviderTestModels && testModel != nil {
+			value = strings.TrimSpace(*testModel)
 		}
 		values = shiftPositionalProviderIDs(values, keyPrefix+prefix, index)
 		for _, id := range newIDs {

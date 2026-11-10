@@ -17,7 +17,7 @@ import (
 )
 
 const probeTimeout = 30 * time.Second
-const probeMaxErrorSnippet = 300
+const probeMaxErrorSnippet = 16 * 1024
 
 var errInvalidProbeURL = errors.New("invalid probe URL")
 var errProbeRedirectRefused = errors.New("probe redirect refused")
@@ -477,17 +477,25 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	defer resp.Body.Close()
-	// The body is evidence about the provider, not content the console needs:
-	// a short redacted snippet names the refusal, the rest is discarded.
-	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, probeMaxErrorSnippet))
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		auditOutcome("success", map[string]any{"status_code": resp.StatusCode})
 		writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "status_code": resp.StatusCode})
 		return
 	}
-	reason := strings.TrimSpace(string(snippet))
-	if reason == "" {
-		reason = http.StatusText(resp.StatusCode)
+	// Never expose a partial response: it can contain a truncated secret.
+	snippet, readErr := io.ReadAll(io.LimitReader(resp.Body, probeMaxErrorSnippet+1))
+	reason := http.StatusText(resp.StatusCode)
+	if len(snippet) > probeMaxErrorSnippet || readErr != nil {
+		reason += " (response unavailable or too large)"
+	} else if json.Valid(snippet) {
+		// Decode before redacting so JSON escapes cannot hide known secrets.
+		if safe, err := security.RedactJSON(snippet, secrets...); err == nil {
+			reason = string(safe)
+		}
+	} else if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "json") && !strings.HasPrefix(strings.TrimSpace(string(snippet)), "{") && !strings.HasPrefix(strings.TrimSpace(string(snippet)), "[") {
+		if text := strings.TrimSpace(string(snippet)); text != "" {
+			reason = text
+		}
 	}
 	auditOutcome("failure", map[string]any{"status_code": resp.StatusCode})
 	writeJSON(writer, http.StatusOK, map[string]any{

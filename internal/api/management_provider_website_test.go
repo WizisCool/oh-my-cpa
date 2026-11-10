@@ -79,6 +79,50 @@ func TestProviderWebsiteRoundTrip(t *testing.T) {
 	}
 }
 
+func TestProviderTestModelRoundTrip(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+	create := `{"family":"openai-compatibility","name":"Probe model","base_url":"https://relay.example.test/v1","test_model":"model-two","model_entries":[{"name":"model-one"},{"name":"model-two"}]}`
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", create)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create: %d %s", resp.StatusCode, payload)
+	}
+	id := fmt.Sprintf("openai-compat-%d", len(state.oaiProviders)-1)
+	read := func() string {
+		_, body := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+		var result struct {
+			Providers []map[string]any `json:"providers"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range result.Providers {
+			if p["id"] == id {
+				value, _ := p["test_model"].(string)
+				return value
+			}
+		}
+		t.Fatalf("missing provider %s", id)
+		return ""
+	}
+	if got := read(); got != "model-two" {
+		t.Fatalf("created test model = %q", got)
+	}
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/"+id, `{"family":"openai-compatibility","name":"Probe model","base_url":"https://relay.example.test/v1"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update: %d %s", resp.StatusCode, payload)
+	}
+	if got := read(); got != "model-two" {
+		t.Fatalf("omitted test model = %q", got)
+	}
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/"+id, `{"family":"openai-compatibility","name":"Probe model","base_url":"https://relay.example.test/v1","test_model":""}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("clear: %d %s", resp.StatusCode, payload)
+	}
+	if got := read(); got != "" {
+		t.Fatalf("cleared test model = %q", got)
+	}
+}
+
 // Only a URL this console may render as a link is accepted. A scheme that can
 // execute script with the session's authority must be refused outright rather
 // than quietly repaired into something else.

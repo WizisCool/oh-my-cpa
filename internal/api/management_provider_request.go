@@ -56,6 +56,8 @@ type SaveProviderRequest struct {
 	// lets a rename save from a client that never carried a website field avoid
 	// erasing one.
 	Website *string `json:"website,omitempty"`
+	// TestModel is console metadata; nil preserves it, empty selects automatic.
+	TestModel *string `json:"test_model,omitempty"`
 }
 
 // normalizeProviderWebsite accepts only a URL this console may render as a link.

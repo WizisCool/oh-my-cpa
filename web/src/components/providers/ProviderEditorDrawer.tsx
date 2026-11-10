@@ -482,9 +482,9 @@ export function ProviderEditorDrawer({
           <Form.Item label={t('pro.field_test_model')}>
             <Select
               value={
-                formTestModel === 'auto' || formModels.some((m) => m.name === formTestModel)
+                formTestModel === '' || formModels.some((m) => m.name === formTestModel)
                   ? formTestModel
-                  : 'auto'
+                  : ''
               }
               onChange={setFormTestModel}
               options={[
@@ -492,7 +492,7 @@ export function ProviderEditorDrawer({
                   label: formModels[0]?.name
                     ? t('pro.test_auto', { model: formModels[0].name })
                     : t('pro.test_auto_default'),
-                  value: 'auto',
+                  value: '',
                 },
                 ...formModels
                   .filter((m) => !!m.name.trim())

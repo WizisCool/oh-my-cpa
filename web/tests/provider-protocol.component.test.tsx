@@ -60,6 +60,72 @@ it('uses the selected draft protocol for probes and model pulls without resolvin
   } finally { view.unmount(); }
 });
 
+function TestModelDraft() {
+  const t = useT();
+  const editor = useProviderManagement({ t, toast, providerIcons: {}, writeProviderIcon: async () => ({ ok: true }), shiftCachedProviderIcons: () => {}, settleProviderRow: () => {} });
+  const provider = { ...PROVIDER, test_model: 'model-two', model_entries: [{ name: 'model-one' }, { name: 'model-two' }, { name: 'auto' }] };
+  return <>
+    <button onClick={() => editor.handleOpenEdit(provider)}>Open test model</button>
+    <button onClick={() => editor.setFormTestModel('model-one')}>Select first model</button>
+    <button onClick={() => editor.setFormTestModel('auto')}>Select model named auto</button>
+    <button onClick={() => editor.setFormTestModel('')}>Select automatic</button>
+    <button onClick={editor.handleSaveProvider}>Save test model</button>
+    <button onClick={() => { void editor.handleTestAllKeys(); }}>Test selected model</button>
+    <output>{editor.formTestModel}</output>
+  </>;
+}
+
+it('restores, probes and saves the chosen test model', async () => {
+  const api = installOmcApi({ providers: [PROVIDER] });
+  api.on('POST', '/management/providers/probe', () => ({ ok: true }));
+  const view = renderWithOmc(<TestModelDraft />);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Open test model' }));
+    expect(screen.getByText('model-two')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Test selected model' }));
+    await waitFor(() => expect(api.writes().filter(request => request.path.endsWith('/probe'))).toHaveLength(2));
+    expect((api.writes()[0].body as Record<string, unknown>).model).toBe('model-two');
+    fireEvent.click(screen.getByRole('button', { name: 'Select first model' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save test model' }));
+    await waitFor(() => expect(api.writes().some(request => request.method === 'PUT' && request.path.endsWith('/management/providers/openai-compat-0'))).toBe(true));
+    const saved = api.writes().find(request => request.method === 'PUT' && request.path.endsWith('/management/providers/openai-compat-0'));
+    expect((saved?.body as Record<string, unknown>).test_model).toBe('model-one');
+  } finally { view.unmount(); }
+});
+
+it('distinguishes automatic from a configured model named auto', async () => {
+  const api = installOmcApi({ providers: [PROVIDER] });
+  api.on('POST', '/management/providers/probe', () => ({ ok: true }));
+  const view = renderWithOmc(<TestModelDraft />);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Open test model' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select model named auto' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test selected model' }));
+    await waitFor(() => expect(api.writes().filter(request => request.path.endsWith('/probe'))).toHaveLength(2));
+    expect((api.writes()[0].body as Record<string, unknown>).model).toBe('auto');
+    fireEvent.click(screen.getByRole('button', { name: 'Save test model' }));
+    await waitFor(() => expect(api.writes().some(request => request.method === 'PUT' && request.path.endsWith('/management/providers/openai-compat-0'))).toBe(true));
+    expect((api.writes().find(request => request.method === 'PUT' && request.path.endsWith('/management/providers/openai-compat-0'))?.body as Record<string, unknown>).test_model).toBe('auto');
+    fireEvent.click(screen.getByRole('button', { name: 'Select automatic' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test selected model' }));
+    await waitFor(() => expect(api.writes().filter(request => request.path.endsWith('/probe'))).toHaveLength(4));
+    expect((api.writes().filter(request => request.path.endsWith('/probe'))[2].body as Record<string, unknown>).model).toBe('model-one');
+  } finally { view.unmount(); }
+});
+
+it('keeps probe failures readable until dismissed', async () => {
+  const api = installOmcApi({ providers: [PROVIDER] });
+  const reason = `upstream answered 401: ${'long error '.repeat(40)}end`;
+  api.on('POST', '/management/providers/probe', () => ({ ok: false, error: reason }));
+  vi.mocked(toast.error).mockClear();
+  const view = renderWithOmc(<TestModelDraft />);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Open test model' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test selected model' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Connectivity test failed', { detail: reason, isPersistent: true }));
+  } finally { view.unmount(); }
+});
+
 function Editor() {
   const t = useT();
   const icons = useProviderIconOverrides();
