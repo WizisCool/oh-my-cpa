@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +50,94 @@ func TestFailureCodeMigrationLeavesHistoricalClassificationUnknown(t *testing.T)
 	}
 	if code != "" || status != 400 || body != "request_scoped" {
 		t.Fatalf("historical evidence changed: %q %d %q", code, status, body)
+	}
+}
+
+func TestFailureCodeMigrationPreservesExistingEvidence(t *testing.T) {
+	ctx := context.Background()
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	db, err := Open(ctx, filepath.Join(directory, "failure-code-upgrade.db"), withMigrationsUntil(61),
+		WithMigrationBackup(cipher, filepath.Join(directory, "backups"), 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+		(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, created_at, updated_at)
+		VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"", "request_scoped", "stream_truncated"} {
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO usage_events
+			(instance_id, event_key, api_group_key, request_id, failed, fail_code, fail_status_code, fail_body, timestamp_ms, created_at_ms)
+			VALUES ('default', ?, '', ?, 1, ?, 429, 'original evidence', 1234, 2345)`, code, code, code); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	schemaObjects := func() map[string]string {
+		t.Helper()
+		rows, err := db.SQL.QueryContext(ctx, `SELECT name, sql FROM sqlite_schema
+			WHERE tbl_name = 'usage_events' AND type IN ('index', 'trigger') AND sql IS NOT NULL`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		objects := map[string]string{}
+		for rows.Next() {
+			var name, definition string
+			if err := rows.Scan(&name, &definition); err != nil {
+				t.Fatal(err)
+			}
+			objects[name] = definition
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return objects
+	}
+	before := schemaObjects()
+	db.migrateUntil = 0
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if after := schemaObjects(); !reflect.DeepEqual(before, after) {
+		t.Fatalf("usage-event indexes or triggers changed: before=%v after=%v", before, after)
+	}
+	for _, code := range []string{"", "request_scoped", "stream_truncated"} {
+		var gotCode, body string
+		var status int
+		if err := db.SQL.QueryRowContext(ctx, `SELECT fail_code, fail_status_code, fail_body FROM usage_events WHERE event_key = ?`, code).Scan(&gotCode, &status, &body); err != nil {
+			t.Fatal(err)
+		}
+		if gotCode != code || status != 429 || body != "original evidence" {
+			t.Fatalf("historical evidence changed: %q %d %q", gotCode, status, body)
+		}
+	}
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE usage_events SET fail_code = 'force_cooldown' WHERE event_key = ''`); err != nil {
+		t.Fatalf("new classification rejected after upgrade: %v", err)
+	}
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE usage_events SET fail_code = 'future_classification' WHERE event_key = ''`); err == nil {
+		t.Fatal("unknown classification accepted after upgrade")
+	}
+	var integrity string
+	if err := db.SQL.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&integrity); err != nil || integrity != "ok" {
+		t.Fatalf("integrity check = %q: %v", integrity, err)
+	}
+	rows, err := db.SQL.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("foreign key check found a violation")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 }
 

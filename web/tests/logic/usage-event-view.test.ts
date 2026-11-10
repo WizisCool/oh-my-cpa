@@ -1093,6 +1093,9 @@ test('usage event view', () => {
   assert.equal(requestFailureCause(undefined, 'stream_truncated'), 'stream_truncated');
   assert.equal(requestFailureCause(200, 'stream_truncated'), 'stream_truncated');
   assert.equal(requestFailureCause(502, 'stream_truncated'), 'stream_truncated');
+  assert.equal(requestFailureCause(undefined, 'force_cooldown'), 'forced_cooldown');
+  assert.equal(requestFailureCause(400, 'force_cooldown'), 'forced_cooldown');
+  assert.equal(requestFailureCause(429, 'force_cooldown'), 'forced_cooldown');
   assert.equal(requestFailureCause(400, 'future_classification'), 'bad_request');
   assert.equal(requestFailureCause(undefined, 'future_classification'), 'unknown');
   assert.equal(requestFailureCause(undefined, ''), 'unknown');
