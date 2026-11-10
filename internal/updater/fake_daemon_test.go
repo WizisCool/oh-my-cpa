@@ -270,12 +270,74 @@ func (d *fakeDaemon) inspection(container *fakeContainer) map[string]any {
 	}
 }
 
+// serveImageLoad reads the archive before taking the daemon lock. In the standalone
+// updater test the archive's layers are fetched through a dial hook that waits on
+// d.mu, so holding it while reading the body would stall the pull it is serving.
+func (d *fakeDaemon) serveImageLoad(writer http.ResponseWriter, request *http.Request) {
+	reply := func(status int, payload any) {
+		writer.WriteHeader(status)
+		_ = json.NewEncoder(writer).Encode(payload)
+	}
+
+	d.mu.Lock()
+	d.loads++
+	loadError, isContainerd := d.loadError, d.isContainerdStore
+	d.mu.Unlock()
+	if loadError != "" {
+		reply(http.StatusOK, map[string]string{"error": loadError})
+		return
+	}
+
+	// Parse the real archive sent over the unix socket, including its configuration identity.
+	archive, err := io.ReadAll(request.Body)
+	if err != nil {
+		reply(http.StatusBadRequest, map[string]string{"message": "incomplete image archive"})
+		return
+	}
+
+	image, err := tarball.Image(func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(archive)), nil
+	}, nil)
+	if err != nil {
+		reply(http.StatusOK, map[string]string{"error": err.Error()})
+		return
+	}
+
+	imageID, err := image.ConfigName()
+	if isContainerd {
+		imageID, err = image.Digest()
+	}
+	if err != nil {
+		reply(http.StatusOK, map[string]string{"error": err.Error()})
+		return
+	}
+
+	config, err := image.ConfigFile()
+	if err != nil {
+		reply(http.StatusOK, map[string]string{"error": err.Error()})
+		return
+	}
+
+	encoded, _ := json.Marshal(config.Config)
+	var fields map[string]any
+	_ = json.Unmarshal(encoded, &fields)
+	d.mu.Lock()
+	d.images[imageID.String()] = fakeImage{ID: imageID.String(), Config: fields}
+	d.loadedImageID = imageID.String()
+	d.mu.Unlock()
+	reply(http.StatusOK, map[string]string{"stream": "Loaded image ID: " + imageID.String()})
+}
+
 func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if request.URL.Path == "/_ping" {
 		writer.Header().Set("API-Version", "1.52")
 		return
 	}
 	path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+	if path == "/images/load" {
+		d.serveImageLoad(writer, request)
+		return
+	}
 	if path == "/events" {
 		writer.WriteHeader(http.StatusOK)
 		writer.(http.Flusher).Flush()
@@ -303,50 +365,6 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 		}
 
 		reply(http.StatusOK, map[string]string{"Os": "linux", "Arch": arch})
-	case path == "/images/load":
-		d.loads++
-		if d.loadError != "" {
-			reply(http.StatusOK, map[string]string{"error": d.loadError})
-			return
-		}
-
-		// Parse the real archive sent over the unix socket, including its configuration identity.
-		archive, err := io.ReadAll(request.Body)
-		if err != nil {
-			reply(http.StatusBadRequest, map[string]string{"message": "incomplete image archive"})
-			return
-		}
-
-		image, err := tarball.Image(func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(archive)), nil
-		}, nil)
-		if err != nil {
-			reply(http.StatusOK, map[string]string{"error": err.Error()})
-			return
-		}
-
-		imageID, err := image.ConfigName()
-		if d.isContainerdStore {
-			imageID, err = image.Digest()
-		}
-
-		if err != nil {
-			reply(http.StatusOK, map[string]string{"error": err.Error()})
-			return
-		}
-
-		config, err := image.ConfigFile()
-		if err != nil {
-			reply(http.StatusOK, map[string]string{"error": err.Error()})
-			return
-		}
-
-		encoded, _ := json.Marshal(config.Config)
-		var fields map[string]any
-		_ = json.Unmarshal(encoded, &fields)
-		d.images[imageID.String()] = fakeImage{ID: imageID.String(), Config: fields}
-		d.loadedImageID = imageID.String()
-		reply(http.StatusOK, map[string]string{"stream": "Loaded image ID: " + imageID.String()})
 	case path == "/containers/json":
 		if d.unavailableList {
 			reply(http.StatusServiceUnavailable, map[string]string{"message": "container discovery unavailable"})
