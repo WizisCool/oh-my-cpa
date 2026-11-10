@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,8 +18,17 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/random"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 const (
@@ -28,6 +39,382 @@ const (
 
 func testTiming() Timing {
 	return Timing{PollInterval: time.Millisecond, HealthTimeout: 5 * time.Second, StableWindow: 0, StopGrace: time.Second}
+}
+
+// proxyRegistryFixture serves a multi-platform image solely through an authenticated forward proxy.
+type proxyRegistryFixture struct {
+	repository       string
+	directRepository string
+	digest           string
+	proxyURL         string
+	images           map[string]v1.Image
+	requests         atomic.Int64
+	corruptLayer     bool
+
+	corruptManifest bool
+}
+
+// newProxyRegistry publishes synthetic images; its unreachable registry address proves the proxy is used.
+func newProxyRegistry(t *testing.T) *proxyRegistryFixture {
+	t.Helper()
+	fixture := &proxyRegistryFixture{
+		repository: "127.0.0.1:1/test/oh-my-cpa",
+		images:     map[string]v1.Image{},
+	}
+	registryHandler := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(registryHandler)
+	t.Cleanup(server.Close)
+	fixture.directRepository = strings.TrimPrefix(server.URL, "http://") + "/test/oh-my-cpa"
+	var index v1.ImageIndex = empty.Index
+
+	// The daemon's architecture must select the corresponding child of the signed index.
+	for _, arch := range []string{"amd64", "arm64"} {
+		image, err := random.Image(256, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Keep the layer diff IDs while setting platform metadata, as a real runnable image does.
+		config, err := image.ConfigFile()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		config.OS, config.Architecture = "linux", arch
+		config.Config.Env = []string{"PATH=/bin"}
+		config.Config.Labels = map[string]string{"org.opencontainers.image.version": "v1.1.0"}
+		image, err = mutate.ConfigFile(image, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fixture.images[arch] = image
+		index = mutate.AppendManifests(index, mutate.IndexAddendum{
+			Add: image, Descriptor: v1.Descriptor{Platform: &v1.Platform{OS: "linux", Architecture: arch}},
+		})
+	}
+
+	tag, err := name.NewTag(strings.TrimPrefix(server.URL, "http://") + "/test/oh-my-cpa:latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := remote.WriteIndex(tag, index); err != nil {
+		t.Fatal(err)
+	}
+
+	digest, err := index.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.digest = digest.String()
+
+	proxy := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		fixture.requests.Add(1)
+		if request.Header.Get("Proxy-Authorization") != "Basic "+base64.StdEncoding.EncodeToString([]byte("proxy-user:proxy-password")) {
+			writer.WriteHeader(http.StatusProxyAuthRequired)
+			return
+		}
+
+		// The loopback registry is HTTP; reject the HTTPS probe before its path reaches the registry.
+		if request.Method == http.MethodConnect {
+			writer.WriteHeader(http.StatusBadGateway)
+			return
+		}
+
+		// Answer the signed digest with different content to exercise the digest check itself.
+		if fixture.corruptManifest && strings.HasSuffix(request.URL.Path, "/manifests/"+TEST_DIGEST) {
+			request.URL.Path = strings.TrimSuffix(request.URL.Path, TEST_DIGEST) + fixture.digest
+		}
+
+		isConfig := false
+		for _, image := range fixture.images {
+			configID, _ := image.ConfigName()
+			isConfig = isConfig || strings.HasSuffix(request.URL.Path, "/blobs/"+configID.String())
+		}
+
+		// Keep the configuration valid so corruption is detected while streaming a layer.
+		if fixture.corruptLayer && !isConfig && strings.Contains(request.URL.Path, "/blobs/") {
+			writer.WriteHeader(http.StatusOK)
+			_, _ = writer.Write([]byte("corrupted proxy image blob"))
+			return
+		}
+
+		registryHandler.ServeHTTP(writer, request)
+	}))
+	t.Cleanup(proxy.Close)
+	fixture.proxyURL = strings.Replace(proxy.URL, "http://", "http://proxy-user:proxy-password@", 1)
+	return fixture
+}
+
+// TestProxyImageUpdates exercises registry download, archive import, replacement and rollback without a Docker process.
+func TestProxyImageUpdates(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		arch    string
+		crash   bool
+		loadErr string
+		product string
+
+		isStandalone bool
+		proxyHost    string
+
+		isProxyNetworkAttached bool
+		isContainerdStore      bool
+	}{
+		{name: "amd64", arch: "amd64"},
+		{name: "arm64", arch: "arm64"},
+		{name: "containerd image store", arch: "amd64", isContainerdStore: true},
+		{name: "CPA tag", arch: "amd64", product: ProductCPA},
+		{name: "rollback", arch: "amd64", crash: true},
+		{name: "import error after HTTP 200", arch: "amd64", loadErr: "proxy-user proxy-password import failed"},
+		{name: "standalone updater", arch: "amd64", isStandalone: true},
+		{name: "standalone proxy alias", arch: "amd64", isStandalone: true, proxyHost: "proxy-alias"},
+		{name: "existing proxy network", arch: "amd64", isStandalone: true, isProxyNetworkAttached: true},
+		{name: "standalone import failure", arch: "amd64", isStandalone: true, loadErr: "import failed"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			registry := newProxyRegistry(t)
+			stack := newDeployment(t, registry.repository+":latest")
+			stack.service.options.OMCContainer = "oh-my-cpa"
+
+			product, containerName := ProductOMC, "oh-my-cpa"
+			manifest, signature := stack.signer.manifest("v1.1.0", registry.repository, registry.digest)
+			if testCase.product == ProductCPA {
+				product, containerName = ProductCPA, "cli-proxy-api"
+				stack.daemon.addContainer(containerSpec{name: containerName, image: registry.repository + ":latest"})
+				stack.service.options.CPAContainer = containerName
+				manifest, signature = nil, ""
+			}
+
+			stack.daemon.arch = testCase.arch
+			stack.daemon.loadError = testCase.loadErr
+			stack.daemon.isContainerdStore = testCase.isContainerdStore
+			proxyURL := registry.proxyURL
+			if testCase.isStandalone {
+				proxyHost := testCase.proxyHost
+				if proxyHost == "" {
+					proxyHost = "mihomo"
+				}
+
+				stack.daemon.addContainer(containerSpec{
+					name: "mihomo", image: OMC_REPOSITORY + ":latest",
+					networks: map[string][]string{"stack": {proxyHost}},
+				})
+				self := stack.daemon.find(stack.service.options.SelfID)
+				self.Networks[LINK_NETWORK] = map[string]any{}
+				if testCase.isProxyNetworkAttached {
+					self.Networks["stack"] = map[string]any{}
+				}
+
+				proxyURL = strings.Replace(proxyURL, "127.0.0.1", proxyHost, 1)
+
+				// Simulate Docker DNS: the proxy hostname is reachable only while the updater shares its network.
+				original := http.DefaultTransport
+				transport := original.(*http.Transport).Clone()
+				transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+					host, port, _ := net.SplitHostPort(address)
+					if host == proxyHost {
+						stack.daemon.mu.Lock()
+						_, attached := self.Networks["stack"]
+						stack.daemon.mu.Unlock()
+						if !attached {
+							return nil, errors.New("proxy network is not attached")
+						}
+
+						address = net.JoinHostPort("127.0.0.1", port)
+					}
+
+					return (&net.Dialer{}).DialContext(ctx, network, address)
+				}
+				http.DefaultTransport = transport
+				t.Cleanup(func() {
+					http.DefaultTransport = original
+					transport.CloseIdleConnections()
+				})
+			}
+
+			var logs bytes.Buffer
+			stack.service.options.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+			imageID, _ := registry.images[testCase.arch].ConfigName()
+			stack.daemon.crashing[imageID.String()] = testCase.crash
+			old := stack.daemon.named(containerName)
+			server := httptest.NewServer(stack.service.Handler("test"))
+			t.Cleanup(server.Close)
+			client := NewClient(server.URL, MASTER_KEY)
+
+			// Exercise the authenticated console-to-updater wire contract as well as the image route.
+			if _, err := client.Update(context.Background(), UpdateRequest{
+				Product: product, Manifest: string(manifest), Signature: signature, ProxyURL: proxyURL,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			job := awaitJob(t, stack.service)
+
+			// Store identity is opaque to the caller; the containerd case must differ from the config hash.
+			expectedImageID := imageID.String()
+			if testCase.isContainerdStore {
+				expectedImageID = stack.daemon.loadedImageID
+				if expectedImageID == imageID.String() {
+					t.Fatal("the containerd fixture must distinguish manifest and config identities")
+				}
+			}
+
+			if testCase.isStandalone {
+				self := stack.daemon.named(SIDECAR_NAME)
+				_, attached := self.Networks["stack"]
+				if attached != testCase.isProxyNetworkAttached {
+					t.Fatal("the proxy download did not restore the original network membership")
+				}
+
+				if _, retained := self.Networks[LINK_NETWORK]; !retained {
+					t.Fatal("the updater's existing link network was removed")
+				}
+			}
+
+			if stack.daemon.pulls != 0 || stack.daemon.loads != 1 || registry.requests.Load() < 3 {
+				t.Fatalf("route: daemon pulls=%d imports=%d proxy requests=%d", stack.daemon.pulls, stack.daemon.loads, registry.requests.Load())
+			}
+
+			current := stack.daemon.named(containerName)
+			switch {
+			case testCase.loadErr != "":
+				if job.Stage != StageFailed || current.ID != old.ID || !current.IsRunning {
+					t.Fatalf("import failure changed the running container: %+v", job)
+				}
+			case testCase.crash:
+				if job.Stage != StageRolledBack || current.ImageID != old.ImageID || !current.IsRunning {
+					t.Fatalf("failed replacement did not restore the old image: %+v", job)
+				}
+			default:
+				if job.Stage != StageDone || current.ImageID != expectedImageID {
+					t.Fatalf("image update = %+v, running image = %s", job, current.ImageID)
+				}
+			}
+
+			// The shared tag is restored on rollback and points at the imported image after success.
+			if testCase.loadErr == "" && stack.daemon.images[registry.repository+":latest"].ID != current.ImageID {
+				t.Fatal("the configured image tag does not match the running image")
+			}
+
+			for _, secret := range []string{registry.proxyURL, "proxy-user", "proxy-password"} {
+				if strings.Contains(job.Error, secret) || strings.Contains(logs.String(), secret) {
+					t.Fatal("proxy credentials escaped into the job or logs")
+				}
+			}
+		})
+	}
+}
+
+func TestDirectImageUpdate(t *testing.T) {
+	registry := newProxyRegistry(t)
+	stack := newDeployment(t, registry.directRepository+":latest")
+	stack.service.options.OMCContainer = "oh-my-cpa"
+	manifest, signature := stack.signer.manifest("v1.1.0", registry.directRepository, registry.digest)
+	server := httptest.NewServer(stack.service.Handler("test"))
+	t.Cleanup(server.Close)
+	client := NewClient(server.URL, MASTER_KEY)
+	if _, err := client.Update(context.Background(), UpdateRequest{Product: ProductOMC, Manifest: string(manifest), Signature: signature, ProxyURL: DirectImageRoute}); err != nil {
+		t.Fatal(err)
+	}
+	job := awaitJob(t, stack.service)
+	if job.Stage != StageDone || stack.daemon.pulls != 0 || stack.daemon.loads != 1 || registry.requests.Load() != 0 {
+		t.Fatalf("direct update = %+v; daemon pulls=%d loads=%d proxy requests=%d", job, stack.daemon.pulls, stack.daemon.loads, registry.requests.Load())
+	}
+}
+
+// TestImageImportUsesReportedIdentity requires a valid daemon identity and checks errors after it is reported.
+func TestImageImportUsesReportedIdentity(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		stream  string
+		wantID  string
+		wantErr bool
+	}{
+		{
+			name: "reported image ID",
+			stream: `{"status":"Loading"}` + "\n" +
+				`{"stream":"Loaded image ID: ` + TEST_DIGEST + `\n"}` + "\n",
+			wantID: TEST_DIGEST,
+		},
+		{
+			name: "error after identity",
+			stream: `{"stream":"Loaded image ID: ` + TEST_DIGEST + `\n"}` + "\n" +
+				`{"error":"unpack failed"}` + "\n",
+			wantErr: true,
+		},
+		{name: "missing identity", stream: `{"status":"Loading"}` + "\n", wantErr: true},
+		{name: "invalid identity", stream: `{"stream":"Loaded image ID: invalid\n"}` + "\n", wantErr: true},
+		{
+			name: "truncated result after identity",
+			stream: `{"stream":"Loaded image ID: ` + TEST_DIGEST + `\n"}` + "\n" +
+				`{"stream":`,
+			wantErr: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			engine := &Engine{
+				apiVersion: MAX_API_VERSION,
+				httpClient: &http.Client{Transport: updaterTransport(func(request *http.Request) (*http.Response, error) {
+					_, _ = io.Copy(io.Discard, request.Body)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(testCase.stream)),
+					}, nil
+				})},
+			}
+
+			// An ID is usable only when the entire load response succeeds, including trailing progress messages.
+			imageID, err := engine.loadImageArchive(context.Background(), strings.NewReader("image archive"))
+			if (err != nil) != testCase.wantErr || imageID != testCase.wantID {
+				t.Fatalf("loaded image ID = %q, error = %v", imageID, err)
+			}
+		})
+	}
+}
+
+// TestProxyDownloadsRejectCorruptContent preserves the signed digest and blob checks on the alternate route.
+func TestProxyDownloadsRejectCorruptContent(t *testing.T) {
+	for _, corruptManifest := range []bool{true, false} {
+		t.Run(fmt.Sprintf("manifest=%v", corruptManifest), func(t *testing.T) {
+			registry := newProxyRegistry(t)
+			registry.corruptLayer = !corruptManifest
+			registry.corruptManifest = corruptManifest
+			daemon, engine := newFakeDaemon(t)
+			digest := registry.digest
+			if corruptManifest {
+				digest = TEST_DIGEST
+			}
+
+			if _, err := engine.PullImageThroughProxy(context.Background(), registry.repository+"@"+digest, registry.proxyURL); err == nil {
+				t.Fatal("corrupted image content must be refused")
+			}
+
+			daemon.mu.Lock()
+			loads := daemon.loads
+			daemon.mu.Unlock()
+
+			if !corruptManifest && loads != 1 {
+				t.Fatal("the corrupted layer was not exercised during archive import")
+			}
+		})
+	}
+}
+
+// TestImagePullProxyValidation refuses direct routes and unsupported protocols instead of bypassing the switch.
+func TestImagePullProxyValidation(t *testing.T) {
+	for _, raw := range []string{"", "direct", "none", "ftp://proxy:7890", "http://", "http://proxy:7890/path?secret=value"} {
+		if _, err := ParseImagePullProxy(raw); err == nil || strings.Contains(err.Error(), "secret=value") {
+			t.Fatalf("unsafe proxy validation for %q", raw)
+		}
+	}
+
+	for _, scheme := range []string{"http", "https", "socks5", "socks5h"} {
+		if _, err := ParseImagePullProxy(scheme + "://user:password@proxy:7890"); err != nil {
+			t.Fatalf("supported proxy %s: %v", scheme, err)
+		}
+	}
 }
 
 type signer struct {
@@ -257,7 +644,7 @@ func TestSignedUpdateReplacesTheConsoleAndRetagsItsImage(t *testing.T) {
 	manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
 	before := stack.daemon.named("oh-my-cpa")
 
-	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	job := awaitJob(t, stack.service)
@@ -308,7 +695,7 @@ func TestUpdateHandsTheFinishedJobToTheUpdatersSuccessor(t *testing.T) {
 	var release sync.Once
 	releaseHandover := func() { release.Do(func() { close(proceed) }) }
 	defer func() { releaseHandover(); stack.service.jobs.Wait() }()
-	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	select {
@@ -319,12 +706,12 @@ func TestUpdateHandsTheFinishedJobToTheUpdatersSuccessor(t *testing.T) {
 	if job := stack.service.LastJob(); job == nil || job.IsFinished() {
 		t.Fatalf("the public outcome must remain unfinished during handover: %+v", job)
 	}
-	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); !errors.Is(err, ErrBusy) {
+	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); !errors.Is(err, ErrBusy) {
 		t.Fatalf("an update remains busy until its updater handover finishes: %v", err)
 	}
 	releaseHandover()
 	awaitJob(t, stack.service)
-	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); !errors.Is(err, ErrBusy) {
+	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); !errors.Is(err, ErrBusy) {
 		t.Fatalf("a predecessor that handed over must not admit another update: %v", err)
 	}
 
@@ -389,7 +776,7 @@ func TestFailedReplacementRestoresThePreviousContainerAndTag(t *testing.T) {
 	manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
 	before := stack.daemon.named("oh-my-cpa")
 
-	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	job := awaitJob(t, stack.service)
@@ -416,7 +803,7 @@ func TestStartRefusesWhatItMustNotInstall(t *testing.T) {
 	t.Run("a pinned image", func(t *testing.T) {
 		stack := newDeployment(t, OMC_REPOSITORY+":v1.0.0")
 		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
-		_, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature)
+		_, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, "")
 		var unavailable *UnavailableError
 		if !errors.As(err, &unavailable) || unavailable.Reason != ReasonPinned {
 			t.Fatalf("err = %v", err)
@@ -425,27 +812,27 @@ func TestStartRefusesWhatItMustNotInstall(t *testing.T) {
 	t.Run("a manifest for another repository", func(t *testing.T) {
 		stack := newDeployment(t, OMC_REPOSITORY+":latest")
 		manifest, signature := stack.signer.manifest("v1.1.0", "someone/else", TEST_DIGEST)
-		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); err == nil {
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err == nil {
 			t.Fatalf("a validly signed manifest for another image must still be refused")
 		}
 	})
 	t.Run("an older release", func(t *testing.T) {
 		stack := newDeployment(t, OMC_REPOSITORY+":latest")
 		manifest, signature := stack.signer.manifest("v0.9.0", OMC_REPOSITORY, TEST_DIGEST)
-		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); err == nil {
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err == nil {
 			t.Fatalf("a downgrade must be refused: migrations only go forward")
 		}
 	})
 	t.Run("an unsigned request", func(t *testing.T) {
 		stack := newDeployment(t, OMC_REPOSITORY+":latest")
 		manifest, _ := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
-		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, ""); !errors.Is(err, ErrSignature) {
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, "", ""); !errors.Is(err, ErrSignature) {
 			t.Fatalf("err = %v", err)
 		}
 	})
 	t.Run("an unknown product", func(t *testing.T) {
 		stack := newDeployment(t, OMC_REPOSITORY+":latest")
-		if _, err := stack.service.Start(context.Background(), "oh-my-cpa", nil, ""); err == nil {
+		if _, err := stack.service.Start(context.Background(), "oh-my-cpa", nil, "", ""); err == nil {
 			t.Fatalf("a caller names a product, never a container")
 		}
 	})
@@ -485,7 +872,7 @@ func TestGatewayUpdatePullsItsConfiguredTagWithoutAManifest(t *testing.T) {
 	stack.daemon.addContainer(containerSpec{name: "cli-proxy-api", image: DEFAULT_CPA_REPOSITORY + ":latest"})
 	stack.daemon.mu.Unlock()
 
-	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	if job := awaitJob(t, stack.service); job.Stage != StageDone || job.ToVersion != "8.0.2" {
@@ -499,7 +886,7 @@ func TestGatewayUpdatePullsItsConfiguredTagWithoutAManifest(t *testing.T) {
 		t.Errorf("a gateway update must not hand the updater over")
 	}
 
-	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatalf("second start: %v", err)
 	}
 	if job := awaitJob(t, stack.service); job.Stage != StageAlreadyCurrent {
@@ -527,7 +914,7 @@ func TestGatewayUpdateRejoinsTheContainersSharingItsNamespace(t *testing.T) {
 	stack.daemon.mu.Unlock()
 	stack.service.options.PublicKey = ""
 
-	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	job := awaitJob(t, stack.service)
@@ -604,7 +991,7 @@ func TestGatewayUpdateRejoinsTheContainersSharingItsNamespace(t *testing.T) {
 	stack.daemon.publish(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-next", "8.0.3")
 	stack.daemon.mu.Unlock()
 	restored.options.Timing = testTiming()
-	if _, err := restored.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := restored.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatalf("a successor must admit the next update: %v", err)
 	}
 	if job := awaitJob(t, restored); job.Stage != StageDone || job.ToVersion != "8.0.3" {
@@ -631,7 +1018,7 @@ func TestGatewayUpdateReportsAnExitedUpdaterSuccessor(t *testing.T) {
 	updater.ImageID = "sha256:updater"
 	stack.daemon.crashing[updater.ImageID] = true
 	stack.daemon.mu.Unlock()
-	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	job := awaitJob(t, stack.service)
@@ -698,7 +1085,7 @@ func TestGatewayUpdateRecoversWhenTheSuccessorCannotUseTheReplacementNamespace(t
 		return transport.RoundTrip(request)
 	})
 
-	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	job := awaitJob(t, stack.service)
@@ -774,7 +1161,7 @@ func TestGatewayUpdateRefusesUnsafeNamespaceChanges(t *testing.T) {
 			if failure == "unknown_self" {
 				stack.service.options.SelfID = ""
 			}
-			if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+			if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 				t.Fatal(err)
 			}
 			if job := awaitJob(t, stack.service); job.Stage != StageFailed {
@@ -816,7 +1203,7 @@ func TestFailedGatewayUpdateRejoinsItsRestoredNamespace(t *testing.T) {
 					return transport.RoundTrip(request)
 				})
 			}
-			if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+			if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 				t.Fatal(err)
 			}
 			job := awaitJob(t, stack.service)
@@ -877,7 +1264,7 @@ func TestGatewayUpdateReportsAnUnrecoverableDependent(t *testing.T) {
 	dependent.HostConfig["NetworkMode"] = "container:" + gateway.ID
 	stack.daemon.mu.Unlock()
 
-	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, ""); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	job := awaitJob(t, stack.service)
@@ -978,7 +1365,7 @@ func TestReconcileRestoringTheUpdaterKeepsTheConsolesVerifiedTag(t *testing.T) {
 	stack := newDeployment(t, OMC_REPOSITORY+":latest")
 	previous := stack.daemon.named(SIDECAR_NAME)
 	manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
-	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature); err != nil {
+	if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
 		t.Fatal(err)
 	}
 	awaitJob(t, stack.service)
@@ -1081,7 +1468,10 @@ func TestControlInterfaceRequiresTheDerivedToken(t *testing.T) {
 		t.Errorf("an update without a token: %d", status)
 	}
 	status, body := call(http.MethodGet, "/v1/status", token, "")
-	if status != http.StatusOK || body["updater_version"] != "v1.0.0" || len(body["products"].([]any)) != 2 {
+	if status != http.StatusOK ||
+		body["updater_version"] != "v1.0.0" ||
+		body["proxy_pull_supported"] != true ||
+		len(body["products"].([]any)) != 2 {
 		t.Errorf("status = %d %v", status, body)
 	}
 	if status, _ := call(http.MethodGet, "/v1/healthz", "", ""); status != http.StatusOK {

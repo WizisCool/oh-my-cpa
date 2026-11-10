@@ -38,6 +38,7 @@ func TestUpdateCheckSettingsAreStrictOnWriteAndLenientOnRead(t *testing.T) {
 	if defaults.IntervalMinutes != DefaultUpdateCheckIntervalMinutes {
 		t.Fatalf("default interval = %d, want %d", defaults.IntervalMinutes, DefaultUpdateCheckIntervalMinutes)
 	}
+
 	for _, stored := range []struct {
 		raw      string
 		isStored bool

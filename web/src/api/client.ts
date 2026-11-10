@@ -1,6 +1,7 @@
 import type { BackupAuthorization, BackupArchive, BackupAutomation, BackupAutomationInput, DatabaseBackupJob, DatabaseBackupsResponse } from '../types/databaseBackup';
 import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } from '../types/routing';
 import type { ExchangeRates } from '../types/currencyDisplay';
+import type { OutboundProxyInput, OutboundProxySettings } from '../types/outboundProxy';
 import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../types/warmup';
 import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
@@ -1349,6 +1350,14 @@ export const api = {
     return request<SystemMaintenanceResponse>(`/management/system/maintenance/${encodeURIComponent(action)}`, {
       method: 'POST',
     });
+  },
+
+  async getOutboundProxy(): Promise<OutboundProxySettings> {
+    return request<OutboundProxySettings>('/management/outbound-proxy', { method: 'GET' });
+  },
+
+  async setOutboundProxy(input: OutboundProxyInput): Promise<OutboundProxySettings> {
+    return request<OutboundProxySettings>('/management/outbound-proxy', { method: 'PUT', body: JSON.stringify(input) });
   },
 
   async getDataRetention(): Promise<DataRetentionResponse> {

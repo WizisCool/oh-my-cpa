@@ -247,6 +247,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Configuration and capability reads. The console renders them; nothing here
 	// writes to the gateway.
+	{http.MethodGet, "/api/v1/management/outbound-proxy", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/source", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/backups", demoAllow, ""},
@@ -348,6 +349,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/plugin-host/v1/models", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
 
 	// Gateway configuration and credential state.
+	{http.MethodPut, "/api/v1/management/outbound-proxy", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPatch, "/api/v1/management/config", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPatch, "/api/v1/management/routing", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "configuration backups hold the gateway's secrets"},

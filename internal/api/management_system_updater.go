@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/outbound"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -45,9 +46,9 @@ const (
 
 const (
 	updateJobPollInterval = 2 * time.Second
-	// updateJobWatchLimit bounds how long a finished job is waited for before its
-	// outcome goes unrecorded; a replacement's own health timeout is three minutes.
-	updateJobWatchLimit = 15 * time.Minute
+	// The image-download deadline allows thirty minutes; leave time for container
+	// health checks and handover before ending outcome observation.
+	updateJobWatchLimit = 45 * time.Minute
 )
 
 // SystemUpdaterDTO is what the System Information page needs to offer an update.
@@ -205,7 +206,7 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 		writeJSON(writer, status, map[string]string{"error": message, "code": code})
 	}
 
-	dto, _ := h.updaterStatus(ctx)
+	dto, sidecar := h.updaterStatus(ctx)
 	if dto.State != updaterReady {
 		refuse(http.StatusConflict, "rejected", "updater_"+dto.State, "updates cannot be applied from the console in this deployment")
 		return
@@ -218,6 +219,27 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 	}
 
 	update := updater.UpdateRequest{Product: body.Product}
+
+	settings, _, err := (repository.OutboundProxyStore{Repo: h.repo, Cipher: h.cipher}).Load(ctx)
+	if err != nil || outbound.Validate(settings) != nil {
+		refuse(http.StatusServiceUnavailable, "failure", "outbound_proxy_unavailable", "outbound network settings could not be read")
+		return
+	}
+	switch settings.Mode {
+	case outbound.ModeProxy:
+		if sidecar == nil || !sidecar.ProxyPullSupported {
+			refuse(http.StatusConflict, "rejected", "image_pull_proxy_unsupported", "the updater must be upgraded to support proxy image downloads")
+			return
+		}
+		update.ProxyURL = settings.URL
+	case outbound.ModeDirect:
+		if sidecar == nil || !sidecar.DirectPullSupported {
+			refuse(http.StatusConflict, "rejected", "image_pull_proxy_unsupported", "the updater must be upgraded to support direct image downloads")
+			return
+		}
+		update.ProxyURL = updater.DirectImageRoute
+	}
+
 	details := map[string]any{}
 	if body.Product == release.ProductOMC {
 		// The console is only ever moved to the release the page is offering, and only

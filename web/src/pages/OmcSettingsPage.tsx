@@ -35,6 +35,7 @@ import { SectionHeading } from '../components/common/SectionHeading';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { DataRetentionSettings } from '../components/settings/DataRetentionSettings';
+import { OutboundProxySettings } from '../components/settings/OutboundProxySettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
 import { useOmcPluginSource } from '../hooks/useOmcPluginSource';
@@ -116,9 +117,8 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, MessageKey> = {
  * plot, so it belongs on those panels, where the operator reading them is - a second control on a
  * settings page would be a second place to look for one decision.
  *
- * CPA's own configuration (its YAML document) is intentionally not reachable from here: that
- * surface is the config panel's, with its different save semantics. The two pages coexist in the
- * sidebar under "Control".
+ * The outbound network setting synchronizes its selected route to CPA through the guarded
+ * configuration write path; the rest of CPA's configuration stays on the config page.
  */
 const REDUCED_MOTION_LABEL_KEYS: Record<ReducedMotionPreference, MessageKey> = {
   on: 'omc.reduced_motion_on',
@@ -223,6 +223,8 @@ export const OmcSettingsPage: React.FC = () => {
       <QuotaAutoRefreshGroup />
 
       <UpdateCheckGroup />
+
+      <OutboundProxySettings />
 
       <DataRetentionSettings />
 
@@ -385,20 +387,16 @@ const QuotaAutoRefreshGroup: React.FC = () => {
   );
 };
 
-/**
- * UpdateCheckGroup is the scheduled update check the server's sweep reads.
- *
- * It changes what the deployment does on its own: the interval decides how often the sweep
- * spends GitHub requests on the release feeds and the plugin store. The token those reads carry
- * is the gateway's own, set on the configuration panel, so GitHub is configured once.
- */
-const UpdateCheckGroup: React.FC = () => {
+/** Configure the scheduled release and plugin checks. */
+export const UpdateCheckGroup: React.FC = () => {
   const t = useT();
   const preference = usePreference<UpdateCheckSettings>(UPDATE_CHECK_PREFERENCE, DEFAULT_UPDATE_CHECK, parseUpdateCheck);
   const settings = preference.value;
+
   // A value written elsewhere is kept selectable, so the control never shows a preset the
   // deployment is not actually running.
   const intervals: number[] = [...UPDATE_CHECK_INTERVALS];
+
   if (!intervals.includes(settings.interval_minutes)) {
     intervals.push(settings.interval_minutes);
     intervals.sort((left, right) => left - right);
@@ -406,6 +404,7 @@ const UpdateCheckGroup: React.FC = () => {
   const formatInterval = (minutes: number) => (minutes % 60 === 0
     ? t('omc.update_check_hours', { n: minutes / 60 })
     : t('omc.update_check_minutes', { n: minutes }));
+
   return (
     <div className="settings-group omc-settings-group">
       <SectionHeading className="settings-group-head" title={t('omc.section_update_check')} />
@@ -423,6 +422,7 @@ const UpdateCheckGroup: React.FC = () => {
           />
         }
       />
+
     </div>
   );
 };

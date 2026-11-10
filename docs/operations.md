@@ -74,7 +74,7 @@ a message naming the variable.
 | `OMCPA_DEMO_MODE` | `false` | Serve the console from the built-in fixture; see [Demo mode](#demo-mode) |
 | `OMCPA_UPDATER_ENABLED` | `true` | `false` makes the console ignore an updater and offer no update action; see [Console updates](#console-updates) |
 | `OMCPA_UPDATER_URL` | `http://oh-my-cpa-updater:8090` | Where the console looks for the updater. The default is the service and container name every install method uses |
-| `OMCPA_GOOGLE_FONTS_URL` | `https://fonts.googleapis.com` | The Google Fonts stylesheet API the font library installs from, or a compatible mirror for a deployment that cannot reach Google. Requests honour `HTTPS_PROXY`; font files are downloaded only from Google's font hosts or the mirror's own site. Used only when an operator installs a family; uploading needs no network |
+| `OMCPA_GOOGLE_FONTS_URL` | `https://fonts.googleapis.com` | The Google Fonts stylesheet API the font library installs from, or a compatible mirror for a deployment that cannot reach Google. Requests use the OMC outbound network policy; font files are downloaded only from Google's font hosts or the mirror's own site. Used only when an operator installs a family; uploading needs no network |
 
 The MCP stdio bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL`,
 `OMCPA_CPA_MANAGEMENT_KEY` and the optional `OMCPA_VERSION` only; the remote MCP
@@ -179,8 +179,7 @@ semantics.
 
 The System Information page reports the running and published versions of both Oh My
 CPA and your gateway. It reads release metadata from `api.github.com` only — fixed host,
-no operator-supplied URL — following `HTTP_PROXY`/`HTTPS_PROXY` like the price sync
-does. A sweep runs on the interval chosen in OMC Settings → Update checks — hourly by
+no operator-supplied URL — using the OMC outbound network policy. A sweep runs on the interval chosen in OMC Settings → Update checks — hourly by
 default, adjustable from fifteen minutes to a day; opening the page and the
 **Check for updates** button also check, subject to a fifteen-minute floor per product —
 inside it the answer comes from the stored index and the message says so, because the feed
@@ -257,8 +256,11 @@ Security boundary:
 - The token is an HMAC of `OMCPA_MASTER_KEY`. Neither container stores it, and it is
   not logged. Changing the master key needs no step here: the updater reads the
   console's current value from Docker.
-- The updater accepts a product name only. It never takes an image, a container name or
-  a command from the console. It identifies the two products from Docker state and
+- The updater accepts a product name and an optional route from OMC Settings → Network
+  proxy: a proxy URL, `direct`, or nothing for the daemon's own configuration. It
+  validates the proxy's protocol and address before downloading.
+  It never takes an image, a container name or a command from the console.
+  It identifies the two products from Docker state and
   refuses to upgrade an image pinned to a version tag or digest. Replacing a namespace
   owner also recreates its running `network_mode: container:<owner>` dependents, even
   across Compose projects; stopped containers are left alone.
@@ -299,8 +301,48 @@ that were already stopped before the update are not started by this process.
 Network use: applying an Oh My CPA update makes the console download
 `release-manifest.json` and its `.sig` from the release's assets on `github.com`,
 following redirects only to GitHub's own asset hosts over HTTPS, through the same proxy
-settings as the update check. The image pull is made by the Docker daemon with its own
+settings as the update check. By default, the Docker daemon pulls images using its own
 registry and proxy configuration.
+
+**OMC Settings → Network proxy** chooses the outbound route. The default follows the
+existing deployment: OMC uses its environment, CPA retains its configuration, and the
+Docker daemon pulls images. Choosing a proxy or direct route also sets CPA's
+`requests.proxy-url` through the normal revision-checked, audited configuration write
+and encrypted backup; returning to the default withdraws only a value OMC wrote,
+leaving a proxy configured in CPA untouched.
+CPA's individual provider and OAuth proxy choices remain independent. A CPA write and
+OMC's settings save cannot be one transaction; a partial failure is reported and requires
+a reload. If CPA's configuration is changed elsewhere, the settings page reports the mismatch;
+applying the OMC setting reconciles it.
+
+A selected proxy applies to OMC's release and manifest reads, price and currency sync,
+font downloads, and provider probes without their own proxy. OMC exclusions apply to
+the console's requests; CPA's proxy configuration does not support this exclusion list,
+and an image download sends every registry request through the proxy.
+Browser-loaded plugin artwork and independently operated clients use their own networks.
+The proxy address must be reachable from OMC, CPA, and updater namespaces: `localhost`
+inside one container is not another container. Only an encrypted OMC settings record is
+stored in SQLite; a proxy configured in CPA also resides in CPA's configuration.
+
+When the selected route is proxy or direct, the updater downloads the registry manifest
+and layers, selects the daemon's platform, and streams a verified archive into Docker.
+OMC's signed index digest and image content hashes are verified before replacement. The
+daemon's proxy configuration is not changed. A standalone updater can temporarily join
+a console network containing the proxy container and removes its own attachment before
+replacement. Proxy failure never triggers a direct retry. The console and updater both
+need builds supporting the selected route; an older updater needs an independent upgrade —
+rerun its install command, or switch to the deployment default route, update the console,
+and switch back.
+The authenticated console-to-updater control connection uses HTTP by default, so place
+that network on trusted infrastructure or provide transport encryption.
+
+Remote backup destinations also have their own network adapters. HTTP-based S3, WebDAV,
+Google Drive and OneDrive destinations can use an explicit proxy when no OMC exclusions
+are configured. Other managed routes, including SMB, and routes whose exclusions cannot
+be guaranteed are refused rather than silently connected directly. With a selected direct route,
+SMB, SFTP and FTP destinations connect directly; HTTP-based destinations are refused
+because their adapters can inherit an environment proxy. Local backups remain available;
+backup OAuth exchanges use OMC's HTTP policy.
 
 Audit: `system.update.apply` records the admission, or the refusal with its reason,
 before the updater is asked; `system.update.completed` records how that admission ended:

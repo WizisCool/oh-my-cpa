@@ -97,7 +97,12 @@ func DecodeFrankfurter(body []byte) ([]Rate, error) {
 type FrankfurterClient struct{ client *http.Client }
 
 func NewFrankfurterClient() *FrankfurterClient {
-	return &FrankfurterClient{client: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}
+	return NewFrankfurterClientWithTransport(nil)
+}
+
+// NewFrankfurterClientWithTransport applies the deployment's outbound policy.
+func NewFrankfurterClientWithTransport(transport http.RoundTripper) *FrankfurterClient {
+	return &FrankfurterClient{client: &http.Client{Timeout: 20 * time.Second, Transport: transport, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 
 func (c *FrankfurterClient) Fetch(ctx context.Context) ([]Rate, error) {

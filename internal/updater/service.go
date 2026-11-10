@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // Products the updater can replace. They are the whole vocabulary of the control
@@ -387,7 +388,26 @@ func answersTo(container Container, host string) bool {
 // Start admits an update and runs it in the background. Everything that can be
 // refused is checked before the job exists, so an admitted job is one that will
 // actually touch the daemon.
-func (s *Service) Start(ctx context.Context, product string, manifest []byte, signature string) (Job, error) {
+func (s *Service) Start(
+	ctx context.Context,
+	product string,
+	manifest []byte,
+	signature string,
+	proxyURL string,
+) (Job, error) {
+	// The console sends its selected route unchanged: a proxy URL, DirectImageRoute,
+	// or nothing when the daemon keeps its own configuration.
+	isDirect := strings.EqualFold(strings.TrimSpace(proxyURL), DirectImageRoute)
+	if isDirect {
+		proxyURL = ""
+	}
+	// Refuse an unusable proxy before admitting a job; an opted-in route never falls back.
+	if proxyURL != "" {
+		if _, err := ParseImagePullProxy(proxyURL); err != nil {
+			return Job{}, err
+		}
+	}
+
 	if product != ProductOMC && product != ProductCPA {
 		return Job{}, fmt.Errorf("unknown product %q", product)
 	}
@@ -451,16 +471,31 @@ func (s *Service) Start(ctx context.Context, product string, manifest []byte, si
 			}
 			s.mu.Unlock()
 		}()
-		s.run(context.WithoutCancel(ctx), container, reference, pullReference, product)
+		s.run(context.WithoutCancel(ctx), container, reference, pullReference, product, proxyURL, isDirect)
 	}()
 	return admitted, nil
 }
 
-func (s *Service) run(ctx context.Context, container Container, reference Reference, pullReference, product string) {
+// run finishes downloading and verifying an image before replacing the running container.
+func (s *Service) run(
+	ctx context.Context,
+	container Container,
+	reference Reference,
+	pullReference, product, proxyURL string,
+	isDirect bool,
+) {
 	logger := s.options.Logger.With("product", product, "container", container.ContainerName())
 	fail := func(err error) {
-		logger.Error("update failed", "stage", StageFailed, "error", err)
-		s.setStage(StageFailed, func(job *Job) { job.Error = err.Error() })
+		// Transport failures can contain proxy authentication details; redact before storing or logging.
+		secrets := []string{proxyURL}
+		if proxy, err := url.Parse(proxyURL); err == nil && proxy.User != nil {
+			password, _ := proxy.User.Password()
+			secrets = append(secrets, proxy.User.Username(), password)
+		}
+
+		message := security.RedactText(err.Error(), secrets...)
+		logger.Error("update failed", "stage", StageFailed, "error", message)
+		s.setStage(StageFailed, func(job *Job) { job.Error = message })
 	}
 	engine := s.options.Engine
 	if _, err := engine.InspectContainer(ctx, container.ContainerName()+PREVIOUS_SUFFIX); err == nil {
@@ -477,19 +512,45 @@ func (s *Service) run(ctx context.Context, container Container, reference Refere
 		fail(fmt.Errorf("discover network namespace dependents: %w", err))
 		return
 	}
-	if err := engine.PullImage(ctx, pullReference); err != nil {
+
+	// A proxy download returns a local image ID: importing a tar does not create RepoDigests.
+	imageSource := pullReference
+	if proxyURL != "" {
+		// Standalone updaters have a private link network; borrow the console's proxy network for the download.
+		var network string
+		network, err = s.connectProxyNetwork(ctx, proxyURL)
+		if err == nil {
+			imageSource, err = engine.PullImageThroughProxy(ctx, pullReference, proxyURL)
+		}
+
+		if network != "" {
+			cleanupContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			cleanupErr := engine.DisconnectNetwork(cleanupContext, network, s.options.SelfID)
+			cancel()
+			if cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("detach the temporary proxy network: %w", cleanupErr))
+			}
+		}
+	} else if isDirect {
+		imageSource, err = engine.PullImageDirect(ctx, pullReference)
+	} else {
+		err = engine.PullImage(ctx, pullReference)
+	}
+
+	if err != nil {
 		fail(err)
 		return
 	}
-	if reference.Digest == "" && strings.Contains(pullReference, "@") {
+
+	if reference.Digest == "" && (proxyURL != "" || isDirect || strings.Contains(pullReference, "@")) {
 		// Point the container's own tag at the verified image, so a later
 		// `docker compose up` sees the image it expects and leaves the container alone.
-		if err := engine.TagImage(ctx, pullReference, reference.Repository, reference.EffectiveTag()); err != nil {
+		if err := engine.TagImage(ctx, imageSource, reference.Repository, reference.EffectiveTag()); err != nil {
 			fail(err)
 			return
 		}
 	}
-	pulled, err := engine.InspectImage(ctx, pullReference)
+	pulled, err := engine.InspectImage(ctx, imageSource)
 	if err != nil {
 		fail(err)
 		return

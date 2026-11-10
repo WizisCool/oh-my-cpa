@@ -31,7 +31,7 @@ const (
 // ErrInvalidUpdateCheckSettings rejects a stored document the sweep cannot honour.
 var ErrInvalidUpdateCheckSettings = errors.New("invalid_update_check")
 
-// UpdateCheckSettings is the deployment-wide scheduled update check policy.
+// UpdateCheckSettings stores the deployment's scheduled update-check policy.
 type UpdateCheckSettings struct {
 	// IntervalMinutes is how often the background sweep reads the release feeds and the
 	// plugin store.
@@ -74,6 +74,7 @@ func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
 		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
 	}
 	settings := UpdateCheckSettings{IntervalMinutes: *document.IntervalMinutes}
+
 	if err := settings.Validate(); err != nil {
 		return UpdateCheckSettings{}, err
 	}
@@ -101,5 +102,6 @@ func ResolveUpdateCheckSettings(raw string, isStored bool) UpdateCheckSettings {
 			settings = candidate
 		}
 	}
+
 	return settings
 }

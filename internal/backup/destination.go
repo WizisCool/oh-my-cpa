@@ -3,6 +3,8 @@ package backup
 import (
 	"context"
 	"io"
+
+	"github.com/rclone/rclone/fs"
 )
 
 // ArtifactSource permits repeatable and resumable delivery without exposing a
@@ -43,4 +45,33 @@ type Destination interface {
 	Delete(context.Context, ObjectRef) error
 	Capabilities() Capabilities
 	Close() error
+}
+
+// rclone builds some HTTP clients lazily from the operation context, so its
+// selected route must accompany each operation as well as destination creation.
+type proxyDestination struct {
+	Destination
+	proxyURL string
+}
+
+func proxyContext(ctx context.Context, proxyURL string) context.Context {
+	ctx, config := fs.AddConfig(ctx)
+	config.HTTPProxy = proxyURL
+	return ctx
+}
+
+func (d proxyDestination) Probe(ctx context.Context) error {
+	return d.Destination.Probe(proxyContext(ctx, d.proxyURL))
+}
+func (d proxyDestination) Put(ctx context.Context, ref ObjectRef, source ArtifactSource) (Receipt, error) {
+	return d.Destination.Put(proxyContext(ctx, d.proxyURL), ref, source)
+}
+func (d proxyDestination) Open(ctx context.Context, ref ObjectRef) (io.ReadCloser, error) {
+	return d.Destination.Open(proxyContext(ctx, d.proxyURL), ref)
+}
+func (d proxyDestination) List(ctx context.Context, cursor string) (ObjectPage, error) {
+	return d.Destination.List(proxyContext(ctx, d.proxyURL), cursor)
+}
+func (d proxyDestination) Delete(ctx context.Context, ref ObjectRef) error {
+	return d.Destination.Delete(proxyContext(ctx, d.proxyURL), ref)
 }

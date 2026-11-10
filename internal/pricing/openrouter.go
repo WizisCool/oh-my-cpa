@@ -64,8 +64,8 @@ type Fetcher interface {
 	Fetch(context.Context) (Catalog, error)
 }
 
-// OpenRouterClient fetches and decodes OpenRouter's model list. Transport and
-// URL are injectable for tests only; production uses the fixed HTTPS default.
+// OpenRouterClient fetches and decodes OpenRouter's model list. Production uses
+// the fixed HTTPS endpoint and its configured outbound transport.
 type OpenRouterClient struct {
 	client  *http.Client
 	baseURL string

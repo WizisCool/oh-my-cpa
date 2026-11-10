@@ -1,4 +1,5 @@
 export default {
+  'sys.backup_error_proxy_unsupported': '远程备份无法使用所选网络路径，请调整网络设置或备份目标。',
   'warmup.settings': '预热设置',
   'warmup.description': '在额度窗口重置后、每天定时或按固定间隔发送一条极简请求，让新的计费窗口提前开始。',
   'warmup.tasks': '预热任务',
@@ -85,6 +86,9 @@ export default {
   'sys.update_already_current': '{product} 已是最新镜像',
   'sys.update_rolled_back': '{product} 更新失败，已恢复原版本：{msg}',
   'sys.update_failed': '{product} 更新失败：{msg}',
+
+  'sys.outbound_proxy_unavailable': '网络设置不可用，请检查 OMC 设置。',
+  'sys.image_pull_proxy_unsupported': '更新器不支持所选的镜像下载路径。',
   'sys.update_outcome_unknown': '{product} 的更新结果未能取回，请以当前版本号为准',
   'sys.update_stage.pulling': '正在拉取新镜像…',
   'sys.update_stage.stopping': '正在停止当前容器…',

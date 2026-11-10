@@ -48,8 +48,8 @@ func NewManifestClient() *ManifestClient {
 	return &ManifestClient{httpClient: &http.Client{Timeout: requestTimeout, CheckRedirect: restrictAssetRedirects}}
 }
 
-// NewManifestClientWithTransport returns a client using the supplied transport and base
-// URL. It exists for tests; the production host constant is not reached through it.
+// NewManifestClientWithTransport returns a client using the supplied transport and optional
+// base URL. An empty base URL retains the fixed production host.
 func NewManifestClientWithTransport(transport http.RoundTripper, baseURL string) *ManifestClient {
 	return &ManifestClient{httpClient: &http.Client{Timeout: requestTimeout, Transport: transport, CheckRedirect: restrictAssetRedirects}, baseURL: baseURL}
 }

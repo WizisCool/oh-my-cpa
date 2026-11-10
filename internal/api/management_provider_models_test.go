@@ -187,9 +187,36 @@ func TestModelPullBaseURLPolicy(t *testing.T) {
 	}
 }
 
+func TestFetchEndpointModelsUsesGlobalRouteUnlessOverridden(t *testing.T) {
+	var globalCalls, overrideCalls atomic.Int32
+	server := func(calls *atomic.Int32) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			calls.Add(1)
+			_ = json.NewEncoder(writer).Encode(map[string]any{"data": []map[string]any{{"id": "fixture-model"}}})
+		}))
+	}
+	global := server(&globalCalls)
+	defer global.Close()
+	override := server(&overrideCalls)
+	defer override.Close()
+	globalURL, err := url.Parse(global.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, proxyURL := range []string{"", override.URL} {
+		models, err := fetchEndpointModels(context.Background(), "http://127.0.0.1:1/v1", "fixture-key", proxyURL, openAICompatibilityFamily, nil, http.ProxyURL(globalURL))
+		if err != nil || len(models) != 1 {
+			t.Fatalf("fetch via selected proxy: %v, %v", models, err)
+		}
+	}
+	if globalCalls.Load() != 1 || overrideCalls.Load() != 1 {
+		t.Fatalf("routes: global=%d override=%d", globalCalls.Load(), overrideCalls.Load())
+	}
+}
+
 func TestFetchEndpointModelsRejectsPublicHTTP(t *testing.T) {
 	useProviderDNS(t, map[string][]net.IP{"example.com.": {net.ParseIP("93.184.216.34")}})
-	_, err := fetchEndpointModels(context.Background(), "http://example.com/v1", "sk-provider-secret-1234", "", openAICompatibilityFamily, nil)
+	_, err := fetchEndpointModels(context.Background(), "http://example.com/v1", "sk-provider-secret-1234", "", openAICompatibilityFamily, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "HTTPS") {
 		t.Fatalf("expected HTTPS policy error, got %v", err)
 	}
@@ -270,6 +297,7 @@ func TestFetchEndpointModelsRefusesCrossOriginRedirect(t *testing.T) {
 				"",
 				family,
 				map[string]string{"X-Provider-Secret": "custom-secret"},
+				nil,
 			)
 			if err == nil {
 				t.Fatal("expected cross-origin redirect to be refused")
@@ -301,7 +329,7 @@ func TestFetchEndpointModelsFollowsSameOriginRedirect(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", openAICompatibilityFamily, nil)
+	models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", openAICompatibilityFamily, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +551,7 @@ func TestFetchEndpointModelsAsksTheFamilyDialectFirst(t *testing.T) {
 			}))
 			defer upstream.Close()
 
-			models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", testCase.family, nil)
+			models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", testCase.family, nil, nil)
 			if !slices.Equal(requested, []string{testCase.path}) {
 				t.Fatalf("requested %v, want exactly [%s]", requested, testCase.path)
 			}

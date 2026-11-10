@@ -10,8 +10,10 @@ export interface UpdateCheckSettings {
 
 export const UPDATE_CHECK_PREFERENCE = 'omc_update_check';
 
-/** Mirrors `DefaultUpdateCheckSettings`: hourly. */
-export const DEFAULT_UPDATE_CHECK: UpdateCheckSettings = { interval_minutes: 60 };
+/** Mirrors `DefaultUpdateCheckSettings`: hourly checks. */
+export const DEFAULT_UPDATE_CHECK: UpdateCheckSettings = {
+  interval_minutes: 60,
+};
 
 export const UPDATE_CHECK_MIN_MINUTES = 15;
 export const UPDATE_CHECK_MAX_MINUTES = 24 * 60;
@@ -24,9 +26,11 @@ export const UPDATE_CHECK_MAX_MINUTES = 24 * 60;
  */
 export const UPDATE_CHECK_INTERVALS = [15, 30, 60, 120, 180, 360, 720, 1440] as const;
 
+/** Read the stored update-check schedule. */
 export function parseUpdateCheck(raw: unknown): UpdateCheckSettings | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const { interval_minutes: intervalMinutes } = raw as Record<string, unknown>;
+
   if (typeof intervalMinutes !== 'number' || !Number.isInteger(intervalMinutes)) return undefined;
   if (intervalMinutes < UPDATE_CHECK_MIN_MINUTES || intervalMinutes > UPDATE_CHECK_MAX_MINUTES) return undefined;
   return { interval_minutes: intervalMinutes };

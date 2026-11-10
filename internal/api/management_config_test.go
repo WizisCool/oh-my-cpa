@@ -24,7 +24,10 @@ type configFixtureCPA struct {
 	configData map[string]any
 	yamlData   string
 	// rejectWrites answers every write the way CPA refuses an invalid document.
-	rejectWrites bool
+	rejectWrites      bool
+	ignoreProxyWrites bool
+	// keepProxyOnRemove answers a proxy removal successfully without applying it.
+	keepProxyOnRemove bool
 	// rejectMessage replaces CPA's explanation when writes are refused.
 	rejectMessage string
 }
@@ -110,6 +113,24 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 	case request.Method == http.MethodPut && path == "/config.yaml":
 		// CPA stores the document in its own rendering.
 		f.yamlData = string(body) + "config-version: 8\n"
+	case request.Method == http.MethodPatch && path == "/config":
+		var patch map[string]any
+		if json.Unmarshal(body, &patch) == nil {
+			if requests, ok := patch["requests"]; ok && !f.ignoreProxyWrites {
+				if f.configData == nil {
+					f.configData = map[string]any{}
+				}
+				f.configData["requests"] = requests
+			}
+		}
+		f.yamlData += "# written\n"
+	case request.Method == http.MethodDelete && path == "/config/requests/proxy-url":
+		if !f.keepProxyOnRemove {
+			if requests, ok := f.configData["requests"].(map[string]any); ok {
+				delete(requests, "proxy-url")
+			}
+		}
+		f.yamlData += "# written\n"
 	default:
 		f.yamlData += "# written\n"
 	}
@@ -121,6 +142,175 @@ func (f *configFixtureCPA) recordedWrites() ([]string, []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.writes...), append([]string(nil), f.bodies...)
+}
+
+func TestOutboundProxySettingsSyncCPA(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
+	endpoint := baseURL + "/omc/api/v1/management/outbound-proxy"
+	response, payload := getJSON(t, client, endpoint)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("read: %d %s", response.StatusCode, payload)
+	}
+	var initial outboundProxyDTO
+	if err := json.Unmarshal(payload, &initial); err != nil || initial.Mode != "environment" || initial.CPARevision == "" || !initial.CPAInSync {
+		t.Fatalf("initial: %s %v", payload, err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"mode": "proxy", "url": "http://fixture-user:fixture-password@proxy.test:8080",
+		"no_proxy": ".internal", "revision": initial.Revision, "cpa_revision": initial.CPARevision,
+	})
+	response, payload = doJSON(t, client, http.MethodPut, endpoint, string(body))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("save: %d %s", response.StatusCode, payload)
+	}
+	if strings.Contains(string(payload), "fixture-user") || strings.Contains(string(payload), "fixture-password") {
+		t.Fatal("proxy credential leaked in DTO")
+	}
+	var saved outboundProxyDTO
+	if err := json.Unmarshal(payload, &saved); err != nil || saved.Mode != "proxy" || !saved.HasCredentials || saved.Revision != 1 {
+		t.Fatalf("saved: %s %v", payload, err)
+	}
+	writes, _ := fixture.recordedWrites()
+	if len(writes) == 0 {
+		t.Fatal("CPA configuration was not updated")
+	}
+	var raw []byte
+	if err := repo.SQL().QueryRow(`SELECT ciphertext FROM outbound_proxy_settings WHERE id=1`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "fixture-password") {
+		t.Fatal("proxy credential was stored in plaintext")
+	}
+	response, _ = doJSON(t, client, http.MethodPut, endpoint, string(body))
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("stale save = %d", response.StatusCode)
+	}
+	fixture.mu.Lock()
+	fixture.configData["requests"] = map[string]any{"proxy-url": "http://external-proxy:8080"}
+	fixture.yamlData += "# changed externally\n"
+	fixture.mu.Unlock()
+	response, payload = getJSON(t, client, endpoint)
+	var drift outboundProxyDTO
+	if response.StatusCode != http.StatusOK || json.Unmarshal(payload, &drift) != nil || drift.CPAInSync {
+		t.Fatalf("external CPA change was not detected: %d %s", response.StatusCode, payload)
+	}
+	for _, mode := range []string{"direct", "environment"} {
+		body, _ = json.Marshal(map[string]any{"mode": mode, "no_proxy": "", "revision": drift.Revision, "cpa_revision": drift.CPARevision})
+		response, payload = doJSON(t, client, http.MethodPut, endpoint, string(body))
+		if response.StatusCode != http.StatusOK || json.Unmarshal(payload, &drift) != nil || !drift.CPAInSync || drift.Mode != mode {
+			t.Fatalf("save %s route: %d %s", mode, response.StatusCode, payload)
+		}
+	}
+}
+
+// The deployment default leaves CPA's own proxy alone: saving it withdraws only a
+// value OMC wrote earlier, so a route the operator set in CPA survives.
+func TestOutboundProxyDefaultRouteKeepsCPAProxy(t *testing.T) {
+	fixture := &configFixtureCPA{configData: map[string]any{
+		"requests": map[string]any{"proxy-url": "http://cpa-own-proxy:8080"},
+	}}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	endpoint := baseURL + "/omc/api/v1/management/outbound-proxy"
+	_, payload := getJSON(t, client, endpoint)
+	var initial outboundProxyDTO
+	if err := json.Unmarshal(payload, &initial); err != nil || initial.Mode != "environment" || initial.Revision != 0 {
+		t.Fatalf("initial: %s %v", payload, err)
+	}
+	body, _ := json.Marshal(map[string]any{"mode": "environment", "no_proxy": "", "revision": 0, "cpa_revision": initial.CPARevision})
+	response, payload := doJSON(t, client, http.MethodPut, endpoint, string(body))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("save default route: %d %s", response.StatusCode, payload)
+	}
+	if writes, _ := fixture.recordedWrites(); len(writes) != 0 {
+		t.Fatalf("the default route wrote CPA: %v", writes)
+	}
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	requests, _ := fixture.configData["requests"].(map[string]any)
+	if requests["proxy-url"] != "http://cpa-own-proxy:8080" {
+		t.Fatalf("CPA's own proxy was changed: %v", fixture.configData["requests"])
+	}
+}
+
+func TestOutboundProxyRefusesUnauditedWrite(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
+	endpoint := baseURL + "/omc/api/v1/management/outbound-proxy"
+	_, payload := getJSON(t, client, endpoint)
+	var initial outboundProxyDTO
+	if err := json.Unmarshal(payload, &initial); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().Exec(`CREATE TRIGGER reject_proxy_audit BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT,'audit unavailable'); END`); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{"mode": "proxy", "url": "http://fixture-user:fixture-password@proxy.test:8080", "no_proxy": "", "revision": 0, "cpa_revision": initial.CPARevision})
+	response, payload := doJSON(t, client, http.MethodPut, endpoint, string(body))
+	if response.StatusCode != http.StatusInternalServerError || strings.Contains(string(payload), "fixture-password") {
+		t.Fatalf("unaudited route: %d %s", response.StatusCode, payload)
+	}
+	writes, _ := fixture.recordedWrites()
+	if len(writes) != 0 {
+		t.Fatal("CPA was changed without audit admission")
+	}
+	var count int
+	if err := repo.SQL().QueryRow(`SELECT COUNT(*) FROM outbound_proxy_settings`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("unaudited route was stored: %d %v", count, err)
+	}
+}
+
+func TestOutboundProxyRefusesUnconfirmedWithdrawal(t *testing.T) {
+	fixture := &configFixtureCPA{keepProxyOnRemove: true}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	endpoint := baseURL + "/omc/api/v1/management/outbound-proxy"
+	_, payload := getJSON(t, client, endpoint)
+	var initial outboundProxyDTO
+	if err := json.Unmarshal(payload, &initial); err != nil {
+		t.Fatal(err)
+	}
+	saved, payload := doJSON(t, client, http.MethodPut, endpoint, mustJSON(map[string]any{
+		"mode": "proxy", "url": "http://fixture-user:fixture-password@proxy.test:8080",
+		"no_proxy": "", "revision": initial.Revision, "cpa_revision": initial.CPARevision,
+	}))
+	if saved.StatusCode != http.StatusOK {
+		t.Fatalf("save proxy: %d %s", saved.StatusCode, payload)
+	}
+	var stored outboundProxyDTO
+	if err := json.Unmarshal(payload, &stored); err != nil {
+		t.Fatal(err)
+	}
+	response, payload := doJSON(t, client, http.MethodPut, endpoint, mustJSON(map[string]any{
+		"mode": "environment", "no_proxy": "", "revision": stored.Revision, "cpa_revision": stored.CPARevision,
+	}))
+	if response.StatusCode != http.StatusConflict || !strings.Contains(string(payload), "outbound_proxy_cpa_mismatch") {
+		t.Fatalf("CPA kept the proxy: %d %s", response.StatusCode, payload)
+	}
+	_, payload = getJSON(t, client, endpoint)
+	var after outboundProxyDTO
+	if err := json.Unmarshal(payload, &after); err != nil || after.Mode != "proxy" || after.Revision != stored.Revision {
+		t.Fatalf("an unconfirmed withdrawal was stored: %s %v", payload, err)
+	}
+}
+
+func TestOutboundProxyRefusesUnconfirmedCPAWrite(t *testing.T) {
+	fixture := &configFixtureCPA{ignoreProxyWrites: true}
+	client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
+	endpoint := baseURL + "/omc/api/v1/management/outbound-proxy"
+	_, payload := getJSON(t, client, endpoint)
+	var initial outboundProxyDTO
+	if err := json.Unmarshal(payload, &initial); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{"mode": "direct", "no_proxy": "", "revision": 0, "cpa_revision": initial.CPARevision})
+	response, payload := doJSON(t, client, http.MethodPut, endpoint, string(body))
+	if response.StatusCode != http.StatusConflict || !strings.Contains(string(payload), "outbound_proxy_cpa_mismatch") {
+		t.Fatalf("unconfirmed CPA route: %d %s", response.StatusCode, payload)
+	}
+	var count int
+	if err := repo.SQL().QueryRow(`SELECT COUNT(*) FROM outbound_proxy_settings`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("unconfirmed route was stored: %d %v", count, err)
+	}
 }
 
 func TestManagementConfigGetRedactsSecrets(t *testing.T) {

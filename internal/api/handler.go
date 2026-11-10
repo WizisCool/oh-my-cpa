@@ -89,6 +89,7 @@ type Handler struct {
 	fontInstaller     *fontasset.GoogleInstaller
 	fontInstallerErr  error
 	fontInstallerOnce sync.Once
+	outboundTransport http.RoundTripper
 	// pluginIdentities remembers installed plugins' store identities and update observations.
 	// Plugins CPA has not loaded borrow their identity from this same snapshot.
 	pluginIdentities *pluginIdentityCache
@@ -166,6 +167,11 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		handler.logger = slog.Default()
 	}
 	return handler
+}
+
+// SetOutboundTransport configures OMC-owned external downloads, not CPA or updater connections.
+func (h *Handler) SetOutboundTransport(transport http.RoundTripper) {
+	h.outboundTransport = transport
 }
 
 func (h *Handler) Router() http.Handler {
@@ -317,6 +323,8 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/routing", h.getRouting)
 				v1.Patch("/management/routing", h.patchRouting)
 				v1.Get("/management/routing/models", h.getRoutingModels)
+				v1.Get("/management/outbound-proxy", h.getOutboundProxy)
+				v1.Put("/management/outbound-proxy", h.putOutboundProxy)
 				v1.Get("/management/config", h.managementConfigGet)
 				v1.Patch("/management/config", h.managementConfigPatch)
 				v1.Put("/management/config/source", h.managementConfigSourcePut)

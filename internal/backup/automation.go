@@ -17,10 +17,14 @@ import (
 	"time"
 
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/outbound"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
 var ErrAutomationConfig = errors.New("automatic backup settings are invalid")
+
+// ErrDestinationProxyUnsupported avoids silently connecting without the selected outbound route.
+var ErrDestinationProxyUnsupported = errors.New("remote backup cannot use the selected network route; change the network setting or destination")
 
 type Automation struct {
 	ID      string `json:"id"`
@@ -185,11 +189,37 @@ func (m *Manager) ConfigureAutomation(ctx context.Context, input Automation) err
 }
 
 func (m *Manager) destination(ctx context.Context, c DestinationConfig) (Destination, error) {
+	proxyURL := ""
+	if m.options.OutboundProxy != nil {
+		settings, err := m.options.OutboundProxy(ctx)
+		if err != nil || outbound.Validate(settings) != nil {
+			return nil, ErrDestinationProxyUnsupported
+		}
+		switch settings.Mode {
+		case outbound.ModeEnvironment:
+		case outbound.ModeProxy:
+			// These rclone backends use its HTTP transport. Its explicit proxy does
+			// not implement NO_PROXY, so exclusions must not be silently ignored.
+			if settings.NoProxy != "" || (c.Provider != "s3" && c.Provider != "webdav" && c.Provider != "drive" && c.Provider != "onedrive") {
+				return nil, ErrDestinationProxyUnsupported
+			}
+			proxyURL = settings.URL
+			ctx = proxyContext(ctx, proxyURL)
+		case outbound.ModeDirect:
+			// These backends dial directly with their own transport; their optional
+			// per-backend proxies are not exposed by OMC's destination options.
+			if c.Provider != "smb" && c.Provider != "sftp" && c.Provider != "ftp" {
+				return nil, ErrDestinationProxyUnsupported
+			}
+		default:
+			return nil, ErrDestinationProxyUnsupported
+		}
+	}
 	factory := m.options.DestinationFactory
 	if factory == nil {
 		factory = newRcloneDestination
 	}
-	return factory(ctx, c, func(values map[string]string) error {
+	destination, err := factory(ctx, c, func(values map[string]string) error {
 		m.automationMu.Lock()
 		defer m.automationMu.Unlock()
 		current, err := m.loadAutomation(ctx)
@@ -204,6 +234,10 @@ func (m *Manager) destination(ctx context.Context, c DestinationConfig) (Destina
 		}
 		return ErrNotFound
 	})
+	if err != nil || proxyURL == "" {
+		return destination, err
+	}
+	return proxyDestination{Destination: destination, proxyURL: proxyURL}, nil
 }
 func (m *Manager) configuredDestination(ctx context.Context, id string) (Destination, error) {
 	value, err := m.Automation(ctx)

@@ -1,8 +1,13 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
+import { databaseBackupErrorKey } from '../src/utils/databaseBackupErrors';
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('reports a refused remote backup route distinctly', () => {
+  expect(databaseBackupErrorKey('database_backup_proxy_unsupported', 'sys.backup_destination_failed')).toBe('sys.backup_error_proxy_unsupported');
+});
 
 it.each(['', '/', '/omc'])('keeps backup transfer and confirmation mount-aware at %s', async (basePath) => {
   const mount = basePath === '/' ? '' : basePath;

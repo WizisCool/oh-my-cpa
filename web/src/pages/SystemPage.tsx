@@ -26,7 +26,7 @@ import {
 } from '../components/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
-import { api, describeError } from '../api/client';
+import { api, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import type { MessageKey } from '../i18n/catalog';
 import { isDemoMode } from '../types/demoMode';
@@ -262,12 +262,22 @@ export const SystemPage: React.FC = () => {
   // The health row states the sidecar's last answer, not the progress the version card keeps drawing
   // while a followed update restarts it, and not a verdict a failed read can no longer certify.
   const updaterVerdict = isUpdaterError ? UPDATER_READ_FAILED : latestUpdater ? UPDATER_VERDICTS[latestUpdater.state] : UPDATER_UNREPORTED;
+
+  /** Start the chosen update and translate actionable proxy configuration failures. */
   const handleApplyUpdate = async (product: ReleaseProduct) => {
     try {
       await applyUpdate(product);
       toast.info(t('sys.update_started', { product: productLabel(product) }));
     } catch (err: unknown) {
-      toast.error(t('sys.update_failed', { product: productLabel(product), msg: describeError(err) }));
+      // Configuration and protocol failures have actionable translations without returning proxy credentials.
+      const code = apiErrorCode(err);
+      const msg = code === 'outbound_proxy_unavailable'
+        ? t('sys.outbound_proxy_unavailable')
+        : code === 'image_pull_proxy_unsupported'
+          ? t('sys.image_pull_proxy_unsupported')
+          : describeError(err);
+
+      toast.error(t('sys.update_failed', { product: productLabel(product), msg }));
     }
   };
 

@@ -76,7 +76,11 @@ func (h *Handler) listFonts(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) googleFonts() (*fontasset.GoogleInstaller, error) {
 	h.fontInstallerOnce.Do(func() {
 		if h.fontInstaller == nil {
-			h.fontInstaller, h.fontInstallerErr = fontasset.NewGoogleInstaller(h.cfg.GoogleFontsURL, http.DefaultTransport)
+			transport := h.outboundTransport
+			if transport == nil {
+				transport = http.DefaultTransport
+			}
+			h.fontInstaller, h.fontInstallerErr = fontasset.NewGoogleInstaller(h.cfg.GoogleFontsURL, transport)
 		}
 	})
 	return h.fontInstaller, h.fontInstallerErr

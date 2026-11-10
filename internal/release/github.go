@@ -138,12 +138,8 @@ type TokenSource func(ctx context.Context) string
 
 // Client reads release feeds from the fixed GitHub API host.
 //
-// The transport is the process default, which honours HTTP_PROXY and HTTPS_PROXY
-// exactly as the pricing sync does. That is a deliberate consistency: both are
-// reads of a public endpoint from a fixed host, and an operator who needs a proxy
-// to reach the internet configures it once. The plugin-logo fetch is the opposite
-// case - it follows a URL an installed plugin chose - and that difference is why
-// it bypasses the proxy.
+// Production supplies the OMC outbound transport; the default constructor retains
+// the process environment route for standalone uses.
 type Client struct {
 	httpClient *http.Client
 	// baseURL exists for tests, which point it at an httptest server. Production
@@ -159,8 +155,8 @@ func NewClient(token TokenSource) *Client {
 	return &Client{httpClient: &http.Client{Timeout: requestTimeout, CheckRedirect: restrictRedirects("")}, token: token}
 }
 
-// NewClientWithTransport returns a client using the supplied transport and base
-// URL. It exists for tests; the production host constant is not reached through it.
+// NewClientWithTransport returns a client using the supplied transport and optional
+// base URL. An empty base URL retains the fixed production host.
 func NewClientWithTransport(transport http.RoundTripper, baseURL string, token TokenSource) *Client {
 	return &Client{httpClient: &http.Client{Timeout: requestTimeout, Transport: transport, CheckRedirect: restrictRedirects(baseURL)}, baseURL: baseURL, token: token}
 }

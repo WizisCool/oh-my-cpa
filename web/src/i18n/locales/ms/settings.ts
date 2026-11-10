@@ -2,6 +2,22 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/settings';
 
 export default {
+  'omc.section_proxy': 'Proksi rangkaian',
+  'omc.proxy_address_desc': 'OMC, CPA dan pengemas kini mesti dapat mencapai alamat ini.',
+  'omc.proxy_cpa_out_of_sync': 'Laluan rangkaian CPA berbeza daripada tetapan ini. Gunakan tetapan untuk menyegerakkannya.',
+  'omc.proxy_mode': 'Laluan keluar',
+  'omc.proxy_environment': 'Persekitaran penggunaan',
+  'omc.proxy_direct': 'Terus',
+  'omc.proxy_custom': 'Proksi',
+  'omc.proxy_address': 'URL proksi',
+  'omc.proxy_exclusions': 'Pengecualian proksi OMC',
+  'omc.proxy_exclusions_desc': 'Destinasi OMC yang sepadan bersambung secara terus.',
+  'omc.proxy_apply': 'Gunakan tetapan rangkaian',
+  'omc.proxy_apply_desc': 'Terpakai pada permintaan OMC tanpa proksi sendiri dan permintaan gerbang CPA.',
+  'omc.proxy_backup_warning': 'Destinasi sandaran jauh yang tidak menyokong laluan yang dipilih akan disekat.',
+  'omc.proxy_saved': 'Tetapan rangkaian disimpan',
+  'omc.proxy_save_failed': 'Tetapan rangkaian gagal disimpan: {msg}',
+  'omc.proxy_load_failed': 'Tetapan rangkaian gagal dimuatkan',
   "omc.timezone_invalid": "Pilih zon waktu IANA yang sah.",
   "omc.timezone": "Zon waktu",
   "omc.timezone_desc": "Digunakan untuk cap masa dan jumlah harian.",
@@ -30,6 +46,7 @@ export default {
   "omc.update_check_minutes": "Setiap {n} min",
   "omc.update_check_hours": "Setiap {n} jam",
   "omc.update_check_invalid": "Selang semakan mestilah antara 15 minit dan 24 jam",
+
   "omc.section_display": "Paparan data",
   "omc.section_appearance": "Rupa",
   "omc.section_sidebar": "Bar sisi",
