@@ -91,7 +91,7 @@ export function ProviderStrip(props: ProviderStripProps) {
         aria-haspopup="dialog"
         data-testid="oauth-provider-switcher"
       />
-      <AppModal open={isOpen} title={t('omc.fleet_providers')} size="small" footer={null} onCancel={() => setIsOpen(false)}>
+      <AppModal open={isOpen} title={t('omc.fleet_providers')} size="small" footer={null} destroyOnHidden onCancel={() => setIsOpen(false)}>
         <ProviderList
           {...props}
           onChange={(provider) => {

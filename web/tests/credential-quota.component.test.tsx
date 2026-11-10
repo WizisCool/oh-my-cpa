@@ -12,6 +12,7 @@ import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { App as AntdApp } from 'antd';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
+import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
 import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
 import { installOmcApi } from './support/omcApi';
@@ -253,6 +254,17 @@ function renderCredentialRow(
 }
 
 describe('credential list row', () => {
+  it('makes credential warnings reachable by keyboard', async () => {
+    renderCredentialRow(quota('warning', []), { fileOverrides: { status_message: 'Credential needs attention' } });
+    const warning = screen.getByTestId('oauth-credential-warning');
+    expect(warning.getAttribute('tabindex')).toBe('0');
+    fireEvent.keyDown(document, { key: 'Tab' });
+    warning.focus();
+    expect(document.activeElement).toBe(warning);
+    await screen.findByRole('tooltip');
+    expect(screen.getByRole('tooltip').textContent).toContain('Credential needs attention');
+  });
+
   it('shows the five-hour and weekly limits in place with reset times, unused window duration, and derived estimate markers', () => {
     const { container } = renderCredentialRow(quota('codex-full', [
       { ...quotaWindow('weekly', 100, 48), reset_accuracy: 'derived' },
@@ -304,6 +316,23 @@ describe('credential list row', () => {
     await waitFor(() => expect(screen.queryByTestId('oauth-credential-name-input')).toBeNull());
     expect(onRename).toHaveBeenCalledTimes(1);
     expect(onRename.mock.calls[0][1]).toBe('Team seat');
+  });
+});
+
+describe('provider navigation', () => {
+  it('clears provider search when the provider list is closed and reopened', async () => {
+    const summaries = Array.from({ length: 8 }, (_, index) => ({ provider: `provider-${index}`, total: 1, attention: 0, disabled: 0 }));
+    renderWithOmc(<ProviderStrip summaries={summaries} total={8} attention={0} active="all" onChange={vi.fn()} onConnect={vi.fn()}
+      reorder={{ isEnabled: true, onMove: vi.fn(), onStep: vi.fn() }} />);
+    fireEvent.click(screen.getByTestId('oauth-provider-switcher'));
+    const search = await screen.findByRole('textbox', { name: 'Find a provider' });
+    fireEvent.change(search, { target: { value: 'provider-1' } });
+    expect(within(screen.getByRole('dialog')).queryByText('All accounts')).toBeNull();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByTestId('oauth-provider-switcher'));
+    expect((await screen.findByRole('textbox', { name: 'Find a provider' }) as HTMLInputElement).value).toBe('');
+    expect(within(screen.getByRole('dialog')).getByText('All accounts')).toBeTruthy();
   });
 });
 

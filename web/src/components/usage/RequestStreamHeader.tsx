@@ -14,9 +14,9 @@ interface RequestStreamHeaderProps {
   handleResizeStart: (colId: RequestColumnId, event: React.PointerEvent<HTMLSpanElement>) => void;
   handleResetColumn: (colId: RequestColumnId) => void;
   handleResizeKeyDown: (colId: RequestColumnId, event: React.KeyboardEvent) => void;
-  /** How the loaded rows stand against the selection. */
   /** Whether a choice is under way, which is when the list has a selection column. */
   isSelecting: boolean;
+  /** How the loaded rows stand against the selection. */
   selectionState: 'none' | 'some' | 'all';
   onToggleAll: (isSelected: boolean) => void;
 }

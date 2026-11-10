@@ -203,7 +203,9 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
         )}
         {(facts.warning || !record.hasUniqueFileName) && (
           <Tooltip title={facts.warning ? summarizeAuthFileStatusMessage(facts.warning) : t('omc.duplicate_file_identity', { name: record.fileName })}>
-            <WarningOutlined className={styles.warning} data-testid="oauth-credential-warning" aria-label={facts.warning ?? t('omc.duplicate_file_identity', { name: record.fileName })} />
+            <span className={styles.warning} tabIndex={0} role="img" data-testid="oauth-credential-warning" aria-label={facts.warning ?? t('omc.duplicate_file_identity', { name: record.fileName })}>
+              <WarningOutlined aria-hidden />
+            </span>
           </Tooltip>
         )}
       </div>
