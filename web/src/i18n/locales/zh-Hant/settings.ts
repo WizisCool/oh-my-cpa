@@ -3,7 +3,7 @@ import type source from '../zh/settings';
 
 export default {
   'omc.section_proxy': '網路代理',
-  'omc.proxy_address_desc': 'OMC、CPA 和更新器都需要能夠存取此位址。',
+  'omc.proxy_address_desc': 'OMC、CPA 和更新器都需要存取此位址。',
   'omc.proxy_cpa_out_of_sync': 'CPA 的網路路徑與目前設定不一致。套用設定以同步。',
   'omc.proxy_mode': '對外連線路徑',
   'omc.proxy_environment': '跟隨部署環境',

@@ -1,6 +1,6 @@
 export default {
   'omc.section_proxy': '网络代理',
-  'omc.proxy_address_desc': 'OMC、CPA 和更新器都需要能够访问此地址。',
+  'omc.proxy_address_desc': 'OMC、CPA 和更新器都需要访问此地址。',
   'omc.proxy_cpa_out_of_sync': 'CPA 的网络路径与当前设置不一致。应用设置以同步。',
   'omc.proxy_mode': '出站路径',
   'omc.proxy_environment': '跟随部署环境',
