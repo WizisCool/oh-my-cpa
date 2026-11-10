@@ -433,6 +433,8 @@ export default {
   'events.cause_request_scoped_hint': 'CPA 将此次失败归于当前请求，可查看响应中的具体原因。',
   'events.cause_stream_truncated': '响应流提前结束',
   'events.cause_stream_truncated_hint': 'CPA 报告此次请求的响应流在完成前已中断。',
+  'events.cause_forced_cooldown': '规则触发凭证冷却',
+  'events.cause_forced_cooldown_hint': '配置的错误规则已使该凭证进入冷却，可查看响应内容了解详情。',
   'events.cause_bad_request': '请求被上游拒绝',
   'events.cause_bad_request_hint': '上游认为请求内容不合规，例如参数有误或上下文过长。具体原因见下方响应。',
   'events.cause_timeout': '上游响应超时',

@@ -283,6 +283,7 @@ func TestFailureClassificationPersistenceAllowlist(t *testing.T) {
 	}{
 		{"request-scoped", true, usage.FailureRequestScoped, usage.FailureRequestScoped},
 		{"stream-truncated", true, usage.FailureStreamTruncated, usage.FailureStreamTruncated},
+		{"forced-cooldown", true, usage.FailureForceCooldown, usage.FailureForceCooldown},
 		{"absent", true, "", ""},
 		{"unknown", true, "future_classification", ""},
 		{"success", false, usage.FailureRequestScoped, ""},
@@ -317,7 +318,7 @@ func TestFailureClassificationPersistenceAllowlist(t *testing.T) {
 func TestFailureDetailSurvivesIngestAndPersistence(t *testing.T) {
 	repo := usageTestRepository(t)
 	raw := `{"request_id":"fixture-failed-1","failed":true,"model":"fixture-model","timestamp":"2026-10-01T00:00:00Z",` +
-		`"fail":{"status_code":502,"code":"stream_truncated","body":"{\"error\":{\"code\":\"server_is_overloaded\"}}"},` +
+		`"fail":{"status_code":502,"code":"force_cooldown","body":"{\"error\":{\"code\":\"server_is_overloaded\"}}"},` +
 		`"response_headers":{"Cf-Ray":["fixture-ray-NRT"],"Set-Cookie":["fixture=1"],"Date":["now"]}}`
 	event, err := usage.DecodeEvent(raw, "default", time.Now())
 	if err != nil {
@@ -345,7 +346,7 @@ func TestFailureDetailSurvivesIngestAndPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get usage event: %v", err)
 	}
-	if detail.FailStatusCode != 502 || detail.FailCode != usage.FailureStreamTruncated || detail.FailBody != `{"error":{"code":"server_is_overloaded"}}` {
+	if detail.FailStatusCode != 502 || detail.FailCode != usage.FailureForceCooldown || detail.FailBody != `{"error":{"code":"server_is_overloaded"}}` {
 		t.Fatalf("stored failure = %d %q", detail.FailStatusCode, detail.FailBody)
 	}
 	// The header snapshot is read by the single-record view alone, already filtered.

@@ -561,7 +561,7 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	now := time.Now().UTC()
 	event := eventFor("overloaded", now.Add(-time.Minute), usage.TokenStats{}, true)
 	event.FailStatusCode = 502
-	event.FailCode = usage.FailureRequestScoped
+	event.FailCode = usage.FailureForceCooldown
 	event.FailBody = `{"error":{"code":"server_is_overloaded"}}`
 	event.ResponseHeaders = `{"cf-ray":"fixture-ray-NRT","set-cookie":"fixture=1"}`
 	event.AccessProvider = "config-inline"
@@ -619,7 +619,7 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	if detail.Event.AccessProvider != "config-inline" || !detail.Event.IsNativeKey {
 		t.Fatalf("detail access = (%q, %v), want (config-inline, true)", detail.Event.AccessProvider, detail.Event.IsNativeKey)
 	}
-	if detail.Event.FailStatusCode != 502 || detail.Event.FailCode != usage.FailureRequestScoped || detail.Event.FailBody != event.FailBody {
+	if detail.Event.FailStatusCode != 502 || detail.Event.FailCode != usage.FailureForceCooldown || detail.Event.FailBody != event.FailBody {
 		t.Fatalf("detail failure = %d %q", detail.Event.FailStatusCode, detail.Event.FailBody)
 	}
 	if len(detail.Event.ResponseHeaders) != 1 || detail.Event.ResponseHeaders[0] != (usage.ResponseHeader{Name: "cf-ray", Value: "fixture-ray-NRT"}) {
@@ -634,6 +634,7 @@ func TestUsageEventDetailFailureClassificationAllowlist(t *testing.T) {
 	}{
 		{usage.FailureRequestScoped, usage.FailureRequestScoped},
 		{usage.FailureStreamTruncated, usage.FailureStreamTruncated},
+		{usage.FailureForceCooldown, usage.FailureForceCooldown},
 		{"", ""},
 		{"future_classification", ""},
 	} {
