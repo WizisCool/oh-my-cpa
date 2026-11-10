@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -509,5 +510,38 @@ func TestClientKeyMasksForPicksNewestNonEmptyMaskPerKey(t *testing.T) {
 	}
 	if _, exists := masks["hmac:never-seen"]; exists {
 		t.Fatalf("unexpected entry for unseen fingerprint: %+v", masks)
+	}
+
+	// More than 64 distinct fingerprints span multiple UNION ALL batches in ClientKeyMasksFor.
+	const bulkCount = 70
+	bulkFingerprints := make([]string, 0, bulkCount)
+	bulkEvents := make([]usage.Event, 0, bulkCount)
+	wantLastMask := ""
+	for i := 0; i < bulkCount; i++ {
+		rawSecret := fmt.Sprintf("sk-bulk-secrets-%04d", i)
+		fp, err := repo.UsageClientKeyFingerprint(rawSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mask := security.MaskSecret(rawSecret)
+		if i == bulkCount-1 {
+			wantLastMask = mask
+		}
+		bulkFingerprints = append(bulkFingerprints, fp)
+		bulkEvents = append(bulkEvents, usage.Event{
+			InstanceID: "default", EventKey: fmt.Sprintf("bulk-%03d", i),
+			APIGroupKey: fp, APIGroupLabel: "api_key", APIKeyMask: mask,
+			TimestampMS: base.Add(time.Duration(i) * time.Second).UnixMilli(),
+		})
+	}
+	if _, err := repo.InsertUsageEvents(ctx, bulkEvents); err != nil {
+		t.Fatal(err)
+	}
+	bulkMasks, err := repo.ClientKeyMasksFor(ctx, "default", bulkFingerprints)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bulkMasks) != bulkCount || wantLastMask == "" || bulkMasks[bulkFingerprints[bulkCount-1]] != wantLastMask {
+		t.Fatalf("bulk masks len=%d last=%q want %q", len(bulkMasks), bulkMasks[bulkFingerprints[bulkCount-1]], wantLastMask)
 	}
 }

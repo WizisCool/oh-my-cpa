@@ -345,8 +345,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		}
 	}
 	if cursor != nil {
-		// The columns must be qualified: the query joins discovered_resources,
-		// which also has an id, and an unqualified name is ambiguous to SQLite.
+		// Qualify columns with the e alias used by usageEventWhere and ORDER BY.
 		//
 		// The row comparison is what makes the tiebreaker correct: comparing the
 		// timestamp alone would skip every row sharing the boundary timestamp,

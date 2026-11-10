@@ -57,11 +57,11 @@ const usageEventMeasures = `
 	latency_ms AS latency_sum_ms, COALESCE(ttft_ms, 0) AS ttft_sum_ms,
 	(ttft_ms IS NOT NULL) AS ttft_count, COALESCE(cost_nanos, 0) AS cost_nanos,
 	(pricing_status = 'priced') AS priced_requests, (cost_nanos IS NOT NULL) AS costed_requests,
-	(COALESCE(json_extract(token_accounting, '$.status'), '') = 'complete') AS canonical_requests,
-	(token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') <> 'complete') AS unresolved_accounting_requests,
-	COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0) AS raw_input_tokens,
-	COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0) AS raw_output_tokens,
-	COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0) AS raw_total_tokens`
+	CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') = 'complete' THEN 1 ELSE 0 END AS canonical_requests,
+	CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') <> 'complete' THEN 1 ELSE 0 END AS unresolved_accounting_requests,
+	CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0) END AS raw_input_tokens,
+	CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0) END AS raw_output_tokens,
+	CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0) END AS raw_total_tokens`
 
 // UsageDimension is one column a usage read can partition or narrow by.
 //
@@ -609,17 +609,7 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	if len(keyColumns) > 0 {
 		keySelect = strings.Join(keyColumns, ", ") + ", "
 	}
-	const eventMeasuresFast = `
-		1 AS requests, failed AS failures, input_tokens, output_tokens, reasoning_tokens,
-		cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
-		latency_ms AS latency_sum_ms, COALESCE(ttft_ms, 0) AS ttft_sum_ms,
-		(ttft_ms IS NOT NULL) AS ttft_count, COALESCE(cost_nanos, 0) AS cost_nanos,
-		(pricing_status = 'priced') AS priced_requests, (cost_nanos IS NOT NULL) AS costed_requests,
-		CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') = 'complete' THEN 1 ELSE 0 END AS canonical_requests,
-		CASE WHEN token_accounting IS NULL THEN 0 WHEN json_extract(token_accounting, '$.status') <> 'complete' THEN 1 ELSE 0 END AS unresolved_accounting_requests,
-		CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0) END AS raw_input_tokens,
-		CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0) END AS raw_output_tokens,
-		CASE WHEN token_accounting IS NULL THEN 0 ELSE COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0) END AS raw_total_tokens`
+
 	filterClause, filterArgs := usageFilterClause(query.Filters)
 	withFilters := func(args ...any) []any { return append(args, filterArgs...) }
 
@@ -641,7 +631,7 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	// every retained record.
 	eventArm := func(index, predicate string, predicateArgs ...any) {
 		parts = append(parts, `
-			SELECT 0 AS from_facts, `+keySelect+aligned("timestamp_ms")+` AS aligned, `+eventMeasuresFast+`
+			SELECT 0 AS from_facts, `+keySelect+aligned("timestamp_ms")+` AS aligned, `+usageEventMeasures+`
 			FROM usage_events INDEXED BY `+index+`
 			WHERE instance_id = ? AND `+predicate+filterClause)
 		args = append(args, withFilters(append([]any{query.InstanceID}, predicateArgs...)...)...)
@@ -651,14 +641,14 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	if plan.fineFrom < plan.fineTo && plan.localFrom < plan.localTo {
 		factArm(usageFactsFineTable, plan.fineFrom, plan.localFrom)
 		factArm(usageFactsFineTable, plan.localTo, plan.fineTo)
-		// When the local-day grain is complete for this zone, read whole local days
-		// directly from usage_facts_local_daily (already one row per local day and
-		// dimension tuple) without also scanning the 96x larger quarter-hour table.
-		// Keep both the EXISTS arm and a NOT EXISTS fallback inside the same SQL
-		// snapshot so a concurrent timezone rebuild that swaps markers mid-flight
-		// still reads a complete partition; NOT EXISTS short-circuits before
-		// touching usage_facts_15m whenever the marker row is present.
+		// When the local-day grain was already marked complete, include both the
+		// EXISTS local arm and a NOT EXISTS fine fallback in the same snapshot so a
+		// concurrent timezone rebuild still reads a complete partition while NOT EXISTS
+		// short-circuits when the marker holds. When the pre-check found no marker,
+		// read the fine table unconditionally so a marker committed between the
+		// pre-check and this snapshot cannot silence both arms.
 		const marker = ` AND EXISTS (SELECT 1 FROM usage_aggregation_checkpoints WHERE name = ?)`
+		fallbackGuard := ""
 		if hasLocalMarker {
 			parts = append(parts, `
 			SELECT 1 AS from_facts, `+keySelect+grid.bucketFromWall("day_wall_ms")+` AS aligned, `+strings.Join(usageFactMeasures, ", ")+`
@@ -666,13 +656,16 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 			WHERE instance_id = ? AND zone = ? AND day_wall_ms >= ? AND day_wall_ms < ?`+filterClause+marker)
 			args = append(args, withFilters(query.InstanceID, grid.location.String(), plan.wallFrom, plan.wallTo)...)
 			args = append(args, plan.localMarker)
+			fallbackGuard = ` AND NOT` + strings.TrimPrefix(marker, " AND")
 		}
 		parts = append(parts, `
 			SELECT 1 AS from_facts, `+keySelect+aligned("bucket_start_ms")+` AS aligned, `+strings.Join(usageFactMeasures, ", ")+`
 			FROM `+usageFactsFineTable+`
-			WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`+filterClause+` AND NOT`+strings.TrimPrefix(marker, " AND"))
+			WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`+filterClause+fallbackGuard)
 		args = append(args, withFilters(query.InstanceID, plan.localFrom, plan.localTo)...)
-		args = append(args, plan.localMarker)
+		if hasLocalMarker {
+			args = append(args, plan.localMarker)
+		}
 	} else if plan.fineFrom < plan.fineTo {
 		factArm(usageFactsDailyTable, plan.dailyFrom, plan.dailyTo)
 		factArm(usageFactsFineTable, plan.fineFrom, plan.dailyFrom)

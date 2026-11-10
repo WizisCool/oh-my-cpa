@@ -55,6 +55,7 @@ import {
   type DashboardRange,
   type DashboardResponse,
   type DashboardSeriesPoint,
+  type DashboardTailResponse,
 } from '../types/dashboard';
 import {
   DASHBOARD_LAYOUT_PREFERENCE,
@@ -236,6 +237,7 @@ export const DashboardPage: React.FC = () => {
     isBusyRef: tailBusyRef,
   });
 
+  const [lastTail, setLastTail] = React.useState<{ query: string; tail: DashboardTailResponse } | null>(null);
   const { data: tail, isFetching: isTailFetching } = useQuery({
     queryKey: ['dashboard-tail', query, tailRevision],
     queryFn: () => api.getDashboardTail(query),
@@ -243,6 +245,8 @@ export const DashboardPage: React.FC = () => {
     // window held by keepPreviousData — patching a new tail onto it would mix
     // two windows on screen.
     enabled: tailEnabled,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === query ? previousData : undefined,
     // Keep the bucket-paced interval so sliding "now" windows advance across
     // quiet periods, while `tailRevision` wakes immediately on pushed SSE usage.
     refetchInterval: full ? livePollInterval(full.window.bucket_ms) : false,
@@ -251,12 +255,20 @@ export const DashboardPage: React.FC = () => {
     meta: { silent: true },
     staleTime: 0,
   });
-  tailBusyRef.current = isTailFetching;
   React.useEffect(() => {
+    if (tail) {
+      setLastTail((prev) => (prev?.query === query && prev.tail === tail ? prev : { query, tail }));
+    } else {
+      setLastTail((prev) => (prev && prev.query !== query ? null : prev));
+    }
+  }, [query, tail]);
+  React.useEffect(() => {
+    tailBusyRef.current = isTailFetching;
     if (!isTailFetching) notifyTailSettled();
   }, [isTailFetching, notifyTailSettled]);
 
-  const merged = React.useMemo(() => (full ? applyTail(full, tail) : undefined), [full, tail]);
+  const effectiveTail = tail ?? (lastTail?.query === query ? lastTail.tail : undefined);
+  const merged = React.useMemo(() => (full ? applyTail(full, effectiveTail) : undefined), [full, effectiveTail]);
   const data = merged?.data;
   // Bucket width in minutes. Rates are per minute, so this is what turns a
   // bucket's volume into the rate its tile names.

@@ -237,6 +237,71 @@ func TestInsightsCubeCarriesEveryDimensionWithoutKeys(t *testing.T) {
 	}
 }
 
+func TestInsightsCubeFoldsDailyFactsIntoCalendarMonths(t *testing.T) {
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 21, 14, 30, 0, 0, shanghai)
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+	repo.Timezone().Apply(shanghai)
+
+	mkEvent := func(id string, at time.Time, tokens int64) repository.UsageDecoded {
+		ev := eventFor(id, at, usage.TokenStats{InputTokens: tokens / 2, OutputTokens: tokens / 2, TotalTokens: tokens}, false)
+		ev.APIGroupKey, ev.Model, ev.APIKeyMask = "sk-alpha-secret-0001", "gpt-5", security.MaskSecret("sk-alpha-secret-0001")
+		return repository.UsageDecoded{Event: ev}
+	}
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		mkEvent("aug-1", time.Date(2026, 8, 5, 10, 0, 0, 0, shanghai), 100),
+		mkEvent("sep-1", time.Date(2026, 9, 3, 11, 0, 0, 0, shanghai), 200),
+		mkEvent("sep-2", time.Date(2026, 9, 28, 16, 0, 0, 0, shanghai), 300),
+		mkEvent("oct-1", time.Date(2026, 10, 2, 9, 0, 0, 0, shanghai), 400),
+		mkEvent("oct-2", time.Date(2026, 10, 12, 18, 0, 0, 0, shanghai), 500),
+		mkEvent("oct-3", time.Date(2026, 10, 21, 8, 0, 0, 0, shanghai), 600),
+	})
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.EnsureLocalUsageFacts(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	fromMS := time.Date(2026, 8, 1, 0, 0, 0, 0, shanghai).UnixMilli()
+	toMS := now.UnixMilli()
+	urlStr := baseURL + "/omc/api/v1/management/insights/cube?bucket=month&from=" +
+		jsonNumber(fromMS) + "&to=" + jsonNumber(toMS)
+	response, payload := getJSON(t, client, urlStr)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status %d: %s", response.StatusCode, payload)
+	}
+	var body insightsCubeResponse
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Window.Bucket != insightsBucketMonth || len(body.BucketStarts) != 3 {
+		t.Fatalf("window=%+v bucket_starts=%v", body.Window, body.BucketStarts)
+	}
+	col := map[string]int{}
+	for idx, name := range body.Columns {
+		col[name] = idx
+	}
+	requestsByBucket := make([]int64, len(body.BucketStarts))
+	for _, row := range body.Rows {
+		requestsByBucket[row[col["bucket"]]] += row[col["requests"]]
+	}
+	want := []int64{1, 2, 3}
+	if !reflect.DeepEqual(requestsByBucket, want) {
+		t.Fatalf("requests per month bucket = %v, want %v", requestsByBucket, want)
+	}
+}
+
+func jsonNumber(v int64) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
 func BenchmarkInsightsCubeHandler(b *testing.B) {
 	ctx := context.Background()
 	shanghai, err := time.LoadLocation("Asia/Shanghai")
