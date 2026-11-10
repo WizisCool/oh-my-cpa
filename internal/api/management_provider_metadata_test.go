@@ -134,6 +134,7 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 	for _, key := range []string{
 		repository.PreferenceProviderNames,
 		repository.PreferenceProviderWebsites,
+		repository.PreferenceProviderTestModels,
 		repository.PreferenceProviderIcons,
 		repository.PreferenceProviderOrder,
 	} {
@@ -172,6 +173,7 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 	for _, key := range []string{
 		repository.PreferenceProviderNames,
 		repository.PreferenceProviderWebsites,
+		repository.PreferenceProviderTestModels,
 		repository.PreferenceProviderIcons,
 		repository.PreferenceProviderOrder,
 	} {

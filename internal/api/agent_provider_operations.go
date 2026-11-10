@@ -148,7 +148,7 @@ func (h *Handler) bindProviderOperations(service *operations.Service) {
 		if err := check(id, revision)(ctx); err != nil {
 			return err
 		}
-		return h.applyProviderMetadata(ctx, id, name, "", false)
+		return h.applyProviderMetadata(ctx, id, name, "", false, nil)
 	}
 }
 func mapAgentProviderError(err error) error {

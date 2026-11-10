@@ -58,7 +58,7 @@ func (h *Handler) moveProviderFamily(ctx context.Context, client *management.Cli
 		},
 		func(*struct{}) error { return nil },
 		func(ctx context.Context, _ struct{}) error {
-			return h.moveProviderMetadata(ctx, id, ids, strings.TrimSpace(req.Name), website, isWebsiteProvided)
+			return h.moveProviderMetadata(ctx, id, ids, strings.TrimSpace(req.Name), website, isWebsiteProvided, req.TestModel)
 		})
 	if err != nil {
 		h.notifyPricingAfterPartialCommit(err)

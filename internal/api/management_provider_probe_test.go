@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type probeCapture struct {
@@ -205,6 +206,77 @@ func TestProbeProviderRedactsTheKeyFromFailures(t *testing.T) {
 	}
 	if payload, _ := json.Marshal(decoded); strings.Contains(string(payload), "sk-probe-secret-9") {
 		t.Fatalf("probe failure leaked the key: %v", decoded)
+	}
+}
+
+func TestProbeProviderReportsLongRedactedErrors(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	message := strings.Repeat("details ", 80) + " end-of-message sk-probe-secret-9"
+	body, err := json.Marshal(map[string]any{"error": map[string]string{"message": message}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream, _ := startProbeUpstream(t, http.StatusBadRequest, string(body))
+	_, decoded := postProbe(t, fixture, `{"family":"codex","base_url":"`+upstream.URL+`","api_key":"sk-probe-secret-9","model":"m"}`)
+	reason, _ := decoded["error"].(string)
+	if !strings.Contains(reason, "end-of-message") || strings.Contains(reason, "sk-probe-secret-9") {
+		t.Fatalf("probe error was truncated or leaked a secret: %q", reason)
+	}
+}
+
+func TestProbeProviderRedactsEscapedJSONSecrets(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	body := `{"error":{"message":"` + strings.Repeat("details ", 50) + `sk\u002dprobe\u002dsecret\u002d9"}}`
+	upstream, _ := startProbeUpstream(t, http.StatusBadRequest, body)
+	_, decoded := postProbe(t, fixture, `{"family":"codex","base_url":"`+upstream.URL+`","api_key":"sk-probe-secret-9","model":"m"}`)
+	reason, _ := decoded["error"].(string)
+	if strings.Contains(reason, `\u002d`) || strings.Contains(reason, "sk-probe-secret-9") || !strings.Contains(reason, "[redacted]") {
+		t.Fatalf("escaped secret was not redacted: %q", reason)
+	}
+}
+
+func TestProbeProviderReturnsBeforeReadingSuccessfulBody(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer upstream.Close()
+	done := make(chan bool, 1)
+	go func() {
+		resp, err := fixture.client.Post(fixture.baseURL+providersEndpoint+"/probe", "application/json", strings.NewReader(`{"family":"codex","base_url":"`+upstream.URL+`","api_key":"fixture-key","model":"m"}`))
+		if err != nil {
+			done <- false
+			return
+		}
+		defer resp.Body.Close()
+		var result map[string]any
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		done <- err == nil && resp.StatusCode == http.StatusOK && result["ok"] == true
+	}()
+	select {
+	case ok := <-done:
+		close(release)
+		if !ok {
+			t.Fatal("probe did not return success")
+		}
+	case <-time.After(2 * time.Second):
+		close(release)
+		<-done
+		t.Fatal("successful probe waited for the upstream body")
+	}
+}
+
+func TestProbeProviderDoesNotExposePartialOversizedErrors(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	body := strings.Repeat("x", probeMaxErrorSnippet-4) + "sk-probe-secret-9"
+	upstream, _ := startProbeUpstream(t, http.StatusBadRequest, body)
+	_, decoded := postProbe(t, fixture, `{"family":"codex","base_url":"`+upstream.URL+`","api_key":"sk-probe-secret-9","model":"m"}`)
+	reason, _ := decoded["error"].(string)
+	if strings.Contains(reason, "xxxx") || !strings.Contains(reason, "too large") {
+		t.Fatalf("oversized response was not withheld: %q", reason)
 	}
 }
 

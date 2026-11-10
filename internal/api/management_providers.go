@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
 type ProviderKeyEntryDTO struct {
@@ -75,7 +76,8 @@ type ProviderItemDTO struct {
 	// stored beside the display name and joined on the same positional id. Only an
 	// absolute http/https URL is ever reported, because the list renders it as a
 	// link.
-	Website string `json:"website,omitempty"`
+	Website   string `json:"website,omitempty"`
+	TestModel string `json:"test_model,omitempty"`
 }
 
 // providerConfigFamilySpec describes one of CPA's config API-key credential
@@ -278,6 +280,7 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 	items := make([]ProviderItemDTO, 0)
 	customNames := h.loadProviderNames(ctx)
 	customWebsites := h.loadProviderWebsites(ctx)
+	testModels, _ := h.loadStringPreference(ctx, repository.PreferenceProviderTestModels)
 
 	// Each family is independent and needs two upstream reads. Read them alongside
 	// the compatibility list, then join by registry position so gateway latency
@@ -408,12 +411,9 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 
 	// Websites are management metadata keyed by the same positional id the names
 	// use, so they are attached once here rather than in each family branch.
-	if len(customWebsites) > 0 {
-		for index := range items {
-			if website := customWebsites[items[index].ID]; website != "" {
-				items[index].Website = website
-			}
-		}
+	for index := range items {
+		items[index].Website = customWebsites[items[index].ID]
+		items[index].TestModel = testModels[items[index].ID]
 	}
 
 	return items

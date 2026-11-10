@@ -21,6 +21,7 @@ const (
 	PreferenceProviderIcons       = "provider_icons"
 	PreferenceProviderNames       = "provider_names"
 	PreferenceProviderWebsites    = "provider_websites"
+	PreferenceProviderTestModels  = "provider_test_models"
 	PreferenceUsageEventsView     = "usage_events_view"
 	PreferenceUsageEventsColumns  = "usage_events_columns"
 	PreferenceOAuthManagementView = "oauth_management_view_v1"

@@ -151,6 +151,7 @@ export interface ProviderItem {
    *  field, so it is stored beside the display name and always an absolute
    *  http/https URL or absent. */
   website?: string;
+  test_model?: string;
   prefix?: string;
   priority?: number;
   disable_cooling?: boolean;
@@ -206,6 +207,8 @@ export interface SaveProviderPayload {
   disabled?: boolean;
   /** Absent leaves the stored website alone; an empty string clears it. */
   website?: string;
+  /** Absent preserves the saved choice; empty selects automatic. */
+  test_model?: string;
   /** Authoritative for cooling, retry and error rules when present; `disable_cooling` is then ignored. */
   runtime_policy?: ProviderRuntimePolicy;
   /** Sets only the switches it names. */

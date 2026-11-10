@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api, ApiError, apiErrorCode, isRetryableWriteFailure, describeError } from '../../api/client';
+import { api, apiErrorCode, isRetryableWriteFailure, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { Toast } from '../feedback';
 import { useLastIntentQueue, LastIntentTimeoutError } from '../../hooks/useLastIntentQueue';
@@ -323,7 +323,7 @@ export function useProviderManagement({
   // the drawer's test choice, falling back to its first configured model.
   const resolveTestModel = (): string => {
     const trimmedTestModel = formTestModel.trim();
-    if (trimmedTestModel !== '' && trimmedTestModel !== 'auto') return trimmedTestModel;
+    if (trimmedTestModel !== '' && trimmedTestModel !== 'auto' && formModels.some((item) => item.name.trim() === trimmedTestModel)) return trimmedTestModel;
     return formModels.map((item) => item.name.trim()).find((name) => name !== '') ?? '';
   };
 
@@ -366,7 +366,7 @@ export function useProviderManagement({
       return;
     }
     if (result.error) {
-      toast.error(result.error instanceof ApiError ? result.error.message : String(result.error));
+      toast.error(t('pro.test_key_failed'), { detail: describeError(result.error), isPersistent: true });
     }
   };
 
@@ -400,7 +400,7 @@ export function useProviderManagement({
       return;
     }
     const firstError = failed[0]?.error;
-    toast.error(describeError(firstError) || t('pro.test_key_failed'));
+    toast.error(t('pro.test_key_failed'), { detail: describeError(firstError), isPersistent: true });
   };
 
   const handleCloseProviderDrawer = () => {
@@ -656,7 +656,7 @@ export function useProviderManagement({
     setPolicySectionOpen(false);
     setIsPolicyChecked(false);
 
-    setFormTestModel('auto');
+    setFormTestModel(provider.test_model || 'auto');
     const existingIcon = resolveProviderPickerIcon(provider, { providerIcons });
     setFormIcon(existingIcon);
     setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
@@ -824,6 +824,7 @@ export function useProviderManagement({
       name: formName.trim() || 'Custom Provider',
       base_url: formBaseURL.trim(),
       website: formWebsite.trim(),
+      test_model: formTestModel === 'auto' || !formModels.some((model) => model.name.trim() === formTestModel) ? '' : formTestModel,
       prefix: formPrefix.trim(),
       priority: formPriority != null ? formPriority : undefined,
       runtime_policy: buildRuntimePolicy(formPolicy, supportsErrorRules),

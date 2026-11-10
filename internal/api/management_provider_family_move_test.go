@@ -101,7 +101,7 @@ func TestProviderProtocolChangePreservesEveryKeyAndMovesMetadata(t *testing.T) {
 	state.oaiProviders[0]["api-keys"] = []string{"first-move-key", "second-move-key"}
 	state.oaiProviders = append(state.oaiProviders, map[string]any{"name": "next", "base-url": "https://next.example.test", "api-keys": []string{"next-key"}})
 	state.mu.Unlock()
-	for _, key := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons, repository.PreferenceProviderOrder} {
+	for _, key := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderTestModels, repository.PreferenceProviderIcons, repository.PreferenceProviderOrder} {
 		if err := fixture.handler.repo.PutPreference(ctx, key, `{"openai-compat-0":"original","openai-compat-1":"neighbour","codex-0":"untouched"}`); err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +110,7 @@ func TestProviderProtocolChangePreservesEveryKeyAndMovesMetadata(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status %d: %s", resp.StatusCode, payload)
 	}
-	for _, key := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons, repository.PreferenceProviderOrder} {
+	for _, key := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderTestModels, repository.PreferenceProviderIcons, repository.PreferenceProviderOrder} {
 		raw, _, err := fixture.handler.repo.GetPreference(ctx, key)
 		if err != nil {
 			t.Fatal(err)

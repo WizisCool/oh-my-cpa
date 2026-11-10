@@ -88,7 +88,7 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 		_, err := h.appendOpenAICompatibilityGated(ctx, client, newEntry, func(ctx context.Context, entries []management.OpenAICompatibility) error {
 			targetID := fmt.Sprintf("%s%d", openAICompatIDPrefix, len(entries)-1)
 			createdID = targetID
-			return h.applyProviderMetadata(ctx, targetID, name, website, websiteProvided)
+			return h.applyProviderMetadata(ctx, targetID, name, website, websiteProvided, req.TestModel)
 		})
 		if err != nil {
 			h.notifyPricingAfterPartialCommit(err)
@@ -116,7 +116,7 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 				createdIDs = append(createdIDs, fmt.Sprintf("%s%d", spec.IDPrefix, position))
 			}
 			createdID = createdIDs[0]
-			return h.applyProviderMetadataForIDs(ctx, "", createdIDs, name, website, websiteProvided)
+			return h.applyProviderMetadataForIDs(ctx, "", createdIDs, name, website, websiteProvided, req.TestModel)
 		})
 		if err != nil {
 			h.notifyPricingAfterPartialCommit(err)
@@ -261,7 +261,7 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 				return nil
 			},
 			func(ctx context.Context, _ []management.OpenAICompatibility) error {
-				return h.applyProviderMetadata(ctx, id, name, website, websiteProvided)
+				return h.applyProviderMetadata(ctx, id, name, website, websiteProvided, req.TestModel)
 			}); err != nil {
 			h.notifyPricingAfterPartialCommit(err)
 			_ = audit("provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
@@ -285,9 +285,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 				updatedIDs = append(updatedIDs, fmt.Sprintf("%s%d", spec.IDPrefix, position))
 			}
 			if len(updatedIDs) == 1 {
-				return h.applyProviderMetadata(ctx, id, name, website, websiteProvided)
+				return h.applyProviderMetadata(ctx, id, name, website, websiteProvided, req.TestModel)
 			}
-			return h.applyProviderMetadataForIDs(ctx, id, updatedIDs, name, website, websiteProvided)
+			return h.applyProviderMetadataForIDs(ctx, id, updatedIDs, name, website, websiteProvided, req.TestModel)
 		}); err != nil {
 			h.notifyPricingAfterPartialCommit(err)
 			_ = audit("provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})

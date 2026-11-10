@@ -467,6 +467,7 @@ a { color: inherit; }
 .omc-toast .ant-notification-notice-title { font-size: var(--text-base); line-height: 1.5; color: var(--fg); }
 .omc-toast .ant-notification-notice-description { color: var(--fg-2); overflow-wrap: anywhere; }
 .omc-toast-detail { margin-bottom: 6px; }
+.omc-toast .ant-notification-notice-description { max-height: min(320px, 50vh); overflow-y: auto; }
 /* A report's per-target list scrolls inside the toast, so forty failures cannot push it past the
    viewport. */
 .omc-toast-report {
