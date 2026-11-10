@@ -72,10 +72,16 @@ func newProxyRegistry(t *testing.T) *proxyRegistryFixture {
 			t.Fatal(err)
 		}
 
-		image, err = mutate.ConfigFile(image, &v1.ConfigFile{
-			OS: "linux", Architecture: arch,
-			Config: v1.Config{Env: []string{"PATH=/bin"}, Labels: map[string]string{"org.opencontainers.image.version": "v1.1.0"}},
-		})
+		// Keep the layer diff IDs while setting platform metadata, as a real runnable image does.
+		config, err := image.ConfigFile()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		config.OS, config.Architecture = "linux", arch
+		config.Config.Env = []string{"PATH=/bin"}
+		config.Config.Labels = map[string]string{"org.opencontainers.image.version": "v1.1.0"}
+		image, err = mutate.ConfigFile(image, config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,9 +158,11 @@ func TestProxyImageUpdates(t *testing.T) {
 		proxyHost    string
 
 		isProxyNetworkAttached bool
+		isContainerdStore      bool
 	}{
 		{name: "amd64", arch: "amd64"},
 		{name: "arm64", arch: "arm64"},
+		{name: "containerd image store", arch: "amd64", isContainerdStore: true},
 		{name: "CPA tag", arch: "amd64", product: ProductCPA},
 		{name: "rollback", arch: "amd64", crash: true},
 		{name: "import error after HTTP 200", arch: "amd64", loadErr: "proxy-user proxy-password import failed"},
@@ -179,6 +187,7 @@ func TestProxyImageUpdates(t *testing.T) {
 
 			stack.daemon.arch = testCase.arch
 			stack.daemon.loadError = testCase.loadErr
+			stack.daemon.isContainerdStore = testCase.isContainerdStore
 			proxyURL := registry.proxyURL
 			if testCase.isStandalone {
 				proxyHost := testCase.proxyHost
@@ -241,6 +250,15 @@ func TestProxyImageUpdates(t *testing.T) {
 
 			job := awaitJob(t, stack.service)
 
+			// Store identity is opaque to the caller; the containerd case must differ from the config hash.
+			expectedImageID := imageID.String()
+			if testCase.isContainerdStore {
+				expectedImageID = stack.daemon.loadedImageID
+				if expectedImageID == imageID.String() {
+					t.Fatal("the containerd fixture must distinguish manifest and config identities")
+				}
+			}
+
 			if testCase.isStandalone {
 				self := stack.daemon.named(SIDECAR_NAME)
 				_, attached := self.Networks["stack"]
@@ -268,7 +286,7 @@ func TestProxyImageUpdates(t *testing.T) {
 					t.Fatalf("failed replacement did not restore the old image: %+v", job)
 				}
 			default:
-				if job.Stage != StageDone || current.ImageID != imageID.String() {
+				if job.Stage != StageDone || current.ImageID != expectedImageID {
 					t.Fatalf("image update = %+v, running image = %s", job, current.ImageID)
 				}
 			}
@@ -282,6 +300,56 @@ func TestProxyImageUpdates(t *testing.T) {
 				if strings.Contains(job.Error, secret) || strings.Contains(logs.String(), secret) {
 					t.Fatal("proxy credentials escaped into the job or logs")
 				}
+			}
+		})
+	}
+}
+
+// TestImageImportUsesReportedIdentity requires a valid daemon identity and checks errors after it is reported.
+func TestImageImportUsesReportedIdentity(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		stream  string
+		wantID  string
+		wantErr bool
+	}{
+		{
+			name: "reported image ID",
+			stream: `{"status":"Loading"}` + "\n" +
+				`{"stream":"Loaded image ID: ` + TEST_DIGEST + `\n"}` + "\n",
+			wantID: TEST_DIGEST,
+		},
+		{
+			name: "error after identity",
+			stream: `{"stream":"Loaded image ID: ` + TEST_DIGEST + `\n"}` + "\n" +
+				`{"error":"unpack failed"}` + "\n",
+			wantErr: true,
+		},
+		{name: "missing identity", stream: `{"status":"Loading"}` + "\n", wantErr: true},
+		{name: "invalid identity", stream: `{"stream":"Loaded image ID: invalid\n"}` + "\n", wantErr: true},
+		{
+			name: "truncated result after identity",
+			stream: `{"stream":"Loaded image ID: ` + TEST_DIGEST + `\n"}` + "\n" +
+				`{"stream":`,
+			wantErr: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			engine := &Engine{
+				apiVersion: MAX_API_VERSION,
+				httpClient: &http.Client{Transport: updaterTransport(func(request *http.Request) (*http.Response, error) {
+					_, _ = io.Copy(io.Discard, request.Body)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(testCase.stream)),
+					}, nil
+				})},
+			}
+
+			// An ID is usable only when the entire load response succeeds, including trailing progress messages.
+			imageID, err := engine.loadImageArchive(context.Background(), strings.NewReader("image archive"))
+			if (err != nil) != testCase.wantErr || imageID != testCase.wantID {
+				t.Fatalf("loaded image ID = %q, error = %v", imageID, err)
 			}
 		})
 	}

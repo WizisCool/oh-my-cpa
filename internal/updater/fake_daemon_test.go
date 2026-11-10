@@ -47,6 +47,10 @@ type fakeDaemon struct {
 	pulls     int
 	loads     int
 	loadError string
+
+	// Containerd stores resolve loaded images by manifest identity rather than configuration identity.
+	isContainerdStore bool
+	loadedImageID     string
 }
 
 type fakeImage struct {
@@ -322,6 +326,10 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 		}
 
 		imageID, err := image.ConfigName()
+		if d.isContainerdStore {
+			imageID, err = image.Digest()
+		}
+
 		if err != nil {
 			reply(http.StatusOK, map[string]string{"error": err.Error()})
 			return
@@ -337,6 +345,7 @@ func (d *fakeDaemon) ServeHTTP(writer http.ResponseWriter, request *http.Request
 		var fields map[string]any
 		_ = json.Unmarshal(encoded, &fields)
 		d.images[imageID.String()] = fakeImage{ID: imageID.String(), Config: fields}
+		d.loadedImageID = imageID.String()
 		reply(http.StatusOK, map[string]string{"stream": "Loaded image ID: " + imageID.String()})
 	case path == "/containers/json":
 		if d.unavailableList {

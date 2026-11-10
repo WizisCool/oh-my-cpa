@@ -101,11 +101,6 @@ func (e *Engine) PullImageThroughProxy(ctx context.Context, reference, proxyURL 
 		return "", errors.New("the downloaded image does not match the Docker daemon's platform")
 	}
 
-	imageID, err := image.ConfigName()
-	if err != nil {
-		return "", fmt.Errorf("read the image identity: %w", err)
-	}
-
 	// Stream to the daemon without buffering the image in memory or requiring a writable filesystem.
 	reader, writer := io.Pipe()
 	finished := make(chan error, 1)
@@ -115,7 +110,7 @@ func (e *Engine) PullImageThroughProxy(ctx context.Context, reference, proxyURL 
 		finished <- err
 	}()
 
-	loadErr := e.loadImageArchive(ctx, reader)
+	imageID, loadErr := e.loadImageArchive(ctx, reader)
 	cancel()
 	_ = reader.CloseWithError(loadErr)
 	downloadErr := <-finished
@@ -127,32 +122,55 @@ func (e *Engine) PullImageThroughProxy(ctx context.Context, reference, proxyURL 
 		return "", fmt.Errorf("download the image layers: %w", downloadErr)
 	}
 
-	return imageID.String(), nil
+	return imageID, nil
 }
 
-// loadImageArchive checks the entire progress stream because Docker can report failures after HTTP 200.
-func (e *Engine) loadImageArchive(ctx context.Context, archive io.Reader) error {
+// loadImageArchive returns Docker's image identity after checking the complete import progress stream.
+func (e *Engine) loadImageArchive(ctx context.Context, archive io.Reader) (string, error) {
 	response, err := e.do(ctx, http.MethodPost, "/images/load", nil, archive)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer response.Body.Close()
 
 	// A layer can already be imported when a later layer fails; no container is replaced until EOF.
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	imageID := ""
+
 	for scanner.Scan() {
 		var progress struct {
-			Error string `json:"error"`
+			Error  string `json:"error"`
+			Stream string `json:"stream"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &progress); err != nil {
-			return fmt.Errorf("read the image import result: %w", err)
+			return "", fmt.Errorf("read the image import result: %w", err)
 		}
 
 		if progress.Error != "" {
-			return errors.New(progress.Error)
+			return "", errors.New(progress.Error)
+		}
+
+		// Classic and containerd stores report different IDs; use the daemon's identifier for tagging and inspection.
+		for line := range strings.SplitSeq(progress.Stream, "\n") {
+			if reported, ok := strings.CutPrefix(strings.TrimSpace(line), "Loaded image ID: "); ok {
+				id, err := v1.NewHash(strings.TrimSpace(reported))
+				if err != nil {
+					return "", errors.New("the Docker daemon reported an invalid loaded image ID")
+				}
+
+				imageID = id.String()
+			}
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	if imageID == "" {
+		return "", errors.New("the Docker daemon did not report the loaded image ID")
+	}
+
+	return imageID, nil
 }

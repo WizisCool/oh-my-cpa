@@ -257,8 +257,10 @@ Security boundary:
 - The token is an HMAC of `OMCPA_MASTER_KEY`. Neither container stores it, and it is
   not logged. Changing the master key needs no step here: the updater reads the
   console's current value from Docker.
-- The updater accepts a product name only. It never takes an image, a container name or
-  a command from the console. It identifies the two products from Docker state and
+- The updater accepts a product name and an optional proxy URL read from CPA's
+  configuration. It validates the proxy's protocol and address before downloading.
+  It never takes an image, a container name or a command from the console.
+  It identifies the two products from Docker state and
   refuses to upgrade an image pinned to a version tag or digest. Replacing a namespace
   owner also recreates its running `network_mode: container:<owner>` dependents, even
   across Compose projects; stopped containers are left alone.
