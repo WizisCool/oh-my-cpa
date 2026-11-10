@@ -74,11 +74,13 @@ export function useServiceLogTail(enabled: boolean): ServiceLogTail {
       lastSeq.current = page.latest_seq ?? lastSeq.current;
       setMeta({ capacity: page.capacity, started_at_ms: page.started_at_ms });
       if (page.gap && !reset) setHasGap(true);
-      setRecords((previous) => {
-        const base = reset ? [] : previous;
-        const merged = base.concat(fresh);
-        return merged.length > MAX_SERVICE_LOG_RECORDS ? merged.slice(merged.length - MAX_SERVICE_LOG_RECORDS) : merged;
-      });
+      if (reset || fresh.length > 0) {
+        setRecords((previous) => {
+          const base = reset ? [] : previous;
+          const merged = base.concat(fresh);
+          return merged.length > MAX_SERVICE_LOG_RECORDS ? merged.slice(merged.length - MAX_SERVICE_LOG_RECORDS) : merged;
+        });
+      }
       setPhase('live');
       setMessage('');
     } catch (err: unknown) {

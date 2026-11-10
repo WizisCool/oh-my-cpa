@@ -16,6 +16,7 @@ import styles from '../components/plugins/PluginPageHost.module.css';
 import shellURL from '../components/plugins/pluginFrameShell.html?url&no-inline';
 import { EmptyState } from '../components/common/EmptyState';
 import { Tooltip } from '../components/common/Tooltip';
+import { preloadRegisteredRoute, useTransitionNavigate } from '../performance/routeContract';
 
 /**
  * One page a plugin registered, shown inside the console.
@@ -29,7 +30,8 @@ import { Tooltip } from '../components/common/Tooltip';
  */
 export const PluginPageHost: React.FC = () => {
   const { t, lang } = useI18n();
-  const navigate = useNavigate();
+  const rawNavigate = useNavigate();
+  const { navigateTo } = useTransitionNavigate(rawNavigate);
   const { pluginId, pageIndex } = useParams();
   const { themeMode } = useTheme();
   const frameTheme: 'dark' | 'light' = themeMode === 'dark' ? 'dark' : 'light';
@@ -103,7 +105,13 @@ export const PluginPageHost: React.FC = () => {
     return (
       <div className={styles.unavailable} data-plugin-page-unavailable>
         <EmptyState title={t('plugin.page_unavailable')}>
-          <Button type="primary" onClick={() => navigate('/plugins')}>{t('plugin.page_open_management')}</Button>
+          <Button
+            type="primary"
+            onMouseEnter={() => preloadRegisteredRoute('/plugins')}
+            onClick={() => navigateTo('/plugins')}
+          >
+            {t('plugin.page_open_management')}
+          </Button>
         </EmptyState>
       </div>
     );
@@ -145,7 +153,8 @@ export const PluginPageHost: React.FC = () => {
             <Button
               size="small"
               icon={<SettingOutlined />}
-              onClick={() => navigate(`/plugins?plugin=${encodeURIComponent(entry.pluginId)}`)}
+              onMouseEnter={() => preloadRegisteredRoute('/plugins')}
+              onClick={() => navigateTo(`/plugins?plugin=${encodeURIComponent(entry.pluginId)}`)}
               aria-label={t('plugin.page_configure')}
             />
           </Tooltip>

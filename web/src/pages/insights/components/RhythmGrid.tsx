@@ -11,9 +11,8 @@ import type { InsightsRhythmCell, InsightsRhythmResponse } from '../../../types/
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../insightsRhythm';
+import { LazyInsightsHourChart as InsightsHourChart } from '../../../charts/lazyCharts';
 import styles from '../insights.module.css';
-
-const InsightsHourChart = React.lazy(() => import('../charts/InsightsHourChart'));
 
 type RhythmMeasure = 'requests' | 'tokens' | 'cost';
 

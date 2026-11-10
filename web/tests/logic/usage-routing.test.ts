@@ -25,6 +25,7 @@ import {
   reconcilePresence,
   type Presence,
 } from '../../src/types/usageRouting.ts';
+import { nextRoutingExpiryDelayMs } from '../../src/components/dashboard/routing/RoutingPanel.tsx';
 import type { UsageEvent } from '../../src/types/usageEvents.ts';
 
 const NOW = 1_000_000;
@@ -146,4 +147,28 @@ test('a row that left the window exits from where it was, and one that returns i
   assert.deepEqual(back.map((entry) => `${entry.key}:${entry.phase}`), ['a:present', 'b:present', 'c:present', 'd:present']);
   const first = reconcilePresence(start, ['b', 'c'], keyOf);
   assert.deepEqual(first.map((entry) => `${entry.key}:${entry.phase}`), ['a:exiting', 'b:present', 'c:present']);
+});
+
+test('routing expiry scheduler sleeps when idle and wakes right after the earliest record or cooldown expires', () => {
+  assert.equal(nextRoutingExpiryDelayMs(undefined, NOW), null);
+  assert.equal(
+    nextRoutingExpiryDelayMs({ records: new Map(), cooldowns: [], windowMs: MINUTE, skewMs: 0 }, NOW),
+    null,
+  );
+
+  // Record finished at (NOW - 50_000 + 500) -> expires at NOW + 10_500 -> delay is 10_525ms.
+  const rec = event(1, { timestamp_ms: NOW - 50_000, latency_ms: 500 });
+  const delayForRecord = nextRoutingExpiryDelayMs(
+    { records: new Map([[1, rec]]), cooldowns: [], windowMs: MINUTE, skewMs: 0 },
+    NOW,
+  );
+  assert.equal(delayForRecord, 10_525);
+
+  // An earlier cooldown wins over a later record expiry.
+  const cooldown = { auth_index: 'auth-1', provider: 'codex', status_code: 429, quota_exceeded: false, until_at_ms: NOW + 3_000 };
+  const delayForCooldown = nextRoutingExpiryDelayMs(
+    { records: new Map([[1, rec]]), cooldowns: [cooldown], windowMs: MINUTE, skewMs: 0 },
+    NOW,
+  );
+  assert.equal(delayForCooldown, 3_025);
 });

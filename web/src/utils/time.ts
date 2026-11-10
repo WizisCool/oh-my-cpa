@@ -8,20 +8,28 @@ dayjs.extend(customParseFormat);
 dayjs.extend(utc);
 dayjs.extend(timezone);
 let effectiveTimezone = 'UTC';
+let notifiedTimezone = 'UTC';
 const LISTENERS = new Set<() => void>();
 export function getTimeZone(): string { return effectiveTimezone; }
 export function subscribeTimeZone(listener: () => void): () => void {
   LISTENERS.add(listener);
   return () => { LISTENERS.delete(listener); };
 }
-export function configureTimeZone(selected: string, server = 'UTC'): void {
+export function primeTimeZone(selected: string, server = 'UTC'): string {
   const next = selected || server;
-  // Validate before replacing a working configuration.
   new Intl.DateTimeFormat('en', { timeZone: next }).format(0);
-  const hasChanged = next !== effectiveTimezone;
-  effectiveTimezone = next;
-  dayjs.tz.setDefault(next);
-  if (hasChanged) LISTENERS.forEach((listener) => listener());
+  if (next !== effectiveTimezone) {
+    effectiveTimezone = next;
+    dayjs.tz.setDefault(next);
+  }
+  return effectiveTimezone;
+}
+export function configureTimeZone(selected: string, server = 'UTC'): void {
+  const next = primeTimeZone(selected, server);
+  if (next !== notifiedTimezone) {
+    notifiedTimezone = next;
+    LISTENERS.forEach((listener) => listener());
+  }
 }
 export function parseTimeZone(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;

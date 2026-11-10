@@ -4,8 +4,14 @@ import { Navigate } from 'react-router-dom';
 import { useViewSearchParams } from '../hooks/useViewSearchParams';
 import { useT } from '../i18n';
 import { PageHeader } from '../components/common/PageHeader';
-import { CpaLogPanel } from '../components/logs/CpaLogPanel';
-import { ServiceLogPanel } from '../components/logs/ServiceLogPanel';
+import { Panel } from '../components/common/Panel';
+import { Placeholder } from '../components/common/Placeholder';
+import { createNamedLoader, lazyRoute } from '../utils/routeLoader';
+
+const loadCpaLogPanel = createNamedLoader(() => import('../components/logs/CpaLogPanel'), 'CpaLogPanel');
+const loadServiceLogPanel = createNamedLoader(() => import('../components/logs/ServiceLogPanel'), 'ServiceLogPanel');
+const LazyCpaLogPanel = lazyRoute(loadCpaLogPanel);
+const LazyServiceLogPanel = lazyRoute(loadServiceLogPanel);
 
 const LOG_SOURCES = ['cpa', 'service'] as const;
 type LogSource = (typeof LOG_SOURCES)[number];
@@ -57,8 +63,16 @@ export const LogsPage: React.FC = () => {
           />
         )}
       />
-      {source === 'cpa' && <CpaLogPanel />}
-      {source === 'service' && <ServiceLogPanel />}
+      <React.Suspense
+        fallback={(
+          <Panel className="logs-panel">
+            <Placeholder width="100%" height={360} />
+          </Panel>
+        )}
+      >
+        {source === 'cpa' && <LazyCpaLogPanel />}
+        {source === 'service' && <LazyServiceLogPanel />}
+      </React.Suspense>
     </div>
   );
 };

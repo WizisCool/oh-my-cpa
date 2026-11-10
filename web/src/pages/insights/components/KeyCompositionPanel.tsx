@@ -13,11 +13,10 @@ import {
 } from '../insightsCube';
 import type { InsightsLabels } from '../useInsightsLabels';
 import type { CompositionSegment } from '../charts/InsightsCompositionChart';
+import { LazyInsightsCompositionChart as InsightsCompositionChart } from '../../../charts/lazyCharts';
 import { MatrixTable } from './MatrixTable';
 import { InsightsValue } from './InsightsValue';
 import { PanelNarrowing } from './PanelNarrowing';
-
-const InsightsCompositionChart = React.lazy(() => import('../charts/InsightsCompositionChart'));
 
 const ROW_LIMIT = 12;
 const SEGMENT_LIMIT = 6;

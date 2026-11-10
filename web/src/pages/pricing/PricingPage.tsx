@@ -3,7 +3,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Popover, Segmented, Select } from 'antd';
 import dayjs from '../../utils/time';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
@@ -18,7 +18,8 @@ import { FactList } from '../../components/common/FactList';
 import type { PricedModel, PricingCandidate, PricingMode, PricingResponse, PricingUsage, UnpricedModel, UpstreamModel } from '../../types/pricing';
 import { formatMultiplier, formatRatePer1M, matchesModelSearch, modeOf } from '../../types/pricingDisplay';
 import { useOpenPriceEditor } from '../../components/pricing/PricingEditorContext';
-import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
+import { PRICING_QUERY_KEYS, pricingBookSwr } from '../../components/pricing/pricingQueries';
+import { invalidateSwrScopes, useSwrQuery } from '../../performance/swrContract';
 import { TierBadges } from '../../components/pricing/PricingParts';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { useProviderBranding } from '../../hooks/useProviderBranding';
@@ -148,17 +149,14 @@ export const PricingPage: React.FC = () => {
   const branding = useProviderBranding();
   React.useEffect(() => { setPage(1); }, [search, filter, providerFilter]);
 
-  const result = useQuery({
-    queryKey: PRICING_QUERY_KEYS.book,
-    queryFn: api.getPricing,
+  const result = useSwrQuery(pricingBookSwr, undefined, {
     staleTime: 30_000,
     refetchInterval: (query) => (query.state.data?.sync.running ? 2_500 : false),
   });
   const data = result.data;
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.book });
-    void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.attention });
+    void invalidateSwrScopes(queryClient, 'pricing');
   };
   const invalidateModel = (model: string) => {
     invalidate();

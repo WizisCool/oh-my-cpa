@@ -1,51 +1,29 @@
+import {
+  createFrameBudgetScheduler,
+  sharedFrameScheduler,
+  type MountPriority,
+} from '../performance/frameScheduler';
+
 export type ScheduleChartTask = (task: () => void) => () => void;
 
-interface ChartMountJob {
-  mount: () => void;
+/**
+ * Backwards-compatible factory over `createFrameBudgetScheduler` for deterministic queue tests.
+ * Uses `frameBudgetMs: 0` when a custom single-step `scheduleTask` is injected so each scheduled
+ * tick runs one queued task unless a wider frame budget is explicitly configured.
+ */
+export function createChartMountQueue(
+  scheduleTask: ScheduleChartTask,
+  frameBudgetMs = 0,
+): (mount: () => void, priority?: MountPriority) => () => void {
+  const scheduler = createFrameBudgetScheduler({
+    frameBudgetMs,
+    scheduleSlice: scheduleTask,
+    isHidden: () => false,
+  });
+  return (mount, priority = 'p1') => scheduler.schedule(priority, mount);
 }
 
-/** Keep expensive initializations in separate tasks so input and paint can run between them. */
-export function createChartMountQueue(scheduleTask: ScheduleChartTask): (mount: () => void) => () => void {
-  const jobs = new Set<ChartMountJob>();
-  let cancelTask: (() => void) | undefined;
-
-  function scheduleNext(): void {
-    if (cancelTask || jobs.size === 0) return;
-    cancelTask = scheduleTask(() => {
-      cancelTask = undefined;
-      const job = jobs.values().next().value;
-      if (!job) return;
-      jobs.delete(job);
-      try {
-        job.mount();
-      } finally {
-        scheduleNext();
-      }
-    });
-  }
-
-  return (mount) => {
-    const job = { mount };
-    jobs.add(job);
-    scheduleNext();
-    return () => {
-      jobs.delete(job);
-      if (jobs.size === 0) {
-        cancelTask?.();
-        cancelTask = undefined;
-      }
-    };
-  };
+/** Enqueues chart creation into the console-wide priority frame-budget scheduler. */
+export function enqueueChartMount(mount: () => void, priority: MountPriority = 'p1'): () => void {
+  return sharedFrameScheduler.schedule(priority, mount);
 }
-
-// A task after rAF leaves a paint opportunity before each chart; a hidden tab naturally pauses.
-const enqueueChartMount = createChartMountQueue((task) => {
-  let taskId: ReturnType<typeof setTimeout> | undefined;
-  const frameId = requestAnimationFrame(() => { taskId = setTimeout(task, 0); });
-  return () => {
-    cancelAnimationFrame(frameId);
-    if (taskId !== undefined) clearTimeout(taskId);
-  };
-});
-
-export { enqueueChartMount };

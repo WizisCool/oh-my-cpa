@@ -1,4 +1,5 @@
 import React from 'react';
+import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';
 
 const MIN_LIST_HEIGHT = 240;
 const INITIAL_LIST_HEIGHT = 480;
@@ -68,7 +69,7 @@ export function useRequestListHeight(pageRef: React.RefObject<HTMLElement | null
     // a fold reversed mid-flight is a new direction and is answered again.
     let answeredFold: boolean | null = null;
 
-    const observer = new ResizeObserver(() => {
+    const unsubscribeResize = sharedResizeObserverHub.observe(host, () => {
       const transitions = foldTransitions();
       if (transitions.length === 0) {
         answeredFold = null;
@@ -84,7 +85,6 @@ export function useRequestListHeight(pageRef: React.RefObject<HTMLElement | null
       const settled = Math.max(MIN_LIST_HEIGHT, Math.round(settledHeight(transitions)));
       if (settled > applied) apply(settled);
     });
-    observer.observe(host);
 
     const handleFoldSettled = (event: TransitionEvent) => {
       if (event.target !== header || foldTransitions().length > 0) return;
@@ -94,7 +94,7 @@ export function useRequestListHeight(pageRef: React.RefObject<HTMLElement | null
     header?.addEventListener('transitionend', handleFoldSettled);
     header?.addEventListener('transitioncancel', handleFoldSettled);
     return () => {
-      observer.disconnect();
+      unsubscribeResize();
       header?.removeEventListener('transitionend', handleFoldSettled);
       header?.removeEventListener('transitioncancel', handleFoldSettled);
     };

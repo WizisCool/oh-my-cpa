@@ -72,13 +72,15 @@ import { KeyTable } from './components/KeyTable';
 import { KeyCompositionPanel } from './components/KeyCompositionPanel';
 import { InsightsValue } from './components/InsightsValue';
 import { ChartLegend } from '../../components/common/ChartLegend';
+import { DeferredPanel } from '../../components/common/DeferredPanel';
 import { PanelNarrowing } from './components/PanelNarrowing';
 import { RhythmGrid } from './components/RhythmGrid';
 import { KeyDetailDrawer } from './components/KeyDetailDrawer';
+import {
+  LazyInsightsFlowChart as InsightsFlowChart,
+  LazyInsightsTrendChart as InsightsTrendChart,
+} from '../../charts/lazyCharts';
 import styles from './insights.module.css';
-
-const InsightsTrendChart = React.lazy(() => import('./charts/InsightsTrendChart'));
-const InsightsFlowChart = React.lazy(() => import('./charts/InsightsFlowChart'));
 
 const TREND_TOP = 5;
 const FLOW_TOP = 6;
@@ -575,74 +577,92 @@ export const InsightsPage: React.FC = () => {
       )}
       {/* A bar per key needs the width to name the key and still show its parts; a phone has the table above. */}
       {!isPhone && (
-        <KeyCompositionPanel
-          cube={cube}
-          rows={compositionRows}
-          columnDimension={modelDimension}
-          metric={metric}
-          labels={labels}
-          selectedKeys={view.filters.key ?? []}
-          selectedColumns={view.filters[modelDimension] ?? []}
-          onSelect={(keyId, columnId) => {
-            const isSame = (view.filters.key ?? []).join() === keyId
-              && (view.filters[modelDimension] ?? []).join() === (columnId ?? '');
-            const next = { ...view.filters };
-            delete next.key;
-            delete next[modelDimension];
-            // Choosing the segment already chosen takes it back, as a ranking row does.
-            setView({ filters: isSame ? next : { ...next, key: [keyId], ...(columnId === null ? {} : { [modelDimension]: [columnId] }) } });
-          }}
-          onSelectColumn={(columnId) => selectFilter(modelDimension, columnId)}
-          onClear={() => {
-            const next = { ...view.filters };
-            delete next.key;
-            delete next[modelDimension];
-            setView({ filters: next });
-          }}
-        />
+        <DeferredPanel
+          priority="p1"
+          immediate={Boolean(cube)}
+          fallback={<Panel className={styles['trend-panel']}><ChartFallback height={280} /></Panel>}
+        >
+          <KeyCompositionPanel
+            cube={cube}
+            rows={compositionRows}
+            columnDimension={modelDimension}
+            metric={metric}
+            labels={labels}
+            selectedKeys={view.filters.key ?? []}
+            selectedColumns={view.filters[modelDimension] ?? []}
+            onSelect={(keyId, columnId) => {
+              const isSame = (view.filters.key ?? []).join() === keyId
+                && (view.filters[modelDimension] ?? []).join() === (columnId ?? '');
+              const next = { ...view.filters };
+              delete next.key;
+              delete next[modelDimension];
+              // Choosing the segment already chosen takes it back, as a ranking row does.
+              setView({ filters: isSame ? next : { ...next, key: [keyId], ...(columnId === null ? {} : { [modelDimension]: [columnId] }) } });
+            }}
+            onSelectColumn={(columnId) => selectFilter(modelDimension, columnId)}
+            onClear={() => {
+              const next = { ...view.filters };
+              delete next.key;
+              delete next[modelDimension];
+              setView({ filters: next });
+            }}
+          />
+        </DeferredPanel>
       )}
       {/* A flow needs its three columns to say anything; a phone gets the rankings above instead. */}
       {flow && flow.links.length > 0 && (
-        <Panel
-          data-testid="insights-flow"
-          title={(
-            <PanelTitle
-              extra={(
-                <PanelNarrowing
-                  count={flowDimensions.reduce((sum, dimension) => sum + (view.filters[dimension]?.length ?? 0), 0)}
-                  unit={t(`insights.metric.${isAdditiveMetric(metric) ? metric : 'requests'}`)}
-                  onClear={() => {
-                    const next = { ...view.filters };
-                    for (const dimension of flowDimensions) delete next[dimension];
-                    setView({ filters: next });
-                  }}
-                />
-              )}
-            >
-              {t('insights.flow_title')}
-            </PanelTitle>
-          )}
+        <DeferredPanel
+          priority="p2"
+          immediate={Boolean(cube)}
+          fallback={<Panel className={styles['trend-panel']}><ChartFallback height={320} /></Panel>}
         >
-          <React.Suspense fallback={<ChartFallback height={320} />}>
-            <InsightsFlowChart
-              nodes={flow.nodes}
-              links={flow.links}
-              metric={isAdditiveMetric(metric) ? metric : 'requests'}
-              colorOf={flowColor}
-              labelOf={flowLabel}
-              isDimmed={isFlowNarrowed ? flowDimmed : undefined}
-              onSelect={selectFilter}
-              label={t('insights.flow_title')}
-            />
-          </React.Suspense>
-        </Panel>
+          <Panel
+            data-testid="insights-flow"
+            title={(
+              <PanelTitle
+                extra={(
+                  <PanelNarrowing
+                    count={flowDimensions.reduce((sum, dimension) => sum + (view.filters[dimension]?.length ?? 0), 0)}
+                    unit={t(`insights.metric.${isAdditiveMetric(metric) ? metric : 'requests'}`)}
+                    onClear={() => {
+                      const next = { ...view.filters };
+                      for (const dimension of flowDimensions) delete next[dimension];
+                      setView({ filters: next });
+                    }}
+                  />
+                )}
+              >
+                {t('insights.flow_title')}
+              </PanelTitle>
+            )}
+          >
+            <React.Suspense fallback={<ChartFallback height={320} />}>
+              <InsightsFlowChart
+                nodes={flow.nodes}
+                links={flow.links}
+                metric={isAdditiveMetric(metric) ? metric : 'requests'}
+                colorOf={flowColor}
+                labelOf={flowLabel}
+                isDimmed={isFlowNarrowed ? flowDimmed : undefined}
+                onSelect={selectFilter}
+                label={t('insights.flow_title')}
+              />
+            </React.Suspense>
+          </Panel>
+        </DeferredPanel>
       )}
-      <RhythmGrid
-        data={rhythmQuery.data}
-        measure={rhythmMeasure}
-        isLoading={rhythmQuery.isLoading}
-        isUncaptured={apiErrorCode(rhythmQuery.error) === 'demo_uncaptured'}
-      />
+      <DeferredPanel
+        priority="p2"
+        immediate={Boolean(rhythmQuery.data)}
+        fallback={<Panel className={styles['trend-panel']}><ChartFallback height={220} /></Panel>}
+      >
+        <RhythmGrid
+          data={rhythmQuery.data}
+          measure={rhythmMeasure}
+          isLoading={rhythmQuery.isLoading}
+          isUncaptured={apiErrorCode(rhythmQuery.error) === 'demo_uncaptured'}
+        />
+      </DeferredPanel>
       <div className={styles['footnote']}>
         {cube.window.widened && <span>{t('insights.widened')}</span>}
         {baseline && <span>{formatCompareWindow(baseline.window)}</span>}

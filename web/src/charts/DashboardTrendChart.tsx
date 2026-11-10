@@ -67,5 +67,5 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
 
   if (values.length < 2) return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
   // At least `height` tall, and taller when the widget is given rows to spare.
-  return <div className="chart-slot" style={{ minHeight: height }}><EChart option={option} label={ariaLabel} /></div>;
+  return <div className="chart-slot" style={{ minHeight: height }}><EChart option={option} label={ariaLabel} priority="p0" /></div>;
 };
