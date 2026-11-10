@@ -11,7 +11,8 @@ import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src
 import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { App as AntdApp } from 'antd';
-import { CredentialSection, type CredentialRowActions } from '../src/pages/oauthManagement/CredentialSection';
+import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
+import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
 import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
 import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
@@ -227,35 +228,35 @@ function renderCredentialRow(
   item: QuotaItem,
   { onRefresh, onOpen = vi.fn(), onRename = vi.fn(async () => true), fileOverrides = {} }: {
     onRefresh?: () => void;
-    onOpen?: CredentialRowActions['onOpen'];
-    onRename?: CredentialRowActions['onRename'];
+    onOpen?: CredentialActions['onOpen'];
+    onRename?: CredentialActions['onRename'];
     fileOverrides?: Partial<ManagementAuthFile>;
   } = {},
 ) {
   const { records } = buildOAuthWorkspaceProjection([file(item.auth_index, fileOverrides)], [item], []);
   const [section] = buildCredentialSections(records, records);
-  const actions: CredentialRowActions = {
+  const actions: CredentialActions = {
     isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
-    onSelect: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen, onRename,
-    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
+    onSelect: vi.fn(), onPick: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen, onRename,
+    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onRedeemCredit: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
   };
   if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
   return render(
     <MemoryRouter>
       <I18nProvider>
         <AntdApp>
-          <CredentialSection section={section} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} onSort={vi.fn()} />
+          <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />
         </AntdApp>
       </I18nProvider>
     </MemoryRouter>,
   );
 }
 
-describe('credential section row', () => {
-  it('renders reset times, unused window duration, and derived estimate markers', () => {
+describe('credential list row', () => {
+  it('shows the five-hour and weekly limits in place with reset times, unused window duration, and derived estimate markers', () => {
     const { container } = renderCredentialRow(quota('codex-full', [
-      { ...quotaWindow('five_hour', 100, 2), used_percent: 0 },
       { ...quotaWindow('weekly', 100, 48), reset_accuracy: 'derived' },
+      { ...quotaWindow('five_hour', 100, 2), used_percent: 0 },
     ]));
     const cells = container.querySelectorAll<HTMLElement>('[data-quota-window-label]');
     expect(within(cells[0]).getByText('100%')).toBeTruthy();
@@ -266,7 +267,7 @@ describe('credential section row', () => {
   it('triggers inline quota refresh, renewal badge navigation, and inline rename', async () => {
     const refresh = vi.fn();
     const onOpen = vi.fn();
-    const onRename = vi.fn<CredentialRowActions['onRename']>(async () => true);
+    const onRename = vi.fn<CredentialActions['onRename']>(async () => true);
     const { container } = renderCredentialRow(
       quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
         status: 'stale',
@@ -321,9 +322,8 @@ describe('provider sections across pages', () => {
     try {
       // The console's own order leads until the operator arranges the sections: Claude is pinned first.
       await waitFor(() => expect(drawnProviders()).toEqual(['claude', 'codex']));
-      // The band that names a provider is what a pointer grabs, and the grip on it steps by keyboard.
-      const codex = screen.getAllByTestId('oauth-credential-section').find(section => section.getAttribute('data-provider') === 'codex')!;
-      expect(codex.querySelector('header')?.getAttribute('data-draggable')).toBe('true');
+      // The provider list behind the tabs is the arrangement: its grip steps a provider by keyboard.
+      fireEvent.click(screen.getByTestId('oauth-provider-switcher'));
       fireEvent.keyDown(await screen.findByRole('button', { name: 'Drag to reorder: Codex' }), { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 });
       await waitFor(() => expect(sectionWrites()).toEqual([{ key: 'omc_oauth_section_order', value: { sections: ['codex', 'claude'] } }]));
       expect(drawnProviders()).toEqual(['codex', 'claude']);
@@ -344,7 +344,8 @@ describe('provider sections across pages', () => {
     const visibleIdentities = () => screen.getAllByTestId('oauth-credential-record').map(row => row.getAttribute('data-auth-index'));
     try {
       await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
-      fireEvent.click(await screen.findByRole('button', { name: 'Quota' }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Sort: / }));
+      fireEvent.click(await screen.findByText('Least quota left'));
       await waitFor(() => expect(visibleIdentities()[0]).toBe('account-13'));
       const firstRow = screen.getAllByTestId('oauth-credential-record')[0];
       expect(within(firstRow).getByRole('button', { name: /^SIWC settings:/ }).getAttribute('data-siwc-badge')).toBe('active');

@@ -1,23 +1,13 @@
 import type { OAuthRecoveryTarget } from '../../types/oauth';
-import { ActionMenu } from '../../components/common/ActionMenu';
 import React from 'react';
 import { useBlocker } from 'react-router-dom';
-import {
-  App as AntdApp,
-  Button,
-  Dropdown,
-  Select,
-  Space,
-} from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown, Select, Space } from 'antd';
 import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
 import {
   BranchesOutlined,
   CloudUploadOutlined,
   DownOutlined,
-  FilterOutlined,
   LoginOutlined,
-  SearchOutlined,
-  SyncOutlined,
   TimerResetOutlined,
   UploadOutlined,
 } from '../../components/icons';
@@ -30,26 +20,15 @@ import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
 import { storeListingsByPluginId } from '../../components/plugins/pluginStoreLogic';
-import { providerFilterTabs } from '../../types/credentialProviders';
-import type { AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
-import {
-  isAuthFileDisabled,
-  isAuthFileHealthy,
-  isAuthFileProblem,
-} from '../../components/authFiles/authFileLogic';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
 import { useCredentialRename } from '../../components/authFiles/useCredentialRename';
 import { WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
-import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
-import { SummaryStrip } from '../../components/common/SummaryStrip';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
-import { ReorderableCredentialSection, type CredentialRowActions } from './CredentialSection';
 import { buildCredentialSections, credentialOrderKey, orderBySection, providersInSectionOrder, type QuotaColumnSort } from './credentialSections';
 import { useCredentialOrder } from './useCredentialOrder';
 import { useOAuthSectionOrder } from './useOAuthSectionOrder';
-import { RowReorder } from '../../components/common/RowReorder';
 import { moveKey, type DropSide } from '../../types/displayOrder';
 import { useOAuthSessions } from './useOAuthSessions';
 import { OAuthSessionStrip } from './OAuthSessionStrip';
@@ -64,25 +43,25 @@ import {
   resolveAuthorizationProviderId,
   sortOAuthWorkspaceRecords,
   DEFAULT_OAUTH_SORT,
-  workspaceProviderCounts,
   workspaceProviderOptions,
-  type OAuthWorkspaceQuotaFilter,
   type OAuthWorkspaceRecord,
-  type OAuthWorkspaceSortKey,
 } from './oauthWorkspaceLogic';
+import { healthCounts, matchesHealthLens, providerSummaries } from './fleetPresentation';
+import { FleetToolbar } from './FleetHeader';
+import { ProviderStrip } from './ProviderStrip';
+import { CredentialList, type CredentialGroup } from './CredentialList';
+import { CredentialCards } from './CredentialCards';
+import type { CredentialActions, DetailSection } from './CredentialParts';
 import styles from './OAuthManagementPage.module.css';
 import { CredentialMark } from '../../components/LobeIcon';
 import { PageHeader } from '../../components/common/PageHeader';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
-import { SearchInput } from '../../components/common/SearchInput';
 import { EmptyState } from '../../components/common/EmptyState';
-import { Toolbar } from '../../components/common/Toolbar';
 import { ToolButton } from '../../components/common/ToolButton';
 import { Pager } from '../../components/common/Pager';
-
 import { DeferredMount } from '../../components/common/DeferredMount';
-import { FilterTransition } from '../../motion/filter';
 import { createRouteLoader } from '../../utils/routeLoader';
+import { pickRows, type SelectionAnchor } from '../../types/rowSelection';
 
 const AuthFileDetailDrawer = React.lazy(createRouteLoader(() =>
   import('../../components/authFiles/AuthFileDetailDrawer').then(module => ({ default: module.AuthFileDetailDrawer }))));
@@ -122,16 +101,8 @@ export const OAuthManagementPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { searchParams, setSearchParams, queryState, setSearch, isViewLoaded } = useOAuthManagementViewState();
   const visibleNow = useVisibleNow();
-  const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
   const [isConnectOpen, setIsConnectOpen] = React.useState(false);
-  const [quotaColumnSorts, setQuotaColumnSorts] = React.useState<Partial<Record<string, QuotaColumnSort>>>({});
   const isDemo = isDemoMode();
-  React.useEffect(() => {
-    if (queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== DEFAULT_OAUTH_SORT) {
-      setIsFiltersOpen(true);
-    }
-  }, [queryState.status, queryState.quota, queryState.sort]);
-
 
   const filesQuery = useQuery({
     queryKey: ['management-auth-files'],
@@ -192,19 +163,16 @@ export const OAuthManagementPage: React.FC = () => {
   }, [records]);
 
   const providerOptions = React.useMemo(() => workspaceProviderOptions(records, choices), [choices, records]);
-  const providerCounts = React.useMemo(() => workspaceProviderCounts(records), [records]);
+  // The scope is everything the provider, the search and the filters let through; the health band
+  // counts it, and its lens narrows it to one verdict.
+  const scopedRecords = React.useMemo(
+    () => filterOAuthWorkspaceRecords(records, queryState.query, queryState.provider, queryState.status, queryState.quota),
+    [queryState.provider, queryState.query, queryState.quota, queryState.status, records],
+  );
+  const scopeCounts = React.useMemo(() => healthCounts(scopedRecords), [scopedRecords]);
   const sortedRecords = React.useMemo(
-    () => sortOAuthWorkspaceRecords(
-      filterOAuthWorkspaceRecords(
-        records,
-        queryState.query,
-        queryState.provider,
-        queryState.status,
-        queryState.quota,
-      ),
-      queryState.sort,
-    ),
-    [queryState.provider, queryState.query, queryState.quota, queryState.sort, queryState.status, records],
+    () => sortOAuthWorkspaceRecords(scopedRecords.filter((record) => matchesHealthLens(record, queryState.health)), queryState.sort),
+    [queryState.health, queryState.sort, scopedRecords],
   );
   // A page is cut from the record order, which keeps a provider's credentials together, so a page
   // groups into the same sections the next page continues.
@@ -214,6 +182,13 @@ export const OAuthManagementPage: React.FC = () => {
   const sectionProviders = React.useMemo(() => providersInSectionOrder(records), [records]);
   const sectionOrder = useOAuthSectionOrder(sectionProviders);
   const isCustomOrder = queryState.sort === 'custom';
+  const quotaDirection = queryState.sort === 'quota-asc' ? 'asc' : queryState.sort === 'quota-desc' ? 'desc' : undefined;
+  // A quota order ranks each provider's credentials by the share left in their tightest limit.
+  const quotaColumnSorts = React.useMemo(() => {
+    const sorts: Partial<Record<string, QuotaColumnSort>> = {};
+    if (quotaDirection) sectionProviders.forEach((provider) => { sorts[provider] = { key: 'quota', direction: quotaDirection }; });
+    return sorts;
+  }, [quotaDirection, sectionProviders]);
   const visibleRecords = React.useMemo(
     () => orderBySection(
       sortedRecords,
@@ -413,6 +388,8 @@ export const OAuthManagementPage: React.FC = () => {
 
   const [selectedKeys, setSelectedKeys] = React.useState<string[]>([]);
   const selectedKeySet = React.useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  /** The credential last picked without Shift, where the next Shift run starts. */
+  const selectionAnchor = React.useRef<SelectionAnchor<string> | null>(null);
   const selectedRecords = React.useMemo(
     () => records.filter((record) => selectedKeySet.has(record.key) && record.canSelectForFileBatch),
     [records, selectedKeySet],
@@ -432,7 +409,7 @@ export const OAuthManagementPage: React.FC = () => {
   const hasUnselectedFilteredRecords = selectableFilteredRecords.some((record) => !selectedKeySet.has(record.key));
 
   const [selectedIdentity, setSelectedIdentity] = React.useState<SelectedIdentity>();
-  const [drawerSection, setDrawerSection] = React.useState<'overview' | 'renewal' | 'configuration' | 'models'>('overview');
+  const [drawerSection, setDrawerSection] = React.useState<DetailSection>('overview');
   const selectedRecord = selectedIdentity
     ? records.find((record) => record.key === selectedIdentity.key)
     : undefined;
@@ -463,19 +440,8 @@ export const OAuthManagementPage: React.FC = () => {
     ]);
   }, [pluginsQuery, queryClient]);
 
-  const totalCount = records.length;
-  const disabledCount = records.filter((record) => isAuthFileDisabled(record.file)).length;
-  const attentionCount = records.filter((record) => !isAuthFileDisabled(record.file) && (record.isQuotaAttention || isAuthFileProblem(record.file))).length;
-  const healthyCount = records.filter((record) => isAuthFileHealthy(record.file) && !record.isQuotaAttention && record.quotaCondition !== 'stale').length;
-  // A reading whose own window has reset is not "normal": nobody knows the current numbers. It is
-  // counted apart from both, because it is not something to act on now either - refreshing it is.
-  const staleCount = records.filter((record) => !isAuthFileDisabled(record.file) && record.quotaCondition === 'stale').length;
-  const knownTotal = filesQuery.isPending ? '—' : totalCount;
-
-  const providerTabs = React.useMemo(
-    () => providerFilterTabs([...records.map((record) => record.displayProvider), ...providerOptions]),
-    [providerOptions, records],
-  );
+  const fleetCounts = React.useMemo(() => healthCounts(records), [records]);
+  const railSummaries = React.useMemo(() => providerSummaries(records, sectionOrder.ordered), [records, sectionOrder.ordered]);
   const hiddenSelectionCount = selectedRecords.filter(
     (record) => !pagedRecords.some((pageRecord) => pageRecord.key === record.key),
   ).length;
@@ -498,10 +464,7 @@ export const OAuthManagementPage: React.FC = () => {
     setIsConnectOpen(true);
   };
 
-  const openCredential = (
-    record: OAuthWorkspaceRecord,
-    section: 'overview' | 'renewal' | 'configuration' | 'models' = 'overview',
-  ) => {
+  const openCredential = (record: OAuthWorkspaceRecord, section: DetailSection = 'overview') => {
     setDrawerSection(section);
     setSelectedIdentity({ key: record.key, name: record.fileName, authIndex: record.authIndex });
   };
@@ -604,16 +567,27 @@ export const OAuthManagementPage: React.FC = () => {
   };
 
   const renameCredential = useCredentialRename();
-  const sections = buildCredentialSections(pagedRecords, visibleRecords, sectionOrder.ordered);
-  const rowActions: CredentialRowActions = {
+  const isPending = filesQuery.isPending && !filesQuery.data;
+  const groups: CredentialGroup[] = buildCredentialSections(pagedRecords, visibleRecords, sectionOrder.ordered)
+    .map((section) => ({ ...section, title: providerDisplayName(section.provider, pluginTitles) }));
+  const credentialActions: CredentialActions = {
     isBusy: (record) => actions.isRecordBusy(record),
     isRefreshingQuota: (record) => Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex)),
     siwcBadge: (record) => siwcBadgeState(record.file, siwcBindings.sessions[siwcTargetKey(record.file)]),
     onSelect: (targets, isSelected) => {
       const keys = targets.map((record) => record.key);
+      // Choosing one credential by its menu is a pick like any other: it anchors the next Shift run.
+      selectionAnchor.current = targets.length === 1 ? { key: keys[0], isSelected, changed: [] } : null;
       setSelectedKeys((previous) => (isSelected
         ? Array.from(new Set([...previous, ...keys]))
         : previous.filter((key) => !keys.includes(key))));
+    },
+    onPick: (record, isRange) => {
+      // A run follows the order the page draws: its providers in turn, each one's credentials as listed.
+      const order = groups.flatMap((group) => group.records).filter((row) => row.canSelectForFileBatch).map((row) => row.key);
+      const pick = pickRows(selectedKeySet, order, record.key, selectionAnchor.current, isRange);
+      selectionAnchor.current = pick.anchor;
+      setSelectedKeys([...pick.selected]);
     },
     onToggle: (record) => void actions.toggleOne(record),
     onDownload: (record) => actions.download(record),
@@ -622,86 +596,64 @@ export const OAuthManagementPage: React.FC = () => {
     onRename: (record, displayName) => renameCredential(record.file, displayName),
     onRefreshQuota: (record) => void actions.refreshQuotaForRecord(record),
     onClearCooldown: (record) => void actions.clearCooldown(record),
+    onRedeemCredit: (record) => void actions.redeemCredit(record),
     onReauthenticate: openConnectForRecord,
     onOpenSIWC: (record) => setSIWCRecordKey(record.key),
   };
 
+  const selectablePage = pagedRecords.filter((record) => record.canSelectForFileBatch);
+  const selectedOnPage = selectablePage.filter((record) => selectedKeySet.has(record.key)).length;
+  const scopeProvider = queryState.provider;
+  const changeScope = (provider: string) => setSearch({ provider: provider === 'all' ? null : provider, page: null });
+  const railProps = {
+    summaries: railSummaries,
+    total: records.length,
+    attention: fleetCounts.attention,
+    active: scopeProvider,
+    onChange: changeScope,
+    onConnect: openConnect,
+    pluginLogos,
+    pluginTitles,
+    reorder: sectionOrder.reorder,
+  };
+  const allRefreshCount = new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size;
+  const viewProps = {
+    groups,
+    pluginLogos,
+    selectedKeys: selectedKeySet,
+    nowMS: visibleNow,
+    actions: credentialActions,
+  };
+
   return (
-    <div className={`terminal-page oauth-management-page ${styles.page}`}>
+    <div className={`terminal-page oauth-management-page ${styles.page} ${selectedKeys.length > 0 ? 'has-fleet-selection' : ''}`}>
       <PageHeader
         title={t('nav.auth_files')}
-        mobileActions={(
-          <>
-            <ActionMenu>
-              <ToolButton icon={<UploadOutlined />} label={t('af.upload')} disabled={isDemo || actions.isOperating} onClick={() => setIsUploadOpen(true)} />
-              <ToolButton icon={<CloudUploadOutlined />} label={t('af.vertex_open')} disabled={isDemo || actions.isOperating} onClick={() => setIsVertexImportOpen(true)} />
-              <ToolButton icon={<BranchesOutlined />} label={t('af.rules_open')} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-management-model-rules-open" />
-            </ActionMenu>
-            <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
-          </>
-        )}
         actions={(
           <>
-            <ToolButton
-              icon={<UploadOutlined />}
-              label={t('af.upload')}
-              disabled={isDemo || actions.isOperating}
-              onClick={() => setIsUploadOpen(true)}
-            />
-            <ToolButton
-              icon={<CloudUploadOutlined />}
-              label={t('af.vertex_open')}
-              disabled={isDemo || actions.isOperating}
-              onClick={() => setIsVertexImportOpen(true)}
-              data-testid="oauth-management-vertex-import-open"
-            />
-            <ToolButton
-              icon={<BranchesOutlined />}
-              label={t('af.rules_open')}
-              disabled={actions.isOperating}
-              onClick={() => setIsModelRulesOpen(true)}
-              data-testid="oauth-management-model-rules-open"
-            />
-            <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>
-              {t('omc.connect_account')}
-            </Button>
+            <ToolButton icon={<BranchesOutlined />} label={t('af.rules_open')} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-model-rules" />
+            <ToolButton icon={<TimerResetOutlined />} label={t('warmup.settings')} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings" />
+            {/* Signing in is how a credential usually arrives, so it is the button; a file or a
+                Vertex key are the other ways in, under its caret. */}
+            <Space.Compact>
+              <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
+              <Dropdown
+                trigger={['click']}
+                placement="bottomRight"
+                menu={{
+                  items: [
+                    { key: 'upload', icon: <UploadOutlined />, label: t('af.upload'), disabled: isDemo || actions.isOperating },
+                    { key: 'vertex', icon: <CloudUploadOutlined />, label: t('af.vertex_open'), disabled: isDemo || actions.isOperating },
+                  ],
+                  onClick: ({ key }) => (key === 'upload' ? setIsUploadOpen(true) : setIsVertexImportOpen(true)),
+                }}
+              >
+                <Button type="primary" icon={<DownOutlined />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
+              </Dropdown>
+            </Space.Compact>
           </>
         )}
-      >
-        <SummaryStrip>
-          <SummaryStrip.Total>
-            {t('af.meta_total', { n: knownTotal })}
-          </SummaryStrip.Total>
-          <SummaryStrip.Divider />
-          <SummaryStrip.Item tone="healthy">
-            {t('af.meta_active', { n: filesQuery.isPending ? '—' : healthyCount })}
-          </SummaryStrip.Item>
-          {(filesQuery.isPending || disabledCount > 0) && (
-            <>
-              <SummaryStrip.Divider />
-              <SummaryStrip.Item tone="disabled">
-                {t('af.meta_disabled', { n: filesQuery.isPending ? '—' : disabledCount })}
-              </SummaryStrip.Item>
-            </>
-          )}
-          {(filesQuery.isPending || attentionCount > 0) && (
-            <>
-              <SummaryStrip.Divider />
-              <SummaryStrip.Item tone="attention">
-                {t('omc.quota_filter_attention')} {filesQuery.isPending ? '—' : attentionCount}
-              </SummaryStrip.Item>
-            </>
-          )}
-          {!filesQuery.isPending && staleCount > 0 && (
-            <>
-              <SummaryStrip.Divider />
-              <SummaryStrip.Item tone="disabled" testId="oauth-summary-stale">
-                {t('omc.quota_stale_count', { n: staleCount })}
-              </SummaryStrip.Item>
-            </>
-          )}
-        </SummaryStrip>
-      </PageHeader>
+      />
 
       <OAuthSessionStrip
         sessions={sessions}
@@ -732,21 +684,10 @@ export const OAuthManagementPage: React.FC = () => {
         )}
 
       {filesQuery.isError && (
-        <LoadFailure
-          className={styles['diagnostic-bar']}
-          title={t('af.error')}
-          error={filesQuery.error}
-          onRetry={() => void filesQuery.refetch()}
-        />
+        <LoadFailure className={styles['diagnostic-bar']} title={t('af.error')} error={filesQuery.error} onRetry={() => void filesQuery.refetch()} />
       )}
       {quotaQuery.isError && (
-        <LoadFailure
-          className={styles['diagnostic-bar']}
-          tone="warning"
-          title={t('omc.quota_read_failed')}
-          error={quotaQuery.error}
-          onRetry={() => void quotaQuery.refetch()}
-        />
+        <LoadFailure className={styles['diagnostic-bar']} tone="warning" title={t('omc.quota_read_failed')} error={quotaQuery.error} onRetry={() => void quotaQuery.refetch()} />
       )}
       {pluginsQuery.isError && (
         <LoadFailure
@@ -758,240 +699,115 @@ export const OAuthManagementPage: React.FC = () => {
         />
       )}
 
-      <ProviderFilterTabs
-        providers={providerTabs.filter((provider) => provider === 'all' || provider === queryState.provider || (providerCounts[provider] ?? 0) > 0)}
-        counts={providerCounts}
-        active={queryState.provider}
-        onChange={(provider) => setSearch({ provider: provider === 'all' ? null : provider, page: null })}
-        pluginLogos={pluginLogos}
-        pluginTitles={pluginTitles}
-      />
+      <div className={styles.workspace}>
+        <ProviderStrip {...railProps} />
+        <FleetToolbar
+          leading={(
+            <Checkbox
+              className={styles['select-all']}
+              checked={selectablePage.length > 0 && selectedOnPage === selectablePage.length}
+              indeterminate={selectedOnPage > 0 && selectedOnPage < selectablePage.length}
+              disabled={!isViewLoaded || selectablePage.length === 0}
+              onChange={(event) => credentialActions.onSelect(selectablePage, event.target.checked)}
+              aria-label={t('omc.fleet_select_page')}
+              data-testid="oauth-select-page"
+            />
+          )}
+          search={searchValue}
+          onSearch={setSearchValue}
+          counts={scopeCounts}
+          isPending={isPending}
+          lens={queryState.health}
+          onLens={(lens) => setSearch({ health: lens === 'all' ? null : lens, page: null })}
+          status={queryState.status}
+          quota={queryState.quota}
+          sort={queryState.sort}
+          isViewLoaded={isViewLoaded}
+          onFilters={(changes) => setSearch({
+            ...('status' in changes ? { status: changes.status === 'all' ? null : changes.status } : {}),
+            ...('quota' in changes ? { quota: changes.quota === 'all' ? null : changes.quota } : {}),
+            page: null,
+          })}
+          onSort={(sort) => setSearch({ sort: sort === DEFAULT_OAUTH_SORT ? null : sort, page: null })}
+          onReset={() => {
+            setResetSearchToken((value) => value + 1);
+            setSearch({ q: null, status: null, quota: null, sort: null, health: null, page: null });
+          }}
+          layout={queryState.layout}
+          onLayout={(layout) => setSearch({ layout })}
+          refresh={{
+            filtered: eligibleFilteredRefreshCount,
+            page: pagedRecords.filter((record) => record.canRefreshQuota).length,
+            all: allRefreshCount,
+            isBusy: actions.busyQuotaIndexes.size > 0,
+            isDisabled: visibleRecords.length === 0,
+            onRefresh: (scope) => void actions.refreshQuota(scope, visibleRecords, pagedRecords, records),
+          }}
+        />
 
-      <Toolbar className={styles.toolbar}>
-        <div className={styles.search}>
-          <SearchInput
-            value={searchValue}
-            label={t('af.search_ph')}
-            onChange={setSearchValue}
+          {isPending ? (
+            <LoadingRegion>
+              <ListPlaceholder rows={6} isFramed />
+            </LoadingRegion>
+          ) : visibleRecords.length === 0 ? (
+            <div className={styles.empty}>
+              <EmptyState title={records.length === 0 ? t('af.empty_all') : t('af.empty_filter')} />
+            </div>
+          ) : (
+            <>
+              {queryState.layout === 'cards'
+                ? <CredentialCards {...viewProps} hasGroupHeads={scopeProvider === 'all'} />
+                : <CredentialList {...viewProps} onReorder={credentialOrder.loaded && !quotaDirection ? reorderCredential : undefined} />}
+              <div className={styles.pagination}>
+                <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
+                <Select
+                  value={pageSize}
+                  disabled={!isViewLoaded}
+                  onChange={(size) => setSearch({ page_size: size as 12 | 24 | 48, page: null })}
+                  style={{ width: 110 }}
+                  options={[12, 24, 48].map((size) => ({ value: size, label: t('af.page_size_n', { n: size }) }))}
+                />
+                <Pager
+                  page={page}
+                  pageSize={pageSize}
+                  total={visibleRecords.length}
+                  hasQuickJumper
+                  onChange={(nextPage) => setSearch({ page: nextPage === 1 ? null : nextPage })}
+                />
+              </div>
+            </>
+          )}
+      </div>
+
+      {/* Batch actions dock at the foot of the view while a selection exists, over whatever is scrolled. */}
+      {selectedRecords.length > 0 && (
+        <div className={styles.dock}>
+          <BatchActionBar
+            selectedCount={selectedRecords.length}
+            selectablePageCount={selectablePage.length}
+            selectableFilteredCount={selectableFilteredRecords.length}
+            canSelectFiltered={hasUnselectedFilteredRecords}
+            isSelectionReady={isViewLoaded}
+            onSelectFiltered={() => {
+              const keys = selectableFilteredRecords.map((record) => record.key);
+              selectionAnchor.current = null;
+              setSelectedKeys((previous) => Array.from(new Set([...previous, ...keys])));
+            }}
+            hiddenCount={hiddenSelectionCount}
+            isMutating={actions.isOperating}
+            onSelectPage={() => credentialActions.onSelect(selectablePage, true)}
+            onClearSelection={() => {
+              selectionAnchor.current = null;
+              setSelectedKeys([]);
+            }}
+            onEnable={() => void actions.batchStatus(false, selectedRecords)}
+            onDisable={() => void actions.batchStatus(true, selectedRecords)}
+            onRefresh={() => void actions.batchRefresh(selectedRecords)}
+            // The demonstration never contacts a provider, so it refuses a refresh.
+            canRefresh={!isDemo}
+            onDelete={() => void actions.batchDelete(selectedRecords)}
           />
         </div>
-        <Button
-          className={styles['filter-toggle']}
-          icon={<FilterOutlined />}
-          aria-expanded={isFiltersOpen}
-          aria-controls="oauth-collection-filters"
-          type={isFiltersOpen || queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== DEFAULT_OAUTH_SORT ? 'primary' : 'default'}
-          onClick={() => setIsFiltersOpen((open) => !open)}
-        >
-          {t('events.more_filters')}
-        </Button>
-        {/* The two collection actions travel as one group, so on a phone they share a row instead of
-            each wrapping onto its own. */}
-        <div className={styles['collection-actions']}>
-          <Button icon={<TimerResetOutlined />} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
-          {/* The main segment refreshes the filtered set, which is what the list is showing; the
-              caret offers the other scopes. */}
-          <Space.Compact className={styles['refresh-quota']}>
-            <Button
-              icon={<SyncOutlined />}
-              disabled={visibleRecords.length === 0}
-              loading={actions.busyQuotaIndexes.size > 0}
-              onClick={() => void actions.refreshQuota('filtered', visibleRecords, pagedRecords, records)}
-            >
-              {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
-            </Button>
-            <Dropdown
-              trigger={['click']}
-              disabled={visibleRecords.length === 0}
-              menu={{
-                items: [
-                  { key: 'page', label: t('omc.refresh_scope_page', { n: pagedRecords.filter((record) => record.canRefreshQuota).length }) },
-                  { key: 'filtered', label: t('omc.refresh_scope_filtered', { n: eligibleFilteredRefreshCount }) },
-                  { key: 'all', label: t('omc.refresh_scope_all', { n: new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size }) },
-                ],
-                onClick: ({ key }) => void actions.refreshQuota(key as 'page' | 'filtered' | 'all', visibleRecords, pagedRecords, records),
-              }}
-            >
-              <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
-            </Dropdown>
-          </Space.Compact>
-        </div>
-      </Toolbar>
-      {isFiltersOpen && (
-        <div id="oauth-collection-filters" className={styles['advanced-filters']}>
-          <div className={styles['filter-field']}>
-            <span className={styles['filter-field-label']}>{t('af.detail_status')}</span>
-            <Select<AuthFileStatusFilter>
-              disabled={!isViewLoaded}
-              value={queryState.status}
-              onChange={(status) => setSearch({ status: status === 'all' ? null : status, page: null })}
-              aria-label={t('af.detail_status')}
-              style={{ width: 140 }}
-              options={[
-                { value: 'all', label: t('af.status_all') },
-                { value: 'enabled', label: t('af.enabled') },
-                { value: 'disabled', label: t('af.disabled') },
-                { value: 'problem', label: t('af.status_problem') },
-              ]}
-            />
-          </div>
-          <div className={styles['filter-field']}>
-            <span className={styles['filter-field-label']}>{t('omc.tab_quota')}</span>
-            <Select<OAuthWorkspaceQuotaFilter>
-              disabled={!isViewLoaded}
-              value={queryState.quota}
-              onChange={(quota) => setSearch({ quota: quota === 'all' ? null : quota, page: null })}
-              aria-label={t('omc.tab_quota')}
-              style={{ width: 160 }}
-              options={[
-                { value: 'all', label: t('common.all') },
-                { value: 'attention', label: t('omc.quota_filter_attention') },
-                { value: 'healthy', label: t('quota.status_normal') },
-                { value: 'warning', label: t('quota.status_warning') },
-                { value: 'exhausted', label: t('quota.status_exceeded') },
-                { value: 'cooldown', label: t('quota.status_cooldown') },
-                { value: 'stale', label: t('quota.status_stale') },
-                { value: 'error', label: t('quota.status_error') },
-                { value: 'unobserved', label: t('omc.quota_unobserved') },
-                { value: 'unsupported', label: t('omc.quota_unsupported') },
-              ]}
-            />
-          </div>
-          <div className={styles['filter-field']}>
-            <span className={styles['filter-field-label']}>{t('af.sort_label')}</span>
-            <Select<OAuthWorkspaceSortKey>
-              aria-label={t('af.sort_label')}
-              disabled={!isViewLoaded}
-              value={queryState.sort}
-              onChange={(sort) => setSearch({ sort: sort === DEFAULT_OAUTH_SORT ? null : sort, page: null })}
-              style={{ width: 160 }}
-              options={[
-                { value: 'custom', label: t('omc.sort_custom') },
-                { value: 'name-asc', label: t('af.sort_name_asc') },
-                { value: 'name-desc', label: t('af.sort_name_desc') },
-                { value: 'priority-desc', label: t('af.sort_priority') },
-                { value: 'weight-desc', label: t('af.sort_weight') },
-              ]}
-            />
-          </div>
-          <div className={styles['toolbar-actions']}>
-            <Button
-              icon={<SearchOutlined />}
-              disabled={!isViewLoaded}
-              onClick={() => {
-                setResetSearchToken((value) => value + 1);
-                setSearch({ q: null, status: null, quota: null, sort: null, page: null });
-              }}
-            >
-              {t('omc.reset_filters')}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <BatchActionBar
-        selectedCount={selectedRecords.length}
-        selectablePageCount={pagedRecords.filter((record) => record.canSelectForFileBatch).length}
-        selectableFilteredCount={selectableFilteredRecords.length}
-        canSelectFiltered={hasUnselectedFilteredRecords}
-        isSelectionReady={isViewLoaded}
-        onSelectFiltered={() => {
-          const keys = selectableFilteredRecords.map((record) => record.key);
-          setSelectedKeys((previous) => Array.from(new Set([...previous, ...keys])));
-        }}
-        hiddenCount={hiddenSelectionCount}
-        isMutating={actions.isOperating}
-        onSelectPage={() => {
-          const keys = pagedRecords.filter((record) => record.canSelectForFileBatch).map((record) => record.key);
-          setSelectedKeys((previous) => Array.from(new Set([...previous, ...keys])));
-        }}
-        onClearSelection={() => setSelectedKeys([])}
-        onEnable={() => void actions.batchStatus(false, selectedRecords)}
-        onDisable={() => void actions.batchStatus(true, selectedRecords)}
-        onRefresh={() => void actions.batchRefresh(selectedRecords)}
-        // The demonstration never contacts a provider, so it refuses a refresh.
-        canRefresh={!isDemo}
-        onDelete={() => void actions.batchDelete(selectedRecords)}
-      />
-
-      {filesQuery.isPending && !filesQuery.data ? (
-        <LoadingRegion>
-          <ListPlaceholder rows={6} isFramed />
-        </LoadingRegion>
-      ) : visibleRecords.length === 0 ? (
-        <div className={`terminal-panel ${styles.empty}`}>
-          <EmptyState title={records.length === 0 ? t('af.empty_all') : t('af.empty_filter')} />
-        </div>
-      ) : (
-        <>
-          <div className={styles.sections}>
-            {/* The provider sections are the page's reorderable list: each section is a row, held by
-                the band that names it. A keyboard step trades places with the section drawn beside
-                it; a step never reaches a section the page does not show. */}
-            <RowReorder
-              items={sections.map((section) => section.provider)}
-              isEnabled={sectionOrder.reorder.isEnabled}
-              onMove={sectionOrder.reorder.onMove}
-              onStep={(provider, direction) => {
-                const index = sections.findIndex((section) => section.provider === provider);
-                const neighbour = sections[index + direction];
-                if (index >= 0 && neighbour) {
-                  sectionOrder.reorder.onMove(provider, neighbour.provider, direction < 0 ? 'before' : 'after');
-                }
-              }}
-            >
-              {/* A filter narrows the sections the way it narrows their rows: the providers that
-                  remain close up as the ones a search left go. */}
-              <FilterTransition itemKeys={sections.map((section) => section.provider)}>
-                {sections.map((section) => (
-                  <ReorderableCredentialSection
-                    key={section.provider}
-                    section={section}
-                    title={providerDisplayName(section.provider, pluginTitles)}
-                    pluginLogos={pluginLogos}
-                    selectedKeys={selectedKeySet}
-                    nowMS={visibleNow}
-                    actions={rowActions}
-                    columnSort={quotaColumnSorts[section.provider]}
-                    onReorder={credentialOrder.loaded ? reorderCredential : undefined}
-                    onSort={(key) => {
-                      setQuotaColumnSorts((current) => {
-                        const next = { ...current };
-                        const sort = current[section.provider];
-                        if (sort?.key !== key) next[section.provider] = { key, direction: 'asc' };
-                        else if (sort.direction === 'asc') next[section.provider] = { key, direction: 'desc' };
-                        else delete next[section.provider];
-                        return next;
-                      });
-                      setSearch({ page: null });
-                    }}
-                  />
-                ))}
-              </FilterTransition>
-            </RowReorder>
-          </div>
-          <div className={styles.pagination}>
-            <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
-            <Select
-              value={pageSize}
-              disabled={!isViewLoaded}
-              onChange={(size) => {
-                const next = size as 12 | 24 | 48;
-                setSearch({ page_size: next, page: null });
-              }}
-              style={{ width: 110 }}
-              options={[12, 24, 48].map((size) => ({ value: size, label: t('af.page_size_n', { n: size }) }))}
-            />
-
-            <Pager
-              page={page}
-              pageSize={pageSize}
-              total={visibleRecords.length}
-              hasQuickJumper
-              onChange={(nextPage) => setSearch({ page: nextPage === 1 ? null : nextPage })}
-            />
-          </div>
-        </>
       )}
 
       <DeferredMount isActive={isConnectOpen}>
@@ -1025,11 +841,7 @@ export const OAuthManagementPage: React.FC = () => {
       </DeferredMount>
 
       <DeferredMount isActive={isVertexImportOpen}>
-        <VertexImportModal
-          open={isVertexImportOpen}
-          onClose={() => setIsVertexImportOpen(false)}
-          onImported={actions.reloadWorkspace}
-        />
+        <VertexImportModal open={isVertexImportOpen} onClose={() => setIsVertexImportOpen(false)} onImported={actions.reloadWorkspace} />
       </DeferredMount>
 
       <DeferredMount isActive={Boolean(selectedRecord)}>
@@ -1060,12 +872,7 @@ export const OAuthManagementPage: React.FC = () => {
       </DeferredMount>
 
       <DeferredMount isActive={Boolean(siwcRecord)}>
-        <SIWCDialog
-          file={siwcRecord?.file}
-          canEdit={Boolean(siwcRecord?.canEditFile)}
-          bindings={siwcBindings}
-          onClose={() => setSIWCRecordKey(undefined)}
-        />
+        <SIWCDialog file={siwcRecord?.file} canEdit={Boolean(siwcRecord?.canEditFile)} bindings={siwcBindings} onClose={() => setSIWCRecordKey(undefined)} />
       </DeferredMount>
       <DeferredMount isActive={isWarmupSettingsOpen}>
         <WarmupSettingsDrawer open={isWarmupSettingsOpen} onClose={() => setIsWarmupSettingsOpen(false)} />

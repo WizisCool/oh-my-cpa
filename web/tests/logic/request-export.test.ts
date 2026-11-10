@@ -15,6 +15,7 @@ import { modelMarkIconId } from '../../src/types/modelSquare.ts';
 import { indexCredentialFiles } from '../../src/types/usageEventIdentity.ts';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import type { UsageEvent } from '../../src/types/usageEvents.ts';
+import type { SelectionAnchor } from '../../src/types/rowSelection.ts';
 import { test } from 'vitest';
 
 test('request image export uses the same issuing portal name and artwork as the request row', () => {
@@ -46,17 +47,24 @@ test('request export', () => {
   const none = new Map<number, (typeof rows)[number]>();
   const ids = (selection: ReadonlyMap<number, unknown>) => [...selection.keys()].sort();
 
-  const one = toggleSelection(none, rows, 4, null, false);
-  assert.deepEqual(ids(one), [4]);
-  assert.deepEqual(ids(toggleSelection(one, rows, 4, 4, false)), [], 'a plain click on a selected row clears it');
-  const run = toggleSelection(one, rows, 2, 4, true);
-  assert.deepEqual(ids(run), [2, 3, 4], 'a range click selects the run from the anchor');
-  assert.deepEqual(ids(toggleSelection(run, rows, 3, 4, true)), [2], 'a range click on a selected row clears the run');
-  assert.deepEqual(ids(toggleSelection(one, rows, 2, 99, true)), [2, 4], 'an anchor that left the page makes the click plain');
-  assert.deepEqual(ids(toggleSelection(one, rows, 99, 4, true)), [4], 'a row that is not loaded changes nothing');
+  const pick = (selection: ReadonlyMap<number, (typeof rows)[number]>, id: number, anchor: SelectionAnchor<number> | null, isRange: boolean) =>
+    toggleSelection(selection, rows, id, anchor, isRange);
+  const one = pick(none, 4, null, false);
+  assert.deepEqual(ids(one.selection), [4]);
+  assert.deepEqual(ids(pick(one.selection, 4, one.anchor, false).selection), [], 'a plain click on a selected row clears it');
+  const run = pick(one.selection, 2, one.anchor, true);
+  assert.deepEqual(ids(run.selection), [2, 3, 4], 'a Shift click selects the run from the anchor');
+  assert.deepEqual(ids(pick(run.selection, 3, run.anchor, true).selection), [3, 4], 'a shorter run gives rows back, as on a desktop');
+  const other = pick(run.selection, 1, run.anchor, false);
+  assert.deepEqual(ids(pick(other.selection, 3, other.anchor, true).selection), [1, 2, 3, 4], 'a new anchor starts its own run and keeps the last one');
+  const cleared = pick(run.selection, 4, run.anchor, false);
+  assert.deepEqual(ids(pick(cleared.selection, 3, cleared.anchor, true).selection), [2], 'a run from a cleared anchor clears');
+  assert.deepEqual(ids(pick(one.selection, 2, { key: 99, isSelected: true, changed: [] }, true).selection), [2, 4], 'an anchor that left the page makes the click plain');
+  assert.deepEqual(ids(pick(one.selection, 99, one.anchor, true).selection), [4], 'a row that is not loaded changes nothing');
+  const runSelection = run.selection;
 
   assert.equal(loadedSelectionState(none, rows), 'none');
-  assert.equal(loadedSelectionState(run, rows), 'some');
+  assert.equal(loadedSelectionState(runSelection, rows), 'some');
   const otherPage = new Map([[42, { id: 42, timestamp_ms: 1 }]]);
   assert.equal(loadedSelectionState(otherPage, rows), 'none', "another page's rows do not tick this page's header");
   const everything = setLoadedSelection(otherPage, rows, true);

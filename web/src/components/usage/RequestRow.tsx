@@ -41,6 +41,7 @@ import { ModelMark } from '../ModelMark';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import { useToast } from '../feedback';
+import { isRangeCheckboxClick, rowClickIntent } from '../../types/rowSelection';
 import './RequestList.css';
 import './requestMarks.css';
 
@@ -58,9 +59,11 @@ export interface RequestRowProps {
   isProviderCatalogUnknown?: boolean;
   onOpen: (id: number) => void;
   isSelected?: boolean;
-  /** Whether the row's checkbox is ticked. */
+  /** Whether the row is picked. */
   isChecked?: boolean;
-  /** A tick on the row's checkbox; `isRange` is a Shift click. */
+  /** Whether a choice is under way: the row shows its checkbox, and a plain click picks it. */
+  isSelecting?: boolean;
+  /** A pick of the row; `isRange` is a Shift click, which runs from the last row picked. */
   onToggleSelect: (id: number, isRange: boolean) => void;
 }
 
@@ -77,6 +80,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     onOpen,
     isSelected = false,
     isChecked = false,
+    isSelecting = false,
     onToggleSelect,
   }) => {
     const timeZone = useTimeZone();
@@ -183,7 +187,13 @@ export const RequestRow = React.memo<RequestRowProps>(
         role="button"
         tabIndex={0}
         className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}`}
-        onClick={() => onOpen(event.id)}
+        // Shift extends a choice, so it must not also start a text selection across the rows.
+        onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
+        onClick={(e) => {
+          const intent = rowClickIntent(e, isSelecting);
+          if (intent === 'open') onOpen(event.id);
+          else onToggleSelect(event.id, intent === 'range');
+        }}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === 'Enter' || e.key === ' ') {
@@ -193,27 +203,22 @@ export const RequestRow = React.memo<RequestRowProps>(
         }}
         aria-label={`${t('common.details')}: ${displayModel}, ${event.request_id || event.id}`}
       >
-        {/* The row opens the record; the checkbox picks it instead, so neither a
-            click nor a key on it may reach the row. */}
-        <label
-          className="req-select"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            className="req-select-box"
-            checked={isChecked}
-            aria-label={t('events.select_row', { id: event.request_id || event.id })}
-            // A run is a pointer gesture. Space on a focused box arrives as a click
-            // too, and whether that click reports Shift differs by browser, so a
-            // keyboard toggle (detail 0) always picks the one row.
-            onChange={(e) => {
-              const click = e.nativeEvent as MouseEvent;
-              onToggleSelect(event.id, click.shiftKey === true && click.detail > 0);
-            }}
-          />
-        </label>
+        {/* The checkbox picks the row; neither a click nor a key on it may also reach the row. */}
+        {isSelecting && (
+          <label
+            className="req-select"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              className="req-select-box"
+              checked={isChecked}
+              aria-label={t('events.select_row', { id: event.request_id || event.id })}
+              onChange={(e) => onToggleSelect(event.id, isRangeCheckboxClick(e.nativeEvent as MouseEvent))}
+            />
+          </label>
+        )}
 
         {/* Column 1: timestamp */}
         <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>

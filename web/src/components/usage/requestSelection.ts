@@ -1,3 +1,4 @@
+import { pickRows, type SelectionAnchor } from '../../types/rowSelection';
 import type { RequestColumnId } from './requestColumns';
 
 /**
@@ -63,34 +64,26 @@ interface SelectableRecord {
 }
 
 /**
- * toggleSelection applies one checkbox click to the selection.
- *
- * A plain click flips the row. A range click extends from the anchor - the row
- * last clicked without Shift - to the row clicked now, and gives every row
- * between them the state the clicked row is moving to, so Shift can deselect a
- * run as well as select one. When the anchor has left the loaded rows (a poll or
- * a page change removed it) there is no run to extend, and the click is plain.
+ * toggleSelection applies one pick to the selection by the console's shared rule (`pickRows`). A row
+ * that is not loaded changes nothing, and a row a run would give back that has since left the
+ * loaded rows stays out, because only a loaded row can be exported.
  */
 export function toggleSelection<Row extends SelectableRecord>(
   selection: ReadonlyMap<number, Row>,
   rows: readonly Row[],
   id: number,
-  anchorId: number | null,
+  anchor: SelectionAnchor<number> | null,
   isRange: boolean,
-): Map<number, Row> {
-  const next = new Map(selection);
-  const targetIndex = rows.findIndex((row) => row.id === id);
-  if (targetIndex < 0) return next;
-  const isSelecting = !selection.has(id);
-  const anchorIndex = isRange && anchorId !== null ? rows.findIndex((row) => row.id === anchorId) : -1;
-  const from = anchorIndex < 0 ? targetIndex : Math.min(anchorIndex, targetIndex);
-  const to = anchorIndex < 0 ? targetIndex : Math.max(anchorIndex, targetIndex);
-  for (let index = from; index <= to; index += 1) {
-    const row = rows[index];
-    if (isSelecting) next.set(row.id, row);
-    else next.delete(row.id);
+): { selection: Map<number, Row>; anchor: SelectionAnchor<number> | null } {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  if (!byId.has(id)) return { selection: new Map(selection), anchor };
+  const pick = pickRows(new Set(selection.keys()), rows.map((row) => row.id), id, anchor, isRange);
+  const next = new Map<number, Row>();
+  for (const key of pick.selected) {
+    const row = selection.get(key) ?? byId.get(key);
+    if (row) next.set(key, row);
   }
-  return next;
+  return { selection: next, anchor: pick.anchor };
 }
 
 /**

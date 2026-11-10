@@ -281,6 +281,7 @@ export default {
   'events.reset_columns': 'Reset Columns',
   'events.select_row': 'Select request {id}',
   'events.select_all': 'Select all on this page',
+  'events.select_requests': 'Select requests',
   'events.selection': 'Selected requests',
   'events.selected_count': '{n} selected',
   'events.clear_selection': 'Clear selection',

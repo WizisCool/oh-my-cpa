@@ -1,78 +1,40 @@
 .page {
-  padding-bottom: 64px;
-}
-
-.toolbar {
-  margin: 14px 0;
-}
-
-.search {
-  flex: 1 1 240px;
-  min-width: 200px;
+  padding-bottom: 72px;
 }
 
 .diagnostic-bar {
   margin-bottom: 12px;
 }
 
-.sections {
+/* The provider tabs, the tools, and the credentials in scope, all at the page's full width. */
+.workspace {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  min-width: 0;
 }
 
-.filter-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.advanced-filters {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.filter-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.filter-field-label {
-  font-size: var(--text-xs);
-  color: var(--meta);
-}
-
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+.select-all {
+  flex: none;
+  padding: 0 4px 0 15px;
 }
 
 .empty {
-  min-height: 180px;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 220px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .pagination {
-  margin-top: 24px;
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  margin-top: 8px;
   color: var(--fg-2);
   font-size: var(--text-sm);
 }
@@ -81,84 +43,32 @@
   margin-right: auto;
 }
 
-.collection-actions {
+/* The selection's actions float at the foot of the view on the floating surface. */
+.dock {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  justify-content: center;
+  margin-top: 16px;
+  pointer-events: none;
 }
 
-@media (max-width: 900px) {
-  .head {
-    flex-direction: column;
-  }
-
-  .actions {
-    width: 100%;
-  }
+.dock > * {
+  max-width: 100%;
+  pointer-events: auto;
 }
 
 @media (max-width: 640px) {
-  .toolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .toolbar > * {
-    width: 100%;
-  }
-
-  .search {
-    min-width: 0;
-    grid-column: 1;
-  }
-
-  .filter-toggle {
-    display: inline-flex;
-    grid-column: 2;
-    width: auto;
-  }
-
-  .advanced-filters > .filter-field,
-  .advanced-filters > .filter-field > :global(.ant-select) {
-    flex: 1 1 100%;
-    width: 100% !important;
-    min-width: 0;
-  }
-
-  .toolbar > :global(.ant-select),
-  .toolbar > :global(.ant-segmented),
-  .toolbar-actions {
-    grid-column: 1 / -1;
-  }
-
-  .toolbar-actions {
-    flex-wrap: wrap;
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .toolbar-actions > * {
-    flex: 1 1 auto;
+  .select-all {
+    padding-left: 12px;
   }
 
   .pagination {
     justify-content: center;
   }
 
-  /* Settings keeps its label's width; the refresh takes the rest of the row, its main segment
-     stretching and the scope caret staying square. */
-  .collection-actions {
-    grid-column: 1 / -1;
-  }
-
-  .refresh-quota {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .refresh-quota > :global(.ant-btn):first-child {
-    flex: 1 1 auto;
-    min-width: 0;
+  .dock {
+    bottom: max(12px, env(safe-area-inset-bottom));
   }
 }

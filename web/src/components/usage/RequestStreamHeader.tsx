@@ -15,6 +15,8 @@ interface RequestStreamHeaderProps {
   handleResetColumn: (colId: RequestColumnId) => void;
   handleResizeKeyDown: (colId: RequestColumnId, event: React.KeyboardEvent) => void;
   /** How the loaded rows stand against the selection. */
+  /** Whether a choice is under way, which is when the list has a selection column. */
+  isSelecting: boolean;
   selectionState: 'none' | 'some' | 'all';
   onToggleAll: (isSelected: boolean) => void;
 }
@@ -33,6 +35,7 @@ export function RequestStreamHeader({
   handleResizeStart,
   handleResetColumn,
   handleResizeKeyDown,
+  isSelecting,
   selectionState,
   onToggleAll,
 }: RequestStreamHeaderProps) {
@@ -41,11 +44,12 @@ export function RequestStreamHeader({
   const selectAllRef = React.useRef<HTMLInputElement>(null);
   React.useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = selectionState === 'some';
-  }, [selectionState]);
+  }, [selectionState, isSelecting]);
 
   return (
 
           <div className="request-table-header">
+            {isSelecting && (
             <label className="req-th req-select req-th-select">
               <input
                 ref={selectAllRef}
@@ -59,6 +63,7 @@ export function RequestStreamHeader({
                 onChange={() => onToggleAll(selectionState !== 'all')}
               />
             </label>
+            )}
             {REQUEST_COLUMNS.map((col) => (
               <div
                 key={col.id}

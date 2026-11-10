@@ -681,8 +681,7 @@
     align-items: center;
     column-gap: 8px;
     row-gap: 6px;
-    /* The left padding is the pick's column, so the three lines share one left edge. */
-    padding: 12px 12px 12px 44px;
+    padding: 12px;
     width: 100%;
     min-width: 100%;
     min-height: auto;
@@ -708,6 +707,10 @@
   .req-col-time::after { order: 19; }
   .req-col-tokens::before { order: 29; }
 
+  /* While choosing, the left padding is the pick's column, so the three lines share one left edge. */
+  .is-selecting .request-row {
+    padding-left: 44px;
+  }
   .req-select {
     position: absolute;
     top: 14px;

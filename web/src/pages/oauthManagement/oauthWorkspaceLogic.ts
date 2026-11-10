@@ -6,8 +6,11 @@ import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { OAUTH_PROVIDER_PATTERN } from '../../types/pluginOAuthProviders';
 import type { OAuthProviderChoice } from '../oauthProviderLogic';
 import type { QuotaItem } from '../../types/quota';
+import { parseHealthLens, type HealthLens } from './fleetPresentation';
 
 export type OAuthWorkspaceDensity = 'compact' | 'expanded';
+/** The two ways the workspace draws credentials: rows to manage, cards to read. */
+export type OAuthWorkspaceLayout = 'list' | 'cards';
 export type OAuthWorkspaceQuotaFilter =
   | 'all'
   | 'attention'
@@ -79,6 +82,8 @@ export interface OAuthWorkspaceQueryState {
   sort: OAuthWorkspaceSortKey;
   page: number;
   pageSize: 12 | 24 | 48;
+  layout: OAuthWorkspaceLayout;
+  health: HealthLens;
   density?: OAuthWorkspaceDensity;
   action?: 'connect';
   connectProvider?: string;
@@ -99,10 +104,11 @@ const QUOTA_FILTERS = new Set<OAuthWorkspaceQuotaFilter>([
   'unsupported',
 ]);
 /**
- * The list's orders: the auth-file sorts, and the operator's own arrangement. The arrangement is the
- * default because, until a row has been dragged, it is the name order the list has always had.
+ * The list's orders: the auth-file sorts, the share of quota left in each credential's tightest
+ * limit, and the operator's own arrangement. The arrangement is the default because, until a row
+ * has been dragged, it is the name order the list has always had.
  */
-export type OAuthWorkspaceSortKey = AuthFileSortKey | 'custom';
+export type OAuthWorkspaceSortKey = AuthFileSortKey | 'custom' | 'quota-asc' | 'quota-desc';
 export const DEFAULT_OAUTH_SORT: OAuthWorkspaceSortKey = 'custom';
 
 const AUTH_FILE_SORTS = new Set<OAuthWorkspaceSortKey>([
@@ -111,11 +117,14 @@ const AUTH_FILE_SORTS = new Set<OAuthWorkspaceSortKey>([
   'name-desc',
   'priority-desc',
   'weight-desc',
+  'quota-asc',
+  'quota-desc',
 ]);
 const PAGE_SIZES = new Set<number>([12, 24, 48]);
 
 export interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
+  layout: OAuthWorkspaceLayout;
   status: AuthFileStatusFilter;
   quota: OAuthWorkspaceQuotaFilter;
   sort: OAuthWorkspaceSortKey;
@@ -123,6 +132,7 @@ export interface OAuthManagementViewPreference {
 
 export const DEFAULT_OAUTH_MANAGEMENT_VIEW: OAuthManagementViewPreference = {
   pageSize: 12,
+  layout: 'list',
   status: 'all',
   quota: 'all',
   sort: DEFAULT_OAUTH_SORT,
@@ -132,7 +142,7 @@ export function parseOAuthManagementView(raw: unknown): OAuthManagementViewPrefe
   if (!raw || typeof raw !== 'object') return undefined;
   const record = raw as Record<string, unknown>;
   const params = new URLSearchParams();
-  for (const key of ['status', 'quota', 'sort'] as const) {
+  for (const key of ['status', 'quota', 'sort', 'layout'] as const) {
     if (typeof record[key] === 'string') params.set(key, record[key]);
   }
   const query = parseOAuthWorkspaceQuery(params);
@@ -140,6 +150,7 @@ export function parseOAuthManagementView(raw: unknown): OAuthManagementViewPrefe
     pageSize: typeof record.pageSize === 'number' && PAGE_SIZES.has(record.pageSize)
       ? record.pageSize as 12 | 24 | 48
       : DEFAULT_OAUTH_MANAGEMENT_VIEW.pageSize,
+    layout: query.layout,
     status: query.status,
     quota: query.quota,
     sort: query.sort,
@@ -224,9 +235,12 @@ export function quotaConditionOf(item: QuotaItem | undefined): OAuthWorkspaceQuo
   return conditionFromWindows(item);
 }
 
+/**
+ * Whether the quota keeps the credential from serving. A low but usable reading (`warning`) is not:
+ * its bars already say how much is left, and flagging it buried the credentials that cannot serve.
+ */
 export function isQuotaAttention(condition: OAuthWorkspaceQuotaCondition): boolean {
-  return condition === 'warning'
-    || condition === 'exhausted'
+  return condition === 'exhausted'
     || condition === 'cooldown'
     || condition === 'error'
     || condition === 'reauth';
@@ -520,6 +534,7 @@ export function parseOAuthWorkspaceQuery(params: URLSearchParams): OAuthWorkspac
   const pageRaw = Number(params.get('page') ?? '1');
   const pageSizeRaw = Number(params.get('page_size') ?? '12');
   const densityRaw = params.get('density');
+  const layoutRaw = params.get('layout');
   const action = params.get('action') === 'connect' ? 'connect' : undefined;
   const connectProviderRaw = normalizedKey(params.get('connect_provider') || '');
   const connectProvider = connectProviderRaw && OAUTH_PROVIDER_PATTERN.test(connectProviderRaw)
@@ -535,6 +550,8 @@ export function parseOAuthWorkspaceQuery(params: URLSearchParams): OAuthWorkspac
     sort: sortRaw && AUTH_FILE_SORTS.has(sortRaw) ? sortRaw : DEFAULT_OAUTH_SORT,
     page: Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1,
     pageSize: PAGE_SIZES.has(pageSizeRaw) ? pageSizeRaw as 12 | 24 | 48 : 12,
+    layout: layoutRaw === 'cards' ? 'cards' : 'list',
+    health: parseHealthLens(params.get('health')),
     density: densityRaw === 'compact' || densityRaw === 'expanded' ? densityRaw : undefined,
     action,
     connectProvider,

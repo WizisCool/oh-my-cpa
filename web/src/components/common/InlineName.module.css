@@ -23,6 +23,7 @@
 }
 
 td:hover .rename,
+:global([data-rename-host]):hover .rename,
 .editable:focus-within .rename {
   opacity: 1;
   pointer-events: auto;

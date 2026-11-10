@@ -178,7 +178,7 @@ export const REQUEST_PAD_INLINE = 12;
 /** The leading track that holds each row's selection checkbox. */
 export const SELECT_TRACK_WIDTH = 20;
 
-/** Which fixed tracks surround the data columns: the list has both, an exported sheet neither. */
+/** Which fixed tracks surround the data columns: the list while choosing has both, an exported sheet neither. */
 export interface RequestGridChrome {
   hasSelection: boolean;
   hasChevron: boolean;
@@ -329,6 +329,7 @@ export function foldRequestColumns(
 ): ReadonlySet<RequestColumnId> {
   const folded = new Set<RequestColumnId>();
   if (availableWidth === null || availableWidth <= REQUEST_STACK_WIDTH) return folded;
+  // Room is kept for the selection track even while it is hidden, so starting a choice never folds a column.
   for (const id of FOLD_SEQUENCE) {
     if (computeGridMinWidth(widths, REQUEST_GRID_GAP, REQUEST_PAD_INLINE, LIST_GRID_CHROME, folded) <= availableWidth) break;
     folded.add(id);

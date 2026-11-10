@@ -43,8 +43,9 @@ beforeEach(() => {
 
 describe('list view preference persistence', () => {
   it('preserves old OAuth page sizes and normalizes unknown filter values', () => {
-    expect(parseOAuthManagementView({ pageSize: 48, density: 'expanded' })).toEqual({ pageSize: 48, status: 'all', quota: 'all', sort: 'custom' });
-    expect(parseOAuthManagementView({ pageSize: '24', status: 'bogus', quota: 'bogus', sort: 'bogus' })).toEqual({ pageSize: 12, status: 'all', quota: 'all', sort: 'custom' });
+    expect(parseOAuthManagementView({ pageSize: 48, density: 'expanded' })).toEqual({ pageSize: 48, layout: 'list', status: 'all', quota: 'all', sort: 'custom' });
+    expect(parseOAuthManagementView({ pageSize: '24', status: 'bogus', quota: 'bogus', sort: 'bogus', layout: 'bogus' })).toEqual({ pageSize: 12, layout: 'list', status: 'all', quota: 'all', sort: 'custom' });
+    expect(parseOAuthManagementView({ layout: 'cards', sort: 'quota-asc' })).toMatchObject({ layout: 'cards', sort: 'quota-asc' });
   });
 
   it('saves OAuth filters and sorting with page size, restores them with a fresh cache and persists reset', async () => {
@@ -54,14 +55,14 @@ describe('list view preference persistence', () => {
     await waitFor(() => expect(writes()).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: 'Resize OAuth' }));
     await waitFor(() => expect(writes()).toHaveLength(2));
-    expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, status: 'enabled', quota: 'attention', sort: 'priority-desc' });
+    expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, layout: 'list', status: 'enabled', quota: 'attention', sort: 'priority-desc' });
     first.unmount();
     const second = mount(<OAuthView />);
     await waitFor(() => expect(readView()).toMatchObject({ pageSize: 24, status: 'enabled', quota: 'attention', sort: 'priority-desc' }));
     expect(writes()).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Reset OAuth' }));
     await waitFor(() => expect(writes()).toHaveLength(3));
-    expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, status: 'all', quota: 'all', sort: 'custom' });
+    expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, layout: 'list', status: 'all', quota: 'all', sort: 'custom' });
     second.unmount();
     mount(<OAuthView />);
     await waitFor(() => expect(readView()).toMatchObject({ pageSize: 24, status: 'all', quota: 'all', sort: 'custom' }));

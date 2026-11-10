@@ -1,0 +1,167 @@
+/* Find, triage, narrow, order, look and refresh: one row that wraps only when the width runs out. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.search {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 320px;
+}
+
+.tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.layout :global(.ant-segmented-item-icon) + :global(.ant-segmented-item-label-text),
+.layout :global(.ant-segmented-item-label) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.caret {
+  width: 28px !important;
+  min-width: 28px;
+}
+
+.tool-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-active {
+  color: var(--accent) !important;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border)) !important;
+}
+
+.tool-count {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Health verdicts as quiet chips: a pip, the verdict and its count. */
+.health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lens {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 9px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.lens:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  color: var(--fg);
+}
+
+.lens:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.lens-active,
+.lens-active:hover {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--fg);
+}
+
+.lens-label {
+  white-space: nowrap;
+}
+
+.lens-count {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.pip-attention { background: var(--warn); }
+.pip-healthy { background: var(--success); }
+.pip-stale { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.pip-disabled { background: color-mix(in srgb, var(--fg) 25%, transparent); }
+
+.sort-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 160px;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 240px;
+  padding: 4px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-field :global(.ant-select) {
+  width: 100%;
+}
+
+.filter-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.filter-reset {
+  align-self: flex-start;
+  margin-left: -7px;
+}
+
+/* A phone: the search takes the first line beside the tools, the verdicts the next. */
+@media (max-width: 640px) {
+  .search {
+    max-width: none;
+  }
+
+  .health {
+    order: 3;
+    width: 100%;
+  }
+
+  .lens {
+    padding: 0 8px 0 7px;
+  }
+}

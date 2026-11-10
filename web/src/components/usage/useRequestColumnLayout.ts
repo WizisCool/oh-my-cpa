@@ -3,6 +3,7 @@ import React from 'react';
 import { usePreference } from '../../hooks/usePreference';
 import {
   COLUMN_MAP,
+  LIST_GRID_CHROME,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   buildGridTemplateColumns,
   computeGridMinWidth,
@@ -25,7 +26,7 @@ import {
  * gesture that measured it, and the grid is derived from what is on screen
  * rather than from the preference document.
  */
-export function useRequestColumnLayout() {
+export function useRequestColumnLayout(isSelecting: boolean) {
 
   const {
     value: columnWidthsPref,
@@ -77,13 +78,15 @@ export function useRequestColumnLayout() {
     () => new Set(foldedKey ? (foldedKey.split(' ') as RequestColumnId[]) : []),
     [foldedKey],
   );
+  // The selection track exists only while a choice is under way; at rest its width goes to the data.
+  const chrome = React.useMemo(() => ({ ...LIST_GRID_CHROME, hasSelection: isSelecting }), [isSelecting]);
   const gridTemplate = React.useMemo(
-    () => buildGridTemplateColumns(colWidths, undefined, folded),
-    [colWidths, folded],
+    () => buildGridTemplateColumns(colWidths, chrome, folded),
+    [colWidths, chrome, folded],
   );
   const gridMinWidth = React.useMemo(
-    () => computeGridMinWidth(colWidths, undefined, undefined, undefined, folded),
-    [colWidths, folded],
+    () => computeGridMinWidth(colWidths, undefined, undefined, chrome, folded),
+    [colWidths, chrome, folded],
   );
 
   const handleResizeStart = React.useCallback(

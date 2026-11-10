@@ -1,0 +1,195 @@
+/* A credential's limits in two tracks, the first line's five-hour and weekly limits in the first
+   and second, every further limit two to a line or alone across both. */
+.lines {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px 24px;
+  min-width: 0;
+}
+
+.slot-short { grid-column: 1; }
+.slot-long { grid-column: 2; }
+/* A line's only limit takes both tracks: a weekly-only plan reads as one long bar. */
+.slot-span { grid-column: 1 / -1; }
+
+.cell {
+  min-width: 0;
+}
+
+/* A reading names itself and states what is left on its first line, draws its bar across the
+   whole track, and puts the window's estimated size and its reset time on the line under the bar,
+   so none of the three competes with the bar for width. */
+.reading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name value"
+    "bar bar"
+    "estimate reset";
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reading:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+/* The window's name is plain secondary ink: the bar and the figure are what the eye compares down
+   the tracks, and a chip on every reading would outweigh both. */
+.name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  grid-area: value;
+  justify-self: end;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.value b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tall enough to hold its colour beside a labelled figure, rounded so a row of readings reads as
+   readings rather than stripes, on an ink wash so the empty share does not turn into a block. */
+.bar {
+  grid-area: bar;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+
+.bar > :global(.meter-fill) {
+  border-radius: inherit;
+}
+
+.estimate,
+.reset {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estimate { grid-area: estimate; }
+
+.reset {
+  grid-area: reset;
+  text-align: right;
+}
+
+/* A reading nobody can act on - out of date, failed, or of a credential turned off - stays legible
+   but steps back. */
+.muted > * {
+  opacity: 0.5;
+}
+
+/* The window's name, its reset and its estimate are three facts, one per line; the default width
+   would fold a line mid-phrase, so the box widens to the longest one within the viewport. */
+.tip-popper {
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* On a narrow track the two readings of a line keep their figures; the bar and its colour already
+   say the figure is what is left. */
+@container (max-width: 420px) {
+  .value-prefix {
+    display: none;
+  }
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metric-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.metric-value {
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+/* Alone, the figures are the reading: the readings' name ink and figure weight. */
+.metrics[data-standalone='true'] .metric-label {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+}
+
+.metrics[data-standalone='true'] .metric-value {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.spark {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+
+.spark-bar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 4px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+.spark-bar[data-empty='true'] {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
+.spark-failed {
+  display: block;
+  width: 100%;
+  background: var(--danger);
+}

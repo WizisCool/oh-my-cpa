@@ -49,8 +49,6 @@ export interface CredentialSection {
   provider: string;
   records: OAuthWorkspaceRecord[];
   visibleRecords: OAuthWorkspaceRecord[];
-  /** Whether any credential has a reading; a section without one has no quota columns. */
-  hasQuota: boolean;
 }
 
 export interface QuotaColumnSort {
@@ -298,9 +296,9 @@ export function credentialOrderKey(record: OAuthWorkspaceRecord): string {
 }
 
 /**
- * The sections a page shows, in the same provider order the pages were cut in. Rows are the page's
- * records; columns come from every visible record of the provider, so paging through a section never
- * adds or drops a column.
+ * The groups a page shows, in the same provider order the pages were cut in: each with the page's
+ * records of the provider and every one of its records the filters let through, which a group's
+ * selection and keyboard reordering reach across pages.
  */
 export function buildCredentialSections(
   pageRecords: OAuthWorkspaceRecord[],
@@ -314,12 +312,11 @@ export function buildCredentialSections(
     sections.set(record.displayProvider, rows);
   }
   return orderSections([...sections.entries()], sectionOrder)
-    .map(([provider, records]) => {
-      const providerRecords = visibleRecords.filter((record) => record.displayProvider === provider);
-      // Summary-only plugin quotas also need the quota cell, even without limit windows.
-      const hasQuota = providerRecords.some((record) => quotaLinesOf(record, provider).length > 0 || (record.quota?.plan?.metrics?.length ?? 0) > 0);
-      return { provider, records, visibleRecords: providerRecords, hasQuota };
-    });
+    .map(([provider, records]) => ({
+      provider,
+      records,
+      visibleRecords: visibleRecords.filter((record) => record.displayProvider === provider),
+    }));
 }
 
 /**
@@ -374,7 +371,6 @@ export function credentialStatusOf(record: OAuthWorkspaceRecord, isDisabled: boo
   }
   if (isProblem) return status('warn', 'af.status_problem');
   switch (record.quotaCondition) {
-    case 'warning': return status('warn', 'quota.status_warning');
     case 'error': return status('warn', 'omc.status_read_failed', { canRefreshFix: true });
     case 'stale': return status('neutral', 'quota.status_stale', { canRefreshFix: true });
     case 'loading': return status('accent', 'common.loading');
