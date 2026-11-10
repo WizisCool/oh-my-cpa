@@ -412,7 +412,9 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 	// Websites are management metadata keyed by the same positional id the names
 	// use, so they are attached once here rather than in each family branch.
 	for index := range items {
-		items[index].Website = customWebsites[items[index].ID]
+		if website := customWebsites[items[index].ID]; website != "" {
+			items[index].Website = website
+		}
 		items[index].TestModel = testModels[items[index].ID]
 	}
 

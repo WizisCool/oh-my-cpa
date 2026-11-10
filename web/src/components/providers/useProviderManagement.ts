@@ -106,7 +106,7 @@ export function useProviderManagement({
   const [expandedKeyIds, setExpandedKeyIds] = useState<Set<string>>(new Set());
   const [headersSectionOpen, setHeadersSectionOpen] = useState<boolean>(false);
   const [modelsSectionOpen, setModelsSectionOpen] = useState<boolean>(false);
-  const [formTestModel, setFormTestModel] = useState<string>('auto');
+  const [formTestModel, setFormTestModel] = useState<string>('');
 
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [targetProviderForIcon, setTargetProviderForIcon] = useState<ProviderItem | null>(null);
@@ -323,7 +323,7 @@ export function useProviderManagement({
   // the drawer's test choice, falling back to its first configured model.
   const resolveTestModel = (): string => {
     const trimmedTestModel = formTestModel.trim();
-    if (trimmedTestModel !== '' && trimmedTestModel !== 'auto' && formModels.some((item) => item.name.trim() === trimmedTestModel)) return trimmedTestModel;
+    if (trimmedTestModel !== '' && formModels.some((item) => item.name.trim() === trimmedTestModel)) return trimmedTestModel;
     return formModels.map((item) => item.name.trim()).find((name) => name !== '') ?? '';
   };
 
@@ -623,7 +623,7 @@ export function useProviderManagement({
     setFormBehavior(EMPTY_BEHAVIOR_DRAFT);
     setPolicySectionOpen(false);
     setIsPolicyChecked(false);
-    setFormTestModel('auto');
+    setFormTestModel('');
     setFormIcon('OpenAI');
     setIconManuallySelected(false);
     const initKeyId = 'key-init-1';
@@ -656,7 +656,7 @@ export function useProviderManagement({
     setPolicySectionOpen(false);
     setIsPolicyChecked(false);
 
-    setFormTestModel(provider.test_model || 'auto');
+    setFormTestModel(provider.test_model || '');
     const existingIcon = resolveProviderPickerIcon(provider, { providerIcons });
     setFormIcon(existingIcon);
     setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
@@ -824,7 +824,7 @@ export function useProviderManagement({
       name: formName.trim() || 'Custom Provider',
       base_url: formBaseURL.trim(),
       website: formWebsite.trim(),
-      test_model: formTestModel === 'auto' || !formModels.some((model) => model.name.trim() === formTestModel) ? '' : formTestModel,
+      test_model: formModels.some((model) => model.name.trim() === formTestModel.trim()) ? formTestModel.trim() : '',
       prefix: formPrefix.trim(),
       priority: formPriority != null ? formPriority : undefined,
       runtime_policy: buildRuntimePolicy(formPolicy, supportsErrorRules),
