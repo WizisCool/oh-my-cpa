@@ -436,6 +436,8 @@ export default {
   "events.cause_request_scoped_hint": "CPA 將此次失敗歸於目前請求，可查看回應中的具體原因。",
   "events.cause_stream_truncated": "回應串流提前結束",
   "events.cause_stream_truncated_hint": "CPA 回報此次請求的回應串流在完成前已中斷。",
+  "events.cause_forced_cooldown": "規則觸發憑證冷卻",
+  "events.cause_forced_cooldown_hint": "設定的錯誤規則已使此憑證進入冷卻，可查看回應內容了解詳情。",
   "events.cause_bad_request": "請求被上游拒絕",
   "events.cause_bad_request_hint": "上游認為請求內容不合規，例如參數有誤或上下文過長。具體原因見下方回應。",
   "events.cause_timeout": "上游回應逾時",

@@ -436,6 +436,8 @@ export default {
   'events.cause_request_scoped_hint': 'CPA attributes this failure to the current request; the response provides the details.',
   'events.cause_stream_truncated': 'Response stream ended early',
   'events.cause_stream_truncated_hint': 'CPA reports that this request’s response stream ended before completion.',
+  'events.cause_forced_cooldown': 'Credential cooled down by error rule',
+  'events.cause_forced_cooldown_hint': 'A configured error rule put this credential into cooldown; the response provides the details.',
   'events.cause_bad_request': 'Request refused upstream',
   'events.cause_bad_request_hint': 'The upstream found something wrong with the request itself, such as a bad parameter or an over-long context. Its response below says what.',
   'events.cause_timeout': 'Upstream timed out',

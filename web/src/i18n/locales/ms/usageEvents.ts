@@ -436,6 +436,8 @@ export default {
   "events.cause_request_scoped_hint": "CPA mengaitkan kegagalan ini dengan permintaan semasa; respons memberikan butirannya.",
   "events.cause_stream_truncated": "Strim respons terhenti awal",
   "events.cause_stream_truncated_hint": "CPA melaporkan bahawa strim respons permintaan ini terhenti sebelum selesai.",
+  "events.cause_forced_cooldown": "Peraturan ralat mencetuskan tempoh bertenang",
+  "events.cause_forced_cooldown_hint": "Peraturan ralat yang dikonfigurasi meletakkan kelayakan ini dalam tempoh bertenang; lihat respons untuk butirannya.",
   "events.cause_bad_request": "Permintaan ditolak oleh hulu",
   "events.cause_bad_request_hint": "Hulu mendapati sesuatu yang salah pada permintaan itu sendiri, seperti parameter yang salah atau konteks terlalu panjang. Responsnya di bawah menerangkannya.",
   "events.cause_timeout": "Hulu tamat masa",

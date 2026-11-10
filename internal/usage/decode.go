@@ -157,13 +157,14 @@ type FailureCode string
 const (
 	FailureRequestScoped   FailureCode = "request_scoped"
 	FailureStreamTruncated FailureCode = "stream_truncated"
+	FailureForceCooldown   FailureCode = "force_cooldown"
 )
 
 // NormalizeFailureCode keeps only CPA classifications with known request semantics.
 // Unknown values carry no attribution evidence and must not become free-text storage.
 func NormalizeFailureCode(code FailureCode) FailureCode {
 	switch code {
-	case FailureRequestScoped, FailureStreamTruncated:
+	case FailureRequestScoped, FailureStreamTruncated, FailureForceCooldown:
 		return code
 	default:
 		return ""

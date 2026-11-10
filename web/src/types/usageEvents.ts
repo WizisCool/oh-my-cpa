@@ -133,7 +133,7 @@ export interface UsageEventResponseHeader {
   value: string;
 }
 
-export type RequestFailureCode = 'request_scoped' | 'stream_truncated';
+export type RequestFailureCode = 'request_scoped' | 'stream_truncated' | 'force_cooldown';
 
 export interface UsageEventDetail {
   event: UsageEvent & {

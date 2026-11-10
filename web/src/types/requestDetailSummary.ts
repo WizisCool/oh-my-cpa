@@ -10,6 +10,7 @@ import { outputTotalWithReasoning } from './tpsCalculation';
 export type RequestFailureCause =
   | 'request_scoped'
   | 'stream_truncated'
+  | 'forced_cooldown'
   | 'rate_limited'
   | 'auth'
   | 'forbidden'
@@ -22,6 +23,7 @@ export type RequestFailureCause =
 
 export function requestFailureCause(status: number | null | undefined, code?: string | null): RequestFailureCause {
   if (code === 'request_scoped' || code === 'stream_truncated') return code;
+  if (code === 'force_cooldown') return 'forced_cooldown';
   if (!status) return 'unknown';
   if (status === 429) return 'rate_limited';
   if (status === 401) return 'auth';

@@ -313,7 +313,8 @@ func TestRequestDetailsExposeStructuredEvidenceOnlyOnSingleReads(t *testing.T) {
 	}
 	codes := map[string]usage.FailureCode{
 		"request": usage.FailureRequestScoped, "stream": usage.FailureStreamTruncated,
-		"absent": "", "unknown": "future_classification", "success": usage.FailureRequestScoped,
+		"cooldown": usage.FailureForceCooldown,
+		"absent":   "", "unknown": "future_classification", "success": usage.FailureRequestScoped,
 	}
 	var events []usage.Event
 	for name, code := range codes {

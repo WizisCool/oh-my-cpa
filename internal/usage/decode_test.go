@@ -68,10 +68,12 @@ func TestDecodeEventFailureClassification(t *testing.T) {
 	}{
 		{"request scoped", true, "request_scoped", FailureRequestScoped},
 		{"stream truncated", true, "stream_truncated", FailureStreamTruncated},
+		{"forced cooldown", true, "force_cooldown", FailureForceCooldown},
 		{"absent", true, "", ""},
 		{"unknown", true, "future_classification", ""},
 		{"body is not classification", true, "request_scoped extra", ""},
 		{"success", false, "request_scoped", ""},
+		{"success with forced cooldown", false, "force_cooldown", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			codeField := ""
