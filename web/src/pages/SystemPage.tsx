@@ -271,8 +271,8 @@ export const SystemPage: React.FC = () => {
     } catch (err: unknown) {
       // Configuration and protocol failures have actionable translations without returning proxy credentials.
       const code = apiErrorCode(err);
-      const msg = code === 'image_pull_proxy_unavailable'
-        ? t('sys.image_pull_proxy_unavailable')
+      const msg = code === 'outbound_proxy_unavailable'
+        ? t('sys.outbound_proxy_unavailable')
         : code === 'image_pull_proxy_unsupported'
           ? t('sys.image_pull_proxy_unsupported')
           : describeError(err);

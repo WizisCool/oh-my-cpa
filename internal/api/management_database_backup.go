@@ -54,6 +54,8 @@ func (h *Handler) databaseBackupError(writer http.ResponseWriter, err error) {
 		status, code = 503, "database_backup_audit"
 	case errors.Is(err, backup.ErrAutomationConfig), errors.Is(err, backup.ErrDestinationConfig):
 		status, code = 400, "database_backup_settings"
+	case errors.Is(err, backup.ErrDestinationProxyUnsupported):
+		status, code = 422, "database_backup_proxy_unsupported"
 	case errors.Is(err, backup.ErrDestinationFailed), errors.Is(err, backup.ErrCredentialPersistence):
 		status, code = 502, "database_backup_destination"
 	case errors.Is(err, backup.ErrPassphrase):

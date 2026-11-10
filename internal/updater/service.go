@@ -395,6 +395,12 @@ func (s *Service) Start(
 	signature string,
 	proxyURL string,
 ) (Job, error) {
+	// The console sends its selected route unchanged: a proxy URL, DirectImageRoute,
+	// or nothing when the daemon keeps its own configuration.
+	isDirect := strings.EqualFold(strings.TrimSpace(proxyURL), DirectImageRoute)
+	if isDirect {
+		proxyURL = ""
+	}
 	// Refuse an unusable proxy before admitting a job; an opted-in route never falls back.
 	if proxyURL != "" {
 		if _, err := ParseImagePullProxy(proxyURL); err != nil {
@@ -465,7 +471,7 @@ func (s *Service) Start(
 			}
 			s.mu.Unlock()
 		}()
-		s.run(context.WithoutCancel(ctx), container, reference, pullReference, product, proxyURL)
+		s.run(context.WithoutCancel(ctx), container, reference, pullReference, product, proxyURL, isDirect)
 	}()
 	return admitted, nil
 }
@@ -476,6 +482,7 @@ func (s *Service) run(
 	container Container,
 	reference Reference,
 	pullReference, product, proxyURL string,
+	isDirect bool,
 ) {
 	logger := s.options.Logger.With("product", product, "container", container.ContainerName())
 	fail := func(err error) {
@@ -524,6 +531,8 @@ func (s *Service) run(
 				err = errors.Join(err, fmt.Errorf("detach the temporary proxy network: %w", cleanupErr))
 			}
 		}
+	} else if isDirect {
+		imageSource, err = engine.PullImageDirect(ctx, pullReference)
 	} else {
 		err = engine.PullImage(ctx, pullReference)
 	}
@@ -533,7 +542,7 @@ func (s *Service) run(
 		return
 	}
 
-	if reference.Digest == "" && (proxyURL != "" || strings.Contains(pullReference, "@")) {
+	if reference.Digest == "" && (proxyURL != "" || isDirect || strings.Contains(pullReference, "@")) {
 		// Point the container's own tag at the verified image, so a later
 		// `docker compose up` sees the image it expects and leaves the container alone.
 		if err := engine.TagImage(ctx, imageSource, reference.Repository, reference.EffectiveTag()); err != nil {

@@ -17,6 +17,13 @@ import (
 
 var providerEnvironmentProxy = http.ProxyFromEnvironment
 
+func (h *Handler) providerProxy() func(*http.Request) (*url.URL, error) {
+	if transport, ok := h.outboundTransport.(*http.Transport); ok && transport.Proxy != nil {
+		return transport.Proxy
+	}
+	return providerEnvironmentProxy
+}
+
 // hostAddressLiteral returns the IP a host string names literally, if it names one.
 func hostAddressLiteral(host string) net.IP {
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")

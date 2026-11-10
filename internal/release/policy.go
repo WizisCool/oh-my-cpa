@@ -31,14 +31,11 @@ const (
 // ErrInvalidUpdateCheckSettings rejects a stored document the sweep cannot honour.
 var ErrInvalidUpdateCheckSettings = errors.New("invalid_update_check")
 
-// UpdateCheckSettings stores the deployment's check schedule and opt-in image download route.
+// UpdateCheckSettings stores the deployment's scheduled update-check policy.
 type UpdateCheckSettings struct {
 	// IntervalMinutes is how often the background sweep reads the release feeds and the
 	// plugin store.
 	IntervalMinutes int `json:"interval_minutes"`
-
-	// UseProxyForImagePull opts into downloading images through CPA's network proxy.
-	UseProxyForImagePull bool `json:"use_proxy_for_image_pull"`
 }
 
 // DefaultUpdateCheckSettings is the policy of a deployment that never chose one.
@@ -70,8 +67,6 @@ func (s UpdateCheckSettings) Interval() time.Duration {
 func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
 	var document struct {
 		IntervalMinutes *int `json:"interval_minutes"`
-
-		UseProxyForImagePull json.RawMessage `json:"use_proxy_for_image_pull"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -79,16 +74,6 @@ func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
 		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
 	}
 	settings := UpdateCheckSettings{IntervalMinutes: *document.IntervalMinutes}
-
-	// Existing documents omit the switch; an explicit value must be a boolean.
-	if len(document.UseProxyForImagePull) > 0 {
-		var enabled *bool
-		if json.Unmarshal(document.UseProxyForImagePull, &enabled) != nil || enabled == nil {
-			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
-		}
-
-		settings.UseProxyForImagePull = *enabled
-	}
 
 	if err := settings.Validate(); err != nil {
 		return UpdateCheckSettings{}, err
@@ -117,9 +102,6 @@ func ResolveUpdateCheckSettings(raw string, isStored bool) UpdateCheckSettings {
 			settings = candidate
 		}
 	}
-
-	// The proxy route stays off in older documents; read valid settings independently.
-	_ = json.Unmarshal(fields["use_proxy_for_image_pull"], &settings.UseProxyForImagePull)
 
 	return settings
 }

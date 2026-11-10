@@ -6,17 +6,13 @@
 export interface UpdateCheckSettings {
   /** The sweep reads the release feeds and the plugin store at this interval. */
   interval_minutes: number;
-
-  /** Opt into downloading images through CPA's network proxy. */
-  use_proxy_for_image_pull: boolean;
 }
 
 export const UPDATE_CHECK_PREFERENCE = 'omc_update_check';
 
-/** Mirrors `DefaultUpdateCheckSettings`: hourly checks and ordinary daemon image pulls. */
+/** Mirrors `DefaultUpdateCheckSettings`: hourly checks. */
 export const DEFAULT_UPDATE_CHECK: UpdateCheckSettings = {
   interval_minutes: 60,
-  use_proxy_for_image_pull: false,
 };
 
 export const UPDATE_CHECK_MIN_MINUTES = 15;
@@ -30,20 +26,12 @@ export const UPDATE_CHECK_MAX_MINUTES = 24 * 60;
  */
 export const UPDATE_CHECK_INTERVALS = [15, 30, 60, 120, 180, 360, 720, 1440] as const;
 
-/** Read stored settings, keeping proxy downloads off in documents written before the switch. */
+/** Read the stored update-check schedule. */
 export function parseUpdateCheck(raw: unknown): UpdateCheckSettings | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const {
-    interval_minutes: intervalMinutes,
-    use_proxy_for_image_pull: useProxyForImagePull = false,
-  } = raw as Record<string, unknown>;
+  const { interval_minutes: intervalMinutes } = raw as Record<string, unknown>;
 
   if (typeof intervalMinutes !== 'number' || !Number.isInteger(intervalMinutes)) return undefined;
   if (intervalMinutes < UPDATE_CHECK_MIN_MINUTES || intervalMinutes > UPDATE_CHECK_MAX_MINUTES) return undefined;
-  if (typeof useProxyForImagePull !== 'boolean') return undefined;
-
-  return {
-    interval_minutes: intervalMinutes,
-    use_proxy_for_image_pull: useProxyForImagePull,
-  };
+  return { interval_minutes: intervalMinutes };
 }

@@ -9,7 +9,7 @@ import { MotionPreferenceSync, MotionProvider, useReducedMotionPreference } from
 import { usePrefersReducedMotion } from '../src/hooks/usePrefersReducedMotion';
 import { isMotionReduced, REDUCED_MOTION_QUERY } from '../src/utils/motionPreference';
 import { ContextReadout } from '../src/components/workspace/ContextReadout';
-import { UpdateCheckGroup } from '../src/pages/OmcSettingsPage';
+import { OutboundProxySettings } from '../src/components/settings/OutboundProxySettings';
 
 function deferred<Value>() {
   let resolve!: (value: Value) => void;
@@ -83,26 +83,23 @@ afterEach(async () => {
 });
 
 describe('real preference hook and cache integration', () => {
-  it('keeps proxy pulls off for existing settings and rolls back a refused opt-in', async () => {
-    stored.omc_update_check = { interval_minutes: 120 };
-    mount(<UpdateCheckGroup />);
+  it('shows when the CPA route differs from the OMC setting', async () => {
+    api.on('GET', '/management/outbound-proxy', () => jsonResponse({ mode: 'direct', address: '', has_credentials: false, no_proxy: '', revision: 1, cpa_revision: 'cpa-1', cpa_in_sync: false }));
+    mount(<OutboundProxySettings />);
+    expect(await screen.findByText("CPA's network route differs from this setting. Apply the setting to synchronize it.")).toBeTruthy();
+  });
 
-    const toggle = await screen.findByRole('switch', { name: 'Use proxy to pull Docker images' });
-    await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false));
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-
-    // Editing the route keeps the operator's interval, including when the save is refused.
-    fireEvent.click(toggle);
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].value).toEqual({ interval_minutes: 120, use_proxy_for_image_pull: true });
-    await completeWrite(0, 503);
-    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
-
-    fireEvent.click(toggle);
-    await waitFor(() => expect(writes).toHaveLength(2));
-    await completeWrite(1);
-    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
-    expect(stored.omc_update_check).toEqual({ interval_minutes: 120, use_proxy_for_image_pull: true });
+  it('saves proxy exclusions without resending unchanged credentials', async () => {
+    const settings = { mode: 'proxy', address: 'http://proxy.test:8080', has_credentials: true, no_proxy: '', revision: 1, cpa_revision: 'cpa-1', cpa_in_sync: true };
+    api.on('GET', '/management/outbound-proxy', () => jsonResponse(settings));
+    api.on('PUT', '/management/outbound-proxy', () => jsonResponse({ ...settings, no_proxy: '.internal', revision: 2, cpa_revision: 'cpa-2' }));
+    mount(<OutboundProxySettings />);
+    const exclusions = await screen.findByLabelText('OMC proxy exclusions');
+    fireEvent.change(exclusions, { target: { value: '.internal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.requests.some(request => request.method === 'PUT' && request.path === '/management/outbound-proxy')).toBe(true));
+    const request = api.requests.find(entry => entry.method === 'PUT' && entry.path === '/management/outbound-proxy');
+    expect(request?.body).toEqual({ mode: 'proxy', no_proxy: '.internal', revision: 1, cpa_revision: 'cpa-1' });
   });
 
   it('waits for a held read, shares one StrictMode query and publishes optimistic updates to both readers', async () => {

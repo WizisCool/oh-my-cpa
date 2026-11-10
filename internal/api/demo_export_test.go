@@ -123,6 +123,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "system-updater", Path: "/api/v1/management/system/updater"},
 		{Name: "system-maintenance", Path: "/api/v1/management/system/maintenance"},
 		{Name: "system-data-retention", Path: "/api/v1/management/system/data-retention"},
+		{Name: "outbound-proxy", Path: "/api/v1/management/outbound-proxy"},
 		{Name: "config", Path: "/api/v1/management/config"},
 		{Name: "config-source", Path: "/api/v1/management/config/source"},
 		{Name: "config-backups", Path: "/api/v1/management/config/backups"},

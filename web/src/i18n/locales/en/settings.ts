@@ -2,6 +2,22 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/settings';
 
 export default {
+  'omc.section_proxy': 'Network proxy',
+  'omc.proxy_address_desc': 'OMC, CPA and the updater must be able to reach this address.',
+  'omc.proxy_cpa_out_of_sync': "CPA's network route differs from this setting. Apply the setting to synchronize it.",
+  'omc.proxy_mode': 'Outbound route',
+  'omc.proxy_environment': 'Deployment environment',
+  'omc.proxy_direct': 'Direct',
+  'omc.proxy_custom': 'Proxy',
+  'omc.proxy_address': 'Proxy URL',
+  'omc.proxy_exclusions': 'OMC proxy exclusions',
+  'omc.proxy_exclusions_desc': 'Matching OMC destinations use a direct connection.',
+  'omc.proxy_apply': 'Apply network settings',
+  'omc.proxy_apply_desc': 'Applies to OMC requests without their own proxy and to CPA gateway requests.',
+  'omc.proxy_backup_warning': 'Remote backup destinations that cannot use the selected route are blocked.',
+  'omc.proxy_saved': 'Network settings saved',
+  'omc.proxy_save_failed': 'Could not save network settings: {msg}',
+  'omc.proxy_load_failed': 'Could not load network settings',
   'omc.timezone_invalid': 'Choose a valid IANA time zone.',
   'omc.timezone': 'Time zone',
   'omc.timezone_desc': 'Used for timestamps and calendar-day totals.',
@@ -31,8 +47,6 @@ export default {
   'omc.update_check_hours': 'Every {n} h',
   'omc.update_check_invalid': 'The check interval must be between 15 minutes and 24 hours',
 
-  'omc.image_pull_proxy': 'Use proxy to pull Docker images',
-  'omc.image_pull_proxy_desc': 'Downloads update images through the proxy in CPA Configuration → Network.',
   'omc.section_display': 'Data display',
   'omc.section_appearance': 'Appearance',
   'omc.section_sidebar': 'Sidebar',

@@ -2,6 +2,22 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/settings';
 
 export default {
+  'omc.section_proxy': '網路代理',
+  'omc.proxy_address_desc': 'OMC、CPA 和更新器都需要能夠存取此位址。',
+  'omc.proxy_cpa_out_of_sync': 'CPA 的網路路徑與目前設定不一致。套用設定以同步。',
+  'omc.proxy_mode': '對外連線路徑',
+  'omc.proxy_environment': '跟隨部署環境',
+  'omc.proxy_direct': '直接連線',
+  'omc.proxy_custom': '代理',
+  'omc.proxy_address': '代理位址',
+  'omc.proxy_exclusions': 'OMC 代理排除',
+  'omc.proxy_exclusions_desc': '符合的 OMC 目標使用直接連線。',
+  'omc.proxy_apply': '套用網路設定',
+  'omc.proxy_apply_desc': '作用於未單獨設定代理的 OMC 請求與 CPA 閘道請求。',
+  'omc.proxy_backup_warning': '無法使用所選路徑的遠端備份目標將被阻止。',
+  'omc.proxy_saved': '網路設定已儲存',
+  'omc.proxy_save_failed': '網路設定儲存失敗：{msg}',
+  'omc.proxy_load_failed': '網路設定載入失敗',
   "omc.timezone_invalid": "請選擇有效的 IANA 時區。",
   "omc.timezone": "時區",
   "omc.timezone_desc": "套用於時間顯示和自然日統計。",
@@ -31,8 +47,6 @@ export default {
   "omc.update_check_hours": "每 {n} 小時",
   "omc.update_check_invalid": "檢查間隔需介於 15 分鐘到 24 小時之間",
 
-  "omc.image_pull_proxy": "使用代理拉取 Docker 映像",
-  "omc.image_pull_proxy_desc": "透過 CPA 設定面板 → 網路設定中的代理下載更新映像。",
   "omc.section_display": "資料顯示",
   "omc.section_appearance": "介面外觀",
   "omc.section_sidebar": "側邊欄",

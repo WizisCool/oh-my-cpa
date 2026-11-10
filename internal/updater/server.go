@@ -22,6 +22,8 @@ type StatusResponse struct {
 
 	// ProxyPullSupported lets the console refuse proxy downloads on older sidecars.
 	ProxyPullSupported bool `json:"proxy_pull_supported,omitempty"`
+	// DirectPullSupported lets the console avoid a daemon-configured proxy.
+	DirectPullSupported bool `json:"direct_pull_supported,omitempty"`
 
 	Products []Target `json:"products"`
 	Job      *Job     `json:"job"`
@@ -35,7 +37,8 @@ type UpdateRequest struct {
 	Manifest  string `json:"manifest"`
 	Signature string `json:"signature"`
 
-	// ProxyURL carries CPA's proxy only within the authenticated control request.
+	// ProxyURL carries the selected route only within the authenticated control request:
+	// a proxy URL, DirectImageRoute, or empty for the daemon's own configuration.
 	ProxyURL string `json:"proxy_url,omitempty"`
 }
 
@@ -49,10 +52,11 @@ func (s *Service) Handler(version string) http.Handler {
 	})
 	mux.Handle("GET /v1/status", s.authenticated(func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(writer, http.StatusOK, StatusResponse{
-			UpdaterVersion:     version,
-			ProxyPullSupported: true,
-			Products:           s.Targets(request.Context()),
-			Job:                s.LastJob(),
+			UpdaterVersion:      version,
+			ProxyPullSupported:  true,
+			DirectPullSupported: true,
+			Products:            s.Targets(request.Context()),
+			Job:                 s.LastJob(),
 		})
 	}))
 	mux.Handle("POST /v1/update", s.authenticated(func(writer http.ResponseWriter, request *http.Request) {

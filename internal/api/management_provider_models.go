@@ -115,7 +115,7 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, family, headers)
+	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, family, headers, h.providerProxy())
 	if err != nil {
 		switch {
 		case errors.Is(err, errInvalidModelPullURL):
@@ -207,7 +207,7 @@ func modelDirectoryTargets(family, rawBaseURL string) []string {
 	return targets
 }
 
-func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, family string, customHeaders map[string]string) ([]string, error) {
+func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, family string, customHeaders map[string]string, proxyFor func(*http.Request) (*url.URL, error)) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -220,9 +220,10 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, fami
 		return nil, fmt.Errorf("%w: base URL must use HTTPS unless it targets localhost, a loopback/private IP address, or a hostname resolving only to those addresses", errInvalidModelPullURL)
 	}
 
-	transport := &http.Transport{
-		Proxy: providerEnvironmentProxy,
+	if proxyFor == nil {
+		proxyFor = providerEnvironmentProxy
 	}
+	transport := &http.Transport{Proxy: proxyFor}
 	if proxyStr != "" {
 		// A proxy the operator named must be the path taken: falling back to
 		// a direct connection on a parse failure would silently change it.

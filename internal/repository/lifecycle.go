@@ -65,6 +65,7 @@ type TableLifecycle struct {
 // whose rows should roll declares a rule and is deleted by the same batched,
 // horizon-publishing engine as everything else; it does not write its own loop.
 var TABLE_LIFECYCLES = map[string]TableLifecycle{
+	"outbound_proxy_settings":    {Kind: LifecycleReplaced, Reason: "one encrypted outbound proxy configuration, updated in place"},
 	"database_backup_automation": {Kind: LifecycleReplaced, Reason: "one encrypted schedule and bounded destination configuration, updated in place"},
 	"channel_model_prices":       {Kind: LifecycleReplaced, Reason: "operator prices keyed by the usage channel and upstream model; history lives in model_price_versions"},
 	"credential_warmup_policies": {Kind: LifecyclePermanent, Reason: "operator-approved warmup tasks, keyed by task id; rows written by the retired per-credential warmup are no longer read"},

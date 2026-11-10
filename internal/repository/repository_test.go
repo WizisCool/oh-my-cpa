@@ -213,3 +213,35 @@ func TestRepositorySanitizesSensitiveResourceDetails(t *testing.T) {
 		t.Fatalf("loaded resource contains fixture secret: %s", encoded)
 	}
 }
+
+func TestOutboundProxyStore(t *testing.T) {
+	repo, cipher := testRepository(t)
+	store := OutboundProxyStore{Repo: repo, Cipher: cipher}
+	ctx := context.Background()
+	settings, revision, err := store.Load(ctx)
+	if err != nil || revision != 0 || settings.Mode != "environment" {
+		t.Fatalf("default settings = %#v, %d, %v", settings, revision, err)
+	}
+	want := OutboundProxySettings{Mode: "proxy", URL: "http://fixture-user:fixture-password@proxy.test:8080", NoProxy: "localhost,.internal"}
+	revision, err = store.Save(ctx, revision, want)
+	if err != nil || revision != 1 {
+		t.Fatalf("save revision = %d, %v", revision, err)
+	}
+	var ciphertext []byte
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT ciphertext FROM outbound_proxy_settings WHERE id=1`).Scan(&ciphertext); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(ciphertext), "fixture-password") {
+		t.Fatal("proxy credential was stored in plaintext")
+	}
+	got, loadedRevision, err := store.Load(ctx)
+	if err != nil || loadedRevision != revision || got != want {
+		t.Fatalf("load = %#v, %d, %v", got, loadedRevision, err)
+	}
+	if _, err := store.Save(ctx, 0, want); err != ErrOutboundProxyConflict {
+		t.Fatalf("stale save error = %v", err)
+	}
+	if _, err := store.Save(ctx, revision, OutboundProxySettings{Mode: "direct"}); err != nil {
+		t.Fatal(err)
+	}
+}

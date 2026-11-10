@@ -10,12 +10,20 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 )
+
+// proxyImageTimeout bounds a stalled registry or proxy while allowing large image downloads.
+const proxyImageTimeout = 30 * time.Minute
+
+// DirectImageRoute is CPA's own spelling for an outbound route that bypasses the
+// configured proxy; the updater accepts it wherever a proxy URL would go.
+const DirectImageRoute = "direct"
 
 // ParseImagePullProxy accepts the HTTP and SOCKS5 routes supported by CPA's network configuration.
 func ParseImagePullProxy(raw string) (*url.URL, error) {
@@ -46,7 +54,15 @@ func (e *Engine) PullImageThroughProxy(ctx context.Context, reference, proxyURL 
 	if err != nil {
 		return "", err
 	}
+	return e.pullImageWithRoute(ctx, reference, proxy)
+}
 
+// PullImageDirect downloads an image without inheriting the daemon's proxy configuration.
+func (e *Engine) PullImageDirect(ctx context.Context, reference string) (string, error) {
+	return e.pullImageWithRoute(ctx, reference, nil)
+}
+
+func (e *Engine) pullImageWithRoute(ctx context.Context, reference string, proxy *url.URL) (string, error) {
 	// Select the daemon's platform, which can differ from the updater process's own platform.
 	var platform struct {
 		OS   string `json:"Os"`
@@ -65,12 +81,15 @@ func (e *Engine) PullImageThroughProxy(ctx context.Context, reference, proxyURL 
 		return "", fmt.Errorf("parse the image reference: %w", err)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, proxyImageTimeout)
 	defer cancel()
 
 	// This explicit transport also covers registry authentication and redirected layer downloads.
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = http.ProxyURL(proxy)
+	transport.Proxy = nil
+	if proxy != nil {
+		transport.Proxy = http.ProxyURL(proxy)
+	}
 	defer transport.CloseIdleConnections()
 
 	descriptor, err := remote.Get(ref,

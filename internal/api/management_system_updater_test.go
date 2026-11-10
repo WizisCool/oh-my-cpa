@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
@@ -51,96 +52,65 @@ func (f *fakeUpdater) Status(context.Context) (updater.StatusResponse, error) {
 	return f.status, f.statusErr
 }
 
-// TestImagePullProxyComesFromCPA exercises saved defaults, live proxy rotation and refusal without secret-bearing responses.
-func TestImagePullProxyComesFromCPA(t *testing.T) {
-	for _, testCase := range []struct {
-		name      string
-		enabled   bool
-		supported bool
-		proxy     string
-		failRead  bool
-		wantCode  string
+// TestImagePullUsesOutboundSettings checks the per-update route and capability handshake.
+func TestImagePullUsesOutboundSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		mode            string
+		proxySupported  bool
+		directSupported bool
+		wantCode        string
 	}{
-		{name: "default route", supported: true, proxy: "http://proxy-user:proxy-password@proxy:7890"},
-		{name: "proxy route", enabled: true, supported: true, proxy: "http://proxy-user:proxy-password@proxy:7890"},
-		{name: "old updater", enabled: true, proxy: "http://proxy:7890", wantCode: "image_pull_proxy_unsupported"},
-		{name: "missing proxy", enabled: true, supported: true, wantCode: "image_pull_proxy_unavailable"},
-		{name: "direct route refused", enabled: true, supported: true, proxy: "direct", wantCode: "image_pull_proxy_unavailable"},
-		{name: "failed config read", enabled: true, supported: true, failRead: true, wantCode: "image_pull_proxy_unavailable"},
+		{name: "deployment default"},
+		{name: "proxy", mode: "proxy", proxySupported: true},
+		{name: "direct", mode: "direct", directSupported: true},
+		{name: "old updater proxy", mode: "proxy", wantCode: "image_pull_proxy_unsupported"},
+		{name: "old updater direct", mode: "direct", wantCode: "image_pull_proxy_unsupported"},
 	} {
-		t.Run(testCase.name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			sidecar := &fakeUpdater{status: updater.StatusResponse{
-				ProxyPullSupported: testCase.supported,
-				Products:           []updater.Target{{Product: updater.ProductCPA, Action: updater.ActionAvailable}},
+				ProxyPullSupported:  tc.proxySupported,
+				DirectPullSupported: tc.directSupported,
+				Products:            []updater.Target{{Product: updater.ProductCPA, Action: updater.ActionAvailable}},
 			}}
-			proxyURL := testCase.proxy
-			reads := 0
-			client, baseURL, repo := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
-				if request.Method != http.MethodGet || request.URL.Path != "/v8/management/config" {
-					writer.WriteHeader(http.StatusNotFound)
-					return
-				}
-
-				reads++
-				if testCase.failRead {
-					writer.WriteHeader(http.StatusBadGateway)
-					return
-				}
-
-				_ = json.NewEncoder(writer).Encode(map[string]any{"requests": map[string]any{"proxy-url": proxyURL}})
-			}, func(handler *Handler) {
+			const proxyURL = "http://fixture-user:fixture-password@proxy:7890"
+			client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
 				handler.cfg.Updater.Enabled = true
 				handler.SetUpdater(sidecar, nil, true)
 				t.Cleanup(handler.CloseUpdateWatchers)
-			})
-			settings := fmt.Sprintf(`{"interval_minutes":120,"use_proxy_for_image_pull":%v}`, testCase.enabled)
-			response, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/preferences/omc_update_check", settings)
-			if response.StatusCode != http.StatusOK {
-				t.Fatalf("save settings: %d %s", response.StatusCode, payload)
-			}
-
-			response, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/system/updater/apply", `{"product":"cpa"}`)
-			if testCase.wantCode != "" {
-				if response.StatusCode < 400 || !bytes.Contains(payload, []byte(testCase.wantCode)) || sidecar.updateCount() != 0 {
-					t.Fatalf("proxy refusal = %d %s", response.StatusCode, payload)
-				}
-			} else {
-				if response.StatusCode != http.StatusAccepted || sidecar.updateCount() != 1 {
-					t.Fatalf("update admission = %d %s", response.StatusCode, payload)
-				}
-
-				wantProxy := ""
-				if testCase.enabled {
-					wantProxy = proxyURL
-				}
-
-				if sidecar.updates[0].ProxyURL != wantProxy {
-					t.Fatal("the control request did not honour the stored proxy choice")
-				}
-
-				// A proxy changed in CPA must reach the next update without a console restart.
-				if testCase.enabled {
-					proxyURL = "socks5h://rotated-user:rotated-password@proxy:1080"
-					response, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/system/updater/apply", `{"product":"cpa"}`)
-					if response.StatusCode != http.StatusAccepted || sidecar.updates[1].ProxyURL != proxyURL || reads != 2 {
-						t.Fatalf("rotated proxy admission = %d %s after %d reads", response.StatusCode, payload, reads)
+				if tc.mode != "" {
+					settings := repository.OutboundProxySettings{Mode: tc.mode}
+					if tc.mode == "proxy" {
+						settings.URL = proxyURL
+					}
+					store := repository.OutboundProxyStore{Repo: handler.repo, Cipher: handler.cipher}
+					if _, err := store.Save(context.Background(), 0, settings); err != nil {
+						t.Fatal(err)
 					}
 				}
+			})
+			response, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/system/updater/apply", `{"product":"cpa"}`)
+			if tc.wantCode != "" {
+				if response.StatusCode < 400 || !bytes.Contains(payload, []byte(tc.wantCode)) || sidecar.updateCount() != 0 {
+					t.Fatalf("update refusal = %d %s", response.StatusCode, payload)
+				}
+				return
 			}
-
-			if !testCase.enabled && reads != 0 {
-				t.Fatal("the default route must not depend on CPA's proxy configuration")
+			if response.StatusCode != http.StatusAccepted || sidecar.updateCount() != 1 {
+				t.Fatalf("update admission = %d %s", response.StatusCode, payload)
 			}
-
+			got := sidecar.updates[0]
+			if (got.ProxyURL == proxyURL) != (tc.mode == "proxy") || (got.ProxyURL == updater.DirectImageRoute) != (tc.mode == "direct") {
+				t.Fatal("update did not receive the selected route")
+			}
 			audits, err := repo.ListAuditEvents(context.Background(), 50)
 			if err != nil {
 				t.Fatal(err)
 			}
-
 			encoded, _ := json.Marshal(audits)
-			for _, secret := range []string{"proxy-user", "proxy-password", "rotated-user", "rotated-password"} {
+			for _, secret := range []string{"fixture-user", "fixture-password"} {
 				if bytes.Contains(payload, []byte(secret)) || bytes.Contains(encoded, []byte(secret)) {
-					t.Fatal("proxy authentication escaped into an ordinary response or audit")
+					t.Fatal("proxy credentials escaped")
 				}
 			}
 		})
@@ -205,6 +175,10 @@ func newUpdaterFixture(t *testing.T) updaterFixture {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	repo := repository.New(db)
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatalf("create cipher: %v", err)
+	}
 	sidecar := &fakeUpdater{status: updater.StatusResponse{Products: []updater.Target{
 		{Product: updater.ProductOMC, Image: "wiziscool/oh-my-cpa:latest", Action: updater.ActionAvailable},
 		{Product: updater.ProductCPA, Image: "eceasy/cli-proxy-api:8.0.1", Action: updater.ActionUnavailable, Reason: updater.ReasonPinned},
@@ -213,6 +187,7 @@ func newUpdaterFixture(t *testing.T) updaterFixture {
 	handler := &Handler{
 		cfg:                config.Config{Version: "v1.0.0", Updater: config.UpdaterConfig{Enabled: true}},
 		repo:               repo,
+		cipher:             cipher,
 		logger:             slog.Default(),
 		updatePollInterval: time.Millisecond,
 		release:            &storedRelease{runningVersions: map[string]string{}},

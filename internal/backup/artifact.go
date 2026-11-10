@@ -272,7 +272,7 @@ func newManifest(id, version string, schema int) Manifest {
 }
 
 func publicError(err error) string {
-	for _, known := range []error{ErrPassphrase, ErrInvalidArtifact, ErrBusy, ErrNotFound, ErrConfirmation, ErrUnsupportedVersion, ErrDestinationConfig, ErrDestinationFailed, ErrCredentialPersistence, ErrAutomationConfig} {
+	for _, known := range []error{ErrPassphrase, ErrInvalidArtifact, ErrBusy, ErrNotFound, ErrConfirmation, ErrUnsupportedVersion, ErrDestinationConfig, ErrDestinationFailed, ErrDestinationProxyUnsupported, ErrCredentialPersistence, ErrAutomationConfig} {
 		if errors.Is(err, known) {
 			return known.Error()
 		}

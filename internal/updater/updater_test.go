@@ -43,12 +43,13 @@ func testTiming() Timing {
 
 // proxyRegistryFixture serves a multi-platform image solely through an authenticated forward proxy.
 type proxyRegistryFixture struct {
-	repository   string
-	digest       string
-	proxyURL     string
-	images       map[string]v1.Image
-	requests     atomic.Int64
-	corruptLayer bool
+	repository       string
+	directRepository string
+	digest           string
+	proxyURL         string
+	images           map[string]v1.Image
+	requests         atomic.Int64
+	corruptLayer     bool
 
 	corruptManifest bool
 }
@@ -63,6 +64,7 @@ func newProxyRegistry(t *testing.T) *proxyRegistryFixture {
 	registryHandler := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
 	server := httptest.NewServer(registryHandler)
 	t.Cleanup(server.Close)
+	fixture.directRepository = strings.TrimPrefix(server.URL, "http://") + "/test/oh-my-cpa"
 	var index v1.ImageIndex = empty.Index
 
 	// The daemon's architecture must select the corresponding child of the signed index.
@@ -302,6 +304,23 @@ func TestProxyImageUpdates(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDirectImageUpdate(t *testing.T) {
+	registry := newProxyRegistry(t)
+	stack := newDeployment(t, registry.directRepository+":latest")
+	stack.service.options.OMCContainer = "oh-my-cpa"
+	manifest, signature := stack.signer.manifest("v1.1.0", registry.directRepository, registry.digest)
+	server := httptest.NewServer(stack.service.Handler("test"))
+	t.Cleanup(server.Close)
+	client := NewClient(server.URL, MASTER_KEY)
+	if _, err := client.Update(context.Background(), UpdateRequest{Product: ProductOMC, Manifest: string(manifest), Signature: signature, ProxyURL: DirectImageRoute}); err != nil {
+		t.Fatal(err)
+	}
+	job := awaitJob(t, stack.service)
+	if job.Stage != StageDone || stack.daemon.pulls != 0 || stack.daemon.loads != 1 || registry.requests.Load() != 0 {
+		t.Fatalf("direct update = %+v; daemon pulls=%d loads=%d proxy requests=%d", job, stack.daemon.pulls, stack.daemon.loads, registry.requests.Load())
 	}
 }
 

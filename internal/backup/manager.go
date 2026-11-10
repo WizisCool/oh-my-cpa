@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -42,6 +43,8 @@ type Options struct {
 	Version            string
 	Logger             *slog.Logger
 	DestinationFactory func(context.Context, DestinationConfig, func(map[string]string) error) (Destination, error)
+	OutboundProxy      func(context.Context) (repository.OutboundProxySettings, error)
+	OutboundTransport  http.RoundTripper
 }
 
 type Manager struct {

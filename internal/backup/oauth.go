@@ -212,7 +212,7 @@ func (m *Manager) CompleteOAuth(ctx context.Context, id, callback string) (resul
 	}
 	client, _ := ctx.Value(oauth2.HTTPClient).(*http.Client)
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{Timeout: 30 * time.Second, Transport: m.options.OutboundTransport}
 	}
 	exchangeContext := context.WithValue(ctx, oauth2.HTTPClient, client)
 	token, err := value.config.Exchange(exchangeContext, code, oauth2.VerifierOption(value.verifier))

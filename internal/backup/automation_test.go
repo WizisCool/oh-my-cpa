@@ -352,6 +352,62 @@ func TestAutomaticBackupCoalescesOverdueRunAfterRestart(t *testing.T) {
 	}
 }
 
+func TestRemoteBackupProxyPolicy(t *testing.T) {
+	ctx := context.Background()
+	dav := &webdav.Handler{FileSystem: webdav.Dir(t.TempDir()), LockSystem: webdav.NewMemLS()}
+	var requests atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Header.Get("Proxy-Authorization") != "Basic dXNlcjpwYXNz" {
+			w.WriteHeader(http.StatusProxyAuthRequired)
+			return
+		}
+		dav.ServeHTTP(w, r)
+	}))
+	defer proxy.Close()
+	settings := repository.OutboundProxySettings{Mode: "proxy", URL: strings.Replace(proxy.URL, "http://", "http://user:pass@", 1)}
+	manager := &Manager{options: Options{OutboundProxy: func(context.Context) (repository.OutboundProxySettings, error) { return settings, nil }}}
+	destination, err := manager.destination(ctx, DestinationConfig{ID: newID(), Name: "proxied", Provider: "webdav", Options: map[string]string{"url": "http://unreachable.invalid"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destination.Close()
+	if err := destination.Probe(ctx); err != nil {
+		t.Fatalf("proxied WebDAV probe: %v", err)
+	}
+	if requests.Load() == 0 {
+		t.Fatal("WebDAV probe bypassed the proxy")
+	}
+	for _, tc := range []struct{ name, mode, exclusions, provider string }{
+		{name: "unsupported SMB", mode: "proxy", provider: "smb"},
+		{name: "unsupported exclusions", mode: "proxy", exclusions: ".internal", provider: "webdav"},
+		{name: "explicit direct", mode: "direct", provider: "webdav"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			settings.Mode, settings.NoProxy = tc.mode, tc.exclusions
+			before := requests.Load()
+			_, err := manager.destination(ctx, DestinationConfig{ID: newID(), Name: "refused", Provider: tc.provider})
+			if !errors.Is(err, ErrDestinationProxyUnsupported) {
+				t.Fatalf("route refusal: %v", err)
+			}
+			if requests.Load() != before {
+				t.Fatal("refused route made a network request")
+			}
+		})
+	}
+	settings.Mode, settings.URL, settings.NoProxy = "direct", "", ""
+	manager.options.DestinationFactory = func(context.Context, DestinationConfig, func(map[string]string) error) (Destination, error) {
+		return &failingDestination{}, nil
+	}
+	for _, provider := range []string{"smb", "sftp", "ftp"} {
+		destination, err := manager.destination(ctx, DestinationConfig{ID: newID(), Name: "direct", Provider: provider})
+		if err != nil {
+			t.Fatalf("direct %s destination: %v", provider, err)
+		}
+		_ = destination.Close()
+	}
+}
+
 func TestRcloneDestinationRejectsCommandsAndCancelsTransfer(t *testing.T) {
 	config := DestinationConfig{ID: newID(), Name: "Remote", Provider: "webdav", Options: map[string]string{"bearer_token_command": "untrusted command"}}
 	if _, err := newRcloneDestination(context.Background(), config, nil); !errors.Is(err, ErrDestinationConfig) {

@@ -35,6 +35,7 @@ import { SectionHeading } from '../components/common/SectionHeading';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { DataRetentionSettings } from '../components/settings/DataRetentionSettings';
+import { OutboundProxySettings } from '../components/settings/OutboundProxySettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
 import { useOmcPluginSource } from '../hooks/useOmcPluginSource';
@@ -116,9 +117,8 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, MessageKey> = {
  * plot, so it belongs on those panels, where the operator reading them is - a second control on a
  * settings page would be a second place to look for one decision.
  *
- * CPA's own configuration (its YAML document) is intentionally not reachable from here: that
- * surface is the config panel's, with its different save semantics. The two pages coexist in the
- * sidebar under "Control".
+ * The outbound network setting synchronizes its selected route to CPA through the guarded
+ * configuration write path; the rest of CPA's configuration stays on the config page.
  */
 const REDUCED_MOTION_LABEL_KEYS: Record<ReducedMotionPreference, MessageKey> = {
   on: 'omc.reduced_motion_on',
@@ -223,6 +223,8 @@ export const OmcSettingsPage: React.FC = () => {
       <QuotaAutoRefreshGroup />
 
       <UpdateCheckGroup />
+
+      <OutboundProxySettings />
 
       <DataRetentionSettings />
 
@@ -385,7 +387,7 @@ const QuotaAutoRefreshGroup: React.FC = () => {
   );
 };
 
-/** Configure the scheduled checks and the opt-in image download route in one stored document. */
+/** Configure the scheduled release and plugin checks. */
 export const UpdateCheckGroup: React.FC = () => {
   const t = useT();
   const preference = usePreference<UpdateCheckSettings>(UPDATE_CHECK_PREFERENCE, DEFAULT_UPDATE_CHECK, parseUpdateCheck);
@@ -414,31 +416,13 @@ export const UpdateCheckGroup: React.FC = () => {
             value={settings.interval_minutes}
             disabled={!preference.loaded}
             options={intervals.map((minutes) => ({ value: minutes, label: formatInterval(minutes) }))}
-            onChange={(minutes) => {
-              // Both controls share one document; changing the interval preserves the route.
-              void preference.set({ ...settings, interval_minutes: minutes });
-            }}
+            onChange={(minutes) => { void preference.set({ interval_minutes: minutes }); }}
             aria-label={t('omc.update_check_interval')}
             popupMatchSelectWidth={false}
           />
         }
       />
 
-      <SettingRow
-        label={t('omc.image_pull_proxy')}
-        description={t('omc.image_pull_proxy_desc')}
-        control={
-          <Switch
-            checked={settings.use_proxy_for_image_pull}
-            disabled={!preference.loaded}
-            onChange={(checked) => {
-              // Store the choice only; the server reads proxy credentials when updating.
-              void preference.set({ ...settings, use_proxy_for_image_pull: checked });
-            }}
-            aria-label={t('omc.image_pull_proxy')}
-          />
-        }
-      />
     </div>
   );
 };
