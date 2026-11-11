@@ -2,7 +2,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Tabs, Typography } from 'antd';
+import { Tabs } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Segmented } from '@/components/ui/segmented';
@@ -20,7 +20,7 @@ import {
 } from '../icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType } from '@/components/ui/table';
 import { api, apiErrorCode, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -64,15 +64,13 @@ import { Toolbar } from '../common/Toolbar';
 import { Count } from '../common/Count';
 import './logs.css';
 import { Tooltip } from '../common/Tooltip';
-import { TAB_OVERFLOW } from '../common/tabOverflow';
 
-const { Text } = Typography;
 
 // Status classes are shown as the numeric class, not as invented English words:
 // the log line itself says 400, and a localized UI must not caption it SUCCESS
 // under a different reading language.
 /** Anything of antd's that Escape should close before it closes the fullscreen viewer. */
-const OPEN_OVERLAY_SELECTOR = '.ant-select-open, .ant-popover:not(.ant-popover-hidden), .ant-modal-wrap:not([style*="display: none"]), .ant-drawer-open';
+const OPEN_OVERLAY_SELECTOR = '[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="popover-content"], [data-slot="dialog-popup"], [data-slot="sheet-content"]';
 
 const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
   all: '',
@@ -412,10 +410,10 @@ export const CpaLogPanel: React.FC = () => {
             )}
             <div className={styles['toolbar-summary']}>
               {isTail && (
-                <Text className="logs-counts">
+                <span className="logs-counts text-foreground">
                   {t('logs.counts', { shown: rows.length, total: parsed.length })}
                   {tail.dropped > 0 ? ` · ${t('logs.dropped', { n: tail.dropped })}` : ''}
-                </Text>
+                </span>
               )}
               <div className={styles['toolbar-actions']}>
                 {isTail && (
@@ -549,7 +547,7 @@ export const CpaLogPanel: React.FC = () => {
             </div>
           )}
 
-          <Tabs more={TAB_OVERFLOW}
+          <Tabs
             size="small"
             activeKey={tab}
             onChange={(key) => setTab(key as 'tail' | 'errors')}

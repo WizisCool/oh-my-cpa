@@ -250,7 +250,7 @@
 .model-series-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
 .model-series-mark { flex: none; }
 .model-series-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.model-usage-card .ant-card-body {
+.model-usage-card :is(.ant-card-body, [data-slot="panel-body"]) {
   /* Centre the row in any height the operator gave the card beyond its content. Grid centring keeps
      the row stretched to the body's full width, unlike flex centring, which would shrink it to its
      content width and let the list collapse. */

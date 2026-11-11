@@ -1,4 +1,4 @@
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { useT } from '../../i18n';
 
 export function VertexModelOpenAPI({ value, onChange, disabled, label }: {

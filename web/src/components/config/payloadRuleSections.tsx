@@ -1,4 +1,4 @@
-import { Select, Typography } from 'antd';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,7 +20,6 @@ import type { PayloadRulesDraft } from './usePayloadRulesDraft';
 import { ConfirmAction } from '../common/ConfirmAction';
 import './config.css';
 
-const { Text } = Typography;
 
 /**
  * The three payload-rule panels: the typed rules' parameters and per-model
@@ -490,7 +489,7 @@ export function renderTypedCategoryContent(draft: PayloadRulesDraft, category: '
     if (rules.length === 0) {
       return (
         <div className="payload-empty-box">
-          <Text type="secondary">{t('cfg.payload_no_rules')}</Text>
+          <span className="text-muted-foreground">{t('cfg.payload_no_rules')}</span>
           <Button
             size="sm"
             variant="primary"
@@ -557,7 +556,7 @@ export function renderRawCategoryContent(draft: PayloadRulesDraft, category: 'de
     if (rules.length === 0) {
       return (
         <div className="payload-empty-box">
-          <Text type="secondary">{t('cfg.payload_no_rules')}</Text>
+          <span className="text-muted-foreground">{t('cfg.payload_no_rules')}</span>
           <Button
             size="sm"
             variant="primary"
@@ -622,7 +621,7 @@ export function renderFilterCategoryContent(draft: PayloadRulesDraft) {
     if (filterRules.length === 0) {
       return (
         <div className="payload-empty-box">
-          <Text type="secondary">{t('cfg.payload_no_rules')}</Text>
+          <span className="text-muted-foreground">{t('cfg.payload_no_rules')}</span>
           <Button
             size="sm"
             variant="primary"

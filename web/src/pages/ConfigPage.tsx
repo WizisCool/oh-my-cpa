@@ -1,6 +1,5 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Space, Typography } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
@@ -55,7 +54,6 @@ import { ToolButton } from '../components/common/ToolButton';
 import '../components/config/config.css';
 import { AppModal } from '../components/common/AppModal';
 
-const { Text } = Typography;
 
 export const ConfigPage: React.FC = () => {
   const t = useT();
@@ -491,16 +489,16 @@ export const ConfigPage: React.FC = () => {
           style={isSourceFocused ? { top: visibleViewport.top, height: visibleViewport.height } : undefined}
         >
           <div className="config-source-toolbar">
-            {!isPhone && !isSourceFocused && <Space size={12}>
+            {!isPhone && !isSourceFocused && <div className="inline-flex items-center gap-3">
               <Tag tone={isDirty ? 'warn' : 'success'}>
                 {isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
               </Tag>
               {rawYaml && (
-                <Text type="secondary" className="mono-num">
+                <span className="mono-num text-xs text-muted-foreground">
                   {(new Blob([rawYaml]).size / 1024).toFixed(1)} KB · {t('cfg.lines_count', { n: rawYaml.split('\n').length })}
-                </Text>
+                </span>
               )}
-            </Space>}
+            </div>}
             <div className="config-source-actions">
               {isSourceFocused && <Button size="sm" icon={<ArrowLeftOutlined />} onClick={() => setIsSourceFocused(false)}>{t('cfg.source_return')}</Button>}
               <Button
@@ -554,9 +552,9 @@ export const ConfigPage: React.FC = () => {
           </div>
 
           <div className="config-source-hint">
-            <Text type="secondary" style={{ fontSize: 11 }}>
+            <span className="text-xs text-muted-foreground">
               <kbd>Ctrl+S</kbd> / <kbd>Cmd+S</kbd> {t('cfg.save_shortcut', { key: '' })}
-            </Text>
+            </span>
           </div>
         </div>
       )}

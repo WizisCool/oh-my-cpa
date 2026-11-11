@@ -1,5 +1,5 @@
 import React from 'react';
-import { Slider } from 'antd';
+import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -53,7 +53,6 @@ function NumberParameter({ id, label, value, min, max, step, restingValue, onCha
           max={max}
           step={step}
           value={value ?? restingValue}
-          tooltip={{ open: false }}
           onChange={next => onChange(next)}
         />
         <NumberInput

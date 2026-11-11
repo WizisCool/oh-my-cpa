@@ -3,7 +3,8 @@ import type { MessageKey } from '../i18n/catalog';
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { ColorPicker, Select } from 'antd';
+import { ColorPicker } from '@/components/ui/color-picker';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../components/common/Switch';
@@ -600,13 +601,9 @@ const PaletteTokenRow: React.FC<{
       <span className="palette-token-name">{t(TOKEN_LABEL_KEYS[tokenKey])}</span>
       <ColorPicker
         value={value}
-        disabledAlpha
-        // Named for a screen reader: the row's label is a sibling span, so without this the control
-        // announces a hex value and nothing about which token it belongs to. Ant Design forwards `aria-*`
-        // to the trigger, which is what makes the name land on the focusable element rather than the field.
         aria-label={t(TOKEN_LABEL_KEYS[tokenKey])}
-        showText={(color) => color.toHexString()}
-        onChange={(color) => onChange(color.toHexString())}
+        showText
+        onChange={(hex) => onChange(hex)}
         onChangeComplete={() => onCommit()}
       />
       <span

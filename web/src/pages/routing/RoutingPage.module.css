@@ -7,7 +7,7 @@
 .aside { position: sticky; top: 16px; min-width: 0; }
 
 /* ── Policy ─────────────────────────────────────────────────────────────── */
-.policy :global(.ant-card-body) { display: flex; flex-direction: column; gap: 12px; }
+.policy :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 12px; }
 .policy-strategy { display: flex; flex-direction: column; gap: 8px; }
 .policy-label { color: var(--fg); font-size: var(--text-sm); font-weight: 600; }
 .policy-hint { color: var(--muted); font-size: var(--text-sm); }

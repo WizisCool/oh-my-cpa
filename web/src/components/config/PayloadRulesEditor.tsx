@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { Collapse, Select } from 'antd';
+import { Collapse } from '@/components/ui/accordion';
+import { Combobox } from '@/components/ui/combobox';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DeleteOutlined, PlusOutlined } from '../icons';
@@ -279,7 +281,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             {/* exist paths */}
             <div className="payload-adv-field">
               <label className="payload-adv-label">{t('cfg.payload_adv_exist')}</label>
-              <Select
+              <Combobox<string[]>
                 mode="tags"
                 size="small"
                 style={{ width: '100%' }}
@@ -292,7 +294,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             {/* not-exist paths */}
             <div className="payload-adv-field">
               <label className="payload-adv-label">{t('cfg.payload_adv_not_exist')}</label>
-              <Select
+              <Combobox<string[]>
                 mode="tags"
                 size="small"
                 style={{ width: '100%' }}

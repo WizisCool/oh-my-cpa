@@ -1,12 +1,11 @@
 import React from 'react';
-import { Tabs, Space } from 'antd';
+import { Tabs } from '@/components/ui/tabs';
 import { AppstoreOutlined } from '../icons';
 import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialMark } from '../LobeIcon';
 import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useT } from '../../i18n';
 import styles from './ProviderFilterTabs.module.css';
-import { TAB_OVERFLOW } from './tabOverflow';
 
 export interface ProviderFilterTabsProps {
   providers: string[];
@@ -48,7 +47,7 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
     return {
       key: provider,
       label: (
-        <Space size={6} align="center">
+        <span className="inline-flex items-center gap-1.5">
           <span className={styles['tab-icon']}>
             {!isAll ? (
               <CredentialMark credential={{ provider, hint: label }} pluginLogos={pluginLogos} size={15} />
@@ -60,14 +59,14 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
           <span className={`${styles['tab-count']} ${isActive ? styles['tab-count-active'] : ''}`}>
             {count}
           </span>
-        </Space>
+        </span>
       ),
     };
   });
 
   return (
     <div className={styles['tabs-wrap']}>
-      <Tabs more={TAB_OVERFLOW}
+      <Tabs
         activeKey={active}
         onChange={onChange}
         items={items}

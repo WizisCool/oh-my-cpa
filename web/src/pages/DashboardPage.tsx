@@ -5,7 +5,7 @@ import { DeferredPanel } from '../components/common/DeferredPanel';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';

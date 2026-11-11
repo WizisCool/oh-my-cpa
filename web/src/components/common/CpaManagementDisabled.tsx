@@ -1,35 +1,26 @@
 import React from 'react';
-import { Result, Typography } from 'antd';
 import { WarningOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { CodeFrame } from './CodeFrame';
 
 const CPA_MANAGEMENT_SNIPPET = 'management:\n  secret-key: "<OMCPA_CPA_MANAGEMENT_KEY>"';
 
-/**
- * Stands in for every page while the gateway serves no Management API at all.
- *
- * CPA answers 404 on every management path until a management secret is set, so its
- * version cannot be observed and upgrade guidance would send the operator the wrong
- * way. The health poll lifts this as soon as either management tree answers.
- */
 export const CpaManagementDisabled: React.FC = () => {
   const t = useT();
   return (
     <div className="cpa-blocked" data-cpa-management-disabled>
-      <Result
-        status="warning"
-        icon={<WarningOutlined />}
-        title={t('shell.cpa_management_disabled_title')}
-        subTitle={t('shell.cpa_management_disabled_desc')}
-        extra={(
-          <div className="cpa-blocked-steps">
-            <Typography.Paragraph>{t('shell.cpa_management_disabled_config')}</Typography.Paragraph>
-            <CodeFrame code={CPA_MANAGEMENT_SNIPPET} label="yaml" lang="yaml" />
-            <Typography.Paragraph type="secondary">{t('shell.cpa_management_disabled_lift')}</Typography.Paragraph>
-          </div>
-        )}
-      />
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <span className="inline-flex size-12 items-center justify-center rounded-full bg-[var(--warning-bg)] text-[var(--warn)]">
+          <WarningOutlined style={{ fontSize: 24 }} />
+        </span>
+        <h2 className="m-0 text-lg font-semibold text-foreground">{t('shell.cpa_management_disabled_title')}</h2>
+        <p className="m-0 max-w-xl text-sm text-muted-foreground">{t('shell.cpa_management_disabled_desc')}</p>
+        <div className="cpa-blocked-steps mt-3 w-full">
+          <p className="m-0 text-sm text-foreground">{t('shell.cpa_management_disabled_config')}</p>
+          <CodeFrame code={CPA_MANAGEMENT_SNIPPET} label="yaml" lang="yaml" />
+          <p className="m-0 text-xs text-muted-foreground">{t('shell.cpa_management_disabled_lift')}</p>
+        </div>
+      </div>
     </div>
   );
 };

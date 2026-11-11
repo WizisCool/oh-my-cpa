@@ -1,6 +1,6 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType } from '@/components/ui/table';
 import dayjs from '../../../utils/time';
 import { ResponsiveList } from '../../../components/common/ResponsiveList';
 import { useT } from '../../../i18n';

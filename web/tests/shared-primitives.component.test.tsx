@@ -293,16 +293,16 @@ describe('Pager', () => {
   it('reports the page chosen and offers no page-size menu', () => {
     const onChange = vi.fn();
     const { container } = render(<Pager page={1} pageSize={20} total={48} onChange={onChange} />);
-    expect(container.querySelector('.ant-pagination-options')).toBeNull();
+    expect(container.querySelector('select')).toBeNull();
 
-    fireEvent.click(container.querySelector('.ant-pagination-item-2') as HTMLElement);
+    fireEvent.click(container.querySelector('[data-page="2"]') as HTMLElement);
 
     expect(onChange).toHaveBeenCalledWith(2, 20);
   });
 
   it('steps through pages without a field to type in', () => {
     const { container } = render(<Pager variant="stepped" page={2} pageSize={10} total={48} onChange={() => undefined} />);
-    expect(container.querySelector('.ant-pagination-simple')).toBeTruthy();
+    expect(container.querySelector('[data-variant="stepped"]')).toBeTruthy();
     expect(container.querySelector('input')).toBeNull();
   });
 });

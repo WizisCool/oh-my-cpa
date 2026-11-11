@@ -3,7 +3,7 @@ import { Notice } from '../../components/feedback';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Space, Spin } from 'antd';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -135,11 +135,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     value: candidate.id,
     title: candidate.title,
     label: (
-      <Space size={8}>
+      <span className="inline-flex items-center gap-2">
         <ProviderBrandIcon mark={candidate} size={18} />
         <span>{candidate.title}</span>
         <ProviderKindTag choice={candidate} />
-      </Space>
+      </span>
     ),
   }));
 
@@ -174,7 +174,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 options={providerOptions}
                 onChange={(value) => onSelectProvider((value ?? '').trim())}
                 style={{ width: '100%' }}
-                getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
               />
             </div>
 
@@ -244,7 +243,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 options={providerOptions}
                 onChange={(value) => onSelectProvider((value ?? '').trim())}
                 style={{ width: '100%' }}
-                getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
               />
             </div>
 
@@ -425,7 +423,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 <div className={styles['session-status-card']} aria-live="polite">
                   {isWaiting && (
                     <div className={styles['status-waiting-box']}>
-                      <Spin size="small" />
+                      <Spinner size="small" />
                       <div className={styles['waiting-copy']}>
                         <span className={styles['waiting-title']}>{t('oauth.status_waiting_badge')}</span>
                         <span className={styles['waiting-desc']}>{t('oauth.status_waiting')}</span>

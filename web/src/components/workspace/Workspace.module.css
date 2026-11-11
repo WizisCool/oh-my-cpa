@@ -1483,7 +1483,7 @@
   min-height: 100%;
 }
 
-.panel-tabs :global(.ant-tabs-nav) {
+.panel-tabs > div:first-child {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -1492,8 +1492,8 @@
   background: var(--bg);
 }
 
-.panel-tabs :global(.ant-tabs-tab) {
-  padding: 14px 0 12px;
+.panel-tabs :global([data-slot='tabs-content']) {
+  padding-top: 0;
 }
 
 .panel-section {

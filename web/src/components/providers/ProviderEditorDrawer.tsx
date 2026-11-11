@@ -1,6 +1,8 @@
 import { ConnectionPoolEditor } from './ConnectionPoolEditor';
 import { EMPTY_CONNECTION_POOL_DRAFT, buildConnectionPool } from './connectionPool';
-import { AutoComplete, Col, Form, Row, Select } from 'antd';
+import { AutoComplete } from '@/components/ui/autocomplete';
+import { Field } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -275,7 +277,7 @@ export function ProviderEditorDrawer({
           </>
         }
       >
-        <Form layout="vertical">
+        <div>
           {/* Provider Icon Card */}
           <div className={styles['icon-card']}>
             <div
@@ -318,9 +320,9 @@ export function ProviderEditorDrawer({
           </div>
 
           {/* Driver & Name */}
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Field
                 label={t('pro.field_family')}
                 required
                 extra={editingProvider && formFamily !== editingProvider.family
@@ -345,10 +347,10 @@ export function ProviderEditorDrawer({
                   disabled={createProviderMutation.isPending || updateProviderMutation.isPending}
                   options={familyOptions}
                 />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item label={t('pro.field_name')} required>
+              </Field>
+            </div>
+            <div>
+              <Field label={t('pro.field_name')} required>
                 <Input
                   value={formName}
                   onChange={(e) => {
@@ -360,12 +362,12 @@ export function ProviderEditorDrawer({
                 }}
                   placeholder={t('pro.field_name_ph')}
                 />
-              </Form.Item>
-            </Col>
-          </Row>
+              </Field>
+            </div>
+          </div>
 
           {/* Base URL */}
-          <Form.Item
+          <Field
             required={lookupProviderFamily(formFamily)?.requiresBaseURL ?? false}
             label={
               <span>
@@ -390,7 +392,7 @@ export function ProviderEditorDrawer({
               }}
               placeholder={t('pro.field_base_url_ph')}
             />
-          </Form.Item>
+          </Field>
 
           {/* Guidance sits with the URL that makes the header necessary: the
               Custom Headers group is collapsed by default, and a requirement
@@ -428,7 +430,7 @@ export function ProviderEditorDrawer({
           )}
 
           {/* Website: console metadata, deliberately not a CPA field. */}
-          <Form.Item
+          <Field
             label={
               <span>
                 {t('pro.field_website')}{' '}
@@ -437,43 +439,44 @@ export function ProviderEditorDrawer({
                 </span>
               </span>
             }
-            validateStatus={websiteInputState.status}
-            help={websiteInputState.help}
+            error={websiteInputState.status === 'error' ? websiteInputState.help : undefined}
+            extra={websiteInputState.status !== 'error' ? websiteInputState.help : undefined}
           >
             <Input
               value={formWebsite}
               onChange={(e) => setFormWebsite(e.target.value)}
               placeholder="https://example.com"
               className="config-mono-input"
+              status={websiteInputState.status === 'error' ? 'error' : undefined}
               allowClear
             />
-          </Form.Item>
+          </Field>
 
           {/* Prefix & Priority */}
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item label={t('pro.field_prefix')}>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Field label={t('pro.field_prefix')}>
                 <Input
                   value={formPrefix}
                   onChange={(e) => setFormPrefix(e.target.value)}
                   placeholder="e.g. prefix"
                 />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item label={t('pro.field_priority')}>
+              </Field>
+            </div>
+            <div>
+              <Field label={t('pro.field_priority')}>
                 <NumberInput
                   value={formPriority}
                   onChange={(val) => setFormPriority(val)}
                   placeholder="e.g. 1"
                   className={styles['full-width']}
                 />
-              </Form.Item>
-            </Col>
-          </Row>
+              </Field>
+            </div>
+          </div>
 
           {/* Test Model */}
-          <Form.Item label={t('pro.field_test_model')}>
+          <Field label={t('pro.field_test_model')}>
             <Select
               value={
                 formTestModel === '' || formModels.some((m) => m.name === formTestModel)
@@ -496,7 +499,7 @@ export function ProviderEditorDrawer({
                   })),
               ]}
             />
-          </Form.Item>
+          </Field>
 
           {/* Flag: Disabled */}
           <div className={styles['flag-list']}>
@@ -816,13 +819,9 @@ export function ProviderEditorDrawer({
                             <AutoComplete
                               value={m.name}
                               options={modelOptions}
-                              // The options are already narrowed by the typed
-                              // text above, so the popup must not apply a second,
-                              // differently-scoped filter on top of them. Stated
-                              // explicitly rather than left to the combobox
-                              // default, which is what silently made this
-                              // dropdown unfiltered in the first place.
-                              showSearch={{ filterOption: false }}
+                              filterOption={false}
+                              placeholder={t('pro.actual_request_model')}
+                              showCaret={endpointModels.length > 0}
                               onSelect={(val) => {
                                 setFormModels((prev) =>
                                   prev.map((item) =>
@@ -844,16 +843,7 @@ export function ProviderEditorDrawer({
                                 );
                               }}
                               className={styles['model-input']}
-                            >
-                              <Input
-                                placeholder={t('pro.actual_request_model')}
-                                suffix={
-                                  endpointModels.length > 0 ? (
-                                    <DownOutlined className={styles['model-suffix']} />
-                                  ) : <span />
-                                }
-                              />
-                            </AutoComplete>
+                            />
                             <Input
                               value={m.alias}
                               onChange={(e) =>
@@ -934,12 +924,12 @@ export function ProviderEditorDrawer({
                                   {t('pro.select_all')}
                                 </Checkbox>
                               </div>
-                              <Row gutter={[10, 10]}>
+                              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                                 {THINKING_LEVEL_OPTIONS.map((opt) => {
                                   const isChecked =
                                     m.thinking?.levels?.includes(opt.value) || false;
                                   return (
-                                    <Col xs={24} sm={12} key={opt.value}>
+                                    <div key={opt.value}>
                                       <div
                                         role="button"
                                         tabIndex={0}
@@ -958,10 +948,10 @@ export function ProviderEditorDrawer({
                                         </Checkbox>
                                         <span className={styles['level-value']}>{opt.value}</span>
                                       </div>
-                                    </Col>
+                                    </div>
                                   );
                                 })}
-                              </Row>
+                              </div>
                             </div>
 
                             <ModelOptionsFields
@@ -1010,7 +1000,7 @@ export function ProviderEditorDrawer({
               showProblems={isPolicyChecked}
             />
           </EditorSection>
-        </Form>
+        </div>
         <ModelPickerModal
           isOpen={isModelPickerOpen && providerDrawerOpen && endpointModels.length > 0}
           models={endpointModels}

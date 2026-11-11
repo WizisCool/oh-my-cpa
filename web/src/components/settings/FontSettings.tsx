@@ -1,6 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { AutoComplete, Select, type SelectProps } from 'antd';
+import { AutoComplete } from '@/components/ui/autocomplete';
+import { Select, type SelectOptionItem } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -104,12 +105,12 @@ export const FontSettings: React.FC = () => {
 const FontPicker: React.FC<{ role: FontRole; fonts: readonly InstalledFont[] }> = ({ role, fonts }) => {
   const t = useT();
   const { value, loaded, setRole } = useFontRoles();
-  const builtIns: SelectProps['options'] = BUILT_IN_FONTS.map((font) => ({
+  const builtIns: SelectOptionItem<string>[] = BUILT_IN_FONTS.map((font) => ({
     value: builtInRef(font.id),
     label: <span style={{ fontFamily: font.stack }}>{t(font.nameKey)}</span>,
     title: t(font.nameKey),
   }));
-  const installed: NonNullable<SelectProps['options']> = fonts.map((font) => ({
+  const installed: SelectOptionItem<string>[] = fonts.map((font) => ({
     value: libraryRef(font.id),
     label: <span style={{ fontFamily: fontStackFor(libraryRef(font.id), fonts) }}>{font.family}</span>,
     title: font.family,
@@ -124,8 +125,8 @@ const FontPicker: React.FC<{ role: FontRole; fonts: readonly InstalledFont[] }> 
       popupMatchSelectWidth={false}
       options={installed.length
         ? [
-          { label: t('omc.font_group_builtin'), title: t('omc.font_group_builtin'), options: builtIns },
-          { label: t('omc.font_group_library'), title: t('omc.font_group_library'), options: installed },
+          { label: t('omc.font_group_builtin'), options: builtIns },
+          { label: t('omc.font_group_library'), options: installed },
         ]
         : builtIns}
     />

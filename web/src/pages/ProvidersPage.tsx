@@ -2,7 +2,7 @@ import type { MessageKey } from '../i18n/catalog';
 import { FilterDisclosure } from '../components/common/FilterDisclosure';
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { PlusOutlined } from '../components/icons';

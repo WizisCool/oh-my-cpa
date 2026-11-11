@@ -1,7 +1,7 @@
 import type { OAuthRecoveryTarget } from '../../types/oauth';
 import React from 'react';
 import { useBlocker } from 'react-router-dom';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import {

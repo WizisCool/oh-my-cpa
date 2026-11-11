@@ -1,7 +1,7 @@
 
 import React from 'react';
 import type { MessageKey } from '../../i18n/catalog';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { FilterOutlined } from '../icons';

@@ -13,7 +13,7 @@ import { Switch } from '../common/Switch';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { GlyphBadge } from '../common/GlyphBadge';
 import { BoxOutlined, DeleteOutlined, EditOutlined, ExternalLinkOutlined, KeyOutlined, MoreOutlined, PictureOutlined, RenameOutlined, TagOutlined } from '../icons';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType } from '@/components/ui/table';
 
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';

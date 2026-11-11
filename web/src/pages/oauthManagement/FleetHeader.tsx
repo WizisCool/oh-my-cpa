@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { ButtonGroup } from '@/components/ui/button-group';
 import {
   DropdownMenu,

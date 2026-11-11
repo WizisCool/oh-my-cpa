@@ -184,7 +184,7 @@
 .tile-change-was { margin-left: 6px; color: var(--meta); }
 
 /* ── Trend ──────────────────────────────────────────────────────────────── */
-.trend-panel :global(.ant-card-body) { display: flex; flex-direction: column; gap: 8px; }
+.trend-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .grouping-select { min-width: 120px; }
 .bucket-control { min-width: 128px; }
 
@@ -244,7 +244,7 @@
 .ranking-more { margin: 8px 0 -4px; color: var(--muted); }
 
 /* ── Key table ──────────────────────────────────────────────────────────── */
-.table-panel :global(.ant-card-body) { display: flex; flex-direction: column; gap: 8px; }
+.table-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .key-table :global(td) { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .key-name {
   display: inline-flex;

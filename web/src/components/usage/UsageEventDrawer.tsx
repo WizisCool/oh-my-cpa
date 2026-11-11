@@ -4,7 +4,7 @@ import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tabs } from 'antd';
+import { Tabs } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
@@ -60,7 +60,6 @@ import { CopyButton } from '../common/CopyButton';
 import './UsageEventDrawer.css';
 import './requestMarks.css';
 import { Tooltip } from '../common/Tooltip';
-import { TAB_OVERFLOW } from '../common/tabOverflow';
 import { AppModal } from '../common/AppModal';
 
 export interface UsageEventDrawerProps {
@@ -373,10 +372,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
               </div>
             </dl>
           </header>
-          <Tabs more={TAB_OVERFLOW}
+          <Tabs
             activeKey={tab}
             onChange={setTab}
-            animated={false}
             items={[
               {
                 key: 'overview',

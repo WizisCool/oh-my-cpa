@@ -1,7 +1,7 @@
 import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
-import { Typography, Spin } from 'antd';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import {
   DownloadOutlined,
@@ -58,7 +58,6 @@ import { AppDrawer } from '../components/common/AppDrawer';
 import { Panel } from '../components/common/Panel';
 import { AppModal } from '../components/common/AppModal';
 
-const { Text, Paragraph } = Typography;
 
 // The change log renders release notes as Markdown, and the Markdown renderer is the largest
 // dependency on this page. It is only needed once a reader opens a log, so it is loaded then.
@@ -893,7 +892,7 @@ export const SystemPage: React.FC = () => {
           {effectiveMaintenance?.running && (
             <Notice
               tone="info"
-              icon={<Spin size="small" />}
+              icon={<Spinner size="small" />}
               className={styles['maintenance-running']}
               title={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
             />
@@ -950,9 +949,9 @@ export const SystemPage: React.FC = () => {
               </div>
 
               {displayedOutcome.detail && (
-                <Text type="secondary" className={styles['maintenance-detail']}>
+                <span className={`text-muted-foreground ${styles['maintenance-detail']}`}>
                   {displayedOutcome.detail}
-                </Text>
+                </span>
               )}
 
               {displayedOutcome.incomplete && (
@@ -1007,9 +1006,9 @@ export const SystemPage: React.FC = () => {
         cancelText={t('common.cancel')}
       >
         <div className={styles['vacuum-modal-content']}>
-          <Paragraph type="secondary" className={styles['vacuum-desc']}>
+          <p className={`m-0 text-muted-foreground ${styles['vacuum-desc']}`}>
             {t('sys.vacuum_confirm_desc')}
-          </Paragraph>
+          </p>
 
           <div className={styles['vacuum-space-table']}>
             <div className={styles['vacuum-space-row']}>

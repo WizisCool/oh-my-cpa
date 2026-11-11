@@ -2,7 +2,7 @@ import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Form } from 'antd';
+import { Field } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlusOutlined, SyncOutlined } from '../components/icons';
@@ -542,8 +542,8 @@ export const ApiKeysPage: React.FC = () => {
       >
         {/* The provider editor's form: the name a reader knows the key by, then the secret, with
             the two actions that produce and take it beside the field. */}
-        <Form layout="vertical">
-          <Form.Item label={t('keys.col_name')} htmlFor="gateway-key-alias">
+        <div>
+          <Field label={t('keys.col_name')} htmlFor="gateway-key-alias">
             <Input
               id="gateway-key-alias"
               placeholder={t('keys.modal_alias_placeholder')}
@@ -554,8 +554,8 @@ export const ApiKeysPage: React.FC = () => {
               showCount
               autoFocus
             />
-          </Form.Item>
-          <Form.Item label={t('keys.modal_label')} htmlFor="gateway-key-value" required>
+          </Field>
+          <Field label={t('keys.modal_label')} htmlFor="gateway-key-value" required>
             <div className={styles['secret-field']}>
               <SecretInput
                 id="gateway-key-value"
@@ -578,11 +578,11 @@ export const ApiKeysPage: React.FC = () => {
               />
               <CopyButton size="middle" text={keyInput.trim()} label={t('cfg.api_keys_copy')} disabled={!keyInput.trim()} />
             </div>
-          </Form.Item>
+          </Field>
           {isValueChanged && (
             <Notice tone="warning" title={t('keys.value_change_warning')} />
           )}
-        </Form>
+        </div>
       </AppDrawer>
     </div>
   );

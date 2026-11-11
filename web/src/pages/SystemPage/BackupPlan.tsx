@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Select, TimePicker } from 'antd';
+import { Select } from '@/components/ui/select';
+import { TimePicker, clockToMinuteOfDay, minuteOfDayToClock } from '@/components/ui/time-picker';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import dayjs from '../../utils/time';
@@ -54,8 +55,7 @@ interface Props {
 /** The stages a run passes through, in order; a run with no cloud location has nothing to upload. */
 const RUN_STAGES: DatabaseBackupJob['state'][] = ['snapshotting', 'packaging', 'validating', 'uploading'];
 
-const minuteToTime = (minute: number) =>
-  dayjs().hour(Math.floor(minute / 60)).minute(minute % 60).second(0).millisecond(0);
+
 
 /**
  * The backup panel is one form: the daily time, the passphrase, and where copies go.
@@ -337,8 +337,8 @@ function PassphraseChange({ isBusy, onSave, onDone }: { isBusy: boolean; onSave:
 function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: boolean; onSave: Props['onSave'] }) {
   const t = useT();
   const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
-  const [time, setTime] = useState(() => minuteToTime(value.daily_at_minute));
-  useEffect(() => setTime(minuteToTime(value.daily_at_minute)), [value.daily_at_minute]);
+  const [time, setTime] = useState(() => minuteOfDayToClock(value.daily_at_minute));
+  useEffect(() => setTime(minuteOfDayToClock(value.daily_at_minute)), [value.daily_at_minute]);
   // A count saved outside the presets (the server accepts 1-100) is still offered, so the control
   // names it rather than showing a bare number.
   const keepOptions = [...new Set([...KEEP_COUNTS, value.keep_local, value.keep_remote])]
@@ -368,15 +368,11 @@ function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: 
               className={styles['time-picker']}
               aria-label={t('sys.backup_daily_at')}
               value={time}
-              format="HH:mm"
-              allowClear={false}
-              needConfirm={false}
               disabled={isBusy || !value.enabled}
-              minuteStep={1}
               onChange={(next) => {
-                if (!next) return;
                 setTime(next);
-                void onSave({ daily_at_minute: next.hour() * 60 + next.minute() });
+                const minute = clockToMinuteOfDay(next);
+                if (minute !== null) void onSave({ daily_at_minute: minute });
               }}
             />
           }

@@ -104,17 +104,8 @@
   background: var(--bg);
 }
 
-.panel-fullscreen :global(.ant-tabs) {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* Every box between the tabs and the list passes the remaining height down. */
-.panel-fullscreen :global(.ant-tabs-body-holder),
-.panel-fullscreen :global(.ant-tabs-body),
-.panel-fullscreen :global(.ant-tabs-content-active) {
+.panel-fullscreen :global([data-slot='tabs']),
+.panel-fullscreen :global([data-slot='tabs-content']) {
   display: flex;
   flex: 1;
   flex-direction: column;

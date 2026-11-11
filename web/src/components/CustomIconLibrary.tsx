@@ -1,6 +1,6 @@
 import type { MessageKey } from '../i18n/catalog';
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Spin } from 'antd';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -381,7 +381,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
           >
             <h4>{t('icons.preview_title')}</h4>
             <div className={styles['preview-large']}>
-              {isBusy ? <Spin /> : renderArtwork(64)}
+              {isBusy ? <Spinner /> : renderArtwork(64)}
             </div>
             <span className={styles['preview-caption']}>64 × 64</span>
             <div className={styles['preview-small']}>

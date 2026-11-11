@@ -1,6 +1,5 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Space } from 'antd';
 import { Button } from '@/components/ui/button';
 import { CheckOutlined, CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -110,7 +109,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
           {extra}
         </div>
 
-        <Space size={10} className="config-dirty-bar-actions">
+        <div className="config-dirty-bar-actions inline-flex items-center gap-2.5">
           {/* Discard needs no confirmation, invoking the rollback directly. */}
           <Button
             size="sm"
@@ -167,7 +166,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               </Button>
             </ConfirmAction>
           )}
-        </Space>
+        </div>
       </div>
     </div>
   );

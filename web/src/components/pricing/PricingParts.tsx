@@ -1,14 +1,14 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { TimePicker } from 'antd';
+import { TimeRangeField } from '@/components/ui/time-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
-import dayjs, { timeZoneOptions } from '../../utils/time';
+import { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
 import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, ThunderboltOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
@@ -304,7 +304,7 @@ const WindowField: React.FC<{
 }> = ({ draft, onChange }) => {
   const t = useT();
   const consoleZone = useTimeZone();
-  const pickerValue = (text: string) => (text ? dayjs(`2000-01-01 ${text}`, 'YYYY-MM-DD HH:mm') : null);
+
   const zones = React.useMemo(() => timeZoneOptions(consoleZone, draft.timeZone, t('pricing.editor.window_zone_console')), [consoleZone, draft.timeZone, t]);
   const shift = clockShiftMinutes(draft.timeZone, consoleZone, Date.now());
   const isComplete = draft.windowStart !== '' && draft.windowEnd !== '';
@@ -312,16 +312,11 @@ const WindowField: React.FC<{
     <div className={styles['tier-window']}>
       <div className={styles['tier-field']}>
         <span>{t('pricing.editor.window_range')}</span>
-        <TimePicker.RangePicker
-          format="HH:mm"
-          order={false}
-          allowEmpty={[true, true]}
-          value={[pickerValue(draft.windowStart), pickerValue(draft.windowEnd)]}
+        <TimeRangeField
+          startValue={draft.windowStart}
+          endValue={draft.windowEnd}
           aria-label={t('pricing.editor.window_range')}
-          onChange={(values) => onChange({
-            windowStart: values?.[0] ? values[0].format('HH:mm') : '',
-            windowEnd: values?.[1] ? values[1].format('HH:mm') : '',
-          })}
+          onChange={({ start, end }) => onChange({ windowStart: start, windowEnd: end })}
         />
       </div>
       <div className={styles['tier-field']}>

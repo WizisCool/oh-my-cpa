@@ -29,7 +29,7 @@
   flex-direction: column;
 }
 
-.system-card :global(.ant-card-body) {
+.system-card :global([data-slot="panel-body"]) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -879,12 +879,12 @@
    Malay compounds a noun phrase into one long word - "Penyelenggaraan" - so a title that fits
    one locale overflows a 390px phone in another. Allowing the wrap is what makes the same
    layout work in every registered language rather than in the language it was designed in. */
-.system-page :global(.ant-card-head-title) {
+.system-page :global([data-slot="panel-head-title"]) {
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.system-page :global(.ant-card-head) {
+.system-page :global([data-slot="panel-head"]) {
   align-items: flex-start;
 }
 

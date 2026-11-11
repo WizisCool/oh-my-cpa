@@ -1,5 +1,4 @@
 import React from 'react';
-import { Typography } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { CheckOutlined, FormatPainterOutlined } from '../icons';
@@ -9,7 +8,6 @@ import styles from './PluginConfigEditor.module.css';
 import { Notice } from '../feedback';
 import { Tag } from '../common/Tag';
 
-const { Text } = Typography;
 
 export interface PluginConfigEditorProps {
   value: string;
@@ -42,7 +40,7 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
           ) : (
             <Tag tone="success" icon={<CheckOutlined />}>{t('plugin.config_valid')}</Tag>
           )}
-          <Text type="secondary">{t('plugin.config_top_level', { n: summary.length })}</Text>
+          <span className="text-muted-foreground">{t('plugin.config_top_level', { n: summary.length })}</span>
         </div>
         <Button size="sm" icon={<FormatPainterOutlined />} disabled={isReadOnly || !parsed.value} onClick={formatValue}>
           {t('plugin.config_format')}
@@ -70,7 +68,7 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
         <div className={styles.summary} data-plugin-config-summary aria-label={t('plugin.config_preview')}>
           <div className={styles['summary-title']}>{t('plugin.config_preview')}</div>
           {summary.length === 0 ? (
-            <Text type="secondary">{t('plugin.config_empty')}</Text>
+            <span className="text-muted-foreground">{t('plugin.config_empty')}</span>
           ) : (
             <ul className={styles['summary-list']}>
               {summary.map((entry) => (

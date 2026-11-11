@@ -5,7 +5,7 @@ import { Table, Typography } from 'antd';
 import { Button } from '@/components/ui/button';
 import { NumberInput } from '../common/NumberInput';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';

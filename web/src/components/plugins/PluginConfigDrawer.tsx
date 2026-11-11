@@ -1,6 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -443,7 +444,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
     }
     if (kind === 'array' && draft.isList) {
       return (
-        <Select
+        <Combobox<string[]>
           mode="tags"
           value={draft.isSet ? draft.list : []}
           disabled={isReadOnly}

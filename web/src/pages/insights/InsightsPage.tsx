@@ -1,6 +1,6 @@
 import React from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Select } from 'antd';
+import { Select } from '@/components/ui/select';
 import { api, apiErrorCode } from '../../api/client';
 import { useT } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';

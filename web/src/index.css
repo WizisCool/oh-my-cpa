@@ -696,7 +696,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
 .ant-typography, h1, h2, h3, h4 { font-family: inherit; }
 .ant-divider, .ant-tabs-top > .ant-tabs-nav::before { border-color: var(--border) !important; }
 /* ── console chrome: bend antd away from its admin-template defaults ────── */
-.ant-card .ant-card-body { padding: 20px; }
+.ant-card .ant-card-body, [data-slot="panel-body"] { padding: 20px; }
 .ant-form-item .ant-form-item-label > label { font-size: var(--text-md); color: var(--muted); letter-spacing: .04em; }
 .ant-table-wrapper .ant-table-thead > tr > th {
   /* A header names its column in one line: a squeezed column wraps its cells, never its name,
@@ -1364,6 +1364,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   box-shadow: var(--shadow-edge);
   border-radius: var(--radius-xl);
   background: var(--bg);
+  overflow: clip;
 }
 .data-table .ant-table-wrapper .ant-table { background: transparent; }
 .data-table .ant-table-wrapper .ant-table-thead > tr > th { padding: 8px 16px; }
@@ -1384,12 +1385,12 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.responsive-list .ant-pagination { margin-top: 12px; }
+.responsive-list :is(.ant-pagination, [data-slot="pager"]) { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
-.ant-card-body [data-testid="phone-row"] { padding-inline: 0; }
+:is(.ant-card-body, [data-slot="panel-body"]) [data-testid="phone-row"] { padding-inline: 0; }
 @media (max-width: 640px) {
-  .ant-card .ant-card-body { padding: 16px; }
+  .ant-card .ant-card-body, [data-slot="panel-body"] { padding: 16px; }
 }
 
 /* A row's action cluster: square 28px icon buttons, 8px apart so the touch rules' 4px hit insets
@@ -1446,7 +1447,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    `:focus-visible` on every focused text field, mouse or keyboard alike. Ringing the inner field
    as well drew a second, smaller rectangle inside the control - its corners showing beside the
    prefix glyph and the caret of every Select. */
-:focus-visible:not(input):not(textarea) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
+:focus-visible:not(input):not(textarea):not([data-slot="select-trigger"]):not([data-slot="combobox-trigger"]):not([data-slot="color-picker-trigger"]) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
 input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* ── shell: a rail on the canvas, the page on one sheet ─────────────────────
@@ -1715,7 +1716,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   flex-direction: column;
 }
 :is(.ant-btn, [data-slot="button"]).tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
-.dashboard-tile .ant-card-body { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dashboard-tile :is(.ant-card-body, [data-slot="panel-body"]) { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 /* A tile given more rows than its reading needs spends them on its sparkline. */
 .dashboard-tile .tile-caption { flex: none; }
 .dashboard-tile .chart-slot { display: flex; flex: 1 1 auto; flex-direction: column; }
@@ -1738,7 +1739,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
 
 @media (max-width: 640px) {
-  .dashboard-tile .ant-card-body { padding: 16px; }
+  .dashboard-tile :is(.ant-card-body, [data-slot="panel-body"]) { padding: 16px; }
   .tile-caption { margin-top: 6px; gap: 2px 10px; font-size: var(--text-sm); }
   .dashboard-tile .chart-slot, .dashboard-tile .chart-placeholder { margin-top: 8px; }
 }
@@ -2891,7 +2892,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .app-header-actions > :is(.ant-btn, [data-slot="button"]) { min-width: 40px; min-height: 40px; }
   .app-header-left { flex: 1; }
   .app-header .demo-chip { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dashboard-tile .ant-card-body { padding: 12px; }
+  .dashboard-tile :is(.ant-card-body, [data-slot="panel-body"]) { padding: 12px; }
   .toolbar.is-ruled { gap: 8px; margin-bottom: 12px; }
   .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }
   .config-toolbar-phone .config-toolbar-left { flex-wrap: nowrap; gap: 8px; width: 100%; justify-content: space-between; }
