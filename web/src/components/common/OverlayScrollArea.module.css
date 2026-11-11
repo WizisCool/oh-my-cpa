@@ -35,7 +35,7 @@
 .thumb {
   width: 100%;
   min-height: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: var(--border);
   transition: background-color var(--motion-fast) var(--ease-standard);
   will-change: transform;

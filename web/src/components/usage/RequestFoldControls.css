@@ -30,7 +30,7 @@
 }
 .request-pagination {
   border-bottom: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 .request-pagination[data-fold-active] {
   will-change: transform;
@@ -45,6 +45,7 @@
   color: var(--fg);
 }
 .req-back-to-top-btn {
+  border: 0;
   position: absolute;
   right: 24px;
   bottom: 60px;
@@ -55,8 +56,8 @@
   height: 28px;
   padding: 0 10px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   color: var(--fg);
   font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
@@ -67,7 +68,7 @@
   animation: reqBackTopEnter var(--motion-base) var(--ease-standard) forwards;
   transition: transform var(--motion-fast) var(--ease-standard),
               background-color var(--motion-fast),
-              border-color var(--motion-fast),
+              box-shadow var(--motion-fast),
               color var(--motion-fast);
 }
 @keyframes reqBackTopEnter {
@@ -82,12 +83,12 @@
 }
 .req-back-to-top-btn:hover {
   background: var(--surface);
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   color: var(--accent);
   transform: translateY(-2px);
 }
 .req-back-to-top-btn.is-live {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   color: var(--accent);
 }
 .req-back-to-top-btn.is-live .anticon {
@@ -125,17 +126,18 @@
     border-radius: 0;
   }
   .req-back-to-top-btn {
+    border: 0;
     right: 12px;
     bottom: 52px;
     height: 28px;
     padding: 0 8px;
     font-size: var(--text-xs);
     gap: 4px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
   }
 }
 :root[data-reduced-motion='true'] {
-  .req-back-to-top-btn { animation: none; }
+  .req-back-to-top-btn { border: 0; animation: none; }
   .req-back-to-top-btn,
   .req-back-to-top-btn .anticon { transition: none; }
 }

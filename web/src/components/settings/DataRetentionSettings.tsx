@@ -5,7 +5,7 @@ import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { DATA_RETENTION_QUERY_KEY, formatRetentionDays, useDataRetention } from '../../hooks/useDataRetention';
-import { SectionHeading } from '../common/SectionHeading';
+import { SettingsGroup } from './SettingsGroup';
 import { SettingRow } from '../common/SettingRow';
 import { useToast } from '../feedback';
 
@@ -76,8 +76,7 @@ export const DataRetentionSettings: React.FC = () => {
 
   const current = data?.request_record_days ?? 0;
   return (
-    <div className="settings-group omc-settings-group" data-testid="omc-retention-settings">
-      <SectionHeading className="settings-group-head" title={t('omc.section_retention')} />
+    <SettingsGroup title={t('omc.section_retention')} testId="omc-retention-settings">
       <SettingRow
         label={t('omc.retention_records')}
         description={t('omc.retention_records_desc')}
@@ -92,6 +91,6 @@ export const DataRetentionSettings: React.FC = () => {
           />
         )}
       />
-    </div>
+    </SettingsGroup>
   );
 };

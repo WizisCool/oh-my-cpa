@@ -1,6 +1,7 @@
 import { theme, type ThemeConfig } from 'antd';
 
-import { THREAD_FILL_SHARES, THREAD_RADII, type ResolvedPalette, type ThemePalette } from './palette';
+import { THREAD_FILL_SHARES, type ResolvedPalette, type ThemePalette } from './palette';
+import { RADIUS } from './radius';
 
 /**
  * The palette projected onto Ant Design, and onto the stylesheet's custom properties.
@@ -105,9 +106,9 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
   const dark = resolved.mode === 'dark';
   const t = resolved.palette;
 
-  // Static surfaces stay flat: a card is a fill and a hairline. The stylesheet gives the floating
-  // layers their shadow from `--shadow-float` and `--shadow-overlay`, so the elevation follows the
-  // palette's mode without the theme being rebuilt.
+  // The stylesheet owns every edge: cards take `--shadow-edge`, floating layers `--shadow-float`
+  // and `--shadow-overlay`, so the elevation follows the palette's mode without the theme being
+  // rebuilt.
   const noShadow = {
     boxShadow: 'none',
     boxShadowSecondary: 'none',
@@ -167,12 +168,15 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       colorFillQuaternary: t.surface,
       colorBgSpotlight: t.tooltipBg,
 
-      // The shared corner scale: controls 6, menus and popovers 8, cards and dialogs 12.
-      borderRadius: 6,
-      borderRadiusSM: 6,
-      borderRadiusLG: 12,
-      borderRadiusXS: 2,
-      borderRadiusOuter: 8,
+      // The corner scale (`theme/radius.ts`). The base step is the control's; the small step is
+      // the nested one a tag or a check box takes; the large step is the surface's - cards,
+      // dialogs, toasts. Buttons and fields keep the control step at every size, and a popup takes
+      // the block step, so it is concentric with the entries 4px inside it.
+      borderRadius: RADIUS.md,
+      borderRadiusSM: RADIUS.sm,
+      borderRadiusLG: RADIUS.xl,
+      borderRadiusXS: RADIUS.xs,
+      borderRadiusOuter: RADIUS.sm,
       wireframe: false,
       motionDurationFast: `${MOTION_FAST.duration / 1000}s`,
       motionDurationMid: '0.18s',
@@ -189,8 +193,9 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         headerPadding: '0 20px 0 12px',
         siderBg: t.canvas,
       },
-      // The rail's entries are soft filled rows: the selected one is a fill a step off the
-      // canvas, never a coloured bar, because the rail is chrome and the colour belongs to data.
+      // The rail's entries are soft filled rows: the selected wash is drawn on the layer under
+      // the menu (`NavSelectionHighlight`) so it can slide and cross-fade cleanly, while hover
+      // washes are owned by `index.css` so touch devices stay free of sticky hover fills.
       Menu: {
         itemBg: 'transparent',
         darkItemBg: 'transparent',
@@ -199,22 +204,24 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         popupBg: t.elevated,
         itemHeight: 32,
         iconMarginInlineEnd: 10,
-        itemBorderRadius: 8,
+        itemBorderRadius: RADIUS.md,
         itemColor: t.fg2,
         darkItemColor: t.fg2,
         itemHoverColor: t.fg,
-        darkItemHoverBg: t.hover,
+        itemHoverBg: 'transparent',
+        darkItemHoverBg: 'transparent',
         darkItemHoverColor: t.fg,
-        itemSelectedBg: t.hover,
+        itemActiveBg: 'transparent',
+        itemSelectedBg: 'transparent',
         itemSelectedColor: t.fg,
-        darkItemSelectedBg: t.hover,
+        darkItemSelectedBg: 'transparent',
         darkItemSelectedColor: t.fg,
         activeBarBorderWidth: 0,
       },
       Card: {
         ...noShadow,
         paddingLG: 20,
-        borderRadiusLG: 12,
+        borderRadiusLG: RADIUS.xl,
         colorBorderSecondary: t.border,
       },
       Table: {
@@ -260,9 +267,15 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         defaultActiveColor: t.fg,
         textHoverBg: 'color-mix(in srgb, var(--fg) 6%, transparent)',
         primaryShadow: 'none',
-        defaultShadow: 'none',
+        // A secondary button stands on its ground in the control material (`--shadow-control`): the
+        // faint ring and a one-pixel drop, the same stuff as the cards at a control's scale. A
+        // disabled one lies flat, with neither a ring nor the stroke Ant Design draws by default.
+        defaultShadow: 'var(--shadow-control)',
         dangerShadow: 'none',
+        colorBorderDisabled: 'transparent',
         iconGap: 6,
+        borderRadiusSM: RADIUS.md,
+        borderRadiusLG: RADIUS.md,
       },
       Input: {
         controlHeight: 32,
@@ -271,6 +284,8 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         activeBorderColor: t.accent,
         hoverBorderColor: t.muted,
         activeShadow: `0 0 0 2px ${t.accent}22`,
+        borderRadiusSM: RADIUS.md,
+        borderRadiusLG: RADIUS.md,
       },
       InputNumber: {
         controlHeight: 32,
@@ -279,17 +294,23 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         activeBorderColor: t.accent,
         hoverBorderColor: t.muted,
         activeShadow: `0 0 0 2px ${t.accent}22`,
+        borderRadiusSM: RADIUS.md,
+        borderRadiusLG: RADIUS.md,
       },
-      // A track filled one step off the page with a raised thumb: the choice reads as a physical
-      // switch position rather than as a row of outlined buttons.
+      // A track set into its ground with a thumb standing in it: the choice reads as a physical
+      // switch position rather than as a row of outlined buttons. The track is a field's ink wash, so
+      // it reads on a card as on the page, and the thumb takes the control material.
       Segmented: {
+        boxShadowTertiary: 'var(--shadow-control)',
         controlHeight: 32,
         controlHeightSM: 28,
         fontSizeSM: 13,
-        borderRadius: 8,
-        borderRadiusSM: 6,
+        // Concentric: the track is a control, its thumb sits 2px inside on the nested step.
+        borderRadius: RADIUS.md,
+        borderRadiusSM: RADIUS.sm,
+        borderRadiusXS: RADIUS.xs,
         trackPadding: 2,
-        trackBg: t.surface,
+        trackBg: inkWash(t.fg, THREAD_FILL_SHARES.field),
         itemSelectedBg: dark ? t.border : t.elevated,
         itemColor: t.muted,
         itemSelectedColor: t.fg,
@@ -306,20 +327,20 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         titleFontSize: 14,
       },
       Drawer: { ...noShadow },
-      Modal: { ...noShadow, borderRadiusLG: 12, titleFontSize: 16 },
-      Popover: { ...noShadow, colorBgElevated: t.elevated, borderRadiusLG: 10 },
-      Dropdown: { ...noShadow, colorBgElevated: t.elevated, borderRadiusLG: 10, borderRadiusSM: 6, paddingBlock: 6, controlPaddingHorizontal: 10 },
-      Select: { optionSelectedBg: t.hover, optionSelectedColor: t.fg, optionSelectedFontWeight: 500, colorBgElevated: t.elevated, borderRadiusLG: 10, borderRadiusSM: 6 },
-      Tooltip: { colorBgSpotlight: t.tooltipBg, borderRadius: 8 },
-      Tag: { borderRadiusSM: 6, defaultBg: t.bg },
-      // `--radius-check`: the control step would round a 16px box into a dot.
-      Checkbox: { borderRadiusSM: 4 },
+      Modal: { ...noShadow, borderRadiusLG: RADIUS.xl, titleFontSize: 16 },
+      // A popup is a block whose entries are controls 4px inside it: 6 + 4 = 10.
+      Popover: { ...noShadow, colorBgElevated: t.elevated, borderRadiusLG: RADIUS.lg },
+      Dropdown: { ...noShadow, colorBgElevated: t.elevated, borderRadiusLG: RADIUS.lg, borderRadiusSM: RADIUS.md, paddingBlock: 6, controlPaddingHorizontal: 10 },
+      Select: { optionSelectedBg: t.hover, optionSelectedColor: t.fg, optionSelectedFontWeight: 500, colorBgElevated: t.elevated, borderRadiusLG: RADIUS.lg, borderRadiusSM: RADIUS.md },
+      Tooltip: { colorBgSpotlight: t.tooltipBg, borderRadius: RADIUS.md },
+      Tag: { borderRadiusSM: RADIUS.sm, defaultBg: t.bg },
+      Checkbox: { borderRadiusSM: RADIUS.sm },
       Progress: { remainingColor: t.border },
       Descriptions: { itemPaddingBottom: 10 },
       Statistic: { contentFontSize: 26 },
       // Every toast is one width - a report with file names and reasons included - because antd
       // lays toasts out in a column of this width, and a wider notice would overhang it.
-      Notification: { width: 420, borderRadiusLG: 12, colorBgElevated: t.elevated },
+      Notification: { width: 420, borderRadiusLG: RADIUS.xl, colorBgElevated: t.elevated },
       Empty: { colorIcon: t.meta },
       Spin: { colorPrimary: t.muted },
     },
@@ -359,11 +380,11 @@ export function themePaletteCssVariables(palette: ThemePalette): Record<string, 
     '--heatmap-zero-recorded': palette.heatmapZeroRecorded,
     '--heatmap-tip-link': palette.heatmapTipLink,
     '--series-track': palette.seriesTrack,
+    '--edge-share': `${palette.edgeShare}%`,
+    '--lift-share': `${palette.liftShare}%`,
+    '--fine-share': `${palette.fineShare}%`,
+    '--shade': palette.shade,
     '--motion-live-text': `${MOTION_LIVE_TEXT.duration}ms`,
-    '--radius-document': `${THREAD_RADII.document}px`,
-    '--radius-control': `${THREAD_RADII.control}px`,
-    '--radius-surface': `${THREAD_RADII.surface}px`,
-    '--radius-thread': `${THREAD_RADII.thread}px`,
     '--thread-field': `color-mix(in srgb, var(--fg) ${THREAD_FILL_SHARES.field}%, transparent)`,
     '--thread-field-hover': `color-mix(in srgb, var(--fg) ${THREAD_FILL_SHARES.fieldHover}%, transparent)`,
     '--thread-hairline': `color-mix(in srgb, var(--fg) ${THREAD_FILL_SHARES.hairline}%, transparent)`,

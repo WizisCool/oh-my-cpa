@@ -1,10 +1,11 @@
 .strip {
+  border: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 8px 10px;
   margin: 12px 0;
@@ -16,11 +17,11 @@
 }
 
 .pill {
+  border: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   padding: 3px 8px;
   background: var(--hover-inset);
@@ -51,6 +52,7 @@
 
 @media (max-width: 640px) {
   .strip {
+    border: 0;
     align-items: flex-start;
   }
 }

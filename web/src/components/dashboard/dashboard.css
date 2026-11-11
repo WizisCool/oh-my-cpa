@@ -1,7 +1,7 @@
 .dashboard-alert { margin-bottom: 16px; }
 .dashboard-section { margin-bottom: 32px; }
 .section-heading { margin-bottom: 12px; }
-.status-pip { width: 7px; height: 7px; border-radius: 999px; background: var(--success); }
+.status-pip { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
 /* ── Dashboard Providers Section ─────────────────────────────────────────── */
 .provider-list-panel {
   display: flex;
@@ -63,15 +63,16 @@
   min-width: 0;
 }
 .provider-brand-badge {
+  border: 0;
   position: relative;
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
   flex: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
 }
 .provider-brand-badge .status-pip {
   position: absolute;
@@ -308,7 +309,7 @@
   font-variant-numeric: tabular-nums;
 }
 .model-usage-row:last-child { border-bottom: none; }
-.model-usage-swatch { width: 8px; height: 8px; border-radius: 999px; }
+.model-usage-swatch { width: 8px; height: 8px; border-radius: var(--radius-xs); }
 .model-usage-name {
   display: flex;
   align-items: center;
@@ -324,7 +325,7 @@
   max-width: 100%;
   padding: 3px 6px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -750,11 +751,12 @@
 }
 /* Static skeleton, never a shimmer. */
 .heatmap-skeleton {
+  border: 0;
   margin-top: 12px;
   /* The measured field's own height: the month axis, then seven rows at the target size. */
   height: calc(16px + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
 }
 .heatmap-alert { margin-top: 12px; }
 /* A 2px indeterminate bar for the panel's own background re-read: one composited layer, no layout,

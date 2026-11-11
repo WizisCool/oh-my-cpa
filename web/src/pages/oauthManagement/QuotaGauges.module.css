@@ -36,7 +36,7 @@
 .reading:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
 }
 
 /* The window's name is plain secondary ink: the bar and the figure are what the eye compares down
@@ -70,12 +70,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Tall enough to hold its colour beside a labelled figure, rounded so a row of readings reads as
-   readings rather than stripes, on an ink wash so the empty share does not turn into a block. */
+/* Tall enough to hold its colour beside a labelled figure, on an ink wash so the empty share does
+   not turn into a block. A meter takes the mark step, as every bar in the console does. */
 .bar {
   grid-area: bar;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--fg) 9%, transparent);
 }
 
@@ -180,7 +180,7 @@
   justify-content: flex-start;
   width: 4px;
   overflow: hidden;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--fg) 30%, transparent);
 }
 

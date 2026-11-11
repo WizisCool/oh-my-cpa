@@ -4,6 +4,7 @@ import type { TwoStopMix } from '../../theme/twoStopMix';
 import { brandDataUri, brandDrawing } from '../../assets/brand/markup';
 import type { ThemePalette } from '../../theme/palette';
 import { exportPixelRatio } from './requestSelection';
+import { RADIUS } from '../../theme/radius';
 import {
   SHEET_LINE_HEIGHT,
   type RequestSheet,
@@ -34,9 +35,6 @@ const GLYPH_SIZE = 12;
 /** The reasoning count's bulb is the list's `text-2xs` glyph. */
 const SMALL_GLYPH_SIZE = 10;
 const GLYPH_BOX = 18;
-/** The list's radii: `--radius-sm` for tags and boxed marks, `--radius-md` for the provider tile. */
-const RADIUS_SM = 6;
-const RADIUS_MD = 8;
 /** The list's washes: a neutral mark is a wash of the ink, a hued one a tint of its hue. */
 const INK_WASH = 0.06;
 const HUE_TINT = 0.12;
@@ -315,7 +313,7 @@ export async function paintRequestSheet(
         wash(
           isNeutral(segment.tone) ? palette.fg : color,
           isNeutral(segment.tone) ? INK_WASH : HUE_TINT,
-          x, centreY - GLYPH_BOX / 2, GLYPH_BOX, GLYPH_BOX, RADIUS_SM,
+          x, centreY - GLYPH_BOX / 2, GLYPH_BOX, GLYPH_BOX, RADIUS.sm,
         );
       }
       const size = glyphSize(segment.glyph);
@@ -353,7 +351,7 @@ export async function paintRequestSheet(
     if (segment.kind === 'dot') {
       const hue = dotColor(segment);
       const inset = segment.isWashed ? 8 : 0;
-      if (segment.isWashed) wash(hue, 0.1, x, centreY - 10, width, 20, RADIUS_SM);
+      if (segment.isWashed) wash(hue, 0.1, x, centreY - 10, width, 20, RADIUS.sm);
       context.fillStyle = hue;
       context.beginPath();
       context.arc(x + inset + 3, centreY, 3, 0, Math.PI * 2);
@@ -366,7 +364,7 @@ export async function paintRequestSheet(
     const hue = (segment.effortStep && palette.effort[segment.effortStep - 1]) || null;
     const ink = hue ?? toneColor(palette, segment.tone);
     const boxHeight = segment.effortStep !== undefined ? 18 : 16;
-    wash(hue ?? palette.fg, hue ? HUE_TINT : INK_WASH, x, centreY - boxHeight / 2, width, boxHeight, RADIUS_SM);
+    wash(hue ?? palette.fg, hue ? HUE_TINT : INK_WASH, x, centreY - boxHeight / 2, width, boxHeight, RADIUS.sm);
     context.fillStyle = ink;
     context.fillText(segment.text, x + (segment.effortStep !== undefined ? 7 : 6), centreY + 0.5);
   };
@@ -376,7 +374,7 @@ export async function paintRequestSheet(
     let available = column.width;
     if (cell.mark) {
       const boxTop = top + (rowHeight - MARK_BOX) / 2;
-      wash(palette.fg, 0.05, left, boxTop, MARK_BOX, MARK_BOX, RADIUS_MD);
+      wash(palette.fg, 0.05, left, boxTop, MARK_BOX, MARK_BOX, RADIUS.md);
       const source = markSource(cell.mark, MARK_SIZE);
       if (source) {
         const inset = (MARK_BOX - MARK_SIZE) / 2;

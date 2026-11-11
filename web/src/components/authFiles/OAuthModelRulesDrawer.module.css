@@ -191,10 +191,11 @@
 /* The catalog is the long list in this drawer, so it scrolls inside its own
    box and the footer's actions stay within reach of the rule list above it. */
 .catalog {
+  border: 0;
   max-height: 360px;
   overflow-y: auto;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
 }
 
 .catalog .row {

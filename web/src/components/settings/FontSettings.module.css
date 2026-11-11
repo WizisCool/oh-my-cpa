@@ -58,13 +58,14 @@
 /* `--border` rather than `--border-soft`: the soft step is the divider between rows inside a
    surface, and on the light palettes it is too close to the page to read as a frame. */
 .library {
+  border: 0;
   margin: 0;
   padding: 0;
   max-height: min(48vh, 420px);
   overflow-y: auto;
   list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
 }
 
 .row {

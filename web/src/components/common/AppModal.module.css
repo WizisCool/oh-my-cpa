@@ -24,7 +24,7 @@
   max-height: calc(100dvh - 48px);
   padding: 0;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
 }
 
 .header.header {
@@ -81,7 +81,7 @@
   inset-inline-end: 18px;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-md);
   color: var(--fg-2);
   transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
@@ -166,7 +166,7 @@
 
   .container.container {
     max-height: calc(var(--sheet-height, 100dvh) - max(24px, env(safe-area-inset-top)));
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     border-bottom: 0;
   }
 

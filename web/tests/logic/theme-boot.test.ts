@@ -5,13 +5,17 @@
  * bundle downloads, the document stands on screen alone. It has to be painted in the mode this
  * browser last chose, or a resumed dark console flashes white. `web/index.html` therefore carries
  * the two shipped page grounds and a script that reads the stored theme before anything else loads.
- * This holds both to the theme module, so the document cannot drift into a copy of it.
+ * This holds both to the theme module, so the document cannot drift into a copy of it. The same
+ * holds for the stylesheet's corner scale and its edges, at the end of this file.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { BUILT_IN_PALETTES, getBuiltInPalette } from '../../src/theme/palette.ts';
+import { BUILT_IN_PALETTES, derivePalette, getBuiltInPalette } from '../../src/theme/palette.ts';
 import { migrateLegacyThemeValue, THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
+import { RADIUS } from '../../src/theme/radius.ts';
 
 const indexHTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
@@ -108,4 +112,85 @@ test('an unreadable preference leaves the shipped ground rather than taking the 
   assert.equal(groundedMode('{'), undefined);
   assert.equal(groundedMode(JSON.stringify({ mode: 'purple' })), undefined);
   assert.equal(groundedMode(JSON.stringify({ mode: 'light' }), { storageThrows: true }), undefined);
+});
+
+/*
+ * The corner scale. The stylesheet declares it for CSS and `RADIUS` carries it to the component
+ * theme, the canvas painters and exported conversations; the two copies must be one scale. A
+ * stylesheet names a step, never a length, so the family cannot grow a sixth radius by accident.
+ */
+const sourceRoot = fileURLToPath(new URL('../../src', import.meta.url));
+const STEP = '(?:xs|sm|md|lg|xl)';
+const ON_SCALE = new RegExp(
+  `^(?:0|50%|inherit|var\\(--radius-${STEP}\\)|calc\\(var\\(--radius-${STEP}\\) [+-] \\d+px\\)|min\\(var\\(--radius-${STEP}\\), \\d+%\\))$`,
+);
+
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFiles(full);
+    return /\.(css|tsx?)$/.test(entry.name) ? [full] : [];
+  });
+}
+
+test('the stylesheet declares the corner scale the theme module exports', () => {
+  const css = readFileSync(path.join(sourceRoot, 'index.css'), 'utf8');
+  const declared = Object.fromEntries(
+    [...css.matchAll(/--radius-([a-z0-9]+):\s*(\d+)px;/g)].map(([, step, value]) => [step, Number(value)]),
+  );
+  assert.deepEqual(declared, RADIUS);
+});
+
+test('the first frame draws edges with the shares and shade the default palettes solve to', () => {
+  const css = readFileSync(path.join(sourceRoot, 'index.css'), 'utf8');
+  const block = (selector: string) => {
+    const start = css.indexOf(`${selector} {`);
+    return css.slice(start, css.indexOf('\n}', start));
+  };
+  const edges = (body: string) => ({
+    edgeShare: Number(/--edge-share:\s*([\d.]+)%;/.exec(body)?.[1]),
+    liftShare: Number(/--lift-share:\s*([\d.]+)%;/.exec(body)?.[1]),
+    fineShare: Number(/--fine-share:\s*([\d.]+)%;/.exec(body)?.[1]),
+    shade: /--shade:\s*(#[0-9a-f]{6});/.exec(body)?.[1],
+  });
+  for (const [selector, id] of [[':root', 'omc-dark'], [":root[data-theme-mode='light']", 'omc-light']] as const) {
+    const palette = derivePalette(getBuiltInPalette(id).mode, getBuiltInPalette(id).core);
+    const { edgeShare, liftShare, fineShare, shade } = palette;
+    assert.deepEqual(edges(block(selector)), { edgeShare, liftShare, fineShare, shade }, id);
+  }
+});
+
+test('every corner in the console sits on the scale', () => {
+  const offScale: string[] = [];
+  for (const file of sourceFiles(sourceRoot)) {
+    const text = readFileSync(file, 'utf8');
+    for (const [, raw] of text.matchAll(/border(?:-[a-z]+)*-radius\s*:\s*([^;}"`]+)/g)) {
+      const value = (raw ?? '').replace('!important', '').trim();
+      const corners = value.match(/(?:[a-z]+\((?:[^()]|\([^()]*\))*\)|\S)+/g) ?? [];
+      if (corners.some((corner) => !ON_SCALE.test(corner))) {
+        offScale.push(`${path.relative(sourceRoot, file)}: ${value}`);
+      }
+    }
+  }
+  assert.deepEqual(offScale, []);
+});
+
+/*
+ * Edges are shadows. A neutral 1px stroke that encloses content is the edge shadow's job, so the
+ * only ones left are glyphs: a ring drawn as a circle, a colour sample's outline, a table's grid.
+ */
+const STROKED_GLYPHS = new Set(['.theme-swatch', '.country-flag', '.markdown-body th, .markdown-body td']);
+
+test('nothing encloses content with a neutral border', () => {
+  const enclosed: string[] = [];
+  for (const file of sourceFiles(sourceRoot).filter((name) => name.endsWith('.css'))) {
+    const css = readFileSync(file, 'utf8');
+    for (const [, prelude, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/(?:^|[\s;])border:\s*1px solid var\(--(?:border|border-soft|thread-hairline)\)/.test(body ?? '')) continue;
+      const selector = (prelude ?? '').split('*/').at(-1)!.trim().replace(/\s+/g, ' ');
+      if (/border-radius:\s*50%/.test(body ?? '') || STROKED_GLYPHS.has(selector)) continue;
+      enclosed.push(`${path.relative(sourceRoot, file)}: ${selector}`);
+    }
+  }
+  assert.deepEqual(enclosed, []);
 });

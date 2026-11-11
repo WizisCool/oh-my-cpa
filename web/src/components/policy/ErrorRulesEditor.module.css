@@ -9,13 +9,14 @@
 }
 
 .rule {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 
 .rule-invalid {
-  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger), var(--edge-drop);
 }
 
 .rule-head {

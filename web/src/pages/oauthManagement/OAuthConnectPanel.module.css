@@ -47,22 +47,23 @@
 }
 
 .provider-tile {
+  border: 0;
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   cursor: pointer;
   text-align: left;
-  transition: background var(--motion-fast), border-color var(--motion-fast);
+  transition: background var(--motion-fast), box-shadow var(--motion-fast);
   width: 100%;
 }
 
 .provider-tile:hover {
   background: var(--hover-inset);
-  border-color: var(--border);
+  box-shadow: var(--shadow-raised);
 }
 
 .provider-tile:focus-visible {
@@ -71,14 +72,14 @@
 }
 
 .tile-icon {
+  border: 0;
   flex: none;
   width: 36px;
   height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--hover-inset);
 }
 
@@ -114,24 +115,25 @@
 }
 
 .connect-identity {
+  border: 0;
   display: flex;
   gap: 14px;
   align-items: flex-start;
   padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
 .connect-icon {
+  border: 0;
   flex: none;
   width: 44px;
   height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--hover-inset);
 }
 
@@ -178,12 +180,13 @@
 }
 
 .step-card {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -199,7 +202,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--accent-on);
   font-size: var(--text-xs);
@@ -234,11 +237,12 @@
 }
 
 .auth-url-box {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   padding: 10px;
   background: var(--hover-inset);
 }
@@ -265,13 +269,14 @@
 }
 
 .device-code {
+  border: 0;
   font-family: var(--font-mono);
   font-size: var(--text-xl);
   font-weight: 700;
   letter-spacing: 0.15em;
   padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--fg);
 }
@@ -283,8 +288,9 @@
 }
 
 .session-status-card {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 12px 14px;
 }

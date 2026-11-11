@@ -12,6 +12,7 @@ import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../com
 import { collectPluginPages } from '../plugins/pluginPages';
 import { buildNavGroups } from '../common/navigation';
 import { SectionHeading } from '../common/SectionHeading';
+import { SettingsGroup } from './SettingsGroup';
 import { SettingRow } from '../common/SettingRow';
 import { Switch } from '../common/Switch';
 import styles from './SidebarNavSettings.module.css';
@@ -83,8 +84,7 @@ export const SidebarNavSettings: React.FC = () => {
   const hasCustomOrder = Object.keys(order).length > 0;
 
   return (
-    <div className="settings-group omc-settings-group" data-testid="sidebar-nav-settings">
-      <SectionHeading className="settings-group-head" title={t('omc.section_sidebar')} />
+    <SettingsGroup title={t('omc.section_sidebar')} testId="sidebar-nav-settings">
       <SettingRow
         label={t('omc.sidebar_entries')}
         description={hiddenCount > 0 ? t('omc.sidebar_hidden_count', { n: hiddenCount }) : t('omc.sidebar_all_shown')}
@@ -104,7 +104,7 @@ export const SidebarNavSettings: React.FC = () => {
         step={step}
         onClose={() => setIsPanelOpen(false)}
       />
-    </div>
+    </SettingsGroup>
   );
 };
 

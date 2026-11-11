@@ -1,32 +1,34 @@
 /* ── brand mark ──────────────────────────────────────────────────────────── */
 
 .icon-card {
+  border: 0;
   display: flex;
   align-items: center;
   gap: 14px;
   margin-bottom: 16px;
   padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
 .icon-tile {
+  border: 0;
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 48px;
   height: 48px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: var(--bg);
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard);
+  transition: box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .icon-tile:hover {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
 }
 
 .icon-meta {
@@ -103,10 +105,11 @@
 /* ── collapsible groups (`EditorSection`) ───────────────────────────────── */
 
 .section {
+  border: 0;
   margin-bottom: 16px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -139,7 +142,7 @@
 }
 
 .section-head:focus-visible {
-  border-radius: calc(var(--radius-lg) - 1px);
+  border-radius: calc(var(--radius-xl) - 1px);
 }
 
 .section-title {
@@ -212,9 +215,10 @@
 }
 
 .item-card {
+  border: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 
@@ -456,11 +460,12 @@
 
 
 .pool {
+  border: 0;
   display: grid;
   gap: 8px;
   min-width: 0;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
 }

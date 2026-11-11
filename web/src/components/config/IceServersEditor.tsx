@@ -286,7 +286,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
         const badUrl = invalidUrl(row.urlsText);
         const emptyUrls = parseUrls(row.urlsText).length === 0;
         return (
-          <div key={row.key} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+          <div key={row.key} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 12, marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontWeight: 600 }}>{t('cfg.ice_server_title', { n: index + 1 })}</span>
               <Button

@@ -1,6 +1,7 @@
-/* Three numbers are the whole geometry: the knob sits 2px inside the track, and its travel and
-   both corners follow from them, so a size is one block and its parts cannot disagree. The track
-   is a pill and the knob a circle, so the two outlines stay concentric at every size. */
+/* Three numbers are the whole geometry: the knob sits 2px inside the track, and its travel follows
+   from them, so a size is one block and its parts cannot disagree. The track is a control and takes
+   the control step; the knob takes the nested step, 2px less, so the two outlines stay concentric
+   at every size. */
 .switch {
   --switch-width: 36px;
   --switch-height: 20px;
@@ -20,7 +21,7 @@
   vertical-align: middle;
   background: color-mix(in srgb, var(--fg) 16%, transparent);
   border: 0;
-  border-radius: calc(var(--switch-height) / 2);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color var(--motion-fast) var(--ease-standard);
 }
@@ -31,7 +32,7 @@
   --switch-thumb: 13px;
 }
 
-/* The knob is a raised disc of the page's lightest ink: the page itself on a light palette, the
+/* The knob is a raised tile of the page's lightest ink: the page itself on a light palette, the
    text colour on a dark one, so it reads as the same object on either. It moves by transform: a
    slide on `left` would be a layout transition. */
 .thumb {
@@ -45,7 +46,7 @@
   height: var(--switch-thumb);
   background: var(--switch-knob);
   border: 2px solid var(--switch-knob);
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-raised);
   transition: transform var(--motion-base) var(--ease-out);
 }
@@ -74,7 +75,7 @@
   width: 2px;
   margin-left: -1px;
   background: var(--accent-on);
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
 }
 
 .switch::after {

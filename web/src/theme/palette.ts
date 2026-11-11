@@ -1,5 +1,5 @@
 /**
- * The palette model: nine authored tokens, eighteen derived ones, and the built-in
+ * The palette model: nine authored tokens, twenty-two derived ones, and the built-in
  * palettes each mode offers.
  *
  * **The split is the design.** A palette used to be thirty hand-tuned hex values, which
@@ -20,16 +20,12 @@
  */
 
 import type { MessageKey } from '../i18n/catalog';
-import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice } from './colorMath';
+import { contrastRatio, mixOklch, mixSrgb, oklchLightness, withLightness, type InkChoice } from './colorMath';
 
 // Conversation objects use foreground transparency rather than authored colours, so every
 // preset and custom palette keeps the same relationship to the conversation's ground.
 // Live labels sweep this same foreground over secondary ink; motion adds no palette colour.
 export const THREAD_FILL_SHARES = { field: 5, fieldHover: 8, hairline: 12 } as const;
-
-// Conversation shapes sit on the console's corner scale: controls take the
-// control step, printed documents and floating surfaces the menu steps, the composer the card step.
-export const THREAD_RADII = { document: 8, control: 6, surface: 10, thread: 12 } as const;
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -134,6 +130,12 @@ export interface ThemePalette extends ThemeCore {
   heatmapZeroUnrecorded: string;
   heatmapZeroRecorded: string;
   heatmapTipLink: string;
+  /** Shares of the foreground, in percent, solved so each edge ring stands `EDGE_STEPS` off the page. */
+  edgeShare: number;
+  liftShare: number;
+  fineShare: number;
+  /** The ink drop shadows are cast in: the palette's own hue, near black. */
+  shade: string;
   /** Categorical identities for multi-series charts, in legend order. */
   series: readonly string[];
   seriesTrack: string;
@@ -186,6 +188,43 @@ const CANVAS_BLEND: Record<ThemeMode, { toward: 'fg' | 'black'; share: number }>
   dark: { toward: 'black', share: 0.24 },
   light: { toward: 'fg', share: 0.04 },
 };
+
+/**
+ * How far each edge stands off the ground it is drawn on, in OKLCH lightness.
+ *
+ * An edge is a one-pixel ring of the foreground ink laid over the ground, and a fixed share of
+ * ink is not a fixed step: 8% of the ink moved OMC Dark's page by 0.078 but a light page by under
+ * 0.04, about half the step its own authored border takes, and cards on Fog and Sandstone could not
+ * be told from the page at a glance. So the share is solved per palette for the step, and every
+ * palette - an operator's own included - draws its edges at the same perceptual weight.
+ *
+ *   edge  a surface resting on the page: cards, tables, settings groups, the composer
+ *   lift  the same surface under the pointer, and a layer floating over the page
+ *   fine  the faint ring a control stands in and a field or a track is set into
+ *
+ * The edge step sits between the derived soft rule (0.06) and the authored borders (0.09-0.15):
+ * firm enough to read without the drop under it, quiet enough that it does not draw a line.
+ */
+export const EDGE_STEPS = { edge: 0.08, lift: 0.11, fine: 0.05 } as const;
+
+/** The least share of `ink`, in half percents, that moves `ground` by `step` of OKLCH lightness. */
+function inkShareFor(ground: string, ink: string, step: number): number {
+  const groundLightness = oklchLightness(ground);
+  for (let share = 0.5; share < 100; share += 0.5) {
+    if (Math.abs(oklchLightness(mixSrgb(ground, ink, share / 100)) - groundLightness) >= step) return share;
+  }
+  return 100;
+}
+
+/**
+ * The ink a palette's drop shadows are cast in: its own hue, near black. A neutral black shadow
+ * on a warm or a cool page reads as a grey smudge on it; a shadow carrying the page's hue reads as
+ * the same material in less light. A light palette's foreground is already a deep ink of its hue;
+ * a dark page's own colour is taken most of the way to black.
+ */
+function shadeInk(mode: ThemeMode, core: ThemeCore): string {
+  return mode === 'light' ? mixOklch(core.fg, '#000000', 0.3) : mixOklch(core.bg, '#000000', 0.8);
+}
 
 /**
  * The accent ladder's steps, as a fraction of the accent's own OKLCH lightness.
@@ -513,7 +552,7 @@ function accentLadder(mode: ThemeMode, accent: string): { hover: string; active:
 }
 
 /**
- * derivePalette computes the eighteen tokens a palette does not author.
+ * derivePalette computes the twenty-two tokens a palette does not author.
  *
  * Pure and total: the same nine tokens always produce the same palette, so the pre-hydration
  * fallback in `index.css`, the six built-ins and an operator's palette are one code path.
@@ -574,6 +613,10 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     // "there is a slot here and nothing in it".
     heatmapZeroRecorded: core.border,
     heatmapTipLink: core.accent,
+    edgeShare: inkShareFor(core.bg, core.fg, EDGE_STEPS.edge),
+    liftShare: inkShareFor(core.bg, core.fg, EDGE_STEPS.lift),
+    fineShare: inkShareFor(core.bg, core.fg, EDGE_STEPS.fine),
+    shade: shadeInk(mode, core),
     series: semantics.series.map(hold),
     seriesTrack: core.border,
     effort: semantics.effort.map(holdBadge),

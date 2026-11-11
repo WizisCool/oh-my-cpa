@@ -3,7 +3,7 @@
 .log-level-chip {
   height: 28px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -22,6 +22,7 @@
 .logs-tail { position: relative; }
 .logs-alert { margin-bottom: 10px; }
 .log-list {
+  border: 0;
   /* `dvh` rather than `vh`: the logs tail is sized against a fixed chrome budget, and on a
      phone the URL bar changes what `100vh` means continuously - the list grew and shrank
      under the reader as they scrolled. The `vh` line stays first as the fallback for a
@@ -31,8 +32,8 @@
   min-height: 300px;
   overflow: auto;
   overscroll-behavior: contain;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 .log-more {
@@ -89,8 +90,8 @@
 .log-state { padding: 24px 12px; color: var(--muted); font-size: var(--text-sm); }
 @media (max-width: 900px) {
   .logs-search { width: 148px; }
-  .log-list { height: calc(100vh - 380px); height: calc(100dvh - 380px); }
+  .log-list { border: 0; height: calc(100vh - 380px); height: calc(100dvh - 380px); }
 }
 @media (pointer: coarse) and (max-height: 640px) {
-  .log-list { min-height: 240px; }
+  .log-list { border: 0; min-height: 240px; }
 }

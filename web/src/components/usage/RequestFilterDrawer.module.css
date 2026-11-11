@@ -72,11 +72,12 @@
   line-height: 1.5;
 }
 .note {
+  border: 0;
   margin: 0 0 14px;
   padding: 8px 10px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font-size: var(--text-sm);
 }

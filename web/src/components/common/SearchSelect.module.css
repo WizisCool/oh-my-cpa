@@ -7,7 +7,7 @@
   min-height: inherit;
   max-height: inherit;
   background: var(--elevated);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 
 .sheet :global(.ant-drawer-body) {

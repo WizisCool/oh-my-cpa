@@ -19,7 +19,7 @@
 .tabs-wrap :global(.ant-tabs-tab) {
   padding: 8px 12px 11px !important;
   margin: 0 4px 0 0 !important;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
+  border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
   color: var(--fg-2) !important;
   font-family: inherit !important;
   font-size: var(--text-md) !important;
@@ -80,6 +80,7 @@
 
 /* Polished count capsule badge */
 .tab-count {
+  border: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -94,16 +95,13 @@
   padding: 0 5px;
   border-radius: var(--radius-sm);
   background: var(--surface);
-  border: 1px solid var(--border-soft);
   transition:
     color var(--motion-fast) ease-out,
-    background-color var(--motion-fast) ease-out,
-    border-color var(--motion-fast) ease-out;
+    background-color var(--motion-fast) ease-out;
 }
 
 .tab-count-active {
   background: var(--surface) !important;
-  border-color: var(--border) !important;
   color: var(--fg) !important;
   font-weight: 700 !important;
 }

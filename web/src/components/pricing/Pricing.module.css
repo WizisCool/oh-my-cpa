@@ -78,13 +78,14 @@
 
 /* ── One OpenRouter model ── */
 .upstream-summary {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 12px 14px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
 }
 
 .upstream-head {
@@ -148,6 +149,7 @@
 }
 
 .tier-badge {
+  border: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -155,8 +157,7 @@
   color: var(--fg-2);
   font-size: var(--text-xs);
   white-space: nowrap;
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   border-radius: var(--radius-sm);
 }
 
@@ -168,12 +169,13 @@
 }
 
 .picker-list {
+  border: 0;
   display: flex;
   flex-direction: column;
   max-height: 320px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
 }
 
 .picker-option {
@@ -373,17 +375,18 @@
 }
 
 .tier-row {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 100%;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
 }
 
 .tier-row-invalid {
-  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger), var(--edge-drop);
 }
 
 .tier-condition {
@@ -416,6 +419,7 @@
 }
 
 .tier-preset {
+  border: 0;
   min-height: 24px;
   padding: 0 8px;
   color: var(--fg-2);
@@ -424,14 +428,14 @@
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  transition: border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
+  transition: box-shadow var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
 
 .tier-preset:hover {
   color: var(--fg);
-  border-color: var(--fg-2);
+  box-shadow: var(--shadow-raised);
 }
 
 .tier-preset:focus-visible {

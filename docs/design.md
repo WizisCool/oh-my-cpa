@@ -10,6 +10,7 @@ This guide explains design intent. Theme values and component APIs live in code.
 | Palette definition and derivation | [`palette.ts`](../web/src/theme/palette.ts) |
 | Component theme projection | [`themeConfig.ts`](../web/src/theme/themeConfig.ts) |
 | Global CSS, type/radius scales and initial render | [`index.css`](../web/src/index.css) |
+| Corner scale for the component theme, canvas painters and exports | [`radius.ts`](../web/src/theme/radius.ts) |
 | Typeface selection and assets | [`web/src/theme`](../web/src/theme) |
 | Shared interaction primitives | [`web/src/components/common`](../web/src/components/common) |
 | Event and state feedback | [`web/src/components/feedback`](../web/src/components/feedback) |
@@ -22,9 +23,9 @@ The pre-hydration appearance must agree with the chosen theme after mounting.
 ## Visual language
 
 The navigation sits on a canvas; the working page is one inset rounded panel.
-Static cards and tables use fill and hairlines. Menus, popovers, toasts, dialogs and
-sheets lift with the shared floating/overlay shadows. Group related content through
-enclosure rather than a stack of headings and dividers.
+Surfaces are edged by soft layered shadows rather than drawn borders (see
+[Edges and elevation](#edges-and-elevation)). Group related content through enclosure rather
+than a stack of headings and dividers.
 
 Use the UI font role for interface prose, the mono role for code and aligned values,
 and tabular numerals for changing measurements. The default typeface is
@@ -46,6 +47,63 @@ request detail and keeps the secondary ink. The duration ramp's stops are solved
 the blends they produce, on row, hover and selection fills, so every reading between them
 keeps its contrast; the cache-rate ramp holds only its two stops and promises nothing
 about the blends between them.
+
+## Corners
+
+Every corner in the console takes one of five steps, chosen by the shape's role rather than its
+size: `xs` for a mark (meters, chart bars, swatches, carets), `sm` for a shape nested in a
+control (tags, badges, inline code, check boxes, a switch's knob or a segmented thumb), `md` for a
+control (buttons, icon buttons, fields, selects, rows, tabs, menu entries, brand tiles), `lg` for a
+block (menus, popovers and dropdowns, notices, callouts, code, a card inside a card) and `xl` for a
+surface (the page panel, cards, tables, dialogs, drawers, toasts, the composer). The control step is
+the anchor: everything else is read against the buttons. The values live in `index.css` and
+`theme/radius.ts`; a logic test holds the two together and rejects any radius that is not a step.
+
+Nested shapes are concentric: the inner radius is the outer radius less the gap between them. The
+steps are spaced so the console's usual gaps land on them - a control 4px inside a block, a thumb
+2px inside its track, a control or row 6px inside a surface - so a container that holds a control
+near its edge sets its padding to fit the pair instead of inventing a radius. Once the gap is as
+wide as the outer radius the two curves no longer read together, and each shape keeps its own
+step. A ring drawn around a shape, such as a drop target, adds its offset to the shape's step with
+`calc()`.
+
+Only dots are round: status pips, radios, spinners, avatars and step numbers are circles. Nothing
+else is a pill - not a switch, a badge, a progress bar or a scroll thumb.
+
+## Edges and elevation
+
+Edges are drawn by soft layered shadows rather than stroked borders, and every edge says how a
+thing sits relative to the page. A raised thing (the panel, cards, tables, settings groups, code,
+the composer) is a one-pixel ring of the foreground ink with blurred drops below it. A control
+standing on its ground (a button, a segmented thumb) is the same material at a control's scale.
+A field or a track (an input, a select, a segmented track, a field-shaped trigger) is set into its
+ground: an ink wash with the ring drawn inside and its shade at the top edge. The composites in
+`index.css` name the depth: `--shadow-edge` for what rests on the page, `--shadow-raised` for a
+resting surface under the pointer or in the hand, `--shadow-float` for menus, popovers and toasts,
+`--shadow-overlay` for dialogs and sheets, `--shadow-control` for a standing control and
+`--shadow-well` for a field or a track. Dark drops carry an inset top highlight, because a dark
+shadow on a dark ground cannot carry the edge alone.
+
+An edge has to read at a glance in every palette, so its strength is solved rather than chosen:
+`derivePalette` finds, per palette, the share of the foreground that moves the page by a fixed
+OKLCH lightness step (`EDGE_STEPS`: edge, lift and the fine ring of controls and fields), and the
+drops are cast in the palette's own `--shade`, its hue near black. A fixed share drew light and
+low-contrast palettes at half the step of the dark ones; a solved share gives OMC Light, Fog,
+Sandstone, Pewter and an operator's own palette the same visible edge. The steps stay
+restrained: an edge must read as more than a single line, yet a resting card must not look
+lifted off the page. Retune the steps or the drop parts, never one surface's own shadow.
+
+A state colours the ring and keeps the drop: `0 0 0 1px <state colour>, var(--edge-drop)` for a
+selected, focused, invalid or warning surface; a focused field trades its well for its accent
+stroke. A shape whose rows stack into one card wraps them in a single element that carries the
+shadow, since a drop drawn per row bleeds across the seams. Where a container clips its content
+(the request list slides inside a clipping slot), the ring is drawn inside the clip instead.
+
+Strokes remain where a line is the thing being drawn: dividers between rows and columns, the
+dashed outline of an empty slot or drop target, a state-coloured button, the edge of a circular
+glyph, a colour swatch or flag, and the grid lines of a markdown table. The logic test that guards
+the corner scale also rejects a neutral enclosing border outside that list, and another holds the
+stylesheet's first-frame edge values to the default palettes' solved ones.
 
 ## Brand marks
 

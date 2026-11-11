@@ -31,7 +31,7 @@ import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
 import { REDUCED_MOTION_PREFERENCES, type ReducedMotionPreference } from '../utils/motionPreference';
-import { SectionHeading } from '../components/common/SectionHeading';
+import { SettingsGroup } from '../components/settings/SettingsGroup';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { DataRetentionSettings } from '../components/settings/DataRetentionSettings';
@@ -163,8 +163,7 @@ export const OmcSettingsPage: React.FC = () => {
     <div className="terminal-page omc-settings-page">
       <PageHeader title={t('omc.title')} />
 
-      <div className="settings-group omc-settings-group">
-        <SectionHeading className="settings-group-head" title={t('omc.section_display')} />
+      <SettingsGroup title={t('omc.section_display')}>
         <SettingRow
           label={t('omc.timezone')}
           description={t('omc.timezone_desc')}
@@ -218,7 +217,7 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
-      </div>
+      </SettingsGroup>
 
       <QuotaAutoRefreshGroup />
 
@@ -230,8 +229,7 @@ export const OmcSettingsPage: React.FC = () => {
 
       <PluginSourceGroup />
 
-      <div className="settings-group omc-settings-group">
-        <SectionHeading className="settings-group-head" title={t('omc.section_appearance')} />
+      <SettingsGroup title={t('omc.section_appearance')}>
         <SettingRow
           label={t('omc.theme_mode')}
           description={t(
@@ -300,7 +298,7 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
-      </div>
+      </SettingsGroup>
 
       <SidebarNavSettings />
     </div>
@@ -312,8 +310,7 @@ const PluginSourceGroup: React.FC = () => {
   const t = useT();
   const source = useOmcPluginSource();
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_plugin_source')} />
+    <SettingsGroup title={t('omc.section_plugin_source')}>
       <SettingRow
         label={t('omc.plugin_source')}
         description={t('omc.plugin_source_desc')}
@@ -326,7 +323,7 @@ const PluginSourceGroup: React.FC = () => {
           />
         )}
       />
-    </div>
+    </SettingsGroup>
   );
 };
 
@@ -355,8 +352,7 @@ const QuotaAutoRefreshGroup: React.FC = () => {
     intervals.sort((left, right) => left - right);
   }
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_quota')} />
+    <SettingsGroup title={t('omc.section_quota')}>
       <SettingRow
         label={t('omc.quota_auto_refresh_interval')}
         description={t('omc.quota_auto_refresh_interval_desc')}
@@ -383,7 +379,7 @@ const QuotaAutoRefreshGroup: React.FC = () => {
           />
         }
       />
-    </div>
+    </SettingsGroup>
   );
 };
 
@@ -406,8 +402,7 @@ export const UpdateCheckGroup: React.FC = () => {
     : t('omc.update_check_minutes', { n: minutes }));
 
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_update_check')} />
+    <SettingsGroup title={t('omc.section_update_check')}>
       <SettingRow
         label={t('omc.update_check_interval')}
         description={t('omc.update_check_interval_desc')}
@@ -423,7 +418,7 @@ export const UpdateCheckGroup: React.FC = () => {
         }
       />
 
-    </div>
+    </SettingsGroup>
   );
 };
 

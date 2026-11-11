@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../theme/ThemeContext';
+import { RADIUS } from '../theme/radius';
 import { EChart, type EChartHandlers } from './echarts/EChart';
 import type { EChartsCoreOption } from './echarts/core';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor, seriesGroupLabel } from './chartTheme';
@@ -50,7 +51,7 @@ export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({ groups, total
       id: 'model-usage', type: 'pie', data, radius: ['66%', '92%'], padAngle: 1.5,
       left: 16, right: 16, top: 16, bottom: 16, clockwise: false,
       label: { show: false }, labelLine: { show: false },
-      itemStyle: { borderRadius: 3 }, emphasis: { scaleSize: 4, itemStyle: { opacity: 1 } },
+      itemStyle: { borderRadius: RADIUS.xs }, emphasis: { scaleSize: 4, itemStyle: { opacity: 1 } },
       animationDuration: 0,
     }],
   }), [data, labelOf, tokenStyle, tokenUnitLabel, totalTokens]);

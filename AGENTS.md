@@ -110,6 +110,8 @@ To keep local feedback and CI fast, follow the 3-tier testing pyramid in [Testin
 ## Code style & documentation hygiene
 
 - Write all technical documentation (`AGENTS.md`, `CONTEXT.md`, `CONTRIBUTING.md`, `docs/**/*.md`) and code comments in English. Only `README.zh-CN.md` and `web/src/i18n/locales/zh*` use Chinese.
+- Corners use the five-step scale (`--radius-xs|sm|md|lg|xl`, `RADIUS` in TypeScript) by role, never a literal length, and nested shapes stay concentric (inner = outer − gap); see [Design](docs/design.md#corners).
+- Edges are shadows, not borders: a surface takes `--shadow-edge|raised|float|overlay`, a control `--shadow-control`, a field or track `--shadow-well`, and a state recolours the ring. Ring strength is solved per palette (`EDGE_STEPS`), so never hand-tune one surface's shadow; see [Design](docs/design.md#edges-and-elevation).
 - Keep external contract spellings (`JSON`, `SQL`, CPA YAML fields) exact. Use `is`/`has`/`can`/`should` prefixes for booleans and kebab-case CSS module classes via `styles['class-name']`.
 - User-visible copy belongs in all four locale catalogs (`web/src/i18n/locales/{zh,en,zh-Hant,ms}/`).
 - **No defensive copy or condition enumeration**: When authoring UI subtitles, descriptions, and hints, never write defensive disclaimers (e.g. "不是xxx", "并非xxx"), fallback/empty-state condition enumeration (e.g. "为空时xxx，为xx时xxx", "0 表示xxx", "留空则xxx"), or operational commands (e.g. "修改后需重启"). State capabilities directly in a single calm sentence; let placeholders, units, and control defaults communicate fallback behavior. If a control is self-explanatory (ports, paths, URLs with placeholders, standard switches), omit the subtitle entirely.

@@ -143,9 +143,10 @@
 /* On a phone the providers are one framed group, as the OAuth list's sections are, each card
    ruled from the next. */
 .provider-list :global(.responsive-list) {
+  border: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 

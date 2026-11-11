@@ -25,7 +25,7 @@
   justify-content: center;
   min-height: 220px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
 }
 
 .pagination {

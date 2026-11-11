@@ -253,12 +253,13 @@
 }
 
 .updater-command {
+  border: 0;
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -500,21 +501,22 @@
 }
 
 .markdown-body code {
+  border: 0;
   font-family: var(--font-mono, monospace);
   font-size: var(--text-sm);
   padding: 2px 5px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--fg);
 }
 
 .markdown-body pre {
+  border: 0;
   margin: 8px 0;
   padding: 10px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   overflow-x: auto;
 }
 
@@ -694,7 +696,7 @@
   width: 8px;
   height: 8px;
   flex: none;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .maintenance-actions {
@@ -788,9 +790,10 @@
 }
 
 .vacuum-space-table {
+  border: 0;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   padding: 12px;
   display: flex;
   flex-direction: column;

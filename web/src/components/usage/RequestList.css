@@ -175,7 +175,7 @@
   height: 16px;
   margin: 0;
   border: 1px solid var(--muted);
-  border-radius: var(--radius-check);
+  border-radius: var(--radius-sm);
   background: var(--bg);
   cursor: pointer;
   transition: background-color var(--motion-fast), border-color var(--motion-fast);
@@ -306,7 +306,7 @@
 .req-result-bullet {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: currentColor;
 }
 /* Column 3: Provider & Credential */
@@ -614,7 +614,7 @@
 .req-cache-bullet {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--cache-rate-hue);
 }
 /* Column 9: Key (caller key / group label) */

@@ -28,7 +28,7 @@
   border: 0; background: transparent; color: var(--fg-2); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer;
 }
 .failover-toggle:hover { color: var(--fg); }
-.failover-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); box-shadow: none !important; }
+.failover-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-md); box-shadow: none !important; }
 .failover { display: flex; flex-direction: column; padding-top: 4px; }
 /* The policy is a side panel, too narrow for a settings page's two columns: a setting's name shares
    its line with the control, and the description runs the panel's full width beneath both, so it
@@ -88,12 +88,13 @@
    border for that fold to measure, so the band it holds keeps its whole box until the row closes. */
 .tier-fold { position: relative; }
 .tier {
+  border: 0;
   position: relative; display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 12px; padding: 10px 12px;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface);
-  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard);
+  border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-edge);
+  transition: box-shadow var(--motion-base) var(--ease-standard);
 }
 /* Only the band a card is about to land in lifts; the rest of the route stays flat. */
-.tier-over { border-color: var(--accent); box-shadow: var(--shadow-float); }
+.tier-over { box-shadow: 0 0 0 1px var(--accent), var(--float-drop); }
 .tier-gutter { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 2px; }
 .tier-step {
   display: inline-flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 24px;
@@ -114,7 +115,7 @@
 
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 .card {
-  min-width: 0; max-width: 360px; max-height: 60px; margin: 0 8px 8px 0; border-radius: var(--radius-md); outline: none;
+  min-width: 0; max-width: 360px; max-height: 60px; margin: 0 8px 8px 0; border-radius: var(--radius-lg); outline: none;
   transition: opacity var(--motion-base) var(--ease-standard),
               transform var(--motion-base) var(--ease-standard),
               max-width var(--motion-base) var(--ease-standard),
@@ -136,7 +137,7 @@
 }
 .card-face {
   position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 6px 8px 6px 6px;
-  border: 1px solid transparent; border-radius: var(--radius-md); background: var(--elevated);
+  border: 1px solid transparent; border-radius: var(--radius-lg); background: var(--elevated);
   box-shadow: var(--shadow-raised);
   transition: border-color var(--motion-fast) var(--ease-standard),
               opacity var(--motion-base) var(--ease-standard),
@@ -161,7 +162,7 @@
 .card-share { animation: share-in var(--motion-base) var(--ease-standard); }
 .card-share-bar {
   position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; overflow: hidden;
-  border-radius: 999px; background: color-mix(in srgb, var(--fg) 8%, transparent); pointer-events: none;
+  border-radius: var(--radius-xs); background: color-mix(in srgb, var(--fg) 8%, transparent); pointer-events: none;
 }
 .card-share-bar::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--accent);
@@ -216,11 +217,12 @@
 }
 
 .weight-chip {
-  min-width: 34px; height: 24px; padding: 0 6px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  border: 0;
+  min-width: 34px; height: 24px; padding: 0 6px; box-shadow: var(--shadow-edge); border-radius: var(--radius-md);
   background: transparent; color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-xs); cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+  transition: color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
-.weight-chip:hover { color: var(--fg); border-color: var(--fg-2); }
+.weight-chip:hover { color: var(--fg); box-shadow: var(--shadow-raised); }
 .weight-chip:focus,
 .weight-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; box-shadow: none !important; }
 .weight-editor { display: flex; flex-direction: column; gap: 8px; max-width: 240px; }
@@ -238,7 +240,7 @@
 @media (max-width: 640px) {
   .lens { flex: 1 1 100%; margin-left: 0; }
   .strategy-glyph { display: none; }
-  .tier { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; }
+  .tier { border: 0; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; }
   /* The tier's inset is narrower here, so the rail moves with its step circles. */
   .flow-entry, .flow-exit { padding: 0 11px; }
   .link::before { left: 22px; }

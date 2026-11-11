@@ -5,7 +5,7 @@ import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import type { OutboundProxyInput, OutboundProxyMode, OutboundProxySettings as Settings } from '../../types/outboundProxy';
-import { SectionHeading } from '../common/SectionHeading';
+import { SettingsGroup } from './SettingsGroup';
 import { SecretInput } from '../common/SecretInput';
 import { SettingRow } from '../common/SettingRow';
 import { LoadFailure, Notice, useToast } from '../feedback';
@@ -89,10 +89,9 @@ export function OutboundProxySettings() {
   const t = useT();
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: api.getOutboundProxy });
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_proxy')} />
+    <SettingsGroup title={t('omc.section_proxy')}>
       {query.isError && <LoadFailure title={t('omc.proxy_load_failed')} error={query.error} onRetry={() => { void query.refetch(); }} />}
       {query.data && <ProxyForm key={query.data.revision} settings={query.data} />}
-    </div>
+    </SettingsGroup>
   );
 }

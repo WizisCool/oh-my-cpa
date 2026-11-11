@@ -9,11 +9,12 @@
 }
 
 .list {
+  border: 0;
   max-height: min(52vh, 480px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
 }
 
 .row {

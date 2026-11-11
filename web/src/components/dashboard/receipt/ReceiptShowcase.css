@@ -47,17 +47,17 @@
 /* The printer the slip feeds from, at the paper's head while it prints: a shallow housing with a highlight
    along its top edge, a recessed mouth the paper leaves through, and a status lamp that breathes
    while the figures are read and flickers while the roller turns. Its body and edges are the
-   console's elevated surface, hairline and shadows, so it follows the palette; the mouth and the
+   console's elevated surface and shadows, so it follows the palette; the mouth and the
    shade it casts on the paper are shadow itself, dark in every theme. */
 .receipt-showcase-printer {
+  border: 0;
   position: absolute;
   top: -22px;
   left: -24px;
   right: -24px;
   z-index: 1;
   height: 32px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background:
     linear-gradient(to bottom, color-mix(in srgb, var(--fg) 7%, transparent), transparent 55%),
     var(--elevated);
@@ -132,6 +132,7 @@
 /* The actions sit under the paper and, while the paper runs past the fold, hold to the view's
    foot over it: the elevated slab the console's other floating action bars use. */
 .receipt-showcase-actions {
+  border: 0;
   position: sticky;
   bottom: 16px;
   display: grid;
@@ -140,8 +141,7 @@
   width: 280px;
   max-width: 100%;
   padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--elevated);
   box-shadow: var(--shadow-float);
   animation: receipt-rise var(--motion-slow) var(--ease-out) calc(var(--motion-receipt-release) + 60ms) both;
@@ -149,12 +149,12 @@
 
 /* Scoped under the stage so it outranks the button's own positioning, injected after this sheet. */
 .receipt-showcase .receipt-showcase-close {
+  border: 0;
   position: absolute;
   top: 16px;
   right: 16px;
   /* Above the printer, which stacks at 1 inside the scroller. */
   z-index: 2;
-  border: 1px solid var(--border-soft);
   background: var(--elevated);
   box-shadow: var(--shadow-float);
   animation: receipt-fade var(--motion-base) var(--ease-standard) both;
@@ -178,13 +178,13 @@
   /* Room for the close button above the printer, which hangs 22px over the paper's head. */
   .receipt-showcase-scroll { padding: 76px 12px calc(16px + env(safe-area-inset-bottom)); }
   .receipt-showcase-stage { width: 100%; }
-  .receipt-showcase-printer { left: -6px; right: -6px; }
+  .receipt-showcase-printer { border: 0; left: -6px; right: -6px; }
   .receipt-showcase-printer-mouth { left: 4px; right: 4px; }
   .receipt-showcase-printer-led { right: 8px; }
   .receipt-showcase-paper,
   .receipt-showcase-paper .omc-receipt { width: 100%; }
-  .receipt-showcase-actions { bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; }
-  .receipt-showcase .receipt-showcase-close { top: 12px; right: 12px; }
+  .receipt-showcase-actions { border: 0; bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; }
+  .receipt-showcase .receipt-showcase-close { border: 0; top: 12px; right: 12px; }
 }
 
 /* The console's motion policy, which an operator's choice can set either way of the system's. */

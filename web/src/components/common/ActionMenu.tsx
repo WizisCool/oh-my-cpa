@@ -9,10 +9,11 @@ import { LabelledActionsContext } from './ToolButton';
  */
 const MENU_VIEWPORT_GAP = 12;
 /**
- * What the popover adds on either side of the menu's own column - 12px of padding and the shared
- * surface rule's 1px hairline - so the room a button's label gets is the placement's room less this.
+ * What the popover adds on either side of the menu's own column - its 12px of padding; the float
+ * shadow draws its edge outside the box - so the room a button's label gets is the placement's room
+ * less this.
  */
-const MENU_CHROME = 2 * (12 + 1);
+const MENU_CHROME = 2 * 12;
 
 export interface ActionMenuProps {
   children: React.ReactNode;

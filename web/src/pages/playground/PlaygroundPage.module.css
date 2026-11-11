@@ -32,19 +32,20 @@
   height: 28px;
   padding: 0 8px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
 .turn-error {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
   border-left: 2px solid var(--danger);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   font-size: var(--text-md);
 }
@@ -124,11 +125,12 @@
 }
 
 .metrics {
+  border: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 

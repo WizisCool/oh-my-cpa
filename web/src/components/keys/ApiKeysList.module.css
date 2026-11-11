@@ -69,9 +69,10 @@
 /* On a phone the keys are one framed table, as an OAuth provider's credentials are: a header strip
    on the surface, then the cards split by hairlines. */
 .is-grouped {
+  border: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 
@@ -165,7 +166,7 @@
   grid-area: bar;
   width: 100%;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--fg) 9%, transparent);
 }
 

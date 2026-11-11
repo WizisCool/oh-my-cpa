@@ -109,7 +109,7 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -129,7 +129,7 @@
 .time-range-day {
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-2);
   font: inherit;
@@ -143,8 +143,8 @@
 .time-range-day.is-today { color: var(--accent); font-weight: 600; }
 .time-range-day.is-in-range,
 .time-range-day.is-in-range:hover:not(:disabled) { border-radius: 0; background: var(--time-range-band); color: var(--fg); }
-.time-range-day.is-range-start { border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
-.time-range-day.is-range-end { border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+.time-range-day.is-range-start { border-top-left-radius: var(--radius-md); border-bottom-left-radius: var(--radius-md); }
+.time-range-day.is-range-end { border-top-right-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); }
 .time-range-day.is-picked,
 .time-range-day.is-picked:hover:not(:disabled) {
   background: var(--accent);
