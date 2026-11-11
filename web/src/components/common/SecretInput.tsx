@@ -31,7 +31,7 @@ export function SecretInput({ isVisible, onVisibleChange, size, className, ...in
       type="button"
       className={styles['toggle']}
       aria-label={toggleLabel}
-      title={toggleLabel}
+      data-tip={toggleLabel}
       aria-pressed={isShown}
       onClick={() => {
         setIsOwnVisible(!isShown);

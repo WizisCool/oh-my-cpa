@@ -164,21 +164,25 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
 
     React.useEffect(() => {
       if (!isOpen) return;
-      const handlePointerDown = (event: PointerEvent) => {
+      const handleOutsidePress = (event: Event) => {
         const trigger = triggerRef.current;
         if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) close();
       };
       const handleKeyDown = (event: KeyboardEvent) => {
         if (event.key === 'Escape') close();
       };
-      document.addEventListener('pointerdown', handlePointerDown, true);
+      document.addEventListener('pointerdown', handleOutsidePress, true);
+      document.addEventListener('touchstart', handleOutsidePress, { capture: true, passive: true });
       document.addEventListener('keydown', handleKeyDown, true);
-      document.addEventListener('scroll', close, true);
+      document.addEventListener('scroll', close, { capture: true, passive: true });
+      document.addEventListener('visibilitychange', close);
       window.addEventListener('blur', close);
       return () => {
-        document.removeEventListener('pointerdown', handlePointerDown, true);
+        document.removeEventListener('pointerdown', handleOutsidePress, true);
+        document.removeEventListener('touchstart', handleOutsidePress, true);
         document.removeEventListener('keydown', handleKeyDown, true);
         document.removeEventListener('scroll', close, true);
+        document.removeEventListener('visibilitychange', close);
         window.removeEventListener('blur', close);
       };
     }, [isOpen, close]);
@@ -290,6 +294,7 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
                   side={side}
                   align={align}
                   sideOffset={6}
+                  collisionPadding={12}
                   style={styles?.root}
                   className={cn('z-[1070] pointer-events-none', classNames?.root)}
                 >
@@ -299,7 +304,7 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
                     data-slot="tooltip"
                     style={styles?.container}
                     className={cn(
-                      'omc-float-surface max-w-[320px] rounded-md bg-tooltip px-2.5 py-1.5 text-sm leading-snug text-tooltip-foreground shadow-float break-words',
+                      'omc-float-surface max-w-[min(320px,calc(100vw-24px))] rounded-md bg-popover px-2.5 py-1.5 text-sm leading-snug text-popover-foreground shadow-float break-words',
                       classNames?.container,
                     )}
                   >

@@ -33,7 +33,7 @@ export function QuotaCapacityButton({ owner, window, className, children }: Quot
         type="button"
         className={className ?? styles['capacity-trigger']}
         aria-haspopup="dialog"
-        title={t('quota.capacity_open_details')}
+        data-tip={t('quota.capacity_open_details')}
         // A row or reading around the estimate may answer clicks of its own.
         onClick={(event) => {
           event.stopPropagation();

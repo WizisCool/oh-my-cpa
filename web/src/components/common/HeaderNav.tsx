@@ -89,7 +89,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   if (isPhone) {
     return (
       <div className="app-header-actions">
-        {isDemo && <span className="demo-chip" role="note" title={t('demo.badge_tooltip')}>{t('demo.badge')}</span>}
+        {isDemo && <Tooltip title={t('demo.badge_tooltip')}><span className="demo-chip" role="note">{t('demo.badge')}</span></Tooltip>}
         <Button variant="ghost" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
         <ActionMenu label={t('header.tools')}>
           <span className="action-menu-label">{t('header.theme')}</span>

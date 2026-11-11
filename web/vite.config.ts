@@ -122,9 +122,14 @@ export default defineConfig(({ command }) => ({
           if (id.includes('vite/preload-helper')) {
             return 'vendor-preload';
           }
-          // The SVG runtime shared by the dashboard and Insights stays lazy.
-          if (id.includes('node_modules/echarts/') || id.includes('node_modules/zrender/')) {
-            return 'vendor-echarts';
+          // The SVG chart runtime shared by Dashboard and Insights stays lazy.
+          // Match the final /node_modules/ segment so pnpm's .pnpm/recharts@.../node_modules/clsx
+          // does not drag shared startup utilities (clsx, react-is) into the lazy chart chunk.
+          const normId = id.replaceAll('\\', '/');
+          const lastNmOffset = normId.lastIndexOf('/node_modules/');
+          const resolvedPkgPath = lastNmOffset >= 0 ? normId.slice(lastNmOffset) : '';
+          if (/^\/node_modules\/(?:recharts|d3-[^/]+)\//.test(resolvedPkgPath)) {
+            return 'vendor-charts';
           }
           // A workspace's dynamic icon directory is one deferred catalog, not thousands
           // of tiny files in the embedded binary. Statically imported console icons stay
@@ -135,10 +140,8 @@ export default defineConfig(({ command }) => ({
             return 'workspace-icons';
           }
           if (
-            id.includes('node_modules/react/') ||
-            id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/react-router/') ||
-            id.includes('node_modules/react-router-dom/')
+            id.includes('commonjsHelpers') ||
+            /^\/node_modules\/(?:react|react-dom|react-is|react-router|react-router-dom|scheduler|use-sync-external-store|clsx|tailwind-merge)\//.test(resolvedPkgPath)
           ) {
             return 'vendor-react';
           }

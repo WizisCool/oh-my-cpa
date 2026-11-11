@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { TooltipPrimitive } from '@/components/ui/tooltip';
+import { TooltipContent, TooltipReadout, TooltipRoot } from '@/components/ui/tooltip';
 import { RightOutlined } from '../icons';
 import { ApiError } from '../../api/client';
 import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';
@@ -129,33 +129,36 @@ export const HeatmapTooltipContent: React.FC<{
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const date = formatDay(day.day, lang, { year: 'numeric', month: 'long', day: 'numeric' });
-  // A day with nothing recorded says so in place of the two counts. Reporting "Requests 0 / Tokens 0"
-  // would be a measurement the panel cannot make - nothing is stored for that day, which is not the
-  // same claim as a day that carried no traffic - and the distinction is the one thing a reader
-  // comparing days needs to be able to see.
   const isRecorded = day.requests > 0 || day.tokens > 0;
+  const compactTokens = formatTokens(day.tokens, tokenStyle);
+  const exactTokens = formatTokensFull(day.tokens);
   return (
-    <dl className="heatmap-tip">
-      <div className="heatmap-tip-day">{date}</div>
-      {isRecorded ? (
-        <>
-          <div className="heatmap-tip-row">
-            <dt>{t('dash.heatmap.tip_requests')}</dt>
-            <dd>{full(day.requests)}</dd>
-          </div>
-          <div className="heatmap-tip-row">
-            <dt>{t('dash.heatmap.tip_tokens')}</dt>
-            <dd title={formatTokensFull(day.tokens)}>{formatTokens(day.tokens, tokenStyle)}</dd>
-          </div>
-          <Link className="heatmap-tip-link" to={href}>
+    <TooltipReadout
+      heading={date}
+      rows={
+        isRecorded
+          ? [
+              { name: t('dash.heatmap.tip_requests'), value: full(day.requests) },
+              {
+                name: t('dash.heatmap.tip_tokens'),
+                value: (
+                  <span data-tip={exactTokens !== compactTokens ? exactTokens : undefined}>
+                    {compactTokens}
+                  </span>
+                ),
+              },
+            ]
+          : [{ value: t('dash.heatmap.tip_no_requests') }]
+      }
+      footer={
+        isRecorded ? (
+          <Link className="heatmap-tip-link inline-flex items-center gap-1" to={href}>
             {t('dash.heatmap.open_requests')}
             <RightOutlined className="heatmap-tip-link-icon" />
           </Link>
-        </>
-      ) : (
-        <div className="heatmap-tip-empty">{t('dash.heatmap.tip_no_requests')}</div>
-      )}
-    </dl>
+        ) : undefined
+      }
+    />
   );
 };
 
@@ -213,28 +216,19 @@ const ActiveHeatmapTooltip: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <TooltipPrimitive.Provider delay={0}>
-      <TooltipPrimitive.Root open>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Positioner
-            anchor={element}
-            side="top"
-            sideOffset={6}
-            className="heatmap-tip-popper z-[1070]"
-          >
-            <TooltipPrimitive.Popup
-              ref={popupRef}
-              id={popupId}
-              role="tooltip"
-              data-slot="tooltip"
-              className="omc-float-surface min-w-[176px] max-w-none rounded-md bg-surface px-2.5 py-1.5 text-sm leading-snug text-foreground shadow-float pointer-events-auto"
-            >
-              <HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />
-            </TooltipPrimitive.Popup>
-          </TooltipPrimitive.Positioner>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
+    <TooltipRoot open>
+      <TooltipContent
+        ref={popupRef}
+        id={popupId}
+        anchor={element}
+        side="top"
+        sideOffset={6}
+        interactive
+        className="min-w-[180px] max-w-none rounded-lg px-3 py-2"
+      >
+        <HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />
+      </TooltipContent>
+    </TooltipRoot>
   );
 };
 

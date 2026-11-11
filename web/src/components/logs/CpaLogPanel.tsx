@@ -106,7 +106,7 @@ const CpaLogLine: React.FC<{
           <button
             type="button"
             className="log-req is-link"
-            title={t('logs.view_request', { id: requestId })}
+            data-tip={t('logs.view_request', { id: requestId })}
             aria-label={t('logs.view_request', { id: requestId })}
             onClick={(event) => {
               event.stopPropagation();
@@ -184,7 +184,7 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
             icon={<EyeOutlined />}
             aria-label={`${t('logs.view_file')} ${file.name}`}
             disabled={isDemo}
-            title={isDemo ? t('demo.blocked') : t('logs.view_file')}
+            data-tip={isDemo ? t('demo.blocked') : t('logs.view_file')}
             onClick={() => onView(file)}
           />
           <Button
@@ -195,7 +195,7 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
             // An error log quotes request content, so the demonstration does not hand
             // one back at all; the server refuses the download too.
             disabled={isDemo}
-            title={isDemo ? t('demo.blocked') : undefined}
+            data-tip={isDemo ? t('demo.blocked') : undefined}
             onClick={async () => {
               try {
                 saveBlob(await api.downloadRequestErrorLog(file.name), file.name);

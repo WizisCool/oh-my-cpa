@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   X,
 } from 'lucide-react';
+import { DelegatedTooltipLayer } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export type OmcToastTone = 'success' | 'info' | 'warning' | 'error' | 'pending';
@@ -36,7 +37,7 @@ function ToastList() {
 
   return (
     <ToastPrimitive.Portal>
-      <ToastPrimitive.Viewport className="fixed top-4 left-1/2 z-[1120] flex w-[min(420px,calc(100vw-32px))] -translate-x-1/2 flex-col gap-2.5 outline-none pointer-events-none">
+      <ToastPrimitive.Viewport className="fixed top-[max(12px,env(safe-area-inset-top))] left-1/2 z-[1120] flex w-[min(420px,calc(100vw-24px))] -translate-x-1/2 flex-col gap-2.5 outline-none pointer-events-none">
         {toasts.map((toast) => {
           const tone = ((toast.type as OmcToastTone | undefined) ?? 'info');
           const data = toast.data;
@@ -90,8 +91,11 @@ function ToastList() {
 
 export function Toaster() {
   return (
-    <ToastPrimitive.Provider toastManager={omcToastManager} limit={6}>
-      <ToastList />
-    </ToastPrimitive.Provider>
+    <>
+      <DelegatedTooltipLayer />
+      <ToastPrimitive.Provider toastManager={omcToastManager} limit={6}>
+        <ToastList />
+      </ToastPrimitive.Provider>
+    </>
   );
 }

@@ -869,7 +869,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--notice-tone) 28%, transparent), var(--edge-drop);
   border-radius: var(--radius-lg);
 }
-.omc-notice-main { flex: 1 1 220px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; min-width: 0; }
+.omc-notice-main { flex: 1 1 220px; display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .omc-notice.is-warning { --notice-tone: var(--warn); }
 .omc-notice.is-error { --notice-tone: var(--danger); }
 .omc-notice.is-success { --notice-tone: var(--success); }
@@ -888,7 +888,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
   white-space: nowrap;
 }
 .omc-notice-icon { display: inline-flex; font-size: var(--text-sm); }
-.omc-notice-body { min-width: 0; }
+.omc-notice-body { flex: 1 1 0; min-width: 0; }
 .omc-notice-title { overflow-wrap: anywhere; }
 .omc-notice-detail {
   display: block;
@@ -1812,24 +1812,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    without occupying layout. */
 /* The heading must not stretch the data tracks: a timestamp is often wider than a KPI value.
    Shared content-sized tracks keep markers beside names and align numeric edges across model rows. */
-.omc-tip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }
-.omc-tip-time { color: var(--muted); margin-bottom: 2px; }
-.omc-tip-rows { display: grid; grid-template-columns: max-content max-content; gap: 2px 6px; max-width: 100%; }
-.omc-tip-rows.has-names { grid-template-columns: max-content minmax(0, max-content) max-content; }
-.omc-tip-rows.has-shares,
-.omc-tip-rows.has-notes { grid-template-columns: max-content max-content max-content; }
-.omc-tip-rows.has-names.has-shares,
-.omc-tip-rows.has-names.has-notes { grid-template-columns: max-content minmax(0, max-content) max-content max-content; }
-.omc-tip-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; font-variant-numeric: tabular-nums; }
-.omc-tip-swatch { grid-column: 1; width: 8px; height: 8px; border-radius: var(--radius-xs); }
-.omc-tip-name { grid-column: 2; color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.omc-tip-value { grid-column: 2; color: var(--fg-2); white-space: nowrap; text-align: right; }
-.omc-tip-rows.has-names .omc-tip-value { grid-column: 3; }
-/* Reserve a metadata track only for readouts that report it. */
-.omc-tip-share,
-.omc-tip-note { grid-column: 3; color: var(--muted); white-space: nowrap; text-align: right; }
-.omc-tip-rows.has-names .omc-tip-share,
-.omc-tip-rows.has-names .omc-tip-note { grid-column: 4; }
+
 
 /* A glyph in the header's own muted ink rather than a framed button: the panel is a reading, and
    its one control should not outweigh the title it sits beside. */
@@ -2752,7 +2735,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      the delay is felt as lag. It is deliberately not applied to the page: double-tap
      zoom is how a reader enlarges a dense table, and taking it away would be an
      accessibility regression dressed as a latency win. */
-  button, a, label, summary, .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
+  button, a, label, summary, [data-slot="segmented-item"], [data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="select-trigger"], .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
     touch-action: manipulation;
   }
 

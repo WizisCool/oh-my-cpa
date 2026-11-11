@@ -96,7 +96,7 @@ export const ConfigOutline: React.FC<{ entries: ConfigOutlineEntry[] }> = ({ ent
                   type="button"
                   className={`config-outline-link${isCurrent ? ' is-current' : isOnScreen ? ' is-on-screen' : ''}`}
                   aria-current={isCurrent ? 'location' : undefined}
-                  title={entry.label}
+                  data-tip={entry.label}
                   onPointerEnter={() => markTarget(entry.id, true)}
                   onPointerLeave={() => markTarget(entry.id, false)}
                   onFocus={() => markTarget(entry.id, true)}

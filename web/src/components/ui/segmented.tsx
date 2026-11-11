@@ -83,7 +83,7 @@ export function Segmented<T extends string | number = string>({
           data-slot="segmented-item"
           value={option.value}
           disabled={disabled || option.disabled}
-          title={option.title}
+          data-tip={option.title}
           className={cn(
             'inline-flex flex-1 items-center gap-1.5 whitespace-nowrap rounded-sm border-0 bg-transparent font-normal text-muted-foreground cursor-pointer',
             'transition-[background-color,color,box-shadow] touch-manipulation',

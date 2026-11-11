@@ -228,16 +228,19 @@ export const RequestRow = React.memo<RequestRowProps>(
           <time dateTime={isoTime} className="req-time-text" data-request-tooltip={fullTime}>
             {formattedTime}
           </time>
-          <div className="req-time-sub" title={event.request_id}>
-            {/* One line, truncated: CPA v8 names each execution with a 36-character UUID, which
-                wrapped at every hyphen and made every row several lines tall. The full id stays in
-                the title, the copy button and the detail drawer. */}
-            <span className="req-time-sub-id">{event.request_id || t('events.no_request_id')}</span>
+          <div className="req-time-sub">
+            <span
+              className="req-time-sub-id"
+              data-request-tooltip={event.request_id || undefined}
+              data-request-tooltip-overflow=""
+            >
+              {event.request_id || t('events.no_request_id')}
+            </span>
             {event.request_id ? (
               <button
                 type="button"
                 className="req-id-quick-copy"
-                title={t('common.copy')}
+                data-request-tooltip={t('common.copy')}
                 aria-label={`${t('common.copy')}: ${event.request_id}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -268,7 +271,8 @@ export const RequestRow = React.memo<RequestRowProps>(
           ) : (
             <span
               className={`req-result-pill ${event.failed ? 'is-failed' : 'is-success'}`}
-              title={resultLabel}
+              data-request-tooltip={resultLabel}
+              data-request-tooltip-overflow=""
             >
               <i className="req-result-bullet" />
               {resultLabel}
@@ -283,31 +287,39 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
           <div className="req-provider-content">
             <div className="req-provider-title-row">
-              <strong className="req-provider-title" title={providerInfo.title}>
+              <strong
+                className="req-provider-title"
+                data-request-tooltip={providerInfo.title}
+                data-request-tooltip-overflow=""
+              >
                 {providerInfo.title}
               </strong>
               {providerInfo.isOAuth && (
-                <span className="req-badge-oauth" title={t('events.oauth_badge')}>
+                <span className="req-badge-oauth" data-request-tooltip={t('events.oauth_badge')}>
                   OAuth
                 </span>
               )}
-              {/* The printed name is a placeholder while the provider catalog is unread, so the
-                  row says so rather than letting the label pass for a resolution. */}
               {providerInfo.isIdentityUnknown && (
-                <span className="req-badge-unresolved" title={t('events.provider_unresolved')}>
+                <span className="req-badge-unresolved" data-request-tooltip={t('events.provider_unresolved')}>
                   {t('events.provider_unresolved_badge')}
                 </span>
               )}
             </div>
             {providerInfo.isOAuth && providerInfo.credential && (
-              <span className="req-provider-credential" title={providerInfo.credential}>
+              <span
+                className="req-provider-credential"
+                data-request-tooltip={providerInfo.credential}
+                data-request-tooltip-overflow=""
+              >
                 {providerInfo.credential}
               </span>
             )}
             {providerKeyMask && (
-              /* The tooltip repeats the cell's own mask and nothing more: the value
-                 itself is never held by this page. */
-              <span className="req-provider-credential req-provider-key" title={providerKeyMask}>
+              <span
+                className="req-provider-credential req-provider-key"
+                data-request-tooltip={providerKeyMask}
+                data-request-tooltip-overflow=""
+              >
                 {providerKeyMask}
               </span>
             )}
@@ -328,12 +340,13 @@ export const RequestRow = React.memo<RequestRowProps>(
             )}
             <strong
               className="req-model-name"
-              title={modelTooltip || displayModel}
+              data-request-tooltip={modelTooltip || displayModel}
+              data-request-tooltip-overflow={modelTooltip ? undefined : ''}
             >
               {displayModel}
             </strong>
             {!event.generate && (
-              <span className="req-preflight-badge" title={t('events.preflight_hint')}>
+              <span className="req-preflight-badge" data-request-tooltip={t('events.preflight_hint')}>
                 {t('events.preflight')}
               </span>
             )}
@@ -453,20 +466,20 @@ export const RequestRow = React.memo<RequestRowProps>(
         <div className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
-            <strong title={`${formatTokensFull(event.tokens.total)} ${t('dash.unit_tokens')}`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
+            <strong data-request-tooltip={`${formatTokensFull(event.tokens.total)} ${t('dash.unit_tokens')}`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
             <small>tokens</small>
           </div>
           <div className="req-tokens-breakdown">
-            <span title={`${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`}>
+            <span data-request-tooltip={`${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`}>
               ↑ {formatTokens(event.tokens.input, tokenStyle)}
             </span>
-            <span title={`${t('events.output_tokens')}: ${formatTokensFull(event.tokens.output)}`}>
+            <span data-request-tooltip={`${t('events.output_tokens')}: ${formatTokensFull(event.tokens.output)}`}>
               ↓ {formatTokens(event.tokens.output, tokenStyle)}
             </span>
             {event.tokens.reasoning > 0 && (
               <span
                 className="req-tokens-reasoning"
-                title={`${t('events.reasoning_tokens')}: ${formatTokensFull(event.tokens.reasoning)}`}
+                data-request-tooltip={`${t('events.reasoning_tokens')}: ${formatTokensFull(event.tokens.reasoning)}`}
               >
                 <BulbOutlined className="req-token-icon-reasoning" />
                 {formatTokens(event.tokens.reasoning, tokenStyle)}
@@ -538,7 +551,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             every other auth type falls back to the source fingerprint */}
         <div className={`req-col req-col-key ${requestColumnAlignClass('key')}`}>
           <span className="req-mobile-label">{t('events.col_key')}</span>
-          <span className="req-key-val" title={keyLabel}>
+          <span className="req-key-val" data-request-tooltip={keyLabel} data-request-tooltip-overflow="">
             {keyLabel}
           </span>
         </div>
@@ -547,7 +560,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             at ingestion */}
         <div className={`req-col req-col-ua ${requestColumnAlignClass('ua')}`}>
           <span className="req-mobile-label">{t('events.col_ua')}</span>
-          <span className="req-ua-val" title={uaLabel}>
+          <span className="req-ua-val" data-request-tooltip={uaLabel} data-request-tooltip-overflow="">
             {uaLabel}
           </span>
         </div>

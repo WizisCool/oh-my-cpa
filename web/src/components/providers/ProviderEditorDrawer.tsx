@@ -284,7 +284,7 @@ export function ProviderEditorDrawer({
                 setTargetProviderForIcon(null);
                 setIconPickerOpen(true);
               }}
-              title={t('pro.change_icon')}
+              data-tip={t('pro.change_icon')}
             >
               <ProviderMark provider={{ id: editingProvider?.id, family: formFamily, name: formName, upstream_name: editingProvider?.upstream_name, base_url: formBaseURL, icon_id: formIcon }} sources={{ pluginLogos }} size={30} />
             </div>
@@ -557,7 +557,7 @@ export function ProviderEditorDrawer({
                           >
                             <span className={styles['item-title']}>{t('pro.key_label', { n: idx + 1 })}</span>
                             {displayKey && (
-                              <span className={styles['item-key']} title={maskKeyText(displayKey)}>
+                              <span className={styles['item-key']} data-tip={maskKeyText(displayKey)} data-tip-overflow="">
                                 {maskKeyText(displayKey)}
                               </span>
                             )}

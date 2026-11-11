@@ -143,7 +143,7 @@ function CredentialCard({ record, isSelected, hasSelection, nowMS, actions, plug
           <CredentialState record={record} facts={facts} actions={actions} nowMS={nowMS} />
         </div>
         {activity.buckets.length > 0 && (
-          <span className={styles.activity} title={t('omc.fleet_traffic_12h')}>
+          <span className={styles.activity} data-tip={t('omc.fleet_traffic_12h')}>
             <ActivitySpark buckets={activity.buckets} failures={activity.failures} label={t('omc.fleet_traffic_12h')} />
           </span>
         )}

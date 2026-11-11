@@ -222,12 +222,12 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
                   : formatTimeWithCountdown(item.plan.expires_at_ms, nowMS, t)}
               </span>
               {isSnapshotBound && (
-                <span className={styles['meta-tag']} title={t('quota.renewal_snapshot_hint')}>
+                <span className={styles['meta-tag']} data-tip={t('quota.renewal_snapshot_hint')}>
                   {t('quota.renewal_snapshot')}
                 </span>
               )}
               {item.plan.auto_renews === false && (
-                <span className={styles['meta-tag']} data-renewal-not-renewing="true" title={t('quota.renewal_not_renewing_hint')}>
+                <span className={styles['meta-tag']} data-renewal-not-renewing="true" data-tip={t('quota.renewal_not_renewing_hint')}>
                   {t('quota.renewal_not_renewing')}
                 </span>
               )}
@@ -257,7 +257,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
                 <span className={styles['meta-tag']}>{t('quota.extra_usage_user_disabled')}</span>
               )}
               {extraUsage.disabled_reason && (
-                <span className={styles['meta-tag']} title={t('quota.extra_usage_reason')}>{extraUsage.disabled_reason}</span>
+                <span className={styles['meta-tag']} data-tip={t('quota.extra_usage_reason')}>{extraUsage.disabled_reason}</span>
               )}
             </span>
           )}
@@ -291,7 +291,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           <div className={styles['reset-list']}>
             {balances.map((balance) => (
               <div className={styles['reset-row']} key={balance.id}>
-                <span className={styles['meta-label']} title={balance.id}>
+                <span className={styles['meta-label']} data-tip={balance.id}>
                   {balance.id === 'iguana_necktie' ? t('quota.balance_cloud_session_credits') : balance.id}
                 </span>
                 <span className={styles['meta-value']}>

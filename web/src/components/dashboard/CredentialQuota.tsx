@@ -153,9 +153,9 @@ const CredentialQuotaRowView: React.FC<QuotaRowProps> = ({ row, nowMS, pluginLog
         size={16}
         className="quota-row-icon"
       />
-      <span className="quota-row-name" title={row.primary}>{row.primary}</span>
+      <span className="quota-row-name" data-tip={row.primary} data-tip-overflow="">{row.primary}</span>
       {status ? (
-        <span className="quota-row-status" title={row.detail}>
+        <span className="quota-row-status" data-tip={row.detail}>
           <status.Icon className="quota-row-status-icon" aria-hidden="true" />
           {t(status.labelKey)}
         </span>

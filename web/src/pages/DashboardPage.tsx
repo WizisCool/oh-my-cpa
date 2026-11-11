@@ -467,15 +467,15 @@ export const DashboardPage: React.FC = () => {
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.total_tokens')}</div>
-            <div className="tile-value" title={formatTokensFull(data.tokens.total)}>
+            <div className="tile-value" data-tip={formatTokensFull(data.tokens.total)}>
               <RollingNumber readout={resolveTokenFlowReadout(data.tokens.total, tokenStyle)} />
             </div>
             <div className="tile-caption">
-              <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
-              <span>{t('dash.tokens_output')} <b title={formatTokensFull(data.tokens.output)}>{formatTokensStyled(data.tokens.output, tokenStyle)}</b></span>
-              <span>{t('dash.tokens_cache_read')} <b title={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_input')} <b data-tip={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_output')} <b data-tip={formatTokensFull(data.tokens.output)}>{formatTokensStyled(data.tokens.output, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_cache_read')} <b data-tip={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
               {data.tokens.reasoning > 0 && (
-                <span>{t('dash.tokens_reasoning')} <b title={formatTokensFull(data.tokens.reasoning)}>{formatTokensStyled(data.tokens.reasoning, tokenStyle)}</b></span>
+                <span>{t('dash.tokens_reasoning')} <b data-tip={formatTokensFull(data.tokens.reasoning)}>{formatTokensStyled(data.tokens.reasoning, tokenStyle)}</b></span>
               )}
             </div>
             <DashboardTrendChart
@@ -517,11 +517,11 @@ export const DashboardPage: React.FC = () => {
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.tpm')}</div>
-            <div className="tile-value" title={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
+            <div className="tile-value" data-tip={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
               <RollingNumber readout={resolveTokenRateFlowReadout(data.metrics.tpm)} />
             </div>
             <div className="tile-caption">
-              <span>{t('dash.total_tokens')} <b title={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
+              <span>{t('dash.total_tokens')} <b data-tip={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
             </div>
             <DashboardTrendChart
               ariaLabel={t('dash.tpm')}
@@ -549,8 +549,8 @@ export const DashboardPage: React.FC = () => {
               <RollingNumber readout={resolveCacheRateReadout(data.metrics.cache_rate)} />
             </div>
             <div className="tile-caption">
-              <span>{t('dash.tokens_cache_read')} <b title={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
-              <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_cache_read')} <b data-tip={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_input')} <b data-tip={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
             </div>
             <DashboardTrendChart
               ariaLabel={t('dash.cache_rate')}

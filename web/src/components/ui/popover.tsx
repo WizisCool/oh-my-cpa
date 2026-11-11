@@ -107,6 +107,7 @@ export function PopoverContent({
         align={align ?? resolved?.align ?? 'center'}
         sideOffset={sideOffset}
         alignOffset={alignOffset}
+        collisionPadding={12}
         style={positionerStyle}
         className={cn('z-[1050] outline-none', positionerClassName)}
       >
@@ -114,7 +115,7 @@ export function PopoverContent({
           ref={ref}
           data-slot="popover-content"
           className={cn(
-            'omc-float-surface rounded-lg bg-popover p-3 text-base text-popover-foreground shadow-float outline-none',
+            'omc-float-surface max-w-[calc(100vw-24px)] rounded-lg bg-popover p-3 text-base text-popover-foreground shadow-float outline-none',
             className,
           )}
           {...props}

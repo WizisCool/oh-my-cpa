@@ -611,7 +611,7 @@ const PaletteTokenRow: React.FC<{
       />
       <span
         className={`terminal-mono palette-token-ratio is-${status}`}
-        title={
+        data-tip={
           floor === undefined
             ? t('omc.contrast_layer')
             : t('omc.contrast_floor', { floor: String(floor), role: t(ROLE_LABEL_KEYS[role]) })

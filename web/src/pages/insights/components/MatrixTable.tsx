@@ -56,7 +56,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
               <tr>
                 <th className={styles['matrix-corner']} scope="col">{t(`insights.dim.${rowDimension}`)}</th>
                 {matrix.columnIds.map((columnId) => (
-                  <th key={columnId} scope="col" title={columnId}>
+                  <th key={columnId} scope="col" data-tip={columnId}>
                     <InsightsValue dimension={columnDimension} id={columnId} labels={labels} className={styles['matrix-column-label']} />
                   </th>
                 ))}
@@ -68,7 +68,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
                 const rowTotal = matrix.rowTotals.get(rowId);
                 return (
                   <tr key={rowId}>
-                    <th scope="row" title={rowId}>
+                    <th scope="row" data-tip={rowId}>
                       <InsightsValue dimension={rowDimension} id={rowId} labels={labels} />
                     </th>
                     {matrix.columnIds.map((columnId) => {
@@ -85,7 +85,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
                             type="button"
                             className={clsx(styles['matrix-cell'], isDense && styles['matrix-cell-dense'])}
                             style={{ '--heatmap-quiet-share': shade.fromShare } as React.CSSProperties}
-                            title={`${labels.label(rowDimension, rowId)} · ${labels.label(columnDimension, columnId)}: ${formatMetricExact(metric, cell.value) ?? formatMetric(metric, cell.value, style)}`}
+                            data-tip={`${labels.label(rowDimension, rowId)} / ${labels.label(columnDimension, columnId)}: ${formatMetricExact(metric, cell.value) ?? formatMetric(metric, cell.value, style)}`}
                             onClick={() => onSelectCell(rowId, columnId)}
                           >
                             {formatMetric(metric, cell.value, style)}

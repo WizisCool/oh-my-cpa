@@ -25,7 +25,7 @@ export const ComparisonText: React.FC<ComparisonTextProps> = ({ comparison, comp
     compare ? formatCompareWindow(compare) : null,
   ].filter(Boolean).join(' · ') || t('insights.col.change');
   return (
-    <span className={className} data-trend={changeTrend(comparison)} title={title}>
+    <span className={className} data-trend={changeTrend(comparison)} data-tip={title}>
       {text}
       {isNoise && <span className="sr-only">{t('insights.change_noise')}</span>}
     </span>

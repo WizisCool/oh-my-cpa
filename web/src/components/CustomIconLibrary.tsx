@@ -326,7 +326,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
                 onFiles={(files) => void readFile(files[0])}
               >
                 {fileName && (
-                  <span className={styles['file-name']} title={fileName}>
+                  <span className={styles['file-name']} data-tip={fileName} data-tip-overflow="">
                     {fileName}
                   </span>
                 )}
@@ -568,7 +568,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
                     disabled={isSelecting || isBusy}
                     aria-pressed={isSelected}
                     onClick={() => void onSelect(`custom:${icon.id}`)}
-                    title={icon.name}
+                    data-tip={icon.name}
                   >
                     <span className={styles['tile-artwork']}>
                       <LobeIcon

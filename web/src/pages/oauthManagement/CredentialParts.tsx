@@ -200,8 +200,8 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
             onCancel={onRenamed}
           />
         ) : facts.displayName ? (
-          <span className={styles.primary} title={facts.displayName} data-credential-display-name="true">{facts.displayName}</span>
-        ) : accountToggle ?? <span className={styles.primary} title={file.name}>{facts.headline}</span>}
+          <span className={styles.primary} data-tip={facts.displayName} data-tip-overflow="" data-credential-display-name="true">{facts.displayName}</span>
+        ) : accountToggle ?? <span className={styles.primary} data-tip={file.name} data-tip-overflow="">{facts.headline}</span>}
         {file.note && !isRenaming && (
           <Tooltip title={<span className={styles['note-tip']}>{file.note}</span>}>
             <span className={styles.note} tabIndex={0} role="img" aria-label={`${t('af.field_note')}: ${file.note}`} data-credential-note="true">
@@ -314,7 +314,7 @@ export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true 
         </Tooltip>
         <CredentialRenewalBadge file={file} onOpen={() => actions.onOpen(record, 'renewal')} />
         {failure && !status.needsReauth && (
-          <span className={styles.failed} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
+          <span className={styles.failed} data-tip={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
         )}
       </div>
       {hasSIWC && siwc && (

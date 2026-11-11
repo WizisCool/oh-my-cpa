@@ -276,7 +276,7 @@ export const PriceSchedule: React.FC<{
                 const isInherited = row.tier !== null && row.inherited.has(key);
                 const ratio = !isInherited && row.tier && from > 0 ? rate / from : null;
                 return (
-                  <td key={key} className={clsx(isInherited && styles['schedule-inherited'])} title={isInherited ? t('pricing.schedule.inherited') : undefined}>
+                  <td key={key} className={clsx(isInherited && styles['schedule-inherited'])} data-tip={isInherited ? t('pricing.schedule.inherited') : undefined}>
                     {formatRatePer1M(rate)}
                     {ratio !== null && Math.abs(ratio - 1) > 1e-9 && (
                       <span className={clsx(styles['schedule-ratio'], ratio > 1 ? styles['rate-up'] : styles['rate-down'])}>

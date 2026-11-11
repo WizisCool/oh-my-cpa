@@ -505,7 +505,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                 <li key={task.id} className={styles['task-row']} data-enabled={task.enabled} data-testid={`warmup-task-${task.id}`}>
                   <CredentialMark className={styles['task-mark']} credential={{ provider: task.provider, hint: task.account }} size={20} />
                   <div className={styles['task-copy']}>
-                    <span className={styles['task-title']} title={view.title}>{view.title}</span>
+                    <span className={styles['task-title']} data-tip={view.title} data-tip-overflow="">{view.title}</span>
                     <span className={styles['task-meta']}>{view.meta.join(' · ')}</span>
                     {next && <span className={styles['task-next']}>{next}</span>}
                   </div>

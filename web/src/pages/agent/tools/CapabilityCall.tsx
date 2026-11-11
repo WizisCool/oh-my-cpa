@@ -67,7 +67,7 @@ export const CapabilityCall = React.memo(function CapabilityCall({ trace, childr
           {isRunning ? <LoadingOutlined /> : tone === 'warning' ? <WarningOutlined /> : tone === 'success' ? <CheckOutlined /> : tone === 'error' ? <CloseOutlined /> : null}
         </span>
         <span className={clsx(styles['call-title'], isRunning && workspace['live-text'])}>{title}</span>
-        {summary && <span className={styles['call-args']} title={summary}>{summary}</span>}
+        {summary && <span className={styles['call-args']} data-tip={summary} data-tip-overflow="">{summary}</span>}
         <span className={styles['call-spacer']} />
         {!isSettledWell && !isRunning && <span className={styles['call-status']} data-tone={tone}>{t(callStatusKey(trace))}</span>}
         {(isRunning || duration !== undefined) && <span className={styles['call-duration']}>

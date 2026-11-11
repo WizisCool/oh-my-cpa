@@ -84,13 +84,13 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
             data-testid={`insights-tile-${item}`}
           >
             <span className={styles['tile-label']}>{t(`insights.metric.${item}`)}</span>
-            <span className={styles['tile-value']} title={formatMetricExact(item, value)}>
+            <span className={styles['tile-value']} data-tip={formatMetricExact(item, value)}>
               <RollingNumber readout={readoutOf(item, value, style, currency)} />
             </span>
             <span
               className={styles['tile-change']}
               data-trend={comparison ? changeTrend(comparison) : undefined}
-              title={changeTitle || undefined}
+              data-tip={changeTitle || undefined}
             >
               {comparison === null ? null : comparison.kind !== 'change' || changeText === null ? (
                 <span className={styles['tile-change-none']}>

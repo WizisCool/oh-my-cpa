@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 /** One console-wide policy for CSS, library animations and imperative gestures. */
 export type ReducedMotionPreference = 'on' | 'system' | 'off';
 
@@ -48,4 +50,9 @@ export function subscribeMotionPreference(listener: () => void): () => void {
       systemQuery = undefined;
     }
   };
+}
+
+export function useMotionPreference(): { isReducedMotion: boolean } {
+  const isReducedMotion = useSyncExternalStore(subscribeMotionPreference, isMotionReduced, () => false);
+  return { isReducedMotion };
 }

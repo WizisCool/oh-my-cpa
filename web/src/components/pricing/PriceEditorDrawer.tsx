@@ -270,7 +270,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
 
   const title = (
     <div className={styles['drawer-title']}>
-      <span className={styles['drawer-model']} title={model}>{model}</span>
+      <span className={styles['drawer-model']} data-tip={model} data-tip-overflow="">{model}</span>
       <StatusLabel tone={modeTone(currentMode)}>
         {currentMode ? t(`pricing.mode.${currentMode}`) : t('pricing.mode.unpriced')}
       </StatusLabel>
@@ -430,7 +430,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                       return (
                         // One provider can list two rates for a model, so its name alone is not unique.
                         <li key={`${index}:${price.providers.join(',')}`}>
-                          <span className={styles['reference-providers']} title={price.providers.join(', ')}>
+                          <span className={styles['reference-providers']} data-tip={price.providers.join(', ')}>
                             {hidden > 0 ? t('pricing.editor.reference_providers_more', { providers: shown, n: hidden }) : shown}
                           </span>
                           <span className={styles['reference-rates']}>{rateText}</span>

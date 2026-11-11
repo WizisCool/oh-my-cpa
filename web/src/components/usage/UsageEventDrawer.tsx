@@ -248,7 +248,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             icon={<UpOutlined />}
             disabled={!hasPrev}
             onClick={handlePrev}
-            title={`${t('events.prev_item')} ([)`}
+            data-tip={`${t('events.prev_item')} ([)`}
             aria-label={t('events.prev_item')}
           />
           <Button
@@ -257,7 +257,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             icon={<DownOutlined />}
             disabled={!hasNext}
             onClick={handleNext}
-            title={`${t('events.next_item')} (])`}
+            data-tip={`${t('events.next_item')} (])`}
             aria-label={t('events.next_item')}
           />
         </div>
@@ -359,7 +359,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 <dt>{t('events.col_tokens')}</dt>
                 {/* The headline is compact to match every other token readout; the exact count is the
                     accessible name, so the rounding never becomes the only number available. */}
-                <dd title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</dd>
+                <dd data-tip={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</dd>
               </div>
               <div>
                 <dt>{t('events.col_cost')}</dt>
@@ -530,7 +530,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           // A request log quotes the request itself, so the demonstration
                           // keeps it out of reach; the server refuses the download as well.
                           disabled={!event.has_request_log || !event.request_id || isDemo}
-                          title={isDemo ? t('demo.blocked') : undefined}
+                          data-tip={isDemo ? t('demo.blocked') : undefined}
                           onClick={() => setDownloadModalOpen(true)}
                         >
                           {t('events.download_log')}

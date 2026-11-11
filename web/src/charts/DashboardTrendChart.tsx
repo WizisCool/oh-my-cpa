@@ -1,10 +1,16 @@
-import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
+import { Area, AreaChart, XAxis, YAxis } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
+import { useMotionPreference } from '@/utils/motionPreference';
 import dayjs from '../utils/time';
-import { renderChartTooltip } from './chartTooltip';
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import { useTheme } from '../theme/ThemeContext';
-import { EChart } from './echarts/EChart';
-import { echarts, type EChartsCoreOption } from './echarts/core';
+import { ChartSurface } from './ChartSurface';
 import { sparkColor, type ChartTone } from './chartTheme';
 import type { DashboardSeriesPoint } from '../types/dashboard';
 
@@ -16,56 +22,101 @@ export interface DashboardTrendChartProps {
   height?: number;
   label?: (timeMs: number) => string;
   format?: (value: number) => string;
-  /** The exact value remains accessible when the visible readout is abbreviated. */
   formatExact?: (value: number) => string;
 }
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
-/** An area carries measured zero buckets to the baseline rather than implying missing data. */
 export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
-  points, pick, ariaLabel, tone = 'accent', height = 46, label, format, formatExact,
+  points,
+  pick,
+  ariaLabel,
+  tone = 'accent',
+  height = 46,
+  label,
+  format,
+  formatExact,
 }) => {
-  const timeZone = useTimeZone();
+  useTimeZone();
   const { theme } = useTheme();
+  const { isReducedMotion } = useMotionPreference();
+  const gradientId = React.useId().replace(/:/g, '');
   const color = sparkColor(theme.palette, tone);
-  const values = React.useMemo(() => points.map((point) => Math.max(0, pick(point) ?? 0)), [points, pick]);
-  const option = React.useMemo<EChartsCoreOption>(() => {
-    const [red, green, blue] = echarts.color.parse(color)!;
-    return {
-      grid: { left: 16, right: 16, top: 16, bottom: 16 },
-      xAxis: { type: 'category', data: points.map((point) => String(point.t)), show: false, boundaryGap: false },
-      yAxis: { type: 'value', min: 0, show: false },
-      tooltip: {
-        trigger: 'axis', className: 'omc-echart-tip', confine: true,
-        axisPointer: { type: 'line' },
-        formatter: (items: Array<{ dataIndex: number }>) => {
-          const index = items[0]?.dataIndex;
-          if (index === undefined) return '';
-          const value = values[index];
-          const display = format?.(value) ?? PLAIN_NUMBER_FORMAT.format(value);
-          return renderChartTooltip((label ?? ((at: number) => dayjs(at).format('MM-DD HH:mm')))(points[index].t), [
-            { color, value: display, exact: formatExact?.(value) ?? display },
-          ]);
-        },
-      },
-      series: [{
-        id: 'metric', type: 'line', data: values, smooth: true, smoothMonotone: 'x',
-        showSymbol: false, symbol: 'circle', symbolSize: 5,
-        lineStyle: { color, width: 1.5, cap: 'round', join: 'round' }, itemStyle: { color },
-        emphasis: { scale: true, lineStyle: { width: 1.5 } },
-        areaStyle: {
-          opacity: 1,
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: `rgba(${red},${green},${blue},0.22)` },
-            { offset: 1, color: `rgba(${red},${green},${blue},0)` },
-          ]),
-        },
-      }],
-    };
-  }, [points, values, color, label, format, formatExact, timeZone]);
 
-  if (values.length < 2) return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
-  // At least `height` tall, and taller when the widget is given rows to spare.
-  return <div className="chart-slot" style={{ minHeight: height }}><EChart option={option} label={ariaLabel} priority="p0" /></div>;
+  const data = React.useMemo(
+    () =>
+      points.map((point) => ({
+        t: point.t,
+        value: Math.max(0, pick(point) ?? 0),
+      })),
+    [points, pick],
+  );
+
+  const config = React.useMemo<ChartConfig>(
+    () => ({ value: { color } }),
+    [color],
+  );
+
+  if (data.length < 2) {
+    return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
+  }
+
+  return (
+    <div className="chart-slot" style={{ minHeight: height }}>
+      <ChartSurface height={height} priority="p0">
+        <ChartContainer
+          config={config}
+          role="img"
+          aria-label={ariaLabel}
+          className="h-full w-full"
+          initialDimension={{ width: 240, height }}
+        >
+          <AreaChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.2} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="t" hide />
+            <YAxis domain={[0, 'auto']} hide />
+            <ChartTooltip
+              cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
+              content={
+                <ChartTooltipContent
+                  buildRows={(payload) => {
+                    const entry = payload[0]?.payload as { t: number; value: number } | undefined;
+                    if (!entry) return null;
+                    const display = format?.(entry.value) ?? PLAIN_NUMBER_FORMAT.format(entry.value);
+                    const exact = formatExact?.(entry.value);
+                    return {
+                      heading: (label ?? ((at: number) => dayjs(at).format('MM-DD HH:mm')))(entry.t),
+                      rows: [
+                        {
+                          color,
+                          value: display,
+                          note: exact && exact !== display ? exact : undefined,
+                        },
+                      ],
+                    };
+                  }}
+                />
+              }
+            />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke={color}
+              strokeWidth={1.5}
+              fill={`url(#${gradientId})`}
+              dot={false}
+              activeDot={{ r: 3, fill: color, strokeWidth: 0 }}
+              isAnimationActive={!isReducedMotion}
+              animationDuration={180}
+            />
+          </AreaChart>
+        </ChartContainer>
+      </ChartSurface>
+    </div>
+  );
 };

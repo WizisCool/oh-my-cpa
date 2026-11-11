@@ -103,7 +103,7 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
               type="button"
               className={styles['filter-chip-action']}
               aria-label={t('insights.open_detail')}
-              title={t('insights.open_detail')}
+              data-tip={t('insights.open_detail')}
               onClick={() => onOpenKey(chip.value)}
             >
               <RightOutlined />

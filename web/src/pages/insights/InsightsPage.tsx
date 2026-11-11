@@ -371,7 +371,7 @@ export const InsightsPage: React.FC = () => {
   // on a window that starts and ends on day boundaries. The exact instants and the deployment's zone
   // are the hover, so the line under the title stays a reading rather than a timestamp dump.
   const subtitle = shownWindow ? (
-    <span className={styles['window-span']} title={`${dayjs(shownWindow.from).format('YYYY-MM-DD HH:mm')} – ${shownWindow.open_end ? t('dash.range.until_now') : dayjs(shownWindow.to).format('YYYY-MM-DD HH:mm')} · ${shownWindow.timezone}`}>
+    <span className={styles['window-span']} data-tip={`${dayjs(shownWindow.from).format('YYYY-MM-DD HH:mm')} – ${shownWindow.open_end ? t('dash.range.until_now') : dayjs(shownWindow.to).format('YYYY-MM-DD HH:mm')} (${shownWindow.timezone})`}>
       {formatWindowSpan(shownWindow, t('dash.range.until_now'))}
     </span>
   ) : t('dash.loading');

@@ -47,12 +47,13 @@ export function DropdownMenuContent({
         align={align ?? resolved?.align ?? 'end'}
         sideOffset={sideOffset}
         alignOffset={alignOffset}
+        collisionPadding={12}
         className="z-[1060] outline-none"
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
-            'omc-float-surface min-w-[160px] rounded-lg bg-popover p-1 text-popover-foreground shadow-float outline-none select-none',
+            'omc-float-surface min-w-[160px] max-w-[calc(100vw-24px)] max-h-[min(420px,calc(100dvh-24px))] overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-float outline-none select-none',
             className,
           )}
           {...props}
@@ -82,7 +83,7 @@ export function DropdownMenuItem({
       data-slot="dropdown-menu-item"
       data-danger={danger ? '' : undefined}
       className={cn(
-        'flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-md text-foreground no-underline outline-none cursor-pointer',
+        'flex min-h-8 [@media(pointer:coarse)]:min-h-10 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-md text-foreground no-underline outline-none cursor-pointer',
         'transition-colors',
         'data-highlighted:bg-hover',
         danger && 'text-danger data-highlighted:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] data-highlighted:text-danger',
@@ -119,7 +120,7 @@ export function DropdownMenuRadioItem({
       closeOnClick={closeOnClick}
       data-slot="dropdown-menu-radio-item"
       className={cn(
-        'flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-md text-foreground outline-none cursor-pointer',
+        'flex min-h-8 [@media(pointer:coarse)]:min-h-10 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-md text-foreground outline-none cursor-pointer',
         'transition-colors',
         'data-highlighted:bg-hover',
         'data-checked:bg-selected data-checked:font-medium',

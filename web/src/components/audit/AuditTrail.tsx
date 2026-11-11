@@ -251,7 +251,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       title: t('audit.field_time'),
       width: 96,
       render: (_, event) => (
-        <span className={styles['audit-time']} title={dayjs(event.occurred_at_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}>
+        <span className={styles['audit-time']} data-tip={dayjs(event.occurred_at_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}>
           {dayjs(event.occurred_at_ms).format('HH:mm:ss')}
         </span>
       ),
@@ -277,7 +277,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       render: (_, event) => {
         const target = readableTarget(event);
         return target
-          ? <span className={styles['audit-target']} title={event.target_id}>{target}</span>
+          ? <span className={styles['audit-target']} data-tip={event.target_id} data-tip-overflow="">{target}</span>
           : <span className={styles['audit-none']}>—</span>;
       },
     },

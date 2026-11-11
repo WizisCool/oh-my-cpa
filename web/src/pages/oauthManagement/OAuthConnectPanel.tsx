@@ -206,7 +206,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                             <span className={styles['tile-title']}>{candidate.title}</span>
                             <ProviderKindTag choice={candidate} />
                           </div>
-                          <span className={styles['tile-desc']} title={candidate.description}>
+                          <span className={styles['tile-desc']} data-tip={candidate.description} data-tip-overflow="">
                             {candidate.description}
                           </span>
                         </div>

@@ -48,7 +48,7 @@ export const ChartSurface: React.FC<ChartSurfaceProps> = ({
   };
 
   return (
-    <div className={clsx('omc-echart-slot', className)} style={boxStyle}>
+    <div className={clsx('omc-chart-slot relative w-full min-w-0', className)} style={boxStyle}>
       {isLoading ? (
         loadingFallback ?? <div className="chart-placeholder" style={{ height: height ?? minHeight ?? '100%' }} aria-hidden="true" />
       ) : isEmpty ? (

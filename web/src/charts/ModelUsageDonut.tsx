@@ -1,82 +1,172 @@
 import React from 'react';
+import { Cell, Pie, PieChart } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 import { useTheme } from '../theme/ThemeContext';
 import { RADIUS } from '../theme/radius';
-import { EChart, type EChartHandlers } from './echarts/EChart';
-import type { EChartsCoreOption } from './echarts/core';
+import { ChartSurface } from './ChartSurface';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor, seriesGroupLabel } from './chartTheme';
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
-import { renderChartTooltip } from './chartTooltip';
 
 export interface ModelUsageDonutProps {
   groups: DashboardModelUsage[];
   totalTokens: number;
-  /** A pinned group stays fully opaque and owns the centre; every other slice remains in context. */
   focusedKey?: string | null;
   foldedLabel: string;
   unnamedLabel: string;
   tokenUnitLabel: string;
-  /** A painted slice toggles its group; the background clears the focus. */
   onFocusGroup?: (key: string) => void;
   onClearFocus?: () => void;
 }
 
-/** The square frame and DOM readout share a centre, independent of the ranked list's height. */
-export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({ groups, totalTokens, focusedKey = null, foldedLabel, unnamedLabel, tokenUnitLabel, onFocusGroup, onClearFocus }) => {
+export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({
+  groups,
+  totalTokens,
+  focusedKey = null,
+  foldedLabel,
+  unnamedLabel,
+  tokenUnitLabel,
+  onFocusGroup,
+  onClearFocus,
+}) => {
   const { theme } = useTheme();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const range = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
-  // A zero-token group stays in the ranked list but has no arc to emphasise. Dimming the whole ring
-  // for it would turn a valid zero reading into what looks like a chart-wide disabled state.
-  const hasFocusedSlice = focusedKey !== null && groups.some((group) => seriesDomainKey(group) === focusedKey && group.tokens > 0);
-  // Zero-angle arcs carry no reading; zero groups still remain in the DOM ranking.
-  const data = React.useMemo(() => groups.filter((group) => group.tokens > 0).map((group) => ({
-    id: seriesDomainKey(group), name: seriesDomainKey(group), value: group.tokens,
-    itemStyle: { color: range[groups.indexOf(group)], opacity: hasFocusedSlice && seriesDomainKey(group) !== focusedKey ? 0.35 : 1 },
-  })), [groups, focusedKey, hasFocusedSlice, range]);
+
+  const hasFocusedSlice =
+    focusedKey !== null &&
+    groups.some((group) => seriesDomainKey(group) === focusedKey && group.tokens > 0);
+
+  const labelOf = React.useCallback(
+    (key: string) =>
+      seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel),
+    [foldedLabel, unnamedLabel],
+  );
+
+  const data = React.useMemo(
+    () =>
+      groups
+        .map((group, index) => ({
+          id: seriesDomainKey(group),
+          name: labelOf(seriesDomainKey(group)),
+          value: group.tokens,
+          color: range[index],
+        }))
+        .filter((entry) => entry.value > 0),
+    [groups, labelOf, range],
+  );
+
+  const config = React.useMemo<ChartConfig>(() => {
+    const out: ChartConfig = {};
+    for (const item of data) {
+      out[item.id] = { label: item.name, color: item.color };
+    }
+    return out;
+  }, [data]);
+
   const activeGroup = groups.find((group) => seriesDomainKey(group) === focusedKey);
-  const labelOf = React.useCallback((key: string) => seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel), [foldedLabel, unnamedLabel]);
-  const option = React.useMemo<EChartsCoreOption>(() => ({
-    tooltip: {
-      trigger: 'item', className: 'omc-echart-tip', confine: true,
-      formatter: (item: { name: string; value: number; color: string }) => renderChartTooltip(undefined, [{
-        name: labelOf(item.name), color: item.color,
-        value: `${formatTokens(item.value, tokenStyle)} ${tokenUnitLabel}`,
-        exact: `${formatTokensFull(item.value)} ${tokenUnitLabel}`,
-        share: formatModelShare(item.value, totalTokens),
-      }]),
-    },
-    series: [{
-      id: 'model-usage', type: 'pie', data, radius: ['66%', '92%'], padAngle: 1.5,
-      left: 16, right: 16, top: 16, bottom: 16, clockwise: false,
-      label: { show: false }, labelLine: { show: false },
-      itemStyle: { borderRadius: RADIUS.xs }, emphasis: { scaleSize: 4, itemStyle: { opacity: 1 } },
-      animationDuration: 0,
-    }],
-  }), [data, labelOf, tokenStyle, tokenUnitLabel, totalTokens]);
-
-  const handlers = React.useMemo<EChartHandlers>(() => ({
-    click: (event) => {
-      const key = (event as { name?: string }).name;
-      if (key !== undefined) onFocusGroup?.(key);
-    },
-    backgroundClick: () => onClearFocus?.(),
-  }), [onClearFocus, onFocusGroup]);
-
   const value = activeGroup?.tokens ?? totalTokens;
   const share = activeGroup ? formatModelShare(value, totalTokens) : undefined;
-  const centerLabel = `${activeGroup ? `${labelOf(seriesDomainKey(activeGroup))}: ` : ''}${formatTokensFull(value)} ${tokenUnitLabel}${share ? ` · ${share}` : ''}`;
+  const centerLabel = `${activeGroup ? `${labelOf(seriesDomainKey(activeGroup))}: ` : ''}${formatTokensFull(value)} ${tokenUnitLabel}${share ? ` (${share})` : ''}`;
+  const didClickSliceRef = React.useRef(false);
+
   return (
     <div className="model-ring" role="img" aria-label={centerLabel}>
-      <div className="model-ring-frame">
-        {data.length > 0 && <EChart option={option} label={`${formatTokensFull(totalTokens)} ${tokenUnitLabel}`} handlers={handlers} />}
+      <div
+        className="model-ring-frame"
+        onClick={() => {
+          if (didClickSliceRef.current) {
+            didClickSliceRef.current = false;
+            return;
+          }
+          onClearFocus?.();
+        }}
+      >
+        {data.length > 0 && (
+          <ChartSurface height="100%" className="h-full w-full">
+            <ChartContainer
+              config={config}
+              className="h-full w-full"
+              initialDimension={{ width: 220, height: 220 }}
+            >
+              <PieChart>
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      hideLabel
+                      buildRows={(payload) => {
+                        const slice = payload[0]?.payload as
+                          | { id: string; name: string; value: number; color: string }
+                          | undefined;
+                        if (!slice) return null;
+                        return {
+                          rows: [
+                            {
+                              key: slice.id,
+                              name: slice.name,
+                              color: slice.color,
+                              value: `${formatTokens(slice.value, tokenStyle)} ${tokenUnitLabel}`,
+                              share: formatModelShare(slice.value, totalTokens),
+                            },
+                          ],
+                        };
+                      }}
+                    />
+                  }
+                />
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="66%"
+                  outerRadius="92%"
+                  paddingAngle={data.length > 1 ? 1.5 : 0}
+                  cornerRadius={RADIUS.xs}
+                  stroke="none"
+                  isAnimationActive={false}
+                  onClick={(_, index) => {
+                    const picked = data[index];
+                    if (picked) {
+                      didClickSliceRef.current = true;
+                      onFocusGroup?.(picked.id);
+                    }
+                  }}
+                >
+                  {data.map((entry) => (
+                    <Cell
+                      key={entry.id}
+                      fill={entry.color}
+                      fillOpacity={hasFocusedSlice && entry.id !== focusedKey ? 0.32 : 1}
+                      className="cursor-pointer"
+                    />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          </ChartSurface>
+        )}
         <div className="model-ring-center">
           <span className="model-ring-total">{formatModelTokens(value, tokenStyle)}</span>
-          <span className="model-ring-unit" aria-hidden="true">{share ?? tokenUnitLabel}</span>
+          <span className="model-ring-unit" aria-hidden="true">
+            {share ?? tokenUnitLabel}
+          </span>
         </div>
       </div>
-      {data.length === 0 && <span className="model-ring-track" style={{ borderColor: seriesTrackColor(theme.palette) }} aria-hidden="true" />}
+      {data.length === 0 && (
+        <span
+          className="model-ring-track"
+          style={{ borderColor: seriesTrackColor(theme.palette) }}
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 });

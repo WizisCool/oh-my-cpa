@@ -24,7 +24,7 @@ export const InsightsValue: React.FC<InsightsValueProps> = ({ dimension, id, lab
   const mark = dimension === 'key' ? <KeyOutlined aria-hidden="true" /> : labels.mark(dimension, id);
   const detail = hasDetail ? labels.detail(dimension, id) : undefined;
   return (
-    <span className={clsx(styles['value'], className)} title={id}>
+    <span className={clsx(styles['value'], className)} data-tip={id}>
       <span className={clsx(styles['value-mark'], dimension === 'key' && styles['value-mark-glyph'])} aria-hidden="true">{mark}</span>
       <span className={clsx(styles['value-name'], isNonKey && styles['is-muted'])}>{labels.label(dimension, id)}</span>
       {detail && <span className={styles['value-detail']}>{detail}</span>}

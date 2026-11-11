@@ -266,7 +266,7 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                         </span>
                       </Tooltip>
                     )}
-                    <span className={styles['name']} title={label}>{label}</span>
+                    <span className={styles['name']} data-tip={label} data-tip-overflow="">{label}</span>
                     <Tooltip title={t('dash.layout.move_earlier')}>
                       <Button
                         size="sm"

@@ -343,6 +343,52 @@ describe('Tooltip', () => {
     expect(document.activeElement).toBe(trigger);
     expect(trigger.getAttribute('aria-describedby')).toBe('field-hint');
   });
+
+  it('opens a tap-readable or delegated data-tip on mobile touch and reliably closes on outside tap, repeat tap, or scroll', async () => {
+    const { ChartContainer, ChartTooltipContent } = await import('../src/components/ui/chart');
+    const { DelegatedTooltipLayer } = await import('../src/components/ui/tooltip');
+
+    render(
+      <div>
+        <DelegatedTooltipLayer />
+        <span data-testid="tip-badge" data-tip="Exact: 1,234,567 tokens">1.2M</span>
+        <div data-testid="outside">Outside area</div>
+        <ChartContainer config={{ val: { label: 'Tokens', color: '#00a2fb' } }} responsive={false} data-testid="mobile-chart">
+          <ChartTooltipContent active label="12:00" payload={[{ name: 'val', dataKey: 'val', value: 4200, payload: { t: 1 } }]} />
+        </ChartContainer>
+      </div>,
+    );
+
+    const badge = screen.getByTestId('tip-badge');
+    const outside = screen.getByTestId('outside');
+    const chart = screen.getByTestId('mobile-chart');
+
+    // 1. Mobile tap on non-interactive data-tip opens it, outside tap closes it immediately.
+    fireEvent.pointerDown(badge, { pointerType: 'touch', clientX: 20, clientY: 20 });
+    fireEvent.pointerUp(badge, { pointerType: 'touch', clientX: 20, clientY: 20 });
+    await waitFor(() => expect(screen.getByText('Exact: 1,234,567 tokens')).toBeTruthy());
+
+    fireEvent.pointerDown(outside, { pointerType: 'touch', clientX: 200, clientY: 200 });
+    await waitFor(() => expect(screen.queryByText('Exact: 1,234,567 tokens')).toBeNull());
+
+    // 2. ChartTooltipContent on mobile touch: visible on tap, closes on outside tap and on scroll.
+    fireEvent.pointerDown(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).not.toBeNull();
+
+    // Repeat tap on same active point toggles chart tooltip off!
+    fireEvent.pointerDown(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
+
+    // Tap again to open, then scroll page -> closes immediately!
+    fireEvent.pointerDown(chart, { pointerType: 'touch', clientX: 60, clientY: 50 });
+    fireEvent.pointerUp(chart, { pointerType: 'touch', clientX: 60, clientY: 50 });
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).not.toBeNull();
+
+    fireEvent.scroll(document);
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
+  });
 });
 
 describe('DeferredMount', () => {

@@ -90,7 +90,7 @@ export function ComposerPicker({
             {icon && <span className={styles['picker-trigger-icon']} aria-hidden="true">{icon}</span>}
             {isPending
               ? <span className={styles['picker-trigger-pending']} />
-              : <span className={styles['picker-trigger-value']} title={valueLabel}>{valueLabel}</span>}
+              : <span className={styles['picker-trigger-value']} data-tip={valueLabel} data-tip-overflow="">{valueLabel}</span>}
             <DropdownCaret className={styles['picker-caret']} />
           </Button>
         }
@@ -183,7 +183,7 @@ export function ComposerPickerList({ label, options, value, onSelect, optionTest
           onClick={() => onSelect(option.value)}
         >
           {option.icon && <span className={styles['picker-option-icon']} aria-hidden="true">{option.icon}</span>}
-          <span className={styles['picker-option-name']} title={option.label}>{option.label}</span>
+          <span className={styles['picker-option-name']} data-tip={option.label} data-tip-overflow="">{option.label}</span>
           {option.detail && <span className={styles['picker-option-detail']}>{option.detail}</span>}
           {shouldShowSelectionMark && <span className={styles['picker-option-check']} aria-hidden="true">{option.value === value && <CheckOutlined />}</span>}
         </button>

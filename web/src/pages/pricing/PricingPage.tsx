@@ -97,7 +97,7 @@ const CandidateLine: React.FC<{
   const rates = `${formatRatePer1M(candidate.model.prompt_price_per_1m)} / ${formatRatePer1M(candidate.model.completion_price_per_1m)}`;
   return (
     <div className={styles.candidate} data-testid="pricing-row-candidate" data-kind={candidate.kind}>
-      <span className={styles['candidate-text']} title={candidate.model.id}>
+      <span className={styles['candidate-text']} data-tip={candidate.model.id}>
         {t(isAutomatic ? 'pricing.candidate.automatic' : 'pricing.candidate.suggested', { id: candidate.model.id, rates })}
       </span>
       <span className={styles['candidate-actions']}>
@@ -285,7 +285,7 @@ export const PricingPage: React.FC = () => {
           <div className={styles['model-text']}>
             {row.channel && <span className={styles['model-sub']}>{t('pricing.scope.channel')} · {row.channelLabel || row.channel}</span>}
             {row.targetChannel && row.rowKind === 'priced' && <span className={styles['model-sub']}>{t('pricing.scope.inherited')}</span>}
-            <span className={styles['model-name']} title={row.model}>{pricingModelIdentity(row.model).label}</span>
+            <span className={styles['model-name']} data-tip={row.model} data-tip-overflow="">{pricingModelIdentity(row.model).label}</span>
             {row.rowKind === 'priced' ? (
               <span className={styles['model-sub']}>
                 {row.upstream_id || (row.source === 'modelsdev' ? t('pricing.source.modelsdev') : t('pricing.source.manual'))}
@@ -302,7 +302,7 @@ export const PricingPage: React.FC = () => {
             )}
             {row.rowKind === 'unpriced' && row.suggestions[0] && (
               <div className={styles['suggestion']}>
-                <span className={styles['model-sub']} title={row.suggestions[0].id}>
+                <span className={styles['model-sub']} data-tip={row.suggestions[0].id}>
                   {t('pricing.attention.suggestion', { id: row.suggestions[0].id })}
                 </span>
                 <Button

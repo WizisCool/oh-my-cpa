@@ -160,7 +160,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
       {caption && <span className={styles['model-caption']}>{caption}</span>}
     </span>
     <span className={styles['model-meta']}>
-      <span className={styles['model-price']} title={t('models.price_head')}>
+      <span className={styles['model-price']} data-tip={t('models.price_head')}>
         {price.status === 'priced' && <>{formatRatePer1M(price.price.prompt_price_per_1m)} / {formatRatePer1M(price.price.completion_price_per_1m)}</>}
         {price.status === 'unpriced' && (onSetPrice && ledger.pricingTargets.length > 0
           ? <button type="button" className={styles['set-price']} onClick={() => onSetPrice(entry.identity)}><StatusLabel tone="warn">{t('pricing.set_price')}</StatusLabel></button>
@@ -171,7 +171,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
             so they collapse to their marks and a count; the details list every one of them. */}
         {connections.length === 1
           ? <span className={styles['model-source']}><ProviderBrandIcon mark={connections[0]} size={14} />{connections[0].name}</span>
-          : connections.length > 1 && <span className={styles['model-source']} title={connections.map(connection => connection.name).join(' · ')}>
+          : connections.length > 1 && <span className={styles['model-source']} data-tip={connections.map(connection => connection.name).join(', ')}>
             <span className={styles['source-marks']}>
               {connections.slice(0, MAX_SOURCE_MARKS).map(connection => <ProviderBrandIcon key={connection.id} mark={connection} size={14} />)}
             </span>

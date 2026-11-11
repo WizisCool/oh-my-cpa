@@ -93,7 +93,7 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
                     className={styles['rhythm-cell']}
                     data-empty={value <= 0 || undefined}
                     style={{ '--heatmap-quiet-share': heatmapRampMix(value, max).fromShare } as React.CSSProperties}
-                    title={`${weekdayLabel(t, weekday)} ${clock(hour)}–${clock(hour + 1)} · ${formatMetric(metric, value, style)}`}
+                    data-tip={`${weekdayLabel(t, weekday)} ${clock(hour)}–${clock(hour + 1)}: ${formatMetric(metric, value, style)}`}
                   />
                 );
               })}

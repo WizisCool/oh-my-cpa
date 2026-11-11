@@ -121,7 +121,7 @@ export function ConfirmDialogHost() {
           <AlertDialogPopup
             role="dialog"
             data-slot="alert-dialog-content"
-            className="omc-dialog-surface flex w-[min(440px,calc(100vw-32px))] max-sm:w-full flex-col gap-4 rounded-xl max-sm:rounded-b-none bg-elevated p-6 max-sm:p-5 text-foreground shadow-overlay outline-none"
+            className="omc-dialog-surface flex w-[min(440px,calc(100vw-32px))] max-sm:w-full flex-col gap-4 rounded-xl max-sm:rounded-b-none bg-elevated p-6 max-sm:px-5 max-sm:pt-5 max-sm:pb-[max(20px,env(safe-area-inset-bottom))] max-sm:[&_[data-slot=button]]:min-h-10 text-foreground shadow-overlay outline-none"
           >
             <div className="flex flex-col gap-1.5">
               <AlertDialogTitle className="m-0 text-lg font-semibold leading-snug text-foreground break-words">

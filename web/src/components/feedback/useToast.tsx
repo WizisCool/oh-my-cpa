@@ -52,7 +52,7 @@ export function toastDetail(options: ToastOptions | undefined): React.ReactNode 
                         {summary.reason && readableReason(summary.reason)}
                         <span className="omc-toast-group-count">{summary.names.length}</span>
                       </div>
-                      <div className="omc-toast-item-names" title={summary.names.join('\n')}>
+                      <div className="omc-toast-item-names" data-tip={summary.names.join('\n')}>
                         {summary.names.join(', ')}
                       </div>
                     </li>

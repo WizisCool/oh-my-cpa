@@ -192,7 +192,7 @@ export function ProviderTable({
             {!isPhone && <RowContextHandle name={record.name} />}
             <div
               className={styles['provider-mark']}
-              title={t('pro.change_icon')}
+              data-tip={t('pro.change_icon')}
               role="button"
               tabIndex={0}
               aria-label={`${t('pro.change_icon')}: ${record.name}`}

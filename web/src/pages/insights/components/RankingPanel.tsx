@@ -114,7 +114,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                     className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'], isSelected && styles['ranking-row-selected'])}
                   >
                     <InsightsValue dimension={dimension} id={group.id} labels={labels} hasDetail />
-                    <span className={styles['ranking-value']} title={formatMetricExact(ranking, group.value)}>
+                    <span className={styles['ranking-value']} data-tip={formatMetricExact(ranking, group.value)}>
                       {formatMetric(ranking, group.value, style)}
                     </span>
                     <span className={styles['ranking-share']}>
@@ -133,7 +133,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                       className={styles['ranking-open']}
                       onClick={() => onOpen(group.id)}
                       aria-label={t('insights.open_detail')}
-                      title={t('insights.open_detail')}
+                      data-tip={t('insights.open_detail')}
                     >
                       <RightOutlined />
                     </button>

@@ -50,6 +50,13 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       cancelPending();
       const title = element.dataset.requestTooltip;
       if (!title || !host.contains(element)) return;
+      if (
+        element.hasAttribute('data-request-tooltip-overflow') &&
+        element.scrollWidth <= element.clientWidth + 1 &&
+        element.scrollHeight <= element.clientHeight + 1
+      ) {
+        return;
+      }
       isShowing = true;
       setTarget({ element, title, isOpen: true });
     };
@@ -126,9 +133,16 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     document.addEventListener('pointerout', handlePointerOut);
     host.addEventListener('focusin', handleFocusIn);
     host.addEventListener('focusout', handleFocusOut);
+    const handleTouchStart = (event: TouchEvent) => {
+      if (!isShowing || isInsidePopup(event.target)) return;
+      dismiss();
+    };
     document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('scroll', handleGeometryChange, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', handleGeometryChange);
+    window.addEventListener('blur', handleGeometryChange);
     window.addEventListener('resize', handleGeometryChange);
     return () => {
       cancelPending();
@@ -137,8 +151,11 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       host.removeEventListener('focusin', handleFocusIn);
       host.removeEventListener('focusout', handleFocusOut);
       document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handleTouchStart, true);
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('scroll', handleGeometryChange, true);
+      document.removeEventListener('visibilitychange', handleGeometryChange);
+      window.removeEventListener('blur', handleGeometryChange);
       window.removeEventListener('resize', handleGeometryChange);
     };
   }, [hostRef]);
@@ -180,7 +197,13 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
 
   if (failureEventId && title) {
     return (
-      <Popover open={isOpen} afterOpenChange={afterOpenChange}>
+      <Popover
+        open={isOpen}
+        onOpenChange={(next) => {
+          if (!next) setTarget((current) => (current?.isOpen ? { ...current, isOpen: false } : current));
+        }}
+        afterOpenChange={afterOpenChange}
+      >
         <PopoverContent
           anchor={target.element}
           placement="bottomLeft"

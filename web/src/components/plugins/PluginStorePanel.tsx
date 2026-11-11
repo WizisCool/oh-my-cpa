@@ -420,7 +420,7 @@ const StoreCard = React.memo(function StoreCard({ entry, isFeatured = false, isE
       <div className={styles['card-head']}>
         <PluginLogo logo={entry.logo} />
         <div className={styles['card-title']}>
-          <span className={styles['card-name']} title={metadata.name || entry.id}>{metadata.name || entry.id}</span>
+          <span className={styles['card-name']} data-tip={metadata.name || entry.id} data-tip-overflow="">{metadata.name || entry.id}</span>
           <PluginMeta
             items={[
               version && <span className={styles['meta-strong']}>{version}</span>,

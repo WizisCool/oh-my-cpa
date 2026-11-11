@@ -69,7 +69,7 @@ export const KeyDetailDrawer: React.FC<KeyDetailDrawerProps> = ({
             facts={[
               { key: 'mask', label: t('insights.col.mask'), value: labels.detail('key', keyId) ?? labels.label('key', keyId) },
               { key: 'requests', label: t('insights.metric.requests'), value: formatMetric('requests', total.requests, style) },
-              { key: 'tokens', label: t('insights.metric.tokens'), value: <span title={formatTokensFull(total.totalTokens)}>{formatTokens(total.totalTokens, style)}</span> },
+              { key: 'tokens', label: t('insights.metric.tokens'), value: <span data-tip={formatTokensFull(total.totalTokens)}>{formatTokens(total.totalTokens, style)}</span> },
               { key: 'cost', label: t('insights.metric.cost'), value: formatMetric('cost', metricValue(total, 'cost'), style) },
             ]}
           />

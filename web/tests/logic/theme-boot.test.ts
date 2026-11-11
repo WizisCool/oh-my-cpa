@@ -327,3 +327,19 @@ test('nothing encloses content with a neutral border', () => {
   }
   assert.deepEqual(enclosed, []);
 });
+
+test('no JSX intrinsic element uses a raw browser title attribute outside iframe', () => {
+  const rawTitles: string[] = [];
+  for (const file of sourceFiles(sourceRoot).filter((name) => name.endsWith('.tsx'))) {
+    const code = stripCodeComments(readFileSync(file, 'utf8'));
+    for (const match of code.matchAll(/<([a-z][a-z0-9-]*)\b((?:[^>"'\`]|"[^"]*"|'[^']*'|\`[^\`]*\`)*)>/g)) {
+      const tag = match[1];
+      const attrs = match[2] ?? '';
+      if (tag === 'iframe') continue;
+      if (/(?:^|\s)title\s*=/.test(attrs)) {
+        rawTitles.push(`${path.relative(sourceRoot, file)}: <${tag} title=...>`);
+      }
+    }
+  }
+  assert.deepEqual(rawTitles, []);
+});

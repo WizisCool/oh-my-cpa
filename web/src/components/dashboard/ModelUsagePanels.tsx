@@ -209,7 +209,7 @@ const ModelSeriesName: React.FC<{
 }> = ({ group, foldedLabel, unnamedLabel }) => {
   const label = groupLabel(group, foldedLabel, unnamedLabel);
   return (
-    <span className="model-series-name" title={label}>
+    <span className="model-series-name" data-tip={label} data-tip-overflow="">
       {!group.folded && <ModelMark model={group.model} size={16} className="model-series-mark" />}
       <span className="model-series-text">{label}</span>
     </span>
@@ -310,7 +310,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = React.memo(funct
                       className={clsx('model-usage-name-button', selectionStyles['selection-control'])}
                       aria-pressed={focusedKey === seriesDomainKey(group)}
                       data-dimmed={focusedKey !== null && focusedKey !== seriesDomainKey(group)}
-                      title={t(focusedKey === seriesDomainKey(group) ? 'dash.models.clear_series_focus' : 'dash.models.focus_series')}
+                      data-tip={t(focusedKey === seriesDomainKey(group) ? 'dash.models.clear_series_focus' : 'dash.models.focus_series')}
                       onClick={() => toggleSeries(seriesDomainKey(group))}
                     >
                       <ModelSeriesName group={group} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} />
@@ -326,7 +326,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = React.memo(funct
                     className="model-usage-tokens"
                     // The exact count lives in the accessible name: the compact cell is for scanning,
                     // and the rounding it applies must never be mistaken for the number itself.
-                    title={`${formatTokensFull(group.tokens)} ${t('dash.unit_tokens')}`}
+                    data-tip={`${formatTokensFull(group.tokens)} ${t('dash.unit_tokens')}`}
                   >
                     {formatModelTokens(group.tokens, tokenStyle)}
                   </span>

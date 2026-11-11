@@ -236,7 +236,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                       }
                     }}
                     className={styles['tile']}
-                    title={`${item.fullTitle} (${item.id})`}
+                    data-tip={`${item.fullTitle} (${item.id})`}
                   >
                     {visibleIconIds.has(item.id) ? (
                       <LobeIcon iconId={item.id} size={28} loading="lazy" />
