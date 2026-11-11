@@ -706,6 +706,13 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	if costNanos != 5_000_000_000 {
 		t.Fatalf("cost lost on fold: got %d, want 5000000000", costNanos)
 	}
+
+	// A calendar day whose midnight sits a quarter past a grid line, read minutes after
+	// midnight, reaches no grid line yet: its traffic still needs a point to plot.
+	early := fillDashboardBuckets(bucket*20+bucket/4, bucket*20+bucket/2, bucket, buckets[1:], costs[1:])
+	if len(early) != 1 || early[0].TimeMS != bucket*20+bucket/4 || early[0].Requests != 5 || early[0].CostNanos != 3_000_000_000 {
+		t.Fatalf("a window before its first grid line lost its traffic: %+v", early)
+	}
 }
 
 // TestDashboardSeriesCarriesPerBucketCacheAndCost pins the properties the four

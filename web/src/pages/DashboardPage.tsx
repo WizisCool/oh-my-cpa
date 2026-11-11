@@ -212,7 +212,9 @@ export const DashboardPage: React.FC = () => {
     {
       enabled: rangeReady,
       refetchInterval: false,
-      refetchOnWindowFocus: sliding,
+      // A closed calendar unit is still the server's to move: yesterday is another day once
+      // midnight passes, so it is read again on return like a sliding window.
+      refetchOnWindowFocus: sliding || isCalendarPreset(range.preset),
     },
   );
 
@@ -245,7 +247,11 @@ export const DashboardPage: React.FC = () => {
 
   const merged = React.useMemo(() => (full ? applyTail(full, tailQuery.data) : undefined), [full, tailQuery.data]);
   const data = merged?.data;
-  latestWindowRef.current = data?.window;
+  // Written once the window commits, so a drill-down never reads one from an abandoned render.
+  const committedWindow = data?.window;
+  React.useLayoutEffect(() => {
+    latestWindowRef.current = committedWindow;
+  }, [committedWindow]);
   // A calendar day is a window only the server resolves: until it has answered for this range,
   // the request list has no bounds to open on.
   const canDrillDown = !isCalendarPreset(range.preset) || (Boolean(data) && !isPlaceholderData);

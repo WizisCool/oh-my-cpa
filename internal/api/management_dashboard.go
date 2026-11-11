@@ -789,7 +789,10 @@ func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.Usa
 		points = append(points, dashboardSeriesPoint{TimeMS: at})
 	}
 	if len(points) == 0 {
-		return points
+		// A window shorter than the stretch to its first grid line - a calendar day whose
+		// midnight falls between grid lines, minutes after midnight - still has traffic to
+		// show: it gets one point at its start, and everything folds into it.
+		points = append(points, dashboardSeriesPoint{TimeMS: fromMS})
 	}
 	index := make(map[int64]int, len(points))
 	for position, point := range points {
