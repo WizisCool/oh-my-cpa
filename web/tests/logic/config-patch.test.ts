@@ -8,6 +8,7 @@ import { parseDocument } from 'yaml';
 
 import { getFieldSemanticValue, updateFieldWithBaseline } from '../../src/components/config/configDirty.ts';
 import { computeConfigChanges, rebaseDraft } from '../../src/components/config/configPatch.ts';
+import { rebaseStringMapDraft, stringMapRowsToWire } from '../../src/components/config/StringMapEditor.tsx';
 import { writePayloadCategory } from '../../src/components/config/payloadRules.ts';
 import { ALL_CONFIG_FIELDS, CONFIG_GROUPS, type ConfigFieldDefinition } from '../../src/types/configSchema.ts';
 
@@ -713,5 +714,211 @@ test('explicitly configured false for Claude Codex commentary is preserved again
   const reloaded = parseDocument(draft.toString());
   assert.equal(getFieldSemanticValue(reloaded, commentaryField), false);
   assert.equal(reloaded.getIn(['client', 'claude', 'show-codex-commentary']), false);
+});
+
+test('Claude server-side fallback sits beside tool-search, defaults to false, and writes only canonical upstream.claude', () => {
+  const fallbackField = field('claudeServerSideFallback');
+  assert.equal(fallbackField.type, 'switch');
+  assert.equal(fallbackField.legacyYamlPath, undefined);
+  const claudeGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_claude_behavior');
+  assert.ok(claudeGroup);
+  assert.equal(
+    claudeGroup.fieldIds.indexOf('claudeServerSideFallback'),
+    claudeGroup.fieldIds.indexOf('claudeToolSearch') + 1,
+  );
+
+  const server = parseDocument(CLAUDE_SESSION_YAML);
+  assert.equal(getFieldSemanticValue(server, fallbackField), false);
+
+  const draft = parseDocument(CLAUDE_SESSION_YAML);
+  updateFieldWithBaseline(draft, server, fallbackField, false);
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+  assert.equal(draft.toString(), server.toString());
+
+  updateFieldWithBaseline(draft, server, fallbackField, true);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['upstream', 'claude', 'server-side-fallback'], value: true },
+  ]);
+  assert.equal(draft.getIn(['upstream', 'claude', 'tool-search']), false);
+
+  const readback = parseDocument(draft.toString());
+  assert.equal(getFieldSemanticValue(readback, fallbackField), true);
+
+  // Explicit false overrides an enabled server value; reverting restores server bytes.
+  const disabledDraft = readback.clone();
+  updateFieldWithBaseline(disabledDraft, readback, fallbackField, false);
+  assert.deepEqual(computeConfigChanges(readback, disabledDraft), [
+    { path: ['upstream', 'claude', 'server-side-fallback'], value: false },
+  ]);
+
+  updateFieldWithBaseline(draft, server, fallbackField, false);
+  assert.equal(draft.toString(), server.toString());
+});
+
+for (const setting of [
+  {
+    id: 'antigravitySensitiveWordsReplace',
+    siblingId: 'antigravitySensitiveWords',
+    groupId: 'grp_antigravity_behavior',
+    path: ['oauth', 'providers', 'antigravity', 'sensitive-words-replace'],
+    yaml: `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-words: [claude]
+            sensitive-words-replace:
+                old/phrase: masked # retained comment
+`,
+    initial: { 'old/phrase': 'masked' },
+    // Slash, dot, interior space, and empty-string deletion must travel inside one map replacement,
+    // never as child configuration path segments.
+    edited: { 'api/v1.internal': 'public', 'Claude Code': '' },
+  },
+  {
+    id: 'devinSensitiveWordsReplace',
+    siblingId: 'devinSensitiveWords',
+    groupId: 'grp_other_providers',
+    path: ['oauth', 'providers', 'devin', 'sensitive-words-replace'],
+    yaml: `${SERVER_YAML}oauth:
+    providers:
+        devin:
+            sensitive-words: [secret-line]
+            sensitive-words-replace:
+                Devin internal: ""
+`,
+    initial: { 'Devin internal': '' },
+    edited: { 'Devin internal': 'Assistant', 'drop\\phrase': '' },
+  },
+]) {
+  test(`${setting.id} replaces and clears a phrase map atomically without splitting keys into path segments`, () => {
+    const mapField = field(setting.id);
+    assert.equal(mapField.type, 'string_map');
+    const group = CONFIG_GROUPS.find((item) => item.id === setting.groupId);
+    assert.ok(group);
+    assert.equal(
+      group.fieldIds.indexOf(setting.id),
+      group.fieldIds.indexOf(setting.siblingId) + 1,
+    );
+
+    const server = parseDocument(setting.yaml);
+    const draft = server.clone();
+    assert.deepEqual(getFieldSemanticValue(server, mapField), setting.initial);
+    assert.deepEqual(computeConfigChanges(server, draft), []);
+
+    updateFieldWithBaseline(draft, server, mapField, setting.edited);
+    assert.deepEqual(computeConfigChanges(server, draft), [
+      { path: setting.path, value: setting.edited },
+    ]);
+    const readback = parseDocument(draft.toString());
+    assert.deepEqual(getFieldSemanticValue(readback, mapField), setting.edited);
+
+    const cleared = readback.clone();
+    updateFieldWithBaseline(cleared, readback, mapField, {});
+    assert.deepEqual(computeConfigChanges(readback, cleared), [
+      { path: setting.path, remove: true },
+    ]);
+
+    const absent = parseDocument(cleared.toString());
+    const empty = absent.clone();
+    updateFieldWithBaseline(empty, absent, mapField, {});
+    assert.deepEqual(computeConfigChanges(absent, empty), []);
+    updateFieldWithBaseline(empty, absent, mapField, setting.edited);
+    assert.deepEqual(computeConfigChanges(absent, empty), [
+      { path: setting.path, value: setting.edited },
+    ]);
+
+    updateFieldWithBaseline(draft, server, mapField, setting.initial);
+    assert.equal(draft.toString(), server.toString());
+  });
+}
+
+test('rebasing a sensitive-words-replace edit preserves concurrent additions while applying draft edits and removals', () => {
+  const mapField = field('antigravitySensitiveWordsReplace');
+  const base = parseDocument(SERVER_YAML);
+  const draft = parseDocument(SERVER_YAML);
+  updateFieldWithBaseline(draft, base, mapField, { 'Claude Code': '' });
+
+  const newer = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-words: [claude]
+            sensitive-words-replace:
+                concurrent: kept
+`;
+  const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
+  assert.deepEqual(rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words'])?.toJSON(), ['claude']);
+  assert.deepEqual(getFieldSemanticValue(rebased, mapField), { concurrent: 'kept', 'Claude Code': '' });
+
+  const existingYaml = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-words-replace:
+                old: one
+                drop: bye
+`;
+  const existingBase = parseDocument(existingYaml);
+  const existingDraft = existingBase.clone();
+  updateFieldWithBaseline(existingDraft, existingBase, mapField, { old: 'two', added: '' });
+  const refreshedYaml = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-words-replace:
+                old: one
+                drop: bye
+                concurrent: three
+`;
+  const rebasedExisting = parseDocument(rebaseDraft(existingBase, existingDraft, refreshedYaml) ?? '');
+  assert.deepEqual(getFieldSemanticValue(rebasedExisting, mapField), {
+    old: 'two',
+    concurrent: 'three',
+    added: '',
+  });
+  assert.deepEqual(computeConfigChanges(parseDocument(refreshedYaml), rebasedExisting), [
+    {
+      path: ['oauth', 'providers', 'antigravity', 'sensitive-words-replace'],
+      value: { old: 'two', concurrent: 'three', added: '' },
+    },
+  ]);
+});
+
+test('stringMapRowsToWire trims target keys, keeps empty deletion values and __proto__ keys, and ignores blank draft rows', () => {
+  const wire = stringMapRowsToWire([
+    { key: '  Claude Code  ', value: '' },
+    { key: '   ', value: '' },
+    { key: 'target', value: '  literal  ' },
+    { key: '__proto__', value: 'safe' },
+  ]);
+  assert.equal(Object.prototype.hasOwnProperty.call(wire, '__proto__'), true);
+  assert.equal(wire['__proto__'], 'safe');
+  assert.deepEqual(Object.entries(wire), [
+    ['Claude Code', ''],
+    ['target', '  literal  '],
+    ['__proto__', 'safe'],
+  ]);
+});
+
+test('rebaseStringMapDraft carries concurrent baseline entries into retained invalid rows while preserving unique row IDs', () => {
+  const rebased = rebaseStringMapDraft(
+    {
+      rows: [
+        // Pretend an earlier refresh allocated `smap_sync_concurrent`, which the operator then renamed to `b`.
+        { id: 'smap_sync_concurrent', key: 'b', value: 'renamed' },
+        { id: 'row-invalid', key: '', value: 'two' },
+      ],
+      baseWire: {},
+    },
+    { concurrent: 'kept' },
+  );
+  assert.equal(rebased.rows[0]?.id, 'smap_sync_concurrent');
+  assert.equal(rebased.rows[1]?.id, 'row-invalid');
+  assert.notEqual(rebased.rows[2]?.id, 'smap_sync_concurrent');
+  assert.notEqual(rebased.rows[2]?.id, 'row-invalid');
+  assert.deepEqual(
+    rebased.rows.map(({ key, value }) => ({ key, value })),
+    [
+      { key: 'b', value: 'renamed' },
+      { key: '', value: 'two' },
+      { key: 'concurrent', value: 'kept' },
+    ],
+  );
 });
 

@@ -12,6 +12,7 @@ import { describeConfigSaveError } from './configSaveErrors';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } from '../../types/configSchema';
 import type { ConfigScalarsResponse } from '../../types/configManagement';
 import type { PayloadValidationIssue } from './payloadRules';
+import { formatStringMapIssue, type StringMapDraftState, type StringMapValidationIssue } from './StringMapEditor';
 import type { YamlSourceEditorRef } from './YamlSourceEditor';
 import { useToast } from '../feedback';
 
@@ -57,13 +58,45 @@ export function useConfigDraft() {
   const [serverYaml, setServerYaml] = React.useState<string>('');
   const [serverRevision, setServerRevision] = React.useState<string>('');
   const [conflictState, setConflictState] = React.useState<{ currentRevision: string } | null>(null);
+  const [stringMapDrafts, setStringMapDrafts] = React.useState<Record<string, StringMapDraftState>>({});
+  const [stringMapIssues, setStringMapIssues] = React.useState<Record<string, StringMapValidationIssue>>({});
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
   const rawYamlRef = React.useRef('');
   const serverYamlRef = React.useRef('');
+  const stringMapIssuesRef = React.useRef(stringMapIssues);
+  stringMapIssuesRef.current = stringMapIssues;
   /** Guards against a second save starting before isPending propagates. */
   const saveInFlightRef = React.useRef(false);
+
+  const setStringMapDraft = React.useCallback((fieldId: string, state: StringMapDraftState | null) => {
+    setStringMapDrafts((prev) => {
+      if (state === null) {
+        if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return prev;
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      }
+      return { ...prev, [fieldId]: state };
+    });
+  }, []);
+
+  const setStringMapIssue = React.useCallback((fieldId: string, issue: StringMapValidationIssue | null) => {
+    setStringMapIssues((prev) => {
+      if (issue === null) {
+        if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return prev;
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      }
+      const existing = prev[fieldId];
+      if (existing && existing.kind === issue.kind && (existing.kind !== 'duplicate_key' || existing.key === (issue as { key: string }).key)) {
+        return prev;
+      }
+      return { ...prev, [fieldId]: issue };
+    });
+  }, []);
 
   const viewModeRef = React.useRef(viewMode);
   viewModeRef.current = viewMode;
@@ -97,6 +130,8 @@ export function useConfigDraft() {
         // A malformed document is expected here: the previous baseline stays in place.
       }
       if (!hasLocalEdits) {
+        setStringMapDrafts({});
+        setStringMapIssues({});
         replaceDraft(yaml);
         return;
       }
@@ -118,7 +153,7 @@ export function useConfigDraft() {
       configQuery.data.safe_yaml,
       configQuery.data.revision || '',
       serverDocRef.current,
-      rawYamlRef.current !== serverYamlRef.current,
+      rawYamlRef.current !== serverYamlRef.current || Object.keys(stringMapIssuesRef.current).length > 0,
     );
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode, adoptBaseline]);
 
@@ -127,7 +162,13 @@ export function useConfigDraft() {
   rawYamlRef.current = rawYaml;
   serverYamlRef.current = serverYaml;
 
-  const isDirty = rawYaml !== serverYaml;
+  const hasStringMapIssues = Object.keys(stringMapIssues).length > 0;
+  const firstStringMapErrorMessage = React.useMemo(() => {
+    const first = Object.values(stringMapIssues)[0];
+    return first ? formatStringMapIssue(first, t) : undefined;
+  }, [stringMapIssues, t]);
+
+  const isDirty = rawYaml !== serverYaml || hasStringMapIssues;
 
   const updateFieldInDoc = React.useCallback(
     (field: ConfigFieldDefinition, value: unknown) => {
@@ -192,7 +233,7 @@ export function useConfigDraft() {
       toast.success(t('cfg.source_save_success'));
       // The operator may have kept typing while the save was in flight: those
       // newer edits are carried over onto what was saved.
-      const hasNewerDraft = rawYamlRef.current !== variables.yamlToSave;
+      const hasNewerDraft = rawYamlRef.current !== variables.yamlToSave || Object.keys(stringMapIssuesRef.current).length > 0;
       let savedDraft: Document | null = null;
       try {
         savedDraft = parseDocument(variables.yamlToSave);
@@ -213,6 +254,10 @@ export function useConfigDraft() {
         }
       }
       setPayloadIssues([]);
+      if (!hasNewerDraft) {
+        setStringMapDrafts({});
+        setStringMapIssues({});
+      }
       setShowErrorFeedback(false);
       setValidateTrigger(0);
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
@@ -241,6 +286,8 @@ export function useConfigDraft() {
       // A malformed document is expected here: the previous baseline stays in place.
     }
     setPayloadIssues([]);
+    setStringMapDrafts({});
+    setStringMapIssues({});
     setShowErrorFeedback(false);
     setValidateTrigger(0);
   }, [serverYaml]);
@@ -256,7 +303,7 @@ export function useConfigDraft() {
     }
   }, [rawYaml]);
 
-  const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0;
+  const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0 || hasStringMapIssues;
 
   /**
    * saveConfig is the single save path for the whole page.
@@ -287,6 +334,11 @@ export function useConfigDraft() {
       toast.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
       return Promise.resolve();
     }
+    if (firstStringMapErrorMessage) {
+      setShowErrorFeedback(true);
+      toast.warning(firstStringMapErrorMessage);
+      return Promise.resolve();
+    }
     saveInFlightRef.current = true;
     // The promise is returned so a Popconfirm can hold its own loading state, and
     // it is settled here rather than left to the caller: a keyboard handler has
@@ -302,6 +354,7 @@ export function useConfigDraft() {
     saveMutation,
     hasYamlErrors,
     payloadIssues.length,
+    firstStringMapErrorMessage,
     configQuery.isError,
     rawYaml,
     serverRevision,
@@ -316,7 +369,7 @@ export function useConfigDraft() {
    */
   const requestSaveConfirmation = React.useCallback(() => {
     if (!isDirty || saveMutation.isPending) return;
-    if (hasYamlErrors || payloadIssues.length > 0 || configQuery.isError) {
+    if (hasYamlErrors || payloadIssues.length > 0 || hasStringMapIssues || configQuery.isError) {
       saveConfig();
       return;
     }
@@ -331,7 +384,7 @@ export function useConfigDraft() {
         return saveConfig();
       },
     });
-  }, [configQuery.isError, hasYamlErrors, isDirty, modal, payloadIssues.length, saveMutation.isPending, saveConfig, t]);
+  }, [configQuery.isError, hasStringMapIssues, hasYamlErrors, isDirty, modal, payloadIssues.length, saveMutation.isPending, saveConfig, t]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -355,7 +408,7 @@ export function useConfigDraft() {
   const confirmDiscardDraft = React.useCallback(
     () =>
       new Promise<boolean>((resolve) => {
-        if (!(rawYamlRef.current !== serverYamlRef.current)) {
+        if (!(rawYamlRef.current !== serverYamlRef.current || Object.keys(stringMapIssuesRef.current).length > 0)) {
           resolve(true);
           return;
         }
@@ -383,6 +436,8 @@ export function useConfigDraft() {
         setRawYaml(src.yaml);
         setServerYaml(src.yaml);
         setServerRevision(src.revision);
+        setStringMapDrafts({});
+        setStringMapIssues({});
         try {
           docRef.current = parseDocument(src.yaml);
           serverDocRef.current = parseDocument(src.yaml);
@@ -465,6 +520,11 @@ export function useConfigDraft() {
     handleDiscardChanges,
     payloadIssues,
     setPayloadIssues,
+    stringMapDrafts,
+    setStringMapDraft,
+    stringMapIssues,
+    setStringMapIssue,
+    firstStringMapErrorMessage,
     hasYamlErrors,
     hasConfigErrors,
     saveConfig,

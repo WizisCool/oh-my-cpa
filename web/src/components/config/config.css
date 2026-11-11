@@ -677,6 +677,51 @@
   gap: 8px;
   align-items: center;
 }
+.string-map-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
+  gap: 8px;
+}
+.string-map-editor.has-rows {
+  align-items: stretch;
+}
+.string-map-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.string-map-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+.string-map-arrow {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1;
+  user-select: none;
+}
+.string-map-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.string-map-error {
+  font-size: var(--text-xs);
+  color: var(--danger);
+  line-height: 1.4;
+}
+@media (max-width: 640px) {
+  .string-map-editor {
+    align-items: flex-start;
+  }
+}
 @media (max-width: 640px) {
   .config-dirty-bar-portal {
     inset-inline-start: 0;

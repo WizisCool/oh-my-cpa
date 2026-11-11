@@ -11,6 +11,7 @@ export interface ConfigDirtyBarProps {
   isSaving: boolean;
   yamlError?: boolean;
   payloadIssuesCount?: number;
+  validationError?: string;
   showErrorFeedback?: boolean;
   onSave: () => void;
   onDiscard: () => void;
@@ -37,6 +38,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
   isSaving,
   yamlError = false,
   payloadIssuesCount = 0,
+  validationError,
   showErrorFeedback = false,
   onSave,
   onDiscard,
@@ -77,12 +79,14 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
 
   if (!isDirty) return null;
 
-  const hasErrors = yamlError || payloadIssuesCount > 0;
+  const hasErrors = yamlError || payloadIssuesCount > 0 || Boolean(validationError);
 
   const errorReason = yamlError
     ? t('cfg.dirty_bar_yaml_error')
     : showErrorFeedback && payloadIssuesCount > 0
     ? t('cfg.dirty_bar_payload_issues', { n: payloadIssuesCount })
+    : showErrorFeedback && validationError
+    ? validationError
     : undefined;
 
   const content = (
