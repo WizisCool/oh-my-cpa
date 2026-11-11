@@ -1,0 +1,104 @@
+.request-virtual-root {
+  position: relative;
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.request-list {
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  position: relative;
+  /* Hide the native scrollbar so the header and rows share the exact same inline width
+     across platforms; the overlay thumb below provides position and drag control. */
+  scrollbar-width: none !important;
+}
+
+.request-list::-webkit-scrollbar {
+  display: none !important;
+}
+
+.request-list-spacer,
+.request-group-body {
+  position: relative;
+  width: 100%;
+}
+
+.request-list-item-virtual {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.request-group-section {
+  position: relative;
+}
+
+.request-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.request-list.is-native-scroll .request-list-item:not(.request-list-item-virtual) {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 96px;
+}
+
+.request-scroll-track {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  inset-inline-end: 2px;
+  width: 6px;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity var(--motion-base) var(--ease-standard);
+}
+
+.request-scroll-track[hidden] {
+  display: none;
+}
+
+.request-virtual-root:hover > .request-scroll-track,
+.request-virtual-root:focus-within > .request-scroll-track,
+.request-virtual-root[data-scrolling] > .request-scroll-track,
+.request-virtual-root[data-dragging] > .request-scroll-track {
+  opacity: 1;
+}
+
+.request-scroll-thumb {
+  width: 100%;
+  min-height: 24px;
+  border-radius: 999px;
+  background: var(--rc-virtual-list-scrollbar-bg, color-mix(in srgb, var(--fg) 18%, transparent));
+  transition: background-color var(--motion-fast) var(--ease-standard);
+  will-change: transform;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.request-scroll-thumb:hover,
+.request-virtual-root[data-dragging] .request-scroll-thumb {
+  background: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+@media (hover: none) {
+  .request-scroll-track {
+    pointer-events: none;
+  }
+}
+
+:root[data-reduced-motion='true'] .request-scroll-track,
+:root[data-reduced-motion='true'] .request-scroll-thumb {
+  transition: none;
+}

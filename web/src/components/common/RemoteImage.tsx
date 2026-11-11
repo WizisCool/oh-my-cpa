@@ -30,6 +30,23 @@ export function RemoteImage(props: RemoteImageProps) {
   return <FetchedMark key={props.src} {...props} />;
 }
 
+const MAX_SETTLED_SOURCES = 512;
+const settledSources = new Set<string>();
+
+/** Clears session-cached mark URLs so non-isolated test runs start from a clean slate. */
+export function resetSettledRemoteSources(): void {
+  settledSources.clear();
+}
+
+function rememberSettledSource(src: string): void {
+  if (settledSources.has(src)) return;
+  if (settledSources.size >= MAX_SETTLED_SOURCES) {
+    const oldest = settledSources.values().next().value;
+    if (oldest !== undefined) settledSources.delete(oldest);
+  }
+  settledSources.add(src);
+}
+
 /** Inline bytes (`data:`, `blob:`) are read from memory rather than fetched over a link. */
 function isInline(src: string): boolean {
   return /^(?:data|blob):/i.test(src);
@@ -37,7 +54,7 @@ function isInline(src: string): boolean {
 
 function FetchedMark({ src, size, isMasked = false, className, style, loading = 'eager', onError }: RemoteImageProps) {
   const isFetched = !isInline(src);
-  const [isReady, setIsReady] = React.useState(() => !isFetched);
+  const [isReady, setIsReady] = React.useState(() => !isFetched || settledSources.has(src));
   const image = React.useRef<HTMLImageElement>(null);
   // The probe outlives a re-render: a caller's fresh handler is what it reports to, not a stale one.
   const reportedError = React.useRef(onError);
@@ -46,49 +63,62 @@ function FetchedMark({ src, size, isMasked = false, className, style, loading = 
   }, [onError]);
 
   // A cached source is complete before the first paint, so it is drawn without ever showing the
-  // placeholder. A failed one releases its box here too, but a source cached as broken may not
-  // repeat its error event on a new element, so the browser's own decode outcome is what tells the
-  // caller to offer its next candidate. Only a mark that reports no dimensions is asked: a valid
-  // SVG may report none in some engines, and decoding it still succeeds.
+  // placeholder. Once proven ready in this session, recycled virtual-list rows render it in a
+  // single pass without mounting a placeholder or forcing a second layout-effect commit.
   React.useLayoutEffect(() => {
     const mark = image.current;
     if (!mark?.complete) return undefined;
     setIsReady(true);
-    if (mark.naturalWidth > 0) return undefined;
+    if (mark.naturalWidth > 0) {
+      rememberSettledSource(src);
+      return undefined;
+    }
     let isCurrent = true;
-    mark.decode().catch(() => {
-      if (isCurrent) reportedError.current?.();
-    });
+    mark.decode().then(
+      () => {
+        if (isCurrent) rememberSettledSource(src);
+      },
+      () => {
+        settledSources.delete(src);
+        if (isCurrent) reportedError.current?.();
+      },
+    );
     return () => {
       isCurrent = false;
     };
   }, [src]);
 
-  // A mask is fetched by CSS, which reports nothing back; the probe is what the box can wait on.
+  // A mask is fetched by CSS, which reports nothing back; the probe is what the box can wait on,
+  // and stays active even for previously settled URLs (without resetting readiness) so a source
+  // that starts failing mid-session still reaches `onError` and falls back.
   React.useLayoutEffect(() => {
     if (!isMasked || !isFetched) return undefined;
     const probe = new Image();
     // The probe speaks for the same rule as the drawn mark: no console address reaches a source
     // that was merely asked to render.
     probe.referrerPolicy = 'no-referrer';
-    const settle = () => setIsReady(true);
+    const settle = () => {
+      rememberSettledSource(src);
+      setIsReady(true);
+    };
     probe.onload = settle;
     probe.onerror = () => {
+      settledSources.delete(src);
       setIsReady(true);
       reportedError.current?.();
     };
     probe.src = src;
-    // A mask already in the browser's cache is complete the moment the probe asks for it, so it is
-    // drawn without the placeholder the first pass would otherwise show. A failed cached source has
-    // no dimensions and stays pending until its error is reported below.
-    if (probe.complete && probe.naturalWidth > 0) setIsReady(true);
+    if (probe.complete && probe.naturalWidth > 0) settle();
     return () => {
       probe.onload = null;
       probe.onerror = null;
     };
   }, [src, isFetched, isMasked]);
 
-  const reveal = () => setIsReady(true);
+  const reveal = () => {
+    rememberSettledSource(src);
+    setIsReady(true);
+  };
   return (
     <span
       className={[styles.frame, className].filter(Boolean).join(' ')}
@@ -120,6 +150,7 @@ function FetchedMark({ src, size, isMasked = false, className, style, loading = 
           referrerPolicy="no-referrer"
           onLoad={reveal}
           onError={() => {
+            settledSources.delete(src);
             setIsReady(true);
             onError?.();
           }}

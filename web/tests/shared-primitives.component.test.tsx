@@ -523,6 +523,61 @@ describe('RemoteImage', () => {
     expect(container.querySelector('.placeholder')).toBeNull();
   });
 
+  it('mounts a previously settled remote source in a single pass without flashing a placeholder', () => {
+    const settledUrl = 'https://cdn.example/settled-provider-mark.png';
+    const first = render(<RemoteImage src={settledUrl} size={20} />);
+    expect(first.container.querySelector('[data-remote-image="loading"]')).not.toBeNull();
+    fireEvent.load(first.container.querySelector('img')!);
+    expect(first.container.querySelector('[data-remote-image="loaded"]')).not.toBeNull();
+    first.unmount();
+
+    const second = render(<RemoteImage src={settledUrl} size={20} />);
+    expect(second.container.querySelector('[data-remote-image="loaded"]')).not.toBeNull();
+    expect(second.container.querySelector('.placeholder')).toBeNull();
+  });
+
+  it('keeps probing a settled masked source so mid-session failures still fall back', () => {
+    const probes: HTMLImageElement[] = [];
+    const NativeImage = window.Image;
+    vi.spyOn(window, 'Image').mockImplementation(function MockImage() {
+      const img = new NativeImage();
+      probes.push(img);
+      return img;
+    } as unknown as typeof Image);
+
+    const maskedUrl = 'https://cdn.example/masked-plugin.svg';
+    const first = render(
+      <MarkArtwork
+        artworks={[{ url: maskedUrl, isMono: true }]}
+        size={20}
+        fallback={<span data-fallback="" />}
+      />,
+    );
+    expect(first.container.querySelector('[data-remote-image="loading"]')).not.toBeNull();
+    act(() => {
+      probes[0].onload?.(new Event('load'));
+    });
+    expect(first.container.querySelector('[data-remote-image="loaded"]')).not.toBeNull();
+    first.unmount();
+
+    // Second mount starts ready immediately without flashing a placeholder, yet still probes.
+    const second = render(
+      <MarkArtwork
+        artworks={[{ url: maskedUrl, isMono: true }]}
+        size={20}
+        fallback={<span data-fallback="" />}
+      />,
+    );
+    expect(second.container.querySelector('[data-remote-image="loaded"]')).not.toBeNull();
+    expect(second.container.querySelector('.placeholder')).toBeNull();
+    expect(probes).toHaveLength(2);
+
+    act(() => {
+      probes[1].onerror?.(new Event('error'));
+    });
+    expect(second.container.querySelector('[data-fallback]')).not.toBeNull();
+  });
+
   it('hands a failed source back, so the next candidate and then the fallback draw', () => {
     const { container } = render(
       <MarkArtwork

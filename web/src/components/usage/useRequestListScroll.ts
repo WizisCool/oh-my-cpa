@@ -1,18 +1,15 @@
 import React from 'react';
 
-import type { ListyRef } from 'antd';
-
 import type { UsageEvent } from '../../types/usageEvents';
 import { consumeWheel } from '../../utils/scrollSmoothing';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../../utils/smoothScroll';
+import type { RequestListHandle } from './RequestVirtualList';
 import { pendingArrivalCount } from './pollingPolicy';
 import { createViewFlag } from './viewFlag';
 
 /**
  * A device a finger can scroll. There the list is an ordinary overflowing element the browser
- * scrolls itself, with the platform's own tracking and momentum: a virtualized list
- * clips its overflow, so every finger move had to be redrawn by script, which trailed the finger
- * and dropped frames however it was tuned.
+ * scrolls itself, with the platform's own tracking and momentum.
  */
 const TOUCH_SCROLL_QUERY = '(any-pointer: coarse)';
 
@@ -37,6 +34,12 @@ const FOLLOW_TOP_PX = 4;
  */
 const HOLD_FROM_PX = 60;
 
+/** Minimum overflow required before touch scroll auto-folds the header, avoiding short-list clamping. */
+const AUTO_COLLAPSE_MIN_OVERFLOW_PX = 140;
+
+/** Downward pull distance at row 1 required to restore the folded header on touch screens. */
+const TOUCH_RESTORE_PULL_PX = 28;
+
 /**
  * Upper bound on how long an animated return to the top may hold the collapse
  * state. A smooth scroll to the top is a few hundred milliseconds; this is long
@@ -45,14 +48,12 @@ const HOLD_FROM_PX = 60;
  */
 const BACK_TO_TOP_GUARD_MS = 1_200;
 
+/** Cap animated return runway so returning from deep history never mounts hundreds of transient rows. */
+const MAX_BACK_TO_TOP_RUNWAY_PX = 960;
+
 /**
  * The request list's scroll behaviour: following the live edge, holding the rows
  * the reader is reading, the header's collapse gestures and the return to the top.
- *
- * Scroll and the live edge are one hook because they are one mechanism: the
- * scroll position is what decides whether the list follows or holds, and the
- * return-to-top gesture is what resumes it. The hold also feeds the list query,
- * which is why this runs before it.
  */
 export function useRequestListScroll({
   viewScope,
@@ -61,59 +62,49 @@ export function useRequestListScroll({
   viewScope: string;
   cursor: string | undefined;
 }) {
-
-  /**
-   * The rows the reader is holding while scrolled away, or null when following.
-   *
-   * Declared here rather than beside the live-tail logic below because the list
-   * query depends on it: while holding, the request carries the newest visible
-   * request time so the server can report how much has arrived since. See the
-   * live-tail section for what holding means.
-   */
-  const [heldItems, setHeldItems] = React.useState<UsageEvent[] | null>(null);
-  // The arrival count is anchored to the row id the reader held when Hold began.
-  // Keeping it separate from the rendered rows prevents a poll that carries the
-  // new row from moving the boundary forward and hiding the count it should show.
+  const scopeKey = `${viewScope}:${cursor ?? ''}`;
+  const heldScopeRef = React.useRef(scopeKey);
+  const heldItemsRef = React.useRef<UsageEvent[] | null>(null);
   const heldBoundaryIDRef = React.useRef<number | undefined>(undefined);
+  const fetchedBoundaryIDRef = React.useRef<number | undefined>(undefined);
+  const latestItemsRef = React.useRef<UsageEvent[]>([]);
+  // Only bumped when releasing a hold that actually buffered newer server rows,
+  // so ordinary scrolling across HOLD_FROM_PX / FOLLOW_TOP_PX never re-renders
+  // UsageEventsPage or triggers a redundant HTTP request.
+  const [, bumpHoldRevision] = React.useState(0);
 
-  // Full-height scroll-down expansion & top-bounce expand mode & back-to-top
+  if (heldScopeRef.current !== scopeKey) {
+    heldScopeRef.current = scopeKey;
+    heldItemsRef.current = null;
+    heldBoundaryIDRef.current = undefined;
+    fetchedBoundaryIDRef.current = undefined;
+  }
+
   const pageRef = React.useRef<HTMLDivElement>(null);
-  const listRef = React.useRef<ListyRef>(null);
-  // Flags rather than state: both flip on scroll gestures, and neither may cost
-  // a render of the page that owns the list. See `viewFlag.ts`.
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const listRef = React.useRef<RequestListHandle>(null);
   const [collapse] = React.useState(() => createViewFlag());
   const [scrolledDown] = React.useState(() => createViewFlag());
-  /**
-   * The reader's scroll position, captured from the list's own scroll events.
-   *
-   * A gesture animates from here, and the value has to come from the element that
-   * actually scrolls: the virtualizer nests the rows in an inner holder, so the
-   * host node's own `scrollTop` is always zero and animating from it would move
-   * nothing.
-   */
   const lastScrollTopRef = React.useRef(0);
-  /** The in-flight return-to-top animation, so a second gesture replaces it. */
   const scrollAnimationRef = React.useRef<ScrollAnimationHandle | null>(null);
-  /**
-   * The browser scrolls the list natively. The header then never folds on its own: a fold resizes
-   * the list under a moving finger, and the first drag up spent on folding moved nothing, which is
-   * what read as the list sticking to the finger. The fold stays one tap away on its toggle.
-   */
   const isNativeScroll = React.useSyncExternalStore(subscribeTouchScroll, readTouchScroll, () => false);
   const isNavigatingPageRef = React.useRef(false);
-  const justCollapsedFromTopRef = React.useRef(false);
   const pageNavigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  /**
-   * Set while an animated return to the top is in flight.
-   *
-   * A smooth scroll emits scroll events the whole way up, and the early ones
-   * still carry a large `scrollTop` - so without this guard the collapse rule
-   * below would re-collapse the header on the first frame of the very gesture
-   * that was expanding it. The guard is cleared on reaching the top, or by its
-   * own deadline if the reader interrupts the animation and it never arrives.
-   */
   const isReturningToTopRef = React.useRef(false);
   const returnToTopTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const releaseHold = React.useCallback(() => {
+    const held = heldItemsRef.current;
+    if (!held) return;
+    const hadPendingUpdates =
+      held !== latestItemsRef.current || fetchedBoundaryIDRef.current !== undefined;
+    heldItemsRef.current = null;
+    heldBoundaryIDRef.current = undefined;
+    fetchedBoundaryIDRef.current = undefined;
+    if (hadPendingUpdates) {
+      bumpHoldRevision((revision) => revision + 1);
+    }
+  }, []);
 
   const schedulePageNavigationReset = React.useCallback(() => {
     if (pageNavigationTimerRef.current) clearTimeout(pageNavigationTimerRef.current);
@@ -144,212 +135,224 @@ export function useRequestListScroll({
 
   const handleScroll = React.useCallback(
     (e: React.UIEvent<HTMLElement>) => {
-      const { scrollTop } = e.currentTarget;
+      const target = e.currentTarget;
+      const { scrollTop } = target;
+      const previousScrollTop = lastScrollTopRef.current;
       lastScrollTopRef.current = scrollTop;
 
-      // Show back-to-top button when scrolled down
       scrolledDown.set(scrollTop > 60);
 
-      // Following vs. holding. The top of the list is the live edge: at the top
-      // the list follows new records, and scrolling away freezes the rows on
-      // screen so the reader keeps their place.
       if (scrollTop <= FOLLOW_TOP_PX) {
-        if (heldItemsRef.current) {
-          heldBoundaryIDRef.current = undefined;
-          setHeldItems(null);
-        }
+        releaseHold();
         if (isReturningToTopRef.current) endReturnToTop();
       } else if (scrollTop > HOLD_FROM_PX && !heldItemsRef.current && latestItemsRef.current.length > 0) {
         heldBoundaryIDRef.current = latestItemsRef.current.reduce(
           (highest, event) => Math.max(highest, event.id),
           0,
         );
-        setHeldItems(latestItemsRef.current);
+        heldItemsRef.current = latestItemsRef.current;
       }
 
-      // An in-flight return to the top owns the collapse state until it lands;
-      // see isReturningToTopRef for why this cannot be left to the scroll event.
-      if (isReturningToTopRef.current) {
+      if (isReturningToTopRef.current || isNavigatingPageRef.current) {
         return;
       }
 
-      // Programmatic scroll-to-top during page change must not cancel collapse
-      if (isNavigatingPageRef.current) {
-        return;
+      // Collapse into fullscreen on downward scroll across both desktop and mobile once the
+      // list has enough scrollable runway beyond the expanded header tail that folding never
+      // clamps the active scroll offset back toward zero.
+      const rawHeaderSpace = Number(pageRef.current?.dataset.headerSpace);
+      const headerSpace = Number.isFinite(rawHeaderSpace) && rawHeaderSpace > 0 ? rawHeaderSpace : 0;
+      if (
+        !collapse.get()
+        && scrollTop > 50
+        && scrollTop > previousScrollTop
+        && target.scrollHeight - target.clientHeight > headerSpace + AUTO_COLLAPSE_MIN_OVERFLOW_PX
+      ) {
+        collapse.set(true);
       }
-
-      // If we just collapsed into full-screen mode from the very top,
-      // keep the list pinned at row 1 (scrollTop = 0) so the first record is never skipped
-      if (justCollapsedFromTopRef.current) {
-        justCollapsedFromTopRef.current = false;
-        if (scrollTop > 0) {
-          listRef.current?.scrollTo({ top: 0 });
-          lastScrollTopRef.current = 0;
-        }
-        return;
-      }
-      // Scrolling down collapses header into full-screen mode
-      if (scrollTop > 50 && !isNativeScroll) collapse.set(true);
     },
-    [collapse, endReturnToTop, scrolledDown, isNativeScroll],
+    [collapse, endReturnToTop, releaseHold, scrolledDown],
   );
 
-  // Wheel handling:
-  // 1. When at top edge and wheeling down in normal mode: collapse header and keep row 1 visible.
-  // 2. When at top edge and wheeling up in collapsed mode: intentional top-bounce overscroll expands header.
-  const handleWheel = React.useCallback(
-    (e: React.WheelEvent<HTMLElement>) => {
-      if (isNavigatingPageRef.current || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.deltaX !== 0) return;
+  // Non-passive native wheel listener on the scroll area:
+  // 1. At the top edge in normal mode, wheeling down collapses the header and prevents
+  //    native scroll so row 1 stays pinned without a post-frame jump.
+  // 2. At the top edge in collapsed mode, wheeling up restores the header.
+  React.useEffect(() => {
+    const area = scrollAreaRef.current;
+    if (!area) return undefined;
+
+    const onWheel = (e: WheelEvent) => {
+      if (isNavigatingPageRef.current || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.deltaX !== 0) {
+        return;
+      }
 
       if (!collapse.get() && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
-        // First wheel down from top: enter full-screen mode, but freeze scroll at top
-        // so row 1 stays visible in full screen mode. The notch became the collapse, so the
-        // console-wide glide must not scroll for it; when the glide had taken the notch over, the
-        // list never moved and there is no jump to pin back, and pinning anyway would swallow the
-        // reader's next notch.
-        const wasClaimed = consumeWheel(e.nativeEvent);
-        const list = e.currentTarget.querySelector<HTMLElement>('.request-list');
-        const holder = isNativeScroll ? list : list?.querySelector<HTMLElement>('.ant-listy-holder');
-        // A wheel over the placeholder or column header cannot move the list. Arming the
-        // correction there would instead undo the first real scroll after the rows appear.
-        justCollapsedFromTopRef.current = !wasClaimed && !!holder && e.target instanceof Node
-          && holder.contains(e.target) && holder.scrollHeight > holder.clientHeight;
+        consumeWheel(e);
+        if (e.cancelable) e.preventDefault();
         collapse.set(true);
         listRef.current?.scrollTo({ top: 0 });
+        lastScrollTopRef.current = 0;
         return;
       }
 
       if (collapse.get() && e.deltaY < -15 && lastScrollTopRef.current <= 2) {
-        // Intentional top-bounce when already at the very top: unfold header
-        justCollapsedFromTopRef.current = false;
+        consumeWheel(e);
+        if (e.cancelable) e.preventDefault();
         collapse.set(false);
       }
-    },
-    [collapse, isNativeScroll],
-  );
+    };
 
-  /**
-   * Scrolling a virtualized list to row one takes two passes. The first pass
-   * lands against the content height the list is holding; committing the new
-   * rows then makes it re-measure, and it re-applies the offset it was holding,
-   * which leaves a residual scroll of roughly one row's top margin. The second
-   * pass lands after that commit.
-   *
-   * This is a correction, so it is never animated: its callers (page navigation,
-   * collapsing into full-screen mode) need row one on screen before their next
-   * statement runs. Any gesture still in flight is stopped first, so a correction
-   * cannot be dragged back by an animation that outlived its click.
-   */
+    let activeTouchId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let topAnchorY: number | null = null;
+    let hasRestoredInGesture = false;
+
+    const resetTouch = () => {
+      activeTouchId = null;
+      topAnchorY = null;
+      hasRestoredInGesture = false;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        resetTouch();
+        return;
+      }
+      const touch = e.touches[0];
+      activeTouchId = touch.identifier;
+      startX = touch.clientX;
+      startY = touch.clientY;
+      topAnchorY = lastScrollTopRef.current <= 2 ? touch.clientY : null;
+      hasRestoredInGesture = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (activeTouchId === null || hasRestoredInGesture || !collapse.get() || isNavigatingPageRef.current) {
+        return;
+      }
+      let touch: Touch | undefined;
+      for (let i = 0; i < e.touches.length; i += 1) {
+        if (e.touches[i].identifier === activeTouchId) {
+          touch = e.touches[i];
+          break;
+        }
+      }
+      if (!touch) return;
+      if (Math.abs(touch.clientX - startX) > Math.abs(touch.clientY - startY)) return;
+      if (lastScrollTopRef.current > 2) {
+        topAnchorY = null;
+        return;
+      }
+      if (topAnchorY === null) {
+        topAnchorY = touch.clientY;
+        return;
+      }
+      if (touch.clientY - topAnchorY >= TOUCH_RESTORE_PULL_PX) {
+        hasRestoredInGesture = true;
+        collapse.set(false);
+      }
+    };
+
+    area.addEventListener('wheel', onWheel, { passive: false });
+    area.addEventListener('touchstart', onTouchStart, { passive: true });
+    area.addEventListener('touchmove', onTouchMove, { passive: true });
+    area.addEventListener('touchend', resetTouch, { passive: true });
+    area.addEventListener('touchcancel', resetTouch, { passive: true });
+    return () => {
+      area.removeEventListener('wheel', onWheel);
+      area.removeEventListener('touchstart', onTouchStart);
+      area.removeEventListener('touchmove', onTouchMove);
+      area.removeEventListener('touchend', resetTouch);
+      area.removeEventListener('touchcancel', resetTouch);
+    };
+  }, [collapse]);
+
   const scrollListToTop = React.useCallback(() => {
     scrollAnimationRef.current?.cancel();
     scrollAnimationRef.current = null;
     listRef.current?.scrollTo({ top: 0 });
-    requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
+    lastScrollTopRef.current = 0;
   }, []);
 
   const handleBackToTop = React.useCallback(() => {
-    // The one scroll the reader directly asked for, so it is the one that moves.
-    // The animation is driven through Listy's own `scrollTo` rather than through
-    // CSS on the holder: the virtualizer keeps writing `scrollTop` itself, so a
-    // holder-level `scroll-behavior` fights it and, measured on the real list, the
-    // holder never moves at all.
     isReturningToTopRef.current = true;
     if (returnToTopTimerRef.current) clearTimeout(returnToTopTimerRef.current);
     returnToTopTimerRef.current = setTimeout(endReturnToTop, BACK_TO_TOP_GUARD_MS);
-    // Resuming is explicit here: the scroll events that follow will also clear it,
-    // but the reader clicked "apply", so do not depend on event timing.
-    heldBoundaryIDRef.current = undefined;
-    setHeldItems(null);
+    releaseHold();
     scrollAnimationRef.current?.cancel();
+    const startScrollTop = Math.min(lastScrollTopRef.current, MAX_BACK_TO_TOP_RUNWAY_PX);
+    if (startScrollTop < lastScrollTopRef.current) {
+      listRef.current?.scrollTo({ top: startScrollTop });
+      lastScrollTopRef.current = startScrollTop;
+    }
     scrollAnimationRef.current = animateScrollToTop(
-      lastScrollTopRef.current,
+      startScrollTop,
       (top) => {
         listRef.current?.scrollTo({ top });
       },
       {
         onComplete: () => {
           listRef.current?.scrollTo({ top: 0 });
-          requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
+          lastScrollTopRef.current = 0;
         },
       },
     );
     scrolledDown.set(false);
     collapse.set(false);
-  }, [collapse, endReturnToTop, scrolledDown]);
+  }, [collapse, endReturnToTop, releaseHold, scrolledDown]);
 
   const handleToggleExpand = React.useCallback(() => {
-    justCollapsedFromTopRef.current = false;
     collapse.set((isCollapsed) => !isCollapsed);
   }, [collapse]);
 
   // Reset collapse only on filter / window changes (NOT cursor pagination, and
   // not on a poll: a refresh must never expand or collapse the reader's view).
   React.useEffect(() => {
-    justCollapsedFromTopRef.current = false;
     collapse.set(false);
     scrolledDown.set(false);
   }, [collapse, scrolledDown, viewScope]);
 
-  const heldBoundaryID = heldItems ? heldBoundaryIDRef.current : undefined;
-
-  // ---- live tail ----
-  // While the reader is at the top the list follows the newest records. Once
-  // they scroll away it holds the rows they are reading and reports how many
-  // have arrived since, the way log viewers do it: applying the update would
-  // move text out from under the cursor, and jumping to the top is the worst
-  // version of that. Scrolling back to the top resumes and applies the backlog.
-  const latestItemsRef = React.useRef<UsageEvent[]>([]);
-  const heldItemsRef = React.useRef<UsageEvent[] | null>(null);
-  heldItemsRef.current = heldItems;
-
-  /**
-   * The page reports the rows its current read returned.
-   *
-   * A render-time ref write rather than an effect, and it has to stay one: a
-   * scroll event can arrive before an effect would have run, and it must observe
-   * the rows of the render the reader is actually looking at.
-   */
   const observeLatest = React.useCallback((items: UsageEvent[] | undefined) => {
     latestItemsRef.current = items ?? [];
   }, []);
 
-  // A different view, or a different page, starts following again.
-  React.useEffect(() => {
-    heldBoundaryIDRef.current = undefined;
-    setHeldItems(null);
-  }, [viewScope, cursor]);
+  const getHeldBoundaryID = React.useCallback(() => heldBoundaryIDRef.current, []);
 
-  /**
-   * How much has been recorded since the reader stopped following, counted by
-   * the server against the boundary the request carried. Diffing the loaded rows
-   * would under-report: the list is sorted by request time, so a request that
-   * started earlier and finished later arrives below the first page rather than
-   * at the top of it. Zero while the reader is at the live edge, where arriving
-   * records are simply part of the list.
-   */
-  const pendingArrivals = React.useCallback(
-    (arrivedCount: number | undefined) => pendingArrivalCount(heldItems?.length ?? 0, arrivedCount),
-    [heldItems],
+  const noteFetchedBoundaryID = React.useCallback((boundaryID: number | undefined) => {
+    fetchedBoundaryIDRef.current = boundaryID;
+  }, []);
+
+  const resolveDisplayedItems = React.useCallback(
+    (latest: UsageEvent[] | undefined): UsageEvent[] => heldItemsRef.current ?? latest ?? [],
+    [],
   );
 
-  /** A page change owns the scroll until it settles; see `isNavigatingPageRef`. */
+  const pendingArrivals = React.useCallback((arrivedCount: number | undefined) => {
+    const held = heldItemsRef.current;
+    if (!held || fetchedBoundaryIDRef.current !== heldBoundaryIDRef.current) return 0;
+    return pendingArrivalCount(held.length, arrivedCount);
+  }, []);
+
   const markPageNavigation = React.useCallback(() => {
     isNavigatingPageRef.current = true;
   }, []);
 
   return {
     pageRef,
+    scrollAreaRef,
     listRef,
     isNativeScroll,
     collapse,
     scrolledDown,
-    heldItems,
-    heldBoundaryID,
     observeLatest,
+    getHeldBoundaryID,
+    noteFetchedBoundaryID,
+    resolveDisplayedItems,
     pendingArrivals,
     markPageNavigation,
     handleScroll,
-    handleWheel,
     handleBackToTop,
     handleToggleExpand,
     scrollListToTop,

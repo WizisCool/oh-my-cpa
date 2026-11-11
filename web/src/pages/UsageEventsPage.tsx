@@ -1,11 +1,9 @@
 import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
-import { registerVirtualScrollDriver } from '../utils/scrollSmoothing';
 import React from 'react';
 import {
   Badge,
   Button,
-  Listy,
   Popover,
 } from 'antd';
 import clsx from 'clsx';
@@ -40,7 +38,7 @@ import {
 import { useRequestColumnLayout } from '../components/usage/useRequestColumnLayout';
 import { useUsageEventViewState } from '../components/usage/useUsageEventViewState';
 import { RequestBackToTop, RequestCollapsibleHeader, RequestFoldToggle } from '../components/usage/RequestFoldControls';
-import { useRequestListHeight } from '../components/usage/useRequestListHeight';
+import { RequestVirtualList, type RequestGroupConfig } from '../components/usage/RequestVirtualList';
 import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
@@ -162,20 +160,24 @@ export const UsageEventsPage: React.FC = () => {
   const liveEdge = useRequestListScroll({ viewScope, cursor });
   const {
     pageRef,
+    scrollAreaRef,
     listRef,
     isNativeScroll,
     collapse,
     scrolledDown,
     observeLatest,
+    getHeldBoundaryID,
+    noteFetchedBoundaryID,
+    resolveDisplayedItems,
     pendingArrivals,
     markPageNavigation,
     handleScroll,
-    handleWheel,
     handleBackToTop,
     handleToggleExpand,
     scrollListToTop,
     schedulePageNavigationReset,
   } = liveEdge;
+  const listHostRef = React.useRef<HTMLDivElement>(null);
   const [selected, setSelected] = React.useState<number | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
   const [isExportOpen, setIsExportOpen] = React.useState(false);
@@ -216,12 +218,15 @@ export const UsageEventsPage: React.FC = () => {
   //
   // The window travels as the reader chose it; `eventWindowQuery` explains why a
   // bound resolved on the browser's clock must never reach the server.
-  const queryString = usageEventParams({
-    ...query,
-    ...eventWindowQuery(query),
-    cursor,
-    since: liveEdge.heldBoundaryID,
-  });
+  const baseEventParams = React.useMemo(
+    () => ({
+      ...query,
+      ...eventWindowQuery(query),
+      cursor,
+    }),
+    [cursor, query],
+  );
+  const queryString = React.useMemo(() => usageEventParams(baseEventParams), [baseEventParams]);
   // A live signal moves the list to a new key, so its read has no data yet and would count as a
   // load. Only the read the signal alone caused is silent: the same key change that also carries a
   // new filter, page or manual sync is one the operator asked for.
@@ -237,7 +242,15 @@ export const UsageEventsPage: React.FC = () => {
   }
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
-    queryFn: () => api.getUsageEvents(queryString),
+    queryFn: async () => {
+      const heldBoundaryID = getHeldBoundaryID();
+      const params = heldBoundaryID !== undefined
+        ? usageEventParams({ ...baseEventParams, since: heldBoundaryID })
+        : queryString;
+      const page = await api.getUsageEvents(params);
+      noteFetchedBoundaryID(heldBoundaryID);
+      return page;
+    },
     enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
     staleTime: 5_000,
@@ -298,7 +311,7 @@ export const UsageEventsPage: React.FC = () => {
 
   const latestItems = displayedPage?.items;
   observeLatest(latestItems);
-  const events = liveEdge.heldItems ?? latestItems ?? [];
+  const events = resolveDisplayedItems(latestItems);
 
   // Read through a ref so the row's toggle keeps one identity: a new callback per
   // poll would re-render every memoized row on screen.
@@ -401,6 +414,11 @@ export const UsageEventsPage: React.FC = () => {
     transport: 'events.filter_chip_transport',
   };
 
+  const credentialNames = React.useMemo(
+    () => new Map([...credentials].map(([index, file]) => [index, credentialOptionLabel(file)] as const)),
+    [credentials],
+  );
+
   const describeChip = React.useCallback(
     (key: EventFilterKey, values: string[]): { label: string; display?: string } => {
       if (key === 'regex') {
@@ -418,9 +436,7 @@ export const UsageEventsPage: React.FC = () => {
       const shown = chipDisplayValue({
         key,
         value: values[0] ?? '',
-        credentialNames: new Map(
-          [...credentials].map(([index, file]) => [index, credentialOptionLabel(file)] as const),
-        ),
+        credentialNames,
         callerFacets: facets.data?.facets.api_group_keys,
         resolveProviderName: providerName,
         costLabels: {
@@ -439,7 +455,7 @@ export const UsageEventsPage: React.FC = () => {
       });
       return { label: t(chipLabels[key], { val: shown }) };
     },
-    [credentials, facets.data, t, providerName],
+    [credentialNames, facets.data, t, providerName],
   );
 
   const activeFilters = EVENT_FILTER_KEYS.filter((key) => (committedParams[key]?.length ?? 0) > 0);
@@ -448,21 +464,16 @@ export const UsageEventsPage: React.FC = () => {
   // hidden would be a filter the operator can only clear by guessing.
   const hasActiveFilter = activeFilters.length > 0 || query.result !== 'all';
 
-  const { hostRef: listHost, height } = useRequestListHeight(pageRef);
-  const hasList = isQueryEnabled && !result.isLoading && events.length > 0;
-  /**
-   * The list moves itself; the glide only names where it should be.
-   *
-   * The glide hands the list an offset instead of dispatching a wheel event it would apply a
-   * frame later, so the list's own offset stays its own: it is kept in React state, and writing the
-   * holder under it is reverted by the next commit, which spends a frame on the previous value.
-   */
-  React.useLayoutEffect(() => {
-    if (isNativeScroll || !hasList) return undefined;
-    const holder = listHost.current?.querySelector<HTMLElement>('.request-list .ant-listy-holder');
-    if (!holder) return undefined;
-    return registerVirtualScrollDriver(holder, (top) => listRef.current?.scrollTo({ top }));
-  }, [grouping, hasList, isNativeScroll, listHost, listRef, viewScope]);
+  const openFilterDrawer = React.useCallback(() => setIsFilterDrawerOpen(true), []);
+  const getEventKey = React.useCallback((event: UsageEvent) => event.id, []);
+  const streamStyle = React.useMemo(
+    () =>
+      ({
+        '--req-grid-columns': gridTemplate,
+        '--req-min-width': `${gridMinWidth}px`,
+      }) as React.CSSProperties,
+    [gridMinWidth, gridTemplate],
+  );
 
   /**
    * Clear-all is offered in two places (the bar and the chip strip) and must
@@ -487,44 +498,77 @@ export const UsageEventsPage: React.FC = () => {
     [credentials, events, providerName, unknownProviderLabel],
   );
 
-  const group =
-    grouping === 'time'
-      ? undefined
-      : {
-          key: (event: UsageEvent) => {
-            if (grouping === 'ua') return eventUserAgentGroupKey(event);
-            const provider = eventProviderIdentity(event, providerName, unknownProviderLabel).key;
-            const credential = eventCredentialIdentity(event, credentials, unknownCredentialLabel).key;
-            return JSON.stringify([provider, credential]);
-          },
-          title: (_key: React.Key, items: UsageEvent[]) => {
-            if (grouping === 'ua') {
-              const label = eventUserAgentGroupKey(items[0]);
-              return (
-                <div className="request-group-title">
-                  <strong>
-                    {label === UNKNOWN_EVENT_GROUP ? t('events.unknown_ua') : items[0].user_agent?.trim()}
-                  </strong>
-                  <span>{t('events.record_count', { n: items.length })}</span>
-                </div>
-              );
-            }
-            const provider = eventProviderIdentity(items[0], providerName, unknownProviderLabel);
-            const credential = eventCredentialIdentity(items[0], credentials, unknownCredentialLabel);
-            return (
-              <div className="request-group-title">
-                <strong>
-                  {formatEventSourceGroupTitle(
-                    provider.label,
-                    credential.label,
-                    multipleAuthSources.has(provider.key),
-                  )}
-                </strong>
-                <span>{t('events.record_count', { n: items.length })}</span>
-              </div>
-            );
-          },
-        };
+  const group = React.useMemo<RequestGroupConfig<UsageEvent> | undefined>(() => {
+    if (grouping === 'time') return undefined;
+    return {
+      key: (event: UsageEvent) => {
+        if (grouping === 'ua') return eventUserAgentGroupKey(event);
+        const provider = eventProviderIdentity(event, providerName, unknownProviderLabel).key;
+        const credential = eventCredentialIdentity(event, credentials, unknownCredentialLabel).key;
+        return JSON.stringify([provider, credential]);
+      },
+      title: (_key: string, items: UsageEvent[]) => {
+        if (grouping === 'ua') {
+          const label = eventUserAgentGroupKey(items[0]);
+          return (
+            <div className="request-group-title">
+              <strong>
+                {label === UNKNOWN_EVENT_GROUP ? t('events.unknown_ua') : items[0].user_agent?.trim()}
+              </strong>
+              <span>{t('events.record_count', { n: items.length })}</span>
+            </div>
+          );
+        }
+        const provider = eventProviderIdentity(items[0], providerName, unknownProviderLabel);
+        const credential = eventCredentialIdentity(items[0], credentials, unknownCredentialLabel);
+        return (
+          <div className="request-group-title">
+            <strong>
+              {formatEventSourceGroupTitle(
+                provider.label,
+                credential.label,
+                multipleAuthSources.has(provider.key),
+              )}
+            </strong>
+            <span>{t('events.record_count', { n: items.length })}</span>
+          </div>
+        );
+      },
+    };
+  }, [credentials, grouping, multipleAuthSources, providerName, t, unknownCredentialLabel, unknownProviderLabel]);
+
+  const renderRequestRow = React.useCallback(
+    (event: UsageEvent) => (
+      <RequestRow
+        event={event}
+        credentials={credentials}
+        providerIcons={providerIcons}
+        configuredProviders={configuredProviders}
+        pluginLogos={pluginLogos}
+        multiPortalKeys={multiPortalKeys}
+        pluginTitles={pluginTitles}
+        isProviderCatalogUnknown={isProviderCatalogUnproven}
+        onOpen={setSelected}
+        isSelected={selected === event.id}
+        isChecked={selection.has(event.id)}
+        isSelecting={isSelecting}
+        onToggleSelect={handleToggleSelect}
+      />
+    ),
+    [
+      configuredProviders,
+      credentials,
+      handleToggleSelect,
+      isProviderCatalogUnproven,
+      isSelecting,
+      multiPortalKeys,
+      pluginLogos,
+      pluginTitles,
+      providerIcons,
+      selected,
+      selection,
+    ],
+  );
   const ingestTone =
     !status || ingest.isError
       ? 'default'
@@ -545,7 +589,7 @@ export const UsageEventsPage: React.FC = () => {
 
   return (
     <div ref={pageRef} className="terminal-page usage-events-page request-events-page">
-      <RequestCollapsibleHeader collapse={collapse}>
+      <RequestCollapsibleHeader collapse={collapse} pageRef={pageRef}>
         <div className="request-header-content">
           <header className="terminal-page-head">
             <div className="terminal-page-heading">
@@ -650,7 +694,7 @@ export const UsageEventsPage: React.FC = () => {
             credentials={credentials}
             resolveProviderName={providerName}
             filterCount={filterCount}
-            onOpenFilters={() => setIsFilterDrawerOpen(true)}
+            onOpenFilters={openFilterDrawer}
             hasActiveFilter={hasActiveFilter}
             activeFilterCount={activeFilters.length}
             onClearFilters={clearFilters}
@@ -687,99 +731,81 @@ export const UsageEventsPage: React.FC = () => {
           )}
         </div>
       </RequestCollapsibleHeader>
-      <section
-        ref={streamRef}
-        className={clsx('request-stream', isSelecting && 'is-selecting')}
-        data-folded-columns={foldedColumns}
-        aria-label={t('events.title')}
-        aria-busy={result.isFetching}
-        style={
-          {
-            '--req-grid-columns': gridTemplate,
-            '--req-min-width': `${gridMinWidth}px`,
-          } as React.CSSProperties
-        }
-      >
-        {isSelecting && (
-          <RequestSelectionBar
-            count={selection.size}
-            isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
-            onSelectLoaded={() => handleToggleAll(true)}
-            onClear={clearSelection}
-            onExport={() => setIsExportOpen(true)}
-          />
-        )}
-        <div className="request-table-scroll-area" onWheel={handleWheel}>
-          <RequestStreamHeader
-            colWidths={colWidths}
-            handleResizeStart={handleResizeStart}
-            handleResetColumn={handleResetColumn}
-            handleResizeKeyDown={handleResizeKeyDown}
-            isSelecting={isSelecting}
-            selectionState={loadedSelectionState(selection, events)}
-            onToggleAll={handleToggleAll}
-          />
-          <div ref={listHost} className="request-list-host">
-            <RequestTooltipLayer hostRef={listHost} />
-            {!isQueryEnabled || result.isLoading ? (
-              <TablePlaceholder rows={8} className="request-loading" />
-            ) : events.length ? (
-              <Listy<UsageEvent>
-                ref={listRef}
-                key={`${viewScope}:${grouping}`}
-                virtual={!isNativeScroll}
-                height={height}
-                items={events}
-                rowKey="id"
-                group={group}
-                sticky
-                className={clsx('request-list', isNativeScroll && 'is-native-scroll')}
-                onScroll={handleScroll}
-                itemRender={(event) => (
-                  <RequestRow
-                    event={event}
-                    credentials={credentials}
-                    providerIcons={providerIcons}
-                    configuredProviders={configuredProviders}
-                    pluginLogos={pluginLogos}
-                    multiPortalKeys={multiPortalKeys}
-                    pluginTitles={pluginTitles}
-                    isProviderCatalogUnknown={isProviderCatalogUnproven}
-                    onOpen={setSelected}
-                    isSelected={selected === event.id}
-                    isChecked={selection.has(event.id)}
-                    isSelecting={isSelecting}
-                    onToggleSelect={handleToggleSelect}
-                  />
-                )}
-              />
-            ) : !result.isError ? (
-              <EmptyState
-                title={t('events.empty_title')}
-                description={t(hasActiveFilter ? 'events.empty_filtered' : 'events.empty_hint')}
-              />
-            ) : (
-              <div className="request-empty-error">{t('events.load_error')}</div>
-            )}
+      <div className="request-stream-slot">
+        <section
+          ref={streamRef}
+          className={clsx('request-stream', isSelecting && 'is-selecting')}
+          data-folded-columns={foldedColumns}
+          aria-label={t('events.title')}
+          aria-busy={result.isFetching}
+          style={streamStyle}
+        >
+          {isSelecting && (
+            <RequestSelectionBar
+              count={selection.size}
+              isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
+              onSelectLoaded={() => handleToggleAll(true)}
+              onClear={clearSelection}
+              onExport={() => setIsExportOpen(true)}
+            />
+          )}
+          <div ref={scrollAreaRef} className="request-table-scroll-area">
+            <RequestStreamHeader
+              colWidths={colWidths}
+              handleResizeStart={handleResizeStart}
+              handleResetColumn={handleResetColumn}
+              handleResizeKeyDown={handleResizeKeyDown}
+              isSelecting={isSelecting}
+              selectionState={loadedSelectionState(selection, events)}
+              onToggleAll={handleToggleAll}
+            />
+            <div ref={listHostRef} className="request-list-host">
+              <RequestTooltipLayer hostRef={listHostRef} />
+              {!isQueryEnabled || result.isLoading ? (
+                <TablePlaceholder rows={8} className="request-loading" />
+              ) : events.length ? (
+                <RequestVirtualList<UsageEvent>
+                  ref={listRef}
+                  key={`${viewScope}:${grouping}`}
+                  virtual
+                  overscanPx={isNativeScroll ? 640 : 432}
+                  items={events}
+                  getItemKey={getEventKey}
+                  group={group}
+                  className={clsx(isNativeScroll && 'is-native-scroll')}
+                  onScroll={handleScroll}
+                  renderItem={renderRequestRow}
+                />
+              ) : !result.isError ? (
+                <EmptyState
+                  title={t('events.empty_title')}
+                  description={t(hasActiveFilter ? 'events.empty_filtered' : 'events.empty_hint')}
+                />
+              ) : (
+                <div className="request-empty-error">{t('events.load_error')}</div>
+              )}
+            </div>
           </div>
-        </div>
+          <RequestPagination
+            collapse={collapse}
+            onRestoreHeader={handleToggleExpand}
+            stale={stale}
+            isPlaceholderData={result.isPlaceholderData}
+            page={cursors.length + 1}
+            count={events.length}
+            limit={query.limit!}
+            isFetching={result.isFetching}
+            isError={result.isError}
+            hasMore={!!result.data?.has_more}
+            hasNextCursor={!!result.data?.next_cursor}
+            hasPrev={cursors.length > 0}
+            onPageSizeChange={setPageSize}
+            onPrev={handlePrevPage}
+            onNext={handleNextPage}
+          />
+        </section>
         <RequestBackToTop scrolledDown={scrolledDown} pendingCount={pendingCount} onBackToTop={handleBackToTop} />
-        <RequestPagination
-          stale={stale}
-          isPlaceholderData={result.isPlaceholderData}
-          page={cursors.length + 1}
-          count={events.length}
-          limit={query.limit!}
-          isFetching={result.isFetching}
-          isError={result.isError}
-          hasMore={!!result.data?.has_more}
-          hasNextCursor={!!result.data?.next_cursor}
-          hasPrev={cursors.length > 0}
-          onPageSizeChange={setPageSize}
-          onPrev={handlePrevPage}
-          onNext={handleNextPage}
-        />
-      </section>
+      </div>
       <UsageEventDrawer
         credentials={credentials}
         eventId={selected}

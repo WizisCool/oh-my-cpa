@@ -65,9 +65,12 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       setTarget({ element, title, bounds, isOpen: true });
     };
     const dismiss = () => {
+      const wasShowing = isShowing;
       cancelPending();
       isShowing = false;
-      setTarget((current) => current?.isOpen ? { ...current, isOpen: false } : current);
+      if (wasShowing) {
+        setTarget((current) => current?.isOpen ? { ...current, isOpen: false } : current);
+      }
     };
     // Movement, not `pointerover`: rows scrolled or refreshed under a still pointer report it over a
     // new cell, and a popup rising there answers nobody.
@@ -131,19 +134,20 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     };
     // Virtualized rows can disappear without pointerout; scroll and resize invalidate their anchors.
     const handleGeometryChange = (event: Event) => {
+      if (!isShowing && pending === undefined && hovered === null && focused === null) return;
       // The popup's own content scrolls: reading a long error body is not the list moving.
       if (isInsidePopup(event.target)) return;
       hovered = null;
       focused = null;
       dismiss();
     };
-    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointermove', handlePointerMove, { passive: true });
     document.addEventListener('pointerout', handlePointerOut);
     host.addEventListener('focusin', handleFocusIn);
     host.addEventListener('focusout', handleFocusOut);
     document.addEventListener('pointerdown', handlePointerDown, true);
     document.addEventListener('keydown', handleKeyDown, true);
-    document.addEventListener('scroll', handleGeometryChange, true);
+    document.addEventListener('scroll', handleGeometryChange, { capture: true, passive: true });
     window.addEventListener('resize', handleGeometryChange);
     return () => {
       cancelPending();

@@ -101,7 +101,7 @@
   cursor: pointer;
   font-size: var(--text-sm);
   position: relative;
-  contain: layout style;
+  contain: content;
   transition: background-color var(--motion-fast) var(--ease-standard);
 }
 /* Washes of the ink rather than a second fill, so hover, the open record and a ticked row read as

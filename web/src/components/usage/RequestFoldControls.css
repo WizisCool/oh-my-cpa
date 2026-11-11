@@ -1,32 +1,39 @@
 .request-collapsible-header {
-  /* A one-row grid folds from the header's own height, however many rows the filters wrap
-     into. A max-height has to be set above the tallest header, and the fold then spends most
-     of its duration shrinking space nobody sees before the header starts to move.
-
-     The list below fills the height this frees, so every frame of the fold resizes it. That
-     is affordable only because nothing in the list answers a frame: the virtual list takes
-     its height once per fold (`useRequestListHeight`), and the fold's flag is not page state
-     (`viewFlag.ts`). */
-  display: grid;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition: grid-template-rows var(--motion-base) var(--ease-standard),
-              opacity var(--motion-base) var(--ease-standard),
-              margin var(--motion-base) var(--ease-standard);
+  position: absolute;
+  top: 32px;
+  left: 32px;
+  right: 32px;
+  z-index: 3;
+  min-width: 0;
 }
 .request-collapsible-header > .request-header-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: 0;
-  overflow: hidden;
+  min-width: 0;
+  contain: layout style;
 }
 .request-collapsible-header.is-collapsed {
-  grid-template-rows: 0fr;
   opacity: 0;
-  margin-top: -16px;
-  margin-bottom: -16px;
+  visibility: hidden;
   pointer-events: none;
+}
+.request-collapsible-header[data-fold-active] {
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.request-stream[data-fold-active] {
+  will-change: transform;
+}
+.request-pagination {
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.request-pagination[data-fold-active] {
+  will-change: transform;
 }
 .req-expand-toggle-btn {
   color: var(--muted);
@@ -47,16 +54,6 @@
   gap: 6px;
   height: 28px;
   padding: 0 10px;
-  /* Opaque, and deliberately without `backdrop-filter` or `box-shadow`.
-     Both were here, and both are paid for on every frame the pill is on screen
-     - which is exactly while the reader is scrolling. A backdrop blur makes the
-     compositor re-read the pixels behind the element as those pixels change, and
-     Windows/Chrome frequently falls back to software compositing for it, which
-     is the reported platform split: smooth on macOS, heavy on Windows. The blur
-     was also not earning its cost: it separated the pill from rows that scroll
-     underneath it, so it was imitating the elevated-card look the rest of this
-     console rejects. An opaque surface reads the same against a busy list, and
-     the 1px border keeps the edge. */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -67,8 +64,6 @@
   line-height: 1;
   cursor: pointer;
   outline: none;
-  /* Compositor-only: the entry is a fade and a short rise, which the engine can
-     run without laying anything out. */
   animation: reqBackTopEnter var(--motion-base) var(--ease-standard) forwards;
   transition: transform var(--motion-fast) var(--ease-standard),
               background-color var(--motion-fast),
@@ -91,9 +86,6 @@
   color: var(--accent);
   transform: translateY(-2px);
 }
-/* The live state is carried by the border and text colour, never by elevation:
-   the console has no shadow language, and a shadow here would also reintroduce
-   per-frame paint on the one element that is on screen during a scroll. */
 .req-back-to-top-btn.is-live {
   border-color: var(--accent);
   color: var(--accent);
@@ -112,15 +104,25 @@
 .req-back-to-top-btn:hover .anticon {
   transform: translateY(-1.5px);
 }
-@media (max-width: 640px) {
-  /* The folded header gives back this page's own gap and its top padding: the list is edge to
-     edge on a phone, so folded it starts at the top bar's rule and needs no second one. */
-  .request-collapsible-header.is-collapsed {
-    margin-top: -8px;
-    margin-bottom: -8px;
+@media (max-width: 900px) {
+  .request-collapsible-header {
+    top: 24px;
+    left: 16px;
+    right: 16px;
   }
-  .request-collapsible-header.is-collapsed + .request-stream {
+}
+@media (max-width: 640px) {
+  .request-collapsible-header {
+    top: 8px;
+    left: 12px;
+    right: 12px;
+  }
+  .request-stream[data-collapsed] {
     border-top-color: transparent;
+  }
+  .request-pagination {
+    border-bottom: 0;
+    border-radius: 0;
   }
   .req-back-to-top-btn {
     right: 12px;
@@ -132,16 +134,8 @@
     border-radius: var(--radius-sm);
   }
 }
-/* ── reduced motion ─────────────────────────────────────────────────────────
-   Reduced motion must also cover these local controls: the back-to-top
-   affordance rises into place and the filter header folds and unfolds, and a
-   reader who asked for less movement should get the state where it lands. The
-   kill is on movement - a keyframe's transform, a disclosure's height - and the
-   colour hints are left alone, because at the fast token they are three frames
-   rather than motion. `index.css` splits the heatmap mark the same way. */
 :root[data-reduced-motion='true'] {
   .req-back-to-top-btn { animation: none; }
   .req-back-to-top-btn,
-  .req-back-to-top-btn .anticon,
-  .request-collapsible-header { transition: none; }
+  .req-back-to-top-btn .anticon { transition: none; }
 }

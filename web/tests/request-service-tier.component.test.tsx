@@ -1,6 +1,15 @@
 import type { ReactNode } from 'react';
-import { fireEvent, screen, within } from '@testing-library/react';
-import { expect, it } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  RequestBackToTop,
+  RequestCollapsibleHeader,
+  RequestFoldToggle,
+  RequestRestoreButton,
+} from '../src/components/usage/RequestFoldControls';
+import { RequestVirtualList } from '../src/components/usage/RequestVirtualList';
+import { useRequestListScroll } from '../src/components/usage/useRequestListScroll';
+import { setReducedMotionPreference } from '../src/utils/motionPreference';
 import usageEventMessages from '../src/i18n/locales/en/usageEvents';
 import { StructuredUsageView } from '../src/components/usage/StructuredUsageView';
 import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
@@ -108,4 +117,242 @@ it('reads structured detail in the drawer without merging observations into cano
 it('keeps legacy structured usage unknown instead of fabricating zero-valued counters', () => {
   renderWithOmc(<StructuredUsageView />);
   expect(within(screen.getByRole('region', { name: 'Upstream usage details' })).getByText('Not captured')).toBeTruthy();
+});
+
+describe('request stream virtualization and desktop/mobile header fold', () => {
+  const originalMatchMedia = window.matchMedia;
+  const originalAnimate = Element.prototype.animate;
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    Element.prototype.animate = originalAnimate;
+    setReducedMotionPreference('system');
+  });
+
+  function installTouchMatchMedia(isCoarse: boolean) {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(any-pointer: coarse)' ? isCoarse : false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+  }
+
+  function StreamHarness({
+    items,
+    onParentRender,
+  }: {
+    items: UsageEvent[];
+    onParentRender?: () => void;
+  }) {
+    onParentRender?.();
+    const scroll = useRequestListScroll({ viewScope: 'preset=1h', cursor: undefined });
+    scroll.observeLatest(items);
+    const displayed = scroll.resolveDisplayedItems(items);
+    return (
+      <div ref={scroll.pageRef} className="request-events-page">
+        <RequestCollapsibleHeader collapse={scroll.collapse} pageRef={scroll.pageRef}>
+          <div className="request-header-content">
+            <input aria-label="Search requests" />
+            <RequestFoldToggle collapse={scroll.collapse} onToggle={scroll.handleToggleExpand} />
+          </div>
+        </RequestCollapsibleHeader>
+        <div className="request-stream-slot">
+          <section className="request-stream">
+            <div ref={scroll.scrollAreaRef} className="request-table-scroll-area">
+              <RequestVirtualList
+                ref={scroll.listRef}
+                virtual
+                overscanPx={144}
+                items={displayed}
+                getItemKey={(item) => item.id}
+                onScroll={scroll.handleScroll}
+                renderItem={(item) => <div data-testid="virtual-req-row">row-{item.id}</div>}
+              />
+            </div>
+            <footer className="request-pagination">
+              <RequestRestoreButton collapse={scroll.collapse} onRestore={scroll.handleToggleExpand} />
+            </footer>
+          </section>
+          <RequestBackToTop scrolledDown={scroll.scrolledDown} pendingCount={0} onBackToTop={scroll.handleBackToTop} />
+        </div>
+      </div>
+    );
+  }
+
+  function makeSyntheticEvents(count: number): UsageEvent[] {
+    return Array.from({ length: count }, (_, index) => ({
+      id: count - index,
+      event_key: `evt-${index}`,
+      timestamp_ms: 1_800_000_000_000 - index * 1_000,
+      provider: 'openai',
+      model: 'gpt-5',
+      failed: false,
+      generate: true,
+      latency_ms: 420,
+      has_request_log: false,
+      tokens: { input: 10, output: 10, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 20 },
+    }));
+  }
+
+  it('folds and restores on desktop wheel gestures without re-rendering parent on scroll thresholds, and respects reduced motion', () => {
+    installTouchMatchMedia(false);
+    let animateCalls = 0;
+    Element.prototype.animate = vi.fn().mockImplementation(() => {
+      animateCalls += 1;
+      return {
+        cancel: vi.fn(),
+        finished: Promise.resolve(),
+      } as unknown as Animation;
+    });
+
+    let parentRenders = 0;
+    const events = makeSyntheticEvents(80);
+    const { container } = renderWithOmc(
+      <StreamHarness items={events} onParentRender={() => { parentRenders += 1; }} />,
+    );
+
+    const header = container.querySelector<HTMLElement>('.request-collapsible-header')!;
+    const scrollArea = container.querySelector<HTMLElement>('.request-table-scroll-area')!;
+    const list = container.querySelector<HTMLElement>('.request-list')!;
+    Object.defineProperty(header, 'offsetHeight', { configurable: true, value: 132 });
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 500 });
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 5_760 });
+
+    // Virtualization mounts only the overscanned window, not all 80 rows.
+    const mountedInitial = screen.getAllByTestId('virtual-req-row');
+    expect(mountedInitial.length).toBeLessThan(30);
+    expect(mountedInitial[0].textContent).toBe('row-80');
+
+    const rendersBeforeScroll = parentRenders;
+    // Wheel-down at the top collapses the header via compositor WAAPI.
+    act(() => {
+      scrollArea.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }));
+    });
+    expect(header.classList.contains('is-collapsed')).toBe(true);
+    expect(animateCalls).toBeGreaterThan(0);
+
+    // Scrolling past HOLD_FROM_PX (60px) updates only ViewFlag subscribers without re-rendering StreamHarness.
+    list.scrollTop = 720;
+    fireEvent.scroll(list);
+    expect(parentRenders).toBe(rendersBeforeScroll);
+    expect(container.querySelector('.req-back-to-top-btn')).not.toBeNull();
+    expect(screen.getAllByTestId('virtual-req-row')[0].textContent).not.toBe('row-80');
+
+    // Under reduced motion, wheel-up at the top restores immediately without calling Element.animate.
+    setReducedMotionPreference('on');
+    const callsBeforeReduced = animateCalls;
+    list.scrollTop = 0;
+    fireEvent.scroll(list);
+    act(() => {
+      scrollArea.dispatchEvent(new WheelEvent('wheel', { deltaY: -80, bubbles: true, cancelable: true }));
+    });
+    expect(header.classList.contains('is-collapsed')).toBe(false);
+    expect(animateCalls).toBe(callsBeforeReduced);
+  });
+
+  it('auto-collapses on mobile downward touch scroll and restores on top pull-down or footer restore tap', () => {
+    installTouchMatchMedia(true);
+    const events = makeSyntheticEvents(60);
+    const { container } = renderWithOmc(<StreamHarness items={events} />);
+
+    const page = container.querySelector<HTMLElement>('.request-events-page')!;
+    const header = container.querySelector<HTMLElement>('.request-collapsible-header')!;
+    const scrollArea = container.querySelector<HTMLElement>('.request-table-scroll-area')!;
+    const list = container.querySelector<HTMLElement>('.request-list')!;
+    page.dataset.headerSpace = '220';
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
+    // Overflow (200px) smaller than headerSpace (220px) + 140px must NOT auto-collapse or clamp scrollTop.
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 800 });
+    list.scrollTop = 64;
+    fireEvent.scroll(list);
+    expect(header.classList.contains('is-collapsed')).toBe(false);
+
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 4_320 });
+    const searchInput = screen.getByLabelText('Search requests');
+    searchInput.focus();
+    expect(document.activeElement).toBe(searchInput);
+
+    // Downward touch scroll past 50px with ample overflow auto-collapses the header, marks it inert,
+    // and rescues focus from any active header control onto the visible restore button.
+    list.scrollTop = 96;
+    fireEvent.scroll(list);
+    expect(header.classList.contains('is-collapsed')).toBe(true);
+    expect(header.hasAttribute('inert')).toBe(true);
+    expect(document.activeElement).toBe(container.querySelector('.req-restore-header-btn'));
+
+    // Returning to row 1 and pulling down >= 28px restores the header on touch screens.
+    list.scrollTop = 0;
+    fireEvent.scroll(list);
+    fireEvent.touchStart(scrollArea, {
+      touches: [{ identifier: 1, clientX: 180, clientY: 220 }],
+    });
+    fireEvent.touchMove(scrollArea, {
+      touches: [{ identifier: 1, clientX: 182, clientY: 256 }],
+    });
+    fireEvent.touchEnd(scrollArea, { touches: [] });
+    expect(header.classList.contains('is-collapsed')).toBe(false);
+
+    // Activating the focused expand button transfers keyboard focus to the footer restore button, and back on restore.
+    const expandBtn = container.querySelector<HTMLElement>('[data-fold-control="expand"]')!;
+    const restoreBtn = container.querySelector<HTMLElement>('.req-restore-header-btn')!;
+    expandBtn.focus();
+    expect(document.activeElement).toBe(expandBtn);
+    fireEvent.click(expandBtn);
+    expect(header.classList.contains('is-collapsed')).toBe(true);
+    expect(restoreBtn.style.display).not.toBe('none');
+    expect(document.activeElement).toBe(restoreBtn);
+    fireEvent.click(restoreBtn);
+    expect(header.classList.contains('is-collapsed')).toBe(false);
+    expect(header.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement).toBe(expandBtn);
+  });
+
+  it('compensates scrollTop when an overscanned row above the viewport measures taller than default', () => {
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          callbacks.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+
+    installTouchMatchMedia(false);
+    const events = makeSyntheticEvents(40);
+    const { container } = renderWithOmc(<StreamHarness items={events} />);
+    const list = container.querySelector<HTMLElement>('.request-list')!;
+    vi.spyOn(list, 'getBoundingClientRect').mockReturnValue({
+      top: 100, bottom: 500, left: 0, right: 800, width: 800, height: 400, x: 0, y: 100, toJSON: () => ({}),
+    });
+
+    list.scrollTop = 300;
+    fireEvent.scroll(list);
+
+    const rows = container.querySelectorAll<HTMLElement>('.request-list-item-virtual');
+    const aboveRow = rows[0]!;
+    vi.spyOn(aboveRow, 'getBoundingClientRect').mockReturnValue({
+      top: -10, bottom: 90, left: 0, right: 800, width: 800, height: 100, x: 0, y: -10, toJSON: () => ({}),
+    });
+
+    act(() => {
+      for (const callback of callbacks) {
+        callback(
+          [{ target: aboveRow, contentRect: { width: 800, height: 100 } } as unknown as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      }
+    });
+
+    // Default row height is 72px; measuring 100px above viewportTop (100) adds +28px to scrollTop.
+    expect(list.scrollTop).toBe(328);
+  });
 });

@@ -3,7 +3,7 @@ import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { tokenAccountingMessage } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { RequestTooltip } from './RequestTooltip';
+
 import { NonStreamOutlined, WebsocketOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
 import { ProviderBrandIcon } from '../LobeIcon';
@@ -177,8 +177,11 @@ export const RequestRow = React.memo<RequestRowProps>(
       });
     };
 
-    const { shortTime: formattedTime, fullTime } = React.useMemo(
-      () => formatRequestTimestamp(event.timestamp_ms),
+    const { shortTime: formattedTime, fullTime, isoTime } = React.useMemo(
+      () => ({
+        ...formatRequestTimestamp(event.timestamp_ms),
+        isoTime: new Date(event.timestamp_ms).toISOString(),
+      }),
       [event.timestamp_ms, timeZone],
     );
 
@@ -222,11 +225,9 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 1: timestamp */}
         <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
-          <RequestTooltip title={fullTime}>
-            <time dateTime={new Date(event.timestamp_ms).toISOString()} className="req-time-text">
-              {formattedTime}
-            </time>
-          </RequestTooltip>
+          <time dateTime={isoTime} className="req-time-text" data-request-tooltip={fullTime}>
+            {formattedTime}
+          </time>
           <div className="req-time-sub" title={event.request_id}>
             {/* One line, truncated: CPA v8 names each execution with a 36-character UUID, which
                 wrapped at every hyphen and made every row several lines tall. The full id stays in
@@ -256,12 +257,14 @@ export const RequestRow = React.memo<RequestRowProps>(
           {event.failed && event.fail_status_code ? (
             // The status is what the list knows; the popup reads the upstream's
             // error body for this record when the pill is hovered or focused.
-            <RequestTooltip title={`HTTP ${event.fail_status_code}`}>
-              <span className="req-result-pill is-failed has-detail" data-request-failure={event.id}>
-                <i className="req-result-bullet" />
-                {resultLabel}
-              </span>
-            </RequestTooltip>
+            <span
+              className="req-result-pill is-failed has-detail"
+              data-request-failure={event.id}
+              data-request-tooltip={`HTTP ${event.fail_status_code}`}
+            >
+              <i className="req-result-bullet" />
+              {resultLabel}
+            </span>
           ) : (
             <span
               className={`req-result-pill ${event.failed ? 'is-failed' : 'is-success'}`}
@@ -338,21 +341,23 @@ export const RequestRow = React.memo<RequestRowProps>(
           {/* Substitutions take priority over routing detail to keep the cell
               within two lines; the routed name remains in the primary tooltip. */}
           {hasServedModel && event.response_model ? (
-            <RequestTooltip
-              title={t('events.served_model_differs', { served: event.response_model })}
+            <span
+              className="req-model-served"
+              data-testid="request-served-model"
+              data-request-tooltip={t('events.served_model_differs', { served: event.response_model })}
             >
-              <span className="req-model-served" data-testid="request-served-model">
-                <SwapOutlined className="req-model-served-icon" aria-hidden />
-                <span className="req-model-served-name">{event.response_model}</span>
-              </span>
-            </RequestTooltip>
+              <SwapOutlined className="req-model-served-icon" aria-hidden />
+              <span className="req-model-served-name">{event.response_model}</span>
+            </span>
           ) : hasRoutedModel ? (
-            <RequestTooltip title={`${t('events.request_model')}: ${requestModel}`}>
-              <span className="req-model-routed" data-testid="request-routed-model">
-                <RightOutlined className="req-model-served-icon" aria-hidden />
-                <span className="req-model-served-name">{requestModel}</span>
-              </span>
-            </RequestTooltip>
+            <span
+              className="req-model-routed"
+              data-testid="request-routed-model"
+              data-request-tooltip={`${t('events.request_model')}: ${requestModel}`}
+            >
+              <RightOutlined className="req-model-served-icon" aria-hidden />
+              <span className="req-model-served-name">{requestModel}</span>
+            </span>
           ) : null}
         </div>
 
@@ -365,40 +370,44 @@ export const RequestRow = React.memo<RequestRowProps>(
           {event.reasoning_effort || isFastTier || transport === 'websocket' || transport === 'http' ? (
             <div className="req-mode-marks">
               {event.reasoning_effort && (
-                <RequestTooltip title={`${t('events.reasoning_effort')}: ${effortLabel}`}>
-                  <span
-                    className="req-effort-badge"
-                    style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
-                  >
-                    {effortLabel}
-                  </span>
-                </RequestTooltip>
+                <span
+                  className="req-effort-badge"
+                  style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
+                  data-request-tooltip={`${t('events.reasoning_effort')}: ${effortLabel}`}
+                >
+                  {effortLabel}
+                </span>
               )}
               {isFastTier && (
-                <RequestTooltip title={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}>
-                  <span
-                    className="req-mode-mark req-fast-icon"
-                    role="img"
-                    aria-label={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}
-                    data-testid="request-fast-tier"
-                  >
-                    <ThunderboltFilled />
-                  </span>
-                </RequestTooltip>
+                <span
+                  className="req-mode-mark req-fast-icon"
+                  role="img"
+                  aria-label={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}
+                  data-testid="request-fast-tier"
+                  data-request-tooltip={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}
+                >
+                  <ThunderboltFilled />
+                </span>
               )}
               {transport === 'websocket' && (
-                <RequestTooltip title={t('events.websocket_hint')}>
-                  <span className="req-mode-mark req-websocket-icon" role="img" aria-label={t('events.websocket_hint')}>
-                    <WebsocketOutlined />
-                  </span>
-                </RequestTooltip>
+                <span
+                  className="req-mode-mark req-websocket-icon"
+                  role="img"
+                  aria-label={t('events.websocket_hint')}
+                  data-request-tooltip={t('events.websocket_hint')}
+                >
+                  <WebsocketOutlined />
+                </span>
               )}
               {transport === 'http' && (
-                <RequestTooltip title={t('events.non_stream_hint')}>
-                  <span className="req-mode-mark req-non-stream-icon" role="img" aria-label={t('events.non_stream_hint')}>
-                    <NonStreamOutlined />
-                  </span>
-                </RequestTooltip>
+                <span
+                  className="req-mode-mark req-non-stream-icon"
+                  role="img"
+                  aria-label={t('events.non_stream_hint')}
+                  data-request-tooltip={t('events.non_stream_hint')}
+                >
+                  <NonStreamOutlined />
+                </span>
               )}
             </div>
           ) : (
@@ -410,13 +419,12 @@ export const RequestRow = React.memo<RequestRowProps>(
         <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.basis !== null ? (
-            <RequestTooltip
-              title={
-                `${t(tpsCalculationHintKey(tpsInfo.basis))} (${tpsInfo.formatted})`
-              }
+            <span
+              className="req-tps-val"
+              data-request-tooltip={`${t(tpsCalculationHintKey(tpsInfo.basis))} (${tpsInfo.formatted})`}
             >
-              <span className="req-tps-val">{tpsInfo.formatted}</span>
-            </RequestTooltip>
+              {tpsInfo.formatted}
+            </span>
           ) : (
             <span className="req-tps-none">—</span>
           )}
@@ -475,26 +483,28 @@ export const RequestRow = React.memo<RequestRowProps>(
             <strong className="req-cost-val">{formatCurrency(event.cost_usd, currency)}</strong>
           ) : (
             <>
-              <RequestTooltip title={event.token_accounting && event.token_accounting.status !== 'complete' ? tokenAccountingMessage(t, event.token_accounting) : t('events.cost_unpriced')}>
-                <span className="req-cost-none">—</span>
-              </RequestTooltip>
+              <span
+                className="req-cost-none"
+                data-request-tooltip={event.token_accounting && event.token_accounting.status !== 'complete' ? tokenAccountingMessage(t, event.token_accounting) : t('events.cost_unpriced')}
+              >
+                —
+              </span>
               {openPriceEditor && event.model && event.pricing_status !== 'legacy_unpriced' && (!event.token_accounting || event.token_accounting.status === 'complete') && (
-                <RequestTooltip title={t('cost.set_price', { model: event.model })}>
-                  <button
-                    type="button"
-                    className="req-cost-set"
-                    aria-label={t('cost.set_price', { model: event.model })}
-                    // The row opens the record; this control opens the price editor instead.
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openPriceEditor(event.model);
-                    }}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    data-testid="request-set-price"
-                  >
-                    <DollarOutlined />
-                  </button>
-                </RequestTooltip>
+                <button
+                  type="button"
+                  className="req-cost-set"
+                  aria-label={t('cost.set_price', { model: event.model })}
+                  data-request-tooltip={t('cost.set_price', { model: event.model })}
+                  // The row opens the record; this control opens the price editor instead.
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPriceEditor(event.model);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  data-testid="request-set-price"
+                >
+                  <DollarOutlined />
+                </button>
               )}
             </>
           )}
@@ -502,8 +512,15 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 10: cache hit rate */}
         <div className={`req-col req-col-cache ${requestColumnAlignClass('cache')}`}>
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
-          <RequestTooltip
-            title={
+          {/* One badge for every reading: 0% keeps the pill and the dot — it
+              is a real value, not a missing one. Only the no-data case drops
+              to the neutral stop. The cached count lives in the tooltip: as a
+              second line here it wrapped at six-digit volumes and pushed the
+              row taller. */}
+          <span
+            className={`req-cache-pill${cache.hasData ? '' : ' is-empty'}`}
+            style={cacheScaleStyle}
+            data-request-tooltip={
               cache.hasData
                 ? t('events.cache_rate_tooltip', {
                     rate: cacheLabel,
@@ -512,19 +529,9 @@ export const RequestRow = React.memo<RequestRowProps>(
                 : t('events.cache_no_data')
             }
           >
-            {/* One badge for every reading: 0% keeps the pill and the dot — it
-                is a real value, not a missing one. Only the no-data case drops
-                to the neutral stop. The cached count lives in the tooltip: as a
-                second line here it wrapped at six-digit volumes and pushed the
-                row taller. */}
-            <span
-              className={`req-cache-pill${cache.hasData ? '' : ' is-empty'}`}
-              style={cacheScaleStyle}
-            >
-              <i className="req-cache-bullet" />
-              {cacheLabel}
-            </span>
-          </RequestTooltip>
+            <i className="req-cache-bullet" />
+            {cacheLabel}
+          </span>
         </div>
 
         {/* Column 11: caller key, masked, and only for api_key callers;

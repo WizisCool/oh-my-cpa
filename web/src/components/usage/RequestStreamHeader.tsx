@@ -30,7 +30,7 @@ interface RequestStreamHeaderProps {
  * The gripper is what makes a column's width the operator's decision, and every
  * one of them is operable from the keyboard as well as by pointer.
  */
-export function RequestStreamHeader({
+export const RequestStreamHeader = React.memo(function RequestStreamHeader({
   colWidths,
   handleResizeStart,
   handleResetColumn,
@@ -90,4 +90,4 @@ export function RequestStreamHeader({
             <span className="req-th req-th-chevron" />
           </div>
   );
-}
+});
