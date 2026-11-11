@@ -198,3 +198,12 @@
 .tone-warn { color: var(--warn); }
 .tone-danger { color: var(--danger); }
 .tone-neutral { color: var(--meta); }
+
+/* The removal names the key it removes, in the face the list shows it in. */
+.confirm-target {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}

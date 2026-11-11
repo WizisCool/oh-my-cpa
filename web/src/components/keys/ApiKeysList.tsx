@@ -148,9 +148,10 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   const trafficCell = (record: ApiKeyRecord) => <TrafficCell traffic={trafficOf(record)} />;
 
   const tokensCell = (record: ApiKeyRecord) => {
-    const tokens = record.usage?.total_tokens ?? 0;
-    if (tokens <= 0) return <span className={styles['muted']}>—</span>;
-    return <span className={styles['figure']}>{formatTokens(tokens, tokenStyle)}</span>;
+    // A dash is unknown usage; a key the window saw nothing from used zero tokens, as its
+    // traffic says "no requests" rather than a dash.
+    if (!isUsageKnown) return <span className={styles['muted']}>—</span>;
+    return <span className={styles['figure']}>{formatTokens(record.usage?.total_tokens ?? 0, tokenStyle)}</span>;
   };
 
   const lastUsedCell = (record: ApiKeyRecord) => {
@@ -192,7 +193,12 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       </Tooltip>
       <ConfirmAction
         title={t('cfg.api_keys_delete_confirm')}
-        description={t('keys.delete_confirm_desc')}
+        description={(
+          <>
+            <span className={styles['confirm-target']}>{nameOf(record)}</span>
+            {t('keys.delete_confirm_desc')}
+          </>
+        )}
         confirmLabel={t('cfg.api_keys_delete')}
         isDanger
         disabled={isReadOnly || isBusy}

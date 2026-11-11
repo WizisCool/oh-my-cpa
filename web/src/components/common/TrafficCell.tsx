@@ -8,8 +8,6 @@ import styles from './TrafficCell.module.css';
 export interface TrafficCellProps {
   /** The row's traffic over the page's window; `undefined` while it is unknown. */
   traffic: { total: number; successRate: number | null } | undefined;
-  /** What the dash says when the traffic is unknown. */
-  unknownHint?: string;
 }
 
 /**
@@ -17,12 +15,14 @@ export interface TrafficCellProps {
  * under it. The Gateway lists (providers, client keys) both show it, so a reader compares the
  * same reading in the same shape on either page.
  */
-export function TrafficCell({ traffic, unknownHint }: TrafficCellProps) {
+export function TrafficCell({ traffic }: TrafficCellProps) {
   const t = useT();
   if (!traffic) {
+    const hint = t('pro.traffic_unknown');
+    // The dash is focusable and named, so a keyboard reaches the hint and a screen reader hears it.
     return (
-      <Tooltip title={unknownHint ?? t('pro.traffic_unknown')}>
-        <span className={styles['muted']}>—</span>
+      <Tooltip title={hint}>
+        <span className={styles['muted']} tabIndex={0} role="img" aria-label={hint}>—</span>
       </Tooltip>
     );
   }
