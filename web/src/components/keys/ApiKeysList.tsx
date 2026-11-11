@@ -2,29 +2,26 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import {
-  CopyOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  EyeInvisibleOutlined,
-  EyeOutlined,
-  HistoryOutlined,
-  KeyOutlined,
-} from '../icons';
+import { DeleteOutlined, EditOutlined, EyeInvisibleOutlined, EyeOutlined, HistoryOutlined, KeyOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
-import { copyText } from '../../utils/clipboard';
 import { formatTimeAgo } from '../../utils/format';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { ResponsiveList } from '../common/ResponsiveList';
 import { ConfirmAction } from '../common/ConfirmAction';
-import { useToast } from '../feedback';
+import { CopyButton } from '../common/CopyButton';
+import { StatusLabel } from '../common/StatusLabel';
+import { TrafficCell } from '../common/TrafficCell';
+import { Meter } from '../common/Meter';
+import { Count } from '../common/Count';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { Tooltip } from '../common/Tooltip';
+import { successRateTone } from '../../types/usageEventMetrics';
+import clsx from 'clsx';
 import type { ApiKeyRecord } from './keyOverview';
 import styles from './ApiKeysList.module.css';
-import './keys.css';
-import { Tooltip } from '../common/Tooltip';
 
 export type { ApiKeyRecord } from './keyOverview';
 
@@ -34,6 +31,8 @@ export interface ApiKeysListProps {
   isLoading: boolean;
   /** True when the read failed with nothing cached, so the page's alert is the one statement. */
   isBlocked?: boolean;
+  /** False until the window's traffic has been read, so no row claims to be idle before it is known. */
+  isUsageKnown: boolean;
   /** The empty copy: no key configured, or none matching the filters. */
   emptyText: React.ReactNode;
   formatTime: (ms: number) => string;
@@ -48,14 +47,16 @@ export interface ApiKeysListProps {
 }
 
 /**
- * The key list: one row per gateway client key, drawn with the provider list's parts - an identity
- * tile, the facts a reader compares across rows, and quiet row actions - so the two Gateway lists
- * read alike. Below 640px it renders labelled rows from the same columns.
+ * The key list: one row per gateway client key, laid out as the other Gateway lists are - the
+ * identity first, then the state and the window's traffic a reader compares down the column, then
+ * the row's actions. A key reads like an OAuth credential: its name is the headline, the masked
+ * secret sits under it and reveals on click, and a key with no name is headed by the mask itself.
  */
 export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   records,
   isLoading,
   isBlocked,
+  isUsageKnown,
   emptyText,
   formatTime,
   isBusy = false,
@@ -66,107 +67,91 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
 }) => {
   useTimeZone();
   const t = useT();
-  const toast = useToast();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const nowMS = useVisibleNow();
+  const isPhone = useIsPhoneViewport();
 
-  const [revealedKeys, setRevealedKeys] = React.useState<Record<string, boolean>>({});
+  const nameOf = (record: ApiKeyRecord) => record.alias ?? maskKeyText(record.key);
 
-  const handleDelete = (record: ApiKeyRecord) => {
+  const [revealedIDs, setRevealedIDs] = React.useState<ReadonlySet<string>>(() => new Set());
+  // A deleted row's reveal goes with it: before the names load, rows are keyed by position, so a
+  // kept id would reveal the key that moves into the deleted one's place.
+  const deleteRecord = (record: ApiKeyRecord) => {
     onDelete(record);
-    // Only this row's revealed state is dropped: clearing every row would hide a
-    // secret the operator deliberately revealed on a row they did not touch.
-    setRevealedKeys((prev) => {
-      if (!(record.id in prev)) return prev;
-      const next = { ...prev };
-      delete next[record.id];
+    setRevealedIDs((prev) => {
+      if (!prev.has(record.id)) return prev;
+      const next = new Set(prev);
+      next.delete(record.id);
       return next;
     });
   };
+  const toggleRevealed = (id: string) => setRevealedIDs((prev) => {
+    const next = new Set(prev);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
 
-  const handleCopy = async (keyText: string) => {
-    if (await copyText(keyText)) {
-      toast.success(t('cfg.source_copy_success'));
-      return;
-    }
-    toast.error(t('cfg.copy_failed'));
+  /**
+   * The mask - or the secret once revealed - with the two glyphs that act on it always beside it:
+   * reading a key and handing it to a client are what this page is opened for most.
+   */
+  const secret = (record: ApiKeyRecord, className: string) => {
+    const isRevealed = revealedIDs.has(record.id);
+    const toggleLabel = isRevealed ? t('common.hide_secret') : t('common.reveal_secret');
+    return (
+      <span className={styles['secret-line']}>
+        <span className={className}>{isRevealed ? record.key : maskKeyText(record.key)}</span>
+        <Tooltip title={toggleLabel}>
+          <Button
+            type="text"
+            size="small"
+            className={styles['secret-action']}
+            icon={isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+            aria-label={`${toggleLabel}: ${nameOf(record)}`}
+            aria-pressed={isRevealed}
+            onClick={() => toggleRevealed(record.id)}
+          />
+        </Tooltip>
+        <CopyButton className={styles['secret-action']} text={record.key} label={t('cfg.api_keys_copy')} />
+      </span>
+    );
   };
-
-  const nameOf = (record: ApiKeyRecord) => record.alias ?? t('keys.unnamed');
 
   const nameCell = (record: ApiKeyRecord) => (
     <div className={styles['identity']}>
-      <span className={styles['mark']} aria-hidden="true">
-        <KeyOutlined />
-      </span>
       {record.alias ? (
-        <span className={styles['name']}>{record.alias}</span>
+        <>
+          <span className={styles['name']}>{record.alias}</span>
+          {secret(record, styles['secret'])}
+        </>
       ) : (
-        <span className={styles['unnamed']}>{t('keys.unnamed')}</span>
+        secret(record, styles['secret-headline'])
       )}
     </div>
   );
 
-  /**
-   * The mask - or the secret once revealed - with the two actions that touch the secret beside it.
-   *
-   * The text box is a fixed width and the two states are the same shape, so revealing moves
-   * nothing: not the column, not the controls beside it, not the row on a phone.
-   */
-  const keyCell = (record: ApiKeyRecord) => {
-    const isRevealed = Boolean(revealedKeys[record.id]);
-    return (
-      <div className="config-key-field">
-        <div className="config-key-box">
-          <span className={`config-key-text${isRevealed ? ' is-revealed' : ' is-masked'}`}>
-            {isRevealed ? record.key : maskKeyText(record.key)}
-          </span>
-        </div>
-        <Tooltip title={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}>
-          <button
-            type="button"
-            className="config-key-action is-quiet"
-            onClick={() => setRevealedKeys((prev) => ({ ...prev, [record.id]: !prev[record.id] }))}
-            aria-label={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}
-            aria-pressed={isRevealed}
-          >
-            {isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-          </button>
-        </Tooltip>
-        <Tooltip title={t('cfg.api_keys_copy')}>
-          <button
-            type="button"
-            className="config-key-action is-quiet"
-            onClick={() => void handleCopy(record.key)}
-            aria-label={t('cfg.api_keys_copy')}
-          >
-            <CopyOutlined />
-          </button>
-        </Tooltip>
-      </div>
-    );
+  const statusCell = (record: ApiKeyRecord) => {
+    if (!isUsageKnown) return <span className={styles['muted']}>—</span>;
+    return (record.usage?.requests ?? 0) > 0
+      ? <StatusLabel tone="success">{t('keys.status_active')}</StatusLabel>
+      : <StatusLabel tone="neutral">{t('keys.stat_idle')}</StatusLabel>;
   };
 
-  const usageCell = (record: ApiKeyRecord) => {
-    if (!record.usage) {
-      return (
-        <Tooltip title={t('keys.not_linked')}>
-          <span className={styles['muted']}>—</span>
-        </Tooltip>
-      );
-    }
-    const { requests, failed, total_tokens: tokens } = record.usage;
-    return (
-      <div className={styles['usage']}>
-        <span className={styles['usage-requests']}>{requests.toLocaleString()}</span>
-        <span className={styles['usage-detail']}>
-          {t('keys.usage_tokens', { n: formatTokens(tokens, tokenStyle) })}
-          {failed > 0 && (
-            <span className={styles['usage-failed']}>{t('keys.usage_failed', { n: failed.toLocaleString() })}</span>
-          )}
-        </span>
-      </div>
-    );
+  // A key with no stored request has nothing to join yet: in the window it served nothing.
+  const trafficOf = (record: ApiKeyRecord) => {
+    if (!isUsageKnown) return undefined;
+    const requests = record.usage?.requests ?? 0;
+    const failed = record.usage?.failed ?? 0;
+    return { total: requests, successRate: requests > 0 ? ((requests - failed) / requests) * 100 : null };
+  };
+
+  const trafficCell = (record: ApiKeyRecord) => <TrafficCell traffic={trafficOf(record)} />;
+
+  const tokensCell = (record: ApiKeyRecord) => {
+    // A dash is unknown usage; a key the window saw nothing from used zero tokens, as its
+    // traffic says "no requests" rather than a dash.
+    if (!isUsageKnown) return <span className={styles['muted']}>—</span>;
+    return <span className={styles['figure']}>{formatTokens(record.usage?.total_tokens ?? 0, tokenStyle)}</span>;
   };
 
   const lastUsedCell = (record: ApiKeyRecord) => {
@@ -174,7 +159,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     if (lastUsed <= 0) return <span className={styles['muted']}>—</span>;
     return (
       <Tooltip title={formatTime(lastUsed)}>
-        <time className={styles['last-used']} dateTime={new Date(lastUsed).toISOString()}>
+        <time className={styles['figure']} dateTime={new Date(lastUsed).toISOString()}>
           {formatTimeAgo(lastUsed, nowMS, t)}
         </time>
       </Tooltip>
@@ -208,11 +193,16 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       </Tooltip>
       <ConfirmAction
         title={t('cfg.api_keys_delete_confirm')}
-        description={t('keys.delete_confirm_desc')}
+        description={(
+          <>
+            <span className={styles['confirm-target']}>{nameOf(record)}</span>
+            {t('keys.delete_confirm_desc')}
+          </>
+        )}
         confirmLabel={t('cfg.api_keys_delete')}
         isDanger
         disabled={isReadOnly || isBusy}
-        onConfirm={() => handleDelete(record)}
+        onConfirm={() => deleteRecord(record)}
         tooltip={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_delete')}
       >
         <Button
@@ -227,32 +217,85 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     </div>
   );
 
-  // The list's columns are the one description of what a key shows: the table renders them, and
-  // the phone row derives its fields from the same array.
+  /*
+   * A key on a phone, drawn as an OAuth credential row is: the name with the row's actions beside
+   * it, the secret and the state under the name, then the window's traffic as one reading across
+   * the card - the count and rate over a bar, the tokens and the last use under it.
+   */
+  const renderPhoneCard = (record: ApiKeyRecord) => {
+    const traffic = trafficOf(record);
+    const tone = successRateTone(traffic?.successRate);
+    const tokens = record.usage?.total_tokens ?? 0;
+    const lastUsed = record.usage?.last_used_ms ?? 0;
+    return (
+      <article className={styles['phone-card']} data-testid="phone-row" aria-label={nameOf(record)}>
+        <div className={styles['phone-card-head']}>
+          {nameCell(record)}
+          {renderActions(record)}
+        </div>
+        <div className={styles['phone-card-state']}>{statusCell(record)}</div>
+        {traffic && (
+          <div className={styles['reading']}>
+            <span className={styles['reading-name']}>{t('pro.window_24h')}</span>
+            {traffic.total === 0 ? (
+              <span className={styles['reading-value']}>{t('pro.traffic_none')}</span>
+            ) : (
+              <>
+                <span className={styles['reading-value']}>
+                  {t('pro.traffic_requests', { n: traffic.total.toLocaleString() })}
+                  <b className={styles[`tone-${tone}`]}>{`${(traffic.successRate ?? 0).toFixed(1)}%`}</b>
+                </span>
+                <Meter
+                  className={styles['reading-bar']}
+                  value={traffic.successRate ?? 0}
+                  color={`var(--${tone === 'neutral' ? 'meta' : tone})`}
+                />
+                <span className={styles['reading-foot']}>
+                  {tokens > 0 ? t('keys.usage_tokens', { n: formatTokens(tokens, tokenStyle) }) : ''}
+                </span>
+                <span className={clsx(styles['reading-foot'], styles['reading-foot-end'])}>
+                  {lastUsed > 0 && <>{t('keys.col_last_used')} {lastUsedCell(record)}</>}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+      </article>
+    );
+  };
+
+  // The list's columns are the one description of what a key shows on a wide screen; the phone
+  // card reuses the same cells.
   const columns: ColumnsType<ApiKeyRecord> = [
     {
       title: t('keys.col_name'),
       key: 'name',
-      minWidth: 200,
+      minWidth: 260,
       render: (_: unknown, record: ApiKeyRecord) => nameCell(record),
     },
     {
-      title: t('keys.col_key'),
-      key: 'key',
-      width: 380,
-      render: (_: unknown, record: ApiKeyRecord) => keyCell(record),
+      title: t('pro.col_status'),
+      key: 'status',
+      width: 112,
+      render: (_: unknown, record: ApiKeyRecord) => statusCell(record),
     },
     {
-      title: t('keys.col_requests_window'),
-      key: 'requests',
-      width: 160,
+      title: t('pro.col_traffic'),
+      key: 'traffic',
+      width: 168,
+      render: (_: unknown, record: ApiKeyRecord) => trafficCell(record),
+    },
+    {
+      title: t('keys.col_tokens_window'),
+      key: 'tokens',
+      width: 120,
       align: 'right' as const,
-      render: (_: unknown, record: ApiKeyRecord) => usageCell(record),
+      render: (_: unknown, record: ApiKeyRecord) => tokensCell(record),
     },
     {
       title: t('keys.col_last_used'),
       key: 'lastUsed',
-      width: 130,
+      width: 128,
       align: 'right' as const,
       render: (_: unknown, record: ApiKeyRecord) => lastUsedCell(record),
     },
@@ -266,7 +309,15 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   ];
 
   return (
-    <div className={styles['key-list']}>
+    <div className={clsx(styles['key-list'], isPhone && records.length > 0 && styles['is-grouped'])}>
+      {/* On a phone the keys are one group under a header strip, as an OAuth provider's credentials are. */}
+      {isPhone && records.length > 0 && (
+        <div className={styles['phone-group-head']}>
+          <KeyOutlined />
+          <span className={styles['phone-group-title']}>{t('keys.stat_all')}</span>
+          <Count>{records.length}</Count>
+        </div>
+      )}
       <ResponsiveList<ApiKeyRecord>
         columns={columns}
         dataSource={records}
@@ -275,8 +326,8 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         isBlocked={isBlocked}
         emptyText={emptyText}
         isFilterAnimated
-        phone={{ identity: 'name', actions: ['actions'] }}
-        tableProps={{ className: 'config-api-keys-table', scroll: { x: 'max-content' } }}
+        phone={{ render: renderPhoneCard }}
+        tableProps={{ scroll: { x: 'max-content' } }}
       />
     </div>
   );

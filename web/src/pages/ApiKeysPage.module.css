@@ -1,4 +1,4 @@
-/* ApiKeysPage.module.css — the key list's overview: use tiles, then the toolbar.
+/* ApiKeysPage.module.css — the key list's overview (use tiles, then the toolbar) and the key editor.
    The tiles and the toolbar are the provider list's own (StatTiles, `.logs-toolbar`), so the
    Gateway pages that summarise their rows before listing them read as one console. */
 
@@ -49,4 +49,16 @@
   .window-summary {
     margin-left: 0;
   }
+}
+
+/* The key editor: the provider editor's vertical form, the secret's two actions beside its field. */
+.secret-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secret-field > :first-child {
+  flex: 1;
+  min-width: 0;
 }

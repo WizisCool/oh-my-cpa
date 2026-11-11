@@ -2,13 +2,8 @@ import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input } from 'antd';
-import {
-  KeyOutlined,
-  PlusOutlined,
-  SyncOutlined,
-  TagOutlined,
-} from '../components/icons';
+import { Button, Form, Input } from 'antd';
+import { PlusOutlined, SyncOutlined } from '../components/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
@@ -25,6 +20,7 @@ import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigChange, ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
 import { PageHeader } from '../components/common/PageHeader';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { SecretInput } from '../components/common/SecretInput';
 import { SummaryStrip } from '../components/common/SummaryStrip';
 import styles from './ApiKeysPage.module.css';
@@ -35,8 +31,8 @@ import { StatTiles } from '../components/common/StatTiles';
 import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 import { AppDrawer } from '../components/common/AppDrawer';
 import { CopyButton } from '../components/common/CopyButton';
+import { ToolButton } from '../components/common/ToolButton';
 import { successRateTone } from '../types/usageEventMetrics';
-import '../components/keys/keys.css';
 
 /** The longest name the alias endpoint accepts. */
 const MAX_ALIAS_LENGTH = 64;
@@ -94,6 +90,7 @@ export const ApiKeysPage: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const isPhone = useIsPhoneViewport();
 
   const configQuery = useQuery<ConfigScalarsResponse>({
     queryKey: ['management-config'],
@@ -442,7 +439,8 @@ export const ApiKeysPage: React.FC = () => {
           </>
         )}
       >
-        {summary}
+        {/* On a phone the use tiles below state the same counts, one line further down. */}
+        {!isPhone && summary}
       </PageHeader>
 
       {isBlocked && (
@@ -507,6 +505,7 @@ export const ApiKeysPage: React.FC = () => {
         records={overview.visible}
         isLoading={configQuery.isPending}
         isBlocked={isBlocked}
+        isUsageKnown={isUsageKnown}
         emptyText={keyCount > 0 ? t('keys.search_empty') : t('keys.empty_title')}
         formatTime={formatUsageTime}
         isBusy={saveMutation.isPending}
@@ -539,52 +538,49 @@ export const ApiKeysPage: React.FC = () => {
           </>
         )}
       >
-        <div className="keys-key-editor">
-          <label className="keys-key-editor-label" htmlFor="gateway-key-value">
-            <KeyOutlined /> {t('keys.modal_label')}
-          </label>
-          <SecretInput
-            id="gateway-key-value"
-            placeholder={t('cfg.api_keys_placeholder')}
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-            onPressEnter={() => void handleSaveKey()}
-            isVisible={isKeyVisible}
-            onVisibleChange={setIsKeyVisible}
-            className="config-mono-input"
-            autoFocus
-          />
-          <div className="keys-key-editor-actions">
-            <Button
-              size="small"
-              icon={<SyncOutlined />}
-              onClick={() => {
-                setKeyInput(generateGatewayKey());
-                setIsKeyVisible(true);
-              }}
-            >
-              {t('cfg.api_keys_generate')}
-            </Button>
-            <CopyButton showLabel text={keyInput.trim()} label={t('cfg.api_keys_copy')} disabled={!keyInput.trim()} />
-          </div>
+        {/* The provider editor's form: the name a reader knows the key by, then the secret, with
+            the two actions that produce and take it beside the field. */}
+        <Form layout="vertical">
+          <Form.Item label={t('keys.col_name')} htmlFor="gateway-key-alias">
+            <Input
+              id="gateway-key-alias"
+              placeholder={t('keys.modal_alias_placeholder')}
+              value={aliasInput}
+              onChange={(e) => setAliasInput(e.target.value)}
+              onPressEnter={() => void handleSaveKey()}
+              maxLength={MAX_ALIAS_LENGTH}
+              showCount
+              autoFocus
+            />
+          </Form.Item>
+          <Form.Item label={t('keys.modal_label')} htmlFor="gateway-key-value" required>
+            <div className={styles['secret-field']}>
+              <SecretInput
+                id="gateway-key-value"
+                placeholder={t('cfg.api_keys_placeholder')}
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                onPressEnter={() => void handleSaveKey()}
+                isVisible={isKeyVisible}
+                onVisibleChange={setIsKeyVisible}
+                className="config-mono-input"
+              />
+              <ToolButton
+                type="text"
+                icon={<SyncOutlined />}
+                label={t('cfg.api_keys_generate')}
+                onClick={() => {
+                  setKeyInput(generateGatewayKey());
+                  setIsKeyVisible(true);
+                }}
+              />
+              <CopyButton size="middle" text={keyInput.trim()} label={t('cfg.api_keys_copy')} disabled={!keyInput.trim()} />
+            </div>
+          </Form.Item>
           {isValueChanged && (
             <Notice tone="warning" title={t('keys.value_change_warning')} />
           )}
-
-          <label className="keys-key-editor-label" htmlFor="gateway-key-alias">
-            <TagOutlined /> {t('keys.modal_alias_label')}
-          </label>
-          <Input
-            id="gateway-key-alias"
-            placeholder={t('keys.modal_alias_placeholder')}
-            value={aliasInput}
-            onChange={(e) => setAliasInput(e.target.value)}
-            onPressEnter={() => void handleSaveKey()}
-            maxLength={MAX_ALIAS_LENGTH}
-            showCount
-            className="config-alias-input"
-          />
-        </div>
+        </Form>
       </AppDrawer>
     </div>
   );

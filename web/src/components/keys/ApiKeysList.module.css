@@ -1,27 +1,13 @@
-/* ApiKeysList.module.css — the gateway client key list, drawn with the provider list's parts. */
+/* ApiKeysList.module.css — the gateway client key list, drawn with the other Gateway lists' parts. */
 
 .key-list { min-width: 0; }
 
+/* The OAuth credential's identity block: a headline, and the secret under it in the muted ink. */
 .identity {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
-}
-
-/* The provider list's identity tile, at the same size and the same wash, so the two Gateway lists
-   start every row on the same shape. A key has no brand, so the tile holds the key glyph. */
-.mark {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--fg) 5%, transparent);
-  color: var(--muted);
-  font-size: var(--text-lg);
 }
 
 .name {
@@ -29,53 +15,46 @@
   overflow: hidden;
   color: var(--fg);
   font-size: var(--text-md);
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Unnamed is a state, stated in the muted ink - not a placeholder chip that reads as a control. */
-.unnamed {
-  color: var(--muted);
-  font-size: var(--text-md);
-  font-style: italic;
+.secret-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
-.usage {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  line-height: 1.3;
-}
-
-.usage-requests {
-  color: var(--fg);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.usage-detail {
-  display: inline-flex;
-  gap: 8px;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
+/* A long revealed or typed key ends in an ellipsis rather than widening the column; copy takes it whole. */
+.secret,
+.secret-headline {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* In the table the column is right-aligned, so the two lines align on their right edge; on a phone
-   the value sits under its label and reads from the left. */
-:global(.config-api-keys-table) .usage {
-  align-items: flex-end;
+.secret {
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
-/* A failure count is danger only when it is above zero; zero is not drawn at all. */
-.usage-failed {
-  color: var(--danger);
+.secret-headline {
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
 }
 
-.last-used {
+/* The secret's reveal and copy glyphs: quiet, and always there. */
+.secret-action {
+  flex: none;
+  color: var(--muted);
+}
+
+.figure {
   color: var(--fg-2);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
@@ -84,4 +63,147 @@
 
 .muted {
   color: var(--meta);
+}
+
+/* ── phone card ─────────────────────────────────────────────────────────────── */
+/* On a phone the keys are one framed table, as an OAuth provider's credentials are: a header strip
+   on the surface, then the cards split by hairlines. */
+.is-grouped {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+
+.phone-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.phone-group-title {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.is-grouped :global(.responsive-list) > * + * {
+  border-top: 1px solid var(--border-soft);
+}
+
+.phone-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 10px 14px 14px;
+}
+
+/* The name and the row's actions share the first line, as on an OAuth credential. */
+.phone-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.phone-card-head .identity {
+  flex: 1;
+  gap: 6px;
+}
+
+.phone-card-state {
+  display: flex;
+  margin-top: -2px;
+}
+
+/* The window's traffic, read as an OAuth quota reading: what it is and its figures on the first
+   line, the rate's bar across the card, the tokens and the last use under the bar. */
+.reading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name value"
+    "bar bar"
+    "foot foot-end";
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  margin-top: 4px;
+  padding-right: 4px;
+}
+
+.reading-name {
+  grid-area: name;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 18px;
+}
+
+.reading-value {
+  grid-area: value;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.reading-value b {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.reading-bar {
+  grid-area: bar;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+
+.reading-bar > :global(.meter-fill) {
+  border-radius: inherit;
+}
+
+.reading-foot {
+  grid-area: foot;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading-foot-end {
+  grid-area: foot-end;
+  text-align: right;
+}
+
+.reading-foot .figure {
+  color: inherit;
+  font-size: inherit;
+}
+
+.tone-success { color: var(--success); }
+.tone-warn { color: var(--warn); }
+.tone-danger { color: var(--danger); }
+.tone-neutral { color: var(--meta); }
+
+/* The removal names the key it removes, in the face the list shows it in. */
+.confirm-target {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
 }

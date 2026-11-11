@@ -17,6 +17,7 @@ import { matchProviderFamily } from '../../types/providerFamilies';
 import { successRateTone } from '../../types/usageEventMetrics';
 import { ResponsiveList } from '../common/ResponsiveList';
 import { StatusLabel } from '../common/StatusLabel';
+import { TrafficCell } from '../common/TrafficCell';
 import styles from './ProviderTable.module.css';
 import type { useProviderManagement } from './useProviderManagement';
 import {
@@ -27,7 +28,6 @@ import {
 } from './providerOverview';
 import { Tag } from '../common/Tag';
 import { ConfirmAction } from '../common/ConfirmAction';
-import { Meter } from '../common/Meter';
 import { Tooltip } from '../common/Tooltip';
 import { InlineNameEditor, inlineNameEditableClass, inlineNamePersistentClass, RenameButton } from '../common/InlineName';
 import { RowContextHandle, RowHandleContext, RowReorder, useReorderList, useReorderRow } from '../common/RowReorder';
@@ -352,30 +352,7 @@ export function ProviderTable({
       title: t('pro.col_traffic'),
       key: 'traffic',
       width: columnWidth('traffic'),
-      render: (_, record) => {
-        const row = traffic?.get(record.id);
-        if (!row) {
-          return (
-            <Tooltip title={t('pro.traffic_unknown')}>
-              <span className={styles['muted']}>—</span>
-            </Tooltip>
-          );
-        }
-        if (row.total === 0) return <span className={styles['muted']}>{t('pro.traffic_none')}</span>;
-        // The rate's colour is the console's one band (successRateTone), carried by the number as
-        // well as by the meter: at a measured 0% the meter has no width to paint.
-        const tone = successRateTone(row.successRate);
-        const rate = row.successRate ?? 0;
-        return (
-          <div className={styles['traffic']}>
-            <div className={styles['traffic-line']}>
-              <span className={styles['traffic-requests']}>{t('pro.traffic_requests', { n: row.total.toLocaleString() })}</span>
-              <span className={clsx(styles['traffic-rate'], styles[`tone-${tone}`])}>{`${rate.toFixed(1)}%`}</span>
-            </div>
-            <Meter className={styles['traffic-meter']} value={rate} color={`var(--${tone === 'neutral' ? 'meta' : tone})`} />
-          </div>
-        );
-      },
+      render: (_, record) => <TrafficCell traffic={traffic?.get(record.id)} />,
     },
 
     // 6. status
