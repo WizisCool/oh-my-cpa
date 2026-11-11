@@ -65,10 +65,11 @@ export function NavSelectionHighlight({ selectedKey, groupKey, layoutKey, childr
   const frameRef = React.useRef<HTMLDivElement | null>(null);
   const layerRefs = [React.useRef<HTMLSpanElement | null>(null), React.useRef<HTMLSpanElement | null>(null)] as const;
   const stateRef = React.useRef<HighlightState>({ active: 0, key: null, group: null, placement: null });
+  // Read by the resize observer, so it holds only a committed selection.
   const selectionRef = React.useRef({ selectedKey, groupKey });
-  selectionRef.current = { selectedKey, groupKey };
 
   React.useLayoutEffect(() => {
+    selectionRef.current = { selectedKey, groupKey };
     const frame = frameRef.current;
     const layers = [layerRefs[0].current, layerRefs[1].current];
     if (!frame || !layers[0] || !layers[1]) return;
