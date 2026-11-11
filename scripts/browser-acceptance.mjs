@@ -5,7 +5,10 @@ import { launchBrowser, closeBrowser, stopProcess, closeServer, withinBudget } f
 // Set OMCPA_LIVE_CPA=1 to run the separately maintained live-system smoke.
 
 import { isolatedAppEnvironment } from './acceptance/environment.mjs';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -109,16 +112,6 @@ async function waitFor(url, timeoutMs = 30000) {
   throw new Error(`timed out waiting for ${url}: ${lastError?.message ?? 'no response'}`);
 }
 
-async function browserStorage(page) {
-  return await page.evaluate(async () => {
-    const local = Object.fromEntries(Object.entries(localStorage));
-    const session = Object.fromEntries(Object.entries(sessionStorage));
-    const cacheNames = 'caches' in window ? await caches.keys() : [];
-    const indexedDBNames = 'databases' in indexedDB ? (await indexedDB.databases()).map((item) => item.name) : [];
-    return JSON.stringify({ local, session, cacheNames, indexedDBNames });
-  });
-}
-
 /**
  * The secret sweep: every console route renders on the built binary, lays out within
  * the viewport, and neither its DOM, its browser storage nor any response it read
@@ -135,14 +128,22 @@ async function auditRoutes(page, responseBodies, routes) {
   for (const [route, selector, options] of routes) {
     await page.goto(`${appURL}${route}`, { waitUntil: 'domcontentloaded' });
     await page.locator(selector).first().waitFor({ state: 'visible', timeout: 15000 });
-    const bodyText = await page.locator('body').innerText();
     const overflow = await measureStable(
       () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
       { page, label: `the ${route} overflow measurement` },
     );
+    const { bodyText, stored } = await page.evaluate(async () => {
+      const local = Object.fromEntries(Object.entries(localStorage));
+      const session = Object.fromEntries(Object.entries(sessionStorage));
+      const cacheNames = 'caches' in window ? await caches.keys() : [];
+      const indexedDBNames = 'databases' in indexedDB ? (await indexedDB.databases()).map((item) => item.name) : [];
+      return {
+        bodyText: document.body.innerText,
+        stored: JSON.stringify({ local, session, cacheNames, indexedDBNames }),
+      };
+    });
     check(`${route} renders`, bodyText.length > 0, selector);
     check(`${route} has no document overflow`, overflow <= 1, `overflow=${overflow}`);
-    const stored = await browserStorage(page);
     const strictSecrets = [FAKE_CPA_MANAGEMENT_KEY, FAKE_ACCOUNT_SECRET];
     for (const value of strictSecrets) {
       check(`${route} excludes management and OAuth credentials`, !bodyText.includes(value) && !stored.includes(value) && !responseBodies.some((body) => body.includes(value)));
@@ -186,11 +187,6 @@ try {
   const appPort = await freePort();
   appURL = `http://127.0.0.1:${appPort}/omc`;
 
-  if (configuredExecutable) {
-    if (!fs.existsSync(executable)) throw new Error(`OMCPA_BROWSER_BINARY does not exist: ${executable}`);
-  } else {
-    execFileSync('go', ['build', '-trimpath', '-o', executable, './cmd/oh-my-cpa'], { cwd: root, env: { ...process.env, CGO_ENABLED: '0' }, stdio: 'inherit' });
-  }
   // Acceptance runs with ingestion disabled, so the request list would be empty
   // and every list behaviour untestable. Seed a deterministic window through the
   // repository itself (see the fixture's own doc comment) before the app opens
@@ -198,11 +194,23 @@ try {
   const seeder = configuredSeeder
     ? path.resolve(root, configuredSeeder)
     : path.join(temporary, process.platform === 'win32' ? 'seed-usage.exe' : 'seed-usage');
-  if (configuredSeeder) {
-    if (!fs.existsSync(seeder)) throw new Error(`OMCPA_SEED_USAGE_BINARY does not exist: ${seeder}`);
-  } else {
-    execFileSync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, env: { ...process.env, CGO_ENABLED: '0' }, stdio: 'inherit' });
+  if (configuredExecutable && !fs.existsSync(executable)) {
+    throw new Error(`OMCPA_BROWSER_BINARY does not exist: ${executable}`);
   }
+  if (configuredSeeder && !fs.existsSync(seeder)) {
+    throw new Error(`OMCPA_SEED_USAGE_BINARY does not exist: ${seeder}`);
+  }
+  const goBuildEnv = { ...process.env, CGO_ENABLED: '0' };
+  const [, , launchedBrowser] = await Promise.all([
+    configuredExecutable
+      ? Promise.resolve()
+      : execFileAsync('go', ['build', '-trimpath', '-o', executable, './cmd/oh-my-cpa'], { cwd: root, env: goBuildEnv }),
+    configuredSeeder
+      ? Promise.resolve()
+      : execFileAsync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, env: goBuildEnv }),
+    launchBrowser(chromium, { headless: true }),
+  ]);
+  browser = launchedBrowser;
   const seedUsage = () => {
     const output = execFileSync(
       seeder,
@@ -271,7 +279,6 @@ try {
   check('fixture startup ignores operator dotenv files', !appLog.join('').includes('loaded environment file'));
   check('/omc redirects to /omc/', redirect.status === 308 && redirect.headers.get('location') === '/omc/', `status=${redirect.status}`);
 
-  browser = await launchBrowser(chromium, { headless: true });
   cancellation.signal.throwIfAborted();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
   network = await guardBrowserContext(context, [appURL, FAKE_INSTALLED_PLUGIN_LOGO_URL, FAKE_UNINSTALLED_PLUGIN_LOGO_URL]);
@@ -284,6 +291,7 @@ try {
     }));
   }
   const responseBodies = [];
+  const auditedAssetURLs = new Set();
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     if (/status of 401 \(Unauthorized\)/i.test(message.text())) return;
@@ -306,7 +314,13 @@ try {
     }
     const type = response.headers()['content-type'] ?? '';
     if (!/(json|text|html|yaml|javascript)/i.test(type)) return;
-    try { responseBodies.push(await response.text()); } catch { /* navigation may dispose a response */ }
+    const url = response.url();
+    const isImmutableAsset = url.includes('/assets/');
+    if (isImmutableAsset && auditedAssetURLs.has(url)) return;
+    try {
+      responseBodies.push(await response.text());
+      if (isImmutableAsset) auditedAssetURLs.add(url);
+    } catch { /* navigation may dispose a response */ }
   });
 
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });

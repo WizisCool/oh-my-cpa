@@ -11,6 +11,7 @@ const require = createRequire(import.meta.url);
 export default defineConfig({
   root: fileURLToPath(new URL('../', import.meta.url)),
   test: {
+    fsModuleCache: true,
     reporters: process.env.CI ? ['default', 'junit'] : ['default'],
     outputFile: { junit: 'tmp/frontend-tests/junit.xml' },
     // Heavy jsdom/antd renders compete for CPU before their assertions run. Bound

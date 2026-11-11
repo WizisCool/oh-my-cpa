@@ -455,40 +455,64 @@
   a { color: inherit; }
 }
 
-/* ── Radix / shadcn floating & overlay transitions (gated on motion preference) ── */
+/* ── Base UI / shadcn interruptible floating & overlay transitions ──────────
+   Base UI marks enter/exit frames with [data-starting-style] and [data-ending-style]
+   and sets --transform-origin on positioned popups, so closing mid-entrance reverses
+   smoothly in place instead of snapping between keyframes. */
 :root:not([data-reduced-motion='true']) {
-  .omc-float-surface[data-state='open'] {
-    animation: omc-float-in var(--motion-float) var(--ease-out);
+  .omc-float-surface {
+    transform-origin: var(--transform-origin, center);
+    transition:
+      opacity var(--motion-float) var(--ease-out),
+      transform var(--motion-float) var(--ease-out);
   }
-  .omc-float-surface[data-state='open'][data-side='bottom'] {
-    animation: omc-drop-in-below var(--motion-float) var(--ease-out);
+  .omc-float-surface[data-starting-style] {
+    opacity: 0;
+    transform: scale(0.96);
   }
-  .omc-float-surface[data-state='open'][data-side='top'] {
-    animation: omc-drop-in-above var(--motion-float) var(--ease-out);
+  .omc-float-surface[data-side='bottom'][data-starting-style] {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
   }
-  .omc-float-surface[data-state='closed'] {
-    animation: omc-float-out var(--motion-fast) var(--ease-standard);
+  .omc-float-surface[data-side='top'][data-starting-style] {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
   }
-  .omc-dialog-surface[data-state='open'] {
-    animation: omc-dialog-in var(--motion-slow) var(--ease-out);
+  .omc-float-surface[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.98);
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--ease-standard);
   }
-  .omc-dialog-surface[data-state='closed'] {
-    animation: omc-float-out var(--motion-base) var(--ease-standard);
+  .omc-float-surface[data-instant] {
+    transition-duration: 0s;
   }
-  .omc-overlay-backdrop[data-state='open'] {
-    animation: omc-fade-in var(--motion-base) var(--ease-out);
+  .omc-dialog-surface {
+    transition:
+      opacity var(--motion-slow) var(--ease-out),
+      transform var(--motion-slow) var(--ease-out);
   }
-  .omc-overlay-backdrop[data-state='closed'] {
-    animation: omc-fade-out var(--motion-fast) var(--ease-standard);
+  .omc-dialog-surface[data-starting-style] {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
   }
-}
-@keyframes omc-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes omc-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  .omc-dialog-surface[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.98);
+    transition-duration: var(--motion-base);
+    transition-timing-function: var(--ease-standard);
+  }
+  .omc-overlay-backdrop {
+    transition: opacity var(--motion-base) var(--ease-out);
+  }
+  .omc-overlay-backdrop[data-starting-style],
+  .omc-overlay-backdrop[data-ending-style] {
+    opacity: 0;
+  }
+  .omc-overlay-backdrop[data-ending-style] {
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--ease-standard);
+  }
 }
 
 /* A card is a fill on the edge shadow, never a border; the layout and a sheet's body are flat. */
