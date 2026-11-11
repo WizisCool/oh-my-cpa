@@ -2,12 +2,6 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/insights';
 
 export default {
-  "insights.range.today": "今天",
-  "insights.range.yesterday": "昨天",
-  "insights.range.this_week": "本週",
-  "insights.range.last_week": "上週",
-  "insights.range.this_month": "本月",
-  "insights.range.last_month": "上月",
   "insights.range.24h": "近 24 小時",
   "insights.range.7d": "近 7 天",
   "insights.range.30d": "近 30 天",

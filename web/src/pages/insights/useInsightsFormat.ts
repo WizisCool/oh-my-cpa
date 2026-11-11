@@ -1,8 +1,8 @@
 import React from 'react';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
-import type { InsightsMetric } from './insightsCube';
-import { formatMetric as formatValue, formatMetricExact as formatExact } from './insightsFormat';
+import type { InsightsMetric } from '../../types/insightsCube';
+import { formatMetric as formatValue, formatMetricExact as formatExact } from '../../types/insightsFormat';
 
 export function useInsightsFormat() {
   const { currency } = useDisplayCurrency();

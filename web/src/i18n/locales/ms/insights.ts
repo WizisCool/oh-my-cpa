@@ -2,12 +2,6 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/insights';
 
 export default {
-  "insights.range.today": "Hari ini",
-  "insights.range.yesterday": "Semalam",
-  "insights.range.this_week": "Minggu ini",
-  "insights.range.last_week": "Minggu lepas",
-  "insights.range.this_month": "Bulan ini",
-  "insights.range.last_month": "Bulan lepas",
   "insights.range.24h": "24 jam lepas",
   "insights.range.7d": "7 hari lepas",
   "insights.range.30d": "30 hari lepas",

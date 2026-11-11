@@ -41,8 +41,17 @@
 }
 
 /* ── presets ── */
-.time-range-rail { display: flex; flex: none; flex-direction: column; width: 148px; padding: 8px; }
-.time-range-presets { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+/* The rail is as wide as its widest row, so a paired group never squeezes a label onto two lines. */
+.time-range-rail { display: flex; flex: none; flex-direction: column; width: max-content; min-width: 148px; padding: 8px; }
+.time-range-presets { display: flex; flex-direction: column; gap: 4px; }
+.time-range-group-label {
+  padding: 4px 10px 2px;
+  color: var(--meta);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+}
+.time-range-group-options { display: flex; flex-direction: column; gap: 1px; }
+.time-range-group-options.is-paired { display: grid; grid-template-columns: repeat(2, minmax(max-content, 1fr)); gap: 1px 2px; }
 /* The custom range is a different kind of answer from the presets above it, so a rule sets it
    apart; its caret says the row opens something rather than applying. */
 .time-range-option.time-range-custom-toggle {
@@ -71,6 +80,7 @@
   color: var(--fg-2);
   font: inherit;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
@@ -203,6 +213,7 @@
   font-size: var(--text-base);
 }
 .time-range-panel.is-sheet .time-range-rail { width: auto; padding: 0; }
+.time-range-panel.is-sheet .time-range-group-label { padding-inline: 12px; }
 .time-range-back {
   display: inline-flex;
   align-items: center;

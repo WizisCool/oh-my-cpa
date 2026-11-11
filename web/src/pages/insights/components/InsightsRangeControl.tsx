@@ -3,7 +3,9 @@ import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { useT } from '../../../i18n';
 import { TimeRangePicker } from '../../../components/common/timeRange/TimeRangePicker';
-import { INSIGHTS_PRESETS, type InsightsPreset, type InsightsRange } from '../../../types/insights';
+import { calendarPresetGroup, calendarPresetLabel } from '../../../components/common/timeRange/presetGroups';
+import { isCalendarPreset } from '../../../types/calendarPresets';
+import { INSIGHTS_SPAN_PRESETS, type InsightsPreset, type InsightsRange } from '../../../types/insights';
 
 interface InsightsRangeControlProps {
   range: InsightsRange;
@@ -22,7 +24,7 @@ function formatSpan(from: number, to: number): string {
 
 /**
  * The Insights window picker: the console's one picker, with the calendar units ("today", "this
- * week") listed ahead of the spans, because a reader comparing keys asks about the calendar first.
+ * week") grouped ahead of the spans, because a reader comparing keys asks about the calendar first.
  * A custom range is whole days, like the dashboard's.
  */
 const InsightsRangeControlView: React.FC<InsightsRangeControlProps> = ({ range, onChange, isDisabled }) => {
@@ -32,9 +34,18 @@ const InsightsRangeControlView: React.FC<InsightsRangeControlProps> = ({ range, 
     ? (typeof range.to === 'number'
       ? formatSpan(range.from, range.to)
       : `${dayjs(range.from).format('MM-DD')} – ${t('dash.range.until_now')}`)
-    : t(`insights.range.${range.preset ?? '7d'}`);
-  const presets = React.useMemo(
-    () => INSIGHTS_PRESETS.map((preset) => ({ key: preset, label: t(`insights.range.${preset}`) })),
+    : isCalendarPreset(range.preset)
+      ? calendarPresetLabel(t, range.preset)
+      : t(`insights.range.${range.preset ?? '7d'}`);
+  const groups = React.useMemo(
+    () => [
+      calendarPresetGroup(t),
+      {
+        key: 'recent',
+        label: t('time_range.quick'),
+        presets: INSIGHTS_SPAN_PRESETS.map((preset) => ({ key: preset, label: t(`insights.range.${preset}`) })),
+      },
+    ],
     [t],
   );
 
@@ -46,7 +57,7 @@ const InsightsRangeControlView: React.FC<InsightsRangeControlProps> = ({ range, 
       preset={range.preset}
       from={range.from}
       to={range.to}
-      presets={presets}
+      groups={groups}
       label={label}
       isDisabled={isDisabled}
       onPresetChange={(preset) => onChange({ preset: preset as InsightsPreset })}

@@ -1,14 +1,14 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../api/client';
-import { useT } from '../../i18n';
-import { useProviderBranding } from '../../hooks/useProviderBranding';
-import { resolveChannelName } from '../../components/dashboard/dashboardProvidersLogic';
-import { CREDENTIAL_FILES_QUERY_KEY } from '../../components/dashboard/CredentialQuota';
-import { createFacetMarkRenderer } from '../../components/usage/RequestFacetMark';
-import { createProviderNameResolver, credentialFileName, credentialTitle, indexCredentialFiles } from '../../types/usageEventIdentity';
-import type { EventFilterKey } from '../../types/usageEventQuery';
-import { FOLDED_ID, type InsightsCube, type InsightsDimension } from './insightsCube';
+import { api } from '../api/client';
+import { useT } from '../i18n';
+import { useProviderBranding } from './useProviderBranding';
+import { resolveChannelName } from '../components/dashboard/dashboardProvidersLogic';
+import { CREDENTIAL_FILES_QUERY_KEY } from '../components/dashboard/CredentialQuota';
+import { createFacetMarkRenderer } from '../components/usage/RequestFacetMark';
+import { createProviderNameResolver, credentialFileName, credentialTitle, indexCredentialFiles } from '../types/usageEventIdentity';
+import type { EventFilterKey } from '../types/usageEventQuery';
+import { FOLDED_ID, type InsightsCube, type InsightsDimension } from '../types/insightsCube';
 
 export interface InsightsLabels {
   /** The name a reader knows a value by. */

@@ -4,8 +4,8 @@ import { EChart } from '../../../charts/echarts/EChart';
 import { renderChartTooltip } from '../../../charts/chartTooltip';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import type { InsightsMetric } from '../insightsCube';
-import { formatShare } from '../insightsFormat';
+import type { InsightsMetric } from '../../../types/insightsCube';
+import { formatShare } from '../../../types/insightsFormat';
 
 export interface InsightsHourChartProps {
   /** Twenty-four values, local hour 0 first. */

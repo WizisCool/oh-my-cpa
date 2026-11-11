@@ -52,7 +52,7 @@ import {
   type InsightsDimension,
   type InsightsFilters,
   type InsightsMetric,
-} from './insightsCube';
+} from '../../types/insightsCube';
 import {
   INSIGHTS_GROUPINGS,
   readInsightsView,
@@ -62,7 +62,7 @@ import {
   type InsightsGrouping,
   type InsightsViewState,
 } from './insightsViewState';
-import { useInsightsLabels } from './useInsightsLabels';
+import { useInsightsLabels } from '../../hooks/useInsightsLabels';
 import { useCompareWindowLabel } from './useCompareWindowLabel';
 import { InsightsRangeControl } from './components/InsightsRangeControl';
 import { InsightsFilterBar } from './components/InsightsFilterBar';

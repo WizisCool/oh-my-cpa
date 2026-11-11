@@ -1,10 +1,4 @@
 export default {
-  'insights.range.today': '今天',
-  'insights.range.yesterday': '昨天',
-  'insights.range.this_week': '本周',
-  'insights.range.last_week': '上周',
-  'insights.range.this_month': '本月',
-  'insights.range.last_month': '上月',
   'insights.range.24h': '近 24 小时',
   'insights.range.7d': '近 7 天',
   'insights.range.30d': '近 30 天',

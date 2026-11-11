@@ -6,10 +6,10 @@
  * window itself is resolved by the server in the OMC Time Zone: a calendar unit such as "today" is a
  * fact of the deployment's calendar, not of whatever clock the browser runs.
  */
+import { CALENDAR_PRESETS, isCalendarPreset } from './calendarPresets';
 
-export const INSIGHTS_CALENDAR_PRESETS = ['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month'] as const;
 export const INSIGHTS_SPAN_PRESETS = ['24h', '7d', '30d', '90d', 'all'] as const;
-export const INSIGHTS_PRESETS = [...INSIGHTS_CALENDAR_PRESETS, ...INSIGHTS_SPAN_PRESETS] as const;
+export const INSIGHTS_PRESETS = [...CALENDAR_PRESETS, ...INSIGHTS_SPAN_PRESETS] as const;
 export type InsightsPreset = (typeof INSIGHTS_PRESETS)[number];
 
 export const INSIGHTS_BUCKETS = ['auto', 'hour', 'day', 'week', 'month'] as const;
@@ -79,7 +79,7 @@ export interface InsightsCompareWindow {
  * range each compare against a whole period, where "the previous period" is already exact.
  */
 export function comparesSameStretch(window: InsightsWindow): boolean {
-  return window.open_end && (INSIGHTS_CALENDAR_PRESETS as readonly string[]).includes(window.preset);
+  return window.open_end && isCalendarPreset(window.preset);
 }
 
 export interface InsightsKey {

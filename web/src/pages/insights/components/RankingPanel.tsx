@@ -13,10 +13,10 @@ import { PanelNarrowing } from './PanelNarrowing';
 import { useT } from '../../../i18n';
 import type { InsightsCompareWindow } from '../../../types/insights';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { compareMetric, NO_COMPARISON, rankingMetric, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../insightsCube';
-import { formatShare } from '../insightsFormat';
+import { compareMetric, NO_COMPARISON, rankingMetric, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../../../types/insightsCube';
+import { formatShare } from '../../../types/insightsFormat';
 import { ComparisonText } from './ComparisonText';
-import type { InsightsLabels } from '../useInsightsLabels';
+import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import styles from '../insights.module.css';
 
 /** Past this many groups an unfolded ranking can be searched; a hundred credentials are not scanned by eye. */

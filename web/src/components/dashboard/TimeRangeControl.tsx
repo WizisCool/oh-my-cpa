@@ -3,7 +3,9 @@ import dayjs from '../../utils/time';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { useT } from '../../i18n';
 import { TimeRangePicker } from '../common/timeRange/TimeRangePicker';
-import { DASHBOARD_PRESETS, type DashboardPreset, type DashboardRange } from '../../types/dashboard';
+import { calendarPresetGroup, calendarPresetLabel } from '../common/timeRange/presetGroups';
+import { isCalendarPreset } from '../../types/calendarPresets';
+import { DASHBOARD_SPAN_PRESETS, DEFAULT_DASHBOARD_RANGE, type DashboardPreset, type DashboardRange } from '../../types/dashboard';
 import './dashboard.css';
 
 /**
@@ -17,6 +19,11 @@ function formatSpan(from: number, to: number): string {
   return start.format('YYYY-MM-DD') === end.format('YYYY-MM-DD')
     ? stamp
     : `${stamp} – ${end.format('MM-DD')}`;
+}
+
+/** How the dashboard names a preset: a calendar unit by its own name, a span as "last …". */
+export function dashboardPresetLabel(t: ReturnType<typeof useT>, preset: DashboardPreset): string {
+  return isCalendarPreset(preset) ? calendarPresetLabel(t, preset) : t(`dash.range.${preset}`);
 }
 
 interface TimeRangeControlProps {
@@ -40,7 +47,18 @@ const TimeRangeControlView: React.FC<TimeRangeControlProps> = ({ range, onChange
     ? (typeof range.to === 'number'
       ? formatSpan(range.from, range.to)
       : `${dayjs(range.from).format('MM-DD')} – ${t('dash.range.until_now')}`)
-    : t(`dash.range.${range.preset ?? '24h'}`);
+    : dashboardPresetLabel(t, range.preset ?? DEFAULT_DASHBOARD_RANGE.preset!);
+  const groups = React.useMemo(
+    () => [
+      calendarPresetGroup(t),
+      {
+        key: 'recent',
+        label: t('time_range.quick'),
+        presets: DASHBOARD_SPAN_PRESETS.map((preset) => ({ key: preset, label: t(`dash.range.${preset}`) })),
+      },
+    ],
+    [t],
+  );
 
   return (
     <TimeRangePicker
@@ -50,7 +68,7 @@ const TimeRangeControlView: React.FC<TimeRangeControlProps> = ({ range, onChange
       preset={range.preset}
       from={range.from}
       to={range.to}
-      presets={DASHBOARD_PRESETS.map((preset) => ({ key: preset, label: t(`dash.range.${preset}`) }))}
+      groups={groups}
       label={label}
       isDisabled={isDisabled}
       onPresetChange={(preset) => onChange({ preset: preset as DashboardPreset })}

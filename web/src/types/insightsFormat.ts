@@ -1,10 +1,10 @@
-import { formatCurrency, USD_CURRENCY, type DisplayCurrency } from '../../types/currencyDisplay';
+import { formatCurrency, USD_CURRENCY, type DisplayCurrency } from './currencyDisplay';
 /**
  * How the Insights page writes a metric. One place, so a tile, a ranking row, a matrix cell and a
  * tooltip print the same value the same way.
  */
 
-import { formatTokens, formatTokensFull, type TokenNumberStyle } from '../../types/tokenDisplay';
+import { formatTokens, formatTokensFull, type TokenNumberStyle } from './tokenDisplay';
 import type { InsightsMetric, MetricComparison } from './insightsCube';
 
 const COUNT = new Intl.NumberFormat('en');

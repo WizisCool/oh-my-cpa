@@ -691,7 +691,7 @@ export const api = {
   /**
    * getInsightsCube reads one window of the Insights page whole: every dimension tuple's usage per
    * bucket, plus the comparison period's totals. The page pivots it in the browser, so its filters and
-   * groupings never read again (`pages/insights/insightsCube.ts`).
+   * groupings never read again (`types/insightsCube.ts`).
    */
   async getInsightsCube(query: string): Promise<InsightsCubeResponse> {
     return request<InsightsCubeResponse>(`/management/insights/cube?${query}`, { method: 'GET' });

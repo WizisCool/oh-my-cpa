@@ -86,6 +86,7 @@ import {
   Plus,
   Puzzle,
   RadioOff,
+  ReceiptText,
   RefreshCw,
   Rocket,
   RotateCcw,
@@ -253,6 +254,7 @@ export const ProfileOutlined = /*#__PURE__*/ createIcon(FileText, 'anticon-profi
 export const QuestionCircleOutlined = /*#__PURE__*/ createIcon(HelpCircle, 'anticon-question-circle');
 export const QuoteOutlined = /*#__PURE__*/ createIcon(TextQuote, 'anticon-quote');
 export const RenameOutlined = /*#__PURE__*/ createIcon(TextCursorInput, 'anticon-rename');
+export const ReceiptOutlined = /*#__PURE__*/ createIcon(ReceiptText, 'anticon-receipt');
 export const ReloadOutlined = /*#__PURE__*/ createIcon(RotateCw, 'anticon-reload');
 export const RightOutlined = /*#__PURE__*/ createIcon(ChevronRight, 'anticon-right');
 export const RobotOutlined = /*#__PURE__*/ createIcon(Bot, 'anticon-robot');

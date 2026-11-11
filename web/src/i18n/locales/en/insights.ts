@@ -2,12 +2,6 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/insights';
 
 export default {
-  'insights.range.today': 'Today',
-  'insights.range.yesterday': 'Yesterday',
-  'insights.range.this_week': 'This week',
-  'insights.range.last_week': 'Last week',
-  'insights.range.this_month': 'This month',
-  'insights.range.last_month': 'Last month',
   'insights.range.24h': 'Last 24 hours',
   'insights.range.7d': 'Last 7 days',
   'insights.range.30d': 'Last 30 days',

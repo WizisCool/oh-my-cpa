@@ -1,0 +1,200 @@
+/* A stage over the dashboard: the page stays in view but softened, and the receipt is the one
+   lit object on it. It arrives the way a till slip does - fed out of a printer's mouth in a few
+   soft ticks of the roller - then, after a beat, the slip is let go: it settles, the printer lifts
+   away, and the actions come up under the paper. */
+.receipt-showcase {
+  --motion-receipt-feed: 1200ms;
+  /* When the slip is let go: the feed, and the beat of a hand tearing it off. */
+  --motion-receipt-release: calc(var(--motion-receipt-feed) + 160ms);
+  /* Seven ticks of the roller, each slow-fast-slow, the last easing out to rest. */
+  --ease-receipt-feed: linear(0, 0.009, 0.026, 0.047, 0.071, 0.096, 0.117, 0.134, 0.143, 0.152, 0.169, 0.19, 0.214, 0.238, 0.26, 0.277, 0.286, 0.295, 0.311, 0.333, 0.357, 0.381, 0.403, 0.42, 0.429, 0.438, 0.454, 0.476, 0.5, 0.524, 0.546, 0.562, 0.571, 0.58, 0.597, 0.619, 0.643, 0.667, 0.689, 0.705, 0.714, 0.723, 0.74, 0.762, 0.786, 0.81, 0.831, 0.848, 0.857, 0.897, 0.928, 0.952, 0.969, 0.981, 0.989, 0.995, 1);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  outline: none;
+}
+.receipt-showcase-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--canvas) 58%, transparent);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  animation: receipt-fade var(--motion-base) var(--ease-standard) both;
+}
+.receipt-showcase-scroll {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  padding: 48px 16px;
+}
+.receipt-showcase-scroll.is-printing { overflow-y: hidden; }
+.receipt-showcase-stage {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 400px;
+  max-width: 100%;
+}
+
+/* The printer the slip feeds from, at the paper's head while it prints: a shallow housing with a highlight
+   along its top edge, a recessed mouth the paper leaves through, and a status lamp that breathes
+   while the figures are read and flickers while the roller turns. Its body and edges are the
+   console's elevated surface, hairline and shadows, so it follows the palette; the mouth and the
+   shade it casts on the paper are shadow itself, dark in every theme. */
+.receipt-showcase-printer {
+  position: absolute;
+  top: -22px;
+  left: -24px;
+  right: -24px;
+  z-index: 1;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--fg) 7%, transparent), transparent 55%),
+    var(--elevated);
+  box-shadow: inset 0 1px 0 var(--thread-hairline), var(--shadow-raised), var(--shadow-float);
+  animation: receipt-printer-in var(--motion-slow) var(--ease-out) both;
+}
+/* A paper's width and a little more, its centre on the line the paper is clipped at. */
+.receipt-showcase-printer-mouth {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 8px;
+  height: 3px;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.88), rgb(0 0 0 / 0.6));
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.5), 0 1px 0 var(--thread-hairline);
+}
+:root[data-theme-mode='light'] .receipt-showcase-printer-mouth {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.55), rgb(0 0 0 / 0.32));
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.3), 0 1px 0 var(--elevated);
+}
+.receipt-showcase-printer-led {
+  position: absolute;
+  top: 8px;
+  right: 22px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success) 70%, transparent);
+  animation: receipt-led-breathe 1.2s var(--ease-standard) infinite alternate;
+}
+.receipt-showcase-printer.is-printing {
+  pointer-events: none;
+  animation: receipt-printer-out var(--motion-slow) var(--ease-standard) var(--motion-receipt-release) forwards;
+}
+.receipt-showcase-printer.is-printing .receipt-showcase-printer-led {
+  animation: receipt-led-flicker 150ms steps(2, jump-none) 8 both;
+}
+
+/* The paper is clipped at the mouth only, so its shadow still falls to the sides and below. */
+.receipt-showcase-feed {
+  position: relative;
+  width: 100%;
+  clip-path: inset(0 -80px -120px -80px);
+}
+/* The housing's shade on the paper just below the mouth. */
+.receipt-showcase-feed::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  height: 16px;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.14), transparent);
+  pointer-events: none;
+}
+.receipt-showcase-feed:empty::before { display: none; }
+.receipt-showcase-printer.is-printing ~ .receipt-showcase-feed::before {
+  animation: receipt-fade var(--motion-slow) var(--ease-standard) var(--motion-receipt-release) reverse forwards;
+}
+.receipt-showcase-paper {
+  max-width: 100%;
+  filter: drop-shadow(0 22px 36px rgb(20 16 10 / 0.22)) drop-shadow(0 2px 4px rgb(20 16 10 / 0.08));
+  transition: opacity var(--motion-base) var(--ease-standard);
+  /* The release only fills forwards, so the feed holds the paper until it begins. */
+  animation:
+    receipt-feed var(--motion-receipt-feed) var(--ease-receipt-feed) both,
+    receipt-release var(--motion-slow) var(--ease-out) var(--motion-receipt-release) forwards;
+}
+.receipt-showcase-paper.is-loading { opacity: 0.72; }
+
+/* The actions sit under the paper and, while the paper runs past the fold, hold to the view's
+   foot over it: the elevated slab the console's other floating action bars use. */
+.receipt-showcase-actions {
+  position: sticky;
+  bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 280px;
+  max-width: 100%;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--elevated);
+  box-shadow: var(--shadow-float);
+  animation: receipt-rise var(--motion-slow) var(--ease-out) calc(var(--motion-receipt-release) + 60ms) both;
+}
+
+/* Scoped under the stage so it outranks the button's own positioning, injected after this sheet. */
+.receipt-showcase .receipt-showcase-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  /* Above the printer, which stacks at 1 inside the scroller. */
+  z-index: 2;
+  border: 1px solid var(--border-soft);
+  background: var(--elevated);
+  box-shadow: var(--shadow-float);
+  animation: receipt-fade var(--motion-base) var(--ease-standard) both;
+}
+
+.receipt-showcase.is-leaving .receipt-showcase-backdrop,
+.receipt-showcase.is-leaving .receipt-showcase-close { animation: receipt-fade var(--motion-fast) var(--ease-standard) reverse both; }
+.receipt-showcase.is-leaving .receipt-showcase-stage { animation: receipt-sink var(--motion-fast) var(--ease-standard) both; }
+
+@keyframes receipt-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes receipt-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes receipt-feed { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes receipt-release { 0% { transform: none; } 40% { transform: translateY(3px); } 100% { transform: none; } }
+@keyframes receipt-printer-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes receipt-printer-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-10px) scale(0.985); } }
+@keyframes receipt-led-breathe { from { opacity: 0.3; } to { opacity: 1; } }
+@keyframes receipt-led-flicker { from { opacity: 0.35; } to { opacity: 1; } }
+@keyframes receipt-sink { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(12px) scale(0.985); } }
+
+@media (max-width: 640px) {
+  /* Room for the close button above the printer, which hangs 22px over the paper's head. */
+  .receipt-showcase-scroll { padding: 76px 12px calc(16px + env(safe-area-inset-bottom)); }
+  .receipt-showcase-stage { width: 100%; }
+  .receipt-showcase-printer { left: -6px; right: -6px; }
+  .receipt-showcase-printer-mouth { left: 4px; right: 4px; }
+  .receipt-showcase-printer-led { right: 8px; }
+  .receipt-showcase-paper,
+  .receipt-showcase-paper .omc-receipt { width: 100%; }
+  .receipt-showcase-actions { bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; }
+  .receipt-showcase .receipt-showcase-close { top: 12px; right: 12px; }
+}
+
+/* The console's motion policy, which an operator's choice can set either way of the system's. */
+:root[data-reduced-motion='true'] .receipt-showcase-backdrop,
+:root[data-reduced-motion='true'] .receipt-showcase .receipt-showcase-close,
+:root[data-reduced-motion='true'] .receipt-showcase-stage,
+:root[data-reduced-motion='true'] .receipt-showcase-printer,
+:root[data-reduced-motion='true'] .receipt-showcase-printer-led,
+:root[data-reduced-motion='true'] .receipt-showcase-paper,
+:root[data-reduced-motion='true'] .receipt-showcase-actions,
+:root[data-reduced-motion='true'] .receipt-showcase-feed::before { animation: none !important; }
+:root[data-reduced-motion='true'] .receipt-showcase-printer.is-printing,
+:root[data-reduced-motion='true'] .receipt-showcase-printer.is-printing ~ .receipt-showcase-feed::before { opacity: 0; }
