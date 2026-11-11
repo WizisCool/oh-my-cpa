@@ -109,7 +109,7 @@
     flex-direction: column;
   }
 
-  .recovery-actions :global(.ant-btn) {
+  .recovery-actions :global([data-slot='button']) {
     width: 100%;
     min-height: 44px;
     height: auto;
@@ -120,7 +120,7 @@
     flex-wrap: wrap;
   }
 
-  .diagnostics :global(.panel-title-extra .ant-btn),
+  .diagnostics :global(.panel-title-extra [data-slot='button']),
   .stack-details summary {
     min-height: 44px;
   }

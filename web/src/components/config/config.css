@@ -469,7 +469,7 @@
   font-size: var(--text-sm);
   margin-left: 4px;
 }
-.config-dirty-bar-actions .ant-btn {
+.config-dirty-bar-actions [data-slot="button"] {
   height: 32px;
   padding-inline: 14px;
   font-size: var(--text-md);
@@ -503,29 +503,26 @@
 }
 .payload-collapse {
   background: transparent !important;
-  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-.payload-collapse > .ant-collapse-item {
-  background: var(--surface) !important;
-  border: 0 !important;
-  border-radius: var(--radius-xl) !important;
+.payload-collapse > [data-slot="accordion-item"] {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-edge);
   overflow: hidden;
 }
-.payload-collapse > .ant-collapse-item > .ant-collapse-header {
-  padding: 14px 18px !important;
-  align-items: center !important;
-  color: var(--fg) !important;
+.payload-collapse > [data-slot="accordion-item"] [data-slot="accordion-trigger"] {
+  padding: 14px 18px;
 }
-.payload-collapse > .ant-collapse-item > .ant-collapse-content {
-  background: var(--bg) !important;
-  border-top: 1px solid var(--border-soft) !important;
-}
-.payload-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
-  padding: 16px !important;
+.payload-collapse > [data-slot="accordion-item"] > [data-slot="accordion-panel"] {
+  background: var(--bg);
+  border-top: 1px solid var(--border-soft);
+  padding: 16px;
 }
 .payload-panel-header {
   display: flex;
@@ -793,7 +790,7 @@
   .config-source-container { gap: 8px; }
   .config-source-toolbar { padding: 4px 0; border: 0; background: transparent; gap: 8px; }
   .config-source-actions { gap: 4px; width: 100%; }
-  .config-source-actions > .ant-btn { padding-inline: 8px; min-height: 40px; }
+  .config-source-actions > [data-slot="button"] { padding-inline: 8px; min-height: 40px; }
   .config-monaco-shell { height: var(--source-available-height, 440px); }
   .config-monaco-loading { min-height: 0; height: 100%; padding: 12px; }
   .config-source-hint { display: none; }
@@ -801,5 +798,5 @@
   .config-dirty-bar { border: 0; padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
   .config-dirty-bar-left { gap: 8px; min-width: 0; flex-wrap: wrap; }
   .config-dirty-bar-actions { margin-inline-start: auto; }
-  .config-dirty-bar-actions .ant-btn { min-height: 40px; }
+  .config-dirty-bar-actions [data-slot="button"] { min-height: 40px; }
 }

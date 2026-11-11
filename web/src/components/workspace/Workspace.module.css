@@ -668,7 +668,7 @@
   transition: box-shadow var(--motion-fast), color var(--motion-fast);
 }
 
-.suggestion :global(.anticon) {
+.suggestion :global(.omc-icon) {
   margin-top: 3px;
   color: var(--muted);
 }
@@ -1785,7 +1785,7 @@
   border-radius: var(--radius-md);
 }
 
-.example :global(.anticon) {
+.example :global(.omc-icon) {
   flex-shrink: 0;
   color: var(--muted);
 }

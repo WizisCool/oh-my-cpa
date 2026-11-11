@@ -562,172 +562,8 @@
 a[data-slot='button']:not([data-variant='link']) { color: var(--fg); }
 a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
 
-/* A card is a fill on the edge shadow, never a border; the layout and a sheet's body are flat. */
-.ant-layout, .ant-drawer-section {
-  box-shadow: none !important;
-}
-.ant-card {
-  border: 0 !important;
-  box-shadow: var(--shadow-edge) !important;
-}
-/* A field, a segmented track and a field-shaped trigger are set into their ground (`--shadow-well`);
-   a focused field trades the well for its accent stroke. Buttons and thumbs take the control
-   material through their theme tokens. */
-.ant-input-filled, .ant-input-number-filled, .ant-picker-filled, .ant-select-filled,
-.ant-segmented, .ant-btn-color-default.ant-btn-variant-filled {
-  box-shadow: var(--shadow-well);
-}
-:is(.ant-input-filled, .ant-input-number-filled, .ant-picker-filled):focus-within,
-.ant-select-filled.ant-select-focused {
-  box-shadow: none;
-}
-/* Floating layers lift off the page. A layer the reader summoned carries the float shadow: its drop
-   says "above", and its ring keeps the edge legible where the drop has nothing to fall on - a light
-   menu over a light page, a dark one over a dark page. */
-.ant-popover-container, .ant-dropdown-menu, .ant-select-dropdown,
-.ant-picker-dropdown .ant-picker-panel-container, .ant-notification-notice {
-  border: 0;
-  box-shadow: var(--shadow-float) !important;
-}
-.ant-modal-container {
-  border: 0;
-  box-shadow: var(--shadow-overlay) !important;
-}
-/* The mask dims the page rather than hiding it: the dialog is a question about what is behind it. */
-.ant-modal-mask, .ant-drawer-mask { background: var(--overlay-mask) !important; }
-/* The date panel needs the same fill step as the popover, dropdown and select
-   panels above; antd exposes no component token for it. */
-.ant-picker-dropdown .ant-picker-panel-container {
-  background: var(--elevated);
-}
-/* ── entrances: fade and settle ─────────────────────────────────────────────
-   antd zooms a panel in from 80% (a dialog from 20%, out of the pointer) and stretches a menu
-   down from 80% of its height. Both read as the panel flying in. Here a panel fades in while
-   settling the last few percent toward its origin, a menu also drops the last 4px toward its
-   control, and a dialog rises 8px into place: the reader sees the result arrive, not travel.
-   Opacity and transform only, so the transition stays on the compositor. */
-.ant-zoom-big-enter.ant-zoom-big-enter-active, .ant-zoom-big-appear.ant-zoom-big-appear-active,
-.ant-zoom-big-fast-enter.ant-zoom-big-fast-enter-active, .ant-zoom-big-fast-appear.ant-zoom-big-fast-appear-active {
-  animation-name: omc-float-in !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-slide-up-enter.ant-slide-up-enter-active, .ant-slide-up-appear.ant-slide-up-appear-active {
-  animation-name: omc-drop-in-below !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-slide-down-enter.ant-slide-down-enter-active, .ant-slide-down-appear.ant-slide-down-appear-active {
-  animation-name: omc-drop-in-above !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-zoom-big-leave.ant-zoom-big-leave-active, .ant-zoom-big-fast-leave.ant-zoom-big-fast-leave-active,
-.ant-slide-up-leave.ant-slide-up-leave-active, .ant-slide-down-leave.ant-slide-down-leave-active {
-  animation-name: omc-float-out !important;
-  animation-duration: var(--motion-fast) !important;
-  animation-timing-function: var(--ease-standard) !important;
-}
-.ant-popover,
-.ant-dropdown,
-.ant-select-dropdown,
-.ant-picker-dropdown {
-  animation-duration: var(--motion-float) !important;
-}
-.ant-tooltip { animation-duration: var(--motion-fast) !important; }
-.ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active {
-  animation-name: omc-dialog-in !important;
-  animation-duration: var(--motion-slow) !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-modal.ant-zoom-leave.ant-zoom-leave-active {
-  animation-name: omc-float-out !important;
-  animation-duration: var(--motion-base) !important;
-  animation-timing-function: var(--ease-standard) !important;
-}
-@keyframes omc-float-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes omc-drop-in-below {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes omc-drop-in-above {
-  from { opacity: 0; transform: translateY(4px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes omc-float-out {
-  from { opacity: 1; }
-  to { opacity: 0; transform: scale(0.98); }
-}
-@keyframes omc-dialog-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to { opacity: 1; transform: none; }
-}
-/* A card is drawn on the panel's own ground and enclosed by its edge shadow: grouping comes from
-   the enclosure, not from a second fill, so a page of cards reads as one sheet with sections on it. */
-.ant-card, .ant-table-wrapper .ant-table {
-  background: var(--bg);
-}
-/* A record sheet (AppDrawer) is the page continued beside it, so it draws on the page's ground.
-   Every quiet step - the soft rule, a card's fill, a row's hover - is derived against that ground;
-   on the elevated fill antd paints a sheet with, a dark palette's soft rule landed within one level
-   of the fill and vanished while a light one, whose elevated fill is the page's white, still showed.
-   The selector outranks antd's own `:where(.css-…).ant-drawer .ant-drawer-section`. Pickers that
-   open as sheets (navigation, time range, search) are summoned layers and keep the elevated fill. */
-.ant-drawer .ant-drawer-section.app-drawer {
-  background: var(--bg);
-}
-.ant-modal-container { border: 0; background: var(--elevated); }
-/* Viewport dimensions land immediately; only the sheet's position slides. */
-.ant-drawer .ant-drawer-content-wrapper {
-  transition-property: transform !important;
-}
-/* A sheet slides opaque, so the page below cannot show through its content. */
-.ant-drawer [class*='-panel-motion-'] {
-  opacity: 1 !important;
-}
-.ant-btn, .ant-input, .ant-select, .ant-table, .ant-tag, .ant-menu { font-family: inherit; }
-/* A dashed button is an invitation to add the next item, drawn as the outline of the slot it will
-   fill - so it keeps its dashed hairline where every other secondary button is a fill. */
-/* A press answers the finger before the action does: the control gives a little under it and
-   springs back on release, so a click is felt even when what it starts takes a moment. */
-.ant-btn:not(:disabled):active { transform: scale(0.97); }
-.ant-btn-variant-dashed:not(:disabled) { background: transparent !important; border-color: var(--border) !important; }
-.ant-btn-variant-dashed:not(:disabled):hover { border-color: var(--muted) !important; background: color-mix(in srgb, var(--fg) 4%, transparent) !important; }
-.ant-typography, h1, h2, h3, h4 { font-family: inherit; }
-.ant-divider, .ant-tabs-top > .ant-tabs-nav::before { border-color: var(--border) !important; }
-/* ── console chrome: bend antd away from its admin-template defaults ────── */
-.ant-card .ant-card-body, [data-slot="panel-body"] { padding: 20px; }
-.ant-form-item .ant-form-item-label > label { font-size: var(--text-md); color: var(--muted); letter-spacing: .04em; }
-.ant-table-wrapper .ant-table-thead > tr > th {
-  /* A header names its column in one line: a squeezed column wraps its cells, never its name,
-     which is how "前缀" came to read one glyph per line. The strip is the OAuth list's header,
-     so every list in the console names its columns the same way. */
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--muted) !important;
-  background: var(--surface) !important;
-  border-bottom: 1px solid var(--border-soft) !important;
-}
-.ant-table-wrapper .ant-table-thead > tr > th::before { display: none; }
-.ant-drawer-title, .ant-modal-title { font-size: var(--text-lg); font-weight: 600; }
-.ant-drawer-header { border-bottom: 1px solid var(--border); }
-.ant-drawer-footer { border-top: 1px solid var(--border); }
-.ant-drawer-right .ant-drawer-section { border: 0; border-left: 1px solid var(--border); }
-.ant-drawer-left .ant-drawer-section { border-right: 1px solid var(--border); }
-/* On a desktop a side sheet floats like the page panel it covers: inset from the window's edges,
-   rounded, and lifted by the overlay shadow, so it reads as a layer over the work rather than as
-   a second column bolted onto it. A phone's sheet stays edge to edge. */
-@media (min-width: 901px) {
-  .ant-drawer-right > .ant-drawer-content-wrapper { top: 8px; bottom: 8px; right: 8px; }
-  .ant-drawer-right .ant-drawer-section {
-    border: 0;
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-overlay) !important;
-  }
-}
-.ant-drawer-top .ant-drawer-section { border-bottom: 1px solid var(--border); }
-.ant-drawer-bottom .ant-drawer-section { border-top: 1px solid var(--border); }
+h1, h2, h3, h4 { font-family: inherit; }
+[data-slot="panel-body"] { padding: 20px; }
 
 .terminal-page {
   max-width: 1440px;
@@ -775,11 +611,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
 /* A toast is a floating panel like a menu: the elevated fill on the float shadow above, whose ring
    keeps its edge where the drop has nothing to fall on. Its icon is the notice's size,
    so a failure reads at the same weight whether it floats or sits in the page. */
-.ant-notification .omc-toast.ant-notification-notice { --ant-notification-icon-font-size: 18px; }
-.omc-toast .ant-notification-notice-title { font-size: var(--text-base); line-height: 1.5; color: var(--fg); }
-.omc-toast .ant-notification-notice-description { color: var(--fg-2); overflow-wrap: anywhere; }
 .omc-toast-detail { margin-bottom: 6px; }
-.omc-toast .ant-notification-notice-description { max-height: min(320px, 50vh); overflow-y: auto; }
 /* A report's per-target list scrolls inside the toast, so forty failures cannot push it past the
    viewport. */
 .omc-toast-report {
@@ -922,7 +754,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
 /* An action here is a quiet control of the callout, not a button laid on top of it: no fill of
    its own, a hairline outline for an edge, and the inset's hover step. The declarations
    outrank Ant Design's variant rules, which are injected after this stylesheet. */
-.omc-notice-tools :is(.ant-btn-default, [data-slot="button"][data-variant="secondary"]):not(:disabled) {
+.omc-notice-tools [data-slot="button"][data-variant="secondary"]:not(:disabled) {
   height: 26px;
   padding-inline: 10px;
   color: var(--fg) !important;
@@ -931,13 +763,13 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
   border-color: var(--thread-hairline) !important;
   box-shadow: inset 0 0 0 1px var(--thread-hairline) !important;
 }
-.omc-notice-tools :is(.ant-btn-default, [data-slot="button"][data-variant="secondary"]):not(:disabled):hover {
+.omc-notice-tools [data-slot="button"][data-variant="secondary"]:not(:disabled):hover {
   background: var(--thread-field-hover) !important;
   border-color: var(--fg-2) !important;
   box-shadow: inset 0 0 0 1px var(--fg-2) !important;
 }
-.omc-notice-tools :is(.ant-btn-default, [data-slot="button"][data-variant="secondary"]) :is(.ant-btn-icon, [data-slot="button-icon"]) { color: var(--muted); }
-.omc-notice-tools :is(.ant-btn-default, [data-slot="button"][data-variant="secondary"]):not(:disabled):hover :is(.ant-btn-icon, [data-slot="button-icon"]) { color: var(--fg); }
+.omc-notice-tools [data-slot="button"][data-variant="secondary"] [data-slot="button-icon"] { color: var(--muted); }
+.omc-notice-tools [data-slot="button"][data-variant="secondary"]:not(:disabled):hover [data-slot="button-icon"] { color: var(--fg); }
 .omc-notice-tools a { font-size: var(--text-md); white-space: nowrap; }
 /* Centred on the code's line: 10px of padding and half of that line's 16px. */
 .omc-notice-close {
@@ -1064,7 +896,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
 /* The gutter is held whether or not the body scrolls: a card folding open past the panel's height
    would otherwise bring a scrollbar in mid-fold and narrow every card above it, then widen them again
    when it folds shut. */
-.app-drawer .ant-drawer-body {
+.app-drawer [data-slot="sheet-body"] {
   scrollbar-gutter: stable;
 }
 
@@ -1140,9 +972,7 @@ a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
-/* While a drag holds the edge, the cursor stays a resize cursor over whatever it crosses and the
-   panel's text cannot be selected by the sweep. */
-.ant-drawer-content-wrapper:has(> .app-drawer-resize[data-dragging]) { user-select: none; }
+
 
 /* SectionHeading (components/common/SectionHeading.tsx): one head at three weights. The frame
    around it - padding, a rule, a tinted strip - is the caller's; the type is not. */
@@ -1273,7 +1103,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .selection-bar-actions { gap: 8px; margin-inline-start: auto; }
 .selection-bar-count { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .selection-bar-note { color: var(--muted); }
-.selection-bar-start .ant-btn-link { padding-inline: 0; }
+.selection-bar-start [data-slot="button"][data-variant="link"] { padding-inline: 0; }
 
 /* Tag (components/common/Tag.tsx): a short label on a soft fill with no edge. A row carries
    several facts, and an outline around each made the row a strip of boxes; a wash keeps each one
@@ -1326,7 +1156,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 
 /* SearchInput (components/common/SearchInput.tsx): the glyph is chrome, so it takes the muted ink
    on every surface the field appears on. */
-.search-input .ant-input-prefix { color: var(--muted); }
+.search-input [data-slot="input-prefix"] { color: var(--muted); }
 
 /* A label/value list (`FactList`). */
 .fact-list { margin: 0; }
@@ -1366,41 +1196,19 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   background: var(--bg);
   overflow: clip;
 }
-.data-table .ant-table-wrapper .ant-table { background: transparent; }
-.data-table .ant-table-wrapper .ant-table-thead > tr > th { padding: 8px 16px; }
-.data-table .ant-table-wrapper .ant-table-tbody > tr > td {
-  background: transparent;
-  border-bottom: 1px solid var(--border-soft);
-  padding: 12px 16px;
-}
-.data-table .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td { background: color-mix(in srgb, var(--fg) 3%, transparent); }
-.data-table .ant-table-wrapper .ant-table-tbody > tr:last-child > td { border-bottom: 0; }
-/* A header a reader already saw above an identical table: kept for assistive technology,
-   which reads each table on its own, and clipped from view. */
-.data-table .data-table-head-hidden .ant-table-thead {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.responsive-list :is(.ant-pagination, [data-slot="pager"]) { margin-top: 12px; }
+.responsive-list [data-slot="pager"] { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
-:is(.ant-card-body, [data-slot="panel-body"]) [data-testid="phone-row"] { padding-inline: 0; }
+[data-slot="panel-body"] [data-testid="phone-row"] { padding-inline: 0; }
 @media (max-width: 640px) {
-  .ant-card .ant-card-body, [data-slot="panel-body"] { padding: 16px; }
+  [data-slot="panel-body"] { padding: 16px; }
 }
 
 /* A row's action cluster: square 28px icon buttons, 8px apart so the touch rules' 4px hit insets
-   meet rather than overlap. At rest an action is its glyph alone - a column of framed buttons
-   repeated down every row was the loudest thing in a list - and the pointer brings up a soft
-   fill under it. A destructive action shows its colour only on hover: a column of red bins read
-   as a column of errors. `!important` because antd's variant colours are injected after this
-   sheet at the same specificity. */
+   meet rather than overlap. At rest an action is its glyph alone, and the pointer brings up a soft
+   fill under it. A destructive action shows its colour only on hover. */
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-:is(.ant-btn, [data-slot="button"]).row-action-btn {
+[data-slot="button"].row-action-btn {
   width: 28px;
   min-width: 28px;
   height: 28px;
@@ -1410,9 +1218,9 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   box-shadow: none !important;
   color: var(--muted) !important;
 }
-:is(.ant-btn, [data-slot="button"]).row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 7%, transparent) !important; color: var(--fg) !important; }
-:is(.ant-btn.ant-btn-dangerous, [data-slot="button"][data-danger]).row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--danger) 12%, transparent) !important; color: var(--danger) !important; }
-:is(.ant-btn, [data-slot="button"]).row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
+[data-slot="button"].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 7%, transparent) !important; color: var(--fg) !important; }
+[data-slot="button"][data-danger].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--danger) 12%, transparent) !important; color: var(--danger) !important; }
+[data-slot="button"].row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
 .terminal-title { margin: 4px 0 0; font-size: var(--text-xl); font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
 .terminal-panel {
   border: 0;
@@ -1436,11 +1244,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 }
 *::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--fg) 30%, transparent); }
 *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
-/* A virtual list (the request list, a select's options) draws its own bar from a custom property,
-   at 50% black by default: it takes the same wash, and a slimmer gutter inset from the edge. */
-:root { --rc-virtual-list-scrollbar-bg: color-mix(in srgb, var(--fg) 18%, transparent); }
-.ant-listy-scrollbar-vertical, .rc-virtual-list-scrollbar-vertical { width: 6px !important; right: 2px !important; }
-.ant-listy-scrollbar-thumb:hover, .rc-virtual-list-scrollbar-thumb:hover { --rc-virtual-list-scrollbar-bg: color-mix(in srgb, var(--fg) 30%, transparent); }
+
 /* The console's one focus ring, for everything a keyboard reaches - except a text field. A text
    field sits inside a control that draws its own focus on the *outer* box (antd's accent border
    and halo on an Input, a Select, a picker or a number field), and a browser matches
@@ -1718,9 +1522,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .auth-alert {
   margin-bottom: 20px;
 }
-.auth-form .ant-form-item { margin-bottom: 20px; }
-.auth-form .ant-form-item .ant-form-item-label { padding-bottom: 8px; }
-.auth-form .ant-form-item .ant-form-item-label > label { font-size: var(--text-sm); }
+.auth-form [data-slot="field"] { margin-bottom: 20px; }
 .auth-submit { font-weight: 600; }
 
 @media (max-width: 640px) {
@@ -1766,8 +1568,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   display: flex;
   flex-direction: column;
 }
-:is(.ant-btn, [data-slot="button"]).tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
-.dashboard-tile :is(.ant-card-body, [data-slot="panel-body"]) { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+[data-slot="button"].tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
+.dashboard-tile [data-slot="panel-body"] { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 /* A tile given more rows than its reading needs spends them on its sparkline. */
 .dashboard-tile .tile-caption { flex: none; }
 .dashboard-tile .chart-slot { display: flex; flex: 1 1 auto; flex-direction: column; }
@@ -1790,7 +1592,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
 
 @media (max-width: 640px) {
-  .dashboard-tile :is(.ant-card-body, [data-slot="panel-body"]) { padding: 16px; }
+  .dashboard-tile [data-slot="panel-body"] { padding: 16px; }
   .tile-caption { margin-top: 6px; gap: 2px 10px; font-size: var(--text-sm); }
   .dashboard-tile .chart-slot, .dashboard-tile .chart-placeholder { margin-top: 8px; }
 }
@@ -1868,8 +1670,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* A glyph in the header's own muted ink rather than a framed button: the panel is a reading, and
    its one control should not outweigh the title it sits beside. */
-.quota-refresh:is(.ant-btn, [data-slot="button"]) { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
-.quota-refresh:is(.ant-btn, [data-slot="button"]):hover { color: var(--accent); }
+.quota-refresh[data-slot="button"] { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+.quota-refresh[data-slot="button"]:hover { color: var(--accent); }
 @keyframes heatmap-progress { from { transform: translateX(-100%); } to { transform: translateX(433%); } }
 
 /* ── transitions: a view never hard-swaps ───────────────────────────────────
@@ -1892,20 +1694,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 :root[data-theme-switching] *::after {
   transition: none !important;
 }
-/* A side sheet springs into place and glides away (`--ease-sheet-*`); its mask fades on the same
-   clock so the two read as one movement. Reduced motion keeps its own zeroed durations. */
-:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-enter-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-appear-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-enter-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-appear-active"] {
-  transition-duration: var(--motion-sheet-in) !important;
-  transition-timing-function: var(--ease-sheet-in) !important;
-}
-:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-leave-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-leave-active"] {
-  transition-duration: var(--motion-sheet-out) !important;
-  transition-timing-function: var(--ease-sheet-out) !important;
-}
+
 /* A palette change cross-fades the whole page (ThemeContext's `withCrossFade`). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -2037,7 +1826,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .placeholder-table-cell { flex: 1 1 0; min-width: 0; }
 /* A table's own column header stays drawn on a first read; its body holds the rows instead of the
    empty message, edge to edge as real rows would be. */
-.ant-table-placeholder:has(.placeholder-table) > .ant-table-cell { padding: 0; text-align: start; }
+[data-slot="table-cell"]:has(.placeholder-table) { padding: 0; text-align: start; }
 .placeholder-panels { display: flex; flex-direction: column; gap: 16px; }
 .placeholder-panel-body { margin-top: 18px; }
 /* A conversation's first load, at the thread's reading column. Global because a lazy route draws it
@@ -2092,19 +1881,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .shell-loading-sider { display: none; }
   .shell-loading-header { padding: 0 16px 0 12px; }
 }
-/* Icon shims (`web/src/components/icons`).
-
-   The console renders Lucide icons through forwarders that carry Ant Design's `anticon`
-   class names, because first-party CSS already selects on `.anticon`
-   (`.req-back-to-top-btn .anticon`, `.request-source-chain > .anticon`, ...) and antd's own
-   components still emit it.
-
-   Both declarations below used to arrive as a side effect: `@ant-design/icons` injects them
-   when one of its components mounts, and no first-party module imports it any more. The base
-   rule is what aligns a Lucide glyph with the text beside it; without it the icon falls back
-   to `vertical-align: baseline` and its box model differs from what the console's CSS and
-   antd's own components expect. */
-.anticon {
+/* Console icon wrappers (`web/src/components/icons`). */
+.omc-icon {
   display: inline-flex;
   align-items: center;
   color: inherit;
@@ -2113,14 +1891,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 /* One rotation per 900ms: a spinner's period is not a state transition, so reduced motion
    freezes it rather than shortening it. */
-.anticon-spin {
+.omc-icon-spin {
   animation: omc-icon-spin 900ms linear infinite;
 }
 @keyframes omc-icon-spin {
   to { transform: rotate(360deg); }
 }
 :root[data-reduced-motion='true'] {
-  /* Library lifecycles use MotionProvider; CSS-owned effects settle in place. */
   *, *::before, *::after {
     scroll-behavior: auto !important;
     transition-duration: 0s !important;
@@ -2128,21 +1905,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     animation-duration: 0s !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
-  }
-  .ant-popover,
-  .ant-dropdown,
-  .ant-select-dropdown,
-  .ant-picker-dropdown,
-  .ant-tooltip,
-  .ant-zoom-big-enter.ant-zoom-big-enter-active, .ant-zoom-big-appear.ant-zoom-big-appear-active,
-  .ant-zoom-big-fast-enter.ant-zoom-big-fast-enter-active, .ant-zoom-big-fast-appear.ant-zoom-big-fast-appear-active,
-  .ant-slide-up-enter.ant-slide-up-enter-active, .ant-slide-up-appear.ant-slide-up-appear-active,
-  .ant-slide-down-enter.ant-slide-down-enter-active, .ant-slide-down-appear.ant-slide-down-appear-active,
-  .ant-zoom-big-leave.ant-zoom-big-leave-active, .ant-zoom-big-fast-leave.ant-zoom-big-fast-leave-active,
-  .ant-slide-up-leave.ant-slide-up-leave-active, .ant-slide-down-leave.ant-slide-down-leave-active,
-  .ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active,
-  .ant-modal.ant-zoom-leave.ant-zoom-leave-active {
-    animation: none !important;
   }
   .route-transition { animation: none; }
   &::view-transition-old(root),
@@ -2153,7 +1915,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   /* A placeholder keeps its place and drops the breath. */
   .placeholder { animation: none; opacity: 0.7; }
   /* The static glyph still reads as "refreshing"; only its rotation is dropped. */
-  .anticon-spin { animation: none; }
+  .omc-icon-spin { animation: none; }
 }
 
 /* ── logs: a tail, not a table ────────────────────────────────────────────── */
@@ -2220,20 +1982,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   border-bottom: var(--hairline) solid var(--border-soft);
 }
 
-/* Optical balance for interim antd selects before Base UI Select lands: keep generous separation
-   between the chosen label and the trailing caret, and keep the caret inset cleanly from the right. */
-.ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
-  padding-inline: 12px 10px !important;
-}
-.ant-select-single.ant-select-show-arrow .ant-select-selection-item,
-.ant-select-single.ant-select-show-arrow .ant-select-selection-placeholder {
-  padding-inline-end: 24px !important;
-}
-.ant-select .ant-select-arrow {
-  inset-inline-end: 10px !important;
-  color: var(--muted) !important;
-  font-size: 12px !important;
-}
+
 
 .settings-group-body {
   padding: 20px;
@@ -2257,9 +2006,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   width: 100%;
 }
 
-.settings-field-host-port .settings-number-control .ant-input-number {
-  width: 100% !important;
-  flex: 1 1 100% !important;
+.settings-field-host-port .settings-number-control [data-slot="number-input"] {
+  width: 100%;
+  flex: 1 1 100%;
 }
 
 .settings-toggle-row {
@@ -2345,7 +2094,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    spilled out of it. Scoped by the `is-select` modifier the config renderer emits, which the OMC
    settings page's rows do not carry: that page's own pickers size themselves (the timezone picker is
    440px) and are measured by their own browser scenario. */
-.settings-toggle-control.is-select .ant-select {
+.settings-toggle-control.is-select [data-slot="select-trigger"] {
   width: 100%;
 }
 
@@ -2355,35 +2104,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   align-items: center;
 }
 
-.settings-field-control .ant-input-affix-wrapper {
-  width: 100% !important;
-  height: 40px !important;
-  padding-block: 0 !important;
-  padding-inline: 11px !important;
-  font-size: var(--text-base) !important;
-  border-radius: var(--radius-md) !important;
-  display: flex !important;
-  align-items: center !important;
-  box-sizing: border-box !important;
+.settings-field-control > :is([data-slot="input-wrapper"], [data-slot="input"]) {
+  width: 100%;
+  height: 36px;
 }
 
-.settings-field-control .ant-input-affix-wrapper > input.ant-input {
-  height: auto !important;
-  line-height: 1.5 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-.settings-field-control > .ant-input {
-  width: 100% !important;
-  height: 40px !important;
-  line-height: 38px !important;
-  font-size: var(--text-base) !important;
-  border-radius: var(--radius-md) !important;
-  box-sizing: border-box !important;
-}
-
-/* Number inputs: compact semantic width 132px + unit, left-aligned text avoiding stepper overlap */
+/* Number inputs: compact semantic width 132px + unit */
 .settings-number-control {
   display: inline-flex;
   align-items: center;
@@ -2391,69 +2117,26 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   width: auto;
 }
 
-.settings-number-control .ant-input-number {
-  flex: 0 0 132px !important;
-  width: 132px !important;
-  height: 40px !important;
-  font-size: var(--text-base) !important;
-  border-radius: var(--radius-md) !important;
-}
-
-.settings-number-control .ant-input-number-input-wrap {
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-}
-
-.settings-number-control .ant-input-number-input {
-  height: 38px !important;
-  line-height: 38px !important;
-  text-align: left !important;
-  padding-inline-start: 12px !important;
-  padding-inline-end: 34px !important;
+.settings-number-control [data-slot="number-input"] {
+  flex: 0 0 132px;
+  width: 132px;
+  height: 36px;
 }
 
 /* Select dropdowns */
-.settings-field-control .ant-select {
-  width: 100% !important;
-  max-width: 280px !important;
-  height: 40px !important;
-  font-size: var(--text-base) !important;
+.settings-field-control [data-slot="select-trigger"] {
+  width: 100%;
+  max-width: 280px;
+  height: 36px;
 }
 
-.settings-field-control .ant-select-selector {
-  height: 40px !important;
-  padding-inline: 12px !important;
-  border-radius: var(--radius-md) !important;
-  display: flex !important;
-  align-items: center !important;
-}
-
-.settings-field-control .ant-select-selection-item {
-  line-height: 38px !important;
-  font-size: var(--text-base) !important;
-}
-
-/* A list field is a free-form tag editor rather than a picker: it has no dropdown to open, and
-   it wraps onto further lines as values accumulate. It therefore takes its column's full width -
-   the 280px bound above sizes a picker against its longest option, which says nothing about how
-   many addresses an operator trusts - and grows in height, where the single-line frame above
-   would paint the tags outside a box pinned at 40px. */
-.settings-field-control.is-string_list .ant-select,
-.settings-toggle-control.is-string_list .ant-select {
-  width: 100% !important;
-  max-width: none !important;
-  height: auto !important;
-}
-
-.settings-field-control.is-string_list .ant-select {
-  min-height: 40px !important;
-}
-
-/* The tag itself keeps a single line's height: the 38px line above lets a chip fill the frame,
-   which turns each address into a 40px block where the wrapping editor expects a chip. */
-.settings-field-control.is-string_list .ant-select-selection-item {
-  line-height: 22px !important;
+/* Free-form list fields wrap tags across lines across the full column width. */
+.settings-field-control.is-string_list [data-slot="combobox-trigger"],
+.settings-toggle-control.is-string_list [data-slot="combobox-trigger"] {
+  width: 100%;
+  max-width: none;
+  min-height: 36px;
+  height: auto;
 }
 
 .config-mono-input {
@@ -2762,7 +2445,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    label and sat in a narrow column beside empty space, so it is given the row's whole width here:
    the options are the row's content at this width, not a control beside a description. */
 @media (max-width: 900px) {
-  .omc-settings-group .settings-toggle-control :is(.ant-segmented, [data-slot="segmented"]) { width: 100%; }
+  .omc-settings-group .settings-toggle-control [data-slot="segmented"] { width: 100%; }
   .theme-preset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* The editor's three columns become a stack: a 132px colour control beside a fixed ratio column
      cannot also hold a token name on a phone, and the ratio belongs under the colour it measures. */
@@ -2787,7 +2470,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      the delay is felt as lag. It is deliberately not applied to the page: double-tap
      zoom is how a reader enlarges a dense table, and taking it away would be an
      accessibility regression dressed as a latency win. */
-  button, a, label, summary, [data-slot="segmented-item"], [data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="select-trigger"], .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
+  button, a, label, summary, [data-slot="segmented-item"], [data-slot="tabs-trigger"], [data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="select-trigger"], [data-slot="combobox-trigger"] {
     touch-action: manipulation;
   }
 
@@ -2804,68 +2487,17 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      Enumerating those wrappers would mean this floor silently stops applying the next time a
      field gains one, which is the defect it exists to prevent. It is a device-level floor,
      so it is meant to outrank the component layer. */
-  .ant-input,
-  .ant-input-affix-wrapper > input.ant-input,
-  .ant-input-textarea textarea,
-  .ant-input-number-input,
-  .ant-select-input,
-  .ant-picker-input > input,
   textarea,
   input {
     font-size: var(--text-lg) !important;
   }
-  /* The *displayed* text of a Select is deliberately left as the token sizes it: the browser
-     reads the size of the element it focuses, and that is the search input above, not this
-     label. Enlarging the label would trade the console's density for zoom that is already
-     prevented. */
 
-  /* Tabs and segmented items sit edge to edge, so they grow on the axis nothing else
-     occupies. A horizontal inset would steal the neighbour's taps, and on the request
-     page the segmented control is three options in a 350px row - there is no gap to take. */
-  .ant-tabs-nav-list .ant-tabs-tab { padding-block: 6px; }
-  .ant-segmented-item > .ant-segmented-item-label { min-height: 30px; display: flex; align-items: center; justify-content: center; }
-
-  /* Measured at 1x19px against the config page: the steppers are a mouse affordance that
-     cannot be hit by a finger, and `!important` for the same source-order reason as the
-     font floor above - antd keeps its own display value for this box. Keyboard entry and
-     the native numeric keypad remain, and an unusable control is worse than an absent one. */
-  .ant-input-number-actions { display: none !important; }
-  .ant-input-number-input { padding-inline-end: 8px; }
-
-  /* The hit area grows while the control keeps its drawn size: the spacing scale
-     keeps the console dense, so enlarging every 28px button would
-     trade a reachability defect for a layout one.
-
-     **The scope is controls small in both dimensions.** A control that is wide - a labelled
-     text button, or any of the console's 32px-tall buttons, which is antd's own height
-     everywhere - is aimable even when it is short, so it keeps its box. What cannot be aimed
-     at is a control with no label and no width: an icon button.
-
-     `.ant-drawer-close` is listed beside antd's icon-only variant
-     because it is a dense control of its own rather than antd's button: it is a plain
-     button, so the first version of this rule missed it, and the browser probe missed the
-     gap in turn because its metric accepted an *ancestor* as a hit - which is exactly what a
-     probe just outside an unexpanded button lands on. A control added here must be a real
-     icon-sized control; adding a wide one would steal its neighbour's taps.
-
-     The remaining cost is stated rather than hidden: in a cluster whose gap is under 8px, two
-     adjacent 4px insets overlap, and the DOM-later control wins that band. The clusters that
-     are still that tight are the ones whose controls are wide enough not to need an inset. */
-  .ant-btn.ant-btn-icon-only,
+  /* Expand touch hit targets on icon-sized controls without inflating layout geometry. */
   [data-slot="button"][data-icon-only],
-  .ant-drawer-close,
-  .ant-pagination-prev,
-  .ant-pagination-next,
-  .ant-input-clear-icon,
   [data-slot="input-clear"] {
     position: relative;
   }
-  .ant-btn.ant-btn-icon-only::before,
   [data-slot="button"][data-icon-only]::before,
-  .ant-drawer-close::before,
-  .ant-pagination-prev::before,
-  .ant-pagination-next::before,
-  .ant-input-clear-icon::before,
   [data-slot="input-clear"]::before {
     content: '';
     position: absolute;
@@ -2897,14 +2529,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   overscroll-behavior: contain;
   gap: 4px;
 }
-.action-menu-content :is(.ant-btn, [data-slot="button"]) {
+.action-menu-content [data-slot="button"] {
   min-height: 44px;
   height: auto;
   justify-content: flex-start;
   white-space: normal;
   text-align: start;
 }
-.action-menu-content > :is(.ant-btn, [data-slot="button"])[aria-pressed="true"] {
+.action-menu-content > [data-slot="button"][aria-pressed="true"] {
   background: var(--selected-inset);
   font-weight: 600;
 }
@@ -2940,23 +2572,23 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .terminal-subtitle { margin-top: 4px; overflow-wrap: anywhere; }
   .terminal-page-actions { min-width: 0; max-width: 100%; gap: 8px; }
   .app-header-actions { gap: 8px; }
-  .app-header-actions > :is(.ant-btn, [data-slot="button"]) { min-width: 40px; min-height: 40px; }
+  .app-header-actions > [data-slot="button"] { min-width: 40px; min-height: 40px; }
   .app-header-left { flex: 1; }
   .app-header .demo-chip { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dashboard-tile :is(.ant-card-body, [data-slot="panel-body"]) { padding: 12px; }
+  .dashboard-tile [data-slot="panel-body"] { padding: 12px; }
   .toolbar.is-ruled { gap: 8px; margin-bottom: 12px; }
   .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }
   .config-toolbar-phone .config-toolbar-left { flex-wrap: nowrap; gap: 8px; width: 100%; justify-content: space-between; }
-  .config-toolbar-phone :is(.ant-segmented, [data-slot="segmented"]) { flex-shrink: 0; }
+  .config-toolbar-phone [data-slot="segmented"] { flex-shrink: 0; }
   .settings-group-head, .settings-group-body { padding: 12px; }
   .settings-group-head { gap: 8px; }
   .settings-toggle-row { gap: 8px; padding-block: 12px; }
   .settings-inline-notice { padding: 0 20px 12px; }
   .config-page.has-dirty-bar { padding-bottom: calc(var(--config-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 24px) !important; }
-  .ant-drawer .ant-drawer-body { min-width: 0; }
+  [data-slot="sheet-body"] { min-width: 0; }
 }
 .phone-filter-disclosure { width: 100%; min-width: 0; }
 .phone-filter-disclosure > summary { min-height: 44px; cursor: pointer; padding-block: 10px; color: var(--fg-2); }
 .phone-filter-current { margin-inline-start: 8px; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
 .phone-filter-content { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 8px; }
-.phone-filter-content > .ant-select { width: 100%; min-width: 0; }
+.phone-filter-content > :is([data-slot="select-trigger"], [data-slot="combobox-trigger"]) { width: 100%; min-width: 0; }

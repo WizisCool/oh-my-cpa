@@ -139,7 +139,7 @@
   padding-left: 4px;
 }
 
-.lifted-head :global(.anticon) { color: var(--muted); }
+.lifted-head :global(.omc-icon) { color: var(--muted); }
 
 .toolbar {
   position: absolute;

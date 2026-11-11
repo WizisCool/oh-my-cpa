@@ -21,8 +21,7 @@
   margin-left: auto;
 }
 
-.layout :global(.ant-segmented-item-icon) + :global(.ant-segmented-item-label-text),
-.layout :global(.ant-segmented-item-label) {
+.layout :global([data-slot='segmented-item']) {
   display: inline-flex;
   align-items: center;
 }
@@ -136,7 +135,8 @@
   gap: 6px;
 }
 
-.filter-field :global(.ant-select) {
+.filter-field :global([data-slot='combobox-trigger']),
+.filter-field :global([data-slot='select-trigger']) {
   width: 100%;
 }
 

@@ -50,6 +50,6 @@ export function isControl(element: Element): boolean {
  * looking at what the press produced, and a hint over it would cover the first option.
  */
 export function hasOpenPopup(element: Element): boolean {
-  return element.matches('[aria-expanded="true"], [data-popup-open], .ant-dropdown-open, .ant-popover-open')
+  return element.matches('[aria-expanded="true"], [data-popup-open]')
     || element.querySelector('[aria-expanded="true"], [data-popup-open]') !== null;
 }

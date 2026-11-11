@@ -56,7 +56,7 @@ const ROUTE_CONTENT_SELECTORS = {
   '/insights': '[data-testid="insights-rhythm"] [data-testid="insights-hour-chart"]',
   '/agent': '[data-testid="agent-empty"]',
   '/oauth-management': '[data-testid="oauth-credential-record"]',
-  '/ai-providers': '.providers-page .ant-table-row',
+  '/ai-providers': '.providers-page [data-slot="table-row"]',
 };
 
 function contentSelectorFor(routePath) {

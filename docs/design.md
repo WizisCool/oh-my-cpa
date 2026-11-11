@@ -7,12 +7,13 @@ This guide explains design intent. Theme values and component APIs live in code.
 
 | Need | Read |
 | --- | --- |
-| Palette definition and derivation | [`palette.ts`](../web/src/theme/palette.ts) |
-| Component theme projection | [`themeConfig.ts`](../web/src/theme/themeConfig.ts) |
-| Global CSS, type/radius scales and initial render | [`index.css`](../web/src/index.css) |
-| Corner scale for the component theme, canvas painters and exports | [`radius.ts`](../web/src/theme/radius.ts) |
+| Palette definition, derivation and open Theme SDK | [`palette.ts`](../web/src/theme/palette.ts), [`themeContract.ts`](../web/src/theme/themeContract.ts) |
+| Motion tokens and CSS variable projection | [`themeConfig.ts`](../web/src/theme/themeConfig.ts) |
+| Global CSS, Tailwind token bridge and initial render | [`index.css`](../web/src/index.css) |
+| Corner scale for UI primitives, canvas painters and exports | [`radius.ts`](../web/src/theme/radius.ts) |
 | Typeface selection and assets | [`web/src/theme`](../web/src/theme) |
-| Shared interaction primitives | [`web/src/components/common`](../web/src/components/common) |
+| Headless Base UI / shadcn primitives | [`web/src/components/ui`](../web/src/components/ui) |
+| Shared console primitives | [`web/src/components/common`](../web/src/components/common) |
 | Event and state feedback | [`web/src/components/feedback`](../web/src/components/feedback) |
 | Copy and translation | [i18n README](../web/src/i18n/README.md), [style](../web/src/i18n/STYLE.md), [glossary](../web/src/i18n/GLOSSARY.md) |
 

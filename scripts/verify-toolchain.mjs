@@ -42,7 +42,6 @@ const pnpmVersion = process.platform === 'win32'
 check('Node.js', nodeVersion, versions.node.version);
 check('Go', goVersion, versions.go.version);
 check('pnpm', pnpmVersion, versions.pnpm.version);
-check('@ant-design/cli', packageVersion('@ant-design/cli'), versions.antDesignCli.version);
 check('playwright-core', packageVersion('playwright-core'), versions.playwrightCore.version);
 check('@playwright/test', packageVersion('@playwright/test'), versions.playwrightCore.version);
 

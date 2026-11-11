@@ -444,7 +444,7 @@ export const ModelSquarePage: React.FC = () => {
     setSelectedIdentity(target.identity);
     // The neighbour's page must be the visible one, so closing the details lands beside it.
     setPage(Math.floor((selectedIndex + offset) / PAGE_SIZE) + 1);
-    detailsRef.current?.closest('.ant-drawer-body')?.scrollTo({ top: 0 });
+    detailsRef.current?.closest('[data-slot="sheet-body"]')?.scrollTo({ top: 0 });
   };
   const selectedRoutes = selected?.routes.filter(route => providers.has(route.provider_id)) ?? [];
 

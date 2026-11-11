@@ -79,7 +79,7 @@
   width: 100%;
   min-height: 24px;
   border-radius: var(--radius-xs);
-  background: var(--rc-virtual-list-scrollbar-bg, color-mix(in srgb, var(--fg) 18%, transparent));
+  background: color-mix(in srgb, var(--fg) 18%, transparent);
   transition: background-color var(--motion-fast) var(--ease-standard);
   will-change: transform;
   cursor: pointer;

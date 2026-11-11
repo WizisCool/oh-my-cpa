@@ -263,19 +263,19 @@
     gap: 4px;
   }
   /* The ingest verdict is the one flexible item: it gives way first, and the tools keep the edge. */
-  .request-events-page .terminal-page-head > .request-actions > .ant-btn:has(.ant-badge) {
+  .request-events-page .terminal-page-head > .request-actions > [data-slot="button"]:has([data-slot="status-dot"]) {
     flex: 0 1 auto;
     min-width: 0;
     margin-inline-end: auto;
     padding-inline: 6px;
     overflow: hidden;
   }
-  .request-events-page .terminal-page-head .ant-badge {
+  .request-events-page .terminal-page-head [data-slot="status-dot"] {
     display: flex;
     align-items: center;
     min-width: 0;
   }
-  .request-events-page .terminal-page-head .ant-badge-status-text {
+  .request-events-page .terminal-page-head [data-slot="status-dot"] > span:last-child {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

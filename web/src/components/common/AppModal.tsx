@@ -137,7 +137,7 @@ export function AppModal({
           if (
             details.reason === 'outside-press' &&
             details.event.target instanceof Element &&
-            details.event.target.closest('.ant-select-dropdown, [data-slot="select-content"], [data-slot="combobox-content"]')
+            details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"]')
           ) {
             details.cancel();
             return;

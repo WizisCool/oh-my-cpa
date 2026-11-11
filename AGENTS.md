@@ -70,7 +70,8 @@ and operator procedures.
   - `internal/ingest/`, `internal/usage/`, `internal/pricing/`, `internal/quota/`: Usage ingestion, token accounting, versioned price book, and quota observation/warmup.
 - **Frontend structure (`web/src/`)**:
   - `pages/`: Route-level views loaded through `App.tsx` and `PageLoading.tsx`.
-  - `components/common/` & `components/feedback/`: Shared interaction primitives (`AppModal`, `ConfirmAction`, `NumberInput`, `SearchSelect`, `RowReorder`, `RefreshButton`, etc.). Always reuse shared primitives before building page-local controls.
+  - `components/ui/`: Headless `shadcn/ui` primitives backed by `@base-ui/react` and styled with OMC palette tokens.
+  - `components/common/` & `components/feedback/`: Shared console primitives (`AppModal`, `ConfirmAction`, `NumberInput`, `SearchSelect`, `RowReorder`, `RefreshButton`, `Notice`, `useToast`, etc.). Always reuse shared primitives before building page-local controls.
   - `api/` & `hooks/`: Typed HTTP client and React Query hooks.
   - `types/`: Domain models and pure state/derivation helpers.
   - `theme/` & `i18n/`: Tokenized palette/theme projection and 4-locale catalogs (`zh`, `en`, `zh-Hant`, `ms`).
@@ -92,9 +93,9 @@ To keep local feedback and CI fast, follow the 3-tier testing pyramid in [Testin
    - Frontend pure derivations, reducers, and HTTP contract fixtures live in `web/tests/logic/*.test.ts` and `web/tests/*.contract.test.ts` (Vitest `logic` project, Node environment, `isolate: false`).
    - **Rule**: Extend existing domain test files instead of creating a new micro-test file for a single helper function. Do not write tests for speculative edge cases or trivial getters/formatters.
 2. **Tier 2 — Component Wiring Tests (`web/tests/*.component.test.tsx`)**:
-   - Exercised in Vitest `components` (jsdom, `isolate: false`, `motion: false` via `renderWithOmc`).
-   - Use only for non-trivial stateful React/Ant Design workflows (form drafts, optimistic rollback, multi-step dialogs).
-   - **Rule**: Never mount full pages or Ant Design trees in jsdom to test static rendering, copy strings, CSS class names, or pure view-model derivations that belong in Tier 1.
+   - Exercised in Vitest `components` (jsdom, `isolate: false`, via `renderWithOmc`).
+   - Use only for non-trivial stateful React/UI primitive workflows (form drafts, optimistic rollback, multi-step dialogs, keyboard focus).
+   - **Rule**: Never mount full pages in jsdom just to test static rendering, copy strings, CSS class names, or pure view-model derivations that belong in Tier 1.
 3. **Tier 3 — Built-Artifact Browser Acceptance (`scripts/browser-acceptance.mjs`)**:
    - Runs Playwright Chromium against the real compiled Go binary, embedded SPA, SQLite, and fake CPA (`pnpm verify:browser:smoke` for PRs, `pnpm verify:browser` for full acceptance).
    - **Rule**: Do not maintain a mocked dev-server Playwright probe suite. Do not reintroduce per-feature browser probe scripts or use Playwright to test CSS geometry, static copy, or isolated component states already covered by Tier 1/2.

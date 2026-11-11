@@ -219,7 +219,7 @@
 
 /* The pinned remove cell covers the fields that scroll beneath it, so it is
    opaque in the table's own surface, hovered or not, and never shows through. */
-.alias-table:global(.ant-table-wrapper) :global(.ant-table-tbody) > tr > td:global(.ant-table-cell-fix) {
+.alias-table :global([data-slot='table-cell'][data-sticky]) {
   background: var(--surface);
 }
 

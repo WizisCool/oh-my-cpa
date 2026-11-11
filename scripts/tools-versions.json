@@ -54,11 +54,6 @@
     "url": "https://registry.npmjs.org/pnpm/-/pnpm-11.19.0.tgz",
     "sha256": "b9e49603540d04107b98e93917a30e6114970d403c23e40309a44ea9c2bca7fd"
   },
-  "antDesignCli": {
-    "version": "6.6.2",
-    "url": "https://registry.npmjs.org/@ant-design/cli/-/cli-6.6.2.tgz",
-    "integrity": "sha512-HrOc5t6SlBXCjdNjOQs3JP9PaDA07yBno9YPz6sajhl0SxpHwxj2N6y3+gEFeA6IpYB6Jdx+myMj242m7Rk20Q=="
-  },
   "playwrightCore": {
     "version": "1.62.1",
     "url": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.62.1.tgz",

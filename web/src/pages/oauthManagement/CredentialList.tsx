@@ -179,7 +179,7 @@ export function isRecordBodyClick(event: React.MouseEvent<HTMLElement>): boolean
   if (target && !event.currentTarget.contains(target)) return false;
   if (!target) return false;
   if (window.getSelection()?.toString()) return false;
-  return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], .ant-dropdown, .ant-popover');
+  return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], [data-slot="dropdown-menu-content"], [data-slot="popover-content"]');
 }
 
 function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, actions, pluginLogos }: {

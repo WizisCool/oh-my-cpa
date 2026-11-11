@@ -343,3 +343,29 @@ test('no JSX intrinsic element uses a raw browser title attribute outside iframe
   }
   assert.deepEqual(rawTitles, []);
 });
+
+test('no retired Ant Design, rc-component, dayjs or ECharts packages or selectors remain', () => {
+  const repoRoot = path.resolve(sourceRoot, '../..');
+  const retiredPkg = /^(?:antd|@ant-design\/.+|@rc-component\/.+|rc-.+|dayjs|echarts)$/;
+  const foundPackages: string[] = [];
+  for (const manifestPath of ['package.json', 'web/package.json']) {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, manifestPath), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    for (const name of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.devDependencies ?? {})]) {
+      if (retiredPkg.test(name)) foundPackages.push(`${manifestPath}: ${name}`);
+    }
+  }
+  assert.deepEqual(foundPackages, []);
+
+  const legacySelectors: string[] = [];
+  for (const file of sourceFiles(sourceRoot)) {
+    const text = stripCodeComments(readFileSync(file, 'utf8'));
+    if (/(?:\.ant-[a-z]|\banticon\b|--rc-virtual-list|\.rc-virtual-list)/.test(text)) {
+      legacySelectors.push(path.relative(sourceRoot, file));
+    }
+  }
+  assert.deepEqual(legacySelectors, []);
+});
+

@@ -204,10 +204,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modal.modal:global(.ant-zoom-enter.ant-zoom-enter-active),
-  .modal.modal:global(.ant-zoom-appear.ant-zoom-appear-active),
-  .modal.modal:global(.ant-zoom-leave.ant-zoom-leave-active) {
-    animation: none !important;
-  }
   .header.header { transition: none; }
 }

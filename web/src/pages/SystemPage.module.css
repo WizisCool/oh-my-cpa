@@ -744,7 +744,7 @@
   overflow-wrap: anywhere;
 }
 
-.maintenance-action-head > :global(.ant-btn) {
+.maintenance-action-head > :global([data-slot='button']) {
   flex: 0 0 auto;
 }
 

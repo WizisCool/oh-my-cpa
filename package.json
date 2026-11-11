@@ -24,7 +24,6 @@
     "dev:web": "pnpm --dir web dev",
     "icons:generate": "node scripts/generate-lucide-icons.mjs",
     "icons:lobe": "node scripts/sync-lobe-icon-catalog.mjs",
-    "lint:antd": "node scripts/lint-antd.mjs",
     "lint:go": "golangci-lint run ./...",
     "models:sync": "node scripts/sync-model-metadata.mjs",
     "openui:prompt": "node --import tsx scripts/generate-openui-prompt.ts",
@@ -53,7 +52,7 @@
     "verify:secrets:staged": "node scripts/secret-scan.mjs --staged",
     "verify:secrets:worktree": "node scripts/secret-scan.mjs --worktree",
     "verify:static": "pnpm verify:static:go && pnpm verify:static:frontend && pnpm verify:static:repository",
-    "verify:static:frontend": "pnpm type-check && pnpm test:frontend && pnpm lint:antd",
+    "verify:static:frontend": "pnpm type-check && pnpm test:frontend",
     "verify:static:go": "go test ./... && go vet ./...",
     "verify:static:repository": "pnpm check:openui-prompt && pnpm check-i18n && pnpm check-brand && pnpm check-css-modules && pnpm check:feedback && pnpm test:self && pnpm check:demo",
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
@@ -61,7 +60,6 @@
     "verify:workflow:lint": "node scripts/lint-workflows.mjs"
   },
   "devDependencies": {
-    "@ant-design/cli": "6.6.2",
     "@playwright/test": "1.62.1",
     "@types/node": "22.20.1",
     "playwright-core": "1.62.1",

@@ -50,7 +50,7 @@
 .copy-name:hover { background: var(--selected-inset); color: var(--fg); }
 .copy-name:focus-visible, .set-price:focus-visible, .model-details:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .copy-name[data-copied] { color: var(--success); }
-.copy-name :global(.anticon) { flex: none; font-size: var(--text-sm); }
+.copy-name :global(.omc-icon) { flex: none; font-size: var(--text-sm); }
 .model-identity { color: var(--fg); font-size: var(--text-md); overflow-wrap: anywhere; }
 .model-caption { color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .model-price { min-width: 0; color: var(--fg-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
@@ -132,5 +132,5 @@
   .set-price { min-height: 36px; }
   .model-row { border: 0; grid-template-columns: minmax(0, 1fr) 44px; padding: 0 0 10px 12px; }
   .reference-link { border: 0; min-height: 44px; }
-  .details-footer :global(.ant-btn) { min-height: 40px; }
+  .details-footer :global([data-slot='button']) { min-height: 40px; }
 }

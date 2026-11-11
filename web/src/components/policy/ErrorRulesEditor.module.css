@@ -90,8 +90,8 @@
 
 /* A finger has no hover and needs a taller target than a pointer does. */
 @media (pointer: coarse) {
-  .rule-tools :global(.ant-btn),
-  .match-row :global(.ant-btn) {
+  .rule-tools :global([data-slot='button']),
+  .match-row :global([data-slot='button']) {
     min-width: 40px;
     min-height: 40px;
   }

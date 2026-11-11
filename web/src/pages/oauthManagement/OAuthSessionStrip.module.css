@@ -46,7 +46,7 @@
   flex: none;
 }
 
-.pill-actions :global(.ant-btn-link) {
+.pill-actions :global([data-slot='button'][data-variant='link']) {
   padding-inline: 2px;
 }
 

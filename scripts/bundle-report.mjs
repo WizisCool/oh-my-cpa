@@ -5,12 +5,12 @@ import { gzipSync } from 'node:zlib';
 
 // These are anomaly ceilings, not feature allowances or latency guarantees.
 export const ANOMALY_LIMITS = {
-  initialJS: { raw: 3072 * 1024, gzip: 1024 * 1024 },
-  initialCSS: { raw: 256 * 1024, gzip: 96 * 1024 },
-  largestJS: { raw: 4096 * 1024 },
-  totalJS: { raw: 16 * 1024 * 1024 },
+  initialJS: { raw: 1792 * 1024, gzip: 576 * 1024 },
+  initialCSS: { raw: 224 * 1024, gzip: 48 * 1024 },
+  largestJS: { raw: 3328 * 1024 },
+  totalJS: { raw: 14 * 1024 * 1024 },
   // The console font's hinted Latin side is about 3 MiB of shards a browser fetches on demand.
-  totalDist: { raw: 32 * 1024 * 1024 },
+  totalDist: { raw: 24 * 1024 * 1024 },
   lobeSVG: { raw: 2 * 1024 * 1024 },
 };
 

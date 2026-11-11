@@ -36,13 +36,13 @@
   flex-direction: column;
   gap: 4px;
 }
-.control > :global(.ant-select),
-.control > :global(.ant-input-affix-wrapper),
-.control > :global(.ant-segmented) {
+.control > :global([data-slot='select-trigger']),
+.control > :global([data-slot='combobox-trigger']),
+.control > :global([data-slot='input-wrapper']),
+.control > :global([data-slot='input']),
+.control > :global([data-slot='segmented']),
+.select {
   width: 100%;
-}
-.select :global(.ant-select-selector) {
-  align-items: flex-start;
 }
 .range-pair {
   display: flex;

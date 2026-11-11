@@ -369,7 +369,7 @@
   line-height: 1.5;
 }
 
-.keep-safe > :global(.anticon) { flex: none; color: var(--warn); }
+.keep-safe > :global(.omc-icon) { flex: none; color: var(--warn); }
 
 /* ── schedule: a settings group, as on every settings page ── */
 /* Short controls stay beside their label even on a phone; the row does not need two lines. */
@@ -871,14 +871,14 @@
   .form-card,
   .preview { padding: 16px; }
   .status-actions { padding-inline-start: 0; }
-  .status-actions > :global(.ant-btn-primary) { flex: 1 1 auto; min-height: 40px; }
+  .status-actions > :global([data-slot='button'][data-variant='primary']) { flex: 1 1 auto; min-height: 40px; }
   .row-fold { padding-inline: 16px; }
   .location { padding-inline-start: 10px; }
   /* Two providers per row on a phone: one per row turned the picker into a long column that
      pushed the rest of the panel out of sight. */
   .choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .choice { border: 0; min-height: 68px; padding: 10px 8px; flex-direction: column; align-items: flex-start; gap: 6px; }
-  .location-actions :global(.ant-btn) { min-width: 36px; min-height: 36px; }
+  .location-actions :global([data-slot='button']) { min-width: 36px; min-height: 36px; }
   .job > .facts,
   .job > .job-actions,
   .job > :global(.omc-notice) { margin-inline-start: 0; }

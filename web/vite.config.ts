@@ -145,6 +145,12 @@ export default defineConfig(({ command }) => ({
           ) {
             return 'vendor-react';
           }
+          if (
+            /^\/node_modules\/(?:@base-ui\/utils|@floating-ui\/[^/]+|tabbable)\//.test(resolvedPkgPath) ||
+            /^\/node_modules\/@base-ui\/react\/(?:internals|utils|merge-props|floating-ui-react|use-render|toast|tooltip|alert-dialog|dialog|popover|menu|checkbox|direction-provider|csp-provider)\//.test(resolvedPkgPath)
+          ) {
+            return 'vendor-ui';
+          }
           // Let shared UI and icon modules follow their consumers. A package-wide chunk
           // promotes route-only controls and the Agent's icon catalog into every startup.
           if (id.includes('node_modules/@tanstack/react-query')) {

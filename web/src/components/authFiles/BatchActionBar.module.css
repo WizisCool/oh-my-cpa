@@ -68,7 +68,7 @@
     width: 100%;
   }
 
-  .scope-controls > :global(.ant-btn) {
+  .scope-controls > :global([data-slot='button']) {
     height: auto;
     min-height: 24px;
     white-space: normal;
@@ -98,7 +98,7 @@
     border-inline-start: 0;
   }
 
-  .destructive-action > :global(.ant-btn) {
+  .destructive-action > :global([data-slot='button']) {
     width: 100%;
   }
 }

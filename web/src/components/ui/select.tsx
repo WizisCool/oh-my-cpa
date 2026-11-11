@@ -63,7 +63,7 @@ function SelectTrigger({
       data-status={status}
       disabled={disabled}
       className={cn(
-        'group/select inline-flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border-0 text-base text-foreground outline-none transition-[background-color,box-shadow,color] select-none',
+        'group/select inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border-0 text-base text-foreground outline-none transition-[background-color,box-shadow,color] select-none',
         variant === 'borderless'
           ? 'bg-transparent shadow-none hover:enabled:bg-hover-inset focus-visible:shadow-field-focus'
           : 'bg-field shadow-well hover:enabled:not-data-[popup-open]:bg-field-hover hover:enabled:not-data-[popup-open]:shadow-field-hover focus-visible:shadow-field-focus data-[popup-open]:shadow-field-focus',

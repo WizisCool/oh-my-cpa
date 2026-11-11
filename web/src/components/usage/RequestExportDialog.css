@@ -43,7 +43,7 @@
   align-items: center;
   gap: 8px 24px;
 }
-.req-export-masks .ant-checkbox-group {
+.req-export-masks [data-slot='checkbox-group'] {
   gap: 6px 16px;
 }
 .req-export-columns {

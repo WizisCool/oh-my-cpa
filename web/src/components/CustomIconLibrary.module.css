@@ -418,7 +418,7 @@
 }
 
 @media (pointer: coarse) {
-  .actions :global(.ant-btn) {
+  .actions :global([data-slot='button']) {
     min-width: 44px;
     min-height: 44px;
   }

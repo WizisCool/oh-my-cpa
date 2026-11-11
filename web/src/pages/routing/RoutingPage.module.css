@@ -42,7 +42,7 @@
 .policy :global(.settings-toggle-title) { grid-area: title; align-self: center; font-size: var(--text-sm); font-weight: 600; }
 .policy :global(.settings-toggle-desc) { grid-area: desc; margin-top: 0; font-size: var(--text-sm); }
 .policy :global(.settings-toggle-control) { grid-area: control; width: auto; }
-.policy :global(.settings-toggle-control .ant-input-number) { width: 88px; }
+.policy :global(.settings-toggle-control [data-slot='number-input']) { width: 88px; }
 
 /* ── Route ──────────────────────────────────────────────────────────────── */
 .board { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
