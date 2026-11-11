@@ -25,7 +25,7 @@ interface TooltipTarget {
   isOpen: boolean;
 }
 
-export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTMLDivElement> }) {
+export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTMLDivElement | null> }) {
   const [target, setTarget] = React.useState<TooltipTarget | null>(null);
   const popupId = React.useId();
 

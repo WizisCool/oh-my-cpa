@@ -32,7 +32,7 @@ export function CopyButton({ text, label, size = 'small', disabled, className, s
   const { t } = useI18n();
   const toast = useToast();
   const [hasCopied, setHasCopied] = React.useState(false);
-  const timerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   React.useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const name = hasCopied ? t('common.copied') : (label ?? t('common.copy'));

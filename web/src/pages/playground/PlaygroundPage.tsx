@@ -107,7 +107,7 @@ export const PlaygroundPage: React.FC = () => {
   // each stored choice is used only once it is known to still exist: a deleted key or a model the
   // gateway no longer serves is never selected. Until all three have been reconciled
   // nothing is written back, so a slow read cannot persist an empty target over a stored one.
-  const storedRef = React.useRef<PlaygroundSession>();
+  const storedRef = React.useRef<PlaygroundSession | undefined>(undefined);
   const [hydration, setHydration] = React.useState({ session: false, key: false, model: false });
 
   React.useEffect(() => {
@@ -174,7 +174,7 @@ export const PlaygroundPage: React.FC = () => {
   // matches the last one is skipped.
   const { set: persistSession } = sessionPref;
   const lastWrittenRef = React.useRef('');
-  const pendingRef = React.useRef<PlaygroundSession>();
+  const pendingRef = React.useRef<PlaygroundSession | undefined>(undefined);
   const wasRunningRef = React.useRef(false);
   const flushSession = React.useCallback(() => {
     const document = pendingRef.current;
@@ -185,7 +185,7 @@ export const PlaygroundPage: React.FC = () => {
     lastWrittenRef.current = serialized;
     void persistSession(document);
   }, [persistSession]);
-  const persistedTargetRef = React.useRef<PlaygroundTarget>();
+  const persistedTargetRef = React.useRef<PlaygroundTarget | undefined>(undefined);
   React.useEffect(() => {
     if (isDemo || !isHydrated || !isRecoveryChecked || isRunning) return;
     pendingRef.current = sessionDocument(target, parameters, turns, lastRunID);
@@ -279,7 +279,7 @@ export const PlaygroundPage: React.FC = () => {
     if (link) navigate(link);
   }, [navigate]);
 
-  const runtimeRef = React.useRef<ReturnType<typeof usePlaygroundThreadRuntime>>();
+  const runtimeRef = React.useRef<ReturnType<typeof usePlaygroundThreadRuntime> | undefined>(undefined);
   const attachmentAdapter = React.useMemo(() => new PlaygroundImageAdapter(
     () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
     () => refuse('invalid_image'),

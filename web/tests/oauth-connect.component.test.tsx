@@ -138,7 +138,10 @@ it('keeps targeted recovery pinned across failure/minimizing and verifies creden
   try {
     expect((verification() as HTMLInputElement).checked).toBe(false);
     fireEvent.click(start());
-    await waitFor(() => expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'codex', ...recovery, verify: false }]));
+    await waitFor(() => {
+      expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'codex', ...recovery, verify: false }]);
+      expect((verification() as HTMLInputElement).disabled).toBe(false);
+    });
     shouldSucceed = true;
     fireEvent.click(verification());
     fireEvent.click(start());

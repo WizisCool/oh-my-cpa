@@ -37,7 +37,7 @@ export function useFlip(
   onMotion?: () => void,
 ) {
   const isReducedMotion = usePrefersReducedMotion();
-  const animationRef = React.useRef<Animation>();
+  const animationRef = React.useRef<Animation | undefined>(undefined);
   const topRef = React.useRef<number | undefined>(undefined);
   const onMotionRef = React.useRef(onMotion);
   React.useLayoutEffect(() => {
@@ -79,7 +79,7 @@ export function useRowMotion(
   { phase, away, delayMs, onMotion }: { phase: PresencePhase; away: string; delayMs: number; onMotion?: () => void },
 ) {
   const isReducedMotion = usePrefersReducedMotion();
-  const entranceRef = React.useRef<Animation>();
+  const entranceRef = React.useRef<Animation | undefined>(undefined);
   const onMotionRef = React.useRef(onMotion);
   React.useLayoutEffect(() => {
     onMotionRef.current = onMotion;

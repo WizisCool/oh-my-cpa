@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import { resolveApiTarget, resolveBasePath } from '../scripts/api-target.mjs';
 import { syncLobeIcons } from '../scripts/sync-lobe-icons.mjs';
@@ -27,6 +28,7 @@ export default defineConfig(({ command }) => ({
         syncLobeIcons({ quiet: true });
       },
     },
+    tailwindcss(),
     react(),
     bundleGraphPlugin(repoRoot),
     bareBaseRedirectPlugin(),

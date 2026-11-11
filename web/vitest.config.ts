@@ -18,6 +18,11 @@ export default defineConfig({
     maxWorkers: process.env.OMC_SHARED_CPU ? 2 : Math.min(4, availableParallelism()),
     projects: [
       {
+        resolve: {
+          alias: {
+            '@': fileURLToPath(new URL('./src', import.meta.url)),
+          },
+        },
         test: {
           name: 'logic',
           include: ['web/tests/**/*.test.ts'],
@@ -32,6 +37,7 @@ export default defineConfig({
         // against the runner's repository root, which does not install React.
         resolve: {
           alias: {
+            '@': fileURLToPath(new URL('./src', import.meta.url)),
             react: dirname(require.resolve('react/package.json')),
             'react-dom': dirname(require.resolve('react-dom/package.json')),
           },

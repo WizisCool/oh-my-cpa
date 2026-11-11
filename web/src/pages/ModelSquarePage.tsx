@@ -115,7 +115,7 @@ const CopyModelName: React.FC<{ identity: string }> = ({ identity }) => {
   const t = useT();
   const toast = useToast();
   const [hasCopied, setHasCopied] = React.useState(false);
-  const timerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   React.useEffect(() => () => clearTimeout(timerRef.current), []);
   const copy = async () => {
     if (!(await copyText(identity))) {

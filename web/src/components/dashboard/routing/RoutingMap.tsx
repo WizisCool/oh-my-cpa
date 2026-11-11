@@ -71,7 +71,7 @@ function useRegistry<T extends Element>() {
 
 function useLaneMotion(ref: React.RefObject<SVGGElement | null>, phase: PresencePhase, delayMs: number) {
   const isReducedMotion = usePrefersReducedMotion();
-  const entranceRef = React.useRef<Animation>();
+  const entranceRef = React.useRef<Animation | undefined>(undefined);
   React.useLayoutEffect(() => {
     if (phase !== 'entering' || isMotionReduced()) return;
     entranceRef.current = ref.current?.animate([{ opacity: 0 }, { opacity: 1 }], {

@@ -124,6 +124,13 @@ const STEP = '(?:xs|sm|md|lg|xl)';
 const ON_SCALE = new RegExp(
   `^(?:0|50%|inherit|var\\(--radius-${STEP}\\)|calc\\(var\\(--radius-${STEP}\\) [+-] \\d+px\\)|min\\(var\\(--radius-${STEP}\\), \\d+%\\))$`,
 );
+const TAILWIND_ROUNDED_ON_SCALE = new RegExp(
+  `^rounded(?:-(?:[tblr]|tl|tr|bl|br|s|e|ss|se|es|ee))?-(?:none|${STEP}|full|\\[(?:inherit|calc\\(var\\(--radius-${STEP}\\)_[+-]_\\d+px\\))\\])$`,
+);
+
+function stripCodeComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+}
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -171,6 +178,20 @@ test('every corner in the console sits on the scale', () => {
         offScale.push(`${path.relative(sourceRoot, file)}: ${value}`);
       }
     }
+    if (/\.(tsx?)$/.test(file)) {
+      const code = stripCodeComments(text);
+      const isUiFile = file.includes(`${path.sep}components${path.sep}ui${path.sep}`);
+      for (const [, literal] of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+        for (const rawToken of (literal ?? '').split(/\s+/)) {
+          const token = rawToken.split(':').at(-1) ?? '';
+          if (token.startsWith('rounded-') || (isUiFile && token === 'rounded')) {
+            if (!TAILWIND_ROUNDED_ON_SCALE.test(token)) {
+              offScale.push(`${path.relative(sourceRoot, file)}: ${rawToken}`);
+            }
+          }
+        }
+      }
+    }
   }
   assert.deepEqual(offScale, []);
 });
@@ -190,6 +211,17 @@ test('nothing encloses content with a neutral border', () => {
       const selector = (prelude ?? '').split('*/').at(-1)!.trim().replace(/\s+/g, ' ');
       if (/border-radius:\s*50%/.test(body ?? '') || STROKED_GLYPHS.has(selector)) continue;
       enclosed.push(`${path.relative(sourceRoot, file)}: ${selector}`);
+    }
+  }
+  for (const file of sourceFiles(sourceRoot).filter((name) => name.includes(`${path.sep}components${path.sep}ui${path.sep}`))) {
+    const code = stripCodeComments(readFileSync(file, 'utf8'));
+    for (const [, , literal] of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+      const tokens = (literal ?? '').trim().split(/\s+/).map((item) => item.split(':').at(-1) ?? '');
+      if (!tokens.includes('border')) continue;
+      if (tokens.includes('border-dashed') || tokens.includes('rounded-full') || tokens.includes('border-transparent')) continue;
+      if (tokens.some((token) => /^border-(?:border|border-soft|hairline)$/.test(token)) || !tokens.some((token) => /^border-(?!0$)/.test(token))) {
+        enclosed.push(`${path.relative(sourceRoot, file)}: ${literal}`);
+      }
     }
   }
   assert.deepEqual(enclosed, []);

@@ -1,6 +1,111 @@
 /* ── Sarasa Mono SC: the core shard of each weight ──────────────── */
 /* The rest of the font is registered asynchronously by `web/src/theme/sarasaFont.ts`. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "./assets/fonts/sarasa/core.css";
+
+/* ── Tailwind v4 ↔ OMC live palette & material bridge ──────────────────────
+   Every utility reads the active palette's custom properties on :root rather
+   than baked hex or zinc/neutral steps. Default Tailwind color, radius, shadow
+   and font-size scales are cleared so off-scale tokens cannot compile. */
+@theme inline {
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
+  --default-font-family: var(--font-ui);
+  --default-mono-font-family: var(--font-mono);
+
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-meta: var(--meta);
+
+  --color-card: var(--bg);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--elevated);
+  --color-popover-foreground: var(--fg);
+  --color-tooltip: var(--tooltip-bg);
+  --color-tooltip-foreground: var(--tooltip-fg);
+  --color-thumb: var(--thumb-bg);
+
+  --color-primary: var(--accent-hover);
+  --color-primary-hover: var(--accent-active);
+  --color-primary-foreground: var(--accent-on);
+  --color-brand: var(--accent);
+  --color-brand-hover: var(--accent-hover);
+  --color-brand-active: var(--accent-active);
+  --color-brand-foreground: var(--accent-on);
+
+  --color-secondary: color-mix(in srgb, var(--fg) 6%, transparent);
+  --color-secondary-hover: color-mix(in srgb, var(--fg) 10%, transparent);
+  --color-secondary-active: color-mix(in srgb, var(--fg) 13%, transparent);
+  --color-secondary-foreground: var(--fg);
+
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--hover);
+  --color-accent-foreground: var(--fg);
+  --color-hover: var(--hover);
+  --color-hover-inset: var(--hover-inset);
+  --color-selected: var(--selected-inset);
+  --color-field: var(--thread-field);
+  --color-field-hover: var(--thread-field-hover);
+
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-hairline: var(--thread-hairline);
+  --color-input: var(--thread-field);
+  --color-ring: var(--accent);
+  --color-overlay: var(--overlay-mask);
+
+  --radius-*: initial;
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --shadow-edge: var(--shadow-edge);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-float: var(--shadow-float);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-control: var(--shadow-control);
+  --shadow-well: var(--shadow-well);
+  --shadow-field-hover: var(--shadow-field-hover);
+  --shadow-field-focus: var(--shadow-field-focus);
+  --shadow-field-invalid: var(--shadow-field-invalid);
+  --shadow-field-invalid-focus: var(--shadow-field-invalid-focus);
+  --shadow-focus: var(--shadow-focus);
+
+  --text-*: initial;
+  --text-2xs: var(--text-2xs);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-md: var(--text-md);
+  --text-base: var(--text-base);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: var(--ease-standard);
+}
 
 :root {
   /* The two typographic roles, both the bundled Sarasa stack by default; an operator's choice
@@ -193,6 +298,14 @@
   --shadow-overlay: 0 0 0 1px var(--lift-ring), var(--overlay-drop);
   --shadow-control: 0 0 0 1px var(--fine-ring), var(--control-drop);
   --shadow-well: inset 0 0 0 1px var(--fine-ring), var(--well-drop);
+  --shadow-field-hover: inset 0 0 0 1px var(--lift-ring), var(--well-drop);
+  --shadow-field-focus: inset 0 0 0 1px var(--accent), 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  --shadow-field-invalid: inset 0 0 0 1px var(--danger), var(--well-drop);
+  --shadow-field-invalid-focus: inset 0 0 0 1px var(--danger), 0 0 0 2px color-mix(in srgb, var(--danger) 16%, transparent);
+  --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --tooltip-bg: var(--surface);
+  --tooltip-fg: var(--fg);
+  --thumb-bg: var(--border);
   --overlay-mask: rgb(0 0 0 / 0.5);
   --thread-field: color-mix(in srgb, var(--fg) 5%, transparent);
   --thread-field-hover: color-mix(in srgb, var(--fg) 8%, transparent);
@@ -261,6 +374,9 @@
   --control-drop: 0 1px 2px color-mix(in srgb, var(--shade) 7%, transparent);
   --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 5%, transparent);
   --overlay-mask: rgb(20 20 30 / 0.12);
+  --tooltip-bg: var(--fg);
+  --tooltip-fg: var(--bg);
+  --thumb-bg: var(--elevated);
   --fg: #1c1c1e;
   --fg-2: #505055;
   --muted: #787880;
@@ -317,22 +433,63 @@
   --effort-tint: 12%;
 }
 
-* { box-sizing: border-box; }
-/* Fixed-viewport shell: body itself never scrolls; the sidebar and the main
-   content column scroll independently (wheel applies to the hovered region). */
-html, body, #root { height: 100%; }
-body { overflow: hidden; }
-body {
-  margin: 0;
-  min-width: 320px;
-  background: var(--bg);
-  color: var(--fg);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  *, ::before, ::after {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+  /* Fixed-viewport shell: body itself never scrolls; the sidebar and the main
+     content column scroll independently (wheel applies to the hovered region). */
+  html, body, #root { height: 100%; }
+  body {
+    overflow: hidden;
+    margin: 0;
+    min-width: 320px;
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--accent); color: var(--accent-on); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  a { color: inherit; }
 }
-::selection { background: var(--accent); color: var(--accent-on); }
-button, input, textarea, select { font: inherit; }
-a { color: inherit; }
+
+/* ── Radix / shadcn floating & overlay transitions (gated on motion preference) ── */
+:root:not([data-reduced-motion='true']) {
+  .omc-float-surface[data-state='open'] {
+    animation: omc-float-in var(--motion-float) var(--ease-out);
+  }
+  .omc-float-surface[data-state='open'][data-side='bottom'] {
+    animation: omc-drop-in-below var(--motion-float) var(--ease-out);
+  }
+  .omc-float-surface[data-state='open'][data-side='top'] {
+    animation: omc-drop-in-above var(--motion-float) var(--ease-out);
+  }
+  .omc-float-surface[data-state='closed'] {
+    animation: omc-float-out var(--motion-fast) var(--ease-standard);
+  }
+  .omc-dialog-surface[data-state='open'] {
+    animation: omc-dialog-in var(--motion-slow) var(--ease-out);
+  }
+  .omc-dialog-surface[data-state='closed'] {
+    animation: omc-float-out var(--motion-base) var(--ease-standard);
+  }
+  .omc-overlay-backdrop[data-state='open'] {
+    animation: omc-fade-in var(--motion-base) var(--ease-out);
+  }
+  .omc-overlay-backdrop[data-state='closed'] {
+    animation: omc-fade-out var(--motion-fast) var(--ease-standard);
+  }
+}
+@keyframes omc-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes omc-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 
 /* A card is a fill on the edge shadow, never a border; the layout and a sheet's body are flat. */
 .ant-layout, .ant-drawer-section {

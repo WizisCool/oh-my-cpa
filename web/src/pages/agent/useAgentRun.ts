@@ -108,9 +108,9 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   const [startedAtMS, setStartedAtMS] = React.useState(0);
   const [replacedTurnID, setReplacedTurnID] = React.useState('');
 
-  const controllerRef = React.useRef<AbortController>();
+  const controllerRef = React.useRef<AbortController | undefined>(undefined);
   const runIDRef = React.useRef('');
-  const publishTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const publishTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The live frame. Held outside React state so a burst of tokens costs one render per
   // publish interval rather than one per token.
   const frameRef = React.useRef<RunFrame>(EMPTY_FRAME);
