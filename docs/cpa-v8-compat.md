@@ -87,6 +87,14 @@ CPA owns normalization (trim, lowercase, drop blanks and duplicates in order) an
 request detection; OMC accepts the gateway's saved readback without maintaining a
 client catalog or detection policy.
 
+User-keyed phrase maps (`string_map` fields such as provider `sensitive-words-replace`)
+are replaced or deleted as whole mapping values at their configuration path rather than
+placing free-form phrase keys into URL path segments; an empty replacement string stays
+explicit (`""`) so CPA deletes the phrase, while clearing all entries removes the key.
+CPA owns phrase normalization, prompt sanitization and Anthropic refusal-fallback
+injection (`upstream.claude.server-side-fallback`), reporting the serving model in
+responses and usage records when a fallback fires.
+
 A multi-path change can require several CPA calls (merge, map replacement, deletion).
 It is not an upstream atomic transaction. Pre-write backup and honest failure/readback
 reporting matter precisely because an earlier call can succeed before a later one fails.

@@ -54,6 +54,16 @@ export function areValuesSemanticallyEqual(currentValue: unknown, baselineValue:
   const isEmptyList = (value: unknown) => value === undefined || value === null || (Array.isArray(value) && value.length === 0);
   if (Array.isArray(currentValue) || Array.isArray(baselineValue)) {
     if (isEmptyList(currentValue) && isEmptyList(baselineValue)) return true;
+    if (!Array.isArray(currentValue) || !Array.isArray(baselineValue)) return false;
+    return isStructuredEqual(currentValue, baselineValue);
+  }
+  // An empty string-map and an absent one are likewise the same fact; a non-empty map
+  // with an empty-string value (`{"phrase": ""}`) still carries that key and is distinct.
+  const isEmptyMap = (value: unknown) => value === undefined || value === null || (isPlainMap(value) && Object.keys(value).length === 0);
+  if (isPlainMap(currentValue) || isPlainMap(baselineValue)) {
+    if (isEmptyMap(currentValue) && isEmptyMap(baselineValue)) return true;
+    if (!isPlainMap(currentValue) || !isPlainMap(baselineValue)) return false;
+    return isStructuredEqual(currentValue, baselineValue);
   }
   if (
     (currentValue === undefined || currentValue === null || currentValue === '') &&
@@ -132,7 +142,13 @@ export function updateFieldWithBaseline(
   // A cleared value still has to be representable in YAML: an empty string would
   // be written back verbatim, so a switch gets the "off" value it can serialise and
   // every other type drops the path, where CPA reads its own default.
-  if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+  if (
+    value === undefined
+    || value === null
+    || value === ''
+    || (Array.isArray(value) && value.length === 0)
+    || (isPlainMap(value) && Object.keys(value).length === 0)
+  ) {
     if (field.type === 'switch') {
       currentDoc.setIn(yamlPath, false);
     } else {
@@ -217,4 +233,21 @@ function toPlain(node: unknown): unknown {
     return (node as { toJSON: () => unknown }).toJSON();
   }
   return node ?? null;
+}
+
+function isPlainMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStructuredEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => isStructuredEqual(item, right[index]));
+  }
+  if (isPlainMap(left) && isPlainMap(right)) {
+    const leftKeys = Object.keys(left);
+    return leftKeys.length === Object.keys(right).length
+      && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && isStructuredEqual(left[key], right[key]));
+  }
+  return false;
 }

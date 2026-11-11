@@ -4,6 +4,22 @@ import type { ConfigChange } from '../../types/configManagement';
 import { ALL_CONFIG_FIELDS } from '../../types/configSchema';
 import { areValuesSemanticallyEqual, getFieldSemanticValue, getFieldYamlPath, updateFieldWithBaseline } from './configDirty';
 
+const VALUE_MAP_PATHS = ALL_CONFIG_FIELDS
+  .filter((field) => field.type === 'string_map')
+  .flatMap((field) => [field.yamlPath, ...(field.legacyYamlPath ? [field.legacyYamlPath] : [])]);
+
+/**
+ * User-keyed maps (`string_map`) are owned as a single atomic value at their field path:
+ * their keys are free-form phrases (which may contain `/` or `\`) rather than configuration
+ * tree segments, and ApplyConfigChanges replaces a mapping value via `PUT /config/<path>` so
+ * removed entries are dropped cleanly.
+ */
+function isValueMapPath(path: string[]): boolean {
+  return VALUE_MAP_PATHS.some(
+    (candidate) => candidate.length === path.length && candidate.every((segment, index) => segment === path[index]),
+  );
+}
+
 /**
  * Turns the visual editor's draft into the settings a save sends.
  *
@@ -45,8 +61,20 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
   for (const { field } of migratedEdits) {
     updateFieldWithBaseline(remainingDraft, draftBase, field, getFieldSemanticValue(draftBase, field));
   }
+  const stringMapEdits = ALL_CONFIG_FIELDS
+    .filter((field) => field.type === 'string_map'
+      && !migratedEdits.some((entry) => entry.field.id === field.id)
+      && !areValuesSemanticallyEqual(getFieldSemanticValue(draftBase, field), getFieldSemanticValue(draft, field)))
+    .map((field) => ({
+      field,
+      baseMap: toPlainRecord(getFieldSemanticValue(draftBase, field)),
+      draftMap: toPlainRecord(getFieldSemanticValue(draft, field)),
+    }));
+  for (const { field } of stringMapEdits) {
+    updateFieldWithBaseline(remainingDraft, draftBase, field, getFieldSemanticValue(draftBase, field));
+  }
   const changes = computeConfigChanges(draftBase, remainingDraft);
-  if (changes.length === 0 && migratedEdits.length === 0) return nextBaseYaml;
+  if (changes.length === 0 && migratedEdits.length === 0 && stringMapEdits.length === 0) return nextBaseYaml;
   const rebased = nextBase.clone();
   try {
     for (const change of changes) {
@@ -58,6 +86,14 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
     }
     for (const { field, value } of migratedEdits) {
       updateFieldWithBaseline(rebased, nextBase, field, value);
+    }
+    for (const { field, baseMap, draftMap } of stringMapEdits) {
+      const targetPath = getFieldYamlPath(rebased, field);
+      const currentNode = rebased.getIn(targetPath, true);
+      if (!isAbsentNode(currentNode) && !isMap(currentNode)) return null;
+      const nextMap = toPlainRecord(getFieldSemanticValue(nextBase, field));
+      const merged = rebaseValueMap(baseMap, draftMap, nextMap);
+      updateFieldWithBaseline(rebased, nextBase, field, merged);
     }
   } catch {
     return null;
@@ -74,19 +110,20 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
 function applyRebasedValue(doc: Document, draftBase: Document | null, path: string[], value: unknown): void {
   const original = draftBase?.getIn(path, true);
   const current = doc.getIn(path, true);
-  if (!isAbsentNode(original) || !isPlainMap(value) || !isMap(current)) {
+  if (!isAbsentNode(original) || !isPlainMap(value) || !isMap(current) || isValueMapPath(path)) {
     doc.setIn(path, doc.createNode(value));
     return;
   }
-  mergeRebasedMap(doc, current, value);
+  mergeRebasedMap(doc, current, value, path);
 }
 
-function mergeRebasedMap(doc: Document, target: YAMLMap, value: Record<string, unknown>): void {
+function mergeRebasedMap(doc: Document, target: YAMLMap, value: Record<string, unknown>, parentPath: string[]): void {
   for (const [key, child] of Object.entries(value)) {
+    const childPath = [...parentPath, key];
     // YAMLMap.get's overload describes scalars even though a map value is returned intact.
     const existing: unknown = target.get(key, true);
-    if (isMap(existing) && isPlainMap(child)) {
-      mergeRebasedMap(doc, existing, child);
+    if (isMap(existing) && isPlainMap(child) && !isValueMapPath(childPath)) {
+      mergeRebasedMap(doc, existing, child, childPath);
     } else {
       target.set(key, doc.createNode(child));
     }
@@ -98,7 +135,7 @@ function isAbsentNode(node: unknown): boolean {
 }
 
 function diffValue(baseline: unknown, draft: unknown, path: string[], changes: ConfigChange[]): void {
-  if (isPlainMap(baseline) && isPlainMap(draft)) {
+  if (isPlainMap(baseline) && isPlainMap(draft) && !isValueMapPath(path)) {
     const keys = new Set([...Object.keys(baseline), ...Object.keys(draft)]);
     for (const key of keys) {
       diffValue(baseline[key], draft[key], [...path, key], changes);
@@ -124,9 +161,47 @@ function isDeepEqual(left: unknown, right: unknown): boolean {
   }
   if (isPlainMap(left) && isPlainMap(right)) {
     const leftKeys = Object.keys(left);
-    return leftKeys.length === Object.keys(right).length && leftKeys.every((key) => key in right && isDeepEqual(left[key], right[key]));
+    return leftKeys.length === Object.keys(right).length
+      && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && isDeepEqual(left[key], right[key]));
   }
   return false;
+}
+
+function setOwnEntry(target: Record<string, unknown>, key: string, entryValue: unknown): void {
+  Object.defineProperty(target, key, {
+    value: entryValue,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
+function toPlainRecord(value: unknown): Record<string, unknown> {
+  if (!isPlainMap(value)) return {};
+  const copy: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    setOwnEntry(copy, key, entryValue);
+  }
+  return copy;
+}
+
+function rebaseValueMap(
+  baseMap: Record<string, unknown>,
+  draftMap: Record<string, unknown>,
+  nextMap: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = toPlainRecord(nextMap);
+  for (const key of Object.keys(baseMap)) {
+    if (!Object.prototype.hasOwnProperty.call(draftMap, key)) {
+      delete merged[key];
+    }
+  }
+  for (const [key, entryValue] of Object.entries(draftMap)) {
+    if (!Object.prototype.hasOwnProperty.call(baseMap, key) || !isDeepEqual(baseMap[key], entryValue)) {
+      setOwnEntry(merged, key, entryValue);
+    }
+  }
+  return merged;
 }
 
 function isPlainMap(value: unknown): value is Record<string, unknown> {

@@ -14,6 +14,7 @@ import { parseDocument, type Document } from 'yaml';
 
 import { PayloadRulesEditor } from './PayloadRulesEditor';
 import { IceServersEditor } from './IceServersEditor';
+import { StringMapEditor } from './StringMapEditor';
 
 import type { useT } from '../../i18n';
 import { isConfigSemanticallyEqual } from './configDirty';
@@ -183,6 +184,22 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
     );
   }
 
+  if (field.type === 'string_map') {
+    return (
+      <StringMapEditor
+        field={field}
+        value={val}
+        disabled={disabled}
+        ariaDescribedBy={ariaDescribedBy}
+        draftState={view.stringMapDrafts[field.id]}
+        onDraftStateChange={view.setStringMapDraft}
+        onValidationChange={view.setStringMapIssue}
+        t={t}
+        onChange={(target, next) => updateFieldInDoc(target, next)}
+      />
+    );
+  }
+
   if (field.type === 'ice_servers') {
     return (
       <IceServersEditor
@@ -247,6 +264,7 @@ export function renderGridField(view: ConfigSectionContext, field: ConfigFieldDe
   const isFull =
     field.type === 'textarea' ||
     field.type === 'json_editor' ||
+    field.type === 'string_map' ||
     field.id === 'proxyUrl' ||
     field.id === 'authDir' ||
     field.id === 'logDir' ||

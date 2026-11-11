@@ -16,6 +16,7 @@ export type ConfigFieldType =
   | 'select'
   | 'api_keys'
   | 'string_list'
+  | 'string_map'
   | 'textarea'
   | 'ice_servers'
   | 'json_editor';
@@ -54,6 +55,8 @@ export interface ConfigFieldDefinition {
   placeholder?: string;
   /** The id of an example value that reads differently per language. */
   placeholderKey?: MessageKey;
+  /** Key-input placeholder for `string_map` fields when domain-specific wording clarifies the pair. */
+  keyPlaceholderKey?: MessageKey;
   unitKey?: MessageKey;
   min?: number;
   max?: number;
@@ -224,7 +227,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_claude_behavior',
     descKey: 'cfg.grp_claude_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeSessionDatePinDays', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList', 'claudeShowCodexCommentary'],
+    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeServerSideFallback', 'claudeSessionDatePinDays', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList', 'claudeShowCodexCommentary'],
   },
   {
     id: 'grp_claude_headers',
@@ -262,7 +265,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_antigravity_behavior',
     descKey: 'cfg.grp_antigravity_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['antigravityCredits', 'antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords'],
+    fieldIds: ['antigravityCredits', 'antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords', 'antigravitySensitiveWordsReplace'],
   },
   {
     id: 'grp_other_providers',
@@ -270,7 +273,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_other_providers',
     descKey: 'cfg.grp_other_providers_desc',
     variant: 'settings-list',
-    fieldIds: ['xaiInjectXSearch', 'devinSensitiveWords'],
+    fieldIds: ['xaiInjectXSearch', 'devinSensitiveWords', 'devinSensitiveWordsReplace'],
   },
 
   // ── 6. Advanced & experimental ────────────────────────────────────────────
@@ -1240,6 +1243,16 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['claude', 'codex', 'tool_search', 'tool search', 'defer_loading'],
   },
   {
+    id: 'claudeServerSideFallback',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_server_side_fallback',
+    descKey: 'cfg.f_claude_server_side_fallback_desc',
+    yamlPath: ['upstream', 'claude', 'server-side-fallback'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['claude', 'fallback', 'refusal', 'server-side-fallback', 'cloak', 'claude-opus-5-5', 'claude-opus-4-8', 'claude-fable-5-1', 'claude-opus-5'],
+  },
+  {
     id: 'claudeSessionDatePinDays',
     sectionId: 'providers',
     labelKey: 'cfg.f_claude_session_date_pin',
@@ -1396,7 +1409,18 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['oauth', 'providers', 'antigravity', 'sensitive-words'],
     type: 'string_list',
     placeholderKey: 'cfg.string_list_placeholder',
-    keywords: ['antigravity', 'sensitive', 'words', 'obfuscate'],
+    keywords: ['antigravity', 'sensitive', 'words', 'obfuscate', 'joiner', 'u+034f'],
+  },
+  {
+    id: 'antigravitySensitiveWordsReplace',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_ag_sensitive_words_replace',
+    descKey: 'cfg.f_ag_sensitive_words_replace_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'sensitive-words-replace'],
+    type: 'string_map',
+    keyPlaceholderKey: 'cfg.sensitive_words_replace_target',
+    placeholderKey: 'cfg.sensitive_words_replace_value',
+    keywords: ['antigravity', 'sensitive', 'words', 'replace', 'sensitive-words-replace'],
   },
   {
     id: 'xaiInjectXSearch',
@@ -1417,7 +1441,18 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['oauth', 'providers', 'devin', 'sensitive-words'],
     type: 'string_list',
     placeholderKey: 'cfg.string_list_placeholder',
-    keywords: ['devin', 'sensitive', 'words', 'obfuscate'],
+    keywords: ['devin', 'sensitive', 'words', 'system prompt', 'remove'],
+  },
+  {
+    id: 'devinSensitiveWordsReplace',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_devin_sensitive_words_replace',
+    descKey: 'cfg.f_devin_sensitive_words_replace_desc',
+    yamlPath: ['oauth', 'providers', 'devin', 'sensitive-words-replace'],
+    type: 'string_map',
+    keyPlaceholderKey: 'cfg.sensitive_words_replace_target',
+    placeholderKey: 'cfg.sensitive_words_replace_value',
+    keywords: ['devin', 'sensitive', 'words', 'replace', 'sensitive-words-replace'],
   },
 
   // ── 6. Advanced & experimental ────────────────────────────────────────────

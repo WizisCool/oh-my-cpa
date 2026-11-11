@@ -53,6 +53,29 @@ test('An emptied list is the same fact as an absent one', () => {
   assert.equal(areValuesSemanticallyEqual(['a'], []), false);
 });
 
+test('An emptied string-map equals absence, while an empty-string replacement entry remains distinct', () => {
+  assert.equal(areValuesSemanticallyEqual({}, undefined), true);
+  assert.equal(areValuesSemanticallyEqual({}, {}), true);
+  assert.equal(areValuesSemanticallyEqual({ phrase: '' }, {}), false);
+  assert.equal(areValuesSemanticallyEqual({ phrase: '' }, undefined), false);
+  assert.equal(areValuesSemanticallyEqual({ phrase: '' }, { phrase: '' }), true);
+  assert.equal(areValuesSemanticallyEqual({ phrase: '' }, { phrase: 'other' }), false);
+  assert.equal(areValuesSemanticallyEqual({ a: '1', b: '2' }, { b: '2', a: '1' }), true);
+
+  const originalYaml = 'server:\n    port: 8317\n';
+  const serverDoc = parseDocument(originalYaml);
+  const currentDoc = parseDocument(originalYaml);
+  const agReplace = schemaField('antigravitySensitiveWordsReplace');
+
+  updateFieldWithBaseline(currentDoc, serverDoc, agReplace, { 'Claude Code': '' });
+  assert.equal(currentDoc.hasIn(['oauth', 'providers', 'antigravity', 'sensitive-words-replace']), true);
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), false);
+
+  updateFieldWithBaseline(currentDoc, serverDoc, agReplace, {});
+  assert.equal(currentDoc.has('oauth'), false);
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), true);
+});
+
 test('Clearing a list the server did not have returns the editor to the server bytes', () => {
   const originalYaml = 'server:\n    port: 8317\n';
   const serverDoc = parseDocument(originalYaml);
