@@ -203,12 +203,13 @@ export const AppLayout: React.FC = () => {
   useDocumentTitle(currentLabel);
   const { products: pendingProducts, hasPluginUpdate } = usePendingUpdates();
   const hasSystemUpdate = pendingProducts.length > 0;
+  const isCollapsedRail = !isMobile && isCollapsed;
   const menuItems = React.useMemo(() => {
     const pendingRoutes = new Set<string>();
     if (hasSystemUpdate) pendingRoutes.add('/system');
     if (hasPluginUpdate) pendingRoutes.add('/plugins');
-    return buildMenuItems(visibleNavGroups, t, !isMobile && isCollapsed, pendingRoutes);
-  }, [visibleNavGroups, t, isMobile, isCollapsed, hasSystemUpdate, hasPluginUpdate]);
+    return buildMenuItems(visibleNavGroups, t, isCollapsedRail, pendingRoutes);
+  }, [visibleNavGroups, t, isCollapsedRail, hasSystemUpdate, hasPluginUpdate]);
 
   // A page change runs as a transition, so `location` - and the selection derived from it - waits
   // for the target page to load. The rail answers the click at once instead: it marks the entry the
@@ -219,18 +220,17 @@ export const AppLayout: React.FC = () => {
   }, [isNavigationPending, location.pathname, location.search]);
   const menuSelectedKey = intendedKey ?? selectedKey;
 
-  const selectPage = ({ key }: { key: string }) => {
+  const navigateToKey = (key: string) => {
     setIsMobileNavOpen(false);
-    if (key !== `${location.pathname}${location.search}`) {
-      setIntendedKey(key);
+    const currentAddress = `${location.pathname}${location.search}`;
+    if (key !== currentAddress || intendedKey !== null) {
+      setIntendedKey(key === currentAddress ? null : key);
       navigateTo(key);
     }
   };
 
-  const goToDashboard = () => {
-    setIsMobileNavOpen(false);
-    if (`${location.pathname}${location.search}` !== '/dashboard') navigateTo('/dashboard');
-  };
+  const selectPage = ({ key }: { key: string }) => navigateToKey(key);
+  const goToDashboard = () => navigateToKey('/dashboard');
 
   React.useEffect(() => {
     return consoleRouteRegistry.scheduleIdlePrewarm(location.pathname);
@@ -243,7 +243,10 @@ export const AppLayout: React.FC = () => {
   };
 
   const selectedGroupKey = visibleNavGroups.find((group) => group.items.some((entry) => entry.key === menuSelectedKey))?.key ?? null;
-  const navLayoutKey = visibleNavGroups.map((group) => `${group.key}:${group.items.map((entry) => entry.key).join(',')}`).join('|');
+  const navLayoutKey = [
+    isCollapsedRail ? 'collapsed' : 'expanded',
+    ...visibleNavGroups.map((group) => `${group.key}:${group.items.map((entry) => entry.key).join(',')}`),
+  ].join('|');
   const menu = (
     <NavSelectionHighlight selectedKey={menuSelectedKey} groupKey={selectedGroupKey} layoutKey={navLayoutKey}>
       <Menu

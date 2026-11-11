@@ -2,8 +2,6 @@ import React from 'react';
 
 interface Placement {
   top: number;
-  left: number;
-  width: number;
   height: number;
 }
 
@@ -12,7 +10,9 @@ interface HighlightState {
   active: 0 | 1;
   key: string | null;
   group: string | null;
+  layoutKey: string | null;
   placement: Placement | null;
+  layerPlacements: [Placement | null, Placement | null];
 }
 
 function measureRow(frame: HTMLElement, key: string): Placement | null {
@@ -21,16 +21,32 @@ function measureRow(frame: HTMLElement, key: string): Placement | null {
   const frameBox = frame.getBoundingClientRect();
   const box = row.getBoundingClientRect();
   if (box.height === 0) return null;
-  return { top: box.top - frameBox.top, left: box.left - frameBox.left, width: box.width, height: box.height };
+  return { top: box.top - frameBox.top, height: box.height };
+}
+
+/** Keeps an externally selected or freshly revealed row inside the rail's scroll viewport. */
+function revealRowIfClipped(frame: HTMLElement, key: string) {
+  const viewport = frame.parentElement;
+  if (!viewport || viewport.clientHeight === 0 || viewport.scrollHeight <= viewport.clientHeight) return;
+  const row = frame.querySelector<HTMLElement>(`[data-route-path="${CSS.escape(key)}"]`);
+  if (!row) return;
+  const viewBox = viewport.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  if (box.height === 0) return;
+  const edgeGap = 4;
+  if (box.top < viewBox.top) {
+    viewport.scrollTop = Math.max(0, viewport.scrollTop - (viewBox.top + edgeGap - box.top));
+  } else if (box.bottom > viewBox.bottom) {
+    viewport.scrollTop += box.bottom - (viewBox.bottom - edgeGap);
+  }
 }
 
 function samePlacement(a: Placement | null, b: Placement | null): boolean {
-  return a !== null && b !== null && a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height;
+  return a !== null && b !== null && Math.abs(a.top - b.top) < 0.5 && Math.abs(a.height - b.height) < 0.5;
 }
 
 function applyPlacement(layer: HTMLElement, placement: Placement) {
-  layer.style.transform = `translate3d(${placement.left}px, ${placement.top}px, 0)`;
-  layer.style.width = `${placement.width}px`;
+  layer.style.transform = `translate3d(0, ${placement.top}px, 0)`;
   layer.style.height = `${placement.height}px`;
 }
 
@@ -39,6 +55,13 @@ function snap(layer: HTMLElement, placement: Placement, opacity: '0' | '1') {
   layer.style.transition = 'none';
   applyPlacement(layer, placement);
   layer.style.opacity = opacity;
+  void layer.offsetWidth;
+  layer.style.transition = '';
+}
+
+function hideImmediate(layer: HTMLElement) {
+  layer.style.transition = 'none';
+  layer.style.opacity = '0';
   void layer.offsetWidth;
   layer.style.transition = '';
 }
@@ -64,40 +87,68 @@ export function NavSelectionHighlight({ selectedKey, groupKey, layoutKey, childr
 }) {
   const frameRef = React.useRef<HTMLDivElement | null>(null);
   const layerRefs = [React.useRef<HTMLSpanElement | null>(null), React.useRef<HTMLSpanElement | null>(null)] as const;
-  const stateRef = React.useRef<HighlightState>({ active: 0, key: null, group: null, placement: null });
-  // Read by the resize observer, so it holds only a committed selection.
-  const selectionRef = React.useRef({ selectedKey, groupKey });
+  const stateRef = React.useRef<HighlightState>({
+    active: 0,
+    key: null,
+    group: null,
+    layoutKey: null,
+    placement: null,
+    layerPlacements: [null, null],
+  });
+  // Read by the resize observer, so it holds only the latest committed selection.
+  const selectionRef = React.useRef({ selectedKey, groupKey, layoutKey });
 
   React.useLayoutEffect(() => {
-    selectionRef.current = { selectedKey, groupKey };
+    selectionRef.current = { selectedKey, groupKey, layoutKey };
     const frame = frameRef.current;
     const layers = [layerRefs[0].current, layerRefs[1].current];
     if (!frame || !layers[0] || !layers[1]) return;
     const state = stateRef.current;
+    if (state.key !== selectedKey || state.layoutKey !== layoutKey) {
+      revealRowIfClipped(frame, selectedKey);
+    }
     const placement = measureRow(frame, selectedKey);
-    const current = layers[state.active]!;
+    const currentIndex = state.active;
+    const otherIndex: 0 | 1 = currentIndex === 0 ? 1 : 0;
+    const current = layers[currentIndex]!;
+    const other = layers[otherIndex]!;
+
     if (!placement) {
-      // The selected page is hidden from the rail: nothing to mark.
-      current.style.opacity = '0';
+      // The selected page is hidden from the rail or sits inside a closed sheet: nothing to mark.
+      hideImmediate(current);
+      hideImmediate(other);
       state.placement = null;
       state.key = null;
       state.group = null;
+      state.layoutKey = layoutKey;
+      state.layerPlacements = [null, null];
       return;
     }
-    if (state.placement === null || state.key === selectedKey) {
+
+    if (state.placement === null || state.key === selectedKey || state.layoutKey !== layoutKey) {
+      hideImmediate(other);
       snap(current, placement, '1');
+      state.layerPlacements[otherIndex] = null;
+      state.layerPlacements[currentIndex] = placement;
     } else if (state.group === groupKey) {
       applyPlacement(current, placement);
+      state.layerPlacements[currentIndex] = placement;
     } else {
       current.style.opacity = '0';
-      state.active = state.active === 0 ? 1 : 0;
-      const next = layers[state.active]!;
-      snap(next, placement, '0');
-      next.style.opacity = '1';
+      state.active = otherIndex;
+      if (samePlacement(state.layerPlacements[otherIndex], placement)) {
+        // Clicking back onto a row whose previous wash is still fading out reverses its fade cleanly.
+        other.style.opacity = '1';
+      } else {
+        snap(other, placement, '0');
+        other.style.opacity = '1';
+      }
+      state.layerPlacements[otherIndex] = placement;
     }
     state.placement = placement;
     state.key = selectedKey;
     state.group = groupKey;
+    state.layoutKey = layoutKey;
   }, [selectedKey, groupKey, layoutKey]);
 
   React.useEffect(() => {
@@ -105,14 +156,29 @@ export function NavSelectionHighlight({ selectedKey, groupKey, layoutKey, childr
     if (!frame || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => {
       const state = stateRef.current;
-      const layer = layerRefs[state.active].current;
-      if (!layer) return;
+      const currentIndex = state.active;
+      const otherIndex: 0 | 1 = currentIndex === 0 ? 1 : 0;
+      const layer = layerRefs[currentIndex].current;
+      const other = layerRefs[otherIndex].current;
+      if (!layer || !other) return;
       const placement = measureRow(frame, selectionRef.current.selectedKey);
-      if (!placement || samePlacement(placement, state.placement)) return;
+      if (!placement) {
+        if (state.placement !== null) {
+          hideImmediate(layer);
+          hideImmediate(other);
+          state.placement = null;
+          state.layerPlacements = [null, null];
+        }
+        return;
+      }
+      if (samePlacement(placement, state.placement)) return;
+      hideImmediate(other);
       snap(layer, placement, '1');
       state.placement = placement;
       state.key = selectionRef.current.selectedKey;
       state.group = selectionRef.current.groupKey;
+      state.layoutKey = selectionRef.current.layoutKey;
+      state.layerPlacements = currentIndex === 0 ? [placement, null] : [null, placement];
     });
     observer.observe(frame);
     const menu = frame.querySelector('.ant-menu');
