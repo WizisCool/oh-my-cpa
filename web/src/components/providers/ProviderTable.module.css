@@ -133,37 +133,6 @@
   gap: 4px;
 }
 
-/* ── traffic over the page's window ─────────────────────────────────────────── */
-.traffic {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.traffic-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.traffic-requests {
-  color: var(--fg);
-  font-size: var(--text-sm);
-}
-
-.traffic-rate {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.traffic-meter {
-  width: 100%;
-}
-
 /* The band's three tones, as the dashboard paints them; neutral is a window with nothing to judge. */
 .tone-success { color: var(--success); }
 .tone-warn { color: var(--warn); }

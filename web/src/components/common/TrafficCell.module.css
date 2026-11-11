@@ -1,0 +1,42 @@
+/* TrafficCell.module.css — a row's window traffic: the count and rate on one line, the rate's meter under it. */
+
+.traffic {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.requests {
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.rate {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.meter {
+  width: 100%;
+}
+
+/* The band's three tones, as the dashboard paints them; neutral is a window with nothing to judge. */
+.tone-success { color: var(--success); }
+.tone-warn { color: var(--warn); }
+.tone-danger { color: var(--danger); }
+.tone-neutral { color: var(--meta); }
+
+.muted {
+  color: var(--meta);
+  font-size: var(--text-md);
+}
