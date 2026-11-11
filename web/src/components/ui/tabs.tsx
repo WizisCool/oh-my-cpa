@@ -75,12 +75,26 @@ function Tabs({
   listClassName,
 }: DeclarativeTabsProps) {
   const hasPanels = items.some((item) => item.children !== undefined);
+  const initialKey = defaultActiveKey ?? items[0]?.key;
+  const [uncontrolledKey, setUncontrolledKey] = React.useState<string | undefined>(initialKey);
+  const currentKey = activeKey !== undefined ? activeKey : uncontrolledKey;
+  const visitedKeysRef = React.useRef<Set<string>>(new Set());
+  if (destroyOnHidden) {
+    visitedKeysRef.current.clear();
+  } else if (currentKey !== undefined) {
+    visitedKeysRef.current.add(currentKey);
+  }
+
   return (
     <TabsRoot
       data-slot="tabs"
       value={activeKey}
-      defaultValue={defaultActiveKey ?? items[0]?.key}
-      onValueChange={(val) => onChange?.(String(val))}
+      defaultValue={initialKey}
+      onValueChange={(val) => {
+        const next = String(val);
+        if (activeKey === undefined) setUncontrolledKey(next);
+        onChange?.(next);
+      }}
       className={cn('flex flex-col', className)}
     >
       <div className="flex items-center justify-between gap-2 border-b-[length:var(--hairline)] border-b-border">
@@ -103,7 +117,7 @@ function Tabs({
             <TabsContent
               key={item.key}
               value={item.key}
-              keepMounted={Boolean(item.forceRender) && !destroyOnHidden}
+              keepMounted={!destroyOnHidden && (Boolean(item.forceRender) || visitedKeysRef.current.has(item.key))}
               className="pt-3"
             >
               {item.children}

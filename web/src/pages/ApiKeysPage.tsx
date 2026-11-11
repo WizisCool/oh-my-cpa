@@ -419,7 +419,7 @@ export const ApiKeysPage: React.FC = () => {
       variant="primary"
       icon={<PlusOutlined />}
       disabled={!canWrite}
-      title={isDemo ? t('demo.blocked') : undefined}
+      data-tip={isDemo ? t('demo.blocked') : undefined}
       onClick={openAddEditor}
     >
       {t('cfg.api_keys_add')}

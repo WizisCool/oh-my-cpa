@@ -283,36 +283,39 @@ function normalizeSize(size?: SimpleSelectProps['size']): 'sm' | 'default' | 'lg
   return 'default';
 }
 
-function Select<V extends SelectPrimitiveValue = string>({
-  id,
-  value,
-  defaultValue,
-  onChange,
-  onBlur,
-  options = [],
-  placeholder,
-  prefix,
-  disabled,
-  loading,
-  allowClear,
-  size,
-  variant = 'filled',
-  status,
-  open,
-  onOpenChange,
-  popupMatchSelectWidth = true,
-  suffixIcon,
-  labelRender,
-  optionRender,
-  notFoundContent,
-  className,
-  popupClassName,
-  style,
-  'aria-label': ariaLabel,
-  'aria-labelledby': ariaLabelledBy,
-  'aria-describedby': ariaDescribedBy,
-  'data-testid': testId,
-}: SimpleSelectProps<V>) {
+function Select<V extends SelectPrimitiveValue = string>(rawProps: SimpleSelectProps<V>) {
+  const isControlled = 'value' in rawProps;
+  const {
+    id,
+    value,
+    defaultValue,
+    onChange,
+    onBlur,
+    options = [],
+    placeholder,
+    prefix,
+    disabled,
+    loading,
+    allowClear,
+    size,
+    variant = 'filled',
+    status,
+    open,
+    onOpenChange,
+    popupMatchSelectWidth = true,
+    suffixIcon,
+    labelRender,
+    optionRender,
+    notFoundContent,
+    className,
+    popupClassName,
+    style,
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledBy,
+    'aria-describedby': ariaDescribedBy,
+    'data-testid': testId,
+  } = rawProps;
+
   const flat = React.useMemo(() => flattenEntries(options), [options]);
   const optionMap = React.useMemo(() => {
     const map = new Map<V, SelectOptionItem<V>>();
@@ -320,10 +323,12 @@ function Select<V extends SelectPrimitiveValue = string>({
     return map;
   }, [flat]);
 
-  const controlled = value !== undefined;
-  const normalizedValue = controlled ? (value ?? null) : undefined;
+  const [uncontrolledValue, setUncontrolledValue] = React.useState<V | null>(() =>
+    defaultValue !== undefined ? defaultValue : null,
+  );
+  const effectiveValue: V | null = isControlled ? (value ?? null) : uncontrolledValue;
   const hasValue =
-    controlled && value !== null && value !== undefined && (value as unknown) !== '';
+    effectiveValue !== null && effectiveValue !== undefined && (effectiveValue as unknown) !== '';
 
   const renderItem = (opt: SelectOptionItem<V>) => (
     <SelectItem key={String(opt.value)} value={opt.value} disabled={opt.disabled}>
@@ -334,12 +339,12 @@ function Select<V extends SelectPrimitiveValue = string>({
   return (
     <SelectRoot<V>
       id={id}
-      value={normalizedValue as V}
-      defaultValue={defaultValue}
+      value={effectiveValue as V}
       disabled={disabled}
       open={open}
       onOpenChange={(next) => onOpenChange?.(next)}
       onValueChange={(next) => {
+        if (!isControlled) setUncontrolledValue(next ?? null);
         if (next === null || next === undefined) {
           if (allowClear) onChange?.(undefined);
           return;
@@ -355,7 +360,14 @@ function Select<V extends SelectPrimitiveValue = string>({
         loading={loading}
         hideCaret={suffixIcon === null}
         onBlur={onBlur}
-        onClear={allowClear && hasValue ? () => onChange?.(undefined) : undefined}
+        onClear={
+          allowClear && hasValue
+            ? () => {
+                if (!isControlled) setUncontrolledValue(null);
+                onChange?.(undefined);
+              }
+            : undefined
+        }
         className={className}
         style={style}
         aria-label={ariaLabel}

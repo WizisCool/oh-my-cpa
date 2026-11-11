@@ -64,21 +64,53 @@ function instantToWall(epochMs: number, zone: string): WallFields {
   return { year, month, day, hour, minute, second, millisecond };
 }
 
+function wallAsUtc(w: WallFields): number {
+  return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second, w.millisecond);
+}
+
 /** Offset in minutes (east of UTC positive, e.g. +345 for UTC+5:45) at an exact UTC instant. */
 function zoneOffsetMinutesAt(epochMs: number, zone: string): number {
   const w = instantToWall(epochMs, zone);
-  const asUtc = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second, w.millisecond);
-  return Math.round((asUtc - epochMs) / 60_000);
+  return Math.round((wallAsUtc(w) - epochMs) / 60_000);
 }
 
-/** Solves wall-clock fields in `zone` to the exact UTC epoch millisecond (two-pass across DST). */
+const DST_WINDOW_MS = 3 * 3_600_000;
+
+/**
+ * Solves wall-clock fields in `zone` to the UTC epoch millisecond.
+ *
+ * - Normal instants resolve directly.
+ * - Fall-back overlaps (repeated hours) select the first occurrence (`offBefore`).
+ * - Spring-forward gaps (nonexistent wall times, including 00:00 transitions such as
+ *   `America/Santiago`) advance monotonically to the exact transition instant where valid
+ *   wall clocks resume, never slipping backward into the preceding hour or previous civil day.
+ */
 function wallToInstant(w: WallFields, zone: string): number {
-  const naiveUtc = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second, w.millisecond);
-  const offset1 = zoneOffsetMinutesAt(naiveUtc, zone);
-  const candidate1 = naiveUtc - offset1 * 60_000;
-  const offset2 = zoneOffsetMinutesAt(candidate1, zone);
-  if (offset1 === offset2) return candidate1;
-  return naiveUtc - offset2 * 60_000;
+  const naiveUtc = wallAsUtc(w);
+  const offset0 = zoneOffsetMinutesAt(naiveUtc, zone);
+  const est = naiveUtc - offset0 * 60_000;
+  const offBefore = zoneOffsetMinutesAt(est - DST_WINDOW_MS, zone);
+  const offAfter = zoneOffsetMinutesAt(est + DST_WINDOW_MS, zone);
+  if (offBefore === offAfter) return naiveUtc - offBefore * 60_000;
+
+  const candBefore = naiveUtc - offBefore * 60_000;
+  if (wallAsUtc(instantToWall(candBefore, zone)) === naiveUtc) return candBefore;
+
+  const candAfter = naiveUtc - offAfter * 60_000;
+  if (wallAsUtc(instantToWall(candAfter, zone)) === naiveUtc) return candAfter;
+
+  // Nonexistent spring-forward gap: locate the exact transition boundary inside (candAfter, candBefore].
+  let lo = Math.floor(Math.min(candAfter, candBefore) / 1000);
+  let hi = Math.ceil(Math.max(candAfter, candBefore) / 1000);
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (zoneOffsetMinutesAt(mid * 1000, zone) === offAfter) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return lo * 1000;
 }
 
 const PAD2 = (n: number) => String(n).padStart(2, '0');

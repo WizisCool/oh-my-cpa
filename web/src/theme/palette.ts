@@ -606,7 +606,12 @@ function resolvePrimarySurface(
   const fillL = oklchLightness(override.fill);
   const hover = override.hover ?? withLightness(override.fill, fillL > 0.5 ? Math.max(0, fillL - 0.06) : Math.min(1, fillL + 0.06));
   const active = override.active ?? withLightness(override.fill, fillL > 0.5 ? Math.max(0, fillL - 0.12) : Math.min(1, fillL + 0.12));
-  if (override.ink && contrastRatio(override.ink, override.fill) >= ACCENT_LABEL_CONTRAST_FLOOR) {
+  if (
+    override.ink &&
+    contrastRatio(override.ink, override.fill) >= ACCENT_LABEL_CONTRAST_FLOOR &&
+    contrastRatio(override.ink, hover) >= ACCENT_LABEL_CONTRAST_FLOOR &&
+    contrastRatio(override.ink, active) >= ACCENT_LABEL_CONTRAST_FLOOR
+  ) {
     return {
       primary: override.fill,
       primaryHover: hover,

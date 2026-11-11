@@ -672,7 +672,7 @@ export const SystemPage: React.FC = () => {
                 // disabled rather than offered: a button whose only outcome is a refusal
                 // teaches the reader something untrue about the product.
                 disabled={isDemo || isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
-                title={isDemo ? t('demo.blocked') : checkUpdatesLabel}
+                data-tip={isDemo ? t('demo.blocked') : checkUpdatesLabel}
                 aria-label={checkUpdatesLabel}
                 onClick={() => void handleCheckUpdates()}
               >
@@ -876,7 +876,7 @@ export const SystemPage: React.FC = () => {
                   aria-label={t('sys.download_diag')}
                   loading={downloadingDiag}
                   disabled={isDemo}
-                  title={isDemo ? t('demo.blocked') : undefined}
+                  data-tip={isDemo ? t('demo.blocked') : undefined}
                   onClick={() => void handleDownloadDiagnostics()}
                 >
                   {t('sys.action_download')}
@@ -935,7 +935,7 @@ export const SystemPage: React.FC = () => {
                   className={styles['maintenance-box-close']}
                   icon={<CloseOutlined />}
                   aria-label={t('common.close')}
-                  title={t('common.close')}
+                  data-tip={t('common.close')}
                   onClick={() => setDismissedOutcomeJobID(displayedOutcome.job_id)}
                 />
               </div>

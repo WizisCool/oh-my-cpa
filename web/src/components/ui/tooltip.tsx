@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-import { hoverIntentDelay, noteHintClosed } from '@/components/common/tooltipIntent';
+import { hasOpenPopup, hoverIntentDelay, noteHintClosed } from '@/components/common/tooltipIntent';
 import { cn } from '@/lib/utils';
 
 const TooltipProvider = TooltipPrimitive.Provider;
@@ -189,6 +189,7 @@ function DelegatedTooltipLayer() {
     const canShow = (element: HTMLElement): string | null => {
       const text = element.dataset.tip?.trim();
       if (!text || !element.isConnected) return null;
+      if (hasOpenPopup(element)) return null;
       if (element.hasAttribute('data-tip-overflow') && !isOverflowing(element)) return null;
       return text;
     };
@@ -250,7 +251,7 @@ function DelegatedTooltipLayer() {
 
     const isInteractiveTarget = (element: HTMLElement): boolean =>
       element.closest(
-        'button, a[href], input, select, textarea, summary, [role="button"], [role="menuitem"], [role="option"], [role="tab"], [role="radio"], [role="switch"]',
+        'button:not(:disabled):not([aria-disabled="true"]), a[href]:not([aria-disabled="true"]), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [role="button"]:not([aria-disabled="true"]), [role="menuitem"]:not([aria-disabled="true"]), [role="option"]:not([aria-disabled="true"]), [role="tab"]:not([aria-disabled="true"]), [role="radio"]:not([aria-disabled="true"]), [role="switch"]:not(:disabled):not([aria-disabled="true"])',
       ) !== null;
 
     const onPointerDown = (event: PointerEvent) => {

@@ -105,7 +105,7 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
           icon={<UpOutlined />}
           disabled={!newer}
           onClick={() => newer && onNavigate(newer)}
-          title={`${t('events.prev_item')} ([)`}
+          data-tip={`${t('events.prev_item')} ([)`}
           aria-label={t('events.prev_item')}
         />
         <Button
@@ -114,7 +114,7 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
           icon={<DownOutlined />}
           disabled={!older}
           onClick={() => older && onNavigate(older)}
-          title={`${t('events.next_item')} (])`}
+          data-tip={`${t('events.next_item')} (])`}
           aria-label={t('events.next_item')}
         />
       </span>

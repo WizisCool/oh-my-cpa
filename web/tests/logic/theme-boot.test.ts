@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { test } from 'vitest';
 import {
   ACCENT_LABEL_CONTRAST_FLOOR,
@@ -266,6 +267,14 @@ test('open theme SDK validates manifests, registers external themes, and falls b
   }
   assert.equal(unregisterTheme('omc-dark'), false);
   assert.equal(resolvePalette('dark', 'plugin:community.nord', undefined).id, 'omc-dark');
+
+  // Explicit primary ink is rejected if it fails contrast against hover or active fills.
+  const mismatchedPrimary = derivePalette('dark', getBuiltInPalette('omc-dark').core, {
+    primary: { fill: '#000000', hover: '#ffffff', active: '#ffffff', ink: '#ffffff' },
+  });
+  assert.ok(contrastRatio(mismatchedPrimary.primaryOn, mismatchedPrimary.primary) >= ACCENT_LABEL_CONTRAST_FLOOR);
+  assert.ok(contrastRatio(mismatchedPrimary.primaryOn, mismatchedPrimary.primaryHover) >= ACCENT_LABEL_CONTRAST_FLOOR);
+  assert.ok(contrastRatio(mismatchedPrimary.primaryOn, mismatchedPrimary.primaryActive) >= ACCENT_LABEL_CONTRAST_FLOOR);
 });
 
 test('every corner in the console sits on the scale', () => {
@@ -328,20 +337,45 @@ test('nothing encloses content with a neutral border', () => {
   assert.deepEqual(enclosed, []);
 });
 
-test('no JSX intrinsic element uses a raw browser title attribute outside iframe', () => {
+const DOM_FORWARDING_PRIMITIVES = new Set([
+  'Button', 'Input', 'Textarea', 'Checkbox', 'Switch', 'Badge', 'Tag',
+  'Select', 'SelectTrigger', 'Combobox', 'AutoComplete', 'NumberInput',
+  'TimePicker', 'ColorPicker', 'Slider', 'Segmented', 'ToggleGroup', 'ToggleGroupItem',
+  'DropdownMenuTrigger', 'PopoverTrigger', 'DialogTrigger', 'SheetTrigger', 'TabsTrigger',
+  'ToolButton', 'HeaderAction', 'RefreshButton', 'CopyButton', 'SecretInput', 'SearchInput',
+]);
+
+test('no JSX intrinsic or DOM-forwarding primitive uses a raw browser title attribute or orphan data-tip-overflow', () => {
   const rawTitles: string[] = [];
+  const orphanOverflowTips: string[] = [];
   for (const file of sourceFiles(sourceRoot).filter((name) => name.endsWith('.tsx'))) {
-    const code = stripCodeComments(readFileSync(file, 'utf8'));
-    for (const match of code.matchAll(/<([a-z][a-z0-9-]*)\b((?:[^>"'\`]|"[^"]*"|'[^']*'|\`[^\`]*\`)*)>/g)) {
-      const tag = match[1];
-      const attrs = match[2] ?? '';
-      if (tag === 'iframe') continue;
-      if (/(?:^|\s)title\s*=/.test(attrs)) {
-        rawTitles.push(`${path.relative(sourceRoot, file)}: <${tag} title=...>`);
+    const src = readFileSync(file, 'utf8');
+    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const visit = (node: ts.Node) => {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tag = node.tagName.getText(sf);
+        const isIntrinsic = /^[a-z]/.test(tag) && tag !== 'iframe';
+        const attrNames = new Set<string>();
+        for (const prop of node.attributes.properties) {
+          if (!ts.isJsxAttribute(prop)) continue;
+          const attrName = prop.name.getText(sf);
+          attrNames.add(attrName);
+          if (attrName === 'title' && (isIntrinsic || DOM_FORWARDING_PRIMITIVES.has(tag))) {
+            const { line } = sf.getLineAndCharacterOfPosition(prop.getStart(sf));
+            rawTitles.push(`${path.relative(sourceRoot, file)}:${line + 1} <${tag} title=...>`);
+          }
+        }
+        if (attrNames.has('data-tip-overflow') && !attrNames.has('data-tip')) {
+          const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+          orphanOverflowTips.push(`${path.relative(sourceRoot, file)}:${line + 1} <${tag} data-tip-overflow>`);
+        }
       }
-    }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
   }
   assert.deepEqual(rawTitles, []);
+  assert.deepEqual(orphanOverflowTips, []);
 });
 
 test('no retired Ant Design, rc-component, dayjs or ECharts packages or selectors remain', () => {

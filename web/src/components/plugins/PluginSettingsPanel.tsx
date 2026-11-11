@@ -449,7 +449,7 @@ function OmcSourceRow({ url, isDemo }: { url?: string; isDemo: boolean }) {
       <Switch
         checked={source.isEnabled}
         disabled={isDemo || !source.isLoaded}
-        title={isDemo ? t('demo.blocked') : undefined}
+        data-tip={isDemo ? t('demo.blocked') : undefined}
         onChange={(enabled) => void toggle(enabled)}
         aria-label={t('plugin.settings_omc_source')}
       />

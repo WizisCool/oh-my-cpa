@@ -30,6 +30,7 @@ import type { InsightsCubeResponse } from '../../src/types/insights.ts';
 import { buildReceiptLedger, receiptCubeParams } from '../../src/components/dashboard/receipt/receiptModel.ts';
 import { isSlidingRange, requestListWindowParams } from '../../src/types/dashboard.ts';
 import { test } from 'vitest';
+import { buildSankeyLayout } from '../../src/pages/insights/charts/InsightsFlowChart.tsx';
 
 test('insights cube', () => {
   const COLUMNS = [
@@ -382,4 +383,37 @@ test('dashboard receipt ledger and calendar windows', () => {
   assert.equal(requestListWindowParams({ preset: 'yesterday' }, window).toString(), 'from=1000&to=9000', 'a calendar drill-down carries its resolved bounds');
   assert.equal(requestListWindowParams({ preset: 'this_month' }, window).toString(), 'from=1000', 'the current unit stays open');
   assert.equal(requestListWindowParams({ preset: 'all' }, window).toString(), 'preset=90d');
+
+  // Skewed 7-node Sankey column reserves minimum node heights within chart bounds.
+  const skewedWeights = [100_000, 1, 1, 1, 1, 1, 1];
+  const skewedNodes = [
+    ...skewedWeights.map((_, idx) => ({
+      id: `0:k${idx}`,
+      level: 0,
+      dimension: 'key' as const,
+      value: `k${idx}`,
+      folded: idx === skewedWeights.length - 1,
+      foldedCount: idx === skewedWeights.length - 1 ? 3 : 0,
+    })),
+    { id: '1:claude', level: 1, dimension: 'provider' as const, value: 'claude', folded: false, foldedCount: 0 },
+  ];
+  const skewedLinks = skewedWeights.map((weight, idx) => ({
+    source: `0:k${idx}`,
+    target: '1:claude',
+    value: weight,
+  }));
+  const chartHeight = 320;
+  const { layoutNodes } = buildSankeyLayout(
+    skewedNodes,
+    skewedLinks,
+    640,
+    chartHeight,
+    () => '#00a2fb',
+    (node) => node.value,
+  );
+  const col0 = layoutNodes.filter((item) => item.node.level === 0);
+  assert.equal(col0.length, 7);
+  assert.ok(col0.every((item) => item.h >= 4), 'every small node retains the 4px floor');
+  const col0Bottom = Math.max(...col0.map((item) => item.y + item.h));
+  assert.ok(col0Bottom <= chartHeight - 10 + 1e-6, `skewed column fits inside innerHeight (bottom=${col0Bottom})`);
 });

@@ -382,7 +382,7 @@ export function InstalledPluginsPanel({
                           checked={plugin.enabled}
                           loading={isUpdating}
                           disabled={isDemo || isDeleting}
-                          title={isDemo ? t('demo.blocked') : undefined}
+                          data-tip={isDemo ? t('demo.blocked') : undefined}
                           onChange={(checked) => enabledMutation.mutate({ id: plugin.id, enabled: checked })}
                           aria-label={t('plugin.toggle_label', { name })}
                         />

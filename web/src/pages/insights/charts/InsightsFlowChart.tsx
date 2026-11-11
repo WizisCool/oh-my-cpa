@@ -49,7 +49,7 @@ interface LayoutRibbon {
   path: string;
 }
 
-function buildSankeyLayout(
+export function buildSankeyLayout(
   nodes: readonly FlowNode[],
   links: readonly FlowLink[],
   width: number,
@@ -86,14 +86,17 @@ function buildSankeyLayout(
   for (const [level, levelNodes] of byLevel) {
     const totals = levelNodes.map((n) => Math.max(outSum.get(n.id) ?? 0, inSum.get(n.id) ?? 0));
     const sumTotal = totals.reduce((a, b) => a + b, 0);
-    const totalGaps = Math.max(0, levelNodes.length - 1) * NODE_GAP;
-    const usableH = Math.max(levelNodes.length * 4, innerHeight - totalGaps);
+    const count = levelNodes.length;
+    const totalGaps = Math.max(0, count - 1) * NODE_GAP;
+    const usableH = Math.max(0, innerHeight - totalGaps);
+    const minNodeH = count > 0 ? Math.min(4, usableH / count) : 0;
+    const extraH = Math.max(0, usableH - count * minNodeH);
     const x = PAD_LEFT + (maxLevel === 0 ? 0 : (level / maxLevel) * innerWidth);
 
     let cursorY = PAD_TOP;
     levelNodes.forEach((node, idx) => {
       const total = totals[idx] ?? 0;
-      const h = sumTotal > 0 ? Math.max(4, (total / sumTotal) * usableH) : usableH / levelNodes.length;
+      const h = sumTotal > 0 ? minNodeH + (total / sumTotal) * extraH : (count > 0 ? usableH / count : 0);
       const item: LayoutNode = {
         node,
         x,

@@ -364,7 +364,7 @@ export const ConfigPage: React.FC = () => {
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
                 disabled={!isDirty || isDemo}
-                title={isDemo ? t('demo.blocked') : undefined}
+                data-tip={isDemo ? t('demo.blocked') : undefined}
                 onClick={saveConfig}
               >
                 {t('cfg.source_save')}
@@ -381,7 +381,7 @@ export const ConfigPage: React.FC = () => {
                   icon={<SaveOutlined />}
                   loading={saveMutation.isPending}
                   disabled={!isDirty || isDemo}
-                  title={isDemo ? t('demo.blocked') : undefined}
+                  data-tip={isDemo ? t('demo.blocked') : undefined}
                 >
                   {t('cfg.source_save')}
                 </Button>

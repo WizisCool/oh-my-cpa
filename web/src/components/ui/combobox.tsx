@@ -379,7 +379,21 @@ export function Combobox<
     }
   };
 
+  const baseId = React.useId();
+  const listboxId = `${baseId}-listbox`;
+  const optionId = (rowIndex: number) => `${baseId}-opt-${rowIndex}`;
+  const activeRow = isOpen && !isPopupDisabled ? flatRows[activeIndex] : undefined;
+  const activeOptionId =
+    activeRow &&
+    (activeRow.kind === 'add' || (activeRow.kind === 'option' && !activeRow.option.disabled))
+      ? optionId(activeIndex)
+      : undefined;
+
+  const isImeComposing = (e: React.KeyboardEvent) =>
+    Boolean(e.nativeEvent.isComposing) || e.keyCode === 229;
+
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isImeComposing(e)) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       stepActive(1);
@@ -479,13 +493,15 @@ export function Combobox<
           placeholder={selected.length === 0 && typeof placeholder === 'string' ? placeholder : undefined}
           onChange={(e) => {
             const raw = e.target.value;
-            if (tokenSeparators && Array.isArray(tokenSeparators) && tokenSeparators.some((sep) => raw.includes(sep))) {
+            const composing = Boolean((e.nativeEvent as InputEvent).isComposing);
+            if (!composing && tokenSeparators && Array.isArray(tokenSeparators) && tokenSeparators.some((sep) => raw.includes(sep))) {
               commitTagsFromText(raw);
               return;
             }
             setQuery(raw);
           }}
           onKeyDown={(e) => {
+            if (isImeComposing(e)) return;
             if (e.key === 'Enter' && query.trim() !== '') {
               e.preventDefault();
               commitTagsFromText(query);
@@ -529,6 +545,7 @@ export function Combobox<
       return (
         <button
           key={row.key}
+          id={optionId(rowIndex)}
           ref={measureRef}
           data-index={dataIndex}
           type="button"
@@ -568,6 +585,7 @@ export function Combobox<
     return (
       <button
         key={row.key}
+        id={optionId(rowIndex)}
         ref={measureRef}
         data-index={dataIndex}
         type="button"
@@ -618,6 +636,7 @@ export function Combobox<
             role="combobox"
             tabIndex={disabled ? -1 : 0}
             aria-expanded={isPopupDisabled ? false : isOpen}
+            aria-controls={!isPopupDisabled && isOpen ? listboxId : undefined}
             aria-haspopup="listbox"
             aria-disabled={disabled || undefined}
             aria-label={ariaLabel}
@@ -760,12 +779,19 @@ export function Combobox<
                   <input
                     ref={searchInputRef}
                     type="text"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={isOpen}
+                    aria-controls={listboxId}
+                    aria-activedescendant={activeOptionId}
                     value={query}
                     placeholder={searchPlaceholder}
                     aria-label={ariaLabel ? `${ariaLabel} search` : searchPlaceholder}
                     onChange={(e) => {
                       const raw = e.target.value;
+                      const composing = Boolean((e.nativeEvent as InputEvent).isComposing);
                       if (
+                        !composing &&
                         mode === 'tags' &&
                         tokenSeparators &&
                         Array.isArray(tokenSeparators) &&
@@ -794,8 +820,12 @@ export function Combobox<
               ) : null}
 
               <div
+                id={listboxId}
                 ref={attachScrollEl}
                 role="listbox"
+                tabIndex={!isSearchable ? -1 : undefined}
+                aria-activedescendant={!isSearchable ? activeOptionId : undefined}
+                onKeyDown={!isSearchable ? (handleSearchKeyDown as unknown as React.KeyboardEventHandler<HTMLDivElement>) : undefined}
                 aria-label={ariaLabel}
                 aria-multiselectable={isMultiple || undefined}
                 style={{ maxHeight: `min(${listHeight}px, var(--available-height, ${listHeight}px))` }}

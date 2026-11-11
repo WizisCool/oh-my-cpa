@@ -63,7 +63,7 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
                   onConfirm={onRedeem}
                   isDanger
                 >
-                  <Button size="sm" icon={<ThunderboltOutlined />} disabled={isDemo} title={isDemo ? t('demo.blocked') : undefined}>
+                  <Button size="sm" icon={<ThunderboltOutlined />} disabled={isDemo} data-tip={isDemo ? t('demo.blocked') : undefined}>
                     {t('quota.btn_reset_quota')}
                   </Button>
                 </ConfirmAction>

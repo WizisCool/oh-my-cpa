@@ -130,7 +130,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               icon={<CheckOutlined />}
               loading={isSaving}
               disabled={isSaving || disabled}
-              title={disabled ? disabledReason ?? t('demo.blocked') : undefined}
+              data-tip={disabled ? disabledReason ?? t('demo.blocked') : undefined}
               onClick={onSave}
               className="config-dirty-btn-save"
             >
@@ -158,7 +158,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
                 icon={<CheckOutlined />}
                 loading={isSaving}
                 disabled={isSaving || disabled}
-                title={disabled ? disabledReason ?? t('demo.blocked') : undefined}
+                data-tip={disabled ? disabledReason ?? t('demo.blocked') : undefined}
                 ref={saveRef}
                 className="config-dirty-btn-save"
               >

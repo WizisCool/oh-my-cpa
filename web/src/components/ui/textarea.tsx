@@ -6,7 +6,8 @@ export interface TextareaAutoSize {
   maxRows?: number;
 }
 
-export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextareaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'title'> {
+  'data-tip'?: string;
   status?: 'error' | 'warning';
   autoSize?: boolean | TextareaAutoSize;
   showCount?: boolean;

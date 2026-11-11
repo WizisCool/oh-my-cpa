@@ -238,7 +238,7 @@ export const AppLayout: React.FC = () => {
           {isFlagged ? flagIcon(entry.icon) : entry.icon}
         </span>
         {!isCollapsedRail && (
-          <span className="app-menu-item-label" data-tip-overflow={label}>
+          <span className="app-menu-item-label" data-tip={label} data-tip-overflow="">
             {label}
             {isFlagged && <span className="sr-only"> ({t('nav.update_available')})</span>}
           </span>
@@ -340,7 +340,7 @@ export const AppLayout: React.FC = () => {
                   </>
                 )}
                 <li className="app-breadcrumb-item" aria-current="page">
-                  <span className="app-breadcrumb-current" data-tip-overflow={currentLabel}>{currentLabel}</span>
+                  <span className="app-breadcrumb-current" data-tip={currentLabel} data-tip-overflow="">{currentLabel}</span>
                 </li>
               </ol>
             </nav>

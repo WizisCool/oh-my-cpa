@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils';
 
 export type InputSize = 'default' | 'sm' | 'lg';
 
-export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
+export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix' | 'title'> {
+  'data-tip'?: string;
   size?: InputSize;
   variant?: 'filled' | 'borderless';
   prefix?: React.ReactNode;

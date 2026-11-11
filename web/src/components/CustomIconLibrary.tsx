@@ -614,7 +614,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
                       danger
                       icon={<DeleteOutlined />}
                       aria-label={t('common.delete')}
-                      title={t('icons.delete_action')}
+                      data-tip={t('icons.delete_action')}
                       disabled={isDemo || isBusy || isSelecting}
                       onClick={() => {
                         setError('');

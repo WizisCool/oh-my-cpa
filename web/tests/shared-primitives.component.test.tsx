@@ -20,6 +20,10 @@ import { SummaryStrip } from '../src/components/common/SummaryStrip';
 import { MaskedText } from '../src/components/common/MaskedText';
 import { MarkArtwork } from '../src/components/common/MarkArtwork';
 import { RemoteImage } from '../src/components/common/RemoteImage';
+import { Select } from '../src/components/ui/select';
+import { Tabs } from '../src/components/ui/tabs';
+import { Combobox } from '../src/components/ui/combobox';
+import { AutoComplete } from '../src/components/ui/autocomplete';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { renderWithOmc } from './support/render';
 import { installOmcApi } from './support/omcApi';
@@ -680,6 +684,140 @@ describe('PageHeader', () => {
     const subtitle = container.querySelector('.terminal-subtitle');
     expect(subtitle?.tagName.toLowerCase()).toBe('div');
     expect(subtitle?.querySelector('[class*="summary-strip"]')).not.toBeNull();
+  });
+});
+
+describe('Base UI Select, Tabs, Combobox & AutoComplete contracts', () => {
+  it('keeps an initially empty controlled Select synchronized across external updates and clear', () => {
+    function Harness() {
+      const [val, setVal] = React.useState<string | undefined>(undefined);
+      return (
+        <div>
+          <button type="button" onClick={() => setVal('claude')}>Set Claude</button>
+          <Select
+            aria-label="Protocol"
+            allowClear
+            placeholder="All protocols"
+            value={val}
+            onChange={(next) => setVal(next)}
+            options={[
+              { value: 'alpha', label: 'Alpha' },
+              { value: 'claude', label: 'Claude' },
+            ]}
+          />
+        </div>
+      );
+    }
+    renderWithOmc(<Harness />);
+    const trigger = screen.getByRole('combobox', { name: 'Protocol' });
+    expect(trigger.textContent).toContain('All protocols');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set Claude' }));
+    expect(trigger.textContent).toContain('Claude');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(trigger.textContent).toContain('All protocols');
+  });
+
+  it('retains visited Tabs panel state when destroyOnHidden is false and discards it when true', () => {
+    function CounterPanel({ label }: { label: string }) {
+      const [count, setCount] = React.useState(0);
+      return (
+        <button type="button" onClick={() => setCount((c) => c + 1)}>
+          {label}: {count}
+        </button>
+      );
+    }
+    const { rerender } = renderWithOmc(
+      <Tabs
+        defaultActiveKey="tail"
+        items={[
+          { key: 'tail', label: 'Tail', children: <CounterPanel label="Tail count" /> },
+          { key: 'errors', label: 'Errors', children: <CounterPanel label="Error count" /> },
+        ]}
+      />,
+    );
+
+    // Lazy initial mount: inactive Errors panel is not mounted before first visit.
+    expect(screen.queryByRole('button', { name: /Error count/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tail count: 0' }));
+    expect(screen.getByRole('button', { name: 'Tail count: 1' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Errors' }));
+    expect(screen.getByRole('button', { name: 'Error count: 0' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Tail' }));
+    expect(screen.getByRole('button', { name: 'Tail count: 1' })).toBeTruthy();
+
+    rerender(
+      <Tabs
+        destroyOnHidden
+        defaultActiveKey="tail"
+        items={[
+          { key: 'tail', label: 'Tail', children: <CounterPanel label="Tail count" /> },
+          { key: 'errors', label: 'Errors', children: <CounterPanel label="Error count" /> },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Errors' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Tail' }));
+    expect(screen.getByRole('button', { name: 'Tail count: 0' })).toBeTruthy();
+  });
+
+  it('wires aria-activedescendant on Combobox and AutoComplete and ignores Enter during IME composition', async () => {
+    const onComboChange = vi.fn();
+    const onAutoSelect = vi.fn();
+    renderWithOmc(
+      <div>
+        <Combobox
+          aria-label="Model picker"
+          showSearch
+          open
+          options={[
+            { value: 'gpt-5', label: 'GPT-5' },
+            { value: 'claude-4', label: 'Claude 4' },
+          ]}
+          onChange={onComboChange}
+        />
+        <AutoComplete
+          aria-label="Alias target"
+          value="g"
+          options={[
+            { value: 'gpt-5', label: 'GPT-5' },
+            { value: 'gemini', label: 'Gemini' },
+          ]}
+          onSelect={onAutoSelect}
+        />
+      </div>,
+    );
+
+    const searchInput = await screen.findByRole('combobox', { name: 'Model picker search' });
+    const firstOptId = searchInput.getAttribute('aria-activedescendant');
+    expect(firstOptId).toBeTruthy();
+    expect(document.getElementById(firstOptId!)?.textContent).toContain('GPT-5');
+
+    fireEvent.keyDown(searchInput, { key: 'ArrowDown' });
+    const secondOptId = searchInput.getAttribute('aria-activedescendant');
+    expect(secondOptId).toBeTruthy();
+    expect(secondOptId).not.toBe(firstOptId);
+    expect(document.getElementById(secondOptId!)?.textContent).toContain('Claude 4');
+
+    // IME composition confirmation must not commit the highlighted option.
+    fireEvent.keyDown(searchInput, { key: 'Enter', isComposing: true });
+    expect(onComboChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+    expect(onComboChange).toHaveBeenCalledWith('claude-4', expect.objectContaining({ value: 'claude-4' }));
+
+    const autoInput = screen.getByRole('combobox', { name: 'Alias target' });
+    fireEvent.focus(autoInput);
+    await waitFor(() => expect(autoInput.getAttribute('aria-expanded')).toBe('true'));
+    const autoActiveId = autoInput.getAttribute('aria-activedescendant');
+    expect(autoActiveId).toBeTruthy();
+    expect(document.getElementById(autoActiveId!)?.textContent).toContain('GPT-5');
+
+    fireEvent.keyDown(autoInput, { key: 'Enter', isComposing: true });
+    expect(onAutoSelect).not.toHaveBeenCalled();
   });
 });
 

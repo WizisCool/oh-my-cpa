@@ -69,7 +69,12 @@ export function AutoComplete({
     setActiveIndex(0);
   }, [filtered.length, open]);
 
+  const baseId = React.useId();
+  const listboxId = `${baseId}-listbox`;
+  const optionId = (idx: number) => `${baseId}-opt-${idx}`;
   const showPopup = open && !disabled && filtered.length > 0;
+  const activeOption = showPopup ? filtered[activeIndex] : undefined;
+  const activeOptionId = activeOption && !activeOption.disabled ? optionId(activeIndex) : undefined;
 
   const commitOption = (opt: AutoCompleteOption) => {
     if (opt.disabled) return;
@@ -107,6 +112,8 @@ export function AutoComplete({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={showPopup}
+          aria-controls={showPopup ? listboxId : undefined}
+          aria-activedescendant={activeOptionId}
           aria-label={ariaLabel}
           data-testid={testId}
           data-alias-field={aliasField}
@@ -124,6 +131,7 @@ export function AutoComplete({
             if (!disabled) setOpen(true);
           }}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
             if (e.key === 'ArrowDown') {
               if (!showPopup && filtered.length > 0) {
                 e.preventDefault();
@@ -185,10 +193,11 @@ export function AutoComplete({
             style={{ width: 'var(--anchor-width)', maxWidth: 'calc(100vw - 24px)' }}
             className="omc-float-surface max-h-[min(260px,var(--available-height,260px))] overflow-y-auto overscroll-contain rounded-lg border-0 bg-popover p-1 text-popover-foreground shadow-float outline-none"
           >
-            <div role="listbox" className="flex flex-col gap-0.5">
+            <div id={listboxId} role="listbox" className="flex flex-col gap-0.5">
               {filtered.map((opt, idx) => (
                 <button
                   key={opt.value}
+                  id={optionId(idx)}
                   type="button"
                   role="option"
                   aria-selected={opt.value === value}

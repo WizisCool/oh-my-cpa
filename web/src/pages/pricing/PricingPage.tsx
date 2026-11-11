@@ -461,7 +461,7 @@ export const PricingPage: React.FC = () => {
         // The sync reaches OpenRouter. The demonstration prices its own fixture instead, so the
         // server refuses this and the button says so.
         disabled={isDemo || Boolean(data?.sync.running)}
-        title={isDemo ? t('demo.blocked') : undefined}
+        data-tip={isDemo ? t('demo.blocked') : undefined}
         onClick={() => syncMutation.mutate()}
       >
         {t('pricing.sync_now')}

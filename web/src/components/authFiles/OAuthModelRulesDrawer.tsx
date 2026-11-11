@@ -397,7 +397,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       icon={<DeleteOutlined />}
       data-testid="oauth-model-rules-clear"
       disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving || isDemo}
-      title={isDemo ? t('demo.blocked') : undefined}
+      data-tip={isDemo ? t('demo.blocked') : undefined}
       onClick={confirmClear}
     >
       {t(section === 'aliases' ? 'af.alias_delete_provider' : 'af.excluded_delete_provider')}
@@ -418,7 +418,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         data-testid="oauth-model-rules-save"
         loading={isSaving}
         disabled={!isSectionReady || !isSectionDirty || isDemo}
-        title={isDemo ? t('demo.blocked') : undefined}
+        data-tip={isDemo ? t('demo.blocked') : undefined}
         onClick={() => void (section === 'aliases' ? saveAliases() : saveRules())}
       >
         {t(section === 'aliases' ? 'af.alias_save' : 'af.excluded_save')}

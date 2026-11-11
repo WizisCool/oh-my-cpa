@@ -660,7 +660,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
             // A refresh spends the credential's refresh token with its provider, which the
             // demonstration never contacts.
             disabled={file.runtime_only || !canEdit || isDemo}
-            title={isDemo ? t('demo.blocked') : t('af.refresh_desc')}
+            data-tip={isDemo ? t('demo.blocked') : t('af.refresh_desc')}
             onClick={() => refreshMutation.mutate({ fileName: file.name, authIndex: file.auth_index })}
           >
             {t('af.refresh')}
@@ -670,7 +670,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
             // Downloading credential material is refused by the demonstration, here as
             // well as on the card behind this drawer.
             disabled={file.runtime_only || isDemo}
-            title={isDemo ? t('demo.blocked') : undefined}
+            data-tip={isDemo ? t('demo.blocked') : undefined}
             onClick={() => onDownload(file)}
           >
             {t('af.download_credential')}

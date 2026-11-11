@@ -46,8 +46,11 @@ export type ButtonVariant = NonNullable<VariantProps<typeof buttonVariants>['var
 export type ButtonSize = NonNullable<VariantProps<typeof buttonVariants>['size']>;
 
 export interface ButtonProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'type'>,
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'title'>,
     VariantProps<typeof buttonVariants> {
+  'data-tip'?: string;
+  'data-tip-side'?: 'top' | 'bottom' | 'left' | 'right';
+  'data-tip-overflow'?: string;
   type?: 'button' | 'submit' | 'reset';
   href?: string;
   target?: string;

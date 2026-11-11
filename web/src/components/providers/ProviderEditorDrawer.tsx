@@ -269,7 +269,7 @@ export function ProviderEditorDrawer({
               variant="primary"
               loading={createProviderMutation.isPending || updateProviderMutation.isPending}
               disabled={isDemo}
-              title={isDemo ? t('demo.blocked') : undefined}
+              data-tip={isDemo ? t('demo.blocked') : undefined}
               onClick={handleSaveProvider}
             >
               {t('common.save')}
@@ -771,7 +771,7 @@ export function ProviderEditorDrawer({
                       icon={<SyncOutlined spin={isPullingModels} />}
                       loading={isPullingModels}
                       disabled={isDemo}
-                      title={isDemo ? t('demo.blocked') : undefined}
+                      data-tip={isDemo ? t('demo.blocked') : undefined}
                       onClick={handlePullModels}
                     >
                       {endpointModels.length > 0

@@ -279,7 +279,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
       ].filter(Boolean).join(' ')}
       icon={<ClockCircleOutlined />}
       disabled={isDisabled}
-      title={t('time_range.title')}
+      data-tip={t('time_range.title')}
       aria-haspopup="dialog"
       aria-expanded={isOpen}
       onClick={isSheet ? open : undefined}

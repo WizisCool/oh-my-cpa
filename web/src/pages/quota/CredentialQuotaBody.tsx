@@ -167,7 +167,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
               danger
               className={styles['callout-action']}
               disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
-              title={isDemo ? t('demo.blocked') : undefined}
+              data-tip={isDemo ? t('demo.blocked') : undefined}
               onClick={() => onClearCooldown(item.auth_index)}
             >
               {t('quota.clear_cooldown')}
@@ -192,7 +192,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           </div>
           {!item.active_cooldown?.is_active && onClearCooldown && (
             <Button size="sm" danger className={styles['callout-action']} disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
-              title={isDemo ? t('demo.blocked') : undefined}
+              data-tip={isDemo ? t('demo.blocked') : undefined}
               onClick={() => onClearCooldown(item.auth_index)}>
               {t('quota.clear_all_cooldowns')}
             </Button>
