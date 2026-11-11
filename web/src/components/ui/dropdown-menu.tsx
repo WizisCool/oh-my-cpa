@@ -145,7 +145,7 @@ export function DropdownMenuSeparator({ className, ...props }: React.HTMLAttribu
   return (
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn('my-1 h-px bg-border-soft', className)}
+      className={cn('my-1 h-[var(--hairline)] bg-border-soft', className)}
       {...props}
     />
   );

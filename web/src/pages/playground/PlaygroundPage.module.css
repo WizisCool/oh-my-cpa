@@ -43,8 +43,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  box-shadow: var(--shadow-edge);
-  border-left: 2px solid var(--danger);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 32%, transparent), var(--edge-drop);
   border-radius: var(--radius-lg);
   background: var(--surface);
   font-size: var(--text-md);

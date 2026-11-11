@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import { Segmented } from '@/components/ui/segmented';
 import { SearchInput } from '../../components/common/SearchInput';
 import { Tooltip } from '../../components/common/Tooltip';
@@ -19,7 +20,6 @@ import {
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
-  DownOutlined,
   FilterOutlined,
   ListOutlined,
   SwapOutlined,
@@ -233,7 +233,7 @@ export function FleetToolbar({
             <DropdownMenuTrigger
               disabled={refresh.isDisabled}
               render={
-                <Button className={styles.caret} icon={<DownOutlined />} disabled={refresh.isDisabled} aria-label={t('omc.fleet_refresh_scopes')} />
+                <Button className={styles.caret} data-split-caret="" icon={<DropdownCaret />} disabled={refresh.isDisabled} aria-label={t('omc.fleet_refresh_scopes')} />
               }
             />
             <DropdownMenuContent placement="bottomRight">

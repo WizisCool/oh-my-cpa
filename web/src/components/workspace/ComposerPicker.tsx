@@ -2,7 +2,8 @@ import React from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { CheckOutlined, DownOutlined } from '../icons';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
+import { CheckOutlined } from '../icons';
 import { nextPickerIndex, pickerRoom, PICKER_GAP } from './pickerNavigation';
 import type { PickerRoom } from './pickerNavigation';
 import styles from './Workspace.module.css';
@@ -90,7 +91,7 @@ export function ComposerPicker({
             {isPending
               ? <span className={styles['picker-trigger-pending']} />
               : <span className={styles['picker-trigger-value']} title={valueLabel}>{valueLabel}</span>}
-            <DownOutlined className={styles['picker-caret']} aria-hidden="true" />
+            <DropdownCaret className={styles['picker-caret']} />
           </Button>
         }
       />

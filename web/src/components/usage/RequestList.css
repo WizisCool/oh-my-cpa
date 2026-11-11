@@ -185,13 +185,13 @@
 }
 .req-select-box:checked,
 .req-select-box:indeterminate {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
+  border-color: var(--primary);
+  background: var(--primary);
 }
 .req-select:hover .req-select-box:checked,
 .req-select:hover .req-select-box:indeterminate {
-  border-color: var(--accent-active);
-  background: var(--accent-active);
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
 }
 .req-select-box:checked::after,
 .req-select-box:indeterminate::after {
@@ -203,14 +203,14 @@
 .req-select-box:checked::after {
   width: 4px;
   height: 8px;
-  border: solid var(--accent-on);
+  border: solid var(--primary-on);
   border-width: 0 1.5px 1.5px 0;
   transform: translateY(-1px) rotate(45deg);
 }
 .req-select-box:indeterminate::after {
   width: 8px;
   height: 1.5px;
-  background: var(--accent-on);
+  background: var(--primary-on);
 }
 .req-select-box:focus-visible {
   outline: 2px solid var(--accent);

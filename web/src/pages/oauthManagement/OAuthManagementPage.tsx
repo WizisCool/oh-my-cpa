@@ -11,11 +11,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
 import {
   BranchesOutlined,
   CloudUploadOutlined,
-  DownOutlined,
   LoginOutlined,
   TimerResetOutlined,
   UploadOutlined,
@@ -649,7 +649,7 @@ export const OAuthManagementPage: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
-                    <Button variant="primary" icon={<DownOutlined />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
+                    <Button variant="primary" data-split-caret="" icon={<DropdownCaret />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
                   }
                 />
                 <DropdownMenuContent placement="bottomRight">

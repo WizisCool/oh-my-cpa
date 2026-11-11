@@ -138,9 +138,9 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       fontSizeHeading4: 14,
       ...noShadow,
 
-      colorPrimary: t.accentHover,
-      colorPrimaryHover: t.accentActive,
-      colorPrimaryActive: t.accentActive,
+      colorPrimary: t.primary,
+      colorPrimaryHover: t.primaryHover,
+      colorPrimaryActive: t.primaryActive,
       colorInfo: t.accent,
       colorLink: t.accent,
       colorLinkHover: t.accent,
@@ -249,7 +249,7 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         // `colorTextLightSolid`, which is white in every palette, so a palette whose accent fill is
         // light would otherwise draw a white label on it. `accentOn` is solved by the derivation, so
         // this is the same value on a built-in palette and on an operator's own.
-        primaryColor: t.accentOn,
+        primaryColor: t.primaryOn,
         // A secondary button is a soft fill rather than an outline: hairlines belong to the things
         // that enclose content, and a toolbar of outlined buttons drew a box around every verb.
         // The fills are the foreground washed over whatever the button stands on, so the same
@@ -364,6 +364,10 @@ export function themePaletteCssVariables(palette: ThemePalette): Record<string, 
     '--hover-inset': palette.hoverInset,
     '--selected-inset': palette.selected,
     '--tooltip-bg': palette.tooltipBg,
+    '--primary': palette.primary,
+    '--primary-hover': palette.primaryHover,
+    '--primary-active': palette.primaryActive,
+    '--primary-on': palette.primaryOn,
     '--accent': palette.accent,
     '--accent-hover': palette.accentHover,
     '--accent-active': palette.accentActive,

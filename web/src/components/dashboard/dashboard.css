@@ -730,7 +730,7 @@
   font-size: var(--text-xs);
 }
 .heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
-.heatmap-tip-link-icon { font-size: 9px; }
+.heatmap-tip-link-icon { font-size: var(--text-sm); }
 /* The key is the field's footer, right-aligned under the newest weeks. */
 .heatmap-legend {
   align-self: flex-end;

@@ -17,12 +17,16 @@ import {
   CORE_TOKEN_KEYS,
   builtInPalettesForMode,
   derivePalette,
-  resolvedBuiltInPalette,
+  getThemeRegistryRevision,
+  listRegisteredThemes,
+  resolvedRegisteredTheme,
+  subscribeThemeRegistry,
   type ContrastRole,
   type ThemeCore,
   type ThemeMode,
 } from '../theme/palette';
 import { contrastRatio } from '../theme/colorMath';
+import { resolveThemeText } from '../theme/themeContract';
 import { THEME_MODE_PREFERENCES, resolveModePreference, type ThemeModePreference } from '../theme/themePreference';
 import { ThemeSwatch } from '../components/common/ThemeSwatch';
 import { CountryFlag, LANGUAGE_FLAGS } from '../components/common/CountryFlag';
@@ -456,16 +460,21 @@ const PaletteSetting: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
  */
 const PaletteChooser: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
   const t = useT();
+  const { lang } = useI18n();
   const { preferences, setPaletteRef, openCustomEditor, customFor } = useTheme();
+  React.useSyncExternalStore(subscribeThemeRegistry, getThemeRegistryRevision, getThemeRegistryRevision);
   const selected = preferences.palettes[mode];
   const custom = customFor(mode);
   const groupLabel = t(mode === 'light' ? 'omc.palette_light' : 'omc.palette_dark');
 
   return (
     <div className="theme-preset-grid" role="group" aria-label={groupLabel}>
-      {builtInPalettesForMode(mode).map((definition) => {
-        const resolved = resolvedBuiltInPalette(definition.id);
+      {listRegisteredThemes(mode).map((definition) => {
+        const resolved = resolvedRegisteredTheme(definition.id);
+        if (!resolved) return null;
         const isActive = selected === definition.id;
+        const displayName = definition.nameKey ? t(definition.nameKey) : resolveThemeText(definition.label, lang, definition.id);
+        const displayDesc = definition.descriptionKey ? t(definition.descriptionKey) : resolveThemeText(definition.description, lang);
         return (
           <button
             key={definition.id}
@@ -475,8 +484,8 @@ const PaletteChooser: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
             onClick={() => setPaletteRef(mode, definition.id)}
           >
             <ThemeSwatch palette={resolved.palette} className="theme-preset-preview" />
-            <span className="theme-preset-name">{t(definition.nameKey)}</span>
-            <span className="theme-preset-desc">{t(definition.descriptionKey)}</span>
+            <span className="theme-preset-name">{displayName}</span>
+            {displayDesc && <span className="theme-preset-desc">{displayDesc}</span>}
           </button>
         );
       })}

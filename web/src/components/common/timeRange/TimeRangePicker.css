@@ -6,7 +6,7 @@
   max-width: 260px;
   justify-content: flex-start;
   gap: 8px;
-  padding-inline: 11px;
+  padding-inline: 12px 10px;
   color: var(--fg);
   font-weight: 400;
   font-variant-numeric: tabular-nums;

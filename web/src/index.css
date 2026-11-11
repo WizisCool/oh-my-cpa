@@ -37,9 +37,10 @@
   --color-tooltip-foreground: var(--tooltip-fg);
   --color-thumb: var(--thumb-bg);
 
-  --color-primary: var(--accent-hover);
-  --color-primary-hover: var(--accent-active);
-  --color-primary-foreground: var(--accent-on);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-on);
   --color-brand: var(--accent);
   --color-brand-hover: var(--accent-hover);
   --color-brand-active: var(--accent-active);
@@ -138,11 +139,13 @@
      background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 resting,
      6.93:1 pressed). Both are measured against the *same* label, which is why the ladder solves them
      together rather than one at a time. */
+  --primary: #0579bd;
+  --primary-hover: #025e94;
+  --primary-active: #034873;
+  --primary-on: #ffffff;
   --accent: #00a2fb;
   --accent-hover: #0579bd;
   --accent-active: #025e94;
-  /* The label colour for a filled accent control, matching the presets' own `accentOn` token.
-     White in both fallback palettes; a preset whose accent fill is light carries a dark step. */
   --accent-on: #ffffff;
   --success: #10b981;
   --warn: #f59e0b;
@@ -190,15 +193,12 @@
   /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
      where the bright accent reads 6.12:1 - clear of AA, so the ladder's own link step is used. */
   --heatmap-tip-link: #00a2fb;
-  /* Categorical series palette: ZCode & Codex inspired developer console
-     palette matching AntV and Tremor. Alternates vibrant primary hues (Blue -> Emerald -> Purple ->
-     Coral -> Amber -> Cyan) ensuring immediate visual hierarchy, warm-cool harmony, and rich telemetry. */
-  --series-1: #3b82f6;
+  --series-1: #6588f5;
   --series-2: #10b981;
-  --series-3: #8b5cf6;
+  --series-3: #9b7bf7;
   --series-4: #f43f5e;
   --series-5: #f59e0b;
-  --series-6: #06b6d4;
+  --series-6: #14b8a6;
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
@@ -212,15 +212,17 @@
   --effort-5: #f08dee;
   --effort-6: #ff8cc1;
   --effort-tint: 14%;
-  /* The type scale. Sizes below the page title are these seven steps; a
-     literal size is a display numeral or an icon, which belong to one surface each. */
-  --text-2xs: 10px;
-  --text-xs: 11px;
+  /* 4-step typography scale (>= 12px floor: 12 / 13 / 16 / 20). Legacy aliases
+     (--text-2xs, --text-xs, --text-base) collapse onto the four steps so no surface
+     drops below 12px or introduces extra fractional tiers. */
+  --text-2xs: 12px;
+  --text-xs: 12px;
   --text-sm: 12px;
   --text-md: 13px;
-  --text-base: 14px;
+  --text-base: 13px;
   --text-lg: 16px;
   --text-xl: 20px;
+  --hairline: 1px;
   /* The corner scale. Five steps, one per role, and nothing between them: radii are read as a
      family, so a sixth value reads as a mistake rather than as a choice. `RADIUS` in
      `theme/radius.ts` carries the same numbers to the component theme, the canvas painters and
@@ -348,6 +350,12 @@
   --ease-sheet-out: cubic-bezier(0.45, 0, 0.2, 1);
 }
 
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+
 :root[data-theme-mode='light'] {
   color-scheme: light;
   --bg: #ffffff;
@@ -384,6 +392,10 @@
   /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
      reads 2.71:1 there, while this reads 6.57:1 as a link and 7.09:1 under white text. The dark
      theme's link step is therefore this theme's filled-control step. */
+  --primary: #005d8f;
+  --primary-hover: #004a73;
+  --primary-active: #023b5d;
+  --primary-on: #ffffff;
   --accent: #005d8f;
   --accent-hover: #004a73;
   --accent-active: #023b5d;
@@ -413,15 +425,12 @@
   /* The link step of the accent ladder for this theme; the tooltip is on the card's surface rather
      than the page, and this is the step that clears 4.5:1 there. */
   --heatmap-tip-link: #005d8f;
-  /* Categorical series palette (light mode): Deep, rich, warm-neutral data visualization counterparts
-     for light card surfaces. Each slot maintains visual correspondence with its dark mode family while
-     clearing >= 3.0 graphical contrast. */
-  --series-1: #2563eb;
+  --series-1: #3d63cf;
   --series-2: #059669;
-  --series-3: #7c3aed;
+  --series-3: #6d47d9;
   --series-4: #e11d48;
   --series-5: #b45309;
-  --series-6: #0891b2;
+  --series-6: #0d8a7e;
   --series-track: #dcdce1;
   /* The same sweep as its darker steps, which is what stays legible on a light page. */
   --effort-1: #39626e;
@@ -550,6 +559,8 @@
   }
 }
 [data-slot='sheet-content']:has(> .app-drawer-resize[data-dragging]) { user-select: none; }
+a[data-slot='button']:not([data-variant='link']) { color: var(--fg); }
+a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
 
 /* A card is a fill on the edge shadow, never a border; the layout and a sheet's body are flat. */
 .ant-layout, .ant-drawer-section {
@@ -848,33 +859,32 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  padding: 10px 14px 12px 14px;
+  padding: 10px 14px;
   color: var(--fg);
   font-size: var(--text-md);
   line-height: 1.5;
   text-align: start;
-  /* A notice is a soft wash of its tone rather than a bar on its edge: it belongs to the region it
-     describes, so it is tinted like part of the page instead of flagged like an interruption. */
-  background: color-mix(in srgb, var(--notice-tone) 8%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--notice-tone) 16%, transparent);
+  background: var(--surface);
+  border: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--notice-tone) 28%, transparent), var(--edge-drop);
   border-radius: var(--radius-lg);
 }
-/* The basis is the narrowest measure a sentence keeps beside its tools; below it the tools wrap
-   under the text instead of squeezing it. */
-.omc-notice-main { flex: 1 1 220px; display: grid; gap: 4px; min-width: 0; }
+.omc-notice-main { flex: 1 1 220px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; min-width: 0; }
 .omc-notice.is-warning { --notice-tone: var(--warn); }
 .omc-notice.is-error { --notice-tone: var(--danger); }
 .omc-notice.is-success { --notice-tone: var(--success); }
-/* The tone's code, in the type the table headers use. */
 .omc-notice-label {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--notice-tone) 12%, transparent);
   color: var(--notice-tone);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  line-height: 16px;
-  letter-spacing: 0.02em;
+  line-height: 18px;
   white-space: nowrap;
 }
 .omc-notice-icon { display: inline-flex; font-size: var(--text-sm); }
@@ -2172,7 +2182,22 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: var(--hairline) solid var(--border-soft);
+}
+
+/* Optical balance for interim antd selects before Base UI Select lands: keep generous separation
+   between the chosen label and the trailing caret, and keep the caret inset cleanly from the right. */
+.ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+  padding-inline: 12px 10px !important;
+}
+.ant-select-single.ant-select-show-arrow .ant-select-selection-item,
+.ant-select-single.ant-select-show-arrow .ant-select-selection-placeholder {
+  padding-inline-end: 24px !important;
+}
+.ant-select .ant-select-arrow {
+  inset-inline-end: 10px !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
 }
 
 .settings-group-body {
@@ -2217,7 +2242,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   position: absolute;
   top: 0;
   inset-inline: 20px;
-  border-top: 1px dashed var(--border);
+  border-top: var(--hairline) solid var(--border-soft);
 }
 
 /* A notice belongs to the row above it rather than becoming a second setting. */

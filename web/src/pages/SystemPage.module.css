@@ -573,7 +573,6 @@
 .image-link {
   color: var(--accent);
   font-size: var(--text-sm);
-  font-style: italic;
   display: inline-block;
 }
 

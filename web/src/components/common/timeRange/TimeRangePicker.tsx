@@ -3,8 +3,9 @@ import React from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Sheet, SheetBody, SheetContent, SheetHeader } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
+import { ClockCircleOutlined, LeftOutlined, RightOutlined } from '../../icons';
 import { languageLocale, useI18n } from '../../../i18n';
 import { useIsNarrowViewport } from '../../../hooks/useIsNarrowViewport';
 import dayjs, { formatTimeZoneOffset } from '../../../utils/time';
@@ -284,7 +285,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
       onClick={isSheet ? open : undefined}
     >
       <span className="time-range-trigger-text">{label}</span>
-      <DownOutlined className="time-range-trigger-caret" />
+      <DropdownCaret className="time-range-trigger-caret" />
     </Button>
   );
 

@@ -16,7 +16,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-foreground hover:enabled:bg-primary-hover active:enabled:bg-brand-active shadow-none',
+        primary: 'bg-primary text-primary-foreground hover:enabled:bg-primary-hover active:enabled:bg-primary-active shadow-control',
         active: 'bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-brand hover:enabled:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_42%,transparent)]',
         secondary: 'bg-secondary text-secondary-foreground hover:enabled:bg-secondary-hover active:enabled:bg-secondary-active shadow-control',
         filled: 'bg-field text-foreground hover:enabled:bg-field-hover shadow-well',

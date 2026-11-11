@@ -13,8 +13,25 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { BUILT_IN_PALETTES, derivePalette, getBuiltInPalette } from '../../src/theme/palette.ts';
-import { migrateLegacyThemeValue, THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
+import {
+  ACCENT_LABEL_CONTRAST_FLOOR,
+  BUILT_IN_PALETTES,
+  BUILT_IN_PALETTE_IDS,
+  CONTRAST_FLOORS,
+  CORE_TOKEN_CONTRAST_ROLES,
+  CORE_TOKEN_KEYS,
+  contrastRatio,
+  derivePalette,
+  exportThemeManifest,
+  getBuiltInPalette,
+  listRegisteredThemes,
+  registerTheme,
+  resolvePalette,
+  resolvedBuiltInPalette,
+  unregisterTheme,
+  validateThemeManifest,
+} from '../../src/theme/index.ts';
+import { migrateLegacyThemeValue, parseThemePreferences, THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
 import { RADIUS } from '../../src/theme/radius.ts';
 
 const indexHTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -161,10 +178,94 @@ test('the first frame draws edges with the shares and shade the default palettes
     shade: /--shade:\s*(#[0-9a-f]{6});/.exec(body)?.[1],
   });
   for (const [selector, id] of [[':root', 'omc-dark'], [":root[data-theme-mode='light']", 'omc-light']] as const) {
-    const palette = derivePalette(getBuiltInPalette(id).mode, getBuiltInPalette(id).core);
+    const def = getBuiltInPalette(id);
+    const palette = derivePalette(def.mode, def.core, def.overrides);
     const { edgeShare, liftShare, fineShare, shade } = palette;
-    assert.deepEqual(edges(block(selector)), { edgeShare, liftShare, fineShare, shade }, id);
+    const body = block(selector);
+    assert.deepEqual(edges(body), { edgeShare, liftShare, fineShare, shade }, id);
+    assert.equal(/--primary:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.primary, `${id} --primary`);
+    assert.equal(/--primary-hover:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.primaryHover, `${id} --primary-hover`);
+    assert.equal(/--primary-active:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.primaryActive, `${id} --primary-active`);
+    assert.equal(/--primary-on:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.primaryOn, `${id} --primary-on`);
+    assert.equal(/--accent:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.accent, `${id} --accent`);
   }
+});
+
+test('every built-in palette clears all text, hint, quiet, primary and accent contrast floors', () => {
+  for (const definition of BUILT_IN_PALETTES) {
+    const { palette } = resolvedBuiltInPalette(definition.id);
+    for (const key of CORE_TOKEN_KEYS) {
+      const floor = CONTRAST_FLOORS[CORE_TOKEN_CONTRAST_ROLES[key]];
+      if (floor !== undefined) {
+        const ratio = contrastRatio(palette[key], palette.bg);
+        assert.ok(ratio >= floor, `${definition.id}.${key} (${ratio.toFixed(2)}) < ${floor}`);
+      }
+    }
+    for (const fill of [palette.primary, palette.primaryHover, palette.primaryActive]) {
+      const ratio = contrastRatio(palette.primaryOn, fill);
+      assert.ok(ratio >= ACCENT_LABEL_CONTRAST_FLOOR, `${definition.id} primary contrast (${ratio.toFixed(2)}) < ${ACCENT_LABEL_CONTRAST_FLOOR}`);
+    }
+    for (const fill of [palette.accentHover, palette.accentActive]) {
+      const ratio = contrastRatio(palette.accentOn, fill);
+      assert.ok(ratio >= ACCENT_LABEL_CONTRAST_FLOOR, `${definition.id} accent contrast (${ratio.toFixed(2)}) < ${ACCENT_LABEL_CONTRAST_FLOOR}`);
+    }
+  }
+});
+
+test('open theme SDK validates manifests, registers external themes, and falls back cleanly on removal', () => {
+  const builtInSet = new Set(BUILT_IN_PALETTE_IDS);
+  assert.equal(validateThemeManifest({ schemaVersion: 1, id: 'omc-dark', mode: 'dark', label: 'Clash', core: {} }, builtInSet).ok, false);
+
+  const nordManifest = exportThemeManifest(
+    {
+      mode: 'dark',
+      core: {
+        bg: '#1c2028',
+        surface: '#242933',
+        elevated: '#2e3440',
+        fg: '#eceff4',
+        fg2: '#d8dee9',
+        muted: '#9aa5b8',
+        meta: '#6d788d',
+        border: '#3b4252',
+        accent: '#88c0d0',
+      },
+      overrides: {
+        primary: '#81a1c1',
+      },
+    },
+    {
+      id: 'plugin:community.nord',
+      label: { en: 'Nord Frost', zh: '极地冰蓝' },
+      description: { en: 'Arctic slate with frost primary', zh: '极地蓝灰与冰霜主色' },
+      author: 'OMC Studio',
+      version: '1.0.0',
+    },
+  );
+
+  const check = validateThemeManifest(nordManifest, builtInSet);
+  assert.equal(check.ok, true);
+
+  const preBootPrefs = parseThemePreferences({
+    mode: 'dark',
+    palettes: { dark: 'plugin:community.nord', light: 'omc-dark' },
+    custom: {},
+  });
+  assert.equal(preBootPrefs?.palettes.dark, 'plugin:community.nord');
+  assert.equal(preBootPrefs?.palettes.light, 'omc-light');
+  assert.equal(resolvePalette('dark', 'plugin:community.nord', undefined).id, 'omc-dark');
+
+  const dispose = registerTheme(nordManifest);
+  try {
+    assert.ok(listRegisteredThemes('dark').some((entry) => entry.id === 'plugin:community.nord'));
+    const resolved = resolvePalette('dark', 'plugin:community.nord', undefined);
+    assert.equal(resolved.id, 'plugin:community.nord');
+    assert.ok(contrastRatio(resolved.palette.primaryOn, resolved.palette.primary) >= ACCENT_LABEL_CONTRAST_FLOOR);
+  } finally {
+    dispose();
+  }
+  assert.equal(unregisterTheme('omc-dark'), false);
+  assert.equal(resolvePalette('dark', 'plugin:community.nord', undefined).id, 'omc-dark');
 });
 
 test('every corner in the console sits on the scale', () => {

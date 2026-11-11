@@ -27,7 +27,6 @@
 .code-body :global(.hljs-comment),
 .code-body :global(.hljs-quote) {
   color: var(--meta);
-  font-style: italic;
 }
 
 .code-body :global(.hljs-keyword),

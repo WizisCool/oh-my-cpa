@@ -8,7 +8,7 @@ import type { ThemePalette } from '../../theme/palette';
  * accent and success are the steps an operator recognises a preset by, and a
  * preview that showed every token would be a legend, not a mark.
  */
-const THEME_SWATCH_CHANNELS = ['bg', 'surface', 'accent', 'success'] as const;
+const THEME_SWATCH_CHANNELS = ['bg', 'surface', 'primary', 'accent'] as const;
 
 /**
  * ThemeSwatch previews one theme preset as its palette bands.

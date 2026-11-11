@@ -4,7 +4,9 @@ import { flushSync } from 'react-dom';
 import {
   emptyCustomPalette,
   getBuiltInPalette,
+  getThemeRegistryRevision,
   resolvePalette,
+  subscribeThemeRegistry,
   type BuiltInPaletteId,
   type CustomPalette,
   type PaletteRef,
@@ -139,11 +141,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [draft, preferences.custom],
   );
 
+  const registryVersion = React.useSyncExternalStore(
+    subscribeThemeRegistry,
+    getThemeRegistryRevision,
+    getThemeRegistryRevision,
+  );
+
   // A draft is a preview, so it is applied to the palette the console paints without being stored.
   const themeMode: ThemeMode = previewMode ?? resolveModePreference(preferences.mode, systemMode);
   const theme = React.useMemo(
     () => resolvePalette(themeMode, preferences.palettes[themeMode], customFor(themeMode)),
-    [customFor, preferences.palettes, themeMode],
+    [customFor, preferences.palettes, registryVersion, themeMode],
   );
 
   // A palette change repaints every surface in one frame. Without this, each element's own colour
@@ -175,8 +183,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (previewMode) root.dataset.themePreview = previewMode;
     else delete root.dataset.themePreview;
     root.style.colorScheme = themeMode;
-    for (const [name, value] of Object.entries(themePaletteCssVariables(theme.palette))) {
+    const variables = themePaletteCssVariables(theme.palette);
+    for (const [name, value] of Object.entries(variables)) {
       root.style.setProperty(name, value);
+    }
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('omc:theme-change', {
+        detail: { id: theme.id, mode: themeMode, isCustom: theme.isCustom, variables },
+      }));
     }
   }, [preferences.mode, previewMode, theme, themeMode]);
 

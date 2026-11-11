@@ -117,19 +117,19 @@ details[open]>summary>.caret{transform:rotate(90deg)}
 .call-mark[data-tone=processing]{color:var(--accent)}
 .call-mark[data-tone=warning]{color:var(--warn)}
 .call-title{flex-shrink:0;color:var(--fg-2);font-weight:500}
-.call-args{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:var(--radius-sm);background:var(--thread-field);color:var(--fg-2);font-size:11px}
-.call-status{flex-shrink:0;color:var(--muted);font-size:11px;white-space:nowrap}
+.call-args{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:var(--radius-sm);background:var(--thread-field);color:var(--fg-2);font-size:12px}
+.call-status{flex-shrink:0;color:var(--muted);font-size:12px;white-space:nowrap}
 .call-status[data-tone=warning]{color:var(--warn)}
 .call-status[data-tone=error]{color:var(--danger)}
 .call-status[data-tone=processing]{color:var(--accent)}
-.call-duration{flex-shrink:0;color:var(--meta,var(--muted));font-size:11px;font-variant-numeric:tabular-nums}
-.call-failure{display:flex;flex-wrap:wrap;gap:2px 8px;padding:0 8px 4px 22px;color:var(--muted);font-size:11.5px;overflow-wrap:anywhere}
+.call-duration{flex-shrink:0;color:var(--meta,var(--muted));font-size:12px;font-variant-numeric:tabular-nums}
+.call-failure{display:flex;flex-wrap:wrap;gap:2px 8px;padding:0 8px 4px 22px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .call-failure code{color:var(--danger)}
 .call-detail{display:flex;flex-direction:column;gap:10px;min-width:0;margin:2px 0 8px 22px;padding:10px 12px 12px;border-radius:var(--radius-lg);background:var(--thread-field)}
-.call-facts{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
-.call-name{color:var(--fg-2);font-size:11px}
+.call-facts{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.call-name{color:var(--fg-2);font-size:12px}
 .call-section{display:flex;flex-direction:column;gap:6px;min-width:0}
-.call-section h4{margin:0;color:var(--muted);font-size:11px;font-weight:400;letter-spacing:.08em;text-transform:uppercase}
+.call-section h4{margin:0;color:var(--muted);font-size:12px;font-weight:500}
 .call-section .code-frame{margin:0}
 .call-section pre{max-height:280px}
 
@@ -148,7 +148,7 @@ details[open]>summary>.caret{transform:rotate(90deg)}
 .markdown input[type=checkbox]{margin:0 6px 0 0;accent-color:var(--accent)}
 pre,code{font-family:inherit}
 .code-frame{margin:0 0 10px;box-shadow:var(--shadow-edge);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden}
-.code-head{display:flex;align-items:center;min-height:30px;padding:0 4px 0 12px;border-bottom:1px solid var(--border-soft,var(--border));color:var(--muted);font-size:11px}
+.code-head{display:flex;align-items:center;min-height:30px;padding:0 4px 0 12px;border-bottom:1px solid var(--border-soft,var(--border));color:var(--muted);font-size:12px}
 .code-lang{flex:1;letter-spacing:.04em}
 .code-frame pre{margin:0;padding:10px 12px;max-height:480px;overflow:auto;white-space:pre;font-size:12.5px;line-height:1.6;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .table-scroll{max-width:100%;margin:0 0 10px;overflow-x:auto;box-shadow:var(--shadow-edge);border-radius:var(--radius-lg);background:var(--bg);scrollbar-width:thin;scrollbar-color:var(--border) transparent}
@@ -178,7 +178,7 @@ figure .table-scroll{margin:0}
 .aside-head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;min-height:48px;margin:0 -16px 16px;padding:0 8px 0 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
 .panel-content{display:flex;flex-direction:column;gap:10px;min-width:0}
 .panel-content h2{margin:0;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
-.panel-content h3{margin:10px 0 -2px;font-size:11px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.panel-content h3{margin:10px 0 -2px;font-size:12px;font-weight:500;color:var(--muted)}
 .panel-content p{margin:0}
 .panel-content .code-frame{margin:0}
 .panel-content pre{white-space:pre-wrap;overflow-wrap:anywhere}

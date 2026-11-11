@@ -52,8 +52,9 @@
   align-items: center;
   gap: 2px 8px;
   max-width: 100%;
-  padding: 2px 0 2px 8px;
-  border-left: 2px solid var(--accent);
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .candidate-text {

@@ -59,7 +59,7 @@ export function SummaryStrip({ total, totalTestId, items, children, className, t
 
         return (
           <React.Fragment key={item.key ?? index}>
-            {needsDivider && <span className={styles['summary-divider']}>·</span>}
+            {needsDivider && <span aria-hidden="true" className={styles['summary-divider']} />}
             <span className={clsx(styles['summary-item'], toneClass)} data-testid={item.testId}>
               {showDot && <span className={styles['status-dot']} aria-hidden="true" />}
               {item.label}
@@ -88,7 +88,7 @@ SummaryStrip.Total = function SummaryTotal({
 };
 
 SummaryStrip.Divider = function SummaryDivider({ className }: { className?: string }) {
-  return <span className={clsx(styles['summary-divider'], className)}>·</span>;
+  return <span aria-hidden="true" className={clsx(styles['summary-divider'], className)} />;
 };
 
 SummaryStrip.Item = function SummaryItem({

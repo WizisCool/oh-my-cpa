@@ -496,7 +496,6 @@
 
 .card-description-muted {
   color: var(--meta);
-  font-style: italic;
 }
 
 .text-toggle {

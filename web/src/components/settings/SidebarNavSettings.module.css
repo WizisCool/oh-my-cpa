@@ -31,7 +31,7 @@
   position: absolute;
   top: 0;
   inset-inline: 20px;
-  border-top: 1px dashed var(--border);
+  border-top: var(--hairline) solid var(--border-soft);
   pointer-events: none;
 }
 
