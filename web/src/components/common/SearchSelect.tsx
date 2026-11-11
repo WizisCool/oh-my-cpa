@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Drawer, Select } from 'antd';
+import { Drawer, Select } from 'antd';
+import { Button } from '@/components/ui/button';
 import type { SelectProps } from 'antd';
 import type { DefaultOptionType } from 'antd/es/select';
 import clsx from 'clsx';
@@ -128,7 +129,7 @@ export function SearchSelect<ValueType = OptionValue | OptionValue[], OptionType
 
 function SheetDone({ onDone }: { onDone: () => void }) {
   const t = useT();
-  return <Button type="primary" block className={styles['done']} onClick={onDone}>{t('common.done')}</Button>;
+  return <Button variant="primary" block className={styles['done']} onClick={onDone}>{t('common.done')}</Button>;
 }
 
 type SheetPanelProps<ValueType, OptionType extends DefaultOptionType> = SearchSelectProps<ValueType, OptionType> & {

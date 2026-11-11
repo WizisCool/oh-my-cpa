@@ -1,6 +1,9 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Collapse, Input, Segmented } from 'antd';
+import { Collapse } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs from '../../utils/time';
@@ -283,11 +286,11 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
             isDanger
             onConfirm={() => remove.mutate()}
           >
-            <Button danger type="text" loading={remove.isPending}>{t(channel ? 'pricing.editor.restore_shared' : 'pricing.editor.remove')}</Button>
+            <Button danger variant="ghost" loading={remove.isPending}>{t(channel ? 'pricing.editor.restore_shared' : 'pricing.editor.remove')}</Button>
           </ConfirmAction>
         )}
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button type="primary" disabled={!canSave} loading={save.isPending} onClick={() => save.mutate()} data-testid="pricing-editor-save">
+        <Button variant="primary" disabled={!canSave} loading={save.isPending} onClick={() => save.mutate()} data-testid="pricing-editor-save">
           {t('common.save')}
         </Button>
     </>
@@ -325,11 +328,11 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
               description={t(candidate.kind === 'automatic' ? 'pricing.candidate.automatic_hint' : 'pricing.candidate.suggested_hint')}
               action={(
                 <div className={styles['candidate-actions']}>
-                  <Button size="small" type="primary" onClick={adoptCandidate} data-testid="pricing-editor-candidate-adopt">
+                  <Button size="sm" variant="primary" onClick={adoptCandidate} data-testid="pricing-editor-candidate-adopt">
                     {t(candidate.kind === 'automatic' ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}
                   </Button>
                   <Button
-                    size="small"
+                    size="sm"
                     loading={dismissCandidate.isPending}
                     onClick={() => dismissCandidate.mutate(candidate.model.id)}
                     data-testid="pricing-editor-candidate-dismiss"
@@ -402,7 +405,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
               <div className={styles['section-head']}>
                 <h3>{t('pricing.editor.rates')}</h3>
                 {reference && (
-                  <Button size="small" type="link" onClick={() => {
+                  <Button size="sm" variant="link" onClick={() => {
                     setRates(ratesDraftFrom(upstreamRates(reference)));
                     setTierDrafts(tierDraftsFrom(reference.tiers, upstreamRates(reference)));
                   }}
@@ -431,7 +434,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                             {hidden > 0 ? t('pricing.editor.reference_providers_more', { providers: shown, n: hidden }) : shown}
                           </span>
                           <span className={styles['reference-rates']}>{rateText}</span>
-                          <Button size="small" type="link" onClick={() => {
+                          <Button size="sm" variant="link" onClick={() => {
                             setRates(referenceDraft(price));
                             setTierDrafts([]);
                           }}
@@ -611,7 +614,7 @@ const PreviewRows: React.FC<{
         <div className={styles.calculator}>
           <span className={styles['calculator-label']}>{t('pricing.editor.preview_service_tier')}</span>
           <Segmented<string>
-            size="small"
+            size="sm"
             value={serviceTier}
             onChange={setPreviewServiceTier}
             options={[{ value: '', label: t('pricing.editor.lane_standard') }, ...laneTiers.map((name) => ({ value: name, label: name }))]}
@@ -649,7 +652,7 @@ const PreviewRows: React.FC<{
       <div className={styles.calculator}>
         <span className={styles['calculator-label']}>{t('pricing.editor.calc')}</span>
         <Input
-          size="small"
+          size="sm"
           value={trialInput}
           onChange={(event) => setTrialInput(event.target.value)}
           placeholder={t('pricing.editor.calc_input')}
@@ -658,7 +661,7 @@ const PreviewRows: React.FC<{
           data-testid="pricing-calc-input"
         />
         <Input
-          size="small"
+          size="sm"
           value={trialOutput}
           onChange={(event) => setTrialOutput(event.target.value)}
           placeholder={t('pricing.editor.calc_output')}

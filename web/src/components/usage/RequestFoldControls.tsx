@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 
 import { useT } from '../../i18n';
 import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';

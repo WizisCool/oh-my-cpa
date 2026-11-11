@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Space } from 'antd';
+import { Space } from 'antd';
+import { Button } from '@/components/ui/button';
 import { CheckOutlined, CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { ConfirmAction } from '../common/ConfirmAction';
@@ -112,7 +113,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
         <Space size={10} className="config-dirty-bar-actions">
           {/* Discard needs no confirmation, invoking the rollback directly. */}
           <Button
-            size="small"
+            size="sm"
             icon={<CloseOutlined />}
             disabled={isSaving || isDiscardDisabled}
             onClick={onDiscard}
@@ -125,8 +126,8 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               a valid form goes through confirmation. */}
           {hasErrors ? (
             <Button
-              size="small"
-              type="primary"
+              size="sm"
+              variant="primary"
               icon={<CheckOutlined />}
               loading={isSaving}
               disabled={isSaving || disabled}
@@ -153,8 +154,8 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               placement="topRight"
             >
               <Button
-                size="small"
-                type="primary"
+                size="sm"
+                variant="primary"
                 icon={<CheckOutlined />}
                 loading={isSaving}
                 disabled={isSaving || disabled}

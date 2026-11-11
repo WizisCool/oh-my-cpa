@@ -4,7 +4,8 @@ import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Tabs } from 'antd';
+import { Tabs } from 'antd';
+import { Button } from '@/components/ui/button';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
@@ -242,8 +243,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             })}
           </span>
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             icon={<UpOutlined />}
             disabled={!hasPrev}
             onClick={handlePrev}
@@ -251,8 +252,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             aria-label={t('events.prev_item')}
           />
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             icon={<DownOutlined />}
             disabled={!hasNext}
             onClick={handleNext}

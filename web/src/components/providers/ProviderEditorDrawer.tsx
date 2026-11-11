@@ -1,15 +1,9 @@
 import { ConnectionPoolEditor } from './ConnectionPoolEditor';
 import { EMPTY_CONNECTION_POOL_DRAFT, buildConnectionPool } from './connectionPool';
-import {
-  AutoComplete,
-  Button,
-  Checkbox,
-  Col,
-  Form,
-  Input,
-  Row,
-  Select,
-} from 'antd';
+import { AutoComplete, Col, Form, Row, Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { NumberInput } from '../common/NumberInput';
 import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined } from '../icons';
 
@@ -270,7 +264,7 @@ export function ProviderEditorDrawer({
               {t('common.cancel')}
             </Button>
             <Button
-              type="primary"
+              variant="primary"
               loading={createProviderMutation.isPending || updateProviderMutation.isPending}
               disabled={isDemo}
               title={isDemo ? t('demo.blocked') : undefined}
@@ -300,7 +294,7 @@ export function ProviderEditorDrawer({
             </div>
             <div className={styles['icon-actions']}>
               <Button
-                size="small"
+                size="sm"
                 onClick={() => {
                   setTargetProviderForIcon(null);
                   setIconPickerOpen(true);
@@ -310,8 +304,8 @@ export function ProviderEditorDrawer({
               </Button>
               {formIcon !== getProviderDefaultIcon(formFamily, formName, formBaseURL) && (
                 <Button
-                  size="small"
-                  type="link"
+                  size="sm"
+                  variant="link"
                   onClick={() => {
                     setFormIcon(getProviderDefaultIcon(formFamily, formName, formBaseURL));
                     setIconManuallySelected(false);
@@ -411,7 +405,7 @@ export function ProviderEditorDrawer({
                 value: OPENCODE_SESSION_HEADER_VALUE,
               })}
               action={
-                <Button size="small" onClick={handleAddOpenCodeSessionHeader}>
+                <Button size="sm" onClick={handleAddOpenCodeSessionHeader}>
                   {t('pro.opencode_session_add', { header: OPENCODE_SESSION_HEADER })}
                 </Button>
               }
@@ -426,7 +420,7 @@ export function ProviderEditorDrawer({
               title={t('pro.opencode_session_conflict_title')}
               description={t('pro.opencode_session_conflict_desc', { header: OPENCODE_SESSION_HEADER })}
               action={
-                <Button size="small" onClick={() => setHeadersSectionOpen(true)}>
+                <Button size="sm" onClick={() => setHeadersSectionOpen(true)}>
                   {t('pro.opencode_session_review')}
                 </Button>
               }
@@ -509,7 +503,7 @@ export function ProviderEditorDrawer({
             <div className={styles['flag']}>
               <Checkbox
                 checked={formDisabled}
-                onChange={(e) => setFormDisabled(e.target.checked)}
+                onCheckedChange={(checked) => setFormDisabled(checked)}
               >
                 <span className={styles['flag-label']}>{t('pro.field_disabled')}</span>
               </Checkbox>
@@ -529,7 +523,7 @@ export function ProviderEditorDrawer({
                 {/* Top Action Row */}
                 <div className={styles['section-actions']}>
                   <Button
-                    type="dashed"
+                    variant="dashed"
                     icon={<PlusOutlined />}
                     onClick={handleKeyAdd}
                   >
@@ -570,15 +564,15 @@ export function ProviderEditorDrawer({
                           </button>
 
                           <div className={styles['item-actions']}>
-                            <Button type="link" size="small" onClick={() => handleTestKey(k, idx)}>
+                            <Button variant="link" size="sm" onClick={() => handleTestKey(k, idx)}>
                               {t('pro.test_single')}
                             </Button>
                             {/* A pointer affordance only: the header button is the toggle a
                                 keyboard and a screen reader use, and a second one would be
                                 announced twice. */}
                             <Button
-                              type="text"
-                              size="small"
+                              variant="ghost"
+                              size="sm"
                               icon={<DownOutlined className={styles['chevron']} />}
                               data-expanded={isExpanded || undefined}
                               aria-hidden="true"
@@ -599,8 +593,8 @@ export function ProviderEditorDrawer({
                                 isDanger
                               >
                                 <Button
-                                  type="text"
-                                  size="small"
+                                  variant="ghost"
+                                  size="sm"
                                   danger
                                   icon={<CloseOutlined />}
                                   aria-label={`${t('common.delete')}: ${t('pro.key_label', { n: idx + 1 })}`}
@@ -721,8 +715,8 @@ export function ProviderEditorDrawer({
                           className={styles['header-input']}
                         />
                         <Button
-                          size="small"
-                          type="text"
+                          size="sm"
+                          variant="ghost"
                           danger
                           icon={<CloseOutlined />}
                           aria-label={`${t('common.delete')}: ${h.key || t('pro.section_headers')}`}
@@ -735,7 +729,7 @@ export function ProviderEditorDrawer({
                   </div>
                 )}
                 <Button
-                  type="dashed"
+                  variant="dashed"
                   icon={<PlusOutlined />}
                   onClick={() =>
                     setFormHeaders((prev) => [
@@ -873,16 +867,16 @@ export function ProviderEditorDrawer({
                               className={styles['model-input']}
                             />
                             <Button
-                              type="text"
-                              size="small"
+                              variant="ghost"
+                              size="sm"
                               icon={<DownOutlined className={styles['chevron']} />}
                               aria-label={m.name || t('pro.actual_request_model')}
                               aria-expanded={isExpanded}
                               onClick={() => toggleModelExpanded(m.id)}
                             />
                             <Button
-                              size="small"
-                              type="text"
+                              size="sm"
+                              variant="ghost"
                               danger
                               icon={<CloseOutlined />}
                               aria-label={`${t('common.delete')}: ${m.name || t('pro.actual_request_model')}`}
@@ -905,7 +899,7 @@ export function ProviderEditorDrawer({
                               <div>
                                 <Checkbox
                                   checked={m.image || false}
-                                  onChange={(e) => updateModelImage(m.id, e.target.checked)}
+                                  onCheckedChange={(checked) => updateModelImage(m.id, checked)}
                                 >
                                   <span className={styles['flag-label']}>
                                     {t('pro.allow_image_endpoint')}
@@ -928,10 +922,10 @@ export function ProviderEditorDrawer({
                                   checked={THINKING_LEVEL_OPTIONS.every((opt) => m.thinking?.levels?.includes(opt.value))}
                                   indeterminate={THINKING_LEVEL_OPTIONS.some((opt) => m.thinking?.levels?.includes(opt.value))
                                     && !THINKING_LEVEL_OPTIONS.every((opt) => m.thinking?.levels?.includes(opt.value))}
-                                  onChange={(event) => {
+                                  onCheckedChange={(checked) => {
                                     const current = m.thinking?.levels ?? [];
                                     const known = new Set(THINKING_LEVEL_OPTIONS.map((opt) => opt.value));
-                                    const next = event.target.checked
+                                    const next = checked
                                       ? [...THINKING_LEVEL_OPTIONS.map((opt) => opt.value), ...current.filter((level) => !known.has(level))]
                                       : current.filter((level) => !known.has(level));
                                     setThinkingLevels(m.id, next);
@@ -990,7 +984,7 @@ export function ProviderEditorDrawer({
                   </div>
                 )}
 
-                <Button type="dashed" icon={<PlusOutlined />} onClick={handleAddModel}>
+                <Button variant="dashed" icon={<PlusOutlined />} onClick={handleAddModel}>
                   {t('pro.add_model_entry')}
                 </Button>
           </EditorSection>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Segmented } from 'antd';
+import { Segmented } from '@/components/ui/segmented';
 import { clsx } from 'clsx';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { ApiError } from '../../api/client';
@@ -129,7 +129,7 @@ const ModelViewToggle: React.FC = () => {
   return (
     <Segmented
       className="model-view-toggle"
-      size="small"
+      size="sm"
       value={modelView}
       options={[
         { value: 'call', label: t('dash.models.view_call') },

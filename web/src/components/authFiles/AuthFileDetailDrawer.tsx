@@ -2,16 +2,11 @@ import { CredentialRecoveryPanel } from './CredentialRecoveryPanel';
 import { SecretInput } from '../common/SecretInput';
 import type { MessageKey } from '../../i18n/catalog';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  Tabs,
-  Button,
-  Typography,
-  Input,
-  Form,
-  Table,
-  Segmented,
-  App as AntdApp,
-} from 'antd';
+import { Tabs, Typography, Form, Table, App as AntdApp } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import { Switch } from '../common/Switch';
 import {
@@ -603,8 +598,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 width: 52,
                 render: (_, model) => (
                   <Button
-                    type="text"
-                    size="small"
+                    variant="ghost"
+                    size="sm"
                     icon={<CopyOutlined />}
                     aria-label={`${t('common.copy')}: ${model.id}`}
                     onClick={() => {
@@ -634,7 +629,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       // however far down the form an edit was made. The other tabs keep the credential's actions.
       footer={file && activeSection === 'configuration' ? (
         <Button
-          type="primary"
+          variant="primary"
           icon={<SaveOutlined />}
           loading={saveMutation.isPending}
           disabled={!isDirty || file.runtime_only || !canEdit}
@@ -959,7 +954,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               label={t('af.vertex_openapi_models')}
                               extra={t('af.vertex_openapi_models_hint')}
                             >
-                              <Input.TextArea
+                              <Textarea
                                 rows={3}
                                 maxLength={65536}
                                 disabled={!safeFieldsReady}
@@ -982,7 +977,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           label={t('af.field_excluded_models')}
                           extra={t('af.field_excluded_models_hint')}
                         >
-                          <Input.TextArea
+                          <Textarea
                             rows={4}
                             maxLength={8192}
                             disabled={!safeFieldsReady}
@@ -991,7 +986,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                         </Form.Item>
 
                         <Form.Item name="note" label={t('af.field_note')}>
-                          <Input.TextArea rows={3} maxLength={500} showCount />
+                          <Textarea rows={3} maxLength={500} showCount />
                         </Form.Item>
 
                       </Form>

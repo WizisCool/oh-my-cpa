@@ -1,5 +1,6 @@
 import React from 'react';
-import { Layout, Menu, Drawer, Button, Breadcrumb } from 'antd';
+import { Layout, Menu, Drawer, Breadcrumb } from 'antd';
+import { Button } from '@/components/ui/button';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -335,10 +336,10 @@ export const AppLayout: React.FC = () => {
         <header className="app-header">
           <div className="app-header-left">
             {isMobile ? (
-              <Button type="text" icon={<MenuUnfoldOutlined />} onClick={() => setIsMobileNavOpen(true)} aria-label={t('header.open_nav')} />
+              <Button variant="ghost" icon={<MenuUnfoldOutlined />} onClick={() => setIsMobileNavOpen(true)} aria-label={t('header.open_nav')} />
             ) : (
               <Tooltip title={isCollapsed ? t('header.expand_sidebar') : t('header.collapse_sidebar')}>
-                <Button type="text" icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setIsCollapsed(!isCollapsed)} disabled={!sidebarPreference.loaded} aria-label={t(isCollapsed ? 'header.expand_sidebar' : 'header.collapse_sidebar')} />
+                <Button variant="ghost" icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setIsCollapsed(!isCollapsed)} disabled={!sidebarPreference.loaded} aria-label={t(isCollapsed ? 'header.expand_sidebar' : 'header.collapse_sidebar')} />
               </Tooltip>
             )}
             <Breadcrumb

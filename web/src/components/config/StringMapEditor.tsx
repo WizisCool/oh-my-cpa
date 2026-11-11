@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Input } from 'antd';
-import type { InputProps } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input, type InputProps } from '@/components/ui/input';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import type { useT } from '../../i18n';
 import type { ConfigFieldDefinition } from '../../types/configSchema';
@@ -389,8 +389,8 @@ export const StringMapEditor: React.FC<StringMapEditorProps> = ({
                 data-testid={`string-map-value-${field.id}-${index}`}
               />
               <Button
-                size="small"
-                type="text"
+                size="sm"
+                variant="ghost"
                 danger
                 icon={<DeleteOutlined />}
                 disabled={disabled}
@@ -409,8 +409,8 @@ export const StringMapEditor: React.FC<StringMapEditorProps> = ({
       )}
       <div className="string-map-footer">
         <Button
-          size="small"
-          type="dashed"
+          size="sm"
+          variant="dashed"
           icon={<PlusOutlined />}
           disabled={disabled}
           onClick={addRow}

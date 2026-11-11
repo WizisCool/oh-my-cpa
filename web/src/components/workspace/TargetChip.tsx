@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '../../i18n';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
 import type { GatewayModelItem } from '../../types/gatewayModels';
@@ -73,10 +73,10 @@ export function TargetChip({
       {close => (
         <div ref={contentRef} className={styles['picker-body']}>
           <div className={styles['picker-head']}>
-            {isChoosingKey && <Button type="text" size="small" aria-label={t('conversation.target.back')} icon={<ArrowLeftOutlined />} onClick={() => { setIsChoosingKey(false); setQuery(''); }} />}
+            {isChoosingKey && <Button variant="ghost" size="sm" aria-label={t('conversation.target.back')} icon={<ArrowLeftOutlined />} onClick={() => { setIsChoosingKey(false); setQuery(''); }} />}
             <span>{t(isChoosingKey ? 'conversation.client_key' : 'conversation.model')}</span>
             {!isChoosingKey && <span className={styles['picker-count']}>{isModelsLoading ? <LoadingOutlined /> : callPoints.length}</span>}
-            {!isChoosingKey && <Tooltip title={t('common.refresh')}><Button type="text" size="small" className={styles['picker-refresh']} aria-label={t('common.refresh')} icon={<ReloadOutlined />} loading={isLoading} onClick={onRefresh} /></Tooltip>}
+            {!isChoosingKey && <Tooltip title={t('common.refresh')}><Button variant="ghost" size="sm" className={styles['picker-refresh']} aria-label={t('common.refresh')} icon={<ReloadOutlined />} loading={isLoading} onClick={onRefresh} /></Tooltip>}
           </div>
           {!isChoosingKey && callPoints.length > SEARCH_THRESHOLD && (
             <div className={styles['picker-search']} data-picker-search>

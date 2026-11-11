@@ -2,7 +2,10 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Checkbox, Segmented, Tabs, Typography } from 'antd';
+import { Tabs, Typography } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -176,8 +179,8 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
       render: (_value, file) => (
         <span className={styles['file-actions']}>
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             icon={<EyeOutlined />}
             aria-label={`${t('logs.view_file')} ${file.name}`}
             disabled={isDemo}
@@ -185,8 +188,8 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
             onClick={() => onView(file)}
           />
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             icon={<DownloadOutlined />}
             aria-label={`${t('logs.download')} ${file.name}`}
             // An error log quotes request content, so the demonstration does not hand
@@ -339,7 +342,7 @@ export const CpaLogPanel: React.FC = () => {
         title={t('logs.disabled_title')}
         action={(
           <Button
-            size="small"
+            size="sm"
             icon={<ReloadOutlined />}
             onClick={() => {
               void status.refetch();
@@ -400,7 +403,7 @@ export const CpaLogPanel: React.FC = () => {
                   className={styles['filter-toggle']}
                   aria-expanded={isFiltersOpen}
                   aria-controls="log-request-filters"
-                  type={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'default'}
+                  variant={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'secondary'}
                   onClick={() => setIsFiltersOpen((isOpen) => !isOpen)}
                 >
                   {activeFilterCount > 0 ? t('logs.filters_active', { n: activeFilterCount }) : t('events.more_filters')}
@@ -429,7 +432,7 @@ export const CpaLogPanel: React.FC = () => {
                   <Tooltip title={t('logs.wrap')}>
                     <Button
                       icon={<WrapTextOutlined />}
-                      type={filters.wrapLines ? 'primary' : 'default'}
+                      variant={filters.wrapLines ? 'primary' : 'secondary'}
                       aria-pressed={filters.wrapLines}
                       aria-label={t('logs.wrap')}
                       onClick={() => patchFilters({ wrapLines: !filters.wrapLines })}
@@ -467,7 +470,7 @@ export const CpaLogPanel: React.FC = () => {
               <div className={styles['filter-field']}>
                 <span className={styles['filter-label']}>{t('logs.status_filter')}</span>
                 <Segmented
-                  size="small"
+                  size="sm"
                   value={filters.statusClass}
                   options={LOG_STATUS_CLASSES.map((value) => ({
                     value,
@@ -529,14 +532,14 @@ export const CpaLogPanel: React.FC = () => {
               <Checkbox
                 className={styles['filter-check']}
                 checked={filters.hideManagement}
-                onChange={(event) => patchFilters({ hideManagement: event.target.checked })}
+                onCheckedChange={(checked) => patchFilters({ hideManagement: checked })}
               >
                 {t('logs.hide_management')}
               </Checkbox>
               {activeFilterCount > 0 && (
                 <Button
-                  type="link"
-                  size="small"
+                  variant="link"
+                  size="sm"
                   className={styles['filter-clear']}
                   onClick={() => patchFilters({ statusClass: 'all', methods: [], paths: [] })}
                 >

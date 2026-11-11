@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import type { useT } from '../../i18n';
 import { Notice } from '../feedback';
@@ -220,10 +222,10 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
         {mode === 'keep' && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Input value="••••••••" disabled style={{ maxWidth: 220 }} aria-label={label} />
-            <Button size="small" disabled={disabled} onClick={startReplacement}>
+            <Button size="sm" disabled={disabled} onClick={startReplacement}>
               {t('cfg.ice_replace')}
             </Button>
-            <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
+            <Button size="sm" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
               {t('cfg.ice_clear')}
             </Button>
           </div>
@@ -238,7 +240,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
               placeholder={label}
               onChange={(event) => updateReplacement(event.target.value)}
             />
-            <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
+            <Button size="sm" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
               {t('cfg.ice_clear')}
             </Button>
           </div>
@@ -246,13 +248,13 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
         {mode === 'clear' && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 12, opacity: 0.65 }}>{t('cfg.ice_will_clear')}</span>
-            <Button size="small" disabled={disabled} onClick={startReplacement}>
+            <Button size="sm" disabled={disabled} onClick={startReplacement}>
               {t('cfg.ice_replace')}
             </Button>
           </div>
         )}
         {mode === 'absent' && (
-          <Button size="small" disabled={disabled} onClick={startReplacement}>
+          <Button size="sm" disabled={disabled} onClick={startReplacement}>
             {t('cfg.ice_add_secret', { secret: label })}
           </Button>
         )}
@@ -266,7 +268,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
               placeholder={t('cfg.ice_reenter_placeholder')}
               onChange={(event) => updateReplacement(event.target.value)}
             />
-            <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
+            <Button size="sm" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
               {t('cfg.ice_clear')}
             </Button>
           </div>
@@ -290,7 +292,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontWeight: 600 }}>{t('cfg.ice_server_title', { n: index + 1 })}</span>
               <Button
-                size="small"
+                size="sm"
                 danger
                 icon={<DeleteOutlined />}
                 disabled={disabled}
@@ -299,7 +301,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
               />
             </div>
             <div style={{ fontSize: 12, marginBottom: 4 }}>{t('cfg.ice_urls')}</div>
-            <Input.TextArea
+            <Textarea
               value={row.urlsText}
               disabled={disabled}
               autoSize={{ minRows: 1, maxRows: 4 }}

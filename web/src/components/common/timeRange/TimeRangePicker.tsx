@@ -1,6 +1,8 @@
 import type { MessageKey } from '../../../i18n/catalog';
 import React from 'react';
-import { Button, Checkbox, Drawer, Popover } from 'antd';
+import { Drawer, Popover } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
 import { languageLocale, useI18n } from '../../../i18n';
 import { useIsNarrowViewport } from '../../../hooks/useIsNarrowViewport';
@@ -246,14 +248,14 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
         <Checkbox
           className="time-range-open-end"
           checked={draft.isOpenEnded}
-          onChange={(event) => updateDraft({ ...draft, isOpenEnded: event.target.checked, endDay: undefined })}
+          onCheckedChange={(checked) => updateDraft({ ...draft, isOpenEnded: checked, endDay: undefined })}
         >
           {t('time_range.until_now')}
         </Checkbox>
         <span className="time-range-zone">{formatTimeZoneOffset(zone)}</span>
         <div className="time-range-actions">
           <Button onClick={close}>{t('common.cancel')}</Button>
-          <Button type="primary" data-testid="time-range-apply" disabled={resolved.error !== undefined} onClick={applyDraft}>
+          <Button variant="primary" data-testid="time-range-apply" disabled={resolved.error !== undefined} onClick={applyDraft}>
             {t('time_range.apply')}
           </Button>
         </div>
@@ -266,7 +268,6 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   const trigger = (
     <Button
       variant="filled"
-      color="default"
       className={[
         'time-range-trigger',
         // A closed range is a fixed fact, not a rolling one. Marking it keeps the reader from

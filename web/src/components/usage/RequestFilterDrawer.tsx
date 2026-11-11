@@ -1,7 +1,10 @@
 import type { MessageKey } from '../../i18n/catalog';
 import clsx from 'clsx';
 import React from 'react';
-import { Button, Input, Segmented, Select, Space } from 'antd';
+import { Select, Space } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import type {
   UsageCostFilter,
@@ -432,7 +435,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             </Button>
             <Button
               data-testid="req-filter-apply"
-              type="primary"
+              variant="primary"
               disabled={!isDirty || Object.keys(errors).length > 0}
               onClick={handleApply}
             >

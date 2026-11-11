@@ -1,6 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Typography } from 'antd';
+import { Typography } from 'antd';
+import { Button } from '@/components/ui/button';
 import dayjs from '../../utils/time';
 import { PauseCircleOutlined, PlayCircleOutlined } from '../icons';
 import { useT } from '../../i18n';

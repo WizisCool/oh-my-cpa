@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { EmptyState } from '../common/EmptyState';
@@ -103,7 +103,7 @@ export function LogList<T>({ items, itemKey, renderItem, isLoading, emptyText, h
         )}
       </div>
       {!isPinned && items.length > 0 && (
-        <Button className="logs-jump" size="small" onClick={() => setIsPinned(true)}>
+        <Button className="logs-jump" size="sm" onClick={() => setIsPinned(true)}>
           {t('logs.jump_latest')}
         </Button>
       )}

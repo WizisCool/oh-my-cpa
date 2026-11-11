@@ -1,6 +1,6 @@
 import React from 'react';
 import XMarkdown from '@ant-design/x-markdown';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { clsx } from 'clsx';
 import { safeMarkdownComponents } from '../common/safeMarkdownComponents';
 import { CodeBody } from '../common/CodeBody';
@@ -45,8 +45,8 @@ export function CodeBlock({ lang, children, streamStatus }: CodeProps) {
       className={styles['code-block']}
       actions={isDocument && (
         <Button
-          size="small"
-          type="text"
+          size="sm"
+          variant="ghost"
           icon={showsPage ? <CodeOutlined /> : <EyeOutlined />}
           onClick={() => setShowsPage(page => !page)}
           data-testid="markdown-document-view"

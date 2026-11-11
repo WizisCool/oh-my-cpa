@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { Button, Collapse, Input, Select } from 'antd';
+import { Collapse, Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import type { Document } from 'yaml';
 
@@ -163,8 +165,8 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
         <div className="payload-adv-kv-header">
           <label className="payload-adv-label">{label}</label>
           <Button
-            size="small"
-            type="link"
+            size="sm"
+            variant="link"
             icon={<PlusOutlined />}
             onClick={() =>
               onChange([
@@ -180,7 +182,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
           {items.map((it, idx) => (
             <div key={it.id} className="payload-adv-kv-row">
               <Input
-                size="small"
+                size="sm"
                 placeholder={t('cfg.payload_adv_kv_key')}
                 value={it.key}
                 onChange={(e) => {
@@ -190,7 +192,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
                 }}
               />
               <Input
-                size="small"
+                size="sm"
                 placeholder={t('cfg.payload_adv_kv_val')}
                 value={it.value !== undefined && it.value !== null ? String(it.value) : ''}
                 onChange={(e) => {
@@ -200,8 +202,8 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
                 }}
               />
               <Button
-                size="small"
-                type="text"
+                size="sm"
+                variant="ghost"
                 danger
                 icon={<DeleteOutlined />}
                 onClick={() => onChange(items.filter((_, i) => i !== idx))}

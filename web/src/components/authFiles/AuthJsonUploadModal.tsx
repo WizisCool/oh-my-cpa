@@ -1,5 +1,8 @@
 import React from 'react';
-import { Checkbox, Input, Segmented } from 'antd';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, describeError } from '../../api/client';
@@ -132,7 +135,7 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
         ) : (
           <>
             <div>
-              <Input.TextArea
+              <Textarea
                 aria-label={t('af.paste_json')}
                 className={styles.json}
                 value={text}
@@ -171,7 +174,7 @@ export const AuthJsonUploadModal: React.FC<AuthJsonUploadModalProps> = ({ open, 
                 tone="warning"
                 title={t('af.paste_replace_note', { name })}
                 action={(
-                  <Checkbox checked={canReplace} onChange={(event) => setCanReplace(event.target.checked)}>
+                  <Checkbox checked={canReplace} onCheckedChange={(checked) => setCanReplace(checked)}>
                     {t('af.paste_replace_confirm')}
                   </Checkbox>
                 )}

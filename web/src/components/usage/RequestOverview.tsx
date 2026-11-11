@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import { ApiOutlined, ArrowRightOutlined, KeyOutlined, SafetyCertificateOutlined, SwapOutlined, ThunderboltFilled } from '../icons';
@@ -130,7 +130,7 @@ function FailureSummary({ event, onShowDiagnostics }: { event: DetailEvent; onSh
       {body && <pre className="req-failure-body">{body}</pre>}
       <div className="req-failure-actions">
         {body && <CopyButton showLabel text={body} label={t('events.copy_error')} />}
-        <Button size="small" type="link" onClick={onShowDiagnostics}>
+        <Button size="sm" variant="link" onClick={onShowDiagnostics}>
           {t('events.view_diagnostics')} →
         </Button>
       </div>

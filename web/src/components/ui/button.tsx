@@ -54,6 +54,7 @@ export interface ButtonProps
   rel?: string;
   download?: string | boolean;
   icon?: React.ReactNode;
+  iconPlacement?: 'start' | 'end';
   loading?: boolean;
   block?: boolean;
   danger?: boolean;
@@ -78,6 +79,7 @@ export function Button({
   rel,
   download,
   icon,
+  iconPlacement = 'start',
   loading = false,
   block = false,
   danger = false,
@@ -102,14 +104,18 @@ export function Button({
     icon ?? null
   );
 
+  const glyphNode =
+    leadingGlyph !== null && leadingGlyph !== undefined ? (
+      <span data-slot="button-icon" className="inline-flex items-center justify-center shrink-0">
+        {leadingGlyph}
+      </span>
+    ) : null;
+
   const content = (
     <>
-      {leadingGlyph !== null && leadingGlyph !== undefined && (
-        <span data-slot="button-icon" className="inline-flex items-center justify-center shrink-0">
-          {leadingGlyph}
-        </span>
-      )}
+      {iconPlacement === 'start' && glyphNode}
       {children}
+      {iconPlacement === 'end' && glyphNode}
     </>
   );
 

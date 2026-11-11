@@ -1,6 +1,10 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { App as AntdApp, Button, Input, Segmented, Select } from 'antd';
+import { App as AntdApp, Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../common/Switch';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -217,7 +221,7 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
             <Button onClick={requestClose} disabled={saveMutation.isPending}>{t('common.cancel')}</Button>
             <Tooltip title={isDemo ? t('demo.blocked') : undefined}>
               <Button
-                type="primary"
+                variant="primary"
                 disabled={isDemo || !isDirty}
                 loading={saveMutation.isPending}
                 onClick={handleSave}
@@ -254,7 +258,7 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
               <span className={styles['config-field-desc']}>{t('plugin.config_pages_hint')}</span>
               <span className={styles['page-links']}>
                 {pages.map((page) => (
-                  <Button key={page.route} size="small" type="primary" ghost icon={<AppstoreOutlined />} onClick={() => openPage(page.route)}>
+                  <Button key={page.route} size="sm" variant="active" icon={<AppstoreOutlined />} onClick={() => openPage(page.route)}>
                     {pages.length > 1 ? page.label : t('plugin.open_page', { name: page.label })}
                   </Button>
                 ))}
@@ -267,7 +271,7 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
             title={t('plugin.config_heading')}
             extra={(
               <Segmented
-                size="small"
+                size="sm"
                 value={mode}
                 onChange={(value) => switchMode(value as EditorMode)}
                 options={[
@@ -454,7 +458,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
     }
     if (kind === 'array' || kind === 'object') {
       return (
-        <Input.TextArea
+        <Textarea
           value={draft.isSet ? draft.text : ''}
           disabled={isReadOnly}
           autoSize={{ minRows: 2, maxRows: 12 }}
@@ -506,12 +510,12 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
           {control}
           {draft.isSet && (
             <Tooltip title={t('plugin.field_unset_action')}>
-              <Button size="small" type="text" icon={<ClearOutlined />} disabled={isReadOnly} onClick={() => onChange({ isSet: false })} aria-label={t('plugin.field_unset_action')} />
+              <Button size="sm" variant="ghost" icon={<ClearOutlined />} disabled={isReadOnly} onClick={() => onChange({ isSet: false })} aria-label={t('plugin.field_unset_action')} />
             </Tooltip>
           )}
           {isChanged && (
             <Tooltip title={t('plugin.field_reset')}>
-              <Button size="small" type="text" icon={<UndoOutlined />} disabled={isReadOnly} onClick={onReset} aria-label={t('plugin.field_reset')} />
+              <Button size="sm" variant="ghost" icon={<UndoOutlined />} disabled={isReadOnly} onClick={onReset} aria-label={t('plugin.field_reset')} />
             </Tooltip>
           )}
         </div>

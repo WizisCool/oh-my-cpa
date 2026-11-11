@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Modal } from 'antd';
+import { Modal } from 'antd';
+import { Button } from '@/components/ui/button';
 import type { ModalProps } from 'antd';
 import clsx from 'clsx';
 import { CloseOutlined, LeftOutlined } from '../icons';
@@ -119,8 +120,8 @@ export function AppModal({
       {onBack && (
         <Tooltip title={t('common.back')}>
           <Button
-            type="text"
-            size="small"
+            variant="ghost"
+            size="sm"
             className={styles['back']}
             icon={<LeftOutlined />}
             aria-label={t('common.back')}

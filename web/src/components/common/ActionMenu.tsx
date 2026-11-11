@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Popover } from 'antd';
+import { Popover } from 'antd';
+import { Button } from '@/components/ui/button';
 import { MoreOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { LabelledActionsContext } from './ToolButton';
@@ -103,7 +104,7 @@ export function ActionMenu({ children, label }: ActionMenuProps) {
     >
       <Button
         ref={triggerRef}
-        type="text"
+        variant="ghost"
         icon={<MoreOutlined />}
         aria-label={label ?? t('common.more')}
         aria-expanded={isOpen}

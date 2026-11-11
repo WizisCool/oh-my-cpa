@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { DownloadOutlined } from '../icons';
 import dayjs from '../../utils/time';
@@ -105,7 +105,7 @@ export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose })
         <>
           <CopyButton showLabel size="middle" text={loaded?.text ?? ''} disabled={!loaded?.text} />
           <Button
-            type="primary"
+            variant="primary"
             icon={<DownloadOutlined />}
             disabled={!loaded}
             onClick={() => loaded && saveBlob(loaded.blob, fileName)}

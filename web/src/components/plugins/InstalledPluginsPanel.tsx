@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Dropdown, Segmented } from 'antd';
+import { Dropdown } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -163,7 +165,7 @@ export function InstalledPluginsPanel({
   if (plugins.length === 0) {
     return (
       <EmptyState className={styles.empty} title={t('plugin.installed_empty')}>
-        <Button type="primary" icon={<ShopOutlined />} onClick={onBrowseStore}>
+        <Button variant="primary" icon={<ShopOutlined />} onClick={onBrowseStore}>
           {t('plugin.browse_store')}
         </Button>
       </EmptyState>
@@ -248,7 +250,7 @@ export function InstalledPluginsPanel({
                 const hasHomepage = homepageURL !== undefined && homepageURL !== repositoryURL;
                 const moreButton = (
                   <Button
-                    size="small"
+                    size="sm"
                     className="row-action-btn"
                     ref={(button) => {
                       if (button) moreButtonRefs.current.set(plugin.id, button);
@@ -294,8 +296,8 @@ export function InstalledPluginsPanel({
                         {listing?.update_available && (
                           <Tooltip title={isDemo ? t('demo.blocked') : isStoreInstallBlocked(listing) === 'auth' ? t('plugin.auth_required_hint') : undefined}>
                             <Button
-                              type="text"
-                              size="small"
+                              variant="ghost"
+                              size="sm"
                               className={styles['update-button']}
                               icon={<UpgradeOutlined />}
                               disabled={isDemo || isDeleting || isStoreInstallBlocked(listing) !== undefined}
@@ -309,7 +311,7 @@ export function InstalledPluginsPanel({
                         )}
                         <Tooltip title={t('plugin.configure')}>
                           <Button
-                            size="small"
+                            size="sm"
                             className="row-action-btn"
                             icon={<SettingOutlined />}
                             disabled={isDeleting}

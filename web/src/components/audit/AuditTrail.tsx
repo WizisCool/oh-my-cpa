@@ -2,7 +2,9 @@ import { translateOr } from '../../i18n/catalog';
 import { FilterDisclosure } from '../common/FilterDisclosure';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Segmented, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import type { ColumnsType } from 'antd/es/table';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
@@ -307,7 +309,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       align: 'right',
       render: (_, event) => (
         <Button
-          size="small"
+          size="sm"
           icon={<ProfileOutlined />}
           onClick={(clickEvent) => {
             clickEvent.stopPropagation();
@@ -408,7 +410,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
             />
           )}
           {isFiltered && (
-            <Button type="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
+            <Button variant="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
               {t('audit.clear_filters')}
             </Button>
           )}

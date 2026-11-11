@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Input, Radio } from 'antd';
+import { Radio } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useI18n, useT } from '../../i18n';
@@ -60,7 +62,7 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
       } else {
         toast.warning(outcome, {
           detail: t('plugin.installed_while_disabled'),
-          actions: <Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>,
+          actions: <Button size="sm" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>,
         });
       }
       void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });

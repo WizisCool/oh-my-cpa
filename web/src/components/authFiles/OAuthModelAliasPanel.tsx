@@ -1,5 +1,7 @@
 import React, { useMemo, useRef } from 'react';
-import { AutoComplete, Button, Input, Table } from 'antd';
+import { AutoComplete, Table } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { VertexModelOpenAPI } from './VertexModelOpenAPI';
 import { Switch } from '../common/Switch';
 import { DeleteOutlined, PlusOutlined } from '../icons';
@@ -162,7 +164,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
       fixed: 'end' as const,
       render: (_: unknown, row: ManagementOAuthModelAliasDraft) => (
         <Button
-          type="text"
+          variant="ghost"
           danger
           disabled={isDisabled}
           aria-label={`${t('af.alias_remove')} ${row.alias || row.name}`}

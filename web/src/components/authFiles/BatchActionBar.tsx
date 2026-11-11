@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import {
   CheckCircleOutlined,
   StopOutlined,
@@ -63,20 +63,20 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
       note={hiddenCount > 0 ? t('omc.hidden_selection', { n: hiddenCount }) : undefined}
       selection={(
         <div className={styles['scope-controls']}>
-          <Button size="small" disabled={isMutating || !isSelectionReady || selectablePageCount === 0} onClick={onSelectPage}>
+          <Button size="sm" disabled={isMutating || !isSelectionReady || selectablePageCount === 0} onClick={onSelectPage}>
             {t('af.select_page')}
           </Button>
-          <Button className={styles['scope-filtered']} size="small" disabled={isMutating || !isSelectionReady || !canSelectFiltered} onClick={onSelectFiltered}>
+          <Button className={styles['scope-filtered']} size="sm" disabled={isMutating || !isSelectionReady || !canSelectFiltered} onClick={onSelectFiltered}>
             {t('af.select_filtered', { n: selectableFilteredCount })}
           </Button>
-          <Button className={styles['scope-clear']} size="small" type="text" icon={<CloseOutlined />} disabled={isMutating} onClick={onClearSelection}>
+          <Button className={styles['scope-clear']} size="sm" variant="ghost" icon={<CloseOutlined />} disabled={isMutating} onClick={onClearSelection}>
             {t('af.clear_selection')}
           </Button>
         </div>
       )}
     >
       <Button
-        size="small"
+        size="sm"
         icon={<CheckCircleOutlined />}
         loading={isMutating}
         disabled={isMutating}
@@ -85,7 +85,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         {t('af.batch_enable')}
       </Button>
       <Button
-        size="small"
+        size="sm"
         icon={<StopOutlined />}
         loading={isMutating}
         disabled={isMutating}
@@ -94,7 +94,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         {t('af.batch_disable')}
       </Button>
       <Button
-        size="small"
+        size="sm"
         icon={<SyncOutlined />}
         loading={isMutating}
         disabled={isMutating || !canRefresh}
@@ -113,8 +113,8 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
           onConfirm={onDelete}
         >
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             danger
             icon={<DeleteOutlined />}
             loading={isMutating}

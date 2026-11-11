@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Dropdown } from 'antd';
+import { App as AntdApp, Dropdown } from 'antd';
+import { Button } from '@/components/ui/button';
 import { Switch } from '../common/Switch';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { GlyphBadge } from '../common/GlyphBadge';
@@ -405,7 +406,7 @@ export function ProviderTable({
         <div className="row-actions">
           <Tooltip title={t('common.edit')}>
             <Button
-              size="small"
+              size="sm"
               className="row-action-btn"
               icon={<EditOutlined />}
               onClick={() => handleOpenEdit(record)}
@@ -420,7 +421,7 @@ export function ProviderTable({
             tooltip={isDemo ? t('demo.blocked') : t('common.delete')}
           >
             <Button
-              size="small"
+              size="sm"
               danger
               className="row-action-btn"
               icon={<DeleteOutlined />}
@@ -552,7 +553,7 @@ export function ProviderTable({
               },
             }}
           >
-            <Button type="text" size="small" className="row-action-btn" icon={<MoreOutlined />} aria-label={`${t('keys.actions_more')}: ${record.name}`} />
+            <Button variant="ghost" size="sm" className="row-action-btn" icon={<MoreOutlined />} aria-label={`${t('keys.actions_more')}: ${record.name}`} />
           </Dropdown>
           <RowContextHandle name={record.name} variant="inline" />
         </div>

@@ -1,7 +1,9 @@
 
 import React from 'react';
 import type { MessageKey } from '../../i18n/catalog';
-import { Button, Segmented, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { FilterOutlined } from '../icons';
 
 import { useT } from '../../i18n';
@@ -185,7 +187,7 @@ export const RequestToolbar = React.memo(function RequestToolbar({
     </span>
   );
   const resetFilters = hasActiveFilter && (
-    <Button type="text" className="req-reset-filters" onClick={onClearFilters}>
+    <Button variant="ghost" className="req-reset-filters" onClick={onClearFilters}>
       {t('events.reset')}
       <span className="req-reset-count">{activeFilterCount || 1}</span>
     </Button>

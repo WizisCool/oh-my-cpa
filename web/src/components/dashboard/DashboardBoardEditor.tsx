@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { EyeInvisibleOutlined, HolderOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../icons';
 import { useT } from '../../i18n';
 import {
@@ -212,7 +212,7 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
               {hidden.map((item) => (
                 <Button
                   key={item.id}
-                  size="small"
+                  size="sm"
                   icon={<PlusOutlined />}
                   data-widget-restore={item.id}
                   onClick={() => onChange(setDashboardWidgetHidden(layout, item.id, false))}
@@ -269,8 +269,8 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                     <span className={styles['name']} title={label}>{label}</span>
                     <Tooltip title={t('dash.layout.move_earlier')}>
                       <Button
-                        size="small"
-                        type="text"
+                        size="sm"
+                        variant="ghost"
                         icon={<LeftOutlined />}
                         aria-label={`${t('dash.layout.move_earlier')} · ${label}`}
                         disabled={index === 0}
@@ -279,8 +279,8 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                     </Tooltip>
                     <Tooltip title={t('dash.layout.move_later')}>
                       <Button
-                        size="small"
-                        type="text"
+                        size="sm"
+                        variant="ghost"
                         icon={<RightOutlined />}
                         aria-label={`${t('dash.layout.move_later')} · ${label}`}
                         disabled={index === ordered.length - 1}
@@ -289,8 +289,8 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                     </Tooltip>
                     <Tooltip title={t('dash.layout.hide')}>
                       <Button
-                        size="small"
-                        type="text"
+                        size="sm"
+                        variant="ghost"
                         icon={<EyeInvisibleOutlined />}
                         aria-label={`${t('dash.layout.hide')} · ${label}`}
                         data-widget-hide={item.id}

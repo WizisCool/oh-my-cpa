@@ -12,6 +12,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   allowClear?: boolean | { clearIcon?: React.ReactNode };
   clearLabel?: string;
   status?: 'error' | 'warning';
+  showCount?: boolean;
   monospace?: boolean;
   onPressEnter?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   ref?: React.Ref<HTMLInputElement>;
@@ -42,6 +43,7 @@ export function Input({
   allowClear = false,
   clearLabel = 'Clear',
   status,
+  showCount = false,
   monospace = false,
   disabled,
   readOnly,
@@ -59,7 +61,7 @@ export function Input({
     () => defaultValue !== undefined && defaultValue !== null && String(defaultValue).length > 0,
   );
   const isInvalid = ariaInvalid === true || ariaInvalid === 'true' || status === 'error';
-  const hasAffix = prefix !== undefined || suffix !== undefined || Boolean(allowClear);
+  const hasAffix = prefix !== undefined || suffix !== undefined || Boolean(allowClear) || (showCount && props.maxLength !== undefined);
 
   const attachRef = React.useCallback(
     (node: HTMLInputElement | null) => {
@@ -191,6 +193,11 @@ export function Input({
         >
           {customClearIcon ?? <X className="size-3.5" aria-hidden="true" />}
         </button>
+      )}
+      {showCount && props.maxLength !== undefined && (
+        <span data-slot="input-count" className="inline-flex items-center shrink-0 font-mono text-xs text-meta tabular-nums select-none" aria-hidden="true">
+          {`${value !== undefined && value !== null ? String(value).length : 0} / ${props.maxLength}`}
+        </span>
       )}
       {suffix !== undefined && suffix !== null && (
         <span data-slot="input-suffix" className="inline-flex items-center shrink-0 text-muted-foreground [&_svg]:size-3.5">

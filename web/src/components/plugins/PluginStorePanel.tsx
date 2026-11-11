@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Segmented, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { ListLoading } from '../common/PageLoading';
 import { CloseOutlined, DownloadOutlined, GithubOutlined, LockOutlined, SettingOutlined, TagOutlined, UpgradeOutlined } from '../icons';
 import { useI18n, useT } from '../../i18n';
@@ -152,7 +154,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
   const showAll = (section: StoreSection) => (
     !isSourceChosen && section.entries.length > STORE_SECTION_PREVIEW ? (
       // Opening a registry of hundreds of cards is one deliberate step, and one React may interrupt.
-      <Button type="link" size="small" className={styles['show-all']} onClick={() => React.startTransition(() => setFacet(section.sourceId))}>
+      <Button variant="link" size="sm" className={styles['show-all']} onClick={() => React.startTransition(() => setFacet(section.sourceId))}>
         {t('plugin.section_show_all', { n: section.entries.length })}
       </Button>
     ) : undefined
@@ -217,7 +219,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
             </button>
           )}
           {(isNarrowed || activeFacet !== ALL_SOURCES) && (
-            <Button type="link" size="small" className={styles['show-all']} onClick={clearFilters}>
+            <Button variant="link" size="sm" className={styles['show-all']} onClick={clearFilters}>
               {t('plugin.clear_filters')}
             </Button>
           )}
@@ -295,7 +297,7 @@ function SourceErrorNotice({ message, onOpenSettings }: { message: string; onOpe
       tone="warning"
       title={t('plugin.source_error_title')}
       description={message}
-      action={<Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
+      action={<Button size="sm" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
     />
   );
 }
@@ -355,7 +357,7 @@ function OmcShowcase({ section, isDemo, shouldHideEmpty, onOpenSettings, extra, 
       {isSourceOff ? (
         <EmptyState size="compact" title={t('plugin.omc_source_off')}>
           <Tooltip title={isDemo ? t('demo.blocked') : undefined}>
-            <Button type="primary" disabled={isDemo} loading={isEnabling} onClick={() => void enable()} data-testid="plugin-omc-source-enable">
+            <Button variant="primary" disabled={isDemo} loading={isEnabling} onClick={() => void enable()} data-testid="plugin-omc-source-enable">
               {t('plugin.omc_source_enable')}
             </Button>
           </Tooltip>
@@ -469,20 +471,20 @@ const StoreCard = React.memo(function StoreCard({ entry, isFeatured = false, isE
         <span className={styles['card-actions']}>
           {!entry.installed && (
             <Tooltip title={actionTitle}>
-              <Button type="primary" size="small" icon={<DownloadOutlined />} disabled={isDemo || blocked !== undefined} onClick={() => onInstall(entry)}>
+              <Button variant="primary" size="sm" icon={<DownloadOutlined />} disabled={isDemo || blocked !== undefined} onClick={() => onInstall(entry)}>
                 {t('plugin.install')}
               </Button>
             </Tooltip>
           )}
           {isUpdate && (
             <Tooltip title={actionTitle}>
-              <Button type="primary" size="small" icon={<UpgradeOutlined />} disabled={isDemo || blocked !== undefined} onClick={() => onInstall(entry)}>
+              <Button variant="primary" size="sm" icon={<UpgradeOutlined />} disabled={isDemo || blocked !== undefined} onClick={() => onInstall(entry)}>
                 {t('plugin.update')}
               </Button>
             </Tooltip>
           )}
           {entry.installed && (
-            <Button size="small" icon={<SettingOutlined />} onClick={() => onManage(entry.id)}>
+            <Button size="sm" icon={<SettingOutlined />} onClick={() => onManage(entry.id)}>
               {t('plugin.manage')}
             </Button>
           )}

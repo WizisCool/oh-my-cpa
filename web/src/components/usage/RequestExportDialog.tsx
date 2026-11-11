@@ -1,6 +1,8 @@
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import React from 'react';
-import { Button, Checkbox, Segmented } from 'antd';
+import { Button } from '@/components/ui/button';
+import { CheckboxGroup } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { useT } from '../../i18n';
@@ -249,7 +251,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             </Button>
           )}
           <Button
-            type="primary"
+            variant="primary"
             icon={<DownloadOutlined />}
             loading={pendingAction === 'download'}
             disabled={isImage && (!isPainted || pendingAction === 'copy')}
@@ -275,9 +277,9 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
         <legend>{t('events.export_mask')}</legend>
         <p className="req-export-hint">{t('events.export_mask_hint')}</p>
         <div className="req-export-mask-row">
-          <Checkbox.Group
+          <CheckboxGroup
             value={details}
-            onChange={(next) => setDetails(next as SensitiveDetail[])}
+            onValueChange={(next) => setDetails(next as SensitiveDetail[])}
             options={SENSITIVE_DETAILS.map((detail) => ({
               value: detail,
               label: t(`events.export_detail_${detail}`),
@@ -311,7 +313,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
           title={t('events.export_provider_unresolved')}
           action={
             onRetryProviders && (
-              <Button size="small" onClick={onRetryProviders}>
+              <Button size="sm" onClick={onRetryProviders}>
                 {t('common.retry')}
               </Button>
             )

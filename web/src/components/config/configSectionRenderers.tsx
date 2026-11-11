@@ -1,4 +1,7 @@
-import { Button, Input, Select, Typography } from 'antd';
+import { Select, Typography } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { NumberInput } from '../common/NumberInput';
 import { Switch } from '../common/Switch';
 import {
@@ -214,7 +217,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
 
   if (field.type === 'json_editor') {
     return (
-      <Input.TextArea
+      <Textarea
         id={`cfg-${field.id}`}
         aria-describedby={ariaDescribedBy}
         rows={2}
@@ -237,7 +240,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
 
   if (field.type === 'textarea') {
     return (
-      <Input.TextArea
+      <Textarea
         id={`cfg-${field.id}`}
         aria-describedby={ariaDescribedBy}
         rows={3}
@@ -391,7 +394,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
               <span className="settings-managed-count">
                 {t('cfg.api_keys_count', { n: configuredKeyCount })}
               </span>
-              <Button size="small" type="primary" onClick={() => navigate('/api-keys')}>
+              <Button size="sm" variant="primary" onClick={() => navigate('/api-keys')}>
                 {t('cfg.api_keys_manage')}
               </Button>
             </div>

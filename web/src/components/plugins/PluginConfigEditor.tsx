@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Input, Typography } from 'antd';
+import { Typography } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { CheckOutlined, FormatPainterOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { parsePluginConfig, pluginConfigSummary } from './pluginConfig';
@@ -42,7 +44,7 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
           )}
           <Text type="secondary">{t('plugin.config_top_level', { n: summary.length })}</Text>
         </div>
-        <Button size="small" icon={<FormatPainterOutlined />} disabled={isReadOnly || !parsed.value} onClick={formatValue}>
+        <Button size="sm" icon={<FormatPainterOutlined />} disabled={isReadOnly || !parsed.value} onClick={formatValue}>
           {t('plugin.config_format')}
         </Button>
       </div>
@@ -55,7 +57,7 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
       )}
 
       <div className={styles.workspace}>
-        <Input.TextArea
+        <Textarea
           data-plugin-config-source
           value={value}
           onChange={(event) => onChange(event.target.value)}

@@ -1,6 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Button, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, describeError } from '../../api/client';

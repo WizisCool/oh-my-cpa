@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Popover } from 'antd';
+import { Popover } from 'antd';
+import { Button } from '@/components/ui/button';
 import { CheckOutlined, DownOutlined } from '../icons';
 import { nextPickerIndex, pickerRoom, PICKER_GAP } from './pickerNavigation';
 import type { PickerRoom } from './pickerNavigation';
@@ -110,8 +111,8 @@ export function ComposerPicker({
     >
       <Button
         ref={triggerRef}
-        type="text"
-        size="small"
+        variant="ghost"
+        size="sm"
         className={[styles['picker-trigger'], className].filter(Boolean).join(' ')}
         data-testid={testId}
         data-state={isPending ? 'pending' : isUnset ? 'unset' : undefined}

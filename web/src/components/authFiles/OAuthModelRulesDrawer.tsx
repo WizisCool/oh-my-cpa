@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntdApp, Button, Segmented } from 'antd';
+import { App as AntdApp } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { DeleteOutlined, SaveOutlined } from '../icons';
 import { CredentialMark } from '../LobeIcon';
 import { providerDisplayName } from '../../types/providerMetadata';
@@ -392,7 +394,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   const footerStart = (
     <Button
       danger
-      type="text"
+      variant="ghost"
       icon={<DeleteOutlined />}
       data-testid="oauth-model-rules-clear"
       disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving || isDemo}
@@ -412,7 +414,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         {t('af.rules_revert')}
       </Button>
       <Button
-        type="primary"
+        variant="primary"
         icon={<SaveOutlined />}
         data-testid="oauth-model-rules-save"
         loading={isSaving}

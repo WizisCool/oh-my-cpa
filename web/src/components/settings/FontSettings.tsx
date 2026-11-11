@@ -1,6 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { AutoComplete, Button, Select, type SelectProps } from 'antd';
+import { AutoComplete, Select, type SelectProps } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiErrorCode } from '../../api/client';
@@ -227,7 +228,7 @@ const FontLibraryDialog: React.FC<{ open: boolean; fonts: readonly InstalledFont
               placeholder="Noto Sans SC"
               aria-label={t('omc.font_google_family')}
             />
-            <Button type="primary" htmlType="submit" icon={<CloudDownloadOutlined />} disabled={!trimmed} loading={install.isPending}>
+            <Button variant="primary" type="submit" icon={<CloudDownloadOutlined />} disabled={!trimmed} loading={install.isPending}>
               {t('omc.font_install')}
             </Button>
           </form>
@@ -237,7 +238,7 @@ const FontLibraryDialog: React.FC<{ open: boolean; fonts: readonly InstalledFont
         <section className={styles.section} aria-label={t('omc.font_installed')}>
           <div className={styles['section-head']}>
             <span className={styles['field-label']}>{t('omc.font_installed')}</span>
-            <Button size="small" icon={<UploadOutlined />} loading={upload.isPending} onClick={() => fileInput.current?.click()}>{t('omc.font_upload')}</Button>
+            <Button size="sm" icon={<UploadOutlined />} loading={upload.isPending} onClick={() => fileInput.current?.click()}>{t('omc.font_upload')}</Button>
             <input
               ref={fileInput}
               type="file"
@@ -312,7 +313,7 @@ const FontLibraryList: React.FC<{ fonts: readonly InstalledFont[] }> = ({ fonts 
               isConfirming={remove.isPending && remove.variables?.id === font.id}
               onConfirm={() => remove.mutateAsync(font).catch(() => undefined)}
             >
-              <Button type="text" icon={<DeleteOutlined />} aria-label={t('omc.font_delete', { family: font.family })} />
+              <Button variant="ghost" icon={<DeleteOutlined />} aria-label={t('omc.font_delete', { family: font.family })} />
             </ConfirmAction>
           </li>
         );

@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Input, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -79,7 +81,7 @@ function ProxyForm({ settings }: { settings: Settings }) {
         </div>
       )}
       <SettingRow label={t('omc.proxy_apply')} description={t('omc.proxy_apply_desc')} control={(
-        <Button type="primary" onClick={submit} loading={save.isPending} disabled={isDisabled}>{t('common.save')}</Button>
+        <Button variant="primary" onClick={submit} loading={save.isPending} disabled={isDisabled}>{t('common.save')}</Button>
       )} />
     </>
   );

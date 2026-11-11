@@ -1,4 +1,6 @@
-import { Checkbox, Input, Segmented } from 'antd';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import { useId } from 'react';
 import { useT } from '../../i18n';
@@ -28,7 +30,7 @@ export function ConnectionPoolEditor({ draft, onChange, isGroup = false, groupNa
   return <div role="group" aria-labelledby={titleId} className={styles['pool']}>
     <div id={titleId} className={styles['item-field-label']}>{t(isGroup ? 'pool.group_title' : 'pool.key_title')}</div>
     {isGroup && <div className={styles['policy-desc']}>{groupName ? t('pool.group_scope', { name: groupName, count: groupSize }) : t('pool.new_scope', { count: groupSize })}</div>}
-    <Checkbox checked={draft.isConfigured} onChange={event => onChange({ ...draft, isConfigured: event.target.checked })}>
+    <Checkbox checked={draft.isConfigured} onCheckedChange={(checked) => onChange({ ...draft, isConfigured: checked })}>
       {t(isGroup ? 'pool.configure_group' : 'pool.configure_key')}
     </Checkbox>
     {draft.isConfigured && <>

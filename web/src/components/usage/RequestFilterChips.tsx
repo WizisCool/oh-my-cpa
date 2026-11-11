@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 import type { EventFilterKey } from '../../types/usageEventQuery';
@@ -64,7 +64,7 @@ export const RequestFilterChips: React.FC<RequestFilterChipsProps> = React.memo(
             );
           }),
         )}
-        <Button size="small" type="link" className="req-clear-all-chips" onClick={onClearAll}>
+        <Button size="sm" variant="link" className="req-clear-all-chips" onClick={onClearAll}>
           {t('events.clear_all')}
         </Button>
       </div>

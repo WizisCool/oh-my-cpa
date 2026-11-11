@@ -1,4 +1,5 @@
-import { App, Button, Typography } from 'antd';
+import { App, Typography } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useMutation } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { api, describeError } from '../../api/client';
@@ -95,7 +96,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
           title={t('recovery.inference')}
           value={file.inference_verified}
           hint={file.inference_verified ? undefined : t('recovery.inference_hint')}
-          action={file.inference_verified ? undefined : <Button size="small" disabled={isBlocked} loading={verification.isPending} data-credential-verify onClick={verify}>
+          action={file.inference_verified ? undefined : <Button size="sm" disabled={isBlocked} loading={verification.isPending} data-credential-verify onClick={verify}>
             {t('recovery.verify_now')}
           </Button>}
         />
@@ -107,7 +108,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
       <SectionHeading level="label" as="h4" title={t('recovery.sign_in')} />
       <div className={styles['recover']}>
         <Text type="secondary" className={styles['hint']}>{t('recovery.recover_hint')}</Text>
-        <Button type={file.requires_sign_in ? 'primary' : 'default'} disabled={isBlocked} onClick={onRecover} data-credential-recover>
+        <Button variant={file.requires_sign_in ? 'primary' : 'secondary'} disabled={isBlocked} onClick={onRecover} data-credential-recover>
           {t('recovery.recover')}
         </Button>
       </div>

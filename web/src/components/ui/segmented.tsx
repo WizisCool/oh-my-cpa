@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { ToggleGroup, ToggleGroupItem } from './toggle-group';
+import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
+import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { cn } from '@/lib/utils';
 
 export interface SegmentedOptionObject<T extends string | number = string> {
@@ -56,61 +57,58 @@ export function Segmented<T extends string | number = string>({
     [options],
   );
 
-  const isControlled = value !== undefined;
-  const [internal, setInternal] = React.useState<T | undefined>(() => defaultValue ?? normalized[0]?.value);
-  const current = isControlled ? value : internal;
-  const encodedValue = current !== undefined ? [String(current)] : [];
-
-  const handleValueChange = (nextValues: string[]) => {
-    // Segmented controls always keep one active segment; clicking the active segment is a no-op.
-    if (nextValues.length === 0) return;
-    const picked = nextValues[nextValues.length - 1];
-    const match = normalized.find((opt) => String(opt.value) === picked);
-    if (!match) return;
-    if (!isControlled) setInternal(match.value);
-    onChange?.(match.value);
-  };
-
-  const resolvedSize = size === 'sm' || size === 'small' ? 'sm' : 'default';
+  const isSmall = size === 'sm' || size === 'small';
 
   return (
-    <ToggleGroup
+    <RadioGroupPrimitive<T>
       id={id}
       data-slot="segmented"
-      size={resolvedSize}
-      block={block}
+      aria-orientation={vertical ? 'vertical' : 'horizontal'}
+      value={value}
+      defaultValue={defaultValue ?? normalized[0]?.value}
       disabled={disabled}
-      orientation={vertical ? 'vertical' : 'horizontal'}
-      value={encodedValue}
-      onValueChange={handleValueChange}
+      onValueChange={(next) => onChange?.(next)}
       style={style}
-      className={cn(vertical && 'items-stretch', className)}
+      className={cn(
+        'inline-flex rounded-md bg-field p-0.5 shadow-well select-none',
+        vertical ? 'flex-col items-stretch' : 'items-center',
+        block && 'flex w-full',
+        className,
+      )}
       {...ariaProps}
     >
-      {normalized.map((option) => {
-        const key = String(option.value);
-        return (
-          <ToggleGroupItem
-            key={key}
-            data-slot="segmented-item"
-            value={key}
-            disabled={disabled || option.disabled}
-            title={option.title}
-            className={cn(vertical && 'justify-start text-left', option.className)}
-          >
-            {option.icon !== undefined && option.icon !== null && (
-              <span className="inline-flex items-center shrink-0 [&_svg]:size-3.5" aria-hidden="true">
-                {option.icon}
-              </span>
-            )}
-            {option.label !== undefined && option.label !== null && (
-              <span className={cn('inline-flex items-center min-w-0', classNames?.label)}>
-                {option.label}
-              </span>
-            )}
-          </ToggleGroupItem>
-        );
-      })}
-    </ToggleGroup>
+      {normalized.map((option) => (
+        <RadioPrimitive.Root<T>
+          key={String(option.value)}
+          data-slot="segmented-item"
+          value={option.value}
+          disabled={disabled || option.disabled}
+          title={option.title}
+          className={cn(
+            'inline-flex flex-1 items-center gap-1.5 whitespace-nowrap rounded-sm border-0 bg-transparent font-normal text-muted-foreground cursor-pointer',
+            'transition-[background-color,color,box-shadow] touch-manipulation',
+            vertical ? 'justify-start text-left' : 'justify-center',
+            'hover:not-data-disabled:not-data-checked:text-foreground',
+            'data-checked:bg-thumb data-checked:font-medium data-checked:text-foreground data-checked:shadow-control',
+            'focus-visible:outline-none focus-visible:shadow-focus',
+            'data-disabled:pointer-events-none data-disabled:opacity-50',
+            isSmall ? 'min-h-6 px-2.5 py-0.5 text-md' : 'min-h-7 px-3 py-1 text-md',
+            '[@media(pointer:coarse)]:min-h-[30px]',
+            option.className,
+          )}
+        >
+          {option.icon !== undefined && option.icon !== null && (
+            <span className="inline-flex items-center shrink-0 [&_svg]:size-3.5" aria-hidden="true">
+              {option.icon}
+            </span>
+          )}
+          {option.label !== undefined && option.label !== null && (
+            <span className={cn('inline-flex items-center min-w-0', classNames?.label)}>
+              {option.label}
+            </span>
+          )}
+        </RadioPrimitive.Root>
+      ))}
+    </RadioGroupPrimitive>
   );
 }

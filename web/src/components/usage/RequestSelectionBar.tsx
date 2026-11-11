@@ -1,4 +1,4 @@
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 
 import { useT } from '../../i18n';
 import { SelectionBar } from '../common/SelectionBar';
@@ -36,19 +36,19 @@ export function RequestSelectionBar({
       selection={(
         <>
           {!isEveryLoadedSelected && (
-            <Button type="link" size="small" onClick={onSelectLoaded}>
+            <Button variant="link" size="sm" onClick={onSelectLoaded}>
               {t('events.select_all')}
             </Button>
           )}
-          <Button type="link" size="small" onClick={onClear}>
+          <Button variant="link" size="sm" onClick={onClear}>
             {t('events.clear_selection')}
           </Button>
         </>
       )}
     >
       <Button
-        type="primary"
-        size="small"
+        variant="primary"
+        size="sm"
         icon={<DownloadOutlined />}
         onClick={onExport}
         data-testid="req-export-open"

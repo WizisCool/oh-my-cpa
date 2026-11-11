@@ -1,7 +1,8 @@
 import { CustomIconLibrary } from './CustomIconLibrary';
 import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Segmented, theme } from 'antd';
+import { theme } from 'antd';
+import { Segmented } from '@/components/ui/segmented';
 import {
   LOBE_ICON_CATALOG,
   type LobeIconCatalogEntry,

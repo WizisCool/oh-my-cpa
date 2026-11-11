@@ -218,24 +218,24 @@ it('keeps background registry refresh separate from a manually requested update 
   const { client } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
   expect((await automatic.arrived).query.has('refresh')).toBe(false);
   const check = screen.getByTestId('plugin-check-updates');
-  expect(check.classList.contains('ant-btn-loading')).toBe(false);
+  expect(check.getAttribute('aria-busy')).toBeNull();
   await act(async () => automatic.release());
 
   const refresh = server.hold('GET', '/management/plugin-store');
   fireEvent.click(screen.getByRole('switch', { name: makeT('en')('plugin.toggle_label', { name: 'Runtime name' }) }));
   const backgroundRequest = await refresh.arrived;
   expect(backgroundRequest.query.has('refresh')).toBe(false);
-  expect(check.classList.contains('ant-btn-loading')).toBe(false);
+  expect(check.getAttribute('aria-busy')).toBeNull();
 
   const manual = server.hold('GET', '/management/plugin-store');
   fireEvent.click(check);
   expect((await manual.arrived).query.get('refresh')).toBe('true');
-  await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(true));
+  await waitFor(() => expect(check.getAttribute('aria-busy')).toBe('true'));
   expect(backgroundRequest.init.signal?.aborted).toBe(true);
   const updated = { ...store, plugins: [{ ...entry, installed: true, install_source_status: 'matched', version: '1.3.0', update_available: true }] };
   await act(async () => manual.release(updated));
   expect(await screen.findByText(makeT('en')('plugin.check_updates_found', { n: 1 }))).toBeTruthy();
-  await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(false));
+  await waitFor(() => expect(check.getAttribute('aria-busy')).toBeNull());
   await act(async () => refresh.release());
   expect(client.getQueryData<PluginStoreResponse>(['management-plugin-store'])).toEqual(updated);
 });

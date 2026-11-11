@@ -1,7 +1,11 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Input, Segmented, TimePicker } from 'antd';
+import { TimePicker } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
@@ -359,7 +363,7 @@ const TierRateFields: React.FC<{
     <div className={styles['tier-rates-block']}>
       <div className={styles['tier-unit']}>
         <Segmented<TierRateUnit>
-          size="small"
+          size="sm"
           value={draft.rateUnit}
           disabled={!base}
           onChange={onUnitChange}
@@ -471,7 +475,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
     <Tooltip title={t('pricing.editor.tier_remove')}>
       <Button
         className="row-action-btn"
-        size="small"
+        size="sm"
         danger
         icon={<DeleteOutlined />}
         aria-label={t('pricing.editor.tier_remove')}
@@ -514,7 +518,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
             <Tooltip title={t('pricing.editor.lane_remove')}>
               <Button
                 className="row-action-btn"
-                size="small"
+                size="sm"
                 danger
                 icon={<DeleteOutlined />}
                 aria-label={t('pricing.editor.lane_remove')}
@@ -583,7 +587,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
                   <span className={styles['tier-note']}>{t('pricing.editor.context_threshold_full', { n: formatTokensFull(threshold) })}</span>
                 )}
               </div>
-              <Checkbox checked={draft.isWindowed} onChange={(event) => update(draft.key, { isWindowed: event.target.checked })}>
+              <Checkbox checked={draft.isWindowed} onCheckedChange={(checked) => update(draft.key, { isWindowed: checked })}>
                 {t('pricing.editor.context_windowed')}
               </Checkbox>
               {draft.isWindowed && windowField(draft)}
