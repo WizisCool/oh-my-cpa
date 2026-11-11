@@ -32,6 +32,7 @@ import { usePreference } from '../../hooks/usePreference';
 import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 import { Tooltip } from './Tooltip';
+import { NavSelectionHighlight } from './NavSelectionHighlight';
 
 const { Sider, Content } = Layout;
 
@@ -124,7 +125,7 @@ export const AppLayout: React.FC = () => {
   const t = useT();
   const toast = useToast();
   const rawNavigate = useNavigate();
-  const { navigateTo } = useTransitionNavigate(rawNavigate, consoleRouteRegistry);
+  const { navigateTo, isPending: isNavigationPending } = useTransitionNavigate(rawNavigate, consoleRouteRegistry);
   const location = useLocation();
   const queryClient = useQueryClient();
   const timeZone = useTimeZone();
@@ -209,9 +210,21 @@ export const AppLayout: React.FC = () => {
     return buildMenuItems(visibleNavGroups, t, !isMobile && isCollapsed, pendingRoutes);
   }, [visibleNavGroups, t, isMobile, isCollapsed, hasSystemUpdate, hasPluginUpdate]);
 
+  // A page change runs as a transition, so `location` - and the selection derived from it - waits
+  // for the target page to load. The rail answers the click at once instead: it marks the entry the
+  // hand chose until the transition settles, whether it committed or was overtaken.
+  const [intendedKey, setIntendedKey] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!isNavigationPending) setIntendedKey(null);
+  }, [isNavigationPending, location.pathname, location.search]);
+  const menuSelectedKey = intendedKey ?? selectedKey;
+
   const selectPage = ({ key }: { key: string }) => {
     setIsMobileNavOpen(false);
-    if (key !== `${location.pathname}${location.search}`) navigateTo(key);
+    if (key !== `${location.pathname}${location.search}`) {
+      setIntendedKey(key);
+      navigateTo(key);
+    }
   };
 
   const goToDashboard = () => {
@@ -229,19 +242,23 @@ export const AppLayout: React.FC = () => {
     if (path) warmRouteIntent(path, { queryClient, pathname: path, timeZone });
   };
 
+  const selectedGroupKey = visibleNavGroups.find((group) => group.items.some((entry) => entry.key === menuSelectedKey))?.key ?? null;
+  const navLayoutKey = visibleNavGroups.map((group) => `${group.key}:${group.items.map((entry) => entry.key).join(',')}`).join('|');
   const menu = (
-    <Menu
-      mode="inline"
-      theme="dark"
-      items={menuItems}
-      selectedKeys={[selectedKey]}
-      onClick={selectPage}
-      onMouseOver={preloadMenuTarget}
-      onFocus={preloadMenuTarget}
-      onTouchStart={preloadMenuTarget}
-      className="app-menu"
-      inlineCollapsed={false}
-    />
+    <NavSelectionHighlight selectedKey={menuSelectedKey} groupKey={selectedGroupKey} layoutKey={navLayoutKey}>
+      <Menu
+        mode="inline"
+        theme="dark"
+        items={menuItems}
+        selectedKeys={[menuSelectedKey]}
+        onClick={selectPage}
+        onMouseOver={preloadMenuTarget}
+        onFocus={preloadMenuTarget}
+        onTouchStart={preloadMenuTarget}
+        className="app-menu"
+        inlineCollapsed={false}
+      />
+    </NavSelectionHighlight>
   );
 
   const handleBrandKeyDown = (e: React.KeyboardEvent) => {
