@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { parseDocument } from 'yaml';
 import {
+  PAYLOAD_PROTOCOLS,
+  buildPayloadProtocolOptions,
   parseTypedRules,
   serializeTypedRules,
   parseRawRules,
@@ -13,6 +15,69 @@ import {
   isValidJson,
   validateAllPayloadRules,
 } from '../../src/components/config/payloadRules.ts';
+
+// CPA's payload-rule engine matches `models[].protocol` against each executor's protocol identifier
+// (`openai`, `gemini`, `claude`, `codex`, `antigravity`, `meta`), while an omitted `protocol` leaves
+// the rule unrestricted. Omitting a documented value from the selector leaves operators unable to
+// author or re-select it in the visual editor.
+test('Every payload-rule protocol CPA documents is offered after the unrestricted default', () => {
+  assert.deepEqual(PAYLOAD_PROTOCOLS, [
+    'openai',
+    'gemini',
+    'claude',
+    'codex',
+    'antigravity',
+    'meta',
+  ]);
+  assert.deepEqual(buildPayloadProtocolOptions('Default'), [
+    { value: '', label: 'Default' },
+    { value: 'openai', label: 'openai' },
+    { value: 'gemini', label: 'gemini' },
+    { value: 'claude', label: 'claude' },
+    { value: 'codex', label: 'codex' },
+    { value: 'antigravity', label: 'antigravity' },
+    { value: 'meta', label: 'meta' },
+  ]);
+});
+
+test('Meta protocol target round-trips across typed, raw, and filter payload rules', () => {
+  const typed = parseTypedRules(
+    [{ models: [{ name: 'muse-*', protocol: 'meta' }], params: { prompt_cache_retention: '24h' } }],
+    'default',
+  );
+  assert.equal(typed[0].models[0].protocol, 'meta');
+  assert.deepEqual(serializeTypedRules(typed), [
+    { models: [{ name: 'muse-*', protocol: 'meta' }], params: { prompt_cache_retention: '24h' } },
+  ]);
+
+  const raw = parseRawRules(
+    [{ models: [{ name: 'muse-*', protocol: 'meta' }], params: { metadata: '{"tier":"pro"}' } }],
+    'override-raw',
+  );
+  assert.equal(raw[0].models[0].protocol, 'meta');
+  assert.deepEqual(serializeRawRules(raw), [
+    { models: [{ name: 'muse-*', protocol: 'meta' }], params: { metadata: '{"tier":"pro"}' } },
+  ]);
+
+  const filter = parseFilterRules(
+    [{ models: [{ name: 'muse-*', protocol: 'meta' }], params: ['prompt_cache_retention'] }],
+    'filter',
+  );
+  assert.equal(filter[0].models[0].protocol, 'meta');
+  assert.deepEqual(serializeFilterRules(filter), [
+    { models: [{ name: 'muse-*', protocol: 'meta' }], params: ['prompt_cache_retention'] },
+  ]);
+
+  typed[0].models[0].protocol = '';
+  assert.deepEqual(serializeTypedRules(typed), [
+    { models: [{ name: 'muse-*' }], params: { prompt_cache_retention: '24h' } },
+  ]);
+
+  typed[0].models[0].protocol = 'meta';
+  assert.deepEqual(serializeTypedRules(typed), [
+    { models: [{ name: 'muse-*', protocol: 'meta' }], params: { prompt_cache_retention: '24h' } },
+  ]);
+});
 
 test('Payload Typed Rules lossless round-trip with models, protocols, headers, match', () => {
   const original = [
