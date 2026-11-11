@@ -98,6 +98,7 @@ function RequestVirtualListInner<T>(
 
   const [, setRenderTick] = React.useState(0);
   const renderedSignatureRef = React.useRef('');
+  const pendingAnchorDeltaRef = React.useRef(0);
 
   const segments = React.useMemo(
     () => (group ? buildGroupSegments(items, group.key) : []),
@@ -173,10 +174,24 @@ function RequestVirtualListInner<T>(
   );
 
   // Observe mounted rows & group headers post-layout with zero synchronous reflow.
+  // When an overscanned row or group header strictly above the visible viewport top
+  // measures taller or shorter than its estimate, compensate scrollTop in lockstep
+  // with the committed row offsets so upward scrolling never shifts visible rows.
   React.useLayoutEffect(() => {
     if (!virtual || typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver((entries) => {
       let hasChange = false;
+      let anchorDelta = 0;
+      const viewport = viewportRef.current;
+      const canAnchor = Boolean(viewport && scrollTopRef.current > 0);
+      let viewportTop: number | null = null;
+      const readViewportTop = () => {
+        if (viewportTop === null) {
+          viewportTop = viewport?.getBoundingClientRect().top ?? 0;
+        }
+        return viewportTop;
+      };
+
       for (const entry of entries) {
         const meta = elementKeyMapRef.current.get(entry.target);
         if (!meta) continue;
@@ -187,6 +202,9 @@ function RequestVirtualListInner<T>(
           if (Math.abs(size - prev) >= 1) {
             rowHeightsRef.current.set(meta.key, size);
             hasChange = true;
+            if (canAnchor && entry.target.getBoundingClientRect().bottom <= readViewportTop() + 0.5) {
+              anchorDelta += size - prev;
+            }
           } else if (!rowHeightsRef.current.has(meta.key)) {
             rowHeightsRef.current.set(meta.key, size);
           }
@@ -195,12 +213,21 @@ function RequestVirtualListInner<T>(
           if (Math.abs(size - prev) >= 1) {
             groupHeaderHeightsRef.current.set(meta.key, size);
             hasChange = true;
+            const sectionTop = entry.target.parentElement?.getBoundingClientRect().top
+              ?? entry.target.getBoundingClientRect().top;
+            if (canAnchor && sectionTop + prev <= readViewportTop() + 0.5) {
+              anchorDelta += size - prev;
+            }
           } else if (!groupHeaderHeightsRef.current.has(meta.key)) {
             groupHeaderHeightsRef.current.set(meta.key, size);
           }
         }
       }
       if (hasChange) {
+        if (anchorDelta !== 0) {
+          pendingAnchorDeltaRef.current += anchorDelta;
+          scrollTopRef.current = Math.max(0, scrollTopRef.current + anchorDelta);
+        }
         setRenderTick((tick) => tick + 1);
       }
     });
@@ -387,9 +414,9 @@ function RequestVirtualListInner<T>(
 
   let content: React.ReactNode;
   let totalScrollHeight = 0;
+  let nextRenderedSignature = 'all';
 
   if (!virtual) {
-    renderedSignatureRef.current = 'all';
     if (group) {
       content = segments.map((seg) => (
         <div key={seg.groupKey} className="request-group-section">
@@ -418,7 +445,7 @@ function RequestVirtualListInner<T>(
       viewportHeight: viewportHeightRef.current,
       overscanPx,
     });
-    renderedSignatureRef.current = groupedWin.rangeKey;
+    nextRenderedSignature = groupedWin.rangeKey;
     totalScrollHeight = groupedWin.totalHeight;
     content = segments.map((seg, segIndex) => {
       const slice = groupedWin.slices[segIndex];
@@ -459,7 +486,7 @@ function RequestVirtualListInner<T>(
       viewportHeight: viewportHeightRef.current,
       overscanPx,
     });
-    renderedSignatureRef.current = `${win.startIndex}:${win.endIndex}`;
+    nextRenderedSignature = `${win.startIndex}:${win.endIndex}`;
     totalScrollHeight = win.totalHeight;
     const mounted = win.endIndex >= win.startIndex ? items.slice(win.startIndex, win.endIndex + 1) : [];
     content = (
@@ -484,8 +511,18 @@ function RequestVirtualListInner<T>(
   }
 
   React.useLayoutEffect(() => {
+    renderedSignatureRef.current = nextRenderedSignature;
+    const anchorDelta = pendingAnchorDeltaRef.current;
+    if (anchorDelta !== 0) {
+      pendingAnchorDeltaRef.current = 0;
+      const viewport = viewportRef.current;
+      if (viewport) {
+        viewport.scrollTop = Math.max(0, viewport.scrollTop + anchorDelta);
+        scrollTopRef.current = viewport.scrollTop;
+      }
+    }
     drawThumbRef.current?.();
-  }, [items.length, totalScrollHeight, virtual]);
+  }, [items.length, nextRenderedSignature, totalScrollHeight, virtual]);
 
   return (
     <div ref={rootRef} className="request-virtual-root">

@@ -311,4 +311,48 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
     expect(header.hasAttribute('inert')).toBe(false);
     expect(document.activeElement).toBe(expandBtn);
   });
+
+  it('compensates scrollTop when an overscanned row above the viewport measures taller than default', () => {
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          callbacks.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+
+    installTouchMatchMedia(false);
+    const events = makeSyntheticEvents(40);
+    const { container } = renderWithOmc(<StreamHarness items={events} />);
+    const list = container.querySelector<HTMLElement>('.request-list')!;
+    vi.spyOn(list, 'getBoundingClientRect').mockReturnValue({
+      top: 100, bottom: 500, left: 0, right: 800, width: 800, height: 400, x: 0, y: 100, toJSON: () => ({}),
+    });
+
+    list.scrollTop = 300;
+    fireEvent.scroll(list);
+
+    const rows = container.querySelectorAll<HTMLElement>('.request-list-item-virtual');
+    const aboveRow = rows[0]!;
+    vi.spyOn(aboveRow, 'getBoundingClientRect').mockReturnValue({
+      top: -10, bottom: 90, left: 0, right: 800, width: 800, height: 100, x: 0, y: -10, toJSON: () => ({}),
+    });
+
+    act(() => {
+      for (const callback of callbacks) {
+        callback(
+          [{ target: aboveRow, contentRect: { width: 800, height: 100 } } as unknown as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      }
+    });
+
+    // Default row height is 72px; measuring 100px above viewportTop (100) adds +28px to scrollTop.
+    expect(list.scrollTop).toBe(328);
+  });
 });
