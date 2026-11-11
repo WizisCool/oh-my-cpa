@@ -1,4 +1,5 @@
 
+import React from 'react';
 import type { MessageKey } from '../../i18n/catalog';
 import { Button, Segmented, Select } from 'antd';
 import { FilterOutlined } from '../icons';
@@ -56,7 +57,7 @@ interface RequestToolbarProps {
  * survive a capped response, and that is a property of the control rather than of
  * the page that supplies the facets.
  */
-export function RequestToolbar({
+export const RequestToolbar = React.memo(function RequestToolbar({
   search,
   onSearchChange,
   query,
@@ -256,4 +257,4 @@ export function RequestToolbar({
       </div>
     </section>
   );
-}
+});

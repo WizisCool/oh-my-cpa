@@ -14,6 +14,7 @@ import {
   type ObservedBoxSize,
 } from '../../src/performance/index.ts';
 import { dashboardWidgetSpec } from '../../src/types/dashboardLayout.ts';
+import { isDiscreteWheel, keyScrollFor, pageDistance, type WheelSample } from '../../src/utils/scrollSmoothing.ts';
 
 test('frame scheduler separates priority tiers across slices, caps per-slice jobs, and yields across frames', () => {
   let clock = 0;
@@ -443,4 +444,64 @@ test('live routing widget is available on mobile viewports and supports half-to-
   const spec = dashboardWidgetSpec('routing');
   assert.equal(Boolean(spec.isPhoneOmitted), false);
   assert.deepEqual(spec.spans, [2, 3, 4]);
+});
+
+function makeWheelSample(overrides: Partial<WheelSample> = {}): WheelSample {
+  return {
+    deltaMode: 0,
+    deltaX: 0,
+    deltaY: 100,
+    wheelDeltaY: -120,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    metaKey: false,
+    ...overrides,
+  };
+}
+
+test('isDiscreteWheel recognizes mouse notches at 1x and fractional HiDPI scales without smoothing trackpads', () => {
+  assert.equal(isDiscreteWheel(makeWheelSample(), { isApple: false, devicePixelRatio: 1 }), true);
+  // Chromium divides legacy wheelDeltaY by fractional display scales (125%, 150%, 175%) and truncates.
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ wheelDeltaY: -96, deltaY: 100 }), { isApple: false, devicePixelRatio: 1.25 }),
+    true,
+  );
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ wheelDeltaY: -192, deltaY: 200 }), { isApple: false, devicePixelRatio: 1.25 }),
+    true,
+  );
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ wheelDeltaY: -80, deltaY: 100 }), { isApple: false, devicePixelRatio: 1.5 }),
+    true,
+  );
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ wheelDeltaY: -68, deltaY: 100 }), { isApple: false, devicePixelRatio: 1.75 }),
+    true,
+  );
+  // Line/page delta modes are always discrete steps.
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ deltaMode: 1, deltaY: 3, wheelDeltaY: undefined }), { isApple: true }),
+    true,
+  );
+
+  // Continuous trackpad streams, small sub-line deltas, Apple pixel streams, horizontal pans, and zoom stay native.
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ wheelDeltaY: -18, deltaY: 14.5 }), { isApple: false, devicePixelRatio: 1.25 }),
+    false,
+  );
+  assert.equal(
+    isDiscreteWheel(makeWheelSample({ wheelDeltaY: -96, deltaY: 24 }), { isApple: false, devicePixelRatio: 1.25 }),
+    false,
+  );
+  assert.equal(isDiscreteWheel(makeWheelSample(), { isApple: true, devicePixelRatio: 2 }), false);
+  assert.equal(isDiscreteWheel(makeWheelSample({ deltaX: 8 }), { isApple: false, devicePixelRatio: 1 }), false);
+  assert.equal(isDiscreteWheel(makeWheelSample({ ctrlKey: true }), { isApple: false, devicePixelRatio: 1 }), false);
+});
+
+test('pageDistance and keyScrollFor step by the unoccluded scroller height when scroll-padding-bottom is present', () => {
+  // With clientHeight = 700 and 200px occluded by the expanded header, only 500px of rows are visible:
+  // PageDown steps 460px (500 - 40) rather than 660px (700 - 40), so no rows are skipped.
+  assert.equal(pageDistance(700, 200), 460);
+  assert.deepEqual(keyScrollFor('PageDown', false, 700 - 200), { by: 460 });
 });

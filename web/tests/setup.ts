@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, vi } from 'vitest';
+import { resetSettledRemoteSources } from '../src/components/common/RemoteImage';
 import { finishOmcApi } from './support/omcApi';
 
 const isBrowserEnvironment = typeof window !== 'undefined';
@@ -65,6 +66,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup?.();
   clearTestQueryClients?.();
+  resetSettledRemoteSources();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   if (isBrowserEnvironment) {

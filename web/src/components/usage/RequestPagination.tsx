@@ -1,11 +1,16 @@
 
+import React from 'react';
 import { Button, Select } from 'antd';
 import { LeftOutlined, RightOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import { Tooltip } from '../common/Tooltip';
+import { RequestRestoreButton } from './RequestFoldControls';
+import type { ViewFlag } from './viewFlag';
 
 interface RequestPaginationProps {
+  collapse?: ViewFlag;
+  onRestoreHeader?: () => void;
   /** The last successful page is on screen while a newer one is in flight. */
   stale: boolean;
   isPlaceholderData: boolean;
@@ -31,7 +36,9 @@ interface RequestPaginationProps {
  * back down the stack they already walked up: the control states come from that
  * stack, not from a total count the list never asks the server for.
  */
-export function RequestPagination({
+export const RequestPagination = React.memo(function RequestPagination({
+  collapse,
+  onRestoreHeader,
   stale,
   isPlaceholderData,
   page,
@@ -58,6 +65,9 @@ export function RequestPagination({
             {isPlaceholderData && ` · ${t('events.updating')}`}
           </span>
           <div className="request-actions">
+            {collapse && onRestoreHeader && (
+              <RequestRestoreButton collapse={collapse} onRestore={onRestoreHeader} />
+            )}
             <Select
               aria-label={t('events.page_size')}
               value={limit}
@@ -85,4 +95,4 @@ export function RequestPagination({
           </div>
         </footer>
   );
-}
+});

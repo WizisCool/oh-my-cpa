@@ -43,6 +43,11 @@ import {
   syncShortfallReason,
 } from '../../src/components/usage/syncPresentation.ts';
 import { chipDisplayValue } from '../../src/components/usage/chipDisplay.ts';
+import {
+  buildGroupSegments,
+  computeGroupedVirtualWindow,
+  computeVirtualWindow,
+} from '../../src/components/usage/requestVirtualWindow.ts';
 import { EVENT_PRESETS } from '../../src/types/usageEventQuery.ts';
 import { test } from 'vitest';
 
@@ -562,4 +567,74 @@ test('a plain text dimension is shown exactly as it was committed', () => {
 test('a reasoning chip shows the parameter spelling', () => {
   assert.equal(chipDisplayValue({ ...chipBase, key: 'reasoning', value: 'xhigh' }), 'xHigh');
   assert.equal(chipDisplayValue({ ...chipBase, key: 'reasoning', value: 'high' }), 'high');
+});
+
+// ---------------------------------------------------------------------------
+// Request virtual windowing
+// ---------------------------------------------------------------------------
+
+test('computeVirtualWindow quantizes stride steps and keeps surviving row coordinates invariant', () => {
+  const heights = Array.from({ length: 100 }, (_, index) => (index % 5 === 0 ? 96 : 72));
+  const atTop = computeVirtualWindow({
+    itemCount: heights.length,
+    getRowHeight: (index) => heights[index],
+    scrollTop: 0,
+    viewportHeight: 360,
+    overscanPx: 144,
+    strideRows: 2,
+  });
+  assert.equal(atTop.startIndex, 0);
+  assert.equal((atTop.endIndex + 1) % 2, 0);
+
+  // Small sub-stride movement inside the overscanned band keeps the mounted window unchanged.
+  const slightScroll = computeVirtualWindow({
+    itemCount: heights.length,
+    getRowHeight: (index) => heights[index],
+    scrollTop: 48,
+    viewportHeight: 360,
+    overscanPx: 144,
+    strideRows: 2,
+  });
+  assert.equal(slightScroll.startIndex, atTop.startIndex);
+
+  // Advancing further shifts startIndex in stride multiples without altering surviving row Y offsets.
+  const deeper = computeVirtualWindow({
+    itemCount: heights.length,
+    getRowHeight: (index) => heights[index],
+    scrollTop: 720,
+    viewportHeight: 360,
+    overscanPx: 144,
+    strideRows: 2,
+  });
+  assert.ok(deeper.startIndex > 0);
+  assert.equal(deeper.startIndex % 2, 0);
+  for (let index = deeper.startIndex; index <= Math.min(atTop.endIndex, deeper.endIndex); index += 1) {
+    assert.equal(deeper.offsets[index], atTop.offsets[index]);
+  }
+});
+
+test('buildGroupSegments and computeGroupedVirtualWindow slice overlapping groups while skipping offscreen bodies', () => {
+  const rows = Array.from({ length: 30 }, (_, index) => ({
+    id: index + 1,
+    source: index < 15 ? 'openai' : 'anthropic',
+  }));
+  const segments = buildGroupSegments(rows, (row) => row.source);
+  assert.deepEqual(segments.map((segment) => segment.groupKey), ['openai', 'anthropic']);
+  assert.equal(segments[1].entries[0].index, 15);
+
+  const grouped = computeGroupedVirtualWindow({
+    segments,
+    getItemKey: (row) => row.id,
+    getHeaderHeight: () => 40,
+    getItemHeight: () => 80,
+    scrollTop: 0,
+    viewportHeight: 240,
+    overscanPx: 160,
+    strideRows: 2,
+  });
+  assert.equal(grouped.totalHeight, 2 * 40 + 30 * 80);
+  assert.equal(grouped.slices[0].startIndex, 0);
+  assert.ok(grouped.slices[0].endIndex >= 4 && grouped.slices[0].endIndex < 14);
+  // Second group starts at 40 + 15 * 80 = 1240px, outside viewport + overscan (400px).
+  assert.equal(grouped.slices[1].endIndex, -1);
 });

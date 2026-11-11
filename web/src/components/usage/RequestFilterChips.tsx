@@ -31,7 +31,7 @@ export interface RequestFilterChipsProps {
  * chip: "Model: 3" cannot be pruned, so the operator would have to reopen the
  * panel and hunt for which of the three they meant.
  */
-export const RequestFilterChips: React.FC<RequestFilterChipsProps> = ({
+export const RequestFilterChips: React.FC<RequestFilterChipsProps> = React.memo(({
   committed,
   describe,
   onRemove,
@@ -73,4 +73,4 @@ export const RequestFilterChips: React.FC<RequestFilterChipsProps> = ({
       </span>
     </div>
   );
-};
+});

@@ -1,8 +1,9 @@
 /* Request explorer: quiet chrome, one scrollable stream, detail on demand. */
 .request-events-page {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  row-gap: 16px;
   height: calc(100dvh - var(--app-header-height));
   min-height: 640px;
   max-width: 1680px;
@@ -55,6 +56,19 @@
   background: var(--muted);
   box-shadow: none;
 }
+.request-stream-slot {
+  flex: 1;
+  min-height: 310px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 2;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  /* overflow: clip clips the translated stream without creating a programmatic scroll
+     container, so keyboard focus inside the list can never scroll the slot itself. */
+  overflow: clip;
+}
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
@@ -67,17 +81,21 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   position: relative;
 }
 .request-pagination {
+  position: relative;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
   padding: 12px 18px;
+  background: var(--bg);
   border-top: 1px solid var(--border);
   font-size: var(--text-xs);
   color: var(--muted);
@@ -89,6 +107,8 @@
 }
 .request-list-host {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 240px;
   min-width: var(--req-min-width, 1418px);
   overflow: hidden;
@@ -100,18 +120,6 @@
 .request-loading,
 .request-empty-error {
   padding: 24px;
-}
-.request-list .ant-listy-item {
-  transition: none;
-  padding: 0;
-  border: 0;
-  /* Kill antd Listy's built-in item hover background too: rows recycle under
-     the cursor while scrolling and a hover fill on every recycled row reads
-     as flicker. The row keeps cursor:pointer; keyboard focus keeps its ring. */
-  background: transparent;
-}
-.request-list .ant-listy-item:hover {
-  background: transparent;
 }
 .request-table-scroll-area {
   flex: 1;
@@ -183,7 +191,7 @@
   color: var(--muted);
   font-size: var(--text-xs);
 }
-.request-list .ant-listy-group-header {
+.request-list .request-group-header {
   background-image: none;
   padding: 0;
 }
@@ -209,7 +217,7 @@
 @media (max-width: 640px) {
   .request-events-page {
     padding: 8px 12px 0;
-    gap: 8px;
+    row-gap: 8px;
     min-height: 0;
   }
   .request-events-page .request-collapsible-header > .request-header-content {
@@ -250,8 +258,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .request-stream {
+  .request-stream-slot {
     margin-inline: -12px;
+    border-radius: 0;
+    min-height: 0;
+  }
+  .request-stream {
     border-inline: 0;
     border-bottom: 0;
     border-radius: 0;
@@ -280,22 +292,10 @@
    and the list is its only scroller. */
 @media (max-width: 640px), (pointer: coarse) {
   .request-events-page,
+  .request-stream-slot,
   .request-stream,
   .request-table-scroll-area,
   .request-list-host {
     min-height: 0;
   }
-}
-/* Where a finger can scroll, the browser scrolls the list itself. A drag that reaches
-   either end stays with the list: handed on, it used to scroll the page around the list and bounce
-   it, or reload it when pulled down at the top. The list keeps the platform's own end bounce, which
-   is part of a native scroller's feel; `contain` rather than `none` is what leaves it that. Rows away from the view keep their place in the scroll
-   height without being laid out or painted, which is what lets a page of 500 records scroll as an
-   ordinary element; `auto` keeps a row's measured height once it has been drawn. */
-.request-list.is-native-scroll {
-  overscroll-behavior: contain;
-}
-.request-list.is-native-scroll .ant-listy-item {
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 96px;
 }

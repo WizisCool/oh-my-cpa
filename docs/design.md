@@ -64,8 +64,9 @@ missing or a registry read fails. Render plugin SVGs only as isolated images, ne
 host markup. Plugin-published HTTP(S) logos load in the browser and fall back to catalog
 artwork or a neutral mark if unavailable; they do not require server-side network access.
 A fetched mark holds its box with the console's first-load placeholder until its bytes
-arrive, so a row never flashes an empty chip; artwork already in the browser's cache
-appears without one.
+arrive, so a row never flashes an empty chip; artwork already in the browser's cache or
+settled earlier in the session appears without one, while still falling back if a later
+load fails.
 Operations/status glyphs remain in the static icon module, separate from brand identity.
 
 A protocol family is not a provider identity. Only an OAuth channel's family names the

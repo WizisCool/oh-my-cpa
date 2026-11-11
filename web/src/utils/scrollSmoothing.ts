@@ -64,13 +64,26 @@ export interface WheelSample {
  * pixel-mode source and the reader reports the console as smooth. Zoom (Ctrl/⌘), horizontal
  * (Shift, or any horizontal component) and Alt-modified wheels keep their native meaning.
  */
-export function isDiscreteWheel(sample: WheelSample, { isApple }: { isApple: boolean }): boolean {
+export function isDiscreteWheel(
+  sample: WheelSample,
+  { isApple, devicePixelRatio = 1 }: { isApple: boolean; devicePixelRatio?: number },
+): boolean {
   if (sample.ctrlKey || sample.metaKey || sample.altKey || sample.shiftKey) return false;
   if (sample.deltaY === 0 || sample.deltaX !== 0) return false;
   if (sample.deltaMode !== 0) return true;
   if (isApple) return false;
   if (typeof sample.wheelDeltaY === 'number' && sample.wheelDeltaY !== 0) {
-    return sample.wheelDeltaY % WHEEL_NOTCH === 0;
+    if (sample.wheelDeltaY % WHEEL_NOTCH === 0) return true;
+    // Under fractional display scaling or browser zoom (125%, 150%, 175%), Chromium divides
+    // legacy wheelDeltaY by the scale factor and truncates to an integer (e.g. -96 at 1.25x).
+    if (devicePixelRatio > 0 && devicePixelRatio !== 1 && Math.abs(sample.deltaY) >= WHEEL_LINE_PX) {
+      const physicalDelta = sample.wheelDeltaY * devicePixelRatio;
+      const nearestNotch = Math.round(physicalDelta / WHEEL_NOTCH) * WHEEL_NOTCH;
+      if (nearestNotch !== 0 && Math.abs(physicalDelta - nearestNotch) <= Math.ceil(devicePixelRatio)) {
+        return true;
+      }
+    }
+    return false;
   }
   // An engine without the legacy field: a notch is a whole, large step; a trackpad's deltas are
   // small or fractional.
@@ -88,8 +101,21 @@ export function wheelDistance(sample: Pick<WheelSample, 'deltaMode' | 'deltaY'>,
  * pageDistance is one Page Down: the viewport less a 40px overlap, and never less than seven eighths
  * of it, which is the overlap rule both Chromium and Firefox use so the last line read stays on screen.
  */
-export function pageDistance(viewportHeight: number): number {
-  return Math.max(viewportHeight * 0.875, viewportHeight - ARROW_KEY_PX);
+export function pageDistance(viewportHeight: number, occludedPx = 0): number {
+  const visibleHeight = Math.max(0, viewportHeight - Math.max(0, occludedPx));
+  return Math.max(visibleHeight * 0.875, visibleHeight - ARROW_KEY_PX);
+}
+
+/**
+ * Visible scroller height after subtracting any occluded bottom band published via
+ * `scroll-padding-bottom` (for example, while the request header is expanded above a
+ * permanently fullscreen-sized stream).
+ */
+export function visibleScrollerHeight(element: Element): number {
+  const inlinePadding = element instanceof HTMLElement ? element.style.scrollPaddingBottom : '';
+  const rawPadding = inlinePadding || getComputedStyle(element).scrollPaddingBottom;
+  const occludedPx = Number.parseFloat(rawPadding);
+  return Math.max(0, element.clientHeight - (Number.isFinite(occludedPx) && occludedPx > 0 ? occludedPx : 0));
 }
 
 /** Where a key moves a scroller: by a distance, or to one of its ends. */
@@ -395,13 +421,14 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
       const elapsed = now - glide.startedAt;
       const position = glidePosition(glide.from, glide.to, elapsed, durationMs);
       if (glide.isVirtual) {
-        const stepPx = position - glide.written;
+        const rounded = elapsed >= durationMs ? Math.round(glide.to) : Math.round(position);
+        const stepPx = rounded - glide.written;
         if (stepPx !== 0) {
-          if (glide.scrollVirtualTo) glide.scrollVirtualTo(position);
+          if (glide.scrollVirtualTo) glide.scrollVirtualTo(rounded);
           else handStep(element, stepPx);
+          glide.written = rounded;
+          extendSpan(glide, rounded);
         }
-        glide.written = position;
-        extendSpan(glide, position);
         if (elapsed >= durationMs) glide.settleFrames = VIRTUAL_SETTLE_FRAMES;
       } else {
         element.scrollTop = position;
@@ -430,12 +457,14 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     if (continuesChain) {
       if (!glide.scrollVirtualTo) handStep(element, 0);
     } else {
-      const position = glidePosition(glide.from, glide.to, FIRST_FRAME_MS, durationMs);
-      if (glide.scrollVirtualTo) glide.scrollVirtualTo(position);
-      else handStep(element, position - glide.written);
-      glide.written = position;
+      const rounded = Math.round(glidePosition(glide.from, glide.to, FIRST_FRAME_MS, durationMs));
+      if (rounded !== glide.written) {
+        if (glide.scrollVirtualTo) glide.scrollVirtualTo(rounded);
+        else handStep(element, rounded - glide.written);
+        glide.written = rounded;
+        extendSpan(glide, rounded);
+      }
       glide.framesAhead = 1;
-      extendSpan(glide, position);
     }
     if (frame) cancelAnimationFrame(frame);
     frame = requestAnimationFrame(step);
@@ -468,7 +497,7 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     pendingWheel = null;
     // The steps this layer hands a virtual list are wheel events too; they are already smooth.
     if (!isEnabled || !event.cancelable || !event.isTrusted) return;
-    if (!isDiscreteWheel(event, { isApple })) {
+    if (!isDiscreteWheel(event, { isApple, devicePixelRatio: window.devicePixelRatio || 1 })) {
       lastContinuousAt = event.timeStamp;
       return;
     }
@@ -477,7 +506,7 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     const direction = Math.sign(event.deltaY);
     const scroller = findScroller(target, direction);
     if (!scroller) return;
-    const distance = wheelDistance(event, scroller.clientHeight);
+    const distance = wheelDistance(event, event.deltaMode === 2 ? visibleScrollerHeight(scroller) : scroller.clientHeight);
     if (isVirtualHolder(scroller)) {
       (event as ClaimableEvent)._virtualHandled = true;
       claimedWheels.add(event);
@@ -488,7 +517,11 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
   const onWheelBubble = (event: WheelEvent) => {
     const pending = pendingWheel;
     pendingWheel = null;
-    if (!pending || pending.event !== event || event.defaultPrevented || consumedWheels.has(event)) return;
+    if (!pending || pending.event !== event || event.defaultPrevented) return;
+    if (consumedWheels.has(event)) {
+      if (event.cancelable) event.preventDefault();
+      return;
+    }
     event.preventDefault();
     glideTo(pending.scroller, destinationOf(pending.scroller) + pending.distance);
   };
@@ -515,7 +548,7 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     const direction = 'by' in probe ? Math.sign(probe.by) : probe.to === 'end' ? 1 : -1;
     const scroller = findScroller(start, direction);
     if (!scroller) return;
-    const move = keyScrollFor(event.key, event.shiftKey, scroller.clientHeight);
+    const move = keyScrollFor(event.key, event.shiftKey, visibleScrollerHeight(scroller));
     if (!move) return;
     event.preventDefault();
     if ('by' in move) {
