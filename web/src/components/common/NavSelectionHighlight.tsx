@@ -181,7 +181,7 @@ export function NavSelectionHighlight({ selectedKey, groupKey, layoutKey, childr
       state.layerPlacements = currentIndex === 0 ? [placement, null] : [null, placement];
     });
     observer.observe(frame);
-    const menu = frame.querySelector('.ant-menu');
+    const menu = frame.querySelector('.app-menu');
     if (menu) observer.observe(menu);
     return () => observer.disconnect();
   }, []);

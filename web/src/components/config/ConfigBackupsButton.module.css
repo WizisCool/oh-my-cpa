@@ -22,6 +22,10 @@
   gap: 8px;
 }
 
+.backups-retention :global([data-slot='number-input']) {
+  width: 80px;
+}
+
 .backups-time {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

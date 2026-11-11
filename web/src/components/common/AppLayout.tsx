@@ -1,12 +1,11 @@
 import React from 'react';
-import { Layout, Menu, Breadcrumb } from 'antd';
+import { clsx } from 'clsx';
 import { Sheet, SheetBody, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '../icons';
-import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
@@ -20,7 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
 import { OverlayScrollArea } from './OverlayScrollArea';
-import { useT, type TFunc } from '../../i18n';
+import { useT } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
 import { consoleRouteRegistry, warmRouteIntent } from '../../routePreload';
@@ -29,16 +28,12 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
 import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
 import { buildNavGroups } from './navigation';
-import { navEntryLabel, type NavEntry, type NavGroup } from '../../types/sidebarNav';
+import { navEntryLabel, type NavEntry } from '../../types/sidebarNav';
 import { usePreference } from '../../hooks/usePreference';
 import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 import { Tooltip } from './Tooltip';
 import { NavSelectionHighlight } from './NavSelectionHighlight';
-
-const { Sider, Content } = Layout;
-
-type NavItem = Required<MenuProps>['items'][number];
 
 /**
  * Routes that own their scroll columns rather than scrolling the content area.
@@ -76,32 +71,6 @@ function flagIcon(icon: React.ReactNode): React.ReactNode {
       <span className="app-menu-update-dot" aria-hidden="true" />
     </span>
   );
-}
-
-function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: boolean, pendingUpdateRoutes: ReadonlySet<string>): NavItem[] {
-  const isFlagged = (entry: NavEntry) => pendingUpdateRoutes.has(entry.key);
-  const iconFor = (entry: NavEntry) => (isFlagged(entry) ? flagIcon(entry.icon) : entry.icon);
-  if (isCollapsed) {
-    return navGroups.flatMap((group) => group.items).map((entry) => {
-      // The collapsed row's name is its `title`, so the notice is spoken from there.
-      const title = isFlagged(entry) ? `${navEntryLabel(entry, t)} · ${t('nav.update_available')}` : navEntryLabel(entry, t);
-      return { key: entry.key, icon: iconFor(entry), label: navEntryLabel(entry, t), title, 'data-route-path': entry.key };
-    });
-  }
-  return navGroups.map((group) => ({
-    key: `group:${group.key}`,
-    type: 'group' as const,
-    label: t(group.labelKey),
-    children: group.items.map((entry): NavItem => ({
-      key: entry.key,
-      icon: iconFor(entry),
-      label: isFlagged(entry)
-        ? <>{navEntryLabel(entry, t)}<span className="sr-only"> · {t('nav.update_available')}</span></>
-        : navEntryLabel(entry, t),
-      title: entry.isLiteralLabel ? entry.labelKey : undefined,
-      'data-route-path': entry.key,
-    })),
-  }));
 }
 
 /** The frame the matched route declared for its module download (`loadingAs` in `App.tsx`). */
@@ -206,12 +175,12 @@ export const AppLayout: React.FC = () => {
   const { products: pendingProducts, hasPluginUpdate } = usePendingUpdates();
   const hasSystemUpdate = pendingProducts.length > 0;
   const isCollapsedRail = !isMobile && isCollapsed;
-  const menuItems = React.useMemo(() => {
-    const pendingRoutes = new Set<string>();
-    if (hasSystemUpdate) pendingRoutes.add('/system');
-    if (hasPluginUpdate) pendingRoutes.add('/plugins');
-    return buildMenuItems(visibleNavGroups, t, isCollapsedRail, pendingRoutes);
-  }, [visibleNavGroups, t, isCollapsedRail, hasSystemUpdate, hasPluginUpdate]);
+  const pendingUpdateRoutes = React.useMemo(() => {
+    const routes = new Set<string>();
+    if (hasSystemUpdate) routes.add('/system');
+    if (hasPluginUpdate) routes.add('/plugins');
+    return routes;
+  }, [hasSystemUpdate, hasPluginUpdate]);
 
   // A page change runs as a transition, so `location` - and the selection derived from it - waits
   // for the target page to load. The rail answers the click at once instead: it marks the entry the
@@ -231,7 +200,6 @@ export const AppLayout: React.FC = () => {
     }
   };
 
-  const selectPage = ({ key }: { key: string }) => navigateToKey(key);
   const goToDashboard = () => navigateToKey('/dashboard');
 
   React.useEffect(() => {
@@ -249,44 +217,79 @@ export const AppLayout: React.FC = () => {
     isCollapsedRail ? 'collapsed' : 'expanded',
     ...visibleNavGroups.map((group) => `${group.key}:${group.items.map((entry) => entry.key).join(',')}`),
   ].join('|');
+
+  const renderNavItem = (entry: NavEntry) => {
+    const isSelected = entry.key === menuSelectedKey;
+    const isFlagged = pendingUpdateRoutes.has(entry.key);
+    const label = navEntryLabel(entry, t);
+    const accessibleLabel = isFlagged ? `${label} (${t('nav.update_available')})` : label;
+    const button = (
+      <button
+        key={entry.key}
+        type="button"
+        data-route-path={entry.key}
+        data-selected={isSelected ? '' : undefined}
+        aria-current={isSelected ? 'page' : undefined}
+        aria-label={isCollapsedRail ? accessibleLabel : undefined}
+        className={clsx('app-menu-item', isSelected && 'app-menu-item-selected')}
+        onClick={() => navigateToKey(entry.key)}
+      >
+        <span className="app-menu-item-icon" aria-hidden="true">
+          {isFlagged ? flagIcon(entry.icon) : entry.icon}
+        </span>
+        {!isCollapsedRail && (
+          <span className="app-menu-item-label" data-tip-overflow={label}>
+            {label}
+            {isFlagged && <span className="sr-only"> ({t('nav.update_available')})</span>}
+          </span>
+        )}
+      </button>
+    );
+    if (!isCollapsedRail) return button;
+    return (
+      <Tooltip key={entry.key} placement="right" title={accessibleLabel}>
+        {button}
+      </Tooltip>
+    );
+  };
+
   const menu = (
     <NavSelectionHighlight selectedKey={menuSelectedKey} groupKey={selectedGroupKey} layoutKey={navLayoutKey}>
-      <Menu
-        mode="inline"
-        theme="dark"
-        items={menuItems}
-        selectedKeys={[menuSelectedKey]}
-        onClick={selectPage}
+      <nav
+        aria-label={t('header.nav_sheet')}
+        className="app-menu"
         onMouseOver={preloadMenuTarget}
         onFocus={preloadMenuTarget}
         onTouchStart={preloadMenuTarget}
-        className="app-menu"
-        inlineCollapsed={false}
-      />
+      >
+        {isCollapsedRail
+          ? visibleNavGroups.flatMap((group) => group.items).map(renderNavItem)
+          : visibleNavGroups.map((group) => (
+              <div key={group.key} className="app-menu-group" role="group" aria-labelledby={`nav-group-${group.key}`}>
+                <div id={`nav-group-${group.key}`} className="app-menu-group-title">
+                  {t(group.labelKey)}
+                </div>
+                <div className="app-menu-group-list">
+                  {group.items.map(renderNavItem)}
+                </div>
+              </div>
+            ))}
+      </nav>
     </NavSelectionHighlight>
   );
 
-  const handleBrandKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      goToDashboard();
-    }
-  };
-
   const brand = (
-    <div
+    <button
+      type="button"
       className="app-brand"
       onClick={goToDashboard}
-      onKeyDown={handleBrandKeyDown}
-      role="button"
-      tabIndex={0}
       aria-label="Dashboard"
     >
       {/* The wordmark spells the product name, so the text that used to sit beside the
           mark is gone: it would say the same thing twice. 20px keeps its cap height in
           step with the navigation text rather than dominating it. */}
       <BrandArtwork shape="wordmark" height={20} className="app-brand-logo" />
-    </div>
+    </button>
   );
 
   React.useLayoutEffect(() => {
@@ -297,43 +300,28 @@ export const AppLayout: React.FC = () => {
   const isCpaUnsupported = health?.cpa_management_api === 'unsupported';
   const isCpaManagementDisabled = health?.cpa_management_api === 'disabled';
   return (
-    <Layout
+    <div
       className="app-shell"
       style={{ '--sider-width': isMobile ? '0px' : isCollapsed ? '58px' : '236px' } as React.CSSProperties}
     >
       {!isMobile && (
-        <Sider
-          width={236}
-          collapsedWidth={58}
-          collapsible
-          collapsed={isCollapsed}
-          trigger={null}
-          className="app-sider"
-          theme="dark"
-        >
+        <aside className={clsx('app-sider', isCollapsed && 'app-sider-collapsed')}>
           {isCollapsed ? (
-            <div
+            <button
+              type="button"
               className="app-brand app-brand-collapsed"
               onClick={() => setIsCollapsed(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setIsCollapsed(false);
-                }
-              }}
-              role="button"
-              tabIndex={0}
               aria-label="Expand Sider"
             >
               {/* 58px cannot hold the wordmark at a legible size, so the collapsed rail
                   shows the square mark. */}
               <BrandArtwork shape="mark" height={20} />
-            </div>
+            </button>
           ) : brand}
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
-        </Sider>
+        </aside>
       )}
-      <Layout className="app-body">
+      <div className="app-body">
         <header className="app-header">
           <div className="app-header-left">
             {isMobile ? (
@@ -343,13 +331,19 @@ export const AppLayout: React.FC = () => {
                 <Button variant="ghost" icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setIsCollapsed(!isCollapsed)} disabled={!sidebarPreference.loaded} aria-label={t(isCollapsed ? 'header.expand_sidebar' : 'header.collapse_sidebar')} />
               </Tooltip>
             )}
-            <Breadcrumb
-              className="app-breadcrumb"
-              items={[
-                { title: currentGroup ? t(currentGroup.labelKey) : '' },
-                { title: <span className="app-breadcrumb-current">{currentLabel}</span> },
-              ]}
-            />
+            <nav aria-label="Breadcrumb" className="app-breadcrumb">
+              <ol className="app-breadcrumb-list">
+                {currentGroup && (
+                  <>
+                    <li className="app-breadcrumb-group">{t(currentGroup.labelKey)}</li>
+                    <li className="app-breadcrumb-sep" aria-hidden="true">/</li>
+                  </>
+                )}
+                <li className="app-breadcrumb-item" aria-current="page">
+                  <span className="app-breadcrumb-current" data-tip-overflow={currentLabel}>{currentLabel}</span>
+                </li>
+              </ol>
+            </nav>
           </div>
           <HeaderNav
             isDiscovering={false}
@@ -358,7 +352,7 @@ export const AppLayout: React.FC = () => {
             isLoggingOut={logoutMutation.isPending}
           />
         </header>
-        <Content
+        <main
           className="app-content"
           ref={contentRef}
           data-scroll-root
@@ -383,8 +377,8 @@ export const AppLayout: React.FC = () => {
               )}
             </React.Suspense>
           </div>
-        </Content>
-      </Layout>
+        </main>
+      </div>
       {isMobile && (
         /* The sheet carries the same parts as the rail - brand and nav - because it is the
            rail at a phone width, not a menu of links. The width is bounded in both `px` and
@@ -399,6 +393,7 @@ export const AppLayout: React.FC = () => {
         >
           <SheetContent
             side="left"
+            surface="ground"
             aria-label={t('header.nav_sheet')}
             style={{ width: 'min(320px, 86vw)' }}
             className="mobile-nav-drawer"
@@ -410,10 +405,6 @@ export const AppLayout: React.FC = () => {
           </SheetContent>
         </Sheet>
       )}
-    </Layout>
+    </div>
   );
 };
-
-
-
-

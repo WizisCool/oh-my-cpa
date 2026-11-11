@@ -39,21 +39,17 @@
   pointer-events: auto;
 }
 
-.shell-bar :global(.ant-btn) {
+.shell-bar :global([data-slot='button']) {
   color: var(--fg-2);
   background: var(--bg);
 }
 
-.shell-new:global(.ant-btn) {
+.shell-new:global([data-slot='button']) {
   border: 0;
   gap: 8px;
   padding-inline: 10px;
   box-shadow: var(--shadow-edge);
   color: var(--fg);
-}
-
-.shell-new:global(.ant-btn:not(:disabled):hover) {
-  border-color: var(--muted);
 }
 
 /* Parts the named action from the icons after it. */
@@ -211,7 +207,7 @@
 
   /* On a phone the label would crowd the actions beside it; the icon and its name for assistive
      technology carry it. */
-  .shell-new:global(.ant-btn) > span:not(:global(.ant-btn-icon)) {
+  .shell-new:global([data-slot='button']) > span:not(:global([data-slot='button-icon'])) {
     display: none;
   }
 }
@@ -649,19 +645,16 @@
   color: var(--fg-2);
 }
 
-/* The selection toolbar is portalled outside Ant Design's scoped CSS variable container. */
-.selection-action:global(.ant-btn) {
+.selection-action:global([data-slot='button']) {
   background: var(--elevated);
   color: var(--fg);
-  border-color: transparent;
   font-family: var(--font-mono);
 }
 
-.selection-action:global(.ant-btn):not(:disabled):hover,
-.selection-action:global(.ant-btn):not(:disabled):active {
+.selection-action:global([data-slot='button']):not(:disabled):hover,
+.selection-action:global([data-slot='button']):not(:disabled):active {
   background: var(--hover);
   color: var(--fg);
-  border-color: transparent;
 }
 
 .selection-toolbar {
@@ -745,7 +738,7 @@
   background: var(--thread-field);
 }
 
-.approval .operation-actions :global(.ant-btn) {
+.approval .operation-actions :global([data-slot='button']) {
   border-radius: var(--radius-md);
 }
 
@@ -837,7 +830,7 @@
     min-width: 0;
   }
 
-  .approval .operation-actions :global(.ant-btn) {
+  .approval .operation-actions :global([data-slot='button']) {
     height: 40px;
   }
 }
@@ -972,7 +965,7 @@
   color: var(--fg-2);
 }
 
-.capability :global(.ant-btn) {
+.capability :global([data-slot='button']) {
   margin-top: 6px;
   color: var(--muted);
 }

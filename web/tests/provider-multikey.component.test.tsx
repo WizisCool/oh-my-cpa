@@ -2,7 +2,6 @@ import providerCopy from '../src/i18n/locales/en/providers';
 import { readConnectionPoolDraft } from '../src/components/providers/connectionPool';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { ConfigProvider } from 'antd';
 import { useT } from '../src/i18n';
 import { ProviderEditorDrawer } from '../src/components/providers/ProviderEditorDrawer';
 import { useProviderManagement } from '../src/components/providers/useProviderManagement';
@@ -18,7 +17,7 @@ const toast: Toast = {
 const renderEditor = (isCreate: boolean, withPool = false, hasInvalidKeyPool = false) => {
   const client = createTestQueryClient();
   client.setQueryData(['management-plugins'], { plugins: [] });
-  return renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><Editor isCreate={isCreate} withPool={withPool} hasInvalidKeyPool={hasInvalidKeyPool} /></ConfigProvider>, { client });
+  return renderWithOmc(<Editor isCreate={isCreate} withPool={withPool} hasInvalidKeyPool={hasInvalidKeyPool} />, { client });
 };
 
 function Editor({ isCreate, withPool, hasInvalidKeyPool }: { isCreate: boolean; withPool: boolean; hasInvalidKeyPool: boolean }) {
@@ -88,7 +87,7 @@ it('sends the stored row identity when a key is rotated to another family', asyn
   api.on('PUT', '/management/providers/codex-0', () => ({ status: 'ok', family: 'claude', id: 'claude-0', ids: ['claude-0'] }));
   const client = createTestQueryClient();
   client.setQueryData(['management-plugins'], { plugins: [] });
-  const view = renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><RotationEditor /></ConfigProvider>, { client });
+  const view = renderWithOmc(<RotationEditor />, { client });
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Load key rotation' }));
     fireEvent.click(await screen.findByRole('button', { name: /^Key #1/ }));

@@ -228,13 +228,13 @@ describe('sidebar selection highlight', () => {
     const brand = surface.container.querySelector<HTMLElement>('.app-brand')!;
     fireEvent.click(brand);
     await waitFor(() => {
-      expect(surface.container.querySelector('[data-route-path="/dashboard"]')?.classList.contains('ant-menu-item-selected')).toBe(true);
+      expect(surface.container.querySelector('[data-route-path="/dashboard"]')?.classList.contains('app-menu-item-selected')).toBe(true);
     });
 
     // Collapse the rail: group headings disappear, while group identity still governs slide vs cross-fade.
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     await screen.findByRole('button', { name: 'Expand sidebar' });
-    expect(surface.container.querySelector('.ant-menu-item-group-title')).toBeNull();
+    expect(surface.container.querySelector('.app-menu-group-title')).toBeNull();
 
     const frame = surface.container.querySelector<HTMLElement>('.app-menu-frame')!;
     const agent = surface.container.querySelector<HTMLElement>('[data-route-path="/agent"]')!;
@@ -248,7 +248,7 @@ describe('sidebar selection highlight', () => {
 
     // Same-group move (/dashboard -> /model-square in Operate) slides the active layer.
     fireEvent.click(modelSquare);
-    await waitFor(() => expect(modelSquare.classList.contains('ant-menu-item-selected')).toBe(true));
+    await waitFor(() => expect(modelSquare.classList.contains('app-menu-item-selected')).toBe(true));
     const [layer0, layer1] = [...surface.container.querySelectorAll<HTMLElement>('.app-menu-highlight')];
     expect(layer0?.style.opacity).toBe('1');
     expect(layer0?.style.transform).toBe('translate3d(0, 102px, 0)');
@@ -256,7 +256,7 @@ describe('sidebar selection highlight', () => {
 
     // Cross-group move (/model-square in Operate -> /ai-providers in Gateway) cross-fades to the second layer.
     fireEvent.click(providers);
-    await waitFor(() => expect(providers.classList.contains('ant-menu-item-selected')).toBe(true));
+    await waitFor(() => expect(providers.classList.contains('app-menu-item-selected')).toBe(true));
     expect(layer0?.style.opacity).toBe('0');
     expect(layer1?.style.opacity).toBe('1');
     expect(layer1?.style.transform).toBe('translate3d(0, 136px, 0)');

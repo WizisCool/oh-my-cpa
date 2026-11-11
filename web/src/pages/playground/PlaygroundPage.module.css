@@ -76,21 +76,21 @@
 }
 
 /* An unset parameter is not a value: the slider rests muted until it is moved. */
-.is-unset :global(.ant-slider-track) {
+.is-unset :global([data-slot='slider-indicator']) {
   background: transparent;
 }
 
-.is-unset :global(.ant-slider-handle)::after {
-  box-shadow: 0 0 0 2px var(--border);
+.is-unset :global([data-slot='slider-thumb']) {
+  box-shadow: 0 0 0 1.5px var(--border), var(--edge-drop);
 }
 
-.number-input:global(.ant-input-number) {
+.number-row .number-input {
   width: 88px;
-  flex-shrink: 0;
+  flex: 0 0 88px;
 }
 
-.json-input textarea,
-.json-input:global(.ant-input) {
+.json-input,
+.json-input textarea {
   font-family: var(--font-mono);
   font-size: var(--text-md);
 }
@@ -166,7 +166,7 @@
   color: var(--meta);
 }
 
-.inspect-tabs :global(.ant-tabs-nav) {
+.inspect-tabs :global([data-slot='tabs-list']) {
   margin: 0;
   padding: 0 20px;
 }

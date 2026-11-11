@@ -1554,9 +1554,11 @@
   line-height: 1.5;
 }
 
-.field :global(.ant-input-number),
-.field :global(.ant-select),
-.field :global(.ant-input-affix-wrapper) {
+.field > :global([data-slot='number-input']),
+.field > :global([data-slot='select-trigger']),
+.field > :global([data-slot='combobox-trigger']),
+.field > :global([data-slot='input-wrapper']),
+.field > :global([data-slot='input']) {
   width: 100%;
 }
 
@@ -1727,31 +1729,11 @@
 
 /* ── arriving text and generation ──────────────────────────────────────────── */
 
-/* The markdown renderer wraps each arriving run of text in a span that names its own fade. The
-   thread replaces that fade with its own: new words land in the accent and settle into the ink,
-   so the eye finds the end of the answer without a jump. */
-:global(:root[data-reduced-motion='false']) {
-  .markdown :global(span[style*='x-markdown-fade-in']) {
-    animation: stream-arrive var(--motion-base) var(--ease-standard) both !important;
-  }
-}
-
-:global(:root[data-reduced-motion='true']) {
-  .markdown :global(span[style*='x-markdown-fade-in']) {
-    animation: none !important;
-  }
-}
-
-/* Only the newest few words are ever mid-fade: the accent is where a run starts, not a colour it
-   holds, so a fast stream trails a short tail instead of a paragraph of tinted text. */
-@keyframes stream-arrive {
-  from {
-    opacity: .2;
-    color: var(--accent);
-  }
-}
-
-.stream-caret {
+/* While a message is still arriving, a quiet accent caret marks where the next words land. */
+.markdown[data-streaming]:empty::after,
+.markdown[data-streaming] > :global(:is(p, h1, h2, h3, h4, blockquote):last-child)::after,
+.markdown[data-streaming] > :global(:is(ul, ol):last-child > li:last-child)::after {
+  content: '';
   display: inline-block;
   width: 2px;
   height: 1em;
@@ -1767,7 +1749,9 @@
 }
 
 :global(:root[data-reduced-motion='true']) {
-  .stream-caret {
+  .markdown[data-streaming]:empty::after,
+  .markdown[data-streaming] > :global(:is(p, h1, h2, h3, h4, blockquote):last-child)::after,
+  .markdown[data-streaming] > :global(:is(ul, ol):last-child > li:last-child)::after {
     animation: none;
   }
 }

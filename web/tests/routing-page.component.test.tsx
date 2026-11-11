@@ -1,6 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { App as AntdApp, ConfigProvider } from 'antd';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { RoutingPage } from '../src/pages/routing/RoutingPage';
@@ -35,7 +34,7 @@ function renderRoutingPage(client?: QueryClient) {
     { path: '/routing', element: <RoutingPage /> },
     { path: '/elsewhere', element: <h1>Other page</h1> },
   ], { initialEntries: ['/routing'] });
-  return { ...renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><AntdApp><RouterProvider router={router} /></AntdApp></ConfigProvider>, { client }), router };
+  return { ...renderWithOmc(<RouterProvider router={router} />, { client }), router };
 }
 
 async function arrangeAndApply(reply: Response | object) {

@@ -43,22 +43,22 @@ export function Slider({
       }}
       className={cn('relative flex w-full touch-none items-center py-2 select-none data-[disabled]:opacity-50', className)}
     >
-      <SliderPrimitive.Control className="flex w-full cursor-pointer items-center py-1.5 [@media(pointer:coarse)]:py-2.5">
+      <SliderPrimitive.Control className="relative flex w-full cursor-pointer items-center py-1.5 [@media(pointer:coarse)]:py-2.5">
         <SliderPrimitive.Track
           data-slot="slider-track"
-          className="relative h-1.5 w-full overflow-hidden rounded-full bg-field shadow-well"
+          className="relative h-1.5 w-full rounded-xs bg-field shadow-well"
         >
           <SliderPrimitive.Indicator
             data-slot="slider-indicator"
-            className="h-full rounded-full bg-brand transition-colors"
+            className="h-full rounded-xs bg-brand transition-colors"
+          />
+          <SliderPrimitive.Thumb
+            data-slot="slider-thumb"
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabelledBy}
+            className="block size-3.5 rounded-full border-0 bg-foreground [:root[data-theme-mode=light]_&]:bg-background shadow-raised outline-none transition-transform hover:scale-110 focus-visible:shadow-focus [@media(pointer:coarse)]:size-4.5"
           />
         </SliderPrimitive.Track>
-        <SliderPrimitive.Thumb
-          data-slot="slider-thumb"
-          aria-label={ariaLabel}
-          aria-labelledby={ariaLabelledBy}
-          className="block size-3.5 rounded-full border-0 bg-thumb shadow-control outline-none transition-transform hover:scale-110 focus-visible:shadow-focus [@media(pointer:coarse)]:size-4.5"
-        />
       </SliderPrimitive.Control>
     </SliderPrimitive.Root>
   );
