@@ -22,7 +22,7 @@
   font-variant-numeric: tabular-nums;
   margin-right: 4px;
 }
-.request-detail .ant-drawer-body {
+.request-detail [data-slot='sheet-body'] {
   padding: 24px;
 }
 
@@ -420,7 +420,7 @@
   border-radius: var(--radius-lg);
 }
 @media (max-width: 640px) {
-  .request-detail .ant-drawer-body {
+  .request-detail [data-slot='sheet-body'] {
     padding: 16px;
   }
   .request-detail-metrics {

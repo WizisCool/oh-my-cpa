@@ -1,8 +1,15 @@
 import type { OAuthRecoveryTarget } from '../../types/oauth';
 import React from 'react';
 import { useBlocker } from 'react-router-dom';
-import { App as AntdApp, Dropdown, Select, Space } from 'antd';
+import { Select } from 'antd';
 import { Button } from '@/components/ui/button';
+import { ButtonGroup } from '@/components/ui/button-group';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
 import {
@@ -57,7 +64,7 @@ import type { CredentialActions, DetailSection } from './CredentialParts';
 import styles from './OAuthManagementPage.module.css';
 import { CredentialMark } from '../../components/LobeIcon';
 import { PageHeader } from '../../components/common/PageHeader';
-import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { LoadFailure, Notice, useConfirmModal, useToast } from '../../components/feedback';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ToolButton } from '../../components/common/ToolButton';
 import { Pager } from '../../components/common/Pager';
@@ -98,7 +105,7 @@ interface SelectedIdentity {
 
 export const OAuthManagementPage: React.FC = () => {
   const t = useT();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { searchParams, setSearchParams, queryState, setSearch, isViewLoaded } = useOAuthManagementViewState();
@@ -637,22 +644,32 @@ export const OAuthManagementPage: React.FC = () => {
             <ToolButton icon={<TimerResetOutlined />} label={t('warmup.settings')} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings" />
             {/* Signing in is how a credential usually arrives, so it is the button; a file or a
                 Vertex key are the other ways in, under its caret. */}
-            <Space.Compact>
+            <ButtonGroup>
               <Button variant="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
-              <Dropdown
-                trigger={['click']}
-                placement="bottomRight"
-                menu={{
-                  items: [
-                    { key: 'upload', icon: <UploadOutlined />, label: t('af.upload'), disabled: isDemo || actions.isOperating },
-                    { key: 'vertex', icon: <CloudUploadOutlined />, label: t('af.vertex_open'), disabled: isDemo || actions.isOperating },
-                  ],
-                  onClick: ({ key }) => (key === 'upload' ? setIsUploadOpen(true) : setIsVertexImportOpen(true)),
-                }}
-              >
-                <Button variant="primary" icon={<DownOutlined />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
-              </Dropdown>
-            </Space.Compact>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="primary" icon={<DownOutlined />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
+                  }
+                />
+                <DropdownMenuContent placement="bottomRight">
+                  <DropdownMenuItem
+                    icon={<UploadOutlined />}
+                    disabled={isDemo || actions.isOperating}
+                    onClick={() => setIsUploadOpen(true)}
+                  >
+                    {t('af.upload')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    icon={<CloudUploadOutlined />}
+                    disabled={isDemo || actions.isOperating}
+                    onClick={() => setIsVertexImportOpen(true)}
+                  >
+                    {t('af.vertex_open')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
           </>
         )}
       />

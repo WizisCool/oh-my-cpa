@@ -1,5 +1,6 @@
 import React from 'react';
-import { Layout, Menu, Drawer, Breadcrumb } from 'antd';
+import { Layout, Menu, Breadcrumb } from 'antd';
+import { Sheet, SheetBody, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
   MenuFoldOutlined,
@@ -390,19 +391,24 @@ export const AppLayout: React.FC = () => {
            `vw`: at a 320px viewport a fixed 320px sheet leaves no page visible behind the mask,
            and the reader loses the sense that this is a layer over where they were. The
            safe-area inset keeps the rail's labels clear of a landscape notch. */
-        <Drawer
-          placement="left"
+        <Sheet
           open={isMobileNavOpen}
-          onClose={() => setIsMobileNavOpen(false)}
-          size="min(320px, 86vw)"
-          closable={false}
-          className="mobile-nav-drawer"
-          aria-label={t('header.nav_sheet')}
-          styles={{ body: { display: 'flex', flexDirection: 'column' } }}
+          onOpenChange={(next) => {
+            if (!next) setIsMobileNavOpen(false);
+          }}
         >
-          {brand}
-          <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
-        </Drawer>
+          <SheetContent
+            side="left"
+            aria-label={t('header.nav_sheet')}
+            style={{ width: 'min(320px, 86vw)' }}
+            className="mobile-nav-drawer"
+          >
+            <SheetBody className="flex flex-col p-0">
+              {brand}
+              <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
+            </SheetBody>
+          </SheetContent>
+        </Sheet>
       )}
     </Layout>
   );

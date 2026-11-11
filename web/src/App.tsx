@@ -7,7 +7,7 @@ import {
   Navigate,
   Outlet,
 } from 'react-router-dom';
-import { App as AntdApp, ConfigProvider } from 'antd';
+import { ConfigProvider } from 'antd';
 import enUS from 'antd/locale/en_US';
 import msMY from 'antd/locale/ms_MY';
 import zhCN from 'antd/locale/zh_CN';
@@ -18,6 +18,7 @@ import { createThemeConfig } from './theme/themeConfig';
 import { AuthGate } from './components/common/AuthGate';
 import { RouteErrorPage } from './components/common/RouteErrorPage';
 import { DemoNotice } from './components/common/DemoNotice';
+import { ConfirmDialogHost, Toaster } from './components/feedback';
 import type { RouteLoadingBody, RouteLoadingHandle } from './components/common/PageLoading';
 // Eager: it stands in for the shell while the shell's own download and the stored preferences are
 // in flight. It reads the locale, so a language change re-renders it rather than recreating the router.
@@ -101,8 +102,6 @@ export const App: React.FC = () => (
  * header or a table, and never stack into a collapsed pile: a report with per-target reasons has to
  * stay readable beside the acknowledgement that followed it.
  */
-const TOAST_CONFIG = { placement: 'top', stack: false } as const;
-
 /** Renders nothing; it only switches the console-wide wheel and keyboard glide (`useScrollSmoothing`). */
 const ScrollSmoothingSync: React.FC = () => {
   useScrollSmoothing();
@@ -137,17 +136,17 @@ const ThemedShell: React.FC = () => {
       button={BUTTON_CONFIG}
     >
       <MotionProvider>
-        <AntdApp notification={TOAST_CONFIG}>
-          <MotionPreferenceSync />
-          <ScrollSmoothingSync />
-          <FontSync />
-          <DemoNotice />
-          <TokenDisplayProvider>
-            <CurrencyDisplayProvider>
-              <AppRoutes />
-            </CurrencyDisplayProvider>
-          </TokenDisplayProvider>
-        </AntdApp>
+        <MotionPreferenceSync />
+        <ScrollSmoothingSync />
+        <FontSync />
+        <DemoNotice />
+        <Toaster />
+        <ConfirmDialogHost />
+        <TokenDisplayProvider>
+          <CurrencyDisplayProvider>
+            <AppRoutes />
+          </CurrencyDisplayProvider>
+        </TokenDisplayProvider>
       </MotionProvider>
     </ConfigProvider>
   );

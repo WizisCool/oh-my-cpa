@@ -1,15 +1,22 @@
 import React from 'react';
-import { Modal } from 'antd';
-import { Button } from '@/components/ui/button';
-import type { ModalProps } from 'antd';
 import clsx from 'clsx';
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogClose,
+  DialogDescription,
+  DialogPopup,
+  DialogPortal,
+  DialogTitle,
+  DialogViewport,
+} from '@/components/ui/dialog';
+import { Button, type ButtonProps } from '@/components/ui/button';
 import { CloseOutlined, LeftOutlined } from '../icons';
 import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { useT } from '../../i18n';
 import { Tooltip } from './Tooltip';
 import styles from './AppModal.module.css';
 
-/** Each width is capped at the viewport; a phone gets a bottom sheet whatever the size. */
 const MODAL_WIDTHS = {
   small: 440,
   medium: 560,
@@ -19,125 +26,224 @@ const MODAL_WIDTHS = {
 
 export type AppModalSize = keyof typeof MODAL_WIDTHS;
 
-export interface AppModalProps
-  extends Omit<ModalProps, 'width' | 'title' | 'closable' | 'centered' | 'closeIcon' | 'classNames' | 'styles'> {
+export interface AppModalProps {
+  open?: boolean;
   title: React.ReactNode;
-  /** One line under the title saying what the dialog is for, when the title alone does not. */
   description?: React.ReactNode;
-  /**
-   * `small` asks one question, `medium` holds a short form, `large` a list or a multi-part task,
-   * `wide` a table or a preview.
-   */
   size?: AppModalSize;
-  /** Shown opposite the footer's actions: a state note or a secondary link. */
+  footer?: React.ReactNode | ((originNode: React.ReactNode, extra: { OkBtn: React.FC; CancelBtn: React.FC }) => React.ReactNode);
   footerStart?: React.ReactNode;
-  /** A dialog that has stepped into a sub-view offers the way back beside its title. */
+  onCancel?: () => void;
+  onOk?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  okText?: React.ReactNode;
+  cancelText?: React.ReactNode;
+  confirmLoading?: boolean;
+  okButtonProps?: ButtonProps;
+  cancelButtonProps?: ButtonProps;
   onBack?: () => void;
-  /** False while work the dialog started cannot be abandoned: no close glyph, Esc or mask click. */
   isDismissible?: boolean;
-  /** The body is a fixed frame whose content scrolls itself (a long list with its own viewport). */
   hasOwnScroll?: boolean;
+  destroyOnHidden?: boolean;
+  keyboard?: boolean;
+  mask?: boolean | { closable?: boolean };
+  zIndex?: number;
+  afterOpenChange?: (open: boolean) => void;
+  className?: string;
+  children?: React.ReactNode;
+  'data-testid'?: string;
 }
 
-/**
- * A dialog over the page: a question, a short form, or one task that needs the reader's full
- * attention and ends by going back to where they were.
- *
- * The head stays put while the body scrolls under it, and a hairline appears below the head only
- * once something has scrolled beneath it. Actions sit in a footer pinned to the bottom edge. On a
- * phone the same dialog rises from the bottom as a sheet, where the thumb already is.
- */
 export function AppModal({
+  open = false,
   title,
   description,
   size = 'medium',
   footer,
   footerStart,
+  onCancel,
+  onOk,
+  okText,
+  cancelText,
+  confirmLoading = false,
+  okButtonProps,
+  cancelButtonProps,
   onBack,
   isDismissible = true,
   hasOwnScroll = false,
+  destroyOnHidden = false,
+  keyboard = true,
+  mask = true,
+  zIndex = 1000,
+  afterOpenChange,
   className,
   children,
-  mask,
-  ...rest
+  'data-testid': testId,
 }: AppModalProps) {
   const t = useT();
+  const [hasOpened, setHasOpened] = React.useState(open);
+  if (open && !hasOpened) setHasOpened(true);
   const [isScrolled, setIsScrolled] = React.useState(false);
-  // A phone's sheet is sized from the visible viewport, not 100dvh: Android shrinks only the
-  // visual viewport for the keyboard, which would leave a focused form's footer under it.
-  const viewport = useVisibleViewport(!!rest.open);
-  const hasStart = footerStart !== undefined && footerStart !== null && footerStart !== false;
-  // antd draws OK/Cancel when `footer` is left undefined; a start slot wraps whichever it is.
-  const resolvedFooter: ModalProps['footer'] = hasStart
-    ? (origin, extra) => (
-        <div className={styles['footer-row']}>
-          <div className={styles['footer-start']}>{footerStart}</div>
-          <div className={styles['footer-actions']}>
-            {typeof footer === 'function' ? footer(origin, extra) : footer === undefined ? origin : footer}
-          </div>
-        </div>
-      )
-    : footer;
+  const viewport = useVisibleViewport(open);
+
   const maskConfig = typeof mask === 'object' && mask !== null ? mask : {};
+  const canDismissByEscape = isDismissible && keyboard !== false;
+  const canDismissByBackdrop = isDismissible && maskConfig.closable !== false;
+
+  const cancelAction = (
+    <Button key="cancel" onClick={() => onCancel?.()} {...cancelButtonProps}>
+      {cancelText ?? t('common.cancel')}
+    </Button>
+  );
+  const okAction = (
+    <Button key="ok" variant="primary" loading={confirmLoading} onClick={(e) => onOk?.(e as React.MouseEvent<HTMLButtonElement>)} {...okButtonProps}>
+      {okText ?? t('common.confirm')}
+    </Button>
+  );
+  const defaultActions = (
+    <>
+      {cancelAction}
+      {okAction}
+    </>
+  );
+
+  const renderedActions =
+    typeof footer === 'function'
+      ? footer(defaultActions, {
+          OkBtn: () => okAction,
+          CancelBtn: () => cancelAction,
+        })
+      : footer === undefined
+        ? defaultActions
+        : footer;
+
+  const hasStart = footerStart !== undefined && footerStart !== null && footerStart !== false;
+  const showFooter = renderedActions !== null || hasStart;
+
+  if (!hasOpened && !open) return null;
+
   return (
-    <Modal
-      {...rest}
-      className={clsx('app-modal', styles['modal'], className)}
-      width={`min(${MODAL_WIDTHS[size]}px, calc(100vw - 32px))`}
-      footer={resolvedFooter}
-      keyboard={isDismissible && rest.keyboard !== false}
-      mask={{ ...maskConfig, closable: isDismissible && maskConfig.closable !== false }}
-      closable={isDismissible ? { 'aria-label': t('common.close') } : false}
-      closeIcon={<CloseOutlined />}
-      styles={{
-        wrapper: {
-          '--sheet-height': `${viewport.height}px`,
-          '--sheet-bottom': `${viewport.bottom}px`,
-        } as React.CSSProperties,
+    <Dialog
+      open={open}
+      onOpenChange={(next, details) => {
+        if (!next) {
+          if (details.reason === 'escape-key' && !canDismissByEscape) {
+            details.cancel();
+            return;
+          }
+          if (details.reason === 'outside-press' && !canDismissByBackdrop) {
+            details.cancel();
+            return;
+          }
+          if (
+            details.reason === 'outside-press' &&
+            details.event.target instanceof Element &&
+            details.event.target.closest('.ant-select-dropdown, [data-slot="select-content"], [data-slot="combobox-content"]')
+          ) {
+            details.cancel();
+            return;
+          }
+          onCancel?.();
+        }
       }}
-      classNames={{
-        wrapper: styles['wrapper'],
-        container: styles['container'],
-        header: clsx(styles['header'], isScrolled && styles['is-scrolled']),
-        title: styles['title'],
-        close: styles['close'],
-        body: styles['body'],
-        footer: styles['footer'],
+      onOpenChangeComplete={(next) => {
+        if (!next) setIsScrolled(false);
+        afterOpenChange?.(next);
       }}
-      afterOpenChange={(open) => {
-        if (!open) setIsScrolled(false);
-        rest.afterOpenChange?.(open);
-      }}
-      title={
-        <div className={clsx(styles['titles'], onBack && styles['has-back'])}>
-          <span className={styles['title-text']}>{title}</span>
-          {description && <span className={styles['description']}>{description}</span>}
-        </div>
-      }
     >
-      {/* The back step sits beside the title but outside the element that names the dialog, so the
-          dialog's accessible name is its title rather than "Back" followed by it. */}
-      {onBack && (
-        <Tooltip title={t('common.back')}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={styles['back']}
-            icon={<LeftOutlined />}
-            aria-label={t('common.back')}
-            onClick={onBack}
+      <DialogPortal keepMounted={hasOpened && !destroyOnHidden}>
+        {mask !== false && (
+          <DialogBackdrop
+            data-slot="dialog-backdrop"
+            style={{ zIndex }}
+            className="omc-overlay-backdrop fixed inset-0 bg-overlay"
           />
-        </Tooltip>
-      )}
-      <div
-        className={clsx(styles['scroll'], hasOwnScroll && styles['is-fixed'])}
-        onScroll={(event) => {
-          const next = event.currentTarget.scrollTop > 0;
-          if (next !== isScrolled) setIsScrolled(next);
-        }}
-      >
-        {children}
-      </div>
-    </Modal>
+        )}
+        <DialogViewport
+          data-slot="dialog-viewport"
+          style={
+            {
+              zIndex: zIndex + 1,
+              '--sheet-height': `${viewport.height}px`,
+              '--sheet-bottom': `${viewport.bottom}px`,
+            } as React.CSSProperties
+          }
+          className={clsx('fixed inset-0 overflow-y-auto', styles['wrapper'])}
+        >
+          <DialogPopup
+            data-slot="dialog-content"
+            data-testid={testId}
+            style={{ width: `min(${MODAL_WIDTHS[size]}px, calc(100vw - 32px))` }}
+            className={clsx(
+              'omc-dialog-surface app-modal bg-elevated text-foreground shadow-overlay outline-none',
+              styles['modal'],
+              styles['container'],
+              className,
+            )}
+          >
+            <header className={clsx(styles['header'], isScrolled && styles['is-scrolled'])}>
+              {onBack && (
+                <Tooltip title={t('common.back')}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={styles['back']}
+                    icon={<LeftOutlined />}
+                    aria-label={t('common.back')}
+                    onClick={onBack}
+                  />
+                </Tooltip>
+              )}
+              <div className={clsx(styles['titles'], onBack && styles['has-back'])}>
+                <DialogTitle className={clsx('m-0', styles['title'], styles['title-text'])}>
+                  {title}
+                </DialogTitle>
+                {description !== undefined && description !== null && description !== false && (
+                  <DialogDescription render={<div />} className={clsx('m-0', styles['description'])}>
+                    {description}
+                  </DialogDescription>
+                )}
+              </div>
+              {isDismissible && (
+                <DialogClose
+                  aria-label={t('common.close')}
+                  className={clsx(
+                    'position-absolute inline-flex items-center justify-center border-0 bg-transparent p-0 cursor-pointer',
+                    styles['close'],
+                  )}
+                  style={{ position: 'absolute' }}
+                >
+                  <CloseOutlined />
+                </DialogClose>
+              )}
+            </header>
+
+            <div className={styles['body']}>
+              <div
+                className={clsx(styles['scroll'], hasOwnScroll && styles['is-fixed'])}
+                onScroll={(event) => {
+                  const next = event.currentTarget.scrollTop > 0;
+                  if (next !== isScrolled) setIsScrolled(next);
+                }}
+              >
+                {children}
+              </div>
+            </div>
+
+            {showFooter && (
+              <footer className={styles['footer']}>
+                {hasStart ? (
+                  <div className={styles['footer-row']}>
+                    <div className={styles['footer-start']}>{footerStart}</div>
+                    {renderedActions !== null && <div className={styles['footer-actions']}>{renderedActions}</div>}
+                  </div>
+                ) : (
+                  renderedActions
+                )}
+              </footer>
+            )}
+          </DialogPopup>
+        </DialogViewport>
+      </DialogPortal>
+    </Dialog>
   );
 }

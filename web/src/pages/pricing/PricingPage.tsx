@@ -1,7 +1,8 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Popover, Select } from 'antd';
+import { Select } from 'antd';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import dayjs from '../../utils/time';
@@ -494,10 +495,20 @@ export const PricingPage: React.FC = () => {
                 { value: 'channels', label: t('pricing.tab.channels') },
               ]}
             />
-            <Popover content={syncPopover} trigger="click" placement="bottomRight" title={t('pricing.sync.title')}>
-              <Button className={styles['sync-button']} data-testid="pricing-sync-status">
-                <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
-              </Button>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button className={styles['sync-button']} data-testid="pricing-sync-status">
+                    <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
+                  </Button>
+                }
+              />
+              <PopoverContent placement="bottomRight">
+                <PopoverTitle className="m-0 mb-2 text-base font-semibold text-foreground">
+                  {t('pricing.sync.title')}
+                </PopoverTitle>
+                {syncPopover}
+              </PopoverContent>
             </Popover>
           </>
         )}

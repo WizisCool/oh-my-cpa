@@ -586,16 +586,23 @@
   max-width: min(80%, 640px);
 }
 
-.sent-images :global(.ant-image) {
+.sent-image-btn {
   border: 0;
+  padding: 0;
   display: block;
   box-shadow: var(--shadow-edge);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface);
+  cursor: zoom-in;
 }
 
-.sent-image:global(.ant-image-img) {
+.sent-image-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sent-image {
   display: block;
   width: auto;
   max-width: 220px;

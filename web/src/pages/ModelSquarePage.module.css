@@ -67,7 +67,7 @@
 .pagination { display: flex; justify-content: flex-end; margin-top: 20px; }
 
 .details-drawer { max-width: 100vw; }
-.details-drawer :global(.ant-drawer-title) { overflow-wrap: anywhere; min-width: 0; }
+.details-drawer :global([data-slot='sheet-title']) { overflow-wrap: anywhere; min-width: 0; }
 .details-position { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 
 .served-by { margin-bottom: 24px; }

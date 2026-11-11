@@ -3,7 +3,6 @@ import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { Switch } from '../common/Switch';
-import { App } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { CopyOutlined, InfoCircleOutlined } from '../icons';
@@ -12,7 +11,7 @@ import { formatGatewayTimestamp } from '../../utils/time';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { isSIWCPending, siwcTargetKey, type SIWCBindings, type SIWCSession } from '../../hooks/useSIWCBindings';
-import { Notice, useToast } from '../feedback';
+import { Notice, useConfirmModal, useToast } from '../feedback';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import styles from './SIWCBindingPanel.module.css';
@@ -32,7 +31,7 @@ const PHASE_KEYS: Record<SIWCSession['phase'], MessageKey> = {
 
 export function SIWCBindingPanel({ file, canEdit, bindings }: { file: ManagementAuthFile; canEdit: boolean; bindings: SIWCBindings }) {
   const t = useT();
-  const { modal } = App.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
 
   const queryClient = useQueryClient();

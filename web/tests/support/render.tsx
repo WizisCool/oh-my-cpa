@@ -1,9 +1,15 @@
 import React from 'react';
-import { App as AntdApp, ConfigProvider } from 'antd';
+import { ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderResult } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../../src/i18n';
+import {
+  clearActiveConfirmModal,
+  clearAllToasts,
+  ConfirmDialogHost,
+  Toaster,
+} from '../../src/components/feedback';
 
 export interface RenderOptions {
   /** Wraps the tree in a router at this entry. */
@@ -25,6 +31,8 @@ export function createTestQueryClient() {
 /** Called by `setup.ts` after each test, once the tree has been unmounted. */
 export function clearTestQueryClients() {
   for (const client of clients.splice(0)) client.clear();
+  clearAllToasts();
+  clearActiveConfirmModal();
 }
 
 /**
@@ -39,7 +47,9 @@ export function renderWithOmc(ui: React.ReactNode, options: RenderOptions = {}):
     <ConfigProvider theme={{ token: { motion: false } }}>
       <QueryClientProvider client={client}>
         <I18nProvider>
-          <AntdApp>{routed}</AntdApp>
+          <Toaster />
+          <ConfirmDialogHost />
+          {routed}
         </I18nProvider>
       </QueryClientProvider>
     </ConfigProvider>

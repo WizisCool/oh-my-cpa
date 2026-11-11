@@ -114,7 +114,7 @@
   background: var(--bg);
 }
 
-.drawer :global(.ant-drawer-body) {
+.drawer :global([data-slot='sheet-body']) {
   padding: 0;
 }
 
@@ -369,11 +369,11 @@
   margin-right: -6px;
 }
 
-.foot-actions :global(.ant-btn) {
+.foot-actions :global([data-slot='button']) {
   color: var(--muted);
 }
 
-.foot-actions :global(.ant-btn:not(:disabled):hover) {
+.foot-actions :global([data-slot='button']:not(:disabled):hover) {
   color: var(--fg);
 }
 
@@ -873,7 +873,7 @@
   white-space: nowrap;
 }
 
-.composer-chip :global(.ant-btn) {
+.composer-chip :global([data-slot='button']) {
   width: 20px;
   min-width: 20px;
   height: 20px;
@@ -941,13 +941,13 @@
   white-space: nowrap;
 }
 
-.attachment[data-kind='file'] .attachment-remove:global(.ant-btn) {
+.attachment[data-kind='file'] .attachment-remove:global([data-slot='button']) {
   position: static;
   flex-shrink: 0;
   background: transparent;
 }
 
-.attachment-remove:global(.ant-btn) {
+.attachment-remove:global([data-slot='button']) {
   position: absolute;
   top: 2px;
   right: 2px;
@@ -1090,7 +1090,7 @@
 
 /* The picker opens a menu of things to add, so it reads as a quiet round `+` rather than an icon
    of one kind of file. */
-.attach-button:global(.ant-btn) {
+.attach-button:global([data-slot='button']) {
   width: 28px;
   min-width: 28px;
   height: 28px;
@@ -1143,7 +1143,7 @@
 
 /* Model and reasoning are two settings of one message: the same trigger, surface and rows.
    Open controls gain a hairline; selection stays ink, leaving accent for keyboard focus. */
-.picker-trigger:global(.ant-btn) {
+.picker-trigger:global([data-slot='button']) {
   gap: 6px;
   height: 28px;
   min-width: 0;
@@ -1155,8 +1155,8 @@
   transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 
-.picker-trigger:global(.ant-btn):not(:disabled):hover,
-.picker-trigger:global(.ant-btn)[aria-expanded='true'] {
+.picker-trigger:global([data-slot='button']):not(:disabled):hover,
+.picker-trigger:global([data-slot='button'])[aria-expanded='true'] {
   border-color: var(--border);
   background: var(--surface);
   color: var(--fg);
@@ -1164,11 +1164,11 @@
 
 /* An unset choice is a prompt to pick one, not a system-health state: it takes foreground
    ink and the hairline stays with the open control, so amber keeps meaning warning. */
-.picker-trigger[data-state='unset']:global(.ant-btn) {
+.picker-trigger[data-state='unset']:global([data-slot='button']) {
   color: var(--fg);
 }
 
-.target-chip:global(.ant-btn) {
+.target-chip:global([data-slot='button']) {
   max-width: 240px;
 }
 
@@ -1182,7 +1182,7 @@
   color: var(--muted);
 }
 
-.picker-trigger[data-state='pending']:global(.ant-btn) {
+.picker-trigger[data-state='pending']:global([data-slot='button']) {
   cursor: progress;
 }
 
@@ -1207,24 +1207,24 @@
   white-space: nowrap;
 }
 
-.picker-trigger:global(.ant-btn):disabled {
+.picker-trigger:global([data-slot='button']):disabled {
   color: var(--meta);
   cursor: not-allowed;
 }
 
-.picker-trigger:global(.ant-btn):disabled .picker-trigger-value,
-.picker-trigger:global(.ant-btn):disabled .picker-trigger-icon,
-.picker-trigger:global(.ant-btn):disabled .picker-caret {
+.picker-trigger:global([data-slot='button']):disabled .picker-trigger-value,
+.picker-trigger:global([data-slot='button']):disabled .picker-trigger-icon,
+.picker-trigger:global([data-slot='button']):disabled .picker-caret {
   color: inherit;
 }
 
 /* The effort's name is a word or two; on a narrow foot it is the model's name that shortens. */
-.effort-chip:global(.ant-btn) {
+.effort-chip:global([data-slot='button']) {
   flex-shrink: 0;
 }
 
 /* A maker's mark is a picture, so it fades where ink would grey. */
-.picker-trigger:global(.ant-btn):disabled .picker-trigger-icon {
+.picker-trigger:global([data-slot='button']):disabled .picker-trigger-icon {
   opacity: .5;
 }
 
@@ -1240,8 +1240,7 @@
 
 /* The picker is a summoned layer like any popover: the float shadow carries its edge, on the
    surface step so its rows read against it. */
-.picker-popover :global(.ant-popover-container),
-.picker-popover :global(.ant-popover-inner) {
+.picker-popover:global([data-slot='popover-content']) {
   border: 0;
   padding: 0;
   border-radius: var(--radius-lg);
@@ -1283,7 +1282,7 @@
   font-size: var(--text-xs);
 }
 
-.picker-head :global(.ant-btn) {
+.picker-head :global([data-slot='button']) {
   flex-shrink: 0;
   width: 24px;
   height: 24px;
@@ -1295,7 +1294,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.picker-refresh:global(.ant-btn) {
+.picker-refresh:global([data-slot='button']) {
   margin-left: auto;
 }
 
@@ -1311,7 +1310,7 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.picker-search :global(.ant-input-affix-wrapper) {
+.picker-search :global([data-slot='input']) {
   padding: 6px 8px;
   font-size: var(--text-sm);
 }
@@ -1590,7 +1589,7 @@
 
 /* On a narrow foot the model's name gives way first: it is the long one, and it is read in full
    in its list, while the endpoint's short name is the whole of what its chip says. */
-.is-phone .target-chip:global(.ant-btn) {
+.is-phone .target-chip:global([data-slot='button']) {
   flex-shrink: 1;
   min-width: 72px;
   max-width: 170px;

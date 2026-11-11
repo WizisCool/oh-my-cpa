@@ -1,7 +1,7 @@
 import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { Popover } from 'antd';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/badge';
 import clsx from 'clsx';
@@ -615,10 +615,18 @@ export const UsageEventsPage: React.FC = () => {
                   aria-label={t('events.auto_refresh')}
                 />
               </label>
-              <Popover
-                trigger="click"
-                title={t('events.ingest_status')}
-                content={
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button variant="ghost">
+                      <StatusDot status={ingestTone} text={t(ingestLabel)} />
+                    </Button>
+                  }
+                />
+                <PopoverContent placement="bottomRight">
+                  <PopoverTitle className="m-0 mb-2 text-base font-semibold text-foreground">
+                    {t('events.ingest_status')}
+                  </PopoverTitle>
                   <div className="request-ingest">
                     <FactList
                       emphasis="quiet"
@@ -632,11 +640,7 @@ export const UsageEventsPage: React.FC = () => {
                     <p>{t('events.delivery_semantics_hint')}</p>
                     {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
                   </div>
-                }
-              >
-                <Button variant="ghost">
-                  <StatusDot status={ingestTone} text={t(ingestLabel)} />
-                </Button>
+                </PopoverContent>
               </Popover>
               {hasCustomWidths && (
                 <Button

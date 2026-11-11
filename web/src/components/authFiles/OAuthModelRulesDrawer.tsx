@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntdApp } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { DeleteOutlined, SaveOutlined } from '../icons';
@@ -28,7 +27,7 @@ import { excludedModelRulesEqual, normalizeExcludedModelRules } from './oauthExc
 import { OAuthExcludedModelsPanel, type OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
 import { OAuthModelAliasPanel } from './OAuthModelAliasPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
-import { LoadFailure, Notice, useToast } from '../feedback';
+import { LoadFailure, Notice, useConfirmModal, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { ListLoading } from '../common/PageLoading';
 import { SearchSelect } from '../common/SearchSelect';
@@ -94,7 +93,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [section, setSection] = useState<OAuthModelRulesSection>('aliases');

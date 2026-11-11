@@ -1,6 +1,7 @@
 import type { MessageKey } from '../../../i18n/catalog';
 import React from 'react';
-import { Drawer, Popover } from 'antd';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Sheet, SheetBody, SheetContent, SheetHeader } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
@@ -291,29 +292,33 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
     return (
       <>
         {trigger}
-        <Drawer
-          className="time-range-sheet"
-          placement="bottom"
-          title={t('time_range.title')}
+        <Sheet
           open={isOpen}
-          onClose={close}
-          destroyOnHidden
-          // The sheet is as tall as what it holds, up to the visible viewport: the preset
-          // list is short and the calendar is not, and a fixed height fits neither.
-          styles={{ wrapper: { height: 'auto', maxHeight: '92dvh' } }}
+          onOpenChange={(next) => {
+            if (!next) close();
+          }}
         >
-          <div className="time-range-panel is-sheet" data-mode={mode}>
-            {mode === 'quick' ? presetList : (
-              <>
-                <button type="button" className="time-range-back" onClick={() => setMode('quick')}>
-                  <LeftOutlined />
-                  {t('time_range.quick')}
-                </button>
-                {customForm}
-              </>
-            )}
-          </div>
-        </Drawer>
+          <SheetContent
+            side="bottom"
+            destroyOnHidden
+            className="time-range-sheet h-auto max-h-[92dvh]"
+          >
+            <SheetHeader title={t('time_range.title')} closeLabel={t('common.close')} />
+            <SheetBody>
+              <div className="time-range-panel is-sheet" data-mode={mode}>
+                {mode === 'quick' ? presetList : (
+                  <>
+                    <button type="button" className="time-range-back" onClick={() => setMode('quick')}>
+                      <LeftOutlined />
+                      {t('time_range.quick')}
+                    </button>
+                    {customForm}
+                  </>
+                )}
+              </div>
+            </SheetBody>
+          </SheetContent>
+        </Sheet>
       </>
     );
   }
@@ -321,22 +326,16 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   return (
     <Popover
       open={isOpen}
-      trigger="click"
-      placement={placement}
-      arrow={false}
-      classNames={{ root: 'time-range-popover' }}
-      // The shell is always present - a popover with no content never opens - and only its
-      // children come and go.
-      content={(
+      onOpenChange={(next) => (next ? open() : close())}
+      afterOpenChange={setIsPanelMounted}
+    >
+      <PopoverTrigger render={trigger} />
+      <PopoverContent placement={placement} className="time-range-popover p-0">
         <div className="time-range-panel" role="dialog" aria-label={t('time_range.title')} data-mode={mode}>
           {(isOpen || isPanelMounted) && presetList}
           {(isOpen || isPanelMounted) && mode === 'custom' && customForm}
         </div>
-      )}
-      onOpenChange={(next) => (next ? open() : close())}
-      afterOpenChange={setIsPanelMounted}
-    >
-      {trigger}
+      </PopoverContent>
     </Popover>
   );
 };

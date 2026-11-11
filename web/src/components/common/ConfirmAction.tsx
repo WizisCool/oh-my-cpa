@@ -1,65 +1,136 @@
 import React from 'react';
-import { Popconfirm } from 'antd';
-import type { ButtonProps, PopconfirmProps } from 'antd';
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
+  type FloatingPlacement,
+} from '@/components/ui/popover';
+import { Button, type ButtonProps } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { Tooltip } from './Tooltip';
 
-export interface ConfirmActionProps
-  extends Omit<PopconfirmProps, 'okText' | 'cancelText' | 'okButtonProps' | 'okType'> {
-  /** The verb on the confirming button - "Delete", "Restore" - where "Confirm" would not say what happens. */
+export interface ConfirmActionProps {
+  title: React.ReactNode;
+  description?: React.ReactNode;
   confirmLabel?: React.ReactNode;
-  /** The action destroys something, so the confirming button takes the danger colour. */
   isDanger?: boolean;
-  /** The confirmed write is in flight. */
   isConfirming?: boolean;
-  /** Further attributes for the confirming button, such as an accessible name. */
   confirmButtonProps?: ButtonProps;
-  /**
-   * The trigger's own tooltip. It is held here rather than wrapped around the trigger by the
-   * caller because it must step aside while the confirmation is open: left up, it sat over the
-   * confirmation's buttons, and over Cancel when both open above the trigger.
-   */
   tooltip?: React.ReactNode;
+  placement?: FloatingPlacement;
+  disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onConfirm?: (event?: React.MouseEvent<HTMLElement>) => unknown | Promise<unknown>;
+  onCancel?: (event?: React.MouseEvent<HTMLElement>) => void;
+  children: React.ReactElement;
 }
 
-/**
- * The second step in front of an action that cannot be taken back, anchored to its trigger.
- *
- * Sixteen call sites spelled the two buttons out each time, and only some of the ones that delete
- * remembered to colour the confirming button, so the same act looked safe on one page and dangerous
- * on the next. The cancel label is fixed here; a caller states only what differs.
- */
 export function ConfirmAction({
+  title,
+  description,
   confirmLabel,
   isDanger = false,
   isConfirming = false,
   confirmButtonProps,
   tooltip,
-  children,
-  open,
+  placement = 'top',
+  disabled = false,
+  open: controlledOpen,
   onOpenChange,
-  ...rest
+  onConfirm,
+  onCancel,
+  children,
 }: ConfirmActionProps) {
   const t = useT();
   const [isOwnOpen, setIsOwnOpen] = React.useState(false);
-  const isOpen = open ?? isOwnOpen;
+  const [isPending, setIsPending] = React.useState(false);
+  const isOpen = disabled ? false : (controlledOpen ?? isOwnOpen);
+
+  const setOpen = (next: boolean) => {
+    if (disabled && next) return;
+    if (controlledOpen === undefined) setIsOwnOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const handleConfirm = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!onConfirm) {
+      setOpen(false);
+      return;
+    }
+    try {
+      const result = onConfirm(event);
+      if (result && typeof (result as Promise<unknown>).then === 'function') {
+        setIsPending(true);
+        await result;
+      }
+      setOpen(false);
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const handleCancel = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onCancel?.(event);
+    setOpen(false);
+  };
+
+  if (disabled) {
+    return tooltip === undefined ? children : <Tooltip title={tooltip}>{children}</Tooltip>;
+  }
+
+  const triggerElement =
+    tooltip === undefined ? (
+      children
+    ) : (
+      <Tooltip title={tooltip} open={isOpen ? false : undefined}>
+        {children}
+      </Tooltip>
+    );
+
+  const isNativeButton = children.type === 'button' || children.type === Button;
+
   return (
-    <Popconfirm
-      {...rest}
-      open={open}
-      onOpenChange={(next: boolean) => {
-        setIsOwnOpen(next);
-        onOpenChange?.(next);
-      }}
-      okText={confirmLabel ?? t('common.confirm')}
-      cancelText={t('common.cancel')}
-      okButtonProps={{ ...confirmButtonProps, danger: isDanger, loading: isConfirming || undefined }}
-    >
-      {tooltip === undefined ? children : (
-        <Tooltip title={tooltip} open={isOpen ? false : undefined}>
-          {children}
-        </Tooltip>
-      )}
-    </Popconfirm>
+    <Popover open={isOpen} onOpenChange={(next) => setOpen(next)}>
+      <PopoverTrigger nativeButton={isNativeButton} render={triggerElement} />
+      <PopoverContent
+        placement={placement}
+        role="dialog"
+        className="w-[min(320px,calc(100vw-24px))] p-3.5"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <PopoverTitle className="m-0 text-base font-semibold leading-snug text-foreground">
+              {title}
+            </PopoverTitle>
+            {description !== undefined && description !== null && description !== false && (
+              <PopoverDescription render={<div />} className="m-0 text-sm leading-normal text-fg-2 break-words">
+                {description}
+              </PopoverDescription>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button size="sm" onClick={handleCancel}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              variant={isDanger ? 'destructive' : 'primary'}
+              danger={isDanger}
+              loading={isConfirming || isPending}
+              onClick={(e) => void handleConfirm(e as React.MouseEvent<HTMLButtonElement>)}
+              {...confirmButtonProps}
+            >
+              {confirmLabel ?? t('common.confirm')}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

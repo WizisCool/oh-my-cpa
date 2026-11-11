@@ -1,5 +1,6 @@
 import React from 'react';
-import { Drawer, Select } from 'antd';
+import { Select } from 'antd';
+import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import type { SelectProps } from 'antd';
 import type { DefaultOptionType } from 'antd/es/select';
@@ -101,29 +102,34 @@ export function SearchSelect<ValueType = OptionValue | OptionValue[], OptionType
         open();
       }}
     />
-    <Drawer
-      rootClassName={styles['sheet']}
-      placement="bottom"
-      title={label}
+    <Sheet
       open={isOpen}
-      onClose={close}
-      destroyOnHidden
-      closable={{ placement: 'end', 'aria-label': t('common.close') }}
-      footer={props.mode ? <SheetDone onDone={close} /> : undefined}
-      styles={{
-        // The sheet is as tall as its list, up to most of the visible viewport. Once open it holds
-        // that height as a floor, and iOS leaves the layout viewport under the keyboard, so it
-        // stands on the visible one.
-        wrapper: {
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
+    >
+      <SheetContent
+        side="bottom"
+        destroyOnHidden
+        className={styles['sheet']}
+        style={{
           height: 'auto',
           maxHeight: fit,
           minHeight: openedHeight === null ? undefined : Math.min(openedHeight, fit),
           bottom: viewport.bottom,
-        },
-      }}
-    >
-      <SheetPanel {...props} label={label} onOpened={setOpenedHeight} onPicked={close} />
-    </Drawer>
+        }}
+      >
+        <SheetHeader title={label} closeLabel={t('common.close')} />
+        <SheetBody>
+          <SheetPanel {...props} label={label} onOpened={setOpenedHeight} onPicked={close} />
+        </SheetBody>
+        {props.mode && (
+          <SheetFooter>
+            <SheetDone onDone={close} />
+          </SheetFooter>
+        )}
+      </SheetContent>
+    </Sheet>
   </>;
 }
 

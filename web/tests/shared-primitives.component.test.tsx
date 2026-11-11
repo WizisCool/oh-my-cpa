@@ -131,7 +131,7 @@ describe('AppDrawer', () => {
     act(() => select(null));
 
     expect(screen.getByText('Body of request 42')).toBeTruthy();
-    expect(document.querySelector('.ant-drawer-title')?.textContent).toBe('request 42');
+    expect(document.querySelector('[data-slot="sheet-title"]')?.textContent).toBe('request 42');
     expect(document.querySelector('.app-drawer-footer-actions button')?.textContent).toBe('Copy request 42');
   });
 
@@ -185,7 +185,7 @@ describe('ConfirmAction', () => {
     );
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
     const confirm = screen.getByRole('button', { name: 'Delete' });
-    expect(confirm.classList.contains('ant-btn-dangerous')).toBe(true);
+    expect(confirm.hasAttribute('data-danger')).toBe(true);
 
     fireEvent.click(confirm);
 
@@ -209,8 +209,8 @@ describe('ConfirmAction', () => {
     await screen.findByRole('button', { name: 'Cancel' });
     // jsdom never ends a motion, so a tooltip on its way out keeps its node in the leave state.
     await waitFor(() => {
-      const tooltip = screen.queryByText('Delete key')?.closest('.ant-tooltip');
-      expect(!tooltip || /-leave\b/.test(tooltip.className)).toBe(true);
+      const tooltip = screen.queryByRole('tooltip');
+      expect(!tooltip || tooltip.hasAttribute('data-ending-style')).toBe(true);
     });
   });
 });

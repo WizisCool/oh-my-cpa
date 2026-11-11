@@ -1,4 +1,4 @@
-import { App, Typography } from 'antd';
+import { Typography } from 'antd';
 import { Button } from '@/components/ui/button';
 import { useMutation } from '@tanstack/react-query';
 import clsx from 'clsx';
@@ -9,7 +9,7 @@ import { isDemoMode } from '../../types/demoMode';
 import { formatGatewayTimestamp } from '../../utils/time';
 import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel } from '../common/StatusLabel';
-import { Notice, useToast } from '../feedback';
+import { Notice, useConfirmModal, useToast } from '../feedback';
 import { CheckOutlined } from '../icons';
 import { renewalDetail, renewalLabel, renewalTone } from './credentialRecovery';
 import styles from './CredentialRecoveryPanel.module.css';
@@ -43,7 +43,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
   onChanged: () => void;
 }) {
   const t = useT();
-  const { modal } = App.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const verification = useMutation({
     mutationFn: (target: { name: string; authIndex?: string }) => api.verifyManagementAuthFile(target.name, target.authIndex),

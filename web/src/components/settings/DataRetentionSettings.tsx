@@ -1,5 +1,5 @@
 import React from 'react';
-import { App, Select } from 'antd';
+import { Select } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -7,7 +7,7 @@ import { isDemoMode } from '../../types/demoMode';
 import { DATA_RETENTION_QUERY_KEY, formatRetentionDays, useDataRetention } from '../../hooks/useDataRetention';
 import { SettingsGroup } from './SettingsGroup';
 import { SettingRow } from '../common/SettingRow';
-import { useToast } from '../feedback';
+import { useConfirmModal, useToast } from '../feedback';
 
 /** The horizons offered; 0 keeps every record. */
 const REQUEST_RECORD_PRESETS = [7, 14, 30, 60, 90, 180, 365, 0];
@@ -36,7 +36,7 @@ function isShorter(next: number, previous: number): boolean {
 export const DataRetentionSettings: React.FC = () => {
   const t = useT();
   const toast = useToast();
-  const { modal } = App.useApp();
+  const modal = useConfirmModal();
   const queryClient = useQueryClient();
   const { data } = useDataRetention();
   const save = useMutation({

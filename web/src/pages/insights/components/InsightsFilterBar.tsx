@@ -1,5 +1,5 @@
 import React from 'react';
-import { Popover } from 'antd';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CloseOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../../../components/icons';
@@ -119,18 +119,17 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
           </button>
         </span>
       ))}
-      <Popover
-        trigger="click"
-        placement="bottomLeft"
-        open={isOpen}
-        onOpenChange={close}
-        content={panel}
-        arrow={false}
-        destroyOnHidden
-      >
-        <Button size="sm" variant="ghost" icon={<PlusOutlined />} className={styles['filter-add']} disabled={!cube}>
-          {t('insights.filter_add')}
-        </Button>
+      <Popover open={isOpen} onOpenChange={(next) => close(next)}>
+        <PopoverTrigger
+          render={
+            <Button size="sm" variant="ghost" icon={<PlusOutlined />} className={styles['filter-add']} disabled={!cube}>
+              {t('insights.filter_add')}
+            </Button>
+          }
+        />
+        <PopoverContent placement="bottomLeft">
+          {panel}
+        </PopoverContent>
       </Popover>
       {hasFilters(filters) && (
         <Button size="sm" variant="link" className={styles['filter-clear']} onClick={() => onChange({})}>

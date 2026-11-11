@@ -1,6 +1,16 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Dropdown, Popover, Select, Space } from 'antd';
+import { Select } from 'antd';
+import { ButtonGroup } from '@/components/ui/button-group';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { SearchInput } from '../../components/common/SearchInput';
@@ -9,7 +19,6 @@ import {
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
-  CheckOutlined,
   DownOutlined,
   FilterOutlined,
   ListOutlined,
@@ -117,11 +126,21 @@ export function FleetToolbar({
       <SearchInput className={styles.search} value={search} onChange={onSearch} label={t('af.search_ph')} />
       <HealthFilter counts={counts} isPending={isPending} lens={lens} onLens={onLens} />
       <div className={styles.tools}>
-        <Popover
-          trigger="click"
-          placement="bottomRight"
-          arrow={false}
-          content={(
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                className={clsx(styles['tool-button'], filterCount > 0 && styles['tool-active'])}
+                icon={<FilterOutlined />}
+                aria-label={t('events.more_filters')}
+                aria-controls="oauth-collection-filters"
+                data-testid="oauth-filter-toggle"
+              >
+                {filterCount > 0 && <span className={styles['tool-count']}>{filterCount}</span>}
+              </Button>
+            }
+          />
+          <PopoverContent placement="bottomRight">
             <div className={styles.filters} id="oauth-collection-filters">
               <label className={styles['filter-field']}>
                 <span className={styles['filter-label']}>{t('af.detail_status')}</span>
@@ -163,43 +182,32 @@ export function FleetToolbar({
                 {t('omc.reset_filters')}
               </Button>
             </div>
-          )}
-        >
-          <Button
-            className={clsx(styles['tool-button'], filterCount > 0 && styles['tool-active'])}
-            icon={<FilterOutlined />}
-            aria-label={t('events.more_filters')}
-            aria-controls="oauth-collection-filters"
-            data-testid="oauth-filter-toggle"
-          >
-            {filterCount > 0 && <span className={styles['tool-count']}>{filterCount}</span>}
-          </Button>
+          </PopoverContent>
         </Popover>
-        <Dropdown
-          trigger={['click']}
-          disabled={!isViewLoaded}
-          menu={{
-            items: SORTS.map((entry) => ({
-              key: entry.key,
-              label: (
-                <span className={styles['sort-item']}>
-                  <span>{t(entry.label)}</span>
-                  {entry.key === sort && <CheckOutlined aria-hidden />}
-                </span>
-              ),
-            })),
-            onClick: ({ key }) => onSort(key as OAuthWorkspaceSortKey),
-          }}
-        >
-          <Tooltip title={`${t('af.sort_label')}: ${sortLabel}`}>
-            <Button
-              className={clsx(styles['tool-button'], sort !== 'custom' && styles['tool-active'])}
-              icon={<SwapOutlined rotate={90} />}
-              disabled={!isViewLoaded}
-              aria-label={`${t('af.sort_label')}: ${sortLabel}`}
-            />
-          </Tooltip>
-        </Dropdown>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={!isViewLoaded}
+            render={
+              <Tooltip title={`${t('af.sort_label')}: ${sortLabel}`}>
+                <Button
+                  className={clsx(styles['tool-button'], sort !== 'custom' && styles['tool-active'])}
+                  icon={<SwapOutlined rotate={90} />}
+                  disabled={!isViewLoaded}
+                  aria-label={`${t('af.sort_label')}: ${sortLabel}`}
+                />
+              </Tooltip>
+            }
+          />
+          <DropdownMenuContent placement="bottomRight">
+            <DropdownMenuRadioGroup value={sort} onValueChange={(next) => onSort(next as OAuthWorkspaceSortKey)}>
+              {SORTS.map((entry) => (
+                <DropdownMenuRadioItem key={entry.key} value={entry.key} icon={entry.icon}>
+                  {t(entry.label)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Segmented<OAuthWorkspaceLayout>
           className={styles.layout}
           value={layout}
@@ -211,7 +219,7 @@ export function FleetToolbar({
           data-testid="oauth-layout-toggle"
         />
         {/* The main segment refreshes what the workspace is showing; the caret offers the other scopes. */}
-        <Space.Compact>
+        <ButtonGroup>
           <Tooltip title={t('omc.refresh_quota_count', { n: refresh.filtered })}>
             <Button
               icon={<SyncOutlined spin={refresh.isBusy} />}
@@ -221,21 +229,26 @@ export function FleetToolbar({
               data-testid="oauth-refresh-quota"
             />
           </Tooltip>
-          <Dropdown
-            trigger={['click']}
-            disabled={refresh.isDisabled}
-            menu={{
-              items: [
-                { key: 'page', label: t('omc.refresh_scope_page', { n: refresh.page }) },
-                { key: 'filtered', label: t('omc.refresh_scope_filtered', { n: refresh.filtered }) },
-                { key: 'all', label: t('omc.refresh_scope_all', { n: refresh.all }) },
-              ],
-              onClick: ({ key }) => refresh.onRefresh(key as 'page' | 'filtered' | 'all'),
-            }}
-          >
-            <Button className={styles.caret} icon={<DownOutlined />} disabled={refresh.isDisabled} aria-label={t('omc.fleet_refresh_scopes')} />
-          </Dropdown>
-        </Space.Compact>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={refresh.isDisabled}
+              render={
+                <Button className={styles.caret} icon={<DownOutlined />} disabled={refresh.isDisabled} aria-label={t('omc.fleet_refresh_scopes')} />
+              }
+            />
+            <DropdownMenuContent placement="bottomRight">
+              <DropdownMenuItem onClick={() => refresh.onRefresh('page')}>
+                {t('omc.refresh_scope_page', { n: refresh.page })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => refresh.onRefresh('filtered')}>
+                {t('omc.refresh_scope_filtered', { n: refresh.filtered })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => refresh.onRefresh('all')}>
+                {t('omc.refresh_scope_all', { n: refresh.all })}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </ButtonGroup>
       </div>
     </div>
   );

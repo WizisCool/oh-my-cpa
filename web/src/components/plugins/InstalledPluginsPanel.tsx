@@ -1,5 +1,11 @@
 import React from 'react';
-import { Dropdown } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../common/Switch';
@@ -338,35 +344,36 @@ export function InstalledPluginsPanel({
                             {moreButton}
                           </ConfirmAction>
                         ) : (
-                          <Dropdown
-                            trigger={['click']}
-                            placement="bottomRight"
-                            menu={{
-                              items: [
-                                ...(repositoryURL ? [{
-                                  key: 'repository',
-                                  icon: <GithubOutlined />,
-                                  label: <a href={repositoryURL} target="_blank" rel="noreferrer noopener">{t('plugin.open_repository')}</a>,
-                                }] : []),
-                                ...(hasHomepage ? [{
-                                  key: 'homepage',
-                                  icon: <ExternalLinkOutlined />,
-                                  label: <a href={homepageURL} target="_blank" rel="noreferrer noopener">{t('plugin.open_homepage')}</a>,
-                                }] : []),
-                                ...(repositoryURL || hasHomepage ? [{ type: 'divider' as const }] : []),
-                                {
-                                  key: 'delete',
-                                  icon: <DeleteOutlined />,
-                                  label: isDemo ? <Tooltip title={t('demo.blocked')}>{t('plugin.delete')}</Tooltip> : t('plugin.delete'),
-                                  danger: true,
-                                  disabled: isDemo || isUpdating,
-                                  onClick: () => setPendingDeleteId(plugin.id),
-                                },
-                              ],
-                            }}
-                          >
-                            {moreButton}
-                          </Dropdown>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger render={moreButton} />
+                            <DropdownMenuContent placement="bottomRight">
+                              {repositoryURL && (
+                                <DropdownMenuItem
+                                  icon={<GithubOutlined />}
+                                  render={<a href={repositoryURL} target="_blank" rel="noreferrer noopener" />}
+                                >
+                                  {t('plugin.open_repository')}
+                                </DropdownMenuItem>
+                              )}
+                              {hasHomepage && (
+                                <DropdownMenuItem
+                                  icon={<ExternalLinkOutlined />}
+                                  render={<a href={homepageURL} target="_blank" rel="noreferrer noopener" />}
+                                >
+                                  {t('plugin.open_homepage')}
+                                </DropdownMenuItem>
+                              )}
+                              {(repositoryURL || hasHomepage) && <DropdownMenuSeparator />}
+                              <DropdownMenuItem
+                                icon={<DeleteOutlined />}
+                                danger
+                                disabled={isDemo || isUpdating}
+                                onClick={() => setPendingDeleteId(plugin.id)}
+                              >
+                                {isDemo ? <Tooltip title={t('demo.blocked')}>{t('plugin.delete')}</Tooltip> : t('plugin.delete')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                       <span className={styles['switch-cell']}>

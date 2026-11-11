@@ -1,9 +1,15 @@
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Dropdown } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { MenuProps } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useConfirmModal } from '../../components/feedback';
 import { CredentialRenewalBadge } from '../../components/authFiles/CredentialRenewalBadge';
 import { renewalLabel } from '../../components/authFiles/credentialRecovery';
 import {
@@ -424,7 +430,7 @@ function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFu
 
 function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, onRename: () => void) {
   const t = useT();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   return (key: ActionKey) => {
     switch (key) {
       case 'details': actions.onOpen(record, 'overview'); break;
@@ -460,22 +466,41 @@ export function CredentialMenu({ record, facts, actions, onRename }: {
   const t = useT();
   const run = useRunAction(record, actions, onRename);
   const list = actionList(record, facts, t);
-  const items: MenuProps['items'] = list.flatMap((action) => {
-    const item = { key: action.key, icon: action.icon, label: action.label, disabled: action.disabled, danger: action.danger };
-    return action.key === 'download' ? [{ type: 'divider' as const }, item] : [item];
-  });
+  const [isOpen, setIsOpen] = React.useState(false);
   return (
-    <Dropdown trigger={['click']} menu={{ items, onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); run(key as ActionKey); } }}>
-      <Tooltip title={t('keys.actions_more')}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={styles['icon-action']}
-          icon={<MoreOutlined />}
-          onClick={(event) => event.stopPropagation()}
-          aria-label={`${t('keys.actions_more')}: ${record.file.name}`}
-        />
-      </Tooltip>
-    </Dropdown>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger
+        render={
+          <Tooltip title={t('keys.actions_more')} open={isOpen ? false : undefined}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles['icon-action']}
+              icon={<MoreOutlined />}
+              onClick={(event) => event.stopPropagation()}
+              aria-label={`${t('keys.actions_more')}: ${record.file.name}`}
+            />
+          </Tooltip>
+        }
+      />
+      <DropdownMenuContent placement="bottomRight" onClick={(event) => event.stopPropagation()}>
+        {list.map((action) => (
+          <React.Fragment key={action.key}>
+            {action.key === 'download' && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              icon={action.icon}
+              disabled={action.disabled}
+              danger={action.danger}
+              onClick={(event) => {
+                event.stopPropagation();
+                run(action.key as ActionKey);
+              }}
+            >
+              {action.label}
+            </DropdownMenuItem>
+          </React.Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

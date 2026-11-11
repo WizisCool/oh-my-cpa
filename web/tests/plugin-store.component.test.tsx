@@ -58,7 +58,7 @@ it('updates catalog display, search and an open confirmation without changing in
   fireEvent.click(within(storePanel).getByRole('button', { name: makeT('en')('plugin.install') }));
   const dialog = await screen.findByRole('dialog');
   expect(dialog.textContent).toContain('Base name');
-  const language = screen.getByRole('combobox', { name: 'Catalog language' });
+  const language = screen.getByLabelText('Catalog language');
   fireEvent.change(language, { target: { value: 'zh' } });
   await waitFor(() => expect(dialog.textContent).toContain('简体标题'));
   for (const panel of [storePanel, installedPanel]) {
@@ -73,10 +73,10 @@ it('updates catalog display, search and an open confirmation without changing in
   expect(within(storePanel).getByText('&lt;tag&gt;')).toBeTruthy();
   expect(storePanel.querySelector('tag')).toBeNull();
   expect(storePanel.querySelector('a[href="https://github.com/publisher/stable-plugin"]')).not.toBeNull();
-  const search = within(storePanel).getByRole('textbox');
+  const search = within(storePanel).getByRole('textbox', { hidden: true });
   fireEvent.change(search, { target: { value: '简体标签 & 保护' } });
   expect(storePanel.querySelector('[data-plugin-id="stable-plugin"]')).not.toBeNull();
-  const installedSearch = within(installedPanel).getByRole('textbox');
+  const installedSearch = within(installedPanel).getByRole('textbox', { hidden: true });
   fireEvent.change(installedSearch, { target: { value: '简体描述 & 保护' } });
   expect(installedPanel.querySelector('[data-plugin-id="stable-plugin"]')).not.toBeNull();
   fireEvent.change(language, { target: { value: 'zh-Hant' } });
@@ -286,7 +286,7 @@ it.each(['complete', 'partial'] as const)('reports a %s manual check without cla
     : [];
   await act(async () => manual.release({ ...store, source_errors: sourceErrors }));
   const title = await screen.findByText(t(outcome === 'partial' ? 'plugin.store_refresh_partial' : 'plugin.check_updates_none'));
-  expect(title.closest(outcome === 'partial' ? '.ant-notification-notice-warning' : '.ant-notification-notice-info')).not.toBeNull();
+  expect(title.closest(outcome === 'partial' ? '.omc-toast-warning' : '.omc-toast-info')).not.toBeNull();
   if (outcome === 'partial') expect(screen.getByText('Registry unavailable')).toBeTruthy();
   expect(screen.getByText('Runtime name')).toBeTruthy();
 });

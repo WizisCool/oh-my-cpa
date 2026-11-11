@@ -1,6 +1,6 @@
 /* ── Shared pricing surfaces: the editor drawer, tier marks, cost breakdown ── */
 
-.drawer :global(.ant-drawer-body) {
+.drawer :global([data-slot='sheet-body']) {
   padding: 20px 24px;
 }
 

@@ -17,16 +17,15 @@ export type TooltipPlacement =
   | 'rightTop'
   | 'rightBottom';
 
-export interface TooltipHandle {
-  readonly nativeElement: HTMLElement | null;
-  readonly popupElement: HTMLElement | null;
-  forceAlign: () => void;
-}
+export type TooltipHandle = HTMLElement;
 
 type TriggerEvents = Pick<
   React.DOMAttributes<HTMLElement>,
   | 'onClick'
+  | 'onKeyDown'
+  | 'onKeyUp'
   | 'onMouseDown'
+  | 'onMouseUp'
   | 'onTouchStart'
   | 'onFocus'
   | 'onBlur'
@@ -36,10 +35,11 @@ type TriggerEvents = Pick<
   | 'onPointerLeave'
   | 'onPointerMove'
   | 'onPointerDown'
+  | 'onPointerUp'
   | 'onContextMenu'
 >;
 
-export interface TooltipProps extends TriggerEvents {
+export interface TooltipProps extends TriggerEvents, Omit<React.AriaAttributes, 'aria-describedby'> {
   children: React.ReactNode;
   title?: React.ReactNode | (() => React.ReactNode);
   overlay?: React.ReactNode | (() => React.ReactNode);
@@ -130,7 +130,12 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
       onPointerLeave,
       onPointerMove,
       onPointerDown,
+      onPointerUp,
+      onMouseUp,
+      onKeyDown,
+      onKeyUp,
       onContextMenu,
+      ...forwardedProps
     },
     ref,
   ) => {
@@ -138,17 +143,6 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
     const [popupTarget, setPopupTarget] = React.useState<HTMLElement | null>(null);
     const popupId = React.useId();
     const triggerRef = React.useRef<HTMLElement | null>(null);
-    const popupElementRef = React.useRef<HTMLDivElement | null>(null);
-
-    React.useImperativeHandle(
-      ref,
-      () => ({
-        get nativeElement() { return triggerRef.current; },
-        get popupElement() { return popupElementRef.current; },
-        forceAlign: () => {},
-      }),
-      [],
-    );
 
     const timerRef = React.useRef<number | undefined>(undefined);
     const isPressedRef = React.useRef(false);
@@ -194,11 +188,14 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
     const childRef = childProps.ref;
     const attachTrigger = React.useCallback(
       (handle: TriggerHandle | null) => {
-        triggerRef.current = handle instanceof HTMLElement ? handle : handle?.nativeElement ?? null;
+        const element = handle instanceof HTMLElement ? handle : handle?.nativeElement ?? null;
+        triggerRef.current = element;
+        if (typeof ref === 'function') ref(element);
+        else if (ref) (ref as React.MutableRefObject<HTMLElement | null>).current = element;
         if (typeof childRef === 'function') childRef(handle);
         else if (childRef) (childRef as React.MutableRefObject<TriggerHandle | null>).current = handle;
       },
-      [childRef],
+      [ref, childRef],
     );
 
     const isShown = hasContent && !disabled && (heldOpen ?? isOpen);
@@ -220,6 +217,7 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
 
     const resolvedId = id ?? popupId;
     const trigger = React.cloneElement(child, {
+      ...forwardedProps,
       ref: attachTrigger,
       'aria-describedby': isShown
         ? [childProps['aria-describedby'], resolvedId].filter(Boolean).join(' ')
@@ -228,7 +226,11 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
         .filter(Boolean)
         .join(' ') || undefined,
       style: style ? { ...childProps.style, ...style } : childProps.style,
+      onKeyDown: compose(childProps.onKeyDown, onKeyDown),
+      onKeyUp: compose(childProps.onKeyUp, onKeyUp),
       onMouseDown: compose(childProps.onMouseDown, onMouseDown),
+      onMouseUp: compose(childProps.onMouseUp, onMouseUp),
+      onPointerUp: compose(childProps.onPointerUp, onPointerUp),
       onTouchStart: compose(childProps.onTouchStart, onTouchStart),
       onMouseEnter: compose(childProps.onMouseEnter, onMouseEnter),
       onMouseLeave: compose(childProps.onMouseLeave, onMouseLeave),
@@ -292,7 +294,6 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
                   className={cn('z-[1070] pointer-events-none', classNames?.root)}
                 >
                   <TooltipPrimitive.Popup
-                    ref={popupElementRef}
                     id={resolvedId}
                     role="tooltip"
                     data-slot="tooltip"

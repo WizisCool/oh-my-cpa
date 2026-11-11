@@ -2,7 +2,7 @@ import { CredentialRecoveryPanel } from './CredentialRecoveryPanel';
 import { SecretInput } from '../common/SecretInput';
 import type { MessageKey } from '../../i18n/catalog';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Tabs, Typography, Form, Table, App as AntdApp } from 'antd';
+import { Tabs, Typography, Form, Table } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,7 +36,7 @@ import {
 } from './authFileLogic';
 import styles from './AuthFileDetailDrawer.module.css';
 import { copyText } from '../../utils/clipboard';
-import { useToast } from '../feedback';
+import { useConfirmModal, useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { ErrorRulesEditor } from '../policy/ErrorRulesEditor';
 import { CredentialModelAliasesEditor } from './CredentialModelAliasesEditor';
@@ -204,7 +204,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<FormValues>();

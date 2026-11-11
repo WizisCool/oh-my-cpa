@@ -1,5 +1,5 @@
 /* Advanced filter drawer: one field per row, grouped by what the field means. */
-.drawer :global(.ant-drawer-body) {
+.drawer :global([data-slot='sheet-body']) {
   padding: 16px 20px 8px;
 }
 .group + .group {

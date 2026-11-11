@@ -1,6 +1,11 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Dropdown } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ThemeProvider as OpenUIThemeProvider } from '@openuidev/react-ui';
 import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
@@ -498,27 +503,35 @@ export function AgentPage() {
       )}
       {hasTurns && <span className={styles['shell-bar-rule']} aria-hidden="true" />}
       {hasTurns && (
-        <Dropdown
-          trigger={['click']}
+        <DropdownMenu
           open={isExportMenuOpen}
-          onOpenChange={setIsExportMenuOpen}
-          disabled={!canExport}
-          menu={{
-            items: [
-              { key: 'html', label: t('agent.export.html') },
-              { key: 'image', label: t('agent.export.image') },
-              { key: 'json', label: t('agent.export.json') },
-            ],
-            onClick: ({ key }) => {
-              setIsExportMenuOpen(false);
-              exportConversation(key as 'html' | 'image' | 'json');
-            },
+          onOpenChange={(next) => {
+            if (!canExport) return;
+            setIsExportMenuOpen(next);
           }}
         >
-          <Tooltip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
-            <Button variant="ghost" aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={!canExport} />
-          </Tooltip>
-        </Dropdown>
+          <DropdownMenuTrigger
+            disabled={!canExport}
+            render={
+              <Tooltip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
+                <Button variant="ghost" aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={!canExport} />
+              </Tooltip>
+            }
+          />
+          <DropdownMenuContent placement="bottomRight">
+            {(['html', 'image', 'json'] as const).map((format) => (
+              <DropdownMenuItem
+                key={format}
+                onClick={() => {
+                  setIsExportMenuOpen(false);
+                  exportConversation(format);
+                }}
+              >
+                {t(`agent.export.${format}`)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       <Tooltip title={t('agent.directory')}>
         <Button variant="ghost" data-testid="agent-directory-open" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />

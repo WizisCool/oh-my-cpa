@@ -1,4 +1,4 @@
-.connect-drawer :global(.ant-drawer-body) {
+.connect-drawer :global([data-slot='sheet-body']) {
   overflow-x: hidden;
   padding-bottom: 24px;
 }

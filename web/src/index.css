@@ -453,6 +453,7 @@
   ::selection { background: var(--accent); color: var(--accent-on); }
   button, input, textarea, select { font: inherit; color: inherit; }
   a { color: inherit; }
+  [hidden]:where(:not([hidden='until-found'])) { display: none !important; }
 }
 
 /* ── Base UI / shadcn interruptible floating & overlay transitions ──────────
@@ -513,7 +514,42 @@
     transition-duration: var(--motion-fast);
     transition-timing-function: var(--ease-standard);
   }
+  .omc-sheet-surface {
+    transition: transform var(--motion-sheet-in) var(--ease-sheet-in);
+  }
+  .omc-sheet-surface[data-ending-style] {
+    transition-duration: var(--motion-sheet-out);
+    transition-timing-function: var(--ease-sheet-out);
+  }
+  .omc-sheet-surface[data-side='right'][data-starting-style],
+  .omc-sheet-surface[data-side='right'][data-ending-style] {
+    transform: translateX(calc(100% + 16px));
+  }
+  .omc-sheet-surface[data-side='left'][data-starting-style],
+  .omc-sheet-surface[data-side='left'][data-ending-style] {
+    transform: translateX(-100%);
+  }
+  .omc-sheet-surface[data-side='bottom'][data-starting-style],
+  .omc-sheet-surface[data-side='bottom'][data-ending-style] {
+    transform: translateY(100%);
+  }
+  .omc-sheet-surface[data-side='top'][data-starting-style],
+  .omc-sheet-surface[data-side='top'][data-ending-style] {
+    transform: translateY(-100%);
+  }
+  .omc-sheet-backdrop {
+    transition: opacity var(--motion-sheet-in) var(--ease-sheet-in);
+  }
+  .omc-sheet-backdrop[data-starting-style],
+  .omc-sheet-backdrop[data-ending-style] {
+    opacity: 0;
+  }
+  .omc-sheet-backdrop[data-ending-style] {
+    transition-duration: var(--motion-sheet-out);
+    transition-timing-function: var(--ease-sheet-out);
+  }
 }
+[data-slot='sheet-content']:has(> .app-drawer-resize[data-dragging]) { user-select: none; }
 
 /* A card is a fill on the edge shadow, never a border; the layout and a sheet's body are flat. */
 .ant-layout, .ant-drawer-section {
@@ -1563,7 +1599,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    and nav - and uses the rail's rules. All this adds is what a full-height overlay
    needs and a rail does not: the notch inset, and a scroll region that cannot drag the
    sheet itself. The left-drawer edge rule comes from the shared drawer treatment. */
-.mobile-nav-drawer .ant-drawer-body {
+.mobile-nav-drawer [data-slot='sheet-body'] {
   padding: 0;
   padding-left: env(safe-area-inset-left);
 }

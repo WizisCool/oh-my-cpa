@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { App as AntdApp, Select } from 'antd';
+import { Select } from 'antd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,7 +35,7 @@ import {
 import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta, PluginOriginBadge, PluginStateLabel } from './PluginParts';
 import { collectPluginPages } from './pluginPages';
 import styles from './Plugins.module.css';
-import { useToast } from '../feedback';
+import { useConfirmModal, useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
@@ -68,7 +68,7 @@ interface PluginConfigDrawerProps {
 export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isDemo, onClose }: PluginConfigDrawerProps) {
   const t = useT();
   const { lang } = useI18n();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();

@@ -1,5 +1,10 @@
 import React from 'react';
-import { Dropdown } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery } from '@tanstack/react-query';
@@ -352,25 +357,33 @@ export const PlaygroundPage: React.FC = () => {
 
   const actions = (
     <>
-      <Dropdown
-        trigger={['click']}
+      <DropdownMenu
         open={isExportMenuOpen}
-        onOpenChange={setIsExportMenuOpen}
-        disabled={turns.length === 0 || isRunning || isExporting}
-        menu={{
-          items: [
-            { key: 'html', label: t('agent.export.html') },
-            { key: 'image', label: t('agent.export.image') },
-            { key: 'json', label: t('agent.export.json') },
-          ],
-          onClick: ({ key }) => {
-            setIsExportMenuOpen(false);
-            exportConversation(key as 'html' | 'image' | 'json');
-          },
+        onOpenChange={(next) => {
+          if (turns.length === 0 || isRunning || isExporting) return;
+          setIsExportMenuOpen(next);
         }}
       >
-        <ToolButton label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting} />
-      </Dropdown>
+        <DropdownMenuTrigger
+          disabled={turns.length === 0 || isRunning || isExporting}
+          render={
+            <ToolButton label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting} />
+          }
+        />
+        <DropdownMenuContent placement="bottomRight">
+          {(['html', 'image', 'json'] as const).map((format) => (
+            <DropdownMenuItem
+              key={format}
+              onClick={() => {
+                setIsExportMenuOpen(false);
+                exportConversation(format);
+              }}
+            >
+              {t(`agent.export.${format}`)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ToolButton label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || !isRecoveryChecked || turns.length === 0} onClick={resetConversation} />
       <Tooltip title={t('pg.parameters')}>
         <Button

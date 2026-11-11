@@ -2,7 +2,7 @@
 /* Drawn as a filled select: the same well, the same 11px inset and the same chevron, so in a
    toolbar of selects it reads as one more of them. It does not give under a press the way a
    button does, because a field never does. */
-.time-range-trigger.ant-btn {
+.time-range-trigger[data-slot='button'] {
   max-width: 260px;
   justify-content: flex-start;
   gap: 8px;
@@ -11,8 +11,8 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.time-range-trigger.ant-btn:not(:disabled):active { transform: none; }
-.time-range-trigger .ant-btn-icon { color: var(--muted); }
+.time-range-trigger[data-slot='button']:not(:disabled):active { transform: none; }
+.time-range-trigger [data-slot='button-icon'] { color: var(--muted); }
 .time-range-trigger-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -22,15 +22,15 @@
   white-space: nowrap;
 }
 .time-range-trigger-caret { flex: none; color: var(--meta); font-size: var(--text-sm); }
-.time-range-trigger.ant-btn.is-frozen,
-.time-range-trigger.ant-btn.is-frozen:not(:disabled):hover {
+.time-range-trigger[data-slot='button'].is-frozen,
+.time-range-trigger[data-slot='button'].is-frozen:not(:disabled):hover {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
-.time-range-trigger.is-frozen .ant-btn-icon { color: var(--accent); }
+.time-range-trigger.is-frozen [data-slot='button-icon'] { color: var(--accent); }
 
 /* The panel draws its own padding so the preset rail can run the popover's full height. */
-.time-range-popover .ant-popover-container { padding: 0; }
+.time-range-popover[data-slot='popover-content'] { padding: 0; }
 
 .time-range-panel {
   --time-range-cell: 32px;
@@ -197,7 +197,7 @@
 .time-range-actions { display: flex; gap: 8px; margin-left: auto; }
 
 /* ── narrow viewports: a bottom sheet ── */
-.time-range-sheet .ant-drawer-body {
+.time-range-sheet [data-slot='sheet-body'] {
   padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
 }
 .time-range-panel.is-sheet {
@@ -232,4 +232,4 @@
 .time-range-panel.is-sheet .time-range-month-step { width: 44px; height: 36px; }
 .time-range-panel.is-sheet .time-range-footer { flex-wrap: wrap; }
 .time-range-panel.is-sheet .time-range-actions { flex: 1 0 100%; }
-.time-range-panel.is-sheet .time-range-actions > .ant-btn { flex: 1 1 0; height: 40px; }
+.time-range-panel.is-sheet .time-range-actions > [data-slot='button'] { flex: 1 1 0; height: 40px; }
