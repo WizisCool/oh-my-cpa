@@ -24,17 +24,30 @@ export function createRouteLoader<Module>(importModule: () => Promise<Module>): 
 }
 
 /**
- * A lazy page that renders at once when intent already downloaded its module.
+ * Wraps a named module export in a deduplicated `RouteLoader` shared by preloads and lazy boundaries.
+ */
+export function createNamedLoader<Module, Name extends keyof Module>(
+  importModule: () => Promise<Module>,
+  name: Name,
+): RouteLoader<{ default: Module[Name] }> {
+  return createRouteLoader(async () => ({ default: (await importModule())[name] }));
+}
+
+/**
+ * A lazy component that renders at once when intent or idle prewarming already settled its module.
  *
  * `React.lazy` suspends on its first render even when the import has settled, so a preloaded page
- * would still paint its route's loading frame - and React holds a revealed fallback for up to half
- * a second. The page chosen on mount is kept, so a page that did suspend is not remounted when its
+ * or chart would still paint its loading frame - and React holds a revealed fallback for up to half
+ * a second. The component chosen on mount is kept, so one that did suspend is not remounted when its
  * module arrives.
  */
-export function lazyRoute(load: RouteLoader<{ default: React.ComponentType }>): React.FC {
+export function lazyRoute<Props extends object = Record<string, never>>(
+  load: RouteLoader<{ default: React.ComponentType<Props> }>,
+): React.FC<Props> {
   const LazyPage = React.lazy(load);
-  return function RoutePage() {
+  return function RoutePage(props: Props) {
     const [module] = React.useState(load.loaded);
-    return React.createElement(module?.default ?? LazyPage);
+    const Target = (module?.default ?? LazyPage) as React.ComponentType<Props>;
+    return React.createElement(Target, props);
   };
 }

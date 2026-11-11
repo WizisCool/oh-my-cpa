@@ -46,15 +46,13 @@ import { Panel } from '../common/Panel';
 import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
 import { useSortableList } from '../../hooks/useSortableList';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { DASHBOARD_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import './dashboard.css';
 
 /** The prefixes the page's refresh button invalidates; shared with the credential workspace. */
 export const CREDENTIAL_FILES_QUERY_KEY = 'management-auth-files';
 export const CREDENTIAL_QUOTA_QUERY_KEY = 'management-quota';
-
-/** Countdowns are minute-grained, so the clock they read ticks at half that. */
-const CLOCK_TICK_MS = 30_000;
 
 export type CredentialQuotaPanelState = 'loading' | 'unknown' | 'empty' | 'ready';
 
@@ -358,7 +356,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
  * spends nothing upstream. Only the refresh control does, through the same run the credential
  * workspace uses, and it reports under the same toast key so the two never stack reports.
  */
-export const CredentialQuota: React.FC = () => {
+export const CredentialQuota: React.FC = React.memo(function CredentialQuota() {
   const pluginLogos = usePluginOAuthLogos();
   const multiPortalKeys = usePluginMultiPortalKeys();
   const filesQuery = useQuery({
@@ -378,11 +376,7 @@ export const CredentialQuota: React.FC = () => {
     meta: { silent: true },
   });
 
-  const [nowMS, setNowMS] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const timer = window.setInterval(() => setNowMS(Date.now()), CLOCK_TICK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
+  const nowMS = useVisibleNow();
 
   const t = useT();
   const toast = useToast();
@@ -444,4 +438,4 @@ export const CredentialQuota: React.FC = () => {
       }}
     />
   );
-};
+});

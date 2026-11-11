@@ -1,6 +1,10 @@
 import React from 'react';
 
-import { createLiveReadPolicy, usageLiveChannel, type UsageLiveState } from '../api/usageLive';
+import { usageLiveChannel, type UsageLiveState } from '../api/usageLive';
+import { createCoalescedSignalGate } from '../performance/streamBuffer';
+
+/** Default trailing-edge coalesce interval for bursty SSE invalidations (leading edge stays 0ms). */
+export const DEFAULT_LIVE_COALESCE_MS = 240;
 
 export interface LiveRevisionOptions {
   /** Off means no signals and no polling: the reader asked the view to hold still. */
@@ -13,44 +17,82 @@ export interface LiveRevisionOptions {
    * naming the flag in a dependency list rebuilt the timer on every fetch.
    */
   isBusyRef: { current: boolean };
+  /**
+   * Trailing-edge coalesce window in ms for high-frequency SSE bursts; `0` disables time coalescing.
+   * The first signal after a quiet interval always fires immediately without delay.
+   */
+  coalesceMs?: number;
 }
 
 /**
- * useLiveRevision binds the shared live usage channel to a revision counter a
- * query can key on. When to read is `createLiveReadPolicy`'s decision; the reader
- * calls `notifySettled` whenever its read finishes, so a held signal runs then.
+ * Binds the shared live usage channel to a revision counter or callback.
+ *
+ * Uses `createCoalescedSignalGate` so an isolated signal triggers an immediate re-read (`0ms`
+ * latency) while high-frequency SSE bursts merge into bounded trailing reads without overlapping
+ * in-flight requests or leaking timers across unmounts.
  */
-export function useLiveRevision({ isEnabled, fallbackPollMs, isBusyRef }: LiveRevisionOptions) {
+export function useLiveRevision({
+  isEnabled,
+  fallbackPollMs,
+  isBusyRef,
+  coalesceMs = DEFAULT_LIVE_COALESCE_MS,
+}: LiveRevisionOptions) {
   const [revision, setRevision] = React.useState(0);
   const [liveState, setLiveState] = React.useState<UsageLiveState>('connecting');
-  const policy = React.useMemo(createLiveReadPolicy, []);
   const bump = React.useCallback(() => setRevision((value) => value + 1), []);
+
+  const gate = React.useMemo(
+    () =>
+      createCoalescedSignalGate({
+        coalesceMs,
+        isBusy: () => isBusyRef.current,
+        isVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
+        onEmit: bump,
+      }),
+    [coalesceMs, isBusyRef, bump],
+  );
 
   React.useEffect(() => {
     if (!isEnabled) {
-      policy.reset();
-      return;
+      gate.reset();
+      return undefined;
     }
-    return usageLiveChannel().subscribe({
-      onSignal: () => {
-        if (policy.onSignal(isBusyRef.current)) bump();
-      },
+    const unsubscribe = usageLiveChannel().subscribe({
+      onSignal: () => gate.onSignal(),
       onState: setLiveState,
     });
-  }, [isEnabled, policy, isBusyRef, bump]);
+    const onVisibility = () => {
+      gate.onVisibilityChange();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    return () => {
+      unsubscribe();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+      gate.reset();
+    };
+  }, [isEnabled, gate]);
 
   const isLive = isEnabled && liveState === 'live';
   React.useEffect(() => {
-    if (!isEnabled || isLive) return;
+    if (!isEnabled || isLive) return undefined;
     const timer = setInterval(() => {
-      if (policy.onTick({ isLive, isVisible: document.visibilityState === 'visible', isBusy: isBusyRef.current })) bump();
+      gate.onFallbackTick(isLive);
     }, fallbackPollMs);
     return () => clearInterval(timer);
-  }, [isEnabled, isLive, fallbackPollMs, policy, isBusyRef, bump]);
+  }, [isEnabled, isLive, fallbackPollMs, gate]);
 
   const notifySettled = React.useCallback(() => {
-    if (policy.onSettled(isBusyRef.current)) bump();
-  }, [policy, isBusyRef, bump]);
+    if (!isEnabled) return;
+    gate.onSettled();
+  }, [isEnabled, gate]);
 
-  return { revision, liveState: isEnabled ? liveState : ('connecting' as UsageLiveState), notifySettled };
+  return {
+    revision,
+    liveState: isEnabled ? liveState : ('connecting' as UsageLiveState),
+    notifySettled,
+  };
 }

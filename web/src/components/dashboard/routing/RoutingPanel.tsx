@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '../../../api/client';
 import { Panel } from '../../common/Panel';
@@ -32,23 +32,29 @@ import styles from './RoutingPanel.module.css';
 import { Tooltip } from '../../common/Tooltip';
 
 const NO_ARRIVALS: RoutingArrivals = { id: 0, routes: [] };
-/** The panel's clock: how often attempts are aged out of the minute. */
-const CLOCK_MS = 1000;
+export const ROUTING_WINDOW_CACHE_KEY = ['usage-routing-window'] as const;
+export const ROUTING_FETCH_QUERY_KEY = ['usage-routing'] as const;
 
 interface RoutingRead {
   response: UsageRoutingResponse;
-  /** The record id the read asked after; undefined for a read of the whole window. */
   after?: number;
-  /** Where the browser's clock stood against the server's when the answer arrived. */
   skewMs: number;
 }
 
-/**
- * When the reader last started looking at the page, on the browser's clock: Infinity while it is
- * hidden, and zero for a page that opened visible, so every request before the first read counts.
- */
-function useShownSince(): React.MutableRefObject<number> {
-  const shownSinceRef = React.useRef(typeof document !== 'undefined' && document.visibilityState === 'hidden' ? Infinity : 0);
+export interface RoutingWindow {
+  records: Map<number, UsageEvent>;
+  cooldowns: UsageRoutingCooldown[];
+  windowMs: number;
+  skewMs: number;
+  after?: number;
+}
+
+function useShownSince(hasWarmSnapshot: boolean): React.MutableRefObject<number> {
+  const shownSinceRef = React.useRef(
+    typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      ? Infinity
+      : hasWarmSnapshot ? Date.now() : 0,
+  );
   React.useEffect(() => {
     const onChange = () => {
       shownSinceRef.current = document.visibilityState === 'visible' ? Date.now() : Infinity;
@@ -59,22 +65,78 @@ function useShownSince(): React.MutableRefObject<number> {
   return shownSinceRef;
 }
 
-interface RoutingWindow {
-  records: Map<number, UsageEvent>;
-  cooldowns: UsageRoutingCooldown[];
-  windowMs: number;
-  skewMs: number;
+/**
+ * Computes the exact millisecond delay until the earliest record or cooldown in `rolling` leaves
+ * the active window, returning `null` when nothing is waiting to expire.
+ *
+ * Replacing the unconditional 1-second `setInterval` with an exact-expiry deadline eliminates
+ * idle per-second React renders and SVG layout passes when no record ages out of the minute.
+ */
+export function nextRoutingExpiryDelayMs(rolling: RoutingWindow | undefined, nowServerMs: number): number | null {
+  if (!rolling) return null;
+  let earliestExpiryMs = Infinity;
+
+  for (const record of rolling.records.values()) {
+    const expiresAt = record.timestamp_ms + Math.max(0, record.latency_ms) + rolling.windowMs;
+    if (expiresAt > nowServerMs && expiresAt < earliestExpiryMs) {
+      earliestExpiryMs = expiresAt;
+    }
+  }
+  for (const cooldown of rolling.cooldowns) {
+    if (cooldown.until_at_ms > nowServerMs && cooldown.until_at_ms < earliestExpiryMs) {
+      earliestExpiryMs = cooldown.until_at_ms;
+    }
+  }
+
+  if (!Number.isFinite(earliestExpiryMs)) return null;
+  // Coalesce closely-spaced expirations into 250ms buckets so bursts age out smoothly together.
+  return Math.max(250, Math.ceil(earliestExpiryMs - nowServerMs) + 25);
 }
 
-/** The server's clock, as the browser best knows it. */
-function useServerNow(skewMs: number): number {
-  const [now, setNow] = React.useState(() => Date.now() + skewMs);
+function useExpiryClock(rolling: RoutingWindow | undefined): number {
+  const skewMs = rolling?.skewMs ?? 0;
+  const [nowMs, setNowMs] = React.useState(() => Date.now() + skewMs);
+
   React.useEffect(() => {
-    setNow(Date.now() + skewMs);
-    const timer = setInterval(() => setNow(Date.now() + skewMs), CLOCK_MS);
-    return () => clearInterval(timer);
-  }, [skewMs]);
-  return now;
+    setNowMs(Date.now() + skewMs);
+  }, [rolling, skewMs]);
+
+  React.useEffect(() => {
+    if (!rolling) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const scheduleNext = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const current = Date.now() + rolling.skewMs;
+      const delayMs = nextRoutingExpiryDelayMs(rolling, current);
+      if (delayMs === null) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        setNowMs(Date.now() + rolling.skewMs);
+        scheduleNext();
+      }, delayMs);
+    };
+
+    const onVisibility = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        setNowMs(Date.now() + rolling.skewMs);
+        scheduleNext();
+      }
+    };
+
+    scheduleNext();
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [rolling]);
+
+  return nowMs;
 }
 
 /**
@@ -82,62 +144,97 @@ function useServerNow(skewMs: number): number {
  * credentials and providers CPA sent them to, and each new request travelling
  * the map while the reader watches.
  *
- * It holds a rolling minute of attempts in the browser. The first read is the
- * whole minute; every live signal after it reads only what was recorded since
- * the newest attempt the panel holds, and a one-second clock ages attempts out,
- * so a model leaves the moment its last request turns a minute old. The window
- * is fixed and the panel sits outside the dashboard's time-range control: it is
- * "now", never a report.
+ * Persisting the folded `RoutingWindow` in `QueryClient` (`ROUTING_WINDOW_CACHE_KEY`) lets route
+ * revisits render the live topology at 0ms without flashing a 260px skeleton or rolling back to
+ * an outdated initial read, while `queryClient.clear()` / session sign-out automatically purges it.
  */
-export function RoutingPanel() {
+export const RoutingPanel = React.memo(function RoutingPanel() {
   const t = useT();
+  const queryClient = useQueryClient();
+
+  const cachedWindow = queryClient.getQueryData<RoutingWindow>(ROUTING_WINDOW_CACHE_KEY);
+  const [rolling, setRolling] = React.useState<RoutingWindow | undefined>(() => {
+    if (!cachedWindow) return undefined;
+    const pruned = pruneRoutingRecords(
+      cachedWindow.records,
+      Date.now() + cachedWindow.skewMs,
+      cachedWindow.windowMs,
+    );
+    return { ...cachedWindow, records: pruned, after: newestRecordIdOf(pruned) ?? cachedWindow.after };
+  });
+  const rollingRef = React.useRef<RoutingWindow | undefined>(rolling);
+  const afterRef = React.useRef<number | undefined>(rolling?.after);
+
+  // On initial page open with no prior window, `shownSince` starts at 0; on warm remount with an
+  // existing window, only requests finishing after remount replay as flying packets.
+  const shownSinceRef = useShownSince(Boolean(cachedWindow));
 
   const isFetchingRef = React.useRef(false);
-  const afterRef = React.useRef<number | undefined>(undefined);
-  const shownSinceRef = useShownSince();
   const { revision, liveState, notifySettled } = useLiveRevision({
     isEnabled: true,
     fallbackPollMs: EVENT_AUTO_REFRESH_MS,
     isBusyRef: isFetchingRef,
   });
+
   const routing = useQuery<RoutingRead>({
-    queryKey: ['usage-routing', revision],
+    queryKey: ROUTING_FETCH_QUERY_KEY,
     queryFn: async () => {
       const after = afterRef.current;
       const response = await api.getUsageRouting(after);
       return { response, after, skewMs: response.as_of_ms - Date.now() };
     },
-    // Each live read is a new key that the window has already folded in.
-    gcTime: 15_000,
-    // A read the reader did not ask for paints no progress.
-    meta: { silent: revision > 0 },
+    staleTime: 0,
+    gcTime: 2 * 60_000,
+    meta: { silent: revision > 0 || Boolean(cachedWindow) },
   });
-  isFetchingRef.current = routing.isFetching;
+
+  const refetchRouting = routing.refetch;
+  const lastRevisionRef = React.useRef(revision);
   React.useEffect(() => {
+    if (revision === lastRevisionRef.current) return;
+    lastRevisionRef.current = revision;
+    void refetchRouting();
+  }, [revision, refetchRouting]);
+
+  React.useLayoutEffect(() => {
+    isFetchingRef.current = routing.isFetching;
     if (!routing.isFetching) notifySettled();
   }, [routing.isFetching, notifySettled]);
 
-  // The rolling window, and the requests that reached it since the panel last looked.
-  const [rolling, setRolling] = React.useState<RoutingWindow | undefined>(undefined);
-  const rollingRef = React.useRef<RoutingWindow | undefined>(undefined);
   const [arrivals, setArrivals] = React.useState<RoutingArrivals>(NO_ARRIVALS);
-  const foldedRef = React.useRef<RoutingRead | undefined>(undefined);
+  // Ignore any prior mount's incremental `RoutingRead` when no matching folded window survived in cache.
+  const foldedRef = React.useRef<RoutingRead | undefined>(
+    cachedWindow ? undefined : queryClient.getQueryData<RoutingRead>(ROUTING_FETCH_QUERY_KEY),
+  );
   const read = routing.data;
+
   React.useEffect(() => {
     if (!read || foldedRef.current === read) return;
     foldedRef.current = read;
     const { response, after, skewMs } = read;
     const previous = rollingRef.current;
-    // An incremental read that did not fit is a gap: the window starts over from it.
-    const isIncremental = after !== undefined && !response.has_more;
+    // An incremental slice without a base window cannot reconstruct the full minute; reset cursor and re-read full.
+    if (!previous && after !== undefined) {
+      afterRef.current = undefined;
+      void refetchRouting();
+      return;
+    }
+    const isIncremental = previous !== undefined && after !== undefined && !response.has_more;
     const merged = mergeRoutingRecords(previous?.records, response.records, isIncremental);
     const records = pruneRoutingRecords(merged, response.as_of_ms, response.window_ms);
-    afterRef.current = newestRecordIdOf(records) ?? after;
-    const next: RoutingWindow = { records, cooldowns: response.cooldowns, windowMs: response.window_ms, skewMs };
+    const nextAfter = newestRecordIdOf(records) ?? after;
+    afterRef.current = nextAfter;
+    const next: RoutingWindow = {
+      records,
+      cooldowns: response.cooldowns,
+      windowMs: response.window_ms,
+      skewMs,
+      after: nextAfter,
+    };
     rollingRef.current = next;
+    queryClient.setQueryData<RoutingWindow>(ROUTING_WINDOW_CACHE_KEY, next);
     setRolling(next);
-    // The first read replays nothing: opening the dashboard is not when those requests ran. Nor does
-    // a request that finished while the page was hidden (see `routesFinishedSince`); the rows count it.
+
     if (previous && response.records.length > 0) {
       const seen = newestRecordIdOf(previous.records) ?? 0;
       const shownSinceServerMs = shownSinceRef.current + skewMs;
@@ -147,9 +244,9 @@ export function RoutingPanel() {
       );
       if (fresh.length > 0) setArrivals((last) => ({ id: last.id + 1, routes: fresh }));
     }
-  }, [read]);
+  }, [read, queryClient, refetchRouting, shownSinceRef]);
 
-  const nowMs = useServerNow(rolling?.skewMs ?? 0);
+  const nowMs = useExpiryClock(rolling);
   const model = React.useMemo<RoutingModel | undefined>(
     () => (rolling ? buildRoutingModel(liveRecords(rolling.records, nowMs, rolling.windowMs), rolling.cooldowns, nowMs) : undefined),
     [rolling, nowMs],
@@ -204,10 +301,11 @@ export function RoutingPanel() {
         <RoutingMap
           model={model}
           nowMs={nowMs}
+          skewMs={rolling?.skewMs ?? 0}
           sources={sources}
           arrivals={arrivals}
         />
       )}
     </Panel>
   );
-}
+});

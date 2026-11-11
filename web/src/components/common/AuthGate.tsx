@@ -17,21 +17,19 @@ import { ProgressBar } from './ProgressBar';
 import { Placeholder } from './Placeholder';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { isMotionReduced } from '../../utils/motionPreference';
-import { SignInStage, type SignInStageState } from './SignInStage';
+import type { SignInStageState } from './SignInStage';
 import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
 import { readKeepSignedIn, writeKeepSignedIn } from './keepSignedIn';
+import { createNamedLoader, lazyRoute } from '../../utils/routeLoader';
+import { currentConsolePathname, preloadBootChunks, warmRouteIntent } from '../../routePreload';
+import { parseTimeZone, primeTimeZone } from '../../utils/time';
 import styles from './AuthGate.module.css';
 
-// The signed-out column's outline - title, subtitle, label, field, option, button - so
-// the form lands where its outline was.
+const loadSignInStage = createNamedLoader(() => import('./SignInStage'), 'SignInStage');
+const LazySignInStage = lazyRoute<{ state: SignInStageState; failures: number }>(loadSignInStage);
+
 type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => { finished: Promise<void> } };
 
-/**
- * Hands the page from the sign-in screen to the console in one composited move: the browser
- * snapshots both, and `data-signing-in` selects the sign-in keyframes (index.css) over the
- * palette cross-fade. The console is rendered inside the callback, so nothing waits on the motion;
- * without the API or under reduced motion it simply lands.
- */
 function enterConsole(update: () => void): void {
   const start = (document as ViewTransitionDocument).startViewTransition;
   if (typeof start !== 'function' || isMotionReduced()) {
@@ -42,11 +40,9 @@ function enterConsole(update: () => void): void {
   root.dataset.signingIn = 'true';
   const transition = start.call(document, () => flushSync(update));
   const clear = () => { delete root.dataset.signingIn; };
-  // `finished` rejects only when the update itself threw, which React has already reported.
   transition.finished.then(clear, clear);
 }
 
-/** The account a password manager files the key under: one per origin, never localized. */
 const PASSWORD_MANAGER_ACCOUNT = 'management-key';
 
 const AUTH_PLACEHOLDERS = [
@@ -68,43 +64,67 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [error, setError] = React.useState<string>();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isKeptSignedIn, setIsKeptSignedIn] = React.useState(readKeepSignedIn);
-  // The mirrored gateway credential belongs to the session that read it: sign-out withdraws
-  // both the browser copy and the one this document holds, so the next sign-in reads it again.
+
   const forgetGatewayCredential = React.useCallback(() => {
     clearMirroredCPAMCCredential();
     queryClient.removeQueries({ queryKey: ['cpa-credential'] });
+    queryClient.removeQueries({ queryKey: ['usage-routing-window'] });
+    queryClient.removeQueries({ queryKey: ['usage-routing'] });
   }, [queryClient]);
-  // Counts refused attempts, so each one replays the field's shake and the gateway's flash.
+
+  const warmAuthenticatedBootstrap = React.useCallback(() => {
+    const pathname = currentConsolePathname();
+    preloadBootChunks(pathname);
+    void queryClient.fetchQuery({
+      queryKey: ['preferences'],
+      queryFn: api.getPreferences,
+      staleTime: Infinity,
+      meta: { silent: true },
+    }).then((prefs) => {
+      const selected = parseTimeZone(prefs?.omc_timezone) || '';
+      const server = parseTimeZone(prefs?.omc_server_timezone) || 'UTC';
+      const timeZone = primeTimeZone(selected, server);
+      warmRouteIntent(pathname, { queryClient, pathname, timeZone });
+    }).catch(() => undefined);
+  }, [queryClient]);
+
   const [failures, setFailures] = React.useState(0);
   const fieldRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<InputRef>(null);
   const isNarrow = useIsNarrowViewport();
-  // The session check and the sign-in request are the page's work in flight; the bar along the
-  // page's top edge counts them, as the console's own bar counts its reads.
   useProgressTask(status === 'loading');
   useProgressTask(isSubmitting);
 
   const checkSession = React.useCallback(async () => {
     try {
       const session = await api.getSession();
-      if (!session.authenticated) forgetGatewayCredential();
-      setStatus(session.authenticated ? 'authenticated' : 'unauthenticated');
+      if (!session.authenticated) {
+        forgetGatewayCredential();
+        void loadSignInStage().catch(() => undefined);
+        setStatus('unauthenticated');
+        return;
+      }
+      warmAuthenticatedBootstrap();
+      setStatus('authenticated');
     } catch (err) {
-      // Only a refused session withdraws the credential. A gateway that is briefly
-      // unreachable says nothing about whether the session is still valid.
       if (err instanceof ApiError && err.status === 401) {
         forgetGatewayCredential();
+        void loadSignInStage().catch(() => undefined);
         setStatus('unauthenticated');
       } else {
         setError(err instanceof Error ? err.message : t('auth.connect_failed'));
+        void loadSignInStage().catch(() => undefined);
         setStatus('unauthenticated');
       }
     }
-  }, [t, forgetGatewayCredential]);
+  }, [t, forgetGatewayCredential, warmAuthenticatedBootstrap]);
 
   React.useEffect(() => {
+    // Download static shell + landing-route code chunks in parallel with session check.
+    preloadBootChunks();
     setUnauthorizedHandler(() => {
       forgetGatewayCredential();
+      void loadSignInStage().catch(() => undefined);
       setStatus('unauthenticated');
     });
     void checkSession();
@@ -116,10 +136,9 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     setError(undefined);
     try {
       await api.login(values.password, isKeptSignedIn);
-      // A new session reads its own credential; nothing the previous one revealed is reused,
-      // which also covers a key rotated while this tab kept an older one cached.
       forgetGatewayCredential();
       await queryClient.invalidateQueries();
+      warmAuthenticatedBootstrap();
       enterConsole(() => setStatus('authenticated'));
       toast.success(t('auth.success'));
     } catch (err) {
@@ -131,8 +150,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     }
   };
 
-  // A refused key shakes the field once and puts the caret back in it, selected, so the next
-  // attempt is one paste away. The shake is a gesture's answer, so it uses the spring's budget.
   React.useEffect(() => {
     if (failures === 0) return;
     inputRef.current?.focus({ cursor: 'all' });
@@ -151,8 +168,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   if (status === 'authenticated') return <>{children}</>;
 
   const isLoading = status === 'loading';
-  // The showcase waits for the session check: a visitor who is already signed in goes straight
-  // to the console and should never see it flash past.
   const isStaged = !isLoading && !isNarrow;
   const stageState: SignInStageState = isSubmitting ? 'submitting' : error ? 'failed' : 'idle';
   const rise = (order: number) => ({ '--rise': order }) as React.CSSProperties;
@@ -161,9 +176,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     <div className={styles['shell']} data-staged={isStaged || undefined}>
       <ProgressBar source={progressTasks} label={isLoading ? t('auth.checking') : t('common.loading')} className="auth-progress" />
       <div className={styles['pane']}>
-        {/* The wordmark, and the same two menus the console header shows, over the same stored
-            theme and language, so a signed-out visitor picks from the full registry first. The
-            title below names the product, so the wordmark is decorative here. */}
         <header className={styles['header']}>
           <BrandArtwork shape="wordmark" height={22} className="app-brand-logo" />
           <div className={styles['menus']}><PreferenceMenus /></div>
@@ -171,7 +183,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
         <main className={styles['main']}>
           <section className={`auth-card ${styles['card']}`} aria-labelledby={isLoading ? undefined : 'auth-title'} aria-busy={isLoading || undefined}>
             {isLoading ? (
-              // The column's own outline at its signed-out geometry, so the form lands in place.
               <div role="status" aria-label={t('auth.checking')}>
                 {AUTH_PLACEHOLDERS.map((placeholder, row) => <Placeholder key={row} {...placeholder} row={row} />)}
               </div>
@@ -180,9 +191,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 <h1 id="auth-title" className={`terminal-title auth-title ${styles['rise']}`} style={rise(0)}>{t('auth.title')}</h1>
                 <p className={`${styles['subtitle']} ${styles['rise']}`} style={rise(1)}>{t('auth.subtitle')}</p>
                 {error && <Notice tone="error" description={error} className="auth-alert" />}
-                {/* The demonstration signs in anyone who asks, so the field is filled in for
-                    them. It is still the ordinary form: what it protects is the deployment's
-                    own session, and there is nothing behind it that a demo must withhold. */}
                 {isDemo && <Notice tone="info" description={t('demo.login_hint')} className="auth-alert" />}
                 <Form
                   layout="vertical"
@@ -192,13 +200,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                   className="auth-form"
                   initialValues={isDemo ? { password: 'omc-demo' } : undefined}
                 >
-                  {/* Password managers - the browser's own, and extensions such as Bitwarden and
-                      1Password - recognise a sign-in form by an account field beside a
-                      current-password field, and file the saved key under that account. The key
-                      has no account, so this fixed one stands in. It is clipped rather than
-                      `display: none`, because some managers skip fields that are not rendered,
-                      and read-only so autofill cannot change it. Saving is the manager's own
-                      offer, accepted by the operator; the console itself never stores the key. */}
                   <input
                     type="text"
                     name="username"
@@ -250,7 +251,11 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </section>
         </main>
       </div>
-      {isStaged && <SignInStage state={stageState} failures={failures} />}
+      {isStaged && (
+        <React.Suspense fallback={null}>
+          <LazySignInStage state={stageState} failures={failures} />
+        </React.Suspense>
+      )}
     </div>
   );
 };

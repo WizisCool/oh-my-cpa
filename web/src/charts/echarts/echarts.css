@@ -1,6 +1,6 @@
 /* An ECharts surface draws on the panel it sits in; the slot holds its height before it mounts so
    nothing below moves when it does. */
-.omc-echart-slot { position: relative; width: 100%; min-width: 0; }
+.omc-echart-slot { position: relative; width: 100%; min-width: 0; contain: style; }
 .omc-echart { width: 100%; min-width: 0; }
 .omc-echart svg { overflow: visible; shape-rendering: geometricPrecision; }
 

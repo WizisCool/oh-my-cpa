@@ -2,8 +2,10 @@ import React from 'react';
 import { Segmented } from 'antd';
 import { clsx } from 'clsx';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { api, ApiError } from '../../api/client';
+import { ApiError } from '../../api/client';
+import { LazyModelTokenTrend, LazyModelUsageDonut } from '../../charts/lazyCharts';
+import { useSwrQuery } from '../../performance/swrContract';
+import { dashboardModelsSwr } from './dashboardQueries';
 import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { seriesColorRange, seriesDomainKey, seriesGroupLabel as groupLabel } from '../../charts/chartTheme';
@@ -17,7 +19,6 @@ import {
   formatTokensFull,
   withGroupBy,
   type DashboardModelUsage,
-  type DashboardModelsResponse,
 } from '../../types/dashboardModels';
 import { formatCurrency } from '../../types/currencyDisplay';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
@@ -29,13 +30,6 @@ import { ModelMark } from '../ModelMark';
 import selectionStyles from '../common/selection.module.css';
 import './dashboard.css';
 import { Tooltip } from '../common/Tooltip';
-
-const LazyModelTokenTrend = React.lazy(() =>
-  import('../../charts/ModelTokenTrend').then((module) => ({ default: module.ModelTokenTrend }))
-);
-const LazyModelUsageDonut = React.lazy(() =>
-  import('../../charts/ModelUsageDonut').then((module) => ({ default: module.ModelUsageDonut }))
-);
 
 export interface ModelUsagePanelsProps {
   /** The window the page's picker selected, serialized exactly as the KPI tiles serialize it. */
@@ -80,17 +74,10 @@ function useDashboardModels({ query, range, enabled }: ModelUsagePanelsProps) {
   const { modelView } = useTokenDisplayStyle();
   const sliding = isSlidingRange(range);
   const modelsQuery = React.useMemo(() => withGroupBy(query, modelView), [query, modelView]);
-  return useQuery<DashboardModelsResponse>({
-    queryKey: [DASHBOARD_MODELS_QUERY_KEY, modelsQuery],
-    queryFn: () => api.getDashboardModels(modelsQuery),
+  return useSwrQuery(dashboardModelsSwr, modelsQuery, {
     enabled,
     refetchInterval: sliding ? DASHBOARD_MODELS_REFRESH_MS : false,
     refetchOnWindowFocus: sliding,
-    staleTime: DASHBOARD_MODELS_REFRESH_MS / 2,
-    // A refresh that failed keeps the panels the operator is reading: replacing a month of ranking
-    // with an error card because one poll timed out is worse than showing slightly old data.
-    placeholderData: keepPreviousData,
-    meta: { silent: true },
   });
 }
 
@@ -229,7 +216,7 @@ const ModelSeriesName: React.FC<{
   );
 };
 
-export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle = false, ...props }) => {
+export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = React.memo(function ModelTrendPanel({ hasViewToggle = false, ...props }) {
   const t = useT();
   const { theme } = useTheme();
   const models = useDashboardModels(props);
@@ -273,9 +260,9 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
       </ModelPanelBody>
     </Panel>
   );
-};
+});
 
-export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
+export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = React.memo(function ModelUsagePanel(props) {
   const t = useT();
   const { theme } = useTheme();
   const { modelView, style: tokenStyle } = useTokenDisplayStyle();
@@ -352,7 +339,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
       </ModelPanelBody>
     </Panel>
   );
-};
+});
 
 /**
  * ModelCost is the ranked list's cost cell.

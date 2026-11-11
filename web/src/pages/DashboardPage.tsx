@@ -1,13 +1,14 @@
 import { useDisplayCurrency } from '../types/CurrencyDisplayContext';
 import { currencyReadout, formatCurrency } from '../types/currencyDisplay';
 import { ActionMenu } from '../components/common/ActionMenu';
+import { DeferredPanel } from '../components/common/DeferredPanel';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Select } from 'antd';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
@@ -17,6 +18,7 @@ import { useLiveRevision } from '../hooks/useLiveRevision';
 import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
+import { LazyDashboardTrendChart } from '../charts/lazyCharts';
 import { maskKeyText } from '../utils/maskKey';
 import { resolveCacheRateReadout } from '../theme/cacheScale';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
@@ -32,16 +34,26 @@ import { successRateTone } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
-import { RoutingPanel } from '../components/dashboard/routing/RoutingPanel';
+import { RoutingPanel, ROUTING_WINDOW_CACHE_KEY } from '../components/dashboard/routing/RoutingPanel';
 import {
   CredentialQuota,
   CREDENTIAL_FILES_QUERY_KEY,
   CREDENTIAL_QUOTA_QUERY_KEY,
 } from '../components/dashboard/CredentialQuota';
 import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
-import { DashboardBoard } from '../components/dashboard/DashboardBoard';
-import { DashboardTilesPlaceholder } from '../components/dashboard/DashboardSkeleton';
+import { DashboardBoard, preloadDashboardBoardEditor } from '../components/dashboard/DashboardBoard';
+import { DashboardKpiTilePlaceholder } from '../components/dashboard/DashboardSkeleton';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
+import { withGroupBy } from '../types/dashboardModels';
+import {
+  dashboardHeatmapSwr,
+  dashboardModelsSwr,
+  dashboardTailSwr,
+  dashboardWindowSwr,
+  managementOverviewSwr,
+} from '../components/dashboard/dashboardQueries';
+import { invalidateSwrScopes, useSwrQuery } from '../performance/swrContract';
+import { preloadRegisteredRoute, useTransitionNavigate } from '../performance/routeContract';
 import {
   applyTail,
   DASHBOARD_RANGE_PREFERENCE,
@@ -55,7 +67,6 @@ import {
   type DashboardRange,
   type DashboardResponse,
   type DashboardSeriesPoint,
-  type DashboardTailResponse,
 } from '../types/dashboard';
 import {
   DASHBOARD_LAYOUT_PREFERENCE,
@@ -68,6 +79,7 @@ import {
 import { LoadFailure, useToast } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { Panel } from '../components/common/Panel';
+import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
 import { ToolButton } from '../components/common/ToolButton';
 import '../components/dashboard/dashboard.css';
 import { Tooltip } from '../components/common/Tooltip';
@@ -84,16 +96,11 @@ function formatRate(value: number | null | undefined): string {
   return `${value.toFixed(2)}%`;
 }
 
-// Parent query status changes must not turn unchanged series into chart revisions.
 function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
 function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
 function pickCacheReads(point: DashboardSeriesPoint): number { return point.cache_read ?? 0; }
 function pickCost(point: DashboardSeriesPoint): number { return (point.cost_nanos ?? 0) / 1_000_000_000; }
 function formatTrendTime(timeMs: number): string { return dayjs(timeMs).format('MM-DD HH:mm'); }
-
-const LazyDashboardTrendChart = React.lazy(() =>
-  import('../charts/DashboardTrendChart').then((m) => ({ default: m.DashboardTrendChart }))
-);
 
 const DashboardTrendChart = React.memo<DashboardTrendChartProps>((props) => (
   <React.Suspense
@@ -107,52 +114,34 @@ const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
   <i className={`legend-dot ${tone}`} />
 );
 
-/**
- * rateTone gives the tile's only pip something to mean.
- *
- * Green/amber/red convey real state, so one pip per verdict, and the band comes
- * from `successRateTone` - the console's single published rate rule, which the dashboard's provider
- * rows read too. 80% or better is a gateway serving well enough not to need a look, 50-80% is
- * degraded, below that is broken, and a window with no traffic carries no verdict at all rather
- * than reading as a fault.
- */
 function rateTone(successRate: number | null | undefined): ChartTone {
   return successRateTone(successRate);
 }
 
-
 export const DashboardPage: React.FC = () => {
-  useTimeZone();
+  const timeZone = useTimeZone();
   const t = useT();
   const isPhone = useIsPhoneViewport();
-  const navigate = useNavigate();
-  // Shared with the navigation's attention mark, so the dashboard adds no request of its own.
+  const rawNavigate = useNavigate();
+  const { navigateTo } = useTransitionNavigate(rawNavigate);
+  const queryClient = useQueryClient();
+
   const { data: pricingAttention } = useQuery({
     queryKey: PRICING_QUERY_KEYS.attention,
     queryFn: api.getPricingAttention,
     staleTime: 60_000,
   });
   const unpricedModels = pricingAttention?.unpriced?.length ?? 0;
-  // The console's token unit style: one setting shared with the model panels and
-  // the request records, so every token readout on this page follows it.
-  const { style: tokenStyle } = useTokenDisplayStyle();
+  const { style: tokenStyle, modelView } = useTokenDisplayStyle();
   const { currency } = useDisplayCurrency();
   const formatTrendCost = React.useCallback((value: number) => formatCurrency(value, currency), [currency]);
-  // The chosen window is the operator's working context, so it lives in the
-  // database: a reload, a service restart and a container rebuild all drop
-  // browser storage, and none of them should reset what they are looking at.
-  // Nothing is fetched for a window that has not been read yet either: painting
-  // the default and correcting it a moment later would show the wrong numbers
-  // first, which is worse than a few extra milliseconds of skeleton.
+
   const { value: range, ready: rangeReady, loaded: isRangeStored, set: applyRange } = usePreference<DashboardRange>(
     DASHBOARD_RANGE_PREFERENCE,
     DEFAULT_DASHBOARD_RANGE,
     parseDashboardRange,
   );
 
-  // The board's arrangement is the operator's too, and lives beside the window for the same reason.
-  // Arranging works on a draft: a half-made arrangement is never stored, and Cancel is just
-  // dropping it.
   const toast = useToast();
   const layoutPreference = usePreference<DashboardLayout>(
     DASHBOARD_LAYOUT_PREFERENCE,
@@ -173,9 +162,6 @@ export const DashboardPage: React.FC = () => {
   const [selectedApiKey, setSelectedApiKey] = React.useState<string | undefined>(undefined);
 
   const keysQuery = useQuery({
-    // The masked list: this picker labels a key by its name or its mask, so it has no
-    // use for the value, and it keeps the bare query key the key page deliberately does
-    // not share - that page opts into the values and must not read a masked entry.
     queryKey: ['management-client-keys'],
     queryFn: () => api.getClientAPIKeys(),
     staleTime: 60_000,
@@ -207,27 +193,20 @@ export const DashboardPage: React.FC = () => {
     if (selectedApiKey) {
       search.set('api_key', selectedApiKey);
     }
-    navigate(`/usage/events?${search.toString()}`);
-  }, [range, selectedApiKey, navigate]);
+    navigateTo(`/usage/events?${search.toString()}`);
+  }, [range, selectedApiKey, navigateTo]);
 
-  // A relative preset and an open-ended (through-now) range both move with the
-  // clock, so both are worth polling; a closed range is frozen.
   const sliding = isSlidingRange(range);
 
-  // The full window is fetched on mount, on range change, on manual refresh and
-  // whenever a tail poll finds it cannot be patched. Everything in between is
-  // the tail endpoint: whole-window numbers, a few buckets of series.
-  const { data: full, isPlaceholderData, isError, error, refetch } = useQuery({
-    queryKey: ['dashboard', query],
-    queryFn: () => api.getDashboard(query),
-    enabled: rangeReady,
-    refetchInterval: false,
-    refetchOnWindowFocus: sliding,
-    staleTime: 10000,
-    // Keep the previous window rendered while the next one loads. Without this
-    // every preset change unmounts the tiles and the page flashes empty.
-    placeholderData: keepPreviousData,
-  });
+  const { data: full, isPlaceholderData, isError, error, refetch } = useSwrQuery(
+    dashboardWindowSwr,
+    query,
+    {
+      enabled: rangeReady,
+      refetchInterval: false,
+      refetchOnWindowFocus: sliding,
+    },
+  );
 
   const tailEnabled = rangeReady && sliding && Boolean(full) && !isPlaceholderData;
   const tailBusyRef = React.useRef(false);
@@ -237,41 +216,28 @@ export const DashboardPage: React.FC = () => {
     isBusyRef: tailBusyRef,
   });
 
-  const [lastTail, setLastTail] = React.useState<{ query: string; tail: DashboardTailResponse } | null>(null);
-  const { data: tail, isFetching: isTailFetching } = useQuery({
-    queryKey: ['dashboard-tail', query, tailRevision],
-    queryFn: () => api.getDashboardTail(query),
-    // While a preset switch is still in flight, `full` is the *previous*
-    // window held by keepPreviousData — patching a new tail onto it would mix
-    // two windows on screen.
+  const tailQuery = useSwrQuery(dashboardTailSwr, query, {
     enabled: tailEnabled,
-    placeholderData: (previousData, previousQuery) =>
-      previousQuery?.queryKey[1] === query ? previousData : undefined,
-    // Keep the bucket-paced interval so sliding "now" windows advance across
-    // quiet periods, while `tailRevision` wakes immediately on pushed SSE usage.
     refetchInterval: full ? livePollInterval(full.window.bucket_ms) : false,
     refetchOnWindowFocus: false,
-    gcTime: 15_000,
-    meta: { silent: true },
-    staleTime: 0,
   });
-  React.useEffect(() => {
-    if (tail) {
-      setLastTail((prev) => (prev?.query === query && prev.tail === tail ? prev : { query, tail }));
-    } else {
-      setLastTail((prev) => (prev && prev.query !== query ? null : prev));
-    }
-  }, [query, tail]);
-  React.useEffect(() => {
-    tailBusyRef.current = isTailFetching;
-    if (!isTailFetching) notifyTailSettled();
-  }, [isTailFetching, notifyTailSettled]);
 
-  const effectiveTail = tail ?? (lastTail?.query === query ? lastTail.tail : undefined);
-  const merged = React.useMemo(() => (full ? applyTail(full, effectiveTail) : undefined), [full, effectiveTail]);
+  const refetchTail = tailQuery.refetch;
+  const lastTailRevisionRef = React.useRef(tailRevision);
+  React.useEffect(() => {
+    if (tailRevision === lastTailRevisionRef.current) return;
+    lastTailRevisionRef.current = tailRevision;
+    if (tailEnabled) void refetchTail();
+  }, [tailRevision, tailEnabled, refetchTail]);
+
+  React.useEffect(() => {
+    tailBusyRef.current = tailQuery.isFetching;
+    if (!tailQuery.isFetching) notifyTailSettled();
+  }, [tailQuery.isFetching, notifyTailSettled]);
+
+  const merged = React.useMemo(() => (full ? applyTail(full, tailQuery.data) : undefined), [full, tailQuery.data]);
   const data = merged?.data;
-  // Bucket width in minutes. Rates are per minute, so this is what turns a
-  // bucket's volume into the rate its tile names.
+
   const bucketMinutes = React.useMemo(() => {
     const ms = data?.window.bucket_ms ?? 0;
     return ms > 0 ? ms / 60_000 : 1;
@@ -284,29 +250,16 @@ export const DashboardPage: React.FC = () => {
   const formatRequestRate = React.useCallback((value: number) => `${value.toFixed(2)} ${t('dash.unit_requests_per_min')}`, [t]);
   const formatTokenRateLabel = React.useCallback((value: number) => `${formatTokenRate(value)} ${t('dash.unit_tokens_per_min')}`, [t]);
   const formatExactTokenRate = React.useCallback((value: number) => `${formatTokensFull(value)} ${t('dash.unit_tokens_per_min')}`, [t]);
-  // Refresh reaches the strip below as well as the tiles. The strip owns its own query
-  // - its span is a fixed fifty-three weeks rather than this window - so invalidating it by
-  // key prefix is what keeps one button meaning "re-read this page". Today's total in
-  // particular keeps growing, so a refresh that left the one panel tracking the current
-  // day stale would be lying about what it did.
-  const overviewQuery = useQuery({
-    queryKey: ['management-overview'],
-    queryFn: api.getManagementOverview,
-    refetchInterval: 30000,
-    meta: { silent: true },
-    staleTime: 10000,
-    placeholderData: keepPreviousData,
+
+  const overviewQuery = useSwrQuery(managementOverviewSwr, undefined, {
+    refetchInterval: 30_000,
   });
 
-  const queryClient = useQueryClient();
   const refreshAll = React.useCallback(() => {
+    void invalidateSwrScopes(queryClient, 'dashboard');
     void queryClient.invalidateQueries({ queryKey: [TOKEN_HEATMAP_QUERY_KEY] });
-    // The model panels own a query of their own as well, and they are ordered by the same button's
-    // meaning - re-read this page. A refresh that left a ranking on screen from a minute ago would
-    // be answering a question nobody asked it.
     void queryClient.invalidateQueries({ queryKey: [DASHBOARD_MODELS_QUERY_KEY] });
     void queryClient.invalidateQueries({ queryKey: ['dashboard-providers'] });
-    void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
     void queryClient.invalidateQueries({ queryKey: [CREDENTIAL_FILES_QUERY_KEY] });
     void queryClient.invalidateQueries({ queryKey: [CREDENTIAL_QUOTA_QUERY_KEY] });
     void refetch();
@@ -315,8 +268,6 @@ export const DashboardPage: React.FC = () => {
   const healRef = React.useRef(0);
   React.useEffect(() => {
     if (!merged?.broken) return;
-    // Rate-limited because a refetch does not clear the stale tail that made
-    // the splice refuse; without this the two would chase each other.
     const now = Date.now();
     if (now - healRef.current < 3000) return;
     healRef.current = now;
@@ -335,8 +286,6 @@ export const DashboardPage: React.FC = () => {
     </>
   );
 
-  // One head for the first load and the loaded board, so its controls do not appear under the
-  // reader when the first reading lands. Arranging waits for a board to arrange.
   const header = (
     <PageHeader
       title={t('nav.dashboard')}
@@ -344,8 +293,21 @@ export const DashboardPage: React.FC = () => {
         <>
           <TimeRangeControl range={range} onChange={applyRange} isDisabled={!isRangeStored} />
           <ActionMenu>
-            <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
-            <ToolButton icon={<AppstoreOutlined />} label={t('dash.layout.arrange')} onClick={() => setLayoutDraft(layout)} disabled={!data} />
+            <ToolButton
+              icon={<HistoryOutlined />}
+              label={t('nav.usage_events')}
+              onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
+              onFocus={() => preloadRegisteredRoute('/usage/events')}
+              onClick={handleDrillDown}
+            />
+            <ToolButton
+              icon={<AppstoreOutlined />}
+              label={t('dash.layout.arrange')}
+              onMouseEnter={preloadDashboardBoardEditor}
+              onFocus={preloadDashboardBoardEditor}
+              onClick={() => setLayoutDraft(layout)}
+              disabled={!data}
+            />
           </ActionMenu>
           {clientKeyOptions.length > 0 && (
             <Select
@@ -374,10 +336,18 @@ export const DashboardPage: React.FC = () => {
               prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
             />
           )}
-          <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
+          <ToolButton
+            icon={<HistoryOutlined />}
+            label={t('nav.usage_events')}
+            onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
+            onFocus={() => preloadRegisteredRoute('/usage/events')}
+            onClick={handleDrillDown}
+          />
           <ToolButton
             icon={<AppstoreOutlined />}
             label={t('dash.layout.arrange')}
+            onMouseEnter={preloadDashboardBoardEditor}
+            onFocus={preloadDashboardBoardEditor}
             onClick={() => setLayoutDraft(layout)}
             disabled={!data}
             data-testid="dashboard-layout-arrange"
@@ -387,31 +357,29 @@ export const DashboardPage: React.FC = () => {
     />
   );
 
-  if (!data) {
-    if (isError) {
-      return (
-        <div className="terminal-page dashboard-page">
-          <PageHeader title={t('nav.dashboard')} />
-          <LoadFailure
-            title={t('dash.error_title')}
-            detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
-            onRetry={() => void refetch()}
-          />
-        </div>
-      );
-    }
-    // First load: the real head, and each tile's readouts where they will land.
+  if (!data && isError) {
     return (
       <div className="terminal-page dashboard-page">
-        {header}
-        <DashboardTilesPlaceholder layout={layout} />
+        <PageHeader title={t('nav.dashboard')} />
+        <LoadFailure
+          title={t('dash.error_title')}
+          detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
+          onRetry={() => void refetch()}
+        />
       </div>
     );
   }
 
+  const hasWarmRouting = Boolean(queryClient.getQueryData(ROUTING_WINDOW_CACHE_KEY));
+  const hasWarmModels = Boolean(dashboardModelsSwr.readSnapshot(queryClient, withGroupBy(query, modelView)));
+  const hasWarmHeatmap = Boolean(dashboardHeatmapSwr.readSnapshot(queryClient, timeZone));
+  const hasWarmQuota = Boolean(queryClient.getQueryData([CREDENTIAL_FILES_QUERY_KEY]));
+  const hasModelUsageHidden = layout.some((item) => item.id === 'model_usage' && item.hidden);
+
   const renderWidget = (id: DashboardWidgetId): React.ReactNode => {
     switch (id) {
       case 'requests':
+        if (!data) return <DashboardKpiTilePlaceholder id="requests" index={0} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-head">
@@ -421,6 +389,7 @@ export const DashboardPage: React.FC = () => {
                 size="small"
                 className="tile-link"
                 icon={<RightOutlined />}
+                onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
                 onClick={handleDrillDown}
               >
                 {t('nav.usage_events')}
@@ -453,6 +422,7 @@ export const DashboardPage: React.FC = () => {
           </Panel>
         );
       case 'tokens':
+        if (!data) return <DashboardKpiTilePlaceholder id="tokens" index={1} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.total_tokens')}</div>
@@ -480,6 +450,7 @@ export const DashboardPage: React.FC = () => {
           </Panel>
         );
       case 'rpm':
+        if (!data) return <DashboardKpiTilePlaceholder id="rpm" index={2} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.rpm')}</div>
@@ -489,8 +460,6 @@ export const DashboardPage: React.FC = () => {
             <div className="tile-caption">
               <span>{t('dash.total_requests')} <b>{formatCount(data.requests.total)}</b></span>
             </div>
-            {/* Per-minute rate, so the readout under an RPM label is an RPM and not
-                a raw bucket count. The tile's own value is a rate too. */}
             <DashboardTrendChart
               ariaLabel={t('dash.rpm')}
               points={data.requests.series}
@@ -503,6 +472,7 @@ export const DashboardPage: React.FC = () => {
           </Panel>
         );
       case 'tpm':
+        if (!data) return <DashboardKpiTilePlaceholder id="tpm" index={3} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.tpm')}</div>
@@ -512,9 +482,6 @@ export const DashboardPage: React.FC = () => {
             <div className="tile-caption">
               <span>{t('dash.total_tokens')} <b title={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
             </div>
-            {/* TPM is a rate, not the token volume the tile above already plots:
-                dividing by the bucket's minutes is what makes this tile a distinct
-                reading rather than a restatement of Token total. */}
             <DashboardTrendChart
               ariaLabel={t('dash.tpm')}
               points={data.tokens.series}
@@ -528,6 +495,7 @@ export const DashboardPage: React.FC = () => {
           </Panel>
         );
       case 'cache_rate':
+        if (!data) return <DashboardKpiTilePlaceholder id="cache_rate" index={4} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">
@@ -543,15 +511,6 @@ export const DashboardPage: React.FC = () => {
               <span>{t('dash.tokens_cache_read')} <b title={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
               <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
             </div>
-            {/* The bar chart is the token volume behind the rate, and its hue is
-                the tile's identity colour. A cache miss is the shape of a novel
-                prompt, not a failed execution; the danger hue belongs to failed
-                requests. The rate itself is read
-                from the badge above, which owns the cache scale. */}
-            {/* The mark shows the cache reads behind the rate. A rate needs both
-                its terms, and this series carries only the numerator, so plotting
-                the ratio itself would invent a denominator from total tokens -
-                which would overstate the rate whenever output tokens were large. */}
             <DashboardTrendChart
               ariaLabel={t('dash.cache_rate')}
               points={data.tokens.series}
@@ -565,6 +524,7 @@ export const DashboardPage: React.FC = () => {
           </Panel>
         );
       case 'cost':
+        if (!data) return <DashboardKpiTilePlaceholder id="cost" index={5} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">
@@ -577,20 +537,20 @@ export const DashboardPage: React.FC = () => {
               <RollingNumber readout={currencyReadout(data.metrics.cost, currency)} />
             </div>
             <div className="tile-caption">
-              {/* The backend distinguishes a complete total from a partial estimate and
-                  from a window with nothing priced; the caption follows that, and a
-                  complete total carries none. When models are unpriced right now, the
-                  caption leads to the price book, where the operator can set their prices. */}
               <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
               {unpricedModels > 0 && data.metrics.cost_source !== 'estimated' && (
-                <Button type="link" size="small" className="tile-caption-link" onClick={() => navigate('/pricing')} data-testid="dashboard-unpriced-link">
+                <Button
+                  type="link"
+                  size="small"
+                  className="tile-caption-link"
+                  onMouseEnter={() => preloadRegisteredRoute('/pricing')}
+                  onClick={() => navigateTo('/pricing')}
+                  data-testid="dashboard-unpriced-link"
+                >
                   {t('dash.cost_unpriced_models', { n: unpricedModels })}
                 </Button>
               )}
             </div>
-            {/* Priced spend per bucket. Unpriced requests contribute nothing, which
-                is why the tile keeps its cost_source note rather than implying the
-                spend curve is complete. */}
             <DashboardTrendChart
               ariaLabel={t('dash.total_cost')}
               points={data.tokens.series}
@@ -602,33 +562,95 @@ export const DashboardPage: React.FC = () => {
             />
           </Panel>
         );
-      // Live, and outside the time-range control's reach: the routing panel holds a rolling minute of
-      // its own and reads whenever a request is stored, so it answers "which model is going to which
-      // credential right now" whatever window the tiles show. A phone does not mount it (the board
-      // leaves it out there): the map needs its three columns to say anything, and a reduced list
-      // would only repeat the request list, so the phone skips its reads and live connection too.
       case 'routing':
-        return <RoutingPanel />;
-      // The window the tiles describe, read at model granularity - inside the window picker's reach,
-      // unlike the activity grid, which owns a fixed fifty-three weeks.
+        return (
+          <DeferredPanel
+            priority="p1"
+            immediate={hasWarmRouting || isArranging}
+            fallback={(
+              <Panel className="dashboard-tile">
+                <Placeholder width="24%" className="placeholder-line is-meta" />
+                <Placeholder width="100%" height={260} className="tile-placeholder-spark" />
+              </Panel>
+            )}
+          >
+            <RoutingPanel />
+          </DeferredPanel>
+        );
       case 'model_trend':
         return (
-          <ModelTrendPanel
-            query={query}
-            range={range}
-            enabled={rangeReady}
-            hasViewToggle={layout.some((item) => item.id === 'model_usage' && item.hidden)}
-          />
+          <DeferredPanel
+            priority="p1"
+            immediate={hasWarmModels || isArranging}
+            fallback={(
+              <Panel className="dashboard-tile">
+                <Placeholder width="32%" className="placeholder-line is-meta" />
+                <Placeholder width="100%" height={220} className="tile-placeholder-spark" />
+              </Panel>
+            )}
+          >
+            <ModelTrendPanel
+              query={query}
+              range={range}
+              enabled={rangeReady}
+              hasViewToggle={hasModelUsageHidden}
+            />
+          </DeferredPanel>
         );
       case 'model_usage':
-        return <ModelUsagePanel query={query} range={range} enabled={rangeReady} />;
+        return (
+          <DeferredPanel
+            priority="p1"
+            immediate={hasWarmModels || isArranging}
+            fallback={(
+              <Panel className="dashboard-tile">
+                <Placeholder width="32%" className="placeholder-line is-meta" />
+                <Placeholder width="100%" height={220} className="tile-placeholder-spark" />
+              </Panel>
+            )}
+          >
+            <ModelUsagePanel query={query} range={range} enabled={rangeReady} />
+          </DeferredPanel>
+        );
       case 'token_activity':
-        return <TokenHeatmap />;
+        return (
+          <DeferredPanel
+            priority="p2"
+            immediate={hasWarmHeatmap || isArranging}
+            fallback={(
+              <Panel className="dashboard-tile heatmap-panel">
+                <div className="heatmap-inner">
+                  <div className="heatmap-head">
+                    <span className="tile-label">{t('dash.heatmap.title')}</span>
+                  </div>
+                  <div className="heatmap-skeleton" aria-hidden="true" />
+                </div>
+              </Panel>
+            )}
+          >
+            <TokenHeatmap />
+          </DeferredPanel>
+        );
       case 'credential_quota':
-        return <CredentialQuota />;
+        return (
+          <DeferredPanel
+            priority="p2"
+            immediate={hasWarmQuota || isArranging}
+            fallback={(
+              <Panel className="dashboard-tile credential-quota-panel">
+                <Placeholder width="36%" className="placeholder-line is-meta" />
+                <Placeholder width="100%" height={156} className="tile-placeholder-spark" />
+              </Panel>
+            )}
+          >
+            <CredentialQuota />
+          </DeferredPanel>
+        );
       case 'providers':
         return overviewQuery.data ? (
-          <DashboardProviders overview={overviewQuery.data} query={query} range={range} enabled={rangeReady} />
+          <DeferredPanel priority="p2" immediate={Boolean(overviewQuery.data) || isArranging}>
+            <DashboardProviders overview={overviewQuery.data} query={query} range={range} enabled={rangeReady} />
+          </DeferredPanel>
         ) : null;
     }
   };
@@ -637,7 +659,7 @@ export const DashboardPage: React.FC = () => {
     <div className="terminal-page dashboard-page">
       {header}
 
-      {data.partial_errors.length > 0 && (
+      {data && data.partial_errors.length > 0 && (
         <LoadFailure
           className="dashboard-alert"
           tone="warning"
@@ -648,29 +670,30 @@ export const DashboardPage: React.FC = () => {
       )}
 
       <ModelSeriesFocusProvider>
-        <DashboardBoard
-          layout={layout}
-          isEditing={isArranging}
-          isPhone={isPhone}
-          renderWidget={renderWidget}
-          onChange={setLayoutDraft}
-        />
+        <LoadingRegion isLoading={!data}>
+          <DashboardBoard
+            layout={layout}
+            isEditing={isArranging}
+            isPhone={isPhone}
+            renderWidget={renderWidget}
+            onChange={setLayoutDraft}
+          />
+        </LoadingRegion>
       </ModelSeriesFocusProvider>
 
-      {/* has_usage is false when the server could not tell, too; a partial
-          response must not claim the deployment has never been used. */}
-      {!data.coverage.has_usage && data.partial_errors.length === 0 && (
+      {data && !data.coverage.has_usage && data.partial_errors.length === 0 && (
         <div className="terminal-panel dashboard-empty">
           <EmptyState title={t('dash.empty_title')} description={t('dash.empty_desc')} />
         </div>
       )}
 
-      <div className="dashboard-footnote">
-        <span>{t('dash.window_minutes', { n: data.window.minutes })}</span>
-      </div>
+      {data && (
+        <div className="dashboard-footnote">
+          <span>{t('dash.window_minutes', { n: data.window.minutes })}</span>
+        </div>
+      )}
     </div>
   );
 };
 
 export type { DashboardResponse };
-

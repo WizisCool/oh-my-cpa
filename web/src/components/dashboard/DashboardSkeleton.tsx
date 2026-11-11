@@ -5,46 +5,71 @@ import {
   dashboardWidgetSpec,
   parseDashboardLayout,
   type DashboardLayout,
+  type DashboardWidgetId,
 } from '../../types/dashboardLayout';
 import { LoadingRegion, PageHeadPlaceholder, Placeholder } from '../common/Placeholder';
 import { Panel } from '../common/Panel';
 import './dashboardGrid.css';
 
 /**
- * The dashboard's metric tiles before the first reading: each tile's own readouts - label, number,
- * sparkline - where they will land, in the operator's arrangement. The panels below the tiles read
- * on their own and draw their own first frames.
+ * Exact-geometry KPI tile placeholder matching the loaded `.kpi-tile` structure (label, hero
+ * readout, caption, and sparkline slot) so the transition from skeleton to live numbers causes
+ * zero layout shift (`CLS = 0`).
  */
-export function DashboardTilesPlaceholder({ layout }: { layout: DashboardLayout }) {
-  const tiles = layout.filter((item) => !item.hidden && dashboardWidgetSpec(item.id).isMetric);
+export function DashboardKpiTilePlaceholder({
+  id,
+  index = 0,
+}: {
+  id: DashboardWidgetId;
+  index?: number;
+}) {
+  const sparkHeight = id === 'requests' || id === 'tokens' ? 64 : 44;
   return (
-    <LoadingRegion className="dashboard-grid">
-      {tiles.map((item, index) => (
-        <div key={item.id} className="dashboard-cell" data-span={item.span}>
-          {item.span > 1 ? (
-            <Panel className="dashboard-tile">
-              <Placeholder width="28%" row={index} className="placeholder-line is-meta" />
-              <Placeholder width="42%" height={34} row={index + 1} className="tile-placeholder-hero" />
-              <Placeholder width="100%" height={44} row={index + 2} className="tile-placeholder-spark" />
-            </Panel>
-          ) : (
-            <Panel className="dashboard-tile">
-              <Placeholder width="46%" row={index + 2} className="placeholder-line is-meta" />
-              <Placeholder width="58%" height={24} row={index + 3} className="tile-placeholder-value" />
-              <Placeholder width="72%" row={index + 4} className="placeholder-line is-meta" />
-            </Panel>
-          )}
-        </div>
-      ))}
-    </LoadingRegion>
+    <Panel className="dashboard-tile kpi-tile">
+      <Placeholder width={id === 'requests' || id === 'tokens' ? '28%' : '46%'} row={index} className="placeholder-line is-meta" />
+      <div className="tile-value" aria-hidden="true">
+        <Placeholder width={id === 'requests' || id === 'tokens' ? '42%' : '58%'} height={34} row={index + 1} />
+      </div>
+      <div className="tile-caption" aria-hidden="true">
+        <Placeholder width="68%" row={index + 2} className="placeholder-line is-meta" />
+      </div>
+      <div className="chart-placeholder" style={{ height: sparkHeight }} aria-hidden="true" />
+    </Panel>
   );
 }
 
 /**
- * The dashboard route while its module downloads. The arrangement is a stored preference the shell
- * has usually read already, so the frame is the operator's own board and the page's first-load
- * frame that follows it moves nothing.
+ * Renders the full dashboard board outline in the operator's stored arrangement while the route
+ * module downloads, reserving both KPI and lower panel tracks so the page height never jumps.
  */
+export function DashboardTilesPlaceholder({ layout }: { layout: DashboardLayout }) {
+  const items = layout.filter((item) => !item.hidden);
+  return (
+    <LoadingRegion className="dashboard-grid">
+      {items.map((item, index) => {
+        const spec = dashboardWidgetSpec(item.id);
+        return (
+          <div
+            key={item.id}
+            className="dashboard-cell"
+            data-span={item.span}
+            style={{ '--rows': item.rows } as React.CSSProperties}
+          >
+            {spec.isMetric ? (
+              <DashboardKpiTilePlaceholder id={item.id} index={index} />
+            ) : (
+              <Panel className="dashboard-tile">
+                <Placeholder width="32%" row={index} className="placeholder-line is-meta" />
+                <Placeholder width="100%" height={item.id === 'routing' ? 260 : 180} row={index + 1} className="tile-placeholder-spark" />
+              </Panel>
+            )}
+          </div>
+        );
+      })}
+    </LoadingRegion>
+  );
+}
+
 export function DashboardSkeleton() {
   const layout = usePreference(DASHBOARD_LAYOUT_PREFERENCE, DEFAULT_DASHBOARD_LAYOUT, parseDashboardLayout);
   return (

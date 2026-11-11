@@ -52,6 +52,7 @@ export function useLogTail(enabled: boolean): LogTail {
   const [paused, setPaused] = React.useState(false);
   const [message, setMessage] = React.useState('');
 
+  const linesRef = React.useRef<string[]>([]);
   const position = React.useRef<Position>({});
   const generation = React.useRef(0);
   const inFlight = React.useRef(false);
@@ -75,12 +76,16 @@ export function useLogTail(enabled: boolean): LogTail {
         after: page.latest_after || undefined,
       };
       if (reset || page.cursor_reset) {
+        linesRef.current = page.lines;
         setLines(page.lines);
         setDropped(0);
-      } else {
-        const merged = mergeLogLines(lines, page.lines);
+      } else if (page.lines.length > 0) {
+        const merged = mergeLogLines(linesRef.current, page.lines);
+        linesRef.current = merged.lines;
         setLines(merged.lines);
-        setDropped((previous) => previous + merged.dropped);
+        if (merged.dropped > 0) {
+          setDropped((count) => count + merged.dropped);
+        }
       }
       setPhase('live');
       setMessage('');
@@ -100,9 +105,11 @@ export function useLogTail(enabled: boolean): LogTail {
         setMessage(describeError(err));
       }
     } finally {
-      inFlight.current = false;
+      if (mine === generation.current) {
+        inFlight.current = false;
+      }
     }
-  }, [lines]);
+  }, []);
 
   // A ref keeps the interval from being rebuilt on every buffer change, which
   // would restart the countdown and quietly stretch the poll gap under load.
@@ -112,6 +119,7 @@ export function useLogTail(enabled: boolean): LogTail {
   const reload = React.useCallback(() => {
     stopped.current = false;
     generation.current += 1;
+    inFlight.current = false;
     position.current = {};
     setPhase('pending');
     void fetchRef.current(true, true);
@@ -137,6 +145,7 @@ export function useLogTail(enabled: boolean): LogTail {
   const truncate = React.useCallback(async () => {
     await api.clearLogs();
     position.current = {};
+    linesRef.current = [];
     setLines([]);
     setDropped(0);
     stopped.current = false;

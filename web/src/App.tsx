@@ -24,6 +24,7 @@ import type { RouteLoadingBody, RouteLoadingHandle } from './components/common/P
 import { ShellLoading } from './components/common/ShellLoading';
 
 import {
+  AppLayout,
   UsageEventsPage,
   PricingPage,
   ProvidersPage,
@@ -51,9 +52,6 @@ import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
 import { MotionPreferenceSync, MotionProvider } from './hooks/useReducedMotionPreference';
 import { useConsoleFonts } from './hooks/useFonts';
-
-// The recovery boundary stays eager even when the authenticated shell cannot be downloaded.
-const AppLayout = React.lazy(() => import('./components/common/AppLayout').then(module => ({ default: module.AppLayout })));
 
 /**
  * The frame a route draws while its module downloads: the shape of its loaded body, so the page that

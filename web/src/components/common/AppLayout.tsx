@@ -21,7 +21,9 @@ import { OverlayScrollArea } from './OverlayScrollArea';
 import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
-import { preloadRoute } from '../../routePreload';
+import { consoleRouteRegistry, warmRouteIntent } from '../../routePreload';
+import { useTransitionNavigate } from '../../performance/routeContract';
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
 import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
 import { buildNavGroups } from './navigation';
@@ -121,9 +123,11 @@ function parseSidebarCollapsed(raw: unknown): boolean | undefined {
 export const AppLayout: React.FC = () => {
   const t = useT();
   const toast = useToast();
-  const navigate = useNavigate();
+  const rawNavigate = useNavigate();
+  const { navigateTo } = useTransitionNavigate(rawNavigate, consoleRouteRegistry);
   const location = useLocation();
   const queryClient = useQueryClient();
+  const timeZone = useTimeZone();
   const sidebarPreference = usePreference('omc_sidebar_collapsed', false, parseSidebarCollapsed);
   const isCollapsed = sidebarPreference.value;
   const setIsCollapsed = (next: boolean) => {
@@ -206,19 +210,23 @@ export const AppLayout: React.FC = () => {
   }, [visibleNavGroups, t, isMobile, isCollapsed, hasSystemUpdate, hasPluginUpdate]);
 
   const selectPage = ({ key }: { key: string }) => {
-    navigate(key);
     setIsMobileNavOpen(false);
+    if (key !== `${location.pathname}${location.search}`) navigateTo(key);
   };
 
   const goToDashboard = () => {
     setIsMobileNavOpen(false);
-    navigate('/dashboard');
+    if (`${location.pathname}${location.search}` !== '/dashboard') navigateTo('/dashboard');
   };
+
+  React.useEffect(() => {
+    return consoleRouteRegistry.scheduleIdlePrewarm(location.pathname);
+  }, [location.pathname]);
 
   const preloadMenuTarget = (event: React.SyntheticEvent) => {
     const target = event.target;
     const path = target instanceof Element ? target.closest('[data-route-path]')?.getAttribute('data-route-path') : null;
-    if (path) preloadRoute(path);
+    if (path) warmRouteIntent(path, { queryClient, pathname: path, timeZone });
   };
 
   const menu = (

@@ -1,18 +1,23 @@
 import React from 'react';
 
-import { reconcilePresence, type Presence } from '../../../types/usageRouting';
+import { reconcilePresence, type Presence, type PresencePhase } from '../../../types/usageRouting';
 
 /**
  * Keeps an item on screen for `exitMs` after it left `items`, marked `exiting`,
- * so it can animate out from the place the reader saw it. The first render's
- * items are `entering`, which lets the panel's opening read as rows arriving.
+ * so it can animate out from the place the reader saw it.
  *
- * Each leaving item has its own timer: a row that left while another was still
- * fading must not wait for the other's timer to restart.
+ * Initial items default to `'present'` so opening or switching to the dashboard paints the existing
+ * 60-second snapshot immediately without a sluggish mount entrance; only rows arriving or leaving
+ * while the panel is open animate through `'entering'` / `'exiting'`.
  */
-export function usePresence<T>(items: readonly T[], keyOf: (item: T) => string, exitMs: number): Presence<T>[] {
+export function usePresence<T>(
+  items: readonly T[],
+  keyOf: (item: T) => string,
+  exitMs: number,
+  initialPhase: PresencePhase = 'present',
+): Presence<T>[] {
   const [list, setList] = React.useState<Presence<T>[]>(
-    () => items.map((item) => ({ key: keyOf(item), item, phase: 'entering' })),
+    () => items.map((item) => ({ key: keyOf(item), item, phase: initialPhase })),
   );
   const keyOfRef = React.useRef(keyOf);
   keyOfRef.current = keyOf;

@@ -31,6 +31,11 @@ export function Placeholder({ width, height, row = 0, className }: PlaceholderPr
 export interface LoadingRegionProps {
   children: React.ReactNode;
   className?: string;
+  /**
+   * Keeps the wrapper element mounted at one React fiber position across `true -> false`
+   * transitions so child panels preserve stateful interactions while the outer status role clears.
+   */
+  isLoading?: boolean;
 }
 
 // One full breath: the 1400ms keyframe run forwards and back.
@@ -47,20 +52,20 @@ const IsInLoadingRegion = React.createContext(false);
  * cycle: a lazy route's frame hands over to the page's own first-load frame mid-breath, and a
  * restarted cycle would make the blocks blink at the seam.
  */
-export function LoadingRegion({ children, className }: LoadingRegionProps) {
+export function LoadingRegion({ children, className, isLoading = true }: LoadingRegionProps) {
   const t = useT();
   const isNested = React.useContext(IsInLoadingRegion);
   const [epoch] = React.useState(() => `${-(performance.now() % BREATH_PERIOD_MS)}ms`);
-  if (isNested) return <div className={clsx('loading-region', className)}>{children}</div>;
+  const isActive = isLoading && !isNested;
   return (
     <div
       className={clsx('loading-region', className)}
-      style={{ '--placeholder-epoch': epoch } as React.CSSProperties}
-      role="status"
-      aria-busy="true"
-      aria-label={t('common.loading')}
+      style={isActive ? ({ '--placeholder-epoch': epoch } as React.CSSProperties) : undefined}
+      role={isActive ? 'status' : undefined}
+      aria-busy={isActive ? 'true' : undefined}
+      aria-label={isActive ? t('common.loading') : undefined}
     >
-      <IsInLoadingRegion.Provider value>{children}</IsInLoadingRegion.Provider>
+      <IsInLoadingRegion.Provider value={isNested || isLoading}>{children}</IsInLoadingRegion.Provider>
     </div>
   );
 }
