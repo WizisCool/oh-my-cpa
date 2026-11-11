@@ -1,5 +1,8 @@
 import React from 'react';
-import { Button, Input, Slider } from 'antd';
+import { Slider } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { NumberInput } from '../../components/common/NumberInput';
 import { clsx } from 'clsx';
 import { UndoOutlined } from '../../components/icons';
@@ -38,7 +41,7 @@ function NumberParameter({ id, label, value, min, max, step, restingValue, onCha
         <label htmlFor={id}>{label}</label>
         {!isUnset && (
           <Tooltip title={t('conversation.model_default')}>
-            <Button type="text" size="small" aria-label={`${t('conversation.model_default')}: ${label}`} icon={<UndoOutlined />} onClick={() => onChange(null)} />
+            <Button variant="ghost" size="sm" aria-label={`${t('conversation.model_default')}: ${label}`} icon={<UndoOutlined />} onClick={() => onChange(null)} />
           </Tooltip>
         )}
       </div>
@@ -85,13 +88,13 @@ export const ParametersPanel = React.memo(function ParametersPanel({ parameters,
       <section className={workspace['panel-section']}>
         <div className={workspace['section-head']}>
           <h2 className={workspace['section-title']}>{t('pg.generation')}</h2>
-          <Button size="small" type="text" disabled={!hasCustomParameters(parameters)} icon={<UndoOutlined />} onClick={onReset}>
+          <Button size="sm" variant="ghost" disabled={!hasCustomParameters(parameters)} icon={<UndoOutlined />} onClick={onReset}>
             {t('pg.reset')}
           </Button>
         </div>
         <div className={workspace['field']}>
           <label className={workspace['field-label']} htmlFor="playground-system">{t('pg.system')}</label>
-          <Input.TextArea
+          <Textarea
             id="playground-system"
             value={parameters.systemPrompt}
             autoSize={{ minRows: 3, maxRows: 10 }}
@@ -146,7 +149,7 @@ export const ParametersPanel = React.memo(function ParametersPanel({ parameters,
         </div>
         <div className={workspace['field']}>
           <label className={workspace['field-label']} htmlFor="playground-custom-body">{t('pg.custom_body')}</label>
-          <Input.TextArea
+          <Textarea
             id="playground-custom-body"
             className={styles['json-input']}
             value={parameters.customBody}

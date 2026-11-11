@@ -1,5 +1,6 @@
 import React from 'react';
-import { App as AntdApp, Button, Popover } from 'antd';
+import { App as AntdApp, Popover } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useBlocker } from 'react-router-dom';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -240,7 +241,7 @@ export function RoutingPage() {
       if (code === 'routing_conflict') {
         toast.error(t('orch.conflict'), {
           key: 'routing-conflict',
-          actions: <Button size="small" onClick={() => { toast.dismiss('routing-conflict'); void reload(); }}>{t('orch.reload')}</Button>,
+          actions: <Button size="sm" onClick={() => { toast.dismiss('routing-conflict'); void reload(); }}>{t('orch.reload')}</Button>,
         });
         return;
       }
@@ -311,7 +312,7 @@ export function RoutingPage() {
         </ul>
       )}
     >
-      <Button size="small" type="link">{t('orch.review')}</Button>
+      <Button size="sm" variant="link">{t('orch.review')}</Button>
     </Popover>
   );
 
@@ -322,7 +323,7 @@ export function RoutingPage() {
         <LoadFailure tone="warning" title={t('orch.readback_pending')} error={boardQuery.error} onRetry={() => void reload()} />
       )}
       {hasRemoteChange && isDirty && !isAwaitingReadback && (
-        <Notice tone="warning" title={t('orch.remote_change')} action={<Button size="small" onClick={() => void reload()}>{t('orch.reload')}</Button>} />
+        <Notice tone="warning" title={t('orch.remote_change')} action={<Button size="sm" onClick={() => void reload()}>{t('orch.reload')}</Button>} />
       )}
       {baseline.partial.length > 0 && (
         <Notice tone="warning" title={t('orch.partial_board', { sources: baseline.partial.join(', ') })} />

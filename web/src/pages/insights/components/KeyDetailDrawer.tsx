@@ -1,6 +1,6 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { AppDrawer } from '../../../components/common/AppDrawer';
 import { FactList } from '../../../components/common/FactList';
 import { useT } from '../../../i18n';
@@ -60,7 +60,7 @@ export const KeyDetailDrawer: React.FC<KeyDetailDrawerProps> = ({
       width="medium"
       title={keyId ? labels.label('key', keyId) : undefined}
       footer={keyId ? (
-        <Button type="primary" onClick={() => onFilter(keyId)}>{t('insights.filter_to_key')}</Button>
+        <Button variant="primary" onClick={() => onFilter(keyId)}>{t('insights.filter_to_key')}</Button>
       ) : undefined}
     >
       {keyId && (

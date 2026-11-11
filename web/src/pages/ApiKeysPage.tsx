@@ -2,7 +2,9 @@ import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Form, Input } from 'antd';
+import { Form } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { PlusOutlined, SyncOutlined } from '../components/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
@@ -414,7 +416,7 @@ export const ApiKeysPage: React.FC = () => {
 
   const addButton = (
     <Button
-      type="primary"
+      variant="primary"
       icon={<PlusOutlined />}
       disabled={!canWrite}
       title={isDemo ? t('demo.blocked') : undefined}
@@ -477,7 +479,7 @@ export const ApiKeysPage: React.FC = () => {
             onChange={setSearchQuery}
           />
           {isFiltered && (
-            <Button type="link" size="small" onClick={() => { setSearchQuery(''); setUseFilter('all'); }}>
+            <Button variant="link" size="sm" onClick={() => { setSearchQuery(''); setUseFilter('all'); }}>
               {t('pro.clear_filters')}
             </Button>
           )}
@@ -528,7 +530,7 @@ export const ApiKeysPage: React.FC = () => {
           <>
             <Button onClick={closeEditor}>{t('common.cancel')}</Button>
             <Button
-              type="primary"
+              variant="primary"
               loading={isSavingEditor}
               disabled={!keyInput.trim()}
               onClick={() => void handleSaveKey()}

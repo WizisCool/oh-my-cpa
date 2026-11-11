@@ -1,5 +1,5 @@
 import React from 'react';
-import { Segmented } from 'antd';
+import { Segmented } from '@/components/ui/segmented';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -104,7 +104,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
                 onClear={onClear}
               />
               <Segmented
-                size="small"
+                size="sm"
                 value={view}
                 onChange={(next) => setView(next as 'chart' | 'table')}
                 aria-label={t('insights.view_label')}

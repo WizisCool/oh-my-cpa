@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Checkbox } from 'antd';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CredentialMark } from '../../components/LobeIcon';
 import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../../components/common/RowReorder';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -146,7 +146,7 @@ export function GroupHead({ group, pluginLogos, selectedKeys, actions, hasColumn
           checked={selectable.length > 0 && selectedCount === selectable.length}
           indeterminate={selectedCount > 0 && selectedCount < selectable.length}
           disabled={selectable.length === 0}
-          onChange={(event) => actions.onSelect(selectable, event.target.checked)}
+          onCheckedChange={(checked) => actions.onSelect(selectable, checked)}
           aria-label={t('omc.section_select', { provider: group.title })}
         />
       </span>

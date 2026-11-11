@@ -15,7 +15,7 @@
 .ttl-input { width: 72px; font-family: var(--font-mono); }
 /* The option is a glyph beside a label rather than a line of text, so it is centred in the item as
    a box: on the text's baseline it sat at the item's foot. */
-.strategy-control :global(.ant-segmented-item-label) { display: flex; align-items: center; min-height: 34px; text-align: left; }
+.strategy-control :global([data-slot='segmented-item']) { justify-content: flex-start; min-height: 34px; text-align: left; }
 .strategy-option { display: inline-flex; align-items: center; gap: 10px; }
 /* Three requests over two peers: the option shows its own distribution before it is read. */
 .strategy-glyph { display: inline-flex; flex-direction: column; gap: 2px; }

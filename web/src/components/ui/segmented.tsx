@@ -87,7 +87,7 @@ export function Segmented<T extends string | number = string>({
           className={cn(
             'inline-flex flex-1 items-center gap-1.5 whitespace-nowrap rounded-sm border-0 bg-transparent font-normal text-muted-foreground cursor-pointer',
             'transition-[background-color,color,box-shadow] touch-manipulation',
-            vertical ? 'justify-start text-left' : 'justify-center',
+            'justify-center',
             'hover:not-data-disabled:not-data-checked:text-foreground',
             'data-checked:bg-thumb data-checked:font-medium data-checked:text-foreground data-checked:shadow-control',
             'focus-visible:outline-none focus-visible:shadow-focus',

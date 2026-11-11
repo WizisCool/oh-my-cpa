@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Dropdown } from 'antd';
+import { Dropdown } from 'antd';
+import { Button } from '@/components/ui/button';
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -375,7 +376,7 @@ export const PlaygroundPage: React.FC = () => {
         <Button
           aria-label={t('pg.parameters')}
           aria-pressed={isPanelOpen}
-          type={isPanelOpen ? 'default' : 'text'}
+          variant={isPanelOpen ? 'secondary' : 'ghost'}
           icon={<LayoutOutlined />}
           onClick={() => setIsPanelOpen(value => !value)}
         />

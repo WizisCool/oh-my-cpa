@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Button, Checkbox, Select, TimePicker } from 'antd';
+import { Select, TimePicker } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import dayjs from '../../utils/time';
 import {
   CheckCircleOutlined,
@@ -86,7 +88,7 @@ export function BackupPlan(props: Props) {
               title={t('sys.backup_cancel_confirm')}
               onConfirm={() => props.onCancelRestore(props.pendingRestore!)}
             >
-              <Button size="small">{t('sys.backup_cancel')}</Button>
+              <Button size="sm">{t('sys.backup_cancel')}</Button>
             </ConfirmAction>
           }
         />
@@ -182,7 +184,7 @@ function Status({
       <div className={styles['status-actions']}>
         {value.has_passphrase && (
           <Button
-            type="primary"
+            variant="primary"
             icon={<CloudUploadOutlined />}
             // A run in progress shows as this button working, not as a dead one: a loading button
             // already refuses clicks, so it keeps its colour and spinner instead of greying out.
@@ -200,7 +202,7 @@ function Status({
             {t('sys.backup_auto_run')}
           </Button>
         )}
-        <Button type="text" icon={<RollbackOutlined />} onClick={onRestore}>
+        <Button variant="ghost" icon={<RollbackOutlined />} onClick={onRestore}>
           {t('sys.backup_restore_from_backup')}
         </Button>
       </div>
@@ -269,7 +271,7 @@ function PassphraseSetup({ isBusy, onSave }: { isBusy: boolean; onSave: Props['o
       />
       <div className={styles['actions']}>
         <Button
-          type="primary"
+          variant="primary"
           loading={isSaving}
           disabled={!isPassphrasePairValid(passphrase, confirmation) || isBusy}
           onClick={() => void submit()}
@@ -304,12 +306,12 @@ function PassphraseChange({ isBusy, onSave, onDone }: { isBusy: boolean; onSave:
         onConfirmation={setConfirmation}
       />
       <div className={styles['actions']}>
-        <Button size="small" onClick={finish} disabled={isSaving}>
+        <Button size="sm" onClick={finish} disabled={isSaving}>
           {t('common.cancel')}
         </Button>
         <Button
-          size="small"
-          type="primary"
+          size="sm"
+          variant="primary"
           loading={isSaving}
           disabled={!isPassphrasePairValid(passphrase, confirmation) || isBusy}
           onClick={async () => {
@@ -416,7 +418,7 @@ function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: 
           description={t('sys.backup_passphrase_set')}
           control={
             <Button
-              size="small"
+              size="sm"
               icon={<LockOutlined />}
               aria-expanded={isChangingPassphrase}
               onClick={() => setIsChangingPassphrase((isOpen) => !isOpen)}
@@ -463,7 +465,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
             // With no cloud location the disk is the only place a backup can go, and a backup that
             // went nowhere is not a backup: the box is on and cannot be cleared yet.
             disabled={isBusy || (isLocalOn && !hasCloud)}
-            onChange={(event) => void props.onSave({ keep_local: event.target.checked ? DEFAULT_KEEP_LOCAL : 0 })}
+            onCheckedChange={(checked) => void props.onSave({ keep_local: checked ? DEFAULT_KEEP_LOCAL : 0 })}
           />
           <BackupProviderMark provider="local" />
           <div className={styles['location-text']}>
@@ -529,7 +531,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
                 tooltip={t('common.delete')}
                 onConfirm={() => remove(destination.id)}
               >
-                <Button type="text" icon={<DeleteOutlined />} aria-label={t('common.delete')} disabled={isBusy} />
+                <Button variant="ghost" icon={<DeleteOutlined />} aria-label={t('common.delete')} disabled={isBusy} />
               </ConfirmAction>
             </div>
           </li>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Segmented } from 'antd';
+import { Segmented } from '@/components/ui/segmented';
 import { Navigate } from 'react-router-dom';
 import { useViewSearchParams } from '../hooks/useViewSearchParams';
 import { useT } from '../i18n';

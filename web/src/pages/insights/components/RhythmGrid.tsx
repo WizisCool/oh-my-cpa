@@ -1,7 +1,7 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import { translateOr, type TFunc } from '../../../i18n/catalog';
 import React from 'react';
-import { Segmented } from 'antd';
+import { Segmented } from '@/components/ui/segmented';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -118,7 +118,7 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
         <PanelTitle
           extra={canShowWeek && (
             <Segmented
-              size="small"
+              size="sm"
               value={view}
               onChange={(next) => setView(next as 'hours' | 'week')}
               aria-label={t('insights.rhythm_view_label')}

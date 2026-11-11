@@ -3,7 +3,9 @@ import type { MessageKey } from '../i18n/catalog';
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, ColorPicker, Segmented, Select } from 'antd';
+import { ColorPicker, Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../components/common/Switch';
 import { PlusOutlined } from '../components/icons';
 import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
@@ -544,7 +546,7 @@ const CustomPaletteEditor: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
           <Button onClick={() => resetCustomPalette(mode)}>
             {t('omc.palette_reset')}
           </Button>
-          <Button type="primary" onClick={closeCustomEditor}>{t('omc.palette_done')}</Button>
+          <Button variant="primary" onClick={closeCustomEditor}>{t('omc.palette_done')}</Button>
         </div>
       </div>
       <div className="palette-token-list">

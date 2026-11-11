@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Image } from 'antd';
+import { Image } from 'antd';
+import { Button } from '@/components/ui/button';
 import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
@@ -213,23 +214,23 @@ function TurnFooter({ turn }: { turn: Turn }) {
         {replaceableTurnID === turn.id && (
           <>
             <Tooltip title={t('agent.turn.retry')}>
-              <Button type="text" size="small" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
+              <Button variant="ghost" size="sm" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
             </Tooltip>
             <Tooltip title={t('agent.turn.edit')}>
-              <Button type="text" size="small" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
+              <Button variant="ghost" size="sm" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
             </Tooltip>
           </>
         )}
         <Tooltip title={t('conversation.copy_answer')}>
           <ActionBarPrimitive.Copy asChild>
-            <Button type="text" size="small" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
+            <Button variant="ghost" size="sm" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
               <span className={styles['copy-idle']}><CopyOutlined /></span>
               <span className={styles['copy-done']}><CheckOutlined /></span>
             </Button>
           </ActionBarPrimitive.Copy>
         </Tooltip>
         <Tooltip title={t('agent.export.answer')}>
-          <Button type="text" size="small" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
+          <Button variant="ghost" size="sm" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
             disabled={isExporting || turn.status === 'running'}
             onClick={() => void readTurnImages([turn]).then(images => exportSnapshot(agentSnapshot({ id: '', revision: 0, model: '', client_key_fingerprint: '', omitted: 0, turns: [turn] }, images), 'html'))}
           />

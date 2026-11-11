@@ -1,6 +1,8 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Dropdown, Popover, Segmented, Select, Space } from 'antd';
+import { Dropdown, Popover, Select, Space } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { SearchInput } from '../../components/common/SearchInput';
 import { Tooltip } from '../../components/common/Tooltip';
 import {
@@ -157,7 +159,7 @@ export function FleetToolbar({
                   ]}
                 />
               </label>
-              <Button size="small" type="text" disabled={!isViewLoaded} onClick={onReset} className={styles['filter-reset']}>
+              <Button size="sm" variant="ghost" disabled={!isViewLoaded} onClick={onReset} className={styles['filter-reset']}>
                 {t('omc.reset_filters')}
               </Button>
             </div>

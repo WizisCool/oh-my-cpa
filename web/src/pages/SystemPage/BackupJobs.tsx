@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { api, apiErrorCode } from '../../api/client';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
 import { SectionHeading } from '../../components/common/SectionHeading';
@@ -79,7 +79,7 @@ export function BackupExport({
         />
         <div className={styles['actions']}>
           <Button
-            type="primary"
+            variant="primary"
             icon={<DownloadOutlined />}
             loading={isWorking}
             disabled={!canSubmit || isBusy}
@@ -164,7 +164,7 @@ function JobCard({
         <div className={styles['location-actions']}>
           {canDownload && (
             <Button
-              size="small"
+              size="sm"
               icon={<DownloadOutlined />}
               href={api.databaseBackupDownloadUrl(job.id)}
               target="_blank"
@@ -180,7 +180,7 @@ function JobCard({
               tooltip={t('sys.backup_remove')}
               onConfirm={() => onAct(job, 'delete')}
             >
-              <Button type="text" icon={<DeleteOutlined />} aria-label={t('sys.backup_remove')} />
+              <Button variant="ghost" icon={<DeleteOutlined />} aria-label={t('sys.backup_remove')} />
             </ConfirmAction>
           )}
         </div>
@@ -212,14 +212,14 @@ function JobCard({
               confirmLabel={t('sys.backup_restore')}
               onConfirm={() => onAct(job, 'restore')}
             >
-              <Button size="small" danger disabled={isBusy}>
+              <Button size="sm" danger disabled={isBusy}>
                 {t('sys.backup_restore')}
               </Button>
             </ConfirmAction>
           )}
           {canRemove && isScheduled && (
             <ConfirmAction isDanger title={t('sys.backup_cancel_confirm')} onConfirm={() => onAct(job, 'delete')}>
-              <Button size="small">{t('sys.backup_cancel')}</Button>
+              <Button size="sm">{t('sys.backup_cancel')}</Button>
             </ConfirmAction>
           )}
         </div>

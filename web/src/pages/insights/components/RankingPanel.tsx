@@ -1,7 +1,7 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -146,8 +146,8 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
       )}
       {groups.length > limit && (
         <Button
-          type="text"
-          size="small"
+          variant="ghost"
+          size="sm"
           className={styles['ranking-more']}
           onClick={() => { setExpanded((value) => !value); setSearch(''); }}
           aria-expanded={isExpanded}

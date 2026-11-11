@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 export interface CheckboxProps
   extends Omit<CheckboxPrimitive.Root.Props, 'onCheckedChange' | 'className' | 'children'> {
-  onCheckedChange?: (checked: boolean) => void;
+  onCheckedChange?: (checked: boolean, eventDetails: CheckboxPrimitive.Root.ChangeEventDetails) => void;
   className?: string;
   children?: React.ReactNode;
   ref?: React.Ref<HTMLElement>;
@@ -39,7 +39,7 @@ export function Checkbox({
       disabled={disabled}
       tabIndex={tabIndex}
       data-slot="checkbox"
-      onCheckedChange={(next) => onCheckedChange?.(next)}
+      onCheckedChange={(next, details) => onCheckedChange?.(next, details)}
       className={cn(
         'peer inline-flex size-4 shrink-0 items-center justify-center rounded-sm border-0 bg-field text-primary-foreground shadow-well cursor-pointer',
         'transition-[background-color,box-shadow,color]',

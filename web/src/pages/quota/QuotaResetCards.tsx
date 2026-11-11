@@ -1,4 +1,4 @@
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { ThunderboltOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
@@ -63,7 +63,7 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
                   onConfirm={onRedeem}
                   isDanger
                 >
-                  <Button size="small" icon={<ThunderboltOutlined />} disabled={isDemo} title={isDemo ? t('demo.blocked') : undefined}>
+                  <Button size="sm" icon={<ThunderboltOutlined />} disabled={isDemo} title={isDemo ? t('demo.blocked') : undefined}>
                     {t('quota.btn_reset_quota')}
                   </Button>
                 </ConfirmAction>

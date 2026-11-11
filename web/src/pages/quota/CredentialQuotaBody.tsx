@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { CodeOutlined, SyncOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
@@ -163,7 +163,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           </div>
           {onClearCooldown && (
             <Button
-              size="small"
+              size="sm"
               danger
               className={styles['callout-action']}
               disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
@@ -191,7 +191,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             ))}
           </div>
           {!item.active_cooldown?.is_active && onClearCooldown && (
-            <Button size="small" danger className={styles['callout-action']} disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
+            <Button size="sm" danger className={styles['callout-action']} disabled={isDemo || !item.capabilities?.clear_cooldown_supported}
               title={isDemo ? t('demo.blocked') : undefined}
               onClick={() => onClearCooldown(item.auth_index)}>
               {t('quota.clear_all_cooldowns')}

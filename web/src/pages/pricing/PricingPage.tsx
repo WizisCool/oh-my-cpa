@@ -1,7 +1,9 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Popover, Segmented, Select } from 'antd';
+import { Popover, Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import dayjs from '../../utils/time';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
@@ -99,8 +101,8 @@ const CandidateLine: React.FC<{
       </span>
       <span className={styles['candidate-actions']}>
         <Button
-          size="small"
-          type="link"
+          size="sm"
+          variant="link"
           icon={isAutomatic ? <SyncOutlined /> : <LinkOutlined />}
           loading={pendingAction === 'adopt'}
           disabled={pendingAction === 'dismiss'}
@@ -111,8 +113,8 @@ const CandidateLine: React.FC<{
           {t(isAutomatic ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}
         </Button>
         <Button
-          size="small"
-          type="link"
+          size="sm"
+          variant="link"
           loading={pendingAction === 'dismiss'}
           disabled={pendingAction === 'adopt'}
           onClick={() => onAct('dismiss')}
@@ -303,8 +305,8 @@ export const PricingPage: React.FC = () => {
                   {t('pricing.attention.suggestion', { id: row.suggestions[0].id })}
                 </span>
                 <Button
-                  size="small"
-                  type="link"
+                  size="sm"
+                  variant="link"
                   icon={<LinkOutlined />}
                   loading={adoptMutation.isPending && adoptMutation.variables?.model === row.model}
                   onClick={() => adoptMutation.mutate({ model: row.model, upstream: row.suggestions[0] })}
@@ -390,7 +392,7 @@ export const PricingPage: React.FC = () => {
         <div className="row-actions">
           <Tooltip title={row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}>
             <Button
-              size="small"
+              size="sm"
               className="row-action-btn"
               icon={<EditOutlined />}
               onClick={() => openEditor?.(row.model, { channel: row.channel, channelLabel: row.channelLabel })}
@@ -398,10 +400,10 @@ export const PricingPage: React.FC = () => {
               data-testid="pricing-row-edit"
             />
           </Tooltip>
-          {row.targetChannel && <Button size="small" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
+          {row.targetChannel && <Button size="sm" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
             {t('pricing.scope.channel')}
           </Button>}
-          {row.channel && <Button size="small" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
+          {row.channel && <Button size="sm" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
             {t('pricing.scope.shared')}
           </Button>}
         </div>

@@ -2,7 +2,8 @@ import type { MessageKey } from '../i18n/catalog';
 import { FilterDisclosure } from '../components/common/FilterDisclosure';
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { PlusOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
@@ -285,14 +286,14 @@ export const ProvidersPage: React.FC = () => {
         title={t('pro.title')}
         mobileActions={(
           <>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>{t('pro.add_provider')}</Button>
+            <Button variant="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>{t('pro.add_provider')}</Button>
           </>
         )}
         actions={(
           <>
             {/* Creating a provider writes the gateway's configuration, which the demonstration
                 refuses; the drawer still opens so the form can be read. */}
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
+            <Button variant="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
               {t('pro.add_provider')}
             </Button>
           </>
@@ -350,7 +351,7 @@ export const ProvidersPage: React.FC = () => {
               ]}
             />
             {isFiltered && (
-              <Button type="link" size="small" onClick={() => setFilters(DEFAULT_PROVIDER_FILTERS)}>
+              <Button variant="link" size="sm" onClick={() => setFilters(DEFAULT_PROVIDER_FILTERS)}>
                 {t('pro.clear_filters')}
               </Button>
             )}

@@ -1,11 +1,8 @@
 import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Button,
-  Typography,
-  Spin,
-} from 'antd';
+import { Typography, Spin } from 'antd';
+import { Button } from '@/components/ui/button';
 import {
   DownloadOutlined,
   CheckCircleOutlined,
@@ -160,8 +157,8 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
           <div className={styles['version-actions']}>
             {canDismiss && (
               <Button
-                type="text"
-                size="small"
+                variant="ghost"
+                size="sm"
                 // A pressed toggle rather than a label that swaps: the wording, and so the
                 // button's width and everything beside it, stays put, and the outcome of each
                 // press is said in a toast instead of in a line that would push the card down.
@@ -178,8 +175,8 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             )}
             {presentation.hasChangelog && (
               <Button
-                type="text"
-                size="small"
+                variant="ghost"
+                size="sm"
                 className={styles['version-action']}
                 icon={<FileTextOutlined />}
                 aria-label={t('sys.open_changelog', { product: productTitle, count: version.merge_count })}
@@ -667,8 +664,8 @@ export const SystemPage: React.FC = () => {
                   sheds its label rather than pushing it onto a row of its own: a title has to
                   stay readable in every language, and the accessible name keeps the meaning. */}
               <Button
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 className={styles['check-updates-action']}
                 icon={<CloudDownloadOutlined />}
                 loading={isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
@@ -932,7 +929,7 @@ export const SystemPage: React.FC = () => {
                       : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
                 </span>
                 <Button
-                  type="text"
+                  variant="ghost"
                   // The console's square row-action size, not `small`: a 28px control gains only 36px
                   // from the coarse-pointer 4px hit inset, and the floor this console measures is
                   // ~40px. The drawn box is what a finger has to hit here.

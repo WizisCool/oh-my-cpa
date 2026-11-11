@@ -1,7 +1,9 @@
 import type { OAuthRecoveryTarget } from '../../types/oauth';
 import React from 'react';
 import { useBlocker } from 'react-router-dom';
-import { App as AntdApp, Button, Checkbox, Dropdown, Select, Space } from 'antd';
+import { App as AntdApp, Dropdown, Select, Space } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
 import {
   BranchesOutlined,
@@ -515,7 +517,7 @@ export const OAuthManagementPage: React.FC = () => {
         : t('omc.oauth_success_refresh_failed');
     const actions = (
       <Button
-        size="small"
+        size="sm"
         onClick={() => {
           toast.dismiss(key);
           revealCompletedCredential(result.providerId, result);
@@ -558,7 +560,7 @@ export const OAuthManagementPage: React.FC = () => {
         tone={record.quotaMatch === 'missing-quota' ? 'info' : 'warning'}
         title={quotaMessage}
         action={record.canRefreshQuota ? (
-          <Button size="small" onClick={() => void actions.refreshQuotaForRecord(record)}>
+          <Button size="sm" onClick={() => void actions.refreshQuotaForRecord(record)}>
             {t('quota.btn_refresh_quota')}
           </Button>
         ) : undefined}
@@ -636,7 +638,7 @@ export const OAuthManagementPage: React.FC = () => {
             {/* Signing in is how a credential usually arrives, so it is the button; a file or a
                 Vertex key are the other ways in, under its caret. */}
             <Space.Compact>
-              <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
+              <Button variant="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
               <Dropdown
                 trigger={['click']}
                 placement="bottomRight"
@@ -648,7 +650,7 @@ export const OAuthManagementPage: React.FC = () => {
                   onClick: ({ key }) => (key === 'upload' ? setIsUploadOpen(true) : setIsVertexImportOpen(true)),
                 }}
               >
-                <Button type="primary" icon={<DownOutlined />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
+                <Button variant="primary" icon={<DownOutlined />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
               </Dropdown>
             </Space.Compact>
           </>
@@ -679,7 +681,7 @@ export const OAuthManagementPage: React.FC = () => {
               missingIndexes: projection.missingAuthIndexCount,
               quotaOnly: projection.quotaOnly.length,
             })}
-            action={<Button size="small" onClick={reloadWorkspace}>{t('common.retry')}</Button>}
+            action={<Button size="sm" onClick={reloadWorkspace}>{t('common.retry')}</Button>}
           />
         )}
 
@@ -708,7 +710,7 @@ export const OAuthManagementPage: React.FC = () => {
               checked={selectablePage.length > 0 && selectedOnPage === selectablePage.length}
               indeterminate={selectedOnPage > 0 && selectedOnPage < selectablePage.length}
               disabled={!isViewLoaded || selectablePage.length === 0}
-              onChange={(event) => credentialActions.onSelect(selectablePage, event.target.checked)}
+              onCheckedChange={(checked) => credentialActions.onSelect(selectablePage, checked)}
               aria-label={t('omc.fleet_select_page')}
               data-testid="oauth-select-page"
             />

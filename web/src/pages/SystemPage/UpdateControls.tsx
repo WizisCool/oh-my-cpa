@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import clsx from 'clsx';
 import { CloudDownloadOutlined, InfoCircleOutlined, LinkOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
@@ -44,8 +44,8 @@ export const UpdateAction: React.FC<UpdateActionProps> = ({ version, productTitl
       disabled={isRunning || isHeld || isSubmitting}
     >
       <Button
-        type="primary"
-        size="small"
+        variant="primary"
+        size="sm"
         className={styles['update-action']}
         icon={<CloudDownloadOutlined />}
         loading={isRunning || isSubmitting}

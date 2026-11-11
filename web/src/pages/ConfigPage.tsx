@@ -1,11 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Button,
-  Segmented,
-  Space,
-  Typography,
-} from 'antd';
+import { Space, Typography } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
 import { SuspenseFallback } from '../components/common/PageLoading';
 import {
@@ -252,7 +249,7 @@ export const ConfigPage: React.FC = () => {
   const sourceTools = (
     <>
       <Button
-        size="small"
+        size="sm"
         icon={<FormatPainterOutlined />}
         disabled={!rawYaml}
         onClick={() => {
@@ -281,7 +278,7 @@ export const ConfigPage: React.FC = () => {
               {configQuery.isError ? t('cfg.status_error') : configQuery.isPending && !rawYaml ? t('cfg.status_loading') : isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
             </span>
             <Segmented
-              size="small"
+              size="sm"
               value={viewMode}
               onChange={(value) => void handleViewModeChange(value as 'visual' | 'source')}
               options={[
@@ -365,7 +362,7 @@ export const ConfigPage: React.FC = () => {
                 global modal the keyboard path uses. */}
             {hasConfigErrors ? (
               <Button
-                type="primary"
+                variant="primary"
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
                 disabled={!isDirty || isDemo}
@@ -382,7 +379,7 @@ export const ConfigPage: React.FC = () => {
                 disabled={!isDirty || saveMutation.isPending || isDemo}
               >
                 <Button
-                  type="primary"
+                  variant="primary"
                   icon={<SaveOutlined />}
                   loading={saveMutation.isPending}
                   disabled={!isDirty || isDemo}
@@ -505,19 +502,19 @@ export const ConfigPage: React.FC = () => {
               )}
             </Space>}
             <div className="config-source-actions">
-              {isSourceFocused && <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setIsSourceFocused(false)}>{t('cfg.source_return')}</Button>}
+              {isSourceFocused && <Button size="sm" icon={<ArrowLeftOutlined />} onClick={() => setIsSourceFocused(false)}>{t('cfg.source_return')}</Button>}
               <Button
-                size="small"
+                size="sm"
                 icon={<SearchOutlined />}
                 disabled={!rawYaml}
                 onClick={() => editorRef.current?.find()}
               >
                 {t('cfg.source_find')}
               </Button>
-              <Button size="small" aria-pressed={wordWrap === 'on'} onClick={() => setWordWrapOverride(wordWrap === 'on' ? 'off' : 'on')}>
+              <Button size="sm" aria-pressed={wordWrap === 'on'} onClick={() => setWordWrapOverride(wordWrap === 'on' ? 'off' : 'on')}>
                 {t('cfg.source_wrap')}
               </Button>
-              {!isSourceFocused && <Button ref={sourceFocusTriggerRef} size="small" icon={<FullscreenOutlined />} onClick={() => setIsSourceFocused(true)}>
+              {!isSourceFocused && <Button ref={sourceFocusTriggerRef} size="sm" icon={<FullscreenOutlined />} onClick={() => setIsSourceFocused(true)}>
                 {t('cfg.source_focus')}
               </Button>}
               {isPhone || isSourceFocused ? (
@@ -591,7 +588,7 @@ export const ConfigPage: React.FC = () => {
           <CopyButton key="copy" showLabel size="middle" text={rawYaml} label={t('cfg.conflict_copy')} />,
           <Button
             key="reload"
-            type="primary"
+            variant="primary"
             icon={<ReloadOutlined />}
             onClick={() => void reloadAfterConflict()}
           >

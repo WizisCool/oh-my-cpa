@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../../api/client';
 import { AppDrawer } from '../../components/common/AppDrawer';

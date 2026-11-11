@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Button, Input, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { apiErrorCode } from '../../api/client';
 import { SecretInput } from '../../components/common/SecretInput';
 import { Notice } from '../../components/feedback';
@@ -251,7 +253,7 @@ export function BackupDestination({
           {t('common.cancel')}
         </Button>
         <Button
-          type="primary"
+          variant="primary"
           loading={isWorking}
           disabled={blocked || !canSave}
           onClick={() => void apply()}

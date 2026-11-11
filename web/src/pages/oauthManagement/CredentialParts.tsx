@@ -1,6 +1,8 @@
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Checkbox, Dropdown } from 'antd';
+import { App as AntdApp, Dropdown } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { MenuProps } from 'antd';
 import { CredentialRenewalBadge } from '../../components/authFiles/CredentialRenewalBadge';
 import { renewalLabel } from '../../components/authFiles/credentialRecovery';
@@ -146,7 +148,7 @@ export function SelectBox({ record, isSelected, isBusy, actions }: {
     <Checkbox
       checked={isSelected}
       disabled={isBusy || !record.canSelectForFileBatch}
-      onChange={(event) => actions.onPick(record, isRangeCheckboxClick(event.nativeEvent as MouseEvent))}
+      onCheckedChange={(_checked, details) => actions.onPick(record, isRangeCheckboxClick(details.event as MouseEvent))}
       onClick={(event) => event.stopPropagation()}
       aria-label={t('af.select_one', { name: record.file.name })}
     />
@@ -349,8 +351,8 @@ export function EditCredentialButton({ record, facts, actions }: { record: OAuth
   return (
     <Tooltip title={t('omc.fleet_action_configure')}>
       <Button
-        type="text"
-        size="small"
+        variant="ghost"
+        size="sm"
         className={styles['icon-action']}
         icon={<EditOutlined />}
         disabled={facts.isBusy || !record.canSelectForFileBatch}
@@ -376,8 +378,8 @@ export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWo
   return (
     <Tooltip title={facts.needsRefresh ? `${t('quota.btn_refresh_quota')} · ${t('omc.refresh_needed')}` : t('quota.btn_refresh_quota')}>
       <Button
-        type="text"
-        size="small"
+        variant="ghost"
+        size="sm"
         className={clsx(styles['icon-action'], facts.needsRefresh && styles['refresh-needed'])}
         icon={<SyncOutlined spin={facts.isRefreshing} />}
         disabled={facts.isBusy || facts.isRefreshing || isDemo}
@@ -466,8 +468,8 @@ export function CredentialMenu({ record, facts, actions, onRename }: {
     <Dropdown trigger={['click']} menu={{ items, onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); run(key as ActionKey); } }}>
       <Tooltip title={t('keys.actions_more')}>
         <Button
-          type="text"
-          size="small"
+          variant="ghost"
+          size="sm"
           className={styles['icon-action']}
           icon={<MoreOutlined />}
           onClick={(event) => event.stopPropagation()}

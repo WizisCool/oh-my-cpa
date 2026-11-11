@@ -1,11 +1,9 @@
 import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
-import {
-  Badge,
-  Button,
-  Popover,
-} from 'antd';
+import { Popover } from 'antd';
+import { Button } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/badge';
 import clsx from 'clsx';
 import { Switch } from '../components/common/Switch';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
@@ -636,14 +634,14 @@ export const UsageEventsPage: React.FC = () => {
                   </div>
                 }
               >
-                <Button type="text">
-                  <Badge status={ingestTone} text={t(ingestLabel)} />
+                <Button variant="ghost">
+                  <StatusDot status={ingestTone} text={t(ingestLabel)} />
                 </Button>
               </Popover>
               {hasCustomWidths && (
                 <Button
-                  size="small"
-                  type="text"
+                  size="sm"
+                  variant="ghost"
                   className="req-reset-columns-btn"
                   onClick={handleResetAllColumns}
                 >

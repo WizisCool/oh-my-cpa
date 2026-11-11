@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Tabs } from 'antd';
+import { Tabs } from 'antd';
+import { Button } from '@/components/ui/button';
 import { HistoryOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';

@@ -5,7 +5,8 @@ import { DeferredPanel } from '../components/common/DeferredPanel';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select } from 'antd';
+import { Select } from 'antd';
+import { Button } from '@/components/ui/button';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -298,7 +299,7 @@ export const DashboardPage: React.FC = () => {
         {t('dash.layout.reset')}
       </Button>
       <Button onClick={() => setLayoutDraft(null)}>{t('common.cancel')}</Button>
-      <Button type="primary" onClick={() => void saveLayout()} data-testid="dashboard-layout-done">
+      <Button variant="primary" onClick={() => void saveLayout()} data-testid="dashboard-layout-done">
         {t('dash.layout.done')}
       </Button>
     </>
@@ -424,8 +425,8 @@ export const DashboardPage: React.FC = () => {
             <div className="tile-head">
               <div className="tile-label">{t('dash.total_requests')}</div>
               <Button
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 className="tile-link"
                 icon={<RightOutlined />}
                 onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
@@ -576,8 +577,8 @@ export const DashboardPage: React.FC = () => {
               </div>
               {/* The receipt is offered where the spend is read, with the same weight as the requests tile's link. */}
               <Button
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 className="tile-link"
                 icon={<ReceiptOutlined />}
                 onMouseEnter={preloadReceiptShowcase}
@@ -595,8 +596,8 @@ export const DashboardPage: React.FC = () => {
               <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
               {unpricedModels > 0 && data.metrics.cost_source !== 'estimated' && (
                 <Button
-                  type="link"
-                  size="small"
+                  variant="link"
+                  size="sm"
                   className="tile-caption-link"
                   onMouseEnter={() => preloadRegisteredRoute('/pricing')}
                   onClick={() => navigateTo('/pricing')}

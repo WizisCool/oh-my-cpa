@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -106,7 +106,7 @@ export const PluginPageHost: React.FC = () => {
       <div className={styles.unavailable} data-plugin-page-unavailable>
         <EmptyState title={t('plugin.page_unavailable')}>
           <Button
-            type="primary"
+            variant="primary"
             onMouseEnter={() => preloadRegisteredRoute('/plugins')}
             onClick={() => navigateTo('/plugins')}
           >
@@ -135,7 +135,7 @@ export const PluginPageHost: React.FC = () => {
         <span className={styles.actions}>
           <Tooltip title={t('plugin.page_reload')}>
             <Button
-              size="small"
+              size="sm"
               icon={<ReloadOutlined />}
               // A page whose credential could not be read recovers through the control the
               // operator already has: read it again, then load the plugin's document afresh.
@@ -147,11 +147,11 @@ export const PluginPageHost: React.FC = () => {
             />
           </Tooltip>
           <Tooltip title={t('plugin.page_open_new_tab')}>
-            <Button size="small" icon={<ExternalLinkOutlined />} href={frameURL} target="_blank" rel="noreferrer" aria-label={t('plugin.page_open_new_tab')} />
+            <Button size="sm" icon={<ExternalLinkOutlined />} href={frameURL} target="_blank" rel="noreferrer" aria-label={t('plugin.page_open_new_tab')} />
           </Tooltip>
           <Tooltip title={t('plugin.page_configure')}>
             <Button
-              size="small"
+              size="sm"
               icon={<SettingOutlined />}
               onMouseEnter={() => preloadRegisteredRoute('/plugins')}
               onClick={() => navigateTo(`/plugins?plugin=${encodeURIComponent(entry.pluginId)}`)}

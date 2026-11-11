@@ -1,7 +1,7 @@
 import { translateOr } from '../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useViewSearchParams, type ViewChangeOptions } from '../hooks/useViewSearchParams';
@@ -282,7 +282,7 @@ const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) =
       <div><dt>{t('models.requests_24h')}</dt><dd>{recentRequests === undefined ? unknown : recentRequests.toLocaleString()}</dd></div>
     </dl>
     <div className={styles['cost-actions']}>
-      {onSetPrice && ledger.pricingTargets.map(target => <Button key={JSON.stringify([target.channel, target.model])} type={target.price ? 'default' : 'primary'} onClick={() => onSetPrice(target)}>
+      {onSetPrice && ledger.pricingTargets.map(target => <Button key={JSON.stringify([target.channel, target.model])} variant={target.price ? 'secondary' : 'primary'} onClick={() => onSetPrice(target)}>
         {t(target.price ? 'pricing.edit' : 'pricing.set_price')}{ledger.pricingTargets.length > 1 ? ` · ${target.channelLabel || target.channel || target.model} · ${target.model}` : ''}
       </Button>)}
       <Link className={styles['reference-link']} to={modelRequestsLink(identity)}>{t('models.view_requests')}<RightOutlined /></Link>
@@ -466,7 +466,7 @@ export const ModelSquarePage: React.FC = () => {
         <span className={styles['result-count']} role="status">
           {isFiltered ? t('models.showing', { shown: entries.length, total: allEntries.length }) : ''}
         </span>
-        {isFiltered && <Button type="link" size="small" className={styles['clear-filters']} onClick={clearFilters}>{t('models.clear_filters')}</Button>}
+        {isFiltered && <Button variant="link" size="sm" className={styles['clear-filters']} onClick={clearFilters}>{t('models.clear_filters')}</Button>}
       </Toolbar>
       <div className={clsx(styles['chip-group'], styles['maker-strip'])} role="group" aria-label={t('models.filter_makers')}>
         <button type="button" className={clsx(styles['chip'], selectionStyles['selection-control'])} aria-pressed={manufacturerId === ''} onClick={() => setParam('maker', '')}>
