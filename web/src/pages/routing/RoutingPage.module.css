@@ -291,11 +291,3 @@
   .tier-primary .tier-role { color: var(--fg-2); }
   .flow-node::before { background: var(--fg-2); }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .card,
-  .card-hidden,
-  .card-face {
-    transition: none !important;
-  }
-}
