@@ -4,6 +4,7 @@ import type { Document } from 'yaml';
 
 import { useT } from '../../i18n';
 import {
+  buildPayloadProtocolOptions,
   generateDynamicId,
   parseFilterRules,
   parseRawRules,
@@ -16,7 +17,6 @@ import {
   writePayloadCategory,
   type PayloadCategoryKey,
   type PayloadFilterRule,
-  type PayloadProtocol,
   type PayloadRawRule,
   type PayloadModelItem,
   type PayloadTypedRule,
@@ -51,14 +51,10 @@ export function usePayloadRulesDraft({
 }) {
   const t = useT();
 
-  const PROTOCOL_OPTIONS: { value: PayloadProtocol; label: string }[] = [
-    { value: '', label: t('cfg.payload_model_default') },
-    { value: 'openai', label: 'openai' },
-    { value: 'gemini', label: 'gemini' },
-    { value: 'claude', label: 'claude' },
-    { value: 'codex', label: 'codex' },
-    { value: 'antigravity', label: 'antigravity' },
-  ];
+  const PROTOCOL_OPTIONS = React.useMemo(
+    () => buildPayloadProtocolOptions(t('cfg.payload_model_default')),
+    [t],
+  );
 
   const [activePanels, setActivePanels] = useState<string[]>([]);
 

@@ -1,7 +1,25 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { isMap, type Document } from 'yaml';
 
-export type PayloadProtocol = '' | 'openai' | 'gemini' | 'claude' | 'codex' | 'antigravity';
+export const PAYLOAD_PROTOCOLS = [
+  'openai',
+  'gemini',
+  'claude',
+  'codex',
+  'antigravity',
+  'meta',
+] as const;
+
+export type PayloadProtocol = '' | (typeof PAYLOAD_PROTOCOLS)[number];
+
+export function buildPayloadProtocolOptions(
+  defaultLabel: string,
+): { value: PayloadProtocol; label: string }[] {
+  return [
+    { value: '', label: defaultLabel },
+    ...PAYLOAD_PROTOCOLS.map((protocol) => ({ value: protocol, label: protocol })),
+  ];
+}
 
 export interface PayloadKVCondition {
   id: string;
