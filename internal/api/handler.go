@@ -100,7 +100,7 @@ type Handler struct {
 	// navigation's update indicators follow the sweep instead of its next poll.
 	updateSignals updateSignals
 	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
-	// the token-activity grid, the dashboard's all-time window, quota reads and the price book's
+	// the token-activity grid, the dashboard's all-time and calendar windows, quota reads and the price book's
 	// recent traffic. Nil means the wall
 	// clock; only the demo dataset export sets it.
 	nowFn func() time.Time

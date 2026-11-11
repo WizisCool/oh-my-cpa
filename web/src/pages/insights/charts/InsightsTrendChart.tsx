@@ -9,8 +9,8 @@ import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsBucket } from '../../../types/insights';
-import { isAdditiveMetric, type InsightsMetric, type TrendGroup } from '../insightsCube';
-import { formatShare } from '../insightsFormat';
+import { isAdditiveMetric, type InsightsMetric, type TrendGroup } from '../../../types/insightsCube';
+import { formatShare } from '../../../types/insightsFormat';
 
 export interface InsightsTrendChartProps {
   bucketStarts: readonly number[];

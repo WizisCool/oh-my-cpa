@@ -11,7 +11,7 @@
  * Pure: no React, no DOM. `web/tests/logic/insights-cube.test.ts` holds its claims.
  */
 
-import type { InsightsCompareWindow, InsightsCubeResponse, InsightsKey, InsightsWindow } from '../../types/insights';
+import type { InsightsCompareWindow, InsightsCubeResponse, InsightsKey, InsightsWindow } from './insights';
 
 export const INSIGHTS_DIMENSIONS = ['key', 'call_point', 'model', 'provider', 'credential'] as const;
 export type InsightsDimension = (typeof INSIGHTS_DIMENSIONS)[number];

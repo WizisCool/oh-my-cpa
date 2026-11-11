@@ -11,8 +11,8 @@ import { useT } from '../../../i18n';
 import { resolveCountFlowReadout, resolveTokenFlowReadout, type TokenNumberStyle } from '../../../types/tokenDisplay';
 import type { RollingReadout } from '../../../types/rollingNumber';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { compareMetric, INSIGHTS_METRICS, metricValue, type InsightsMetric, type Measures } from '../insightsCube';
-import { changeTrend, formatChange } from '../insightsFormat';
+import { compareMetric, INSIGHTS_METRICS, metricValue, type InsightsMetric, type Measures } from '../../../types/insightsCube';
+import { changeTrend, formatChange } from '../../../types/insightsFormat';
 import styles from '../insights.module.css';
 
 interface MetricTilesProps {

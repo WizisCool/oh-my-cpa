@@ -10,9 +10,9 @@ import { formatTokens, formatTokensFull } from '../../../types/tokenDisplay';
 import {
   filterRows, groupTotals, metricValue, rankGroups, sumMeasures,
   type InsightsCube, type InsightsDimension, type InsightsFilters, type InsightsMetric,
-} from '../insightsCube';
+} from '../../../types/insightsCube';
 
-import type { InsightsLabels } from '../useInsightsLabels';
+import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import { RankingPanel } from './RankingPanel';
 import { RhythmGrid } from './RhythmGrid';
 import styles from '../insights.module.css';

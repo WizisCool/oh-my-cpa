@@ -6,7 +6,7 @@ import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Select } from 'antd';
-import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
+import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -44,6 +44,7 @@ import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_M
 import { DashboardBoard, preloadDashboardBoardEditor } from '../components/dashboard/DashboardBoard';
 import { DashboardKpiTilePlaceholder } from '../components/dashboard/DashboardSkeleton';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
+import { isCalendarPreset } from '../types/calendarPresets';
 import { withGroupBy } from '../types/dashboardModels';
 import {
   dashboardHeatmapSwr,
@@ -60,11 +61,12 @@ import {
   dashboardRangeParams,
   DEFAULT_DASHBOARD_RANGE,
   isSlidingRange,
-  requestListPreset,
+  requestListWindowParams,
   livePollInterval,
   parseDashboardRange,
   costNoteKey,
   type DashboardRange,
+  type DashboardWindow,
   type DashboardResponse,
   type DashboardSeriesPoint,
 } from '../types/dashboard';
@@ -99,6 +101,11 @@ function formatRate(value: number | null | undefined): string {
 function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
 function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
 function pickCacheReads(point: DashboardSeriesPoint): number { return point.cache_read ?? 0; }
+/** The receipt reads the Insights cube and embeds fonts to export; none of it is paid for until it is opened. */
+const loadReceiptShowcase = () => import('../components/dashboard/receipt/ReceiptShowcase');
+const preloadReceiptShowcase = () => void loadReceiptShowcase();
+const ReceiptShowcase = React.lazy(loadReceiptShowcase);
+
 function pickCost(point: DashboardSeriesPoint): number { return (point.cost_nanos ?? 0) / 1_000_000_000; }
 function formatTrendTime(timeMs: number): string { return dayjs(timeMs).format('MM-DD HH:mm'); }
 
@@ -151,6 +158,7 @@ export const DashboardPage: React.FC = () => {
   const [layoutDraft, setLayoutDraft] = React.useState<DashboardLayout | null>(null);
   const isArranging = layoutDraft !== null;
   const layout = layoutDraft ?? layoutPreference.value;
+  const hasCostHidden = layout.some((item) => item.id === 'cost' && item.hidden);
   const saveLayout = React.useCallback(async () => {
     const draft = layoutDraft;
     setLayoutDraft(null);
@@ -160,6 +168,8 @@ export const DashboardPage: React.FC = () => {
   }, [layoutDraft, layoutPreference, toast, t]);
 
   const [selectedApiKey, setSelectedApiKey] = React.useState<string | undefined>(undefined);
+  const [isReceiptOpen, setIsReceiptOpen] = React.useState(false);
+  const openReceipt = React.useCallback(() => setIsReceiptOpen(true), []);
 
   const keysQuery = useQuery({
     queryKey: ['management-client-keys'],
@@ -183,13 +193,11 @@ export const DashboardPage: React.FC = () => {
     return `${separator}api_key=${encodeURIComponent(selectedApiKey)}`;
   }, [rangeParams, selectedApiKey]);
 
+  // The drill-down reads the window the server last resolved, without re-creating the handler
+  // on every live tail.
+  const latestWindowRef = React.useRef<DashboardWindow | undefined>(undefined);
   const handleDrillDown = React.useCallback(() => {
-    const search = new URLSearchParams();
-    if (range.preset) search.set('preset', requestListPreset(range.preset));
-    else if (range.from !== undefined) {
-      search.set('from', String(range.from));
-      if (typeof range.to === 'number') search.set('to', String(range.to));
-    }
+    const search = requestListWindowParams(range, latestWindowRef.current);
     if (selectedApiKey) {
       search.set('api_key', selectedApiKey);
     }
@@ -204,7 +212,9 @@ export const DashboardPage: React.FC = () => {
     {
       enabled: rangeReady,
       refetchInterval: false,
-      refetchOnWindowFocus: sliding,
+      // A closed calendar unit is still the server's to move: yesterday is another day once
+      // midnight passes, so it is read again on return like a sliding window.
+      refetchOnWindowFocus: sliding || isCalendarPreset(range.preset),
     },
   );
 
@@ -237,6 +247,14 @@ export const DashboardPage: React.FC = () => {
 
   const merged = React.useMemo(() => (full ? applyTail(full, tailQuery.data) : undefined), [full, tailQuery.data]);
   const data = merged?.data;
+  // Written once the window commits, so a drill-down never reads one from an abandoned render.
+  const committedWindow = data?.window;
+  React.useLayoutEffect(() => {
+    latestWindowRef.current = committedWindow;
+  }, [committedWindow]);
+  // A calendar day is a window only the server resolves: until it has answered for this range,
+  // the request list has no bounds to open on.
+  const canDrillDown = !isCalendarPreset(range.preset) || (Boolean(data) && !isPlaceholderData);
 
   const bucketMinutes = React.useMemo(() => {
     const ms = data?.window.bucket_ms ?? 0;
@@ -293,12 +311,21 @@ export const DashboardPage: React.FC = () => {
         <>
           <TimeRangeControl range={range} onChange={applyRange} isDisabled={!isRangeStored} />
           <ActionMenu>
+            {hasCostHidden && (
+              <ToolButton
+                icon={<ReceiptOutlined />}
+                label={t('dash.receipt.open')}
+                onClick={openReceipt}
+                disabled={!data}
+              />
+            )}
             <ToolButton
               icon={<HistoryOutlined />}
               label={t('nav.usage_events')}
               onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
               onFocus={() => preloadRegisteredRoute('/usage/events')}
               onClick={handleDrillDown}
+              disabled={!canDrillDown}
             />
             <ToolButton
               icon={<AppstoreOutlined />}
@@ -336,12 +363,24 @@ export const DashboardPage: React.FC = () => {
               prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
             />
           )}
+          {/* With the cost tile hidden, its receipt link moves to the toolbar. */}
+          {hasCostHidden && (
+            <ToolButton
+              icon={<ReceiptOutlined />}
+              label={t('dash.receipt.open')}
+              onMouseEnter={preloadReceiptShowcase}
+              onFocus={preloadReceiptShowcase}
+              onClick={openReceipt}
+              disabled={!data}
+            />
+          )}
           <ToolButton
             icon={<HistoryOutlined />}
             label={t('nav.usage_events')}
             onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
             onFocus={() => preloadRegisteredRoute('/usage/events')}
             onClick={handleDrillDown}
+            disabled={!canDrillDown}
           />
           <ToolButton
             icon={<AppstoreOutlined />}
@@ -391,6 +430,7 @@ export const DashboardPage: React.FC = () => {
                 icon={<RightOutlined />}
                 onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
                 onClick={handleDrillDown}
+                disabled={!canDrillDown}
               >
                 {t('nav.usage_events')}
               </Button>
@@ -527,11 +567,26 @@ export const DashboardPage: React.FC = () => {
         if (!data) return <DashboardKpiTilePlaceholder id="cost" index={5} />;
         return (
           <Panel className="dashboard-tile kpi-tile">
-            <div className="tile-label">
-              {t('dash.total_cost')}
-              <Tooltip title={t('dash.cost_hint')}>
-                <QuestionCircleOutlined className="tile-help" />
-              </Tooltip>
+            <div className="tile-head">
+              <div className="tile-label">
+                {t('dash.total_cost')}
+                <Tooltip title={t('dash.cost_hint')}>
+                  <QuestionCircleOutlined className="tile-help" />
+                </Tooltip>
+              </div>
+              {/* The receipt is offered where the spend is read, with the same weight as the requests tile's link. */}
+              <Button
+                type="link"
+                size="small"
+                className="tile-link"
+                icon={<ReceiptOutlined />}
+                onMouseEnter={preloadReceiptShowcase}
+                onFocus={preloadReceiptShowcase}
+                onClick={openReceipt}
+                data-testid="dashboard-receipt"
+              >
+                {t('dash.receipt.open')}
+              </Button>
             </div>
             <div className="tile-value">
               <RollingNumber readout={currencyReadout(data.metrics.cost, currency)} />
@@ -691,6 +746,18 @@ export const DashboardPage: React.FC = () => {
         <div className="dashboard-footnote">
           <span>{t('dash.window_minutes', { n: data.window.minutes })}</span>
         </div>
+      )}
+
+      {isReceiptOpen && (
+        <React.Suspense fallback={null}>
+          <ReceiptShowcase
+            range={range}
+            onClose={() => setIsReceiptOpen(false)}
+            keyFilter={selectedApiKey
+              ? { id: selectedApiKey, label: clientKeyOptions.find((option) => option.value === selectedApiKey)?.label ?? selectedApiKey }
+              : undefined}
+          />
+        </React.Suspense>
       )}
     </div>
   );

@@ -46,7 +46,7 @@ const TimeRangeControlView: React.FC<TimeRangeControlProps> = ({ preset, from, t
       // Every preset is offered, the selected one included: selection is a highlight, not a
       // filter. The list is `presetKeys`, so a preset added to `EVENT_PRESETS` cannot be
       // silently missing from it.
-      presets={presetKeys().map((value) => ({ key: value, label: t('events.last_range', { range: value }) }))}
+      groups={[{ key: 'recent', presets: presetKeys().map((value) => ({ key: value, label: t('events.last_range', { range: value }) })) }]}
       label={label}
       onPresetChange={(next) => onChange({ preset: next })}
       onRangeChange={(nextFrom, nextTo) => onChange({ from: nextFrom, to: nextTo ?? undefined })}

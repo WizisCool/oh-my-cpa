@@ -4,7 +4,7 @@ import { EChart } from '../../../charts/echarts/EChart';
 import { renderChartTooltip } from '../../../charts/chartTooltip';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import type { FlowLink, FlowNode, InsightsDimension, InsightsMetric } from '../insightsCube';
+import type { FlowLink, FlowNode, InsightsDimension, InsightsMetric } from '../../../types/insightsCube';
 
 
 export interface InsightsFlowChartProps {

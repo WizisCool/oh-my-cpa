@@ -16,7 +16,7 @@ import {
   rankGroups,
   sumMeasures,
   trendSeries,
-} from '../../src/pages/insights/insightsCube.ts';
+} from '../../src/types/insightsCube.ts';
 import { comparesSameStretch, insightsRangeParams, parseInsightsRange } from '../../src/types/insights.ts';
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../../src/pages/insights/insightsRhythm.ts';
 import {
@@ -27,6 +27,8 @@ import {
   writeInsightsView,
 } from '../../src/pages/insights/insightsViewState.ts';
 import type { InsightsCubeResponse } from '../../src/types/insights.ts';
+import { buildReceiptLedger, receiptCubeParams } from '../../src/components/dashboard/receipt/receiptModel.ts';
+import { isSlidingRange, requestListWindowParams } from '../../src/types/dashboard.ts';
 import { test } from 'vitest';
 
 test('insights cube', () => {
@@ -321,4 +323,63 @@ test('insights cube', () => {
   assert.equal(mergedMatrix.cells.get(matrixCellKey('hmac:a', 'openai-compat-shared'))?.value, 15);
   const mergedFlow = buildFlow(mergedAttr, mergedAttr.rows, ['key', 'model', 'provider'], 'requests', 5);
   assert.equal(mergedFlow.links.filter((l) => l.target === '2:openai-compat-shared').reduce((s, l) => s + l.value, 0), 20);
+});
+
+test('dashboard receipt ledger and calendar windows', () => {
+  const columns = [
+    'bucket', 'key', 'call_point', 'model', 'provider', 'credential',
+    'requests', 'failures', 'input_tokens', 'output_tokens', 'reasoning_tokens', 'cached_tokens',
+    'cache_read_tokens', 'cache_creation_tokens', 'total_tokens', 'latency_sum_ms', 'ttft_sum_ms',
+    'ttft_count', 'cost_nanos', 'priced_requests', 'costed_requests',
+  ];
+  const cell = (bucket: number, key: number, model: number, requests: number, costNanos: number, costed = requests) =>
+    [bucket, key, 0, model, 0, 0, requests, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, costNanos, costed, costed];
+  const cube = decodeInsightsCube({
+    window: { preset: 'yesterday', from: 0, to: 86_399_999, open_end: false, bucket: 'hour', timezone: 'UTC', widened: false },
+    compare_window: { from: -86_400_000, to: -1 },
+    bucket_starts: [0, 3_600_000],
+    dims: {
+      keys: [{ id: 'hmac:a', is_client_key: true }, { id: 'hmac:b', is_client_key: true }, { id: 'hmac:c', is_client_key: true }],
+      call_points: ['x'],
+      models: ['m0', 'm1', 'm2'],
+      providers: ['p'],
+      credentials: [{ auth_index: 'c', auth_type: 'apikey' }],
+    },
+    columns,
+    rows: [
+      // Key a spreads one model over two buckets; the buckets must sum into one line.
+      cell(0, 0, 0, 2, 1_000_000_000),
+      cell(1, 0, 0, 3, 2_000_000_000),
+      cell(0, 0, 1, 1, 500_000_000),
+      cell(0, 0, 2, 9, 0, 0),
+      cell(0, 1, 0, 4, 5_000_000_000),
+      cell(0, 2, 1, 1, 100_000_000),
+    ],
+    previous_rows: [cell(-1, 0, 0, 5, 4_000_000_000).slice(1)],
+    coverage: { fact_requests: 20, detail_requests: 0 },
+  });
+
+  const ledger = buildReceiptLedger(cube, undefined, { keys: 2, models: 2 });
+  assert.deepEqual(ledger.keys.map((line) => line.key), ['hmac:b', 'hmac:a'], 'keys rank by spend');
+  const keyA = ledger.keys[1];
+  assert.deepEqual(keyA.models.map((line) => [line.model, line.requests, line.costNanos]), [['m0', 5, 3_000_000_000], ['m1', 1, 500_000_000]]);
+  assert.deepEqual(keyA.otherModels, { count: 1, requests: 9, costNanos: 0, costedRequests: 0 }, 'an unpriced tail folds without becoming free');
+  assert.deepEqual(ledger.otherKeys, { count: 1, requests: 1, costNanos: 100_000_000, costedRequests: 1 });
+  assert.equal(ledger.current.requests, 20);
+
+  const filtered = buildReceiptLedger(cube, 'hmac:a');
+  assert.deepEqual(filtered.keys.map((line) => line.key), ['hmac:a'], 'a key filter narrows the receipt to that key');
+  assert.equal(filtered.previous.requests, 5);
+  assert.equal(filtered.costChange.kind, 'change');
+
+  const window = { from: 1_000, to: 9_000, bucket_ms: 60_000, minutes: 0, complete: true, open_end: false };
+  assert.equal(receiptCubeParams({ preset: 'today' }, window), 'preset=today', 'a preset both pages know keeps its own comparison');
+  assert.equal(receiptCubeParams({ preset: '1h' }, window), 'from=1000', 'a dashboard-only span reads its bounds, open-ended');
+  assert.equal(receiptCubeParams({ from: 1_000, to: 9_000 }, window), 'from=1000&to=9000');
+
+  assert.equal(isSlidingRange({ preset: 'today' }), true);
+  assert.equal(isSlidingRange({ preset: 'last_week' }), false, 'a previous calendar unit is closed');
+  assert.equal(requestListWindowParams({ preset: 'yesterday' }, window).toString(), 'from=1000&to=9000', 'a calendar drill-down carries its resolved bounds');
+  assert.equal(requestListWindowParams({ preset: 'this_month' }, window).toString(), 'from=1000', 'the current unit stays open');
+  assert.equal(requestListWindowParams({ preset: 'all' }, window).toString(), 'preset=90d');
 });

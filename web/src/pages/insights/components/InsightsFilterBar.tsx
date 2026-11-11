@@ -3,9 +3,9 @@ import { Button, Checkbox, Popover } from 'antd';
 import { CloseOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../../../components/icons';
 import { SearchInput } from '../../../components/common/SearchInput';
 import { useT } from '../../../i18n';
-import { facetValues, filterRows, INSIGHTS_DIMENSIONS, type InsightsCube, type InsightsDimension, type InsightsFilters } from '../insightsCube';
+import { facetValues, filterRows, INSIGHTS_DIMENSIONS, type InsightsCube, type InsightsDimension, type InsightsFilters } from '../../../types/insightsCube';
 import { hasFilters, toggleFilter } from '../insightsViewState';
-import type { InsightsLabels } from '../useInsightsLabels';
+import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import { InsightsValue } from './InsightsValue';
 import styles from '../insights.module.css';
 

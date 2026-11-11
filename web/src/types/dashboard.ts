@@ -1,4 +1,5 @@
 import type { MessageKey } from '../i18n/catalog';
+import { CALENDAR_PRESETS, isCalendarPreset, isClosedCalendarPreset } from './calendarPresets';
 /** Response shapes for the dashboard, which reads permanent usage facts. */
 
 export interface DashboardWindow {
@@ -104,13 +105,14 @@ export interface DashboardResponse {
 }
 
 /**
- * Range presets offered by the dashboard picker, shortest first. "15m" is the
- * one the picker labels Live.
+ * Spans back from now offered by the dashboard picker, shortest first. The picker
+ * lists the calendar units ahead of them.
  *
  * "all" has no length of its own: the server starts it at the deployment's first
  * usage record, which is why no table here maps a preset to a span.
  */
-export const DASHBOARD_PRESETS = ['15m', '1h', '6h', '24h', '7d', '30d', '90d', 'all'] as const;
+export const DASHBOARD_SPAN_PRESETS = ['1h', '6h', '24h', '7d', '30d', '90d', 'all'] as const;
+export const DASHBOARD_PRESETS = [...CALENDAR_PRESETS, ...DASHBOARD_SPAN_PRESETS] as const;
 export type DashboardPreset = (typeof DASHBOARD_PRESETS)[number];
 
 /**
@@ -125,6 +127,31 @@ export const REQUEST_LIST_LONGEST_PRESET = '90d';
 
 export function requestListPreset(preset: DashboardPreset): string {
   return preset === 'all' ? REQUEST_LIST_LONGEST_PRESET : preset;
+}
+
+/**
+ * The request-list query a dashboard drill-down opens.
+ *
+ * A span carries over by name. A calendar unit has no name the request list knows, so it
+ * carries over as the bounds the server resolved it to; the current unit stays open so the
+ * list keeps following the clock the way the dashboard did.
+ */
+export function requestListWindowParams(range: DashboardRange, window: DashboardWindow | undefined): URLSearchParams {
+  const search = new URLSearchParams();
+  if (isCalendarPreset(range.preset)) {
+    if (!window) {
+      search.set('preset', '24h');
+      return search;
+    }
+    search.set('from', String(window.from));
+    if (isClosedCalendarPreset(range.preset)) search.set('to', String(window.to));
+  } else if (range.preset) {
+    search.set('preset', requestListPreset(range.preset));
+  } else if (range.from !== undefined) {
+    search.set('from', String(range.from));
+    if (typeof range.to === 'number') search.set('to', String(range.to));
+  }
+  return search;
 }
 
 export interface DashboardRange {
@@ -142,7 +169,7 @@ export interface DashboardRange {
 /** The stored preference key holding the dashboard's current range. */
 export const DASHBOARD_RANGE_PREFERENCE = 'dashboard_range';
 
-export const DEFAULT_DASHBOARD_RANGE: DashboardRange = { preset: '24h' };
+export const DEFAULT_DASHBOARD_RANGE: DashboardRange = { preset: 'today' };
 
 export function dashboardRangeParams(range: DashboardRange): string {
   const search = new URLSearchParams();
@@ -158,11 +185,12 @@ export function dashboardRangeParams(range: DashboardRange): string {
 }
 
 /**
- * A relative preset and an open-ended custom range both move with the clock, so
- * both are worth polling. A closed custom range is frozen.
+ * A relative preset, the current calendar unit and an open-ended custom range all
+ * move with the clock, so they are worth polling. A closed custom range and a
+ * previous calendar unit are frozen.
  */
 export function isSlidingRange(range: DashboardRange): boolean {
-  if (range.preset !== undefined) return true;
+  if (range.preset !== undefined) return !isClosedCalendarPreset(range.preset);
   return range.from !== undefined && range.to === null;
 }
 

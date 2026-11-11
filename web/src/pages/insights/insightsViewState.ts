@@ -15,7 +15,7 @@ import {
   type InsightsDimension,
   type InsightsFilters,
   type InsightsMetric,
-} from './insightsCube';
+} from '../../types/insightsCube';
 
 /** What the trend stacks by; `none` draws the whole selection as one series. */
 export type InsightsGrouping = 'key' | 'model' | 'provider' | 'credential' | 'none';

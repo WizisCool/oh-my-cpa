@@ -3,8 +3,8 @@ import React from 'react';
 import { EChart } from '../../../charts/echarts/EChart';
 import { renderChartTooltip } from '../../../charts/chartTooltip';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import type { InsightsMetric } from '../insightsCube';
-import { formatShare } from '../insightsFormat';
+import type { InsightsMetric } from '../../../types/insightsCube';
+import { formatShare } from '../../../types/insightsFormat';
 
 export interface CompositionSegment {
   /** The column value (a model), or null for the row's remainder. */

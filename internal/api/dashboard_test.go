@@ -706,6 +706,13 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	if costNanos != 5_000_000_000 {
 		t.Fatalf("cost lost on fold: got %d, want 5000000000", costNanos)
 	}
+
+	// A calendar day whose midnight sits a quarter past a grid line, read minutes after
+	// midnight, reaches no grid line yet: its traffic still needs a point to plot.
+	early := fillDashboardBuckets(bucket*20+bucket/4, bucket*20+bucket/2, bucket, buckets[1:], costs[1:])
+	if len(early) != 1 || early[0].TimeMS != bucket*20+bucket/4 || early[0].Requests != 5 || early[0].CostNanos != 3_000_000_000 {
+		t.Fatalf("a window before its first grid line lost its traffic: %+v", early)
+	}
 }
 
 // TestDashboardSeriesCarriesPerBucketCacheAndCost pins the properties the four
@@ -844,5 +851,54 @@ func TestDashboardRealtimePresetIsFifteenMinutes(t *testing.T) {
 	}
 	if response.StatusCode != http.StatusOK || tail.Live.BucketMS != body.Window.BucketMS {
 		t.Fatalf("tail pacing disagrees with the window: %d vs %d", tail.Live.BucketMS, body.Window.BucketMS)
+	}
+}
+
+// A calendar preset is a unit of the deployment's calendar: "yesterday" is the
+// closed day before today's local midnight, and "today" runs from that midnight to
+// now. Both keep the grid a whole day would get, so the current day does not
+// re-snap its buckets as it grows.
+func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
+	// The handler's clock, days behind the wall clock: a calendar unit is resolved on it, as
+	// Insights resolves it, and one instant serves the fixtures and the handler alike.
+	now := time.Now().Add(-72 * time.Hour).UTC()
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+	zone := repo.Timezone().Location()
+	local := now.In(zone)
+	midnight := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, zone)
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: eventFor("cal-yesterday", midnight.Add(-12*time.Hour), usage.TokenStats{TotalTokens: 5}, false)},
+		{Event: eventFor("cal-today", midnight.Add(now.Sub(midnight)/2), usage.TokenStats{TotalTokens: 7}, false)},
+		{Event: eventFor("cal-older", midnight.Add(-36*time.Hour), usage.TokenStats{TotalTokens: 9}, false)},
+	})
+
+	read := func(preset string) dashboardResponse {
+		t.Helper()
+		response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset="+preset)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d body %s", preset, response.StatusCode, payload)
+		}
+		var body dashboardResponse
+		if err := json.Unmarshal(payload, &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	yesterday := read("yesterday")
+	if yesterday.Window.Preset != "yesterday" || yesterday.Window.FromMS != midnight.Add(-24*time.Hour).UnixMilli() || yesterday.Window.ToMS != midnight.UnixMilli()-1 {
+		t.Fatalf("yesterday window wrong: %+v", yesterday.Window)
+	}
+	if yesterday.Requests.Total != 1 {
+		t.Fatalf("yesterday must hold only its own record: %+v", yesterday.Requests)
+	}
+	today := read("today")
+	if today.Window.FromMS != midnight.UnixMilli() || today.Requests.Total != 1 {
+		t.Fatalf("today window wrong: %+v requests %+v", today.Window, today.Requests)
+	}
+	if today.Window.BucketMS != yesterday.Window.BucketMS || today.Window.BucketMS != (30*time.Minute).Milliseconds() {
+		t.Fatalf("today must keep a whole day's grid: %d vs %d", today.Window.BucketMS, yesterday.Window.BucketMS)
 	}
 }

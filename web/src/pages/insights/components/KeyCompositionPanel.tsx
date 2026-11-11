@@ -10,8 +10,8 @@ import { useTheme } from '../../../theme/ThemeContext';
 import {
   buildMatrix, matrixCellKey, metricValue, rankingMetric,
   type CubeRow, type InsightsCube, type InsightsDimension, type InsightsMetric,
-} from '../insightsCube';
-import type { InsightsLabels } from '../useInsightsLabels';
+} from '../../../types/insightsCube';
+import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import type { CompositionSegment } from '../charts/InsightsCompositionChart';
 import { LazyInsightsCompositionChart as InsightsCompositionChart } from '../../../charts/lazyCharts';
 import { MatrixTable } from './MatrixTable';

@@ -5,9 +5,9 @@ import { EmptyState } from '../../../components/common/EmptyState';
 import { useT } from '../../../i18n';
 import { heatmapRampMix, heatmapRampPosition } from '../../../theme/heatmapRamp';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { matrixCellKey, metricValue, type InsightsDimension, type InsightsMatrix, type InsightsMetric } from '../insightsCube';
+import { matrixCellKey, metricValue, type InsightsDimension, type InsightsMatrix, type InsightsMetric } from '../../../types/insightsCube';
 
-import type { InsightsLabels } from '../useInsightsLabels';
+import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import { InsightsValue } from './InsightsValue';
 import styles from '../insights.module.css';
 

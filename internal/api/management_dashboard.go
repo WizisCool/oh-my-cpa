@@ -22,10 +22,8 @@ const maxDashboardWindow = 365 * 24 * time.Hour
 // bucket width is snapped to a human-friendly step.
 const dashboardTargetBuckets = 48
 
-// dashboardPresets maps the UI range picker to a window length.
-//
-// "15m" is what the picker labels Live: one minute per bucket over fifteen, so
-// the newest bucket visibly grows instead of waiting an hour to appear.
+// dashboardPresets maps a range preset to a window length. "15m" is no longer
+// offered by the UI picker but stays accepted for API callers and drill-down links.
 var dashboardPresets = map[string]time.Duration{
 	"15m": 15 * time.Minute,
 	"1h":  time.Hour,
@@ -577,7 +575,11 @@ func (h *Handler) dashboardWindow(request *http.Request, now time.Time) (dashboa
 	preset := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("preset")))
 	isAllTime := preset == dashboardPresetAll && request.URL.Query().Get("from") == "" && request.URL.Query().Get("to") == ""
 	var window dashboardWindow
-	if !isAllTime {
+	// A calendar unit is resolved on the handler's clock, as Insights resolves the same preset,
+	// so the dashboard and the cube its receipt itemises name the same day.
+	if calendar, isCalendar := dashboardCalendarWindow(request, h.now().UTC(), h.insightsZone()); isCalendar {
+		window = calendar
+	} else if !isAllTime {
 		var message string
 		if window, message = dashboardWindowFromRequest(request, now); message != "" {
 			return dashboardWindow{}, message, nil
@@ -616,12 +618,44 @@ func (h *Handler) dashboardWindow(request *http.Request, now time.Time) (dashboa
 	return window, "", nil
 }
 
+// dashboardCalendarWindow places a calendar preset ("today", "last_week") on the
+// deployment's calendar in the OMC Time Zone, the way Insights places it. The
+// current unit runs to now and the previous one is closed. The bucket width is
+// chosen for the whole unit rather than the part already elapsed, so "today"
+// keeps one grid from midnight to midnight instead of re-snapping as it grows.
+func dashboardCalendarWindow(request *http.Request, now time.Time, zone *time.Location) (dashboardWindow, bool) {
+	query := request.URL.Query()
+	if query.Get("from") != "" || query.Get("to") != "" {
+		return dashboardWindow{}, false
+	}
+	preset := strings.ToLower(strings.TrimSpace(query.Get("preset")))
+	calendar, isCalendar := insightsCalendarPresets[preset]
+	if !isCalendar {
+		return dashboardWindow{}, false
+	}
+	start := civilStart(now, zone, calendar.unit, calendar.previous)
+	end := civilStart(now, zone, calendar.unit, calendar.previous-1)
+	toMS := end.UnixMilli() - 1
+	if calendar.previous == 0 {
+		toMS = now.UnixMilli()
+	}
+	window := dashboardWindow{
+		Preset:   preset,
+		FromMS:   start.UnixMilli(),
+		ToMS:     toMS,
+		BucketMS: dashboardBucketWidth(end.Sub(start)).Milliseconds(),
+		Complete: true,
+	}
+	window.Minutes = int((window.ToMS - window.FromMS) / 60000)
+	return window, true
+}
+
 // presetErrorMessage lists the presets the requested endpoint accepts. The parser
 // is shared with the request list, which does not offer the all-time window, so
 // only the dashboard's own routes name it.
 func presetErrorMessage(request *http.Request) string {
 	if strings.Contains(request.URL.Path, "/management/dashboard") {
-		return "preset must be one of 15m, 1h, 6h, 24h, 7d, 30d, 90d, all"
+		return "preset must be one of today, yesterday, this_week, last_week, this_month, last_month, 15m, 1h, 6h, 24h, 7d, 30d, 90d, all"
 	}
 	return "preset must be one of 15m, 1h, 6h, 24h, 7d, 30d, 90d"
 }
@@ -755,7 +789,10 @@ func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.Usa
 		points = append(points, dashboardSeriesPoint{TimeMS: at})
 	}
 	if len(points) == 0 {
-		return points
+		// A window shorter than the stretch to its first grid line - a calendar day whose
+		// midnight falls between grid lines, minutes after midnight - still has traffic to
+		// show: it gets one point at its start, and everything folds into it.
+		points = append(points, dashboardSeriesPoint{TimeMS: fromMS})
 	}
 	index := make(map[int64]int, len(points))
 	for position, point := range points {

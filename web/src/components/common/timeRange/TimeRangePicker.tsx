@@ -27,12 +27,24 @@ export interface TimeRangePreset {
   label: string;
 }
 
+/**
+ * A run of presets that answer the same kind of question - calendar units, spans back from now.
+ * A group with a label is headed by it; `isPaired` lays its options two to a row, for groups whose
+ * options come in current/previous pairs.
+ */
+export interface TimeRangePresetGroup {
+  key: string;
+  label?: string;
+  isPaired?: boolean;
+  presets: readonly TimeRangePreset[];
+}
+
 export interface TimeRangePickerProps {
   /** The committed window: a preset, or `from` with `to` (`null` when open-ended). */
   preset?: string;
   from?: number;
   to?: number | null;
-  presets: readonly TimeRangePreset[];
+  groups: readonly TimeRangePresetGroup[];
   /** Whether a custom range is whole days or carries a time on each end. */
   granularity: RangeGranularity;
   /** What the trigger reads; the caller owns how its page words a window. */
@@ -74,7 +86,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   preset,
   from,
   to,
-  presets,
+  groups,
   granularity,
   label,
   className,
@@ -171,28 +183,34 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
 
   const presetList = (
     <div className="time-range-rail">
-      <ul className="time-range-presets" role="listbox" aria-label={t('time_range.quick')}>
-        {presets.map((option) => {
-          const isSelected = !isCustom && option.key === preset;
-          return (
-            <li key={option.key} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                data-preset={option.key}
-                className={`time-range-option${isSelected ? ' is-active' : ''}`}
-                onClick={() => {
-                  onPresetChange(option.key);
-                  close();
-                }}
-              >
-                {option.label}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="time-range-presets" role="listbox" aria-label={t('time_range.quick')}>
+        {groups.map((group) => (
+          <div key={group.key} className="time-range-group" role="group" aria-label={group.label}>
+            {group.label && <div className="time-range-group-label" aria-hidden="true">{group.label}</div>}
+            <div className={`time-range-group-options${group.isPaired ? ' is-paired' : ''}`}>
+              {group.presets.map((option) => {
+                const isSelected = !isCustom && option.key === preset;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    data-preset={option.key}
+                    className={`time-range-option${isSelected ? ' is-active' : ''}`}
+                    onClick={() => {
+                      onPresetChange(option.key);
+                      close();
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
       <button
         type="button"
         className={`time-range-option time-range-custom-toggle${isCustom ? ' is-active' : ''}`}

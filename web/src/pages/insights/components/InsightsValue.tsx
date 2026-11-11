@@ -1,8 +1,8 @@
 import React from 'react';
 import clsx from 'clsx';
 import { KeyOutlined } from '../../../components/icons';
-import type { InsightsDimension } from '../insightsCube';
-import type { InsightsLabels } from '../useInsightsLabels';
+import type { InsightsDimension } from '../../../types/insightsCube';
+import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import styles from '../insights.module.css';
 
 interface InsightsValueProps {
