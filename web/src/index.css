@@ -2083,49 +2083,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-family: var(--font-mono);
 }
 
-/* Square key action buttons: a 1px frame on the row's own actions, none on the glyphs that sit
-   beside the secret, which read as part of the key rather than as separate controls. */
-.config-key-action {
-  width: 30px !important;
-  height: 30px !important;
-  min-width: 30px !important;
-  padding: 0 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-sm) !important;
-  background: var(--surface) !important;
-  color: var(--muted) !important;
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
-}
-
-.config-key-action.is-quiet {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  border-color: transparent !important;
-  background: transparent !important;
-}
-
-.config-key-action:not(:disabled):hover {
-  color: var(--accent) !important;
-  border-color: var(--accent) !important;
-  background: var(--bg) !important;
-}
-
-.config-key-action.is-quiet:not(:disabled):hover {
-  border-color: transparent !important;
-  background: var(--hover) !important;
-}
-
-.config-key-action:disabled {
-  color: var(--meta) !important;
-  cursor: not-allowed;
-  opacity: .6;
-}
-
 @media (max-width: 900px) {
   .settings-field-host-port {
     grid-template-columns: 1fr;
@@ -2516,9 +2473,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      everywhere - is aimable even when it is short, so it keeps its box. What cannot be aimed
      at is a control with no label and no width: an icon button.
 
-     `.config-key-action` and `.ant-drawer-close` are listed beside antd's icon-only variant
-     because they are the console's own dense controls rather than antd's: they are plain
-     buttons, so the first version of this rule missed them, and the browser probe missed the
+     `.ant-drawer-close` is listed beside antd's icon-only variant
+     because it is a dense control of its own rather than antd's button: it is a plain
+     button, so the first version of this rule missed it, and the browser probe missed the
      gap in turn because its metric accepted an *ancestor* as a hit - which is exactly what a
      probe just outside an unexpanded button lands on. A control added here must be a real
      icon-sized control; adding a wide one would steal its neighbour's taps.
@@ -2528,7 +2485,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      are still that tight are the ones whose controls are wide enough not to need an inset. */
   .ant-btn.ant-btn-icon-only,
   .ant-drawer-close,
-  .config-key-action,
   .ant-pagination-prev,
   .ant-pagination-next,
   .ant-input-clear-icon {
@@ -2536,7 +2492,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   }
   .ant-btn.ant-btn-icon-only::before,
   .ant-drawer-close::before,
-  .config-key-action::before,
   .ant-pagination-prev::before,
   .ant-pagination-next::before,
   .ant-input-clear-icon::before {
