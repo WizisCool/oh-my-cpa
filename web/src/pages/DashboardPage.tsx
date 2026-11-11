@@ -670,18 +670,15 @@ export const DashboardPage: React.FC = () => {
       )}
 
       <ModelSeriesFocusProvider>
-        {(() => {
-          const board = (
-            <DashboardBoard
-              layout={layout}
-              isEditing={isArranging}
-              isPhone={isPhone}
-              renderWidget={renderWidget}
-              onChange={setLayoutDraft}
-            />
-          );
-          return data ? board : <LoadingRegion>{board}</LoadingRegion>;
-        })()}
+        <LoadingRegion isLoading={!data}>
+          <DashboardBoard
+            layout={layout}
+            isEditing={isArranging}
+            isPhone={isPhone}
+            renderWidget={renderWidget}
+            onChange={setLayoutDraft}
+          />
+        </LoadingRegion>
       </ModelSeriesFocusProvider>
 
       {data && !data.coverage.has_usage && data.partial_errors.length === 0 && (
