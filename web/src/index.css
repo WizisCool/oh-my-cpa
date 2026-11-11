@@ -1183,7 +1183,21 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard) !important;
 }
 .app-menu .ant-menu-item .ant-menu-item-icon { font-size: var(--text-lg); color: var(--muted); transition: color var(--motion-fast) var(--ease-standard); }
-.app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 500; background: color-mix(in srgb, var(--fg) 8%, transparent) !important; }
+/* The selected wash is `NavSelectionHighlight`'s layer under the menu, so the row itself stays
+   clear and the wash can slide within a group and cross-fade between groups. */
+.app-menu-frame { position: relative; }
+.app-menu-frame > .app-menu { position: relative; }
+.app-menu-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  transition: transform var(--motion-slow) var(--ease-out), height var(--motion-slow) var(--ease-out), opacity var(--motion-base) var(--ease-standard);
+}
+.app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 500; background: transparent !important; }
 .app-menu .ant-menu-item-selected .ant-menu-item-icon, .app-menu .ant-menu-item:hover .ant-menu-item-icon { color: var(--fg); }
 /* A plugin page's artwork can have any intrinsic size. The nav model hands the
    same element to the rail and to the sidebar-visibility dialog, so the glyph box belongs to the
@@ -1194,7 +1208,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    icon's corner, where it touches neither the glyph nor the row's hover fill. */
 .app-menu .app-menu-flagged-icon { position: relative; display: inline-flex; align-items: center; flex: none; }
 .app-menu .app-menu-update-dot { position: absolute; top: -3px; inset-inline-end: -4px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
-.app-menu .ant-menu-item-selected:hover { background: color-mix(in srgb, var(--fg) 8%, transparent) !important; }
+.app-menu .ant-menu-item-selected:hover { background: transparent !important; }
 /* Stands in for every page while the gateway is older than CPA v8. The steps read
    left-aligned under the centred result, like instructions rather than a slogan. */
 .cpa-blocked { max-width: 680px; margin: 48px auto; padding: 0 16px; }
