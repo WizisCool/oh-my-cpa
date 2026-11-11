@@ -499,7 +499,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
             </div>
             <div className={styles['location-actions']}>
               <ToolButton
-                type="text"
+                variant="ghost"
                 icon={<SyncOutlined spin={probing === destination.id} />}
                 label={t('sys.backup_destination_test')}
                 disabled={isBusy || !!probing}
@@ -516,7 +516,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
                 }}
               />
               <ToolButton
-                type="text"
+                variant="ghost"
                 icon={<EditOutlined />}
                 label={t('sys.backup_destination_edit')}
                 disabled={isBusy}

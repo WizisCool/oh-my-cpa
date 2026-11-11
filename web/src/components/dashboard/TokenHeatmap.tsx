@@ -1,9 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tooltip } from 'antd';
-import type { TooltipRef } from 'antd/es/tooltip';
-import { createPortal } from 'react-dom';
+import { TooltipPrimitive } from '@/components/ui/tooltip';
 import { RightOutlined } from '../icons';
 import { ApiError } from '../../api/client';
 import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';
@@ -178,17 +176,17 @@ const ActiveHeatmapTooltip: React.FC<{
   lang: Lang;
   onClose: () => void;
 }> = ({ target, entry, lang, onClose }) => {
-  const popupRef = React.useRef<TooltipRef>(null);
+  const popupRef = React.useRef<HTMLDivElement | null>(null);
   const popupId = React.useId();
   const { element, isOpen } = target;
 
   React.useLayoutEffect(() => {
     if (!isOpen) return;
     element.setAttribute('aria-describedby', popupId);
-    element.classList.add('ant-tooltip-open');
+    element.classList.add('omc-tooltip-open');
     return () => {
       element.removeAttribute('aria-describedby');
-      element.classList.remove('ant-tooltip-open');
+      element.classList.remove('omc-tooltip-open');
     };
   }, [element, isOpen, popupId, entry]);
 
@@ -196,12 +194,12 @@ const ActiveHeatmapTooltip: React.FC<{
     if (!isOpen) return;
     const dismissOutside = (event: PointerEvent) => {
       const node = event.target;
-      if (!(node instanceof Node) || element.contains(node) || popupRef.current?.popupElement?.contains(node)) return;
+      if (!(node instanceof Node) || element.contains(node) || popupRef.current?.contains(node)) return;
       onClose();
     };
     const dismissEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (popupRef.current?.popupElement?.contains(document.activeElement)) element.focus({ preventScroll: true });
+      if (popupRef.current?.contains(document.activeElement)) element.focus({ preventScroll: true });
       onClose();
     };
     document.addEventListener('pointerdown', dismissOutside, true);
@@ -212,21 +210,31 @@ const ActiveHeatmapTooltip: React.FC<{
     };
   }, [element, isOpen, onClose]);
 
-  return createPortal(
-    <Tooltip
-      ref={popupRef}
-      id={popupId}
-      open={isOpen}
-      trigger={[]}
-      placement="top"
-      classNames={{ root: 'heatmap-tip-popper' }}
-      styles={{ container: { maxWidth: 'none' } }}
-      title={<HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />}
-      destroyOnHidden
-    >
-      <span className="heatmap-tooltip-anchor" aria-hidden="true" />
-    </Tooltip>,
-    element,
+  if (!isOpen) return null;
+
+  return (
+    <TooltipPrimitive.Provider delay={0}>
+      <TooltipPrimitive.Root open>
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Positioner
+            anchor={element}
+            side="top"
+            sideOffset={6}
+            className="heatmap-tip-popper z-[1070]"
+          >
+            <TooltipPrimitive.Popup
+              ref={popupRef}
+              id={popupId}
+              role="tooltip"
+              data-slot="tooltip"
+              className="omc-float-surface min-w-[176px] max-w-none rounded-md bg-surface px-2.5 py-1.5 text-sm leading-snug text-foreground shadow-float pointer-events-auto"
+            >
+              <HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />
+            </TooltipPrimitive.Popup>
+          </TooltipPrimitive.Positioner>
+        </TooltipPrimitive.Portal>
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
   );
 };
 

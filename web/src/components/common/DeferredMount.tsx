@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { Notice } from '../feedback';
 import { SuspenseFallback } from './PageLoading';
@@ -57,7 +57,7 @@ function OptionalSurfaceFailure() {
         title={t('common.load_failed_title')}
         data-testid="optional-surface-failure"
         action={(
-          <Button size="small" onClick={() => window.location.reload()}>
+          <Button size="sm" onClick={() => window.location.reload()}>
             {t('route_error.reload')}
           </Button>
         )}

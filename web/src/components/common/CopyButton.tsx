@@ -1,34 +1,23 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { CheckOutlined, CopyOutlined } from '../icons';
 import { useI18n } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { useToast } from '../feedback';
 import { Tooltip } from './Tooltip';
 
-/** How long the check mark stands in for the copy glyph after a successful copy. */
 const COPIED_MS = 1500;
 
 export interface CopyButtonProps {
   text: string;
-  /** The accessible name and tooltip; defaults to the console's plain "Copy". */
   label?: string;
-  size?: 'small' | 'middle';
+  size?: 'small' | 'middle' | 'sm' | 'default';
   disabled?: boolean;
   className?: string;
-  /** Draws the label beside the glyph, for a place where two copy actions sit side by side. */
   showLabel?: boolean;
 }
 
-/**
- * An icon button that copies a value and acknowledges it in place.
- *
- * The acknowledgement is the glyph turning into a check mark, not a toast: a transcript carries a
- * copy action on every answer and every code block, and a toast per click stacks messages at the
- * top of the page about an action the reader is looking straight at. A failure still raises a
- * toast, because a copy that silently did nothing is the one outcome the reader cannot see.
- */
-export function CopyButton({ text, label, size = 'small', disabled, className, showLabel = false }: CopyButtonProps) {
+export function CopyButton({ text, label, size = 'sm', disabled, className, showLabel = false }: CopyButtonProps) {
   const { t } = useI18n();
   const toast = useToast();
   const [hasCopied, setHasCopied] = React.useState(false);
@@ -46,15 +35,19 @@ export function CopyButton({ text, label, size = 'small', disabled, className, s
     timerRef.current = setTimeout(() => setHasCopied(false), COPIED_MS);
   };
 
+  const resolvedSize = size === 'small' || size === 'sm' ? 'sm' : 'default';
   const icon = hasCopied ? <CheckOutlined /> : <CopyOutlined />;
-  // The labelled form keeps its name while acknowledging, so the state is also an attribute: a
-  // browser check can then wait for the copy without reading the glyph.
   const copyState = hasCopied ? 'copied' : undefined;
   if (showLabel) {
-    // The label stays the action's name while the glyph acknowledges the copy, so the button keeps
-    // its width and the control beside it does not move.
     return (
-      <Button size={size} className={className} disabled={disabled} icon={icon} data-copy-state={copyState} onClick={() => void onClick()}>
+      <Button
+        size={resolvedSize}
+        className={className}
+        disabled={disabled}
+        icon={icon}
+        data-copy-state={copyState}
+        onClick={() => void onClick()}
+      >
         {label ?? t('common.copy')}
       </Button>
     );
@@ -62,8 +55,8 @@ export function CopyButton({ text, label, size = 'small', disabled, className, s
   return (
     <Tooltip title={name}>
       <Button
-        type="text"
-        size={size}
+        variant="ghost"
+        size={resolvedSize}
         className={className}
         aria-label={name}
         data-copy-state={copyState}

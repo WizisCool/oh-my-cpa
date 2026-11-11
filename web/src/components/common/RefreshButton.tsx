@@ -1,7 +1,6 @@
-import type { ButtonProps } from 'antd';
 import { ReloadOutlined } from '../icons';
 import { useT } from '../../i18n';
-import { ToolButton } from './ToolButton';
+import { ToolButton, type ToolButtonProps } from './ToolButton';
 
 export interface RefreshButtonProps {
   onRefresh: () => void;
@@ -10,19 +9,10 @@ export interface RefreshButtonProps {
   /** Overrides the plain "Refresh" name, for a control that re-reads something narrower. */
   label?: string;
   disabled?: boolean;
-  size?: ButtonProps['size'];
+  size?: ToolButtonProps['size'];
   className?: string;
 }
 
-/**
- * The console's one page-refresh control.
- *
- * The glyph is the header's own (`ReloadOutlined`), so the page control and the global one read
- * as the same action at two scopes; `SyncOutlined` stays reserved for a synchronisation job such
- * as a catalogue sync. A read in flight spins the glyph instead of setting antd's `loading`,
- * because `loading` swallows clicks and swaps the glyph for a spinner of another shape - the
- * button would appear to change identity every time a background poll ran.
- */
 export function RefreshButton({
   onRefresh,
   isRefreshing = false,

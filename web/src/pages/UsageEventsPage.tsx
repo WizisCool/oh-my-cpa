@@ -653,8 +653,7 @@ export const UsageEventsPage: React.FC = () => {
               <ToolButton
                 icon={<CheckSquareOutlined />}
                 label={t('events.select_requests')}
-                type={isSelecting ? 'primary' : 'default'}
-                ghost={isSelecting}
+                variant={isSelecting ? 'active' : 'secondary'}
                 aria-pressed={isSelecting}
                 onClick={() => (isSelecting ? clearSelection() : setIsSelectMode(true))}
               />

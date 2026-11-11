@@ -1,13 +1,58 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
-import { Tooltip as AntTooltip, type TooltipProps as AntTooltipProps, type TooltipRef } from 'antd';
+import { TooltipPrimitive } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { hasOpenPopup, hoverIntentDelay, isControl, noteHintClosed } from './tooltipIntent';
 
-type TriggerEvents = Pick<React.DOMAttributes<HTMLElement>,
-  'onClick' | 'onMouseDown' | 'onTouchStart' | 'onFocus' | 'onBlur' | 'onMouseEnter' | 'onMouseLeave' |
-  'onPointerEnter' | 'onPointerLeave' | 'onPointerMove' | 'onPointerDown' | 'onContextMenu'>;
+export type TooltipPlacement =
+  | 'top'
+  | 'topLeft'
+  | 'topRight'
+  | 'bottom'
+  | 'bottomLeft'
+  | 'bottomRight'
+  | 'left'
+  | 'leftTop'
+  | 'leftBottom'
+  | 'right'
+  | 'rightTop'
+  | 'rightBottom';
 
-export type TooltipProps = TriggerEvents & Omit<AntTooltipProps, 'trigger' | 'mouseEnterDelay' | 'mouseLeaveDelay'> & {
+export interface TooltipHandle {
+  readonly nativeElement: HTMLElement | null;
+  readonly popupElement: HTMLElement | null;
+  forceAlign: () => void;
+}
+
+type TriggerEvents = Pick<
+  React.DOMAttributes<HTMLElement>,
+  | 'onClick'
+  | 'onMouseDown'
+  | 'onTouchStart'
+  | 'onFocus'
+  | 'onBlur'
+  | 'onMouseEnter'
+  | 'onMouseLeave'
+  | 'onPointerEnter'
+  | 'onPointerLeave'
+  | 'onPointerMove'
+  | 'onPointerDown'
+  | 'onContextMenu'
+>;
+
+export interface TooltipProps extends TriggerEvents {
+  children: React.ReactNode;
+  title?: React.ReactNode | (() => React.ReactNode);
+  overlay?: React.ReactNode | (() => React.ReactNode);
+  placement?: TooltipPlacement;
+  open?: boolean;
+  disabled?: boolean;
+  id?: string;
+  className?: string;
+  openClassName?: string;
+  classNames?: { root?: string; container?: string };
+  styles?: { root?: React.CSSProperties; container?: React.CSSProperties };
+  style?: React.CSSProperties;
+  afterOpenChange?: (open: boolean) => void;
   /**
    * A tap on the trigger reads the hint even though the trigger is a control: an info button whose
    * only job is the hint. Plain text and marks answer a tap without this.
@@ -18,41 +63,32 @@ export type TooltipProps = TriggerEvents & Omit<AntTooltipProps, 'trigger' | 'mo
    * own: the pointer reads those, and a hover on the gaps between them must not open this one too.
    */
   isFocusOnly?: boolean;
-};
+}
 
 type TriggerHandle = HTMLElement | { nativeElement?: HTMLElement };
 type ChildProps = React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<TriggerHandle> };
 
-/** The real trigger stays mounted; only a reader's intent allocates popup and alignment machinery. */
-const TooltipPopup = React.forwardRef<TooltipRef, AntTooltipProps & { element: HTMLElement }>(
-  ({ element, open, children: _children, ...props }, ref) => {
-    const [bounds, setBounds] = React.useState(() => element.getBoundingClientRect());
-    React.useLayoutEffect(() => {
-      if (!open) return;
-      const updateBounds = () => setBounds(element.getBoundingClientRect());
-      updateBounds();
-      const observer = new ResizeObserver(updateBounds);
-      observer.observe(element);
-      window.addEventListener('resize', updateBounds);
-      document.addEventListener('scroll', updateBounds, true);
-      return () => {
-        observer.disconnect();
-        window.removeEventListener('resize', updateBounds);
-        document.removeEventListener('scroll', updateBounds, true);
-      };
-    }, [element, open]);
-    return createPortal(
-      <AntTooltip {...props} ref={ref} open={open} trigger={[]}>
-        <span aria-hidden="true" style={{
-          position: 'fixed', pointerEvents: 'none',
-          left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height,
-        }} />
-      </AntTooltip>,
-      document.body,
-    );
-  },
-);
-TooltipPopup.displayName = 'TooltipPopup';
+function resolvePlacement(placement: TooltipPlacement = 'top'): {
+  side: 'top' | 'bottom' | 'left' | 'right';
+  align: 'start' | 'center' | 'end';
+} {
+  switch (placement) {
+    case 'topLeft': return { side: 'top', align: 'start' };
+    case 'topRight': return { side: 'top', align: 'end' };
+    case 'bottom': return { side: 'bottom', align: 'center' };
+    case 'bottomLeft': return { side: 'bottom', align: 'start' };
+    case 'bottomRight': return { side: 'bottom', align: 'end' };
+    case 'left': return { side: 'left', align: 'center' };
+    case 'leftTop': return { side: 'left', align: 'start' };
+    case 'leftBottom': return { side: 'left', align: 'end' };
+    case 'right': return { side: 'right', align: 'center' };
+    case 'rightTop': return { side: 'right', align: 'start' };
+    case 'rightBottom': return { side: 'right', align: 'end' };
+    case 'top':
+    default:
+      return { side: 'top', align: 'center' };
+  }
+}
 
 function compose<E>(own: ((event: E) => void) | undefined, theirs: ((event: E) => void) | undefined) {
   return (event: E) => {
@@ -61,39 +97,65 @@ function compose<E>(own: ((event: E) => void) | undefined, theirs: ((event: E) =
   };
 }
 
-/**
- * The console's tooltip: Ant Design's popup, opened only when the reader is asking for it.
- *
- * A mouse or pen asks by resting on the trigger after moving onto it (`tooltipIntent.ts` says why
- * entering is not enough). Pressing the trigger puts the hint away until the pointer leaves, and it
- * stays down while the trigger has a menu or panel open. A finger asks by tapping a trigger that does
- * nothing else - text, a mark, an info glyph - and the hint then stays until the next touch elsewhere
- * or a scroll; a tap on a control only operates it. A keyboard asks by moving a visible focus onto the
- * trigger, and the hint leaves with the focus. Callers that hold `open` can still force the
- * hint down (`open={false}`) or up.
- */
-export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
-  ({ children, open: heldOpen, isTapReadable = false, isFocusOnly = false, title, overlay, afterOpenChange,
-    onClick, onMouseDown, onTouchStart, onFocus, onBlur, onMouseEnter, onMouseLeave, onPointerEnter,
-    onPointerLeave, onPointerMove, onPointerDown, onContextMenu, ...rest }, ref) => {
+function evaluateContent(source: React.ReactNode | (() => React.ReactNode)): React.ReactNode {
+  return typeof source === 'function' ? source() : source;
+}
+
+export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
+  (
+    {
+      children,
+      open: heldOpen,
+      disabled = false,
+      isTapReadable = false,
+      isFocusOnly = false,
+      title,
+      overlay,
+      placement = 'top',
+      id,
+      className,
+      openClassName,
+      classNames,
+      styles,
+      style,
+      afterOpenChange,
+      onClick,
+      onMouseDown,
+      onTouchStart,
+      onFocus,
+      onBlur,
+      onMouseEnter,
+      onMouseLeave,
+      onPointerEnter,
+      onPointerLeave,
+      onPointerMove,
+      onPointerDown,
+      onContextMenu,
+    },
+    ref,
+  ) => {
     const [isOpen, setIsOpen] = React.useState(false);
     const [popupTarget, setPopupTarget] = React.useState<HTMLElement | null>(null);
     const popupId = React.useId();
     const triggerRef = React.useRef<HTMLElement | null>(null);
-    const popupRef = React.useRef<TooltipRef>(null);
-    // A parent popup (for example Popconfirm) still anchors to the original control before
-    // this hint has ever opened. Exposing the portal's synthetic anchor would move its target.
-    React.useImperativeHandle(ref, () => ({
-      get nativeElement() { return triggerRef.current!; },
-      get popupElement() { return popupRef.current?.popupElement!; },
-      forceAlign: () => popupRef.current?.forceAlign(),
-    }), []);
+    const popupElementRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        get nativeElement() { return triggerRef.current; },
+        get popupElement() { return popupElementRef.current; },
+        forceAlign: () => {},
+      }),
+      [],
+    );
+
     const timerRef = React.useRef<number | undefined>(undefined);
-    // A press holds the hint down until the pointer leaves the trigger.
     const isPressedRef = React.useRef(false);
     const lastPointerRef = React.useRef<string>('mouse');
-    const hasContent = title !== undefined && title !== null && title !== '' && title !== false
-      || overlay !== undefined && overlay !== null;
+    const hasContent =
+      (title !== undefined && title !== null && title !== '' && title !== false) ||
+      (overlay !== undefined && overlay !== null && overlay !== false);
 
     const cancelPending = React.useCallback(() => {
       if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
@@ -106,22 +168,22 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
 
     React.useEffect(() => cancelPending, [cancelPending]);
 
-    // An open hint belongs to the moment it answered: a scroll moves its trigger, a touch elsewhere is
-    // the reader moving on, and Escape or leaving the window dismisses it outright.
     React.useEffect(() => {
       if (!isOpen) return;
-      const onPointerDown = (event: PointerEvent) => {
+      const handlePointerDown = (event: PointerEvent) => {
         const trigger = triggerRef.current;
         if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) close();
       };
-      const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
-      document.addEventListener('pointerdown', onPointerDown, true);
-      document.addEventListener('keydown', onKeyDown, true);
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') close();
+      };
+      document.addEventListener('pointerdown', handlePointerDown, true);
+      document.addEventListener('keydown', handleKeyDown, true);
       document.addEventListener('scroll', close, true);
       window.addEventListener('blur', close);
       return () => {
-        document.removeEventListener('pointerdown', onPointerDown, true);
-        document.removeEventListener('keydown', onKeyDown, true);
+        document.removeEventListener('pointerdown', handlePointerDown, true);
+        document.removeEventListener('keydown', handleKeyDown, true);
         document.removeEventListener('scroll', close, true);
         window.removeEventListener('blur', close);
       };
@@ -129,21 +191,43 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
 
     const child = React.isValidElement<ChildProps>(children) ? children : <span>{children}</span>;
     const childProps = child.props;
-    const childRef = (child as React.ReactElement & { ref?: React.Ref<TriggerHandle> }).ref;
-    const attachTrigger = React.useCallback((handle: TriggerHandle | null) => {
-      triggerRef.current = handle instanceof HTMLElement ? handle : handle?.nativeElement ?? null;
-      if (typeof childRef === 'function') childRef(handle);
-      else if (childRef) (childRef as React.MutableRefObject<TriggerHandle | null>).current = handle;
-    }, [childRef]);
-    const isShown = hasContent && !rest.disabled && (heldOpen ?? isOpen);
+    const childRef = childProps.ref;
+    const attachTrigger = React.useCallback(
+      (handle: TriggerHandle | null) => {
+        triggerRef.current = handle instanceof HTMLElement ? handle : handle?.nativeElement ?? null;
+        if (typeof childRef === 'function') childRef(handle);
+        else if (childRef) (childRef as React.MutableRefObject<TriggerHandle | null>).current = handle;
+      },
+      [childRef],
+    );
+
+    const isShown = hasContent && !disabled && (heldOpen ?? isOpen);
+    const wasShownRef = React.useRef(false);
+
     React.useLayoutEffect(() => {
-      if (isShown && triggerRef.current) setPopupTarget(triggerRef.current);
-    }, [isShown]);
+      if (isShown && triggerRef.current) {
+        setPopupTarget(triggerRef.current);
+      }
+      if (wasShownRef.current && !isShown) {
+        noteHintClosed();
+        setPopupTarget(null);
+        afterOpenChange?.(false);
+      } else if (!wasShownRef.current && isShown) {
+        afterOpenChange?.(true);
+      }
+      wasShownRef.current = isShown;
+    }, [isShown, afterOpenChange]);
+
+    const resolvedId = id ?? popupId;
     const trigger = React.cloneElement(child, {
       ref: attachTrigger,
-      'aria-describedby': isShown ? [childProps['aria-describedby'], rest.id ?? popupId].filter(Boolean).join(' ') : childProps['aria-describedby'],
-      className: [childProps.className, rest.className, isShown && (rest.openClassName ?? 'ant-tooltip-open')].filter(Boolean).join(' ') || undefined,
-      style: rest.style ? { ...childProps.style, ...rest.style } : childProps.style,
+      'aria-describedby': isShown
+        ? [childProps['aria-describedby'], resolvedId].filter(Boolean).join(' ')
+        : childProps['aria-describedby'],
+      className: [childProps.className, className, isShown && (openClassName ?? 'omc-tooltip-open')]
+        .filter(Boolean)
+        .join(' ') || undefined,
+      style: style ? { ...childProps.style, ...style } : childProps.style,
       onMouseDown: compose(childProps.onMouseDown, onMouseDown),
       onTouchStart: compose(childProps.onTouchStart, onTouchStart),
       onMouseEnter: compose(childProps.onMouseEnter, onMouseEnter),
@@ -180,7 +264,6 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
         if (!isTapReadable && isControl(event.currentTarget)) return;
         setIsOpen((current) => !current);
       }),
-      // Keyboard focus only: a click focuses what it pressed too, and that is not a request to read it.
       onFocus: compose(compose(childProps.onFocus, onFocus), (event: React.FocusEvent<HTMLElement>) => {
         const element = event.currentTarget;
         if (!hasContent || heldOpen !== undefined || !element.matches(':focus-visible') || hasOpenPopup(element)) return;
@@ -190,26 +273,41 @@ export const Tooltip = React.forwardRef<TooltipRef, TooltipProps>(
       onBlur: compose(compose(childProps.onBlur, onBlur), () => close()),
     });
 
+    const { side, align } = resolvePlacement(placement);
+    const renderedContent = isShown ? evaluateContent(title ?? overlay) : null;
+
     return (
       <>
         {trigger}
-        {popupTarget && (
-          <TooltipPopup
-            {...rest}
-            ref={popupRef}
-            id={rest.id ?? popupId}
-            element={popupTarget}
-            title={title}
-            overlay={overlay}
-            open={isShown}
-            afterOpenChange={(hasOpened) => {
-              if (!hasOpened) {
-                noteHintClosed();
-                if (!isShown) setPopupTarget(null);
-              }
-              afterOpenChange?.(hasOpened);
-            }}
-          />
+        {isShown && popupTarget && renderedContent !== null && renderedContent !== undefined && renderedContent !== '' && (
+          <TooltipPrimitive.Provider delay={0}>
+            <TooltipPrimitive.Root open>
+              <TooltipPrimitive.Portal>
+                <TooltipPrimitive.Positioner
+                  anchor={popupTarget}
+                  side={side}
+                  align={align}
+                  sideOffset={6}
+                  style={styles?.root}
+                  className={cn('z-[1070] pointer-events-none', classNames?.root)}
+                >
+                  <TooltipPrimitive.Popup
+                    ref={popupElementRef}
+                    id={resolvedId}
+                    role="tooltip"
+                    data-slot="tooltip"
+                    style={styles?.container}
+                    className={cn(
+                      'omc-float-surface max-w-[320px] rounded-md bg-tooltip px-2.5 py-1.5 text-sm leading-snug text-tooltip-foreground shadow-float break-words',
+                      classNames?.container,
+                    )}
+                  >
+                    {renderedContent}
+                  </TooltipPrimitive.Popup>
+                </TooltipPrimitive.Positioner>
+              </TooltipPrimitive.Portal>
+            </TooltipPrimitive.Root>
+          </TooltipPrimitive.Provider>
         )}
       </>
     );

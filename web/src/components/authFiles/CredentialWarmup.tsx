@@ -509,8 +509,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                   </div>
                   <div className={styles['task-actions']}>
                     <ToolButton
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       icon={<PlayCircleOutlined />}
                       label={t('warmup.run')}
                       loading={isRunning}
@@ -518,8 +518,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       onClick={() => runMutation.mutate(task.id)}
                     />
                     <ToolButton
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       icon={<EditOutlined />}
                       label={t('warmup.edit_task')}
                       disabled={isDemo}

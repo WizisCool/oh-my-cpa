@@ -404,8 +404,7 @@ export const InsightsPage: React.FC = () => {
     <ToolButton
       icon={<SwapOutlined />}
       label={t(view.isComparing ? 'insights.compare_off' : 'insights.compare_on')}
-      type={view.isComparing ? 'primary' : 'default'}
-      ghost={view.isComparing}
+      variant={view.isComparing ? 'active' : 'secondary'}
       aria-pressed={view.isComparing}
       disabled={!cube?.compare}
       onClick={() => setView({ isComparing: !view.isComparing })}

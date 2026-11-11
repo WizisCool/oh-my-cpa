@@ -187,8 +187,8 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
               {archives.data ? t('sys.backup_archive_count', { count: archives.data.items.length }) : ' '}
             </span>
             <ToolButton
-              type="text"
-              size="small"
+              variant="ghost"
+              size="sm"
               icon={<ReloadOutlined spin={archives.isFetching} />}
               label={t('sys.backup_archive_refresh')}
               disabled={archives.isFetching}
@@ -213,7 +213,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
                     </div>
                     {source === LOCAL && (
                       <ToolButton
-                        type="text"
+                        variant="ghost"
                         icon={<DownloadOutlined />}
                         label={t('sys.backup_download')}
                         href={api.databaseBackupArchiveDownloadUrl(item.key)}

@@ -38,12 +38,12 @@ describe('SearchInput', () => {
 
   it('keeps a longer placeholder apart from the accessible name and clears to an empty string', () => {
     const onChange = vi.fn();
-    const { container } = render(
+    render(
       <SearchInput value="prod" onChange={onChange} label="Search requests" placeholder="Model, key or request ID" />,
     );
     expect(screen.getByRole('textbox', { name: 'Search requests' }).getAttribute('placeholder')).toBe('Model, key or request ID');
 
-    fireEvent.click(container.querySelector('.ant-input-clear-icon')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(onChange.mock.calls).toEqual([['']]);
   });

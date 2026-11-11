@@ -566,7 +566,7 @@ export const ApiKeysPage: React.FC = () => {
                 className="config-mono-input"
               />
               <ToolButton
-                type="text"
+                variant="ghost"
                 icon={<SyncOutlined />}
                 label={t('cfg.api_keys_generate')}
                 onClick={() => {

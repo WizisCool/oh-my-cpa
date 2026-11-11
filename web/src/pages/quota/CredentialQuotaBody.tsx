@@ -111,12 +111,12 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         <div className={styles['quota-tools']}>
           <span className={styles['card-meta-time']}>{formatObservedAgo(item.observed_at_ms, nowMS, t)}</span>
           {hasDiagnostics && (
-            <ToolButton size="small" type="text" icon={<CodeOutlined />} label={t('omc.quota_diagnostics')} onClick={() => setIsDiagnosticsOpen(true)} />
+            <ToolButton size="sm" variant="ghost" icon={<CodeOutlined />} label={t('omc.quota_diagnostics')} onClick={() => setIsDiagnosticsOpen(true)} />
           )}
           {onRefresh && (
             <ToolButton
-              size="small"
-              type="text"
+              size="sm"
+              variant="ghost"
               icon={<SyncOutlined spin={isRefreshing} />}
               label={t('quota.btn_refresh_quota')}
               disabled={item.disabled || isRefreshing || !item.capabilities?.refresh_supported}
