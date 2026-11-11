@@ -65,10 +65,19 @@ export function useConfigDraft() {
   const serverDocRef = React.useRef<Document | null>(null);
   const rawYamlRef = React.useRef('');
   const serverYamlRef = React.useRef('');
-  const stringMapIssuesRef = React.useRef(stringMapIssues);
-  stringMapIssuesRef.current = stringMapIssues;
+  const stringMapIssuesRef = React.useRef<Record<string, StringMapValidationIssue>>({});
   /** Guards against a second save starting before isPending propagates. */
   const saveInFlightRef = React.useRef(false);
+
+  React.useEffect(() => {
+    stringMapIssuesRef.current = stringMapIssues;
+  }, [stringMapIssues]);
+
+  const clearStringMapState = React.useCallback(() => {
+    stringMapIssuesRef.current = {};
+    setStringMapDrafts({});
+    setStringMapIssues({});
+  }, []);
 
   const setStringMapDraft = React.useCallback((fieldId: string, state: StringMapDraftState | null) => {
     setStringMapDrafts((prev) => {
@@ -88,13 +97,16 @@ export function useConfigDraft() {
         if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return prev;
         const next = { ...prev };
         delete next[fieldId];
+        stringMapIssuesRef.current = next;
         return next;
       }
       const existing = prev[fieldId];
       if (existing && existing.kind === issue.kind && (existing.kind !== 'duplicate_key' || existing.key === (issue as { key: string }).key)) {
         return prev;
       }
-      return { ...prev, [fieldId]: issue };
+      const next = { ...prev, [fieldId]: issue };
+      stringMapIssuesRef.current = next;
+      return next;
     });
   }, []);
 
@@ -130,8 +142,7 @@ export function useConfigDraft() {
         // A malformed document is expected here: the previous baseline stays in place.
       }
       if (!hasLocalEdits) {
-        setStringMapDrafts({});
-        setStringMapIssues({});
+        clearStringMapState();
         replaceDraft(yaml);
         return;
       }
@@ -141,7 +152,7 @@ export function useConfigDraft() {
       const rebased = rebaseDraft(draftBase, docRef.current, yaml);
       if (rebased !== null) replaceDraft(rebased);
     },
-    [replaceDraft],
+    [clearStringMapState, replaceDraft],
   );
 
   React.useEffect(() => {
@@ -255,8 +266,7 @@ export function useConfigDraft() {
       }
       setPayloadIssues([]);
       if (!hasNewerDraft) {
-        setStringMapDrafts({});
-        setStringMapIssues({});
+        clearStringMapState();
       }
       setShowErrorFeedback(false);
       setValidateTrigger(0);
@@ -286,11 +296,10 @@ export function useConfigDraft() {
       // A malformed document is expected here: the previous baseline stays in place.
     }
     setPayloadIssues([]);
-    setStringMapDrafts({});
-    setStringMapIssues({});
+    clearStringMapState();
     setShowErrorFeedback(false);
     setValidateTrigger(0);
-  }, [serverYaml]);
+  }, [clearStringMapState, serverYaml]);
 
   const [payloadIssues, setPayloadIssues] = React.useState<PayloadValidationIssue[]>([]);
 
@@ -336,7 +345,6 @@ export function useConfigDraft() {
     }
     if (firstStringMapErrorMessage) {
       setShowErrorFeedback(true);
-      toast.warning(firstStringMapErrorMessage);
       return Promise.resolve();
     }
     saveInFlightRef.current = true;
@@ -436,8 +444,7 @@ export function useConfigDraft() {
         setRawYaml(src.yaml);
         setServerYaml(src.yaml);
         setServerRevision(src.revision);
-        setStringMapDrafts({});
-        setStringMapIssues({});
+        clearStringMapState();
         try {
           docRef.current = parseDocument(src.yaml);
           serverDocRef.current = parseDocument(src.yaml);

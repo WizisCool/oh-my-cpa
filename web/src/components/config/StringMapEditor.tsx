@@ -179,11 +179,19 @@ interface ComposingTextInputProps extends Omit<InputProps, 'value' | 'onChange'>
 
 const ComposingTextInput: React.FC<ComposingTextInputProps> = ({ value, onCommit, onBlur, ...rest }) => {
   const [composingDraft, setComposingDraft] = React.useState<string | null>(null);
+  const isComposingSessionRef = React.useRef(false);
   const lastCommittedRef = React.useRef<string>(value);
-  lastCommittedRef.current = value;
+
+  React.useEffect(() => {
+    lastCommittedRef.current = value;
+    if (!isComposingSessionRef.current) {
+      setComposingDraft(null);
+    }
+  }, [value]);
 
   const commit = React.useCallback(
     (text: string) => {
+      isComposingSessionRef.current = false;
       setComposingDraft(null);
       if (text === lastCommittedRef.current) return;
       lastCommittedRef.current = text;
@@ -192,25 +200,26 @@ const ComposingTextInput: React.FC<ComposingTextInputProps> = ({ value, onCommit
     [onCommit],
   );
 
-  React.useEffect(() => {
-    setComposingDraft(null);
-  }, [value]);
-
   return (
     <Input
       {...rest}
       value={composingDraft ?? value}
       onChange={(event) => {
         if (isComposing(event)) {
+          isComposingSessionRef.current = true;
           setComposingDraft(event.target.value);
           return;
         }
         commit(event.target.value);
       }}
-      onCompositionStart={() => setComposingDraft(value)}
+      onCompositionStart={() => {
+        isComposingSessionRef.current = true;
+        setComposingDraft((prev) => prev ?? value);
+      }}
       onCompositionEnd={(event) => commit(event.currentTarget.value)}
       onBlur={(event) => {
         if (composingDraft !== null) commit(event.currentTarget.value);
+        else isComposingSessionRef.current = false;
         onBlur?.(event);
       }}
     />

@@ -107,11 +107,15 @@ it('edits sensitive-word replacement rows with interior spaces, IME composition,
     fireEvent.click(screen.getByTestId('string-map-add-antigravitySensitiveWordsReplace'));
     expect(screen.getByTestId('provider-map-draft').textContent).toBe('server:\n  port: 8317\n');
 
-    // Provisional IME composition text stays local until compositionEnd commits it.
+    // Provisional IME composition text stays local across background refreshes until compositionEnd commits it.
     const valInput0 = screen.getByTestId('string-map-value-antigravitySensitiveWordsReplace-0') as HTMLInputElement;
     fireEvent.compositionStart(valInput0);
     typeComposing(valInput0, 'zhong', true);
     expect(screen.getByTestId('provider-map-errors').textContent).toBe('false');
+    act(() => {
+      client.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r1b', safe_yaml: 'server:\n  port: 8317\n' });
+    });
+    expect(valInput0.value).toBe('zhong');
     typeComposing(valInput0, 'First', true);
     fireEvent.compositionEnd(valInput0);
 
@@ -177,6 +181,22 @@ it('edits sensitive-word replacement rows with interior spaces, IME composition,
     expect(screen.getByTestId('provider-map-draft').textContent).toContain('a: one');
     expect(screen.getByTestId('provider-map-draft').textContent).toContain('b: two');
     expect(screen.getByTestId('provider-map-draft').textContent).toContain('concurrent: kept');
+
+    // Also verify an active IME composition on an existing row survives a background value change on that row.
+    const existingValInput0 = screen.getByTestId('string-map-value-antigravitySensitiveWordsReplace-0') as HTMLInputElement;
+    fireEvent.compositionStart(existingValInput0);
+    typeComposing(existingValInput0, 'xin', true);
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r4',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-words-replace:\n        a: updated\n        b: two\n        concurrent: kept\n',
+      });
+    });
+    expect(existingValInput0.value).toBe('xin');
+    typeComposing(existingValInput0, 'final', true);
+    fireEvent.compositionEnd(existingValInput0);
+    expect(screen.getByTestId('provider-map-draft').textContent).toContain('a: final');
   } finally {
     patchSpy.mockRestore();
   }
