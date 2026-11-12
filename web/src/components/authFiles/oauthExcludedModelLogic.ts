@@ -91,10 +91,22 @@ export interface ExcludedRuleSummary {
   matchCount: number;
 }
 
+export interface ExcludedActiveRule {
+  rule: string;
+  isWildcard: boolean;
+  /** How many catalog models this rule covers; zero for an exact rule. */
+  matchCount: number;
+  /** Catalog display name when the rule names a single catalog model. */
+  displayName?: string;
+  inCatalog: boolean;
+}
+
 export interface ExcludedModelsView {
   models: ExcludedCatalogModel[];
   /** Rules the catalog list cannot express as a checkbox: patterns, and IDs it does not list. */
   typedRules: ExcludedRuleSummary[];
+  /** Every active rule in its configured order. */
+  activeRules: ExcludedActiveRule[];
   excludedCount: number;
   totalCount: number;
   isEverythingExcluded: boolean;
@@ -114,7 +126,7 @@ export function describeExcludedModels(
   const rules = normalizeExcludedModelRules(ruleValues);
   const exactRules = new Set(rules.filter((rule) => !isWildcardRule(rule)));
   const patterns = rules.filter(isWildcardRule);
-  const catalogKeys = new Set(catalog.map((model) => ruleKeyOf(model.id)));
+  const catalogByKey = new Map(catalog.map((model) => [ruleKeyOf(model.id), model]));
 
   const models = catalog.map((model): ExcludedCatalogModel => {
     const isExactlyExcluded = exactRules.has(ruleKeyOf(model.id));
@@ -129,7 +141,7 @@ export function describeExcludedModels(
   });
 
   const typedRules = rules
-    .filter((rule) => isWildcardRule(rule) || !catalogKeys.has(rule))
+    .filter((rule) => isWildcardRule(rule) || !catalogByKey.has(rule))
     .map((rule): ExcludedRuleSummary => ({
       rule,
       isWildcard: isWildcardRule(rule),
@@ -138,9 +150,33 @@ export function describeExcludedModels(
         : 0,
     }));
 
+  const activeRules = rules.map((rule): ExcludedActiveRule => {
+    const wildcard = isWildcardRule(rule);
+    if (wildcard) {
+      return {
+        rule,
+        isWildcard: true,
+        matchCount: catalog.reduce((count, model) => (matchesExcludedModelRule(rule, model.id) ? count + 1 : count), 0),
+        inCatalog: false,
+      };
+    }
+    const catalogModel = catalogByKey.get(rule);
+    const displayName = catalogModel?.display_name && catalogModel.display_name !== catalogModel.id
+      ? catalogModel.display_name
+      : undefined;
+    return {
+      rule,
+      isWildcard: false,
+      matchCount: 0,
+      displayName,
+      inCatalog: catalogModel !== undefined,
+    };
+  });
+
   return {
     models,
     typedRules,
+    activeRules,
     excludedCount: models.reduce((count, model) => (model.isExcluded ? count + 1 : count), 0),
     totalCount: models.length,
     isEverythingExcluded: rules.includes(EXCLUDE_ALL_RULE),
@@ -154,10 +190,10 @@ export function setExcludedModelRule(rules: readonly string[], candidate: string
   return next;
 }
 
-/** Rule order carries no meaning to the gateway, so two orders of one set are the same draft. */
+/** Rule order is preserved and editable, so reordered drafts count as changed. */
 export function excludedModelRulesEqual(left: readonly string[], right: readonly string[]): boolean {
-  const leftRules = normalizeExcludedModelRules(left).sort();
-  const rightRules = normalizeExcludedModelRules(right).sort();
+  const leftRules = normalizeExcludedModelRules(left);
+  const rightRules = normalizeExcludedModelRules(right);
   return leftRules.length === rightRules.length && leftRules.every((rule, index) => rule === rightRules[index]);
 }
 
