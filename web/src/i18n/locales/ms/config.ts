@@ -358,6 +358,8 @@ export default {
   "cfg.f_github_token_desc": "Token peribadi untuk had API GitHub dan muat turun",
   "cfg.unit_bytes": "bait",
   "cfg.f_max_request_body": "Had badan permintaan",
+  "cfg.f_shutdown_timeout": "Tamat masa saliran penutupan",
+  "cfg.f_shutdown_timeout_desc": "Tempoh menunggu maksimum untuk menyelesaikan permintaan HTTP yang sedang berjalan semasa penutupan",
   "cfg.f_tls_handshake_timeout": "Tamat masa jabat tangan TLS",
   "cfg.f_affinity_rebind_on": "Ikat semula sesi apabila",
   "cfg.f_affinity_rebind_on_desc": "Jenis ralat yang mencetuskan pengikatan semula kelayakan",

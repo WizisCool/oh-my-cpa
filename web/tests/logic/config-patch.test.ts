@@ -922,3 +922,76 @@ test('rebaseStringMapDraft carries concurrent baseline entries into retained inv
   );
 });
 
+test('shutdownTimeout sits in grp_service, preserves omitted defaults, writes positive budgets, and reverts to server bytes', () => {
+  const shutdownField = field('shutdownTimeout');
+  assert.equal(shutdownField.type, 'number');
+  assert.equal(shutdownField.sectionId, 'connectivity');
+  assert.deepEqual(shutdownField.yamlPath, ['server', 'shutdown-timeout']);
+  assert.equal(shutdownField.legacyYamlPath, undefined);
+  assert.equal(shutdownField.min, 0);
+  assert.equal(shutdownField.max, undefined);
+  assert.equal(shutdownField.defaultValue, 0);
+  assert.equal(shutdownField.unitKey, 'cfg.unit_seconds');
+
+  const serviceGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_service');
+  assert.ok(serviceGroup);
+  assert.equal(serviceGroup.sectionId, 'connectivity');
+  assert.equal(serviceGroup.variant, 'form-grid');
+  assert.ok(serviceGroup.fieldIds.includes('shutdownTimeout'));
+
+  // Omitted default stays absent through default confirmation, cleared input, and unrelated saves.
+  const server = parseDocument(SERVER_YAML);
+  const draft = server.clone();
+  assert.equal(getFieldSemanticValue(server, shutdownField), 0);
+  updateFieldWithBaseline(draft, server, shutdownField, 0);
+  assert.equal(draft.hasIn(['server', 'shutdown-timeout']), false);
+  assert.equal(draft.toString(), server.toString());
+  updateFieldWithBaseline(draft, server, shutdownField, null);
+  assert.equal(draft.hasIn(['server', 'shutdown-timeout']), false);
+  assert.equal(draft.toString(), server.toString());
+
+  updateFieldWithBaseline(draft, server, field('debug'), true);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['observability', 'logs', 'debug'], value: true },
+  ]);
+  assert.equal(draft.hasIn(['server', 'shutdown-timeout']), false);
+  updateFieldWithBaseline(draft, server, field('debug'), false);
+
+  // Positive drain budgets above 30s remain representable without client-side clamping.
+  updateFieldWithBaseline(draft, server, shutdownField, 45);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['server', 'shutdown-timeout'], value: 45 },
+  ]);
+  assert.equal(getFieldSemanticValue(parseDocument(draft.toString()), shutdownField), 45);
+
+  // Reverting an added value restores the original server bytes.
+  updateFieldWithBaseline(draft, server, shutdownField, 0);
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+  assert.equal(draft.toString(), server.toString());
+
+  // Existing explicit positive value preserves comments on revert and allows explicit 0 override.
+  const configuredYaml = `${SERVER_YAML.replace('port: 8317\n', 'port: 8317\n    shutdown-timeout: 45 # drain budget\n')}`;
+  const configured = parseDocument(configuredYaml);
+  assert.equal(getFieldSemanticValue(configured, shutdownField), 45);
+  const zeroDraft = configured.clone();
+  updateFieldWithBaseline(zeroDraft, configured, shutdownField, 0);
+  assert.deepEqual(computeConfigChanges(configured, zeroDraft), [
+    { path: ['server', 'shutdown-timeout'], value: 0 },
+  ]);
+  assert.equal(getFieldSemanticValue(parseDocument(zeroDraft.toString()), shutdownField), 0);
+  updateFieldWithBaseline(zeroDraft, configured, shutdownField, 45);
+  assert.deepEqual(computeConfigChanges(configured, zeroDraft), []);
+  assert.equal(zeroDraft.toString(), configured.toString());
+
+  // Rebase carries a shutdownTimeout edit onto a newer baseline without dropping concurrent changes.
+  const rebasedDraft = server.clone();
+  updateFieldWithBaseline(rebasedDraft, server, shutdownField, 60);
+  const newerYaml = SERVER_YAML.replace('port: 8317', 'port: 9000');
+  const rebased = parseDocument(rebaseDraft(server, rebasedDraft, newerYaml) ?? '');
+  assert.equal(rebased.getIn(['server', 'port']), 9000);
+  assert.equal(getFieldSemanticValue(rebased, shutdownField), 60);
+  assert.deepEqual(computeConfigChanges(parseDocument(newerYaml), rebased), [
+    { path: ['server', 'shutdown-timeout'], value: 60 },
+  ]);
+});
+
