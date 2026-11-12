@@ -15,10 +15,11 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { useMotionPreference } from '@/utils/motionPreference';
+import { STACK_CAP_KEY, stackCapOf, stackCapShape } from '../../../charts/stackCap';
+import { BucketBrush } from '../../../charts/BucketBrush';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { useT } from '../../../i18n';
-import { RADIUS } from '../../../theme/radius';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsBucket } from '../../../types/insights';
@@ -90,7 +91,6 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
   const { formatMetric } = useInsightsFormat();
   const isAdditive = isAdditiveMetric(metric);
 
-  const [dragSpan, setDragSpan] = React.useState<{ start: number; current: number } | null>(null);
   const didInteractSeriesRef = React.useRef(false);
 
   const categories = React.useMemo(
@@ -110,6 +110,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
         for (const group of groups) {
           row[seriesKey(group.id)] = group.values[index] ?? null;
         }
+        row[STACK_CAP_KEY] = stackCapOf(row, groups.map((group) => seriesKey(group.id)));
         return row;
       }),
     [bucketStarts, categories, groups, totals],
@@ -179,32 +180,13 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
       <ComposedChart
         data={data}
         margin={{ top: 14, right: 12, bottom: 4, left: 4 }}
-        onMouseDown={(state) => {
-          if (!onBrush || state?.activeTooltipIndex === undefined) return;
-          const idx = Number(state.activeTooltipIndex);
-          if (Number.isFinite(idx)) setDragSpan({ start: idx, current: idx });
-        }}
-        onMouseMove={(state) => {
-          if (!dragSpan || state?.activeTooltipIndex === undefined) return;
-          const idx = Number(state.activeTooltipIndex);
-          if (Number.isFinite(idx) && idx !== dragSpan.current) {
-            setDragSpan((prev) => (prev ? { ...prev, current: idx } : null));
-          }
-        }}
-        onMouseUp={() => {
-          if (!dragSpan) return;
-          const from = Math.min(dragSpan.start, dragSpan.current);
-          const to = Math.max(dragSpan.start, dragSpan.current);
-          setDragSpan(null);
-          if (to > from && onBrush) {
-            didInteractSeriesRef.current = true;
-            onBrush(from, to);
-          }
-        }}
       >
         <CartesianGrid vertical={false} />
         <XAxis
           dataKey="bucketIndex"
+          // Bands in both modes: a line-only chart would otherwise take a point scale, and the brush
+          // reads the plot as equal bucket bands.
+          scale="band"
           tickLine={false}
           axisLine={false}
           tickMargin={6}
@@ -234,17 +216,8 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
             />
           ) : null,
         )}
-        {dragSpan && (
-          <ReferenceArea
-            x1={Math.min(dragSpan.start, dragSpan.current)}
-            x2={Math.max(dragSpan.start, dragSpan.current)}
-            fill={theme.palette.accent}
-            fillOpacity={0.14}
-            stroke={theme.palette.accent}
-            strokeOpacity={0.4}
-          />
-        )}
         <ChartTooltip
+          isPinnedTop
           content={
             <ChartTooltipContent
               buildRows={(payload) => {
@@ -301,10 +274,9 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
           }
         />
         {isAdditive
-          ? groups.map((group, groupIdx) => {
+          ? groups.map((group) => {
               const key = seriesKey(group.id);
               const color = colorOf(group.id);
-              const isTop = groupIdx === groups.length - 1;
               return (
                 <Bar
                   key={group.id}
@@ -313,7 +285,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
                   stackId="total"
                   maxBarSize={28}
                   fill={color}
-                  radius={isTop ? [RADIUS.xs, RADIUS.xs, 0, 0] : [0, 0, 0, 0]}
+                  shape={stackCapShape(key)}
                   isAnimationActive={!isReducedMotion}
                   animationDuration={180}
                   onClick={() => {
@@ -391,6 +363,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
             animationDuration={180}
           />
         )}
+        {onBrush && <BucketBrush bucketCount={data.length} onBrush={onBrush} />}
       </ComposedChart>
     </ChartContainer>
   );

@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { StatusLabel, type StatusTone } from './StatusLabel';
 import styles from './StatTiles.module.css';
 import { Tooltip } from './Tooltip';
+import { useSelectionThumb } from '@/components/ui/selection-thumb';
 
 export interface StatTile<K extends string> {
   key: K;
@@ -39,9 +40,12 @@ export interface StatTilesProps<K extends string> {
  * and must not look like an alarm.
  */
 export function StatTiles<K extends string>({ tiles, selected, onSelect, ariaLabel, testId, tileTestIdPrefix, className }: StatTilesProps<K>) {
+  // On a phone the strip is a segmented filter, and its selection glides like every other one.
+  const thumbRef = useSelectionThumb<HTMLDivElement>('[aria-pressed="true"]', 'aria-pressed');
   return (
     <div
-      className={clsx(styles['stat-tiles'], className)}
+      ref={thumbRef}
+      className={clsx('omc-thumb-host', styles['stat-tiles'], className)}
       style={{ '--stat-tile-count': tiles.length } as React.CSSProperties}
       role="group"
       aria-label={ariaLabel}

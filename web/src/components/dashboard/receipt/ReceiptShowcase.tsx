@@ -248,10 +248,12 @@ export default function ReceiptShowcase({ range, keyFilter, onClose }: ReceiptSh
               <div
                 className={`receipt-showcase-paper${isCurrentData ? '' : ' is-loading'}`}
                 onAnimationEnd={(event) => {
-                  if (event.target === event.currentTarget && event.animationName === 'receipt-release') setIsSettled(true);
+                  if (event.animationName === 'receipt-release') setIsSettled(true);
                 }}
               >
-                <ReceiptPaper ref={paperRef} sheet={sheet} marks={marks} />
+                <div className="receipt-showcase-slip">
+                  <ReceiptPaper ref={paperRef} sheet={sheet} marks={marks} />
+                </div>
               </div>
             )}
           </div>

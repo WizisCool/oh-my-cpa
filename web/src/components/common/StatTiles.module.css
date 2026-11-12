@@ -1,8 +1,7 @@
 /* StatTiles.module.css — a strip of counted tiles, each one a filter over the list below it.
-   Flat: a 1px frame per tile, a background shift for the selected one, no shadow. */
+   Each tile is a raised card; the selected one takes an accent ring and the hover inset. */
 
 .stat-tiles {
-  border: 0;
   display: grid;
   grid-template-columns: repeat(var(--stat-tile-count, 4), minmax(0, 1fr));
   gap: 8px;
@@ -27,7 +26,7 @@
 }
 
 .stat-tile:hover {
-  border-color: var(--muted);
+  background: var(--hover-inset);
 }
 
 .stat-tile-active {
@@ -65,19 +64,23 @@
   color: var(--warn);
 }
 
-/* On a phone the strip becomes a segmented filter: one framed row, each segment its label and its
-   count on one line, the selected one filled. Four boxed tiles stood taller than the records they
-   filter and repeated the header's own summary; one line states the same four numbers and reads at
-   once as the control it is. */
+/* The phone's thumb belongs to the segmented layout below; the desktop tiles mark their own. */
+.stat-tiles::before { display: none; }
+
+/* On a phone the strip becomes a segmented filter: one well, each segment its label and its count
+   on one line, the selected one lifted on a thumb that glides between segments - the same control
+   as every other segmented switch. Four boxed tiles stood taller than the records they filter and
+   repeated the header's own summary; one line states the same four numbers and reads at once as the
+   control it is. */
 @media (max-width: 640px) {
   .stat-tiles {
-    border: 0;
     gap: 2px;
     padding: 2px;
-    box-shadow: var(--shadow-edge);
+    box-shadow: var(--shadow-well);
     border-radius: var(--radius-md);
-    background: var(--bg);
+    background: var(--thread-field);
   }
+  .stat-tiles::before { display: block; }
   /* A label and a count too long to share a segment wrap the count under the label, and a label
      too long for the segment breaks between words, instead of either being cut short. */
   .stat-tile {
@@ -89,17 +92,21 @@
     gap: 0 6px;
     min-height: 32px;
     padding: 0 4px;
-    border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
+    box-shadow: none;
+    transition: background-color var(--motion-fast) var(--ease-standard);
   }
   .stat-tile:hover {
-    border-color: transparent;
+    background: transparent;
   }
-  /* An ink wash rather than the hover inset, which is too faint on the dark ground to mark the
-     segment that is on. */
   .stat-tile-active {
-    background: color-mix(in srgb, var(--fg) 10%, transparent);
+    background: var(--thumb-bg);
+    box-shadow: var(--shadow-control);
+  }
+  .stat-tiles[data-thumb] .stat-tile-active {
+    background: transparent;
+    box-shadow: none;
   }
   .stat-tile-label {
     min-width: 0;

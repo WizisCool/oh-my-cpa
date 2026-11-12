@@ -222,6 +222,11 @@ A height fold animates a wrapper with no padding or border and the visible box s
 Motion measures `auto` in the state it is heading for, so padding folding alongside would stall
 the motion short of its end and snap the rest.
 
+Charts are the exception. A chart's marks are hundreds of SVG nodes, so a new dataset is rendered
+once inside an element-scoped view transition ([`useChartMorph`](../web/src/charts/useChartMorph.ts))
+that cross-fades the chart on the compositor, and the chart library's own tween stays off. Where
+scoped transitions are missing or motion is reduced, the new data simply lands.
+
 A list that a search or a status filter narrows animates through the same layer
 ([`motion/filter.tsx`](../web/src/motion/filter.tsx)): what remains glides to the place the shorter
 list gives it, and what starts to match fades in where it now belongs, as one move. A row the filter

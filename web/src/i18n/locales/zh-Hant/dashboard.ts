@@ -46,6 +46,7 @@ export default {
   "dash.models.focus_series": "點擊以突顯此系列",
   "dash.models.clear_series_focus": "點擊以取消突顯",
   "dash.models.empty": "該時間視窗內沒有模型用量",
+  "dash.models.total": "合計",
   "dash.models.error": "無法讀取模型用量",
   "dash.models.stale": "模型用量重新整理失敗，目前顯示的是上一次的資料",
   "dash.heatmap.grid_label": "近一年每日 Token 用量；點選某天可檢視當天請求",

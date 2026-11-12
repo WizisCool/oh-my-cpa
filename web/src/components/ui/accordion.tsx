@@ -75,14 +75,15 @@ export function Collapse({
             </AccordionPrimitive.Trigger>
             {item.extra ? <div className="shrink-0 pr-3">{item.extra}</div> : null}
           </AccordionPrimitive.Header>
+          {/* The panel folds by its height, so its padding lives on the box inside it: padding on the
+              panel itself would survive the fold and stall the last frames at the padding's height. */}
           <AccordionPrimitive.Panel
             data-slot="accordion-panel"
-            className={cn(
-              'overflow-hidden text-base text-foreground',
-              ghost ? 'px-1 pt-1 pb-2' : size === 'small' ? 'px-3 pt-1 pb-3' : 'px-4 pt-1 pb-4',
-            )}
+            className="omc-fold-panel overflow-hidden text-base text-foreground"
           >
-            {item.children}
+            <div className={ghost ? 'px-1 pt-1 pb-2' : size === 'small' ? 'px-3 pt-1 pb-3' : 'px-4 pt-1 pb-4'}>
+              {item.children}
+            </div>
           </AccordionPrimitive.Panel>
         </AccordionPrimitive.Item>
       ))}

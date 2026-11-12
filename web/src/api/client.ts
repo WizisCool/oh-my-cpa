@@ -468,7 +468,7 @@ export const api = {
 
   /**
    * getDashboardModels reads the per-model breakdown behind the dashboard's token trend and
-   * model-usage ring.
+   * model-usage ranking.
    *
    * Its own call, for the reason the heatmap has one: it answers for the window the picker selected
    * but on its own cadence, and it walks the detail rows rather than the aggregation rollup, so

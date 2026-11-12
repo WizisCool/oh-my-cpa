@@ -191,6 +191,13 @@
     transition-duration: var(--motion-sheet-out);
     transition-timing-function: var(--ease-sheet-out);
   }
+  /* The sheet's own entrance frame for the browser, over the dialog's global one (`index.css`). */
+  @starting-style {
+    :global(:root:not([data-reduced-motion='true'])) .modal.modal[data-open] {
+      opacity: 1;
+      transform: translateY(100%);
+    }
+  }
 }
 
 @keyframes sheet-in {

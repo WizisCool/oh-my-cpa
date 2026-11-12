@@ -1,6 +1,6 @@
 /**
  * Response shapes for the dashboard's two model-level panels: the per-model token trend and the
- * model-usage ring.
+ * model-usage ranking.
  *
  * Both read one response, because they are two views of one ranking. A second endpoint would let the
  * trend's lines and the ring's slices disagree about which models exist and in what order, and the

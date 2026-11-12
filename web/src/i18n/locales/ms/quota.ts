@@ -68,7 +68,6 @@ export default {
   "quota.usage_share_unavailable": "Tidak tersedia",
   "quota.capacity_estimate": "Anggaran kapasiti",
   "quota.capacity_tokens": "{n} token",
-  "quota.capacity_figure": "{value} ({tokens})",
   "quota.capacity_hint": "Dianggarkan daripada permintaan yang direkodkan oleh get laluan ini dan kuota yang digunakannya, serta diperhalus semasa kelayakan digunakan.",
   "quota.capacity_reason_scope_unknown": "Belum ada penggunaan model tetingkap ini yang direkodkan",
   "quota.capacity_reason_history_unavailable": "Sejarah tidak dapat dibaca; muat semula untuk mencuba lagi",

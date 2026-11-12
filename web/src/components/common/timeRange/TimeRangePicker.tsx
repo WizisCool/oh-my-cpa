@@ -10,6 +10,7 @@ import { languageLocale, useI18n } from '../../../i18n';
 import { useIsNarrowViewport } from '../../../hooks/useIsNarrowViewport';
 import dayjs, { formatTimeZoneOffset } from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
+import { isMotionReduced } from '../../../utils/motionPreference';
 import { RangeCalendar } from './RangeCalendar';
 import {
   clampEndTime,
@@ -117,6 +118,36 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
 
   const close = React.useCallback(() => setIsOpen(false), []);
 
+  // Opening the calendar beside the presets grows the popover several times over. The panel eases
+  // from the size it had to the size it now has, so the calendar unfolds out of the list rather
+  // than the surface jumping to its new box.
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const panelSizeBefore = React.useRef<{ width: number; height: number } | null>(null);
+  const switchMode = (next: PanelMode) => {
+    const panel = panelRef.current;
+    panelSizeBefore.current = panel ? { width: panel.offsetWidth, height: panel.offsetHeight } : null;
+    setMode(next);
+  };
+  React.useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const before = panelSizeBefore.current;
+    panelSizeBefore.current = null;
+    if (!panel || !before || isMotionReduced()) return;
+    const after = { width: panel.offsetWidth, height: panel.offsetHeight };
+    if (after.width === before.width && after.height === before.height) return;
+    // A switch back mid-ease starts from where the panel had got to (measured before this commit,
+    // with the ease still on); the cleanup takes the running ease off before the new size is read,
+    // and also when the panel closes, turns into the sheet or unmounts mid-ease.
+    const resize = panel.animate(
+      [
+        { width: `${before.width}px`, height: `${before.height}px`, overflow: 'clip' },
+        { width: `${after.width}px`, height: `${after.height}px`, overflow: 'clip' },
+      ],
+      { duration: 260, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+    );
+    return () => resize.cancel();
+  }, [mode, isOpen, isSheet]);
+
   // A popover is not a focus trap, so Escape is heard on the document: focus may still be on
   // the trigger, or on nothing at all after a press on the calendar's padding. The sheet
   // already closes on Escape through the Drawer.
@@ -219,7 +250,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
         type="button"
         className={`time-range-option time-range-custom-toggle${isCustom ? ' is-active' : ''}`}
         aria-expanded={mode === 'custom'}
-        onClick={() => setMode(mode === 'custom' && !isSheet ? 'quick' : 'custom')}
+        onClick={() => switchMode(mode === 'custom' && !isSheet ? 'quick' : 'custom')}
       >
         {t('time_range.custom')}
         <RightOutlined className="time-range-custom-caret" />
@@ -332,7 +363,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
     >
       <PopoverTrigger render={trigger} />
       <PopoverContent placement={placement} className="time-range-popover p-0">
-        <div className="time-range-panel" role="dialog" aria-label={t('time_range.title')} data-mode={mode}>
+        <div ref={panelRef} className="time-range-panel" role="dialog" aria-label={t('time_range.title')} data-mode={mode}>
           {(isOpen || isPanelMounted) && presetList}
           {(isOpen || isPanelMounted) && mode === 'custom' && customForm}
         </div>

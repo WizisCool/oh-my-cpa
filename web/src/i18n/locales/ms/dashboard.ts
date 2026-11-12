@@ -46,6 +46,7 @@ export default {
   "dash.models.focus_series": "Klik untuk menyerlahkan siri ini",
   "dash.models.clear_series_focus": "Klik untuk membuang serlahan",
   "dash.models.empty": "Tiada penggunaan model dalam tetingkap masa ini",
+  "dash.models.total": "Jumlah",
   "dash.models.error": "Gagal memuatkan penggunaan model",
   "dash.models.stale": "Penggunaan model menyegarkan gagal; menunjukkan bacaan terakhir yang berjaya",
   "dash.heatmap.grid_label": "Penggunaan token harian sepanjang tahun lalu; buka hari untuk melihat permintaannya",

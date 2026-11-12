@@ -68,7 +68,6 @@ export default {
   'quota.usage_share_unavailable': 'Unavailable',
   'quota.capacity_estimate': 'Est. capacity',
   'quota.capacity_tokens': '{n} tokens',
-  'quota.capacity_figure': '{value} ({tokens})',
   'quota.capacity_hint': 'Estimated from the requests this gateway recorded and the quota they used, and refined as the credential is used.',
   'quota.capacity_reason_scope_unknown': 'No usage of this window\'s models recorded yet',
   'quota.capacity_reason_history_unavailable': 'History could not be read; refresh to retry',

@@ -25,10 +25,10 @@ export function RadioItem({ className, children, ...props }: RadioItemProps) {
     <label className={cn('inline-flex cursor-pointer items-center gap-2 text-base text-foreground select-none [@media(pointer:coarse)]:min-h-10', props.disabled && 'cursor-not-allowed opacity-50', className)}>
       <RadioPrimitive.Root
         data-slot="radio-item"
-        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full border-0 bg-field shadow-well outline-none transition-shadow focus-visible:shadow-focus data-[checked]:bg-brand"
+        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full border-0 bg-field shadow-well outline-none transition-[background-color,box-shadow] focus-visible:shadow-focus data-[checked]:bg-brand"
         {...props}
       >
-        <RadioPrimitive.Indicator className="size-1.5 rounded-full bg-brand-foreground" />
+        <RadioPrimitive.Indicator className="omc-mark-pop size-1.5 rounded-full bg-brand-foreground" />
       </RadioPrimitive.Root>
       {children ? <span>{children}</span> : null}
     </label>

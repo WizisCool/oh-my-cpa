@@ -84,6 +84,7 @@ export function AppModal({
   if (open && !hasOpened) setHasOpened(true);
   const [isScrolled, setIsScrolled] = React.useState(false);
   const viewport = useVisibleViewport(open);
+  const sheetSpan = useOpenSheetSpan(open, MODAL_WIDTHS[size]);
 
   const maskConfig = typeof mask === 'object' && mask !== null ? mask : {};
   const canDismissByEscape = isDismissible && keyboard !== false;
@@ -165,6 +166,7 @@ export function AppModal({
               zIndex: zIndex + 1,
               '--sheet-height': `${viewport.height}px`,
               '--sheet-bottom': `${viewport.bottom}px`,
+              ...(sheetSpan && { paddingInlineStart: sheetSpan.start, paddingInlineEnd: sheetSpan.end }),
             } as React.CSSProperties
           }
           className={clsx('fixed inset-0 overflow-y-auto', styles['wrapper'])}
@@ -246,4 +248,33 @@ export function AppModal({
       </DialogPortal>
     </Dialog>
   );
+}
+
+/** Room a dialog keeps on each side of it inside the span it is centred in. */
+const SPAN_GUTTER = 16;
+
+/**
+ * Where an open side sheet stands, as the inline insets that centre a dialog over it.
+ *
+ * A side sheet is modal, so a dialog that opens while one is open was opened from it. Centred on
+ * the window, the dialog straddled the sheet's edge and hung half over the dimmed page, a card
+ * floating loose over two surfaces; centred on the sheet - which steps back under it - it reads as
+ * the next layer of the same stack. A dialog wider than the sheet, and a phone's bottom sheet,
+ * keep the window's centre.
+ */
+function useOpenSheetSpan(open: boolean, width: number) {
+  const [span, setSpan] = React.useState<{ start: number; end: number } | null>(null);
+  React.useLayoutEffect(() => {
+    if (!open) return undefined;
+    const measure = () => {
+      const sheets = document.querySelectorAll<HTMLElement>('[data-slot="sheet-content"][data-open]');
+      const box = sheets[sheets.length - 1]?.getBoundingClientRect();
+      const fits = box && window.innerWidth > 640 && box.width >= width + 2 * SPAN_GUTTER;
+      setSpan(fits ? { start: box.left, end: window.innerWidth - box.right } : null);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open, width]);
+  return span;
 }

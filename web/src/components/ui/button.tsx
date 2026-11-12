@@ -16,10 +16,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-foreground hover:enabled:bg-primary-hover active:enabled:bg-primary-active shadow-control',
-        active: 'bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-brand hover:enabled:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_42%,transparent)]',
+        primary: 'bg-primary text-primary-foreground hover:enabled:bg-primary-hover active:enabled:bg-primary-active shadow-[var(--control-drop)]',
+        // Switched on: the same control material as `secondary`, the state carried by the wash and ink
+        // alone, so a toggled tool never gains an outline its neighbours do not have.
+        active: 'bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-brand hover:enabled:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] shadow-control',
         secondary: 'bg-secondary text-secondary-foreground hover:enabled:bg-secondary-hover active:enabled:bg-secondary-active shadow-control',
-        filled: 'bg-field text-foreground hover:enabled:bg-field-hover shadow-well',
+        // A field holding a value, drawn like the selects beside it: it does not give under a press.
+        filled: 'bg-field text-foreground hover:enabled:bg-field-hover active:enabled:scale-100 shadow-well',
         ghost: 'bg-transparent text-foreground hover:enabled:bg-secondary active:enabled:bg-secondary-hover shadow-none',
         dashed: 'border border-dashed border-border bg-transparent text-foreground hover:enabled:border-muted-foreground hover:enabled:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)] shadow-none',
         destructive: 'bg-destructive text-destructive-foreground hover:enabled:opacity-90 shadow-none',

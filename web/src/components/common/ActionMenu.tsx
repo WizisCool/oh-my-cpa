@@ -29,10 +29,16 @@ function anchorFor(trigger: HTMLElement | null): MenuAnchor | undefined {
   };
 }
 
-/** Keeps actual action controls mounted, including dialogs owned by a menu action. */
+/**
+ * Keeps actual action controls mounted once the menu has opened, including dialogs owned by a menu
+ * action. Until then nothing is mounted: a list draws one of these per row, and a closed menu's
+ * positioner and actions cost every re-render of the row - every pointer move of a drag among them.
+ */
 export function ActionMenu({ children, label }: ActionMenuProps) {
   const t = useT();
   const [isOpen, setIsOpen] = React.useState(false);
+  const [hasOpened, setHasOpened] = React.useState(false);
+  if (isOpen && !hasOpened) setHasOpened(true);
   const [anchor, setAnchor] = React.useState<MenuAnchor>();
   const contentRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -55,7 +61,7 @@ export function ActionMenu({ children, label }: ActionMenuProps) {
           />
         }
       />
-      <PopoverContent
+      {hasOpened && <PopoverContent
         keepMounted
         placement={anchor?.placement ?? 'bottomRight'}
         initialFocus={() => contentRef.current?.querySelector<HTMLElement>('button:not(:disabled), a[href]') ?? null}
@@ -79,7 +85,7 @@ export function ActionMenu({ children, label }: ActionMenuProps) {
         >
           <LabelledActionsContext.Provider value>{children}</LabelledActionsContext.Provider>
         </div>
-      </PopoverContent>
+      </PopoverContent>}
     </Popover>
   );
 }

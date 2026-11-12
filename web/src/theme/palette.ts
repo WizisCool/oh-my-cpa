@@ -216,10 +216,18 @@ const CANVAS_BLEND: Record<ThemeMode, { toward: 'fg' | 'black'; share: number }>
  *   lift  the same surface under the pointer, and a layer floating over the page
  *   fine  the faint ring a control stands in and a field or a track is set into
  *
- * The edge step sits between the derived soft rule (0.06) and the authored borders (0.09-0.15):
- * firm enough to read without the drop under it, quiet enough that it does not draw a line.
+ * The modes split the work of an edge differently. A dark page has little for a shadow to darken,
+ * so its ring carries the edge - sitting between the derived soft rule (0.06) and the authored
+ * borders (0.09-0.15) - with a lit top line above it. A light page shows a soft shadow well, and
+ * a ring at the dark step reads there as a drawn outline: the box looks traced rather than
+ * resting. So a light ring stands a lighter step off and the layered drop under it - a tight
+ * contact shadow plus a wide, faint ambient one - says the surface is raised. A control's faint
+ * ring is the same in both: it is what tells a white button from the white card it stands on.
  */
-export const EDGE_STEPS = { edge: 0.08, lift: 0.11, fine: 0.05 } as const;
+export const EDGE_STEPS: Record<ThemeMode, { edge: number; lift: number; fine: number }> = {
+  dark: { edge: 0.08, lift: 0.11, fine: 0.05 },
+  light: { edge: 0.055, lift: 0.075, fine: 0.05 },
+};
 
 /** The least share of `ink`, in half percents, that moves `ground` by `step` of OKLCH lightness. */
 function inkShareFor(ground: string, ink: string, step: number): number {
@@ -696,9 +704,9 @@ export function derivePalette(
     heatmapZeroUnrecorded: borderSoft,
     heatmapZeroRecorded: core.border,
     heatmapTipLink: core.accent,
-    edgeShare: inkShareFor(core.bg, core.fg, EDGE_STEPS.edge),
-    liftShare: inkShareFor(core.bg, core.fg, EDGE_STEPS.lift),
-    fineShare: inkShareFor(core.bg, core.fg, EDGE_STEPS.fine),
+    edgeShare: inkShareFor(core.bg, core.fg, EDGE_STEPS[mode].edge),
+    liftShare: inkShareFor(core.bg, core.fg, EDGE_STEPS[mode].lift),
+    fineShare: inkShareFor(core.bg, core.fg, EDGE_STEPS[mode].fine),
     shade: shadeInk(mode, core),
     series: baseSeries.map(hold),
     seriesTrack: core.border,

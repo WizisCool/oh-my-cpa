@@ -265,10 +265,8 @@ export const DashboardPage: React.FC = () => {
   const pickTokenRate = React.useCallback((point: DashboardSeriesPoint) => pickTokens(point) / bucketMinutes, [bucketMinutes]);
   const formatRequests = React.useCallback((value: number) => `${formatCount(value)} ${t('dash.unit_requests')}`, [t]);
   const formatTokens = React.useCallback((value: number) => `${formatTokensStyled(value, tokenStyle)} ${t('dash.unit_tokens')}`, [t, tokenStyle]);
-  const formatExactTokens = React.useCallback((value: number) => `${formatTokensFull(value)} ${t('dash.unit_tokens')}`, [t]);
   const formatRequestRate = React.useCallback((value: number) => `${value.toFixed(2)} ${t('dash.unit_requests_per_min')}`, [t]);
   const formatTokenRateLabel = React.useCallback((value: number) => `${formatTokenRate(value)} ${t('dash.unit_tokens_per_min')}`, [t]);
-  const formatExactTokenRate = React.useCallback((value: number) => `${formatTokensFull(value)} ${t('dash.unit_tokens_per_min')}`, [t]);
 
   const overviewQuery = useSwrQuery(managementOverviewSwr, undefined, {
     refetchInterval: 30_000,
@@ -486,7 +484,6 @@ export const DashboardPage: React.FC = () => {
               height={64}
               label={formatTrendTime}
               format={formatTokens}
-              formatExact={formatExactTokens}
             />
           </Panel>
         );
@@ -531,7 +528,6 @@ export const DashboardPage: React.FC = () => {
               height={44}
               label={formatTrendTime}
               format={formatTokenRateLabel}
-              formatExact={formatExactTokenRate}
             />
           </Panel>
         );
@@ -560,7 +556,6 @@ export const DashboardPage: React.FC = () => {
               height={44}
               label={formatTrendTime}
               format={formatTokens}
-              formatExact={formatExactTokens}
             />
           </Panel>
         );

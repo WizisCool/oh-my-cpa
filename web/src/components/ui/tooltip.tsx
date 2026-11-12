@@ -78,20 +78,21 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
   const hasMeta = rows.some((row) => row.share !== undefined || row.note !== undefined);
 
   return (
-    <div data-slot="tooltip-readout" className={cn('flex flex-col gap-1 min-w-[112px]', className)}>
+    <div data-slot="tooltip-readout" className={cn('flex flex-col gap-1.5 min-w-[120px]', className)}>
       {heading !== undefined && heading !== '' && (
-        <div className="text-sm font-medium text-muted-foreground tabular-nums pb-0.5">
+        <div className="pb-1.5 text-sm font-medium text-fg-2 tabular-nums border-b-[length:var(--hairline)] border-b-border-soft">
           {heading}
         </div>
       )}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         {rows.map((row, index) => {
           const indicator = row.indicator ?? 'dot';
           return (
             <div
               key={row.key ?? index}
               className={cn(
-                'flex items-center justify-between gap-3 tabular-nums text-sm leading-snug',
+                'flex items-center gap-3 tabular-nums text-sm leading-snug',
+                hasNames ? 'justify-between' : 'justify-start gap-2',
                 row.isTotal && index > 0 && 'mt-0.5 pt-1 border-t-[length:var(--hairline)] border-t-border-soft',
               )}
             >
@@ -130,7 +131,7 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
               <span className={cn('inline-flex items-baseline gap-1.5 shrink-0', hasNames && 'ml-auto')}>
                 <span className="font-medium text-foreground whitespace-nowrap">{row.value}</span>
                 {hasMeta && (row.share !== undefined || row.note !== undefined) && (
-                  <span className="text-muted-foreground whitespace-nowrap">
+                  <span className="min-w-[4ch] text-right text-fg-2 whitespace-nowrap">
                     {row.share ?? row.note}
                   </span>
                 )}
@@ -140,7 +141,7 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
         })}
       </div>
       {footer && (
-        <div className="mt-0.5 pt-1 border-t-[length:var(--hairline)] border-t-border-soft">
+        <div className="pt-1.5 border-t-[length:var(--hairline)] border-t-border-soft">
           {footer}
         </div>
       )}

@@ -7,6 +7,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { useMotionPreference } from '@/utils/motionPreference';
+import { STACK_CAP_KEY, stackCapOf, stackCapShape } from '../../../charts/stackCap';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
@@ -66,6 +67,7 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
         segments.forEach((segment, segIdx) => {
           entry[segKey(segment, segIdx)] = values[segIdx]?.[rowIdx] ?? 0;
         });
+        entry[STACK_CAP_KEY] = stackCapOf(entry, segments.map((segment, segIdx) => segKey(segment, segIdx)));
         return entry;
       }),
     [rows, segments, totals, values],
@@ -156,6 +158,7 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
               stackId="composition"
               maxBarSize={18}
               fill={segment.color}
+              shape={stackCapShape(key, 'row')}
               isAnimationActive={!isReducedMotion}
               animationDuration={180}
               onClick={(_, rowIdx) => {

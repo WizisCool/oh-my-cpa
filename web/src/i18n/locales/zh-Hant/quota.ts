@@ -68,7 +68,6 @@ export default {
   "quota.usage_share_unavailable": "不可用",
   "quota.capacity_estimate": "預估額度",
   "quota.capacity_tokens": "{n} tokens",
-  "quota.capacity_figure": "{value}（{tokens}）",
   "quota.capacity_hint": "根據閘道記錄的請求及其消耗的額度換算，隨使用持續校準。",
   "quota.capacity_reason_scope_unknown": "尚未記錄到此視窗計額模型的用量",
   "quota.capacity_reason_history_unavailable": "歷史記錄讀取失敗，重新整理後重試",
