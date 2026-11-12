@@ -216,6 +216,4 @@
   to { transform: translateY(100%); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .header.header { transition: none; }
-}
+:global(:root[data-reduced-motion='true']) .header.header { transition: none; }

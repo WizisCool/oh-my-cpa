@@ -444,9 +444,10 @@
   font-weight: 500;
 }
 
-/* The checkbox mirrors the tile's state; the tile takes the click. */
-.level-check {
-  pointer-events: none;
+.level-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .level-label {

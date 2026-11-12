@@ -302,40 +302,6 @@
   min-width: 0;
 }
 
-/* Follow-up questions are objects the reader presses, so each rests on the page as its own
-   rounded slip; spacing separates them from the answer, not a rule. */
-.follow-ups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.follow-up {
-  border: 0;
-  max-width: 100%;
-  padding: 6px 14px;
-  box-shadow: var(--shadow-edge);
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--fg-2);
-  font: inherit;
-  font-size: var(--text-md);
-  line-height: 1.5;
-  text-align: start;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
-}
-
-.follow-up:hover {
-  background: var(--thread-field);
-  color: var(--fg);
-}
-
-.follow-up:focus-visible {
-  border-radius: var(--radius-md);
-}
-
 .message-foot {
   display: flex;
   align-items: center;
@@ -1648,6 +1614,17 @@
 
 @media (max-width: 640px) {
   .head { gap: 8px 12px; min-height: 0; padding: 8px 12px; }
+  /* The phone's top bar names the page one line above, as it does for every other page, so the
+     title stays in the outline and the head keeps only its actions. */
+  .head { position: relative; justify-content: flex-end; }
+  .title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 
   .empty {
     justify-content: flex-start;
@@ -1701,24 +1678,12 @@
   to { background-position: calc(100% + var(--live-text-band)) 0, 0 0; }
 }
 
-/* The questions a settled answer offers arrive one after another rather than as a block. */
-.follow-up {
-  border: 0;
-  animation: workspace-enter var(--motion-base) var(--ease-standard) backwards;
-  animation-delay: calc(var(--follow-up-row, 0) * var(--motion-fast));
-}
-
 @keyframes workspace-enter {
   from { opacity: 0; transform: translateY(4px); }
 }
 
 :global(:root[data-reduced-motion='true']) {
   .live-text {
-    animation: none;
-  }
-
-  .follow-up {
-    border: 0;
     animation: none;
   }
 }

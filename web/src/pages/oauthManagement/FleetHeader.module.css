@@ -77,7 +77,6 @@
   /* Four translated verdicts can outgrow their track at any width; they scroll rather than run under
      the tools beside them. */
   overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .lens {

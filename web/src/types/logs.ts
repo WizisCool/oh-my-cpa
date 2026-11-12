@@ -233,7 +233,8 @@ export interface LogFilters {
   methods: LogMethod[];
   /** Request paths without their query string; a line matches when its path is one of them. */
   paths: string[];
-  wrapLines: boolean;
+  /** Absent until the operator chooses: a phone then wraps, since an unwrapped line shows little more than its time. */
+  wrapLines?: boolean;
 }
 
 export const DEFAULT_LOG_FILTERS: LogFilters = {
@@ -242,7 +243,6 @@ export const DEFAULT_LOG_FILTERS: LogFilters = {
   statusClass: 'all',
   methods: [],
   paths: [],
-  wrapLines: false,
 };
 
 /** MAX_LOG_PATH_FILTERS bounds the stored selection; the preference is a small JSON blob. */
@@ -305,7 +305,7 @@ export function parseLogFilters(raw: unknown): LogFilters | undefined {
     statusClass,
     methods: Array.isArray(value.methods) ? LOG_METHODS.filter((method) => (value.methods as unknown[]).includes(method)) : [],
     paths: normalizeLogPaths(value.paths),
-    wrapLines: value.wrapLines === true,
+    ...(typeof value.wrapLines === 'boolean' ? { wrapLines: value.wrapLines } : {}),
   };
 }
 

@@ -26,6 +26,7 @@ import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { useLogTail } from '../../hooks/useLogTail';
 import { usePreference } from '../../hooks/usePreference';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { RefreshButton } from '../common/RefreshButton';
 import { ResponsiveList } from '../common/ResponsiveList';
 import { saveBlob } from '../../utils/download';
@@ -255,6 +256,10 @@ export const CpaLogPanel: React.FC = () => {
   const tail = useLogTail(tab === 'tail' && filtersReady && status.isSuccess && !loggingDisabled);
 
   const patchFilters = React.useCallback((next: Partial<LogFilters>) => setFilters({ ...filters, ...next }), [filters, setFilters]);
+  // On a phone an unwrapped line shows its time and half a path, so the tail wraps there until the
+  // operator chooses otherwise; a choice made on either screen is kept on both.
+  const isPhone = useIsPhoneViewport();
+  const isWrapped = filters.wrapLines ?? isPhone;
 
   const parsed = React.useMemo(() => tail.lines.map((line) => parseLogLine(line)), [tail.lines]);
 
@@ -430,10 +435,10 @@ export const CpaLogPanel: React.FC = () => {
                   <Tooltip title={t('logs.wrap')}>
                     <Button
                       icon={<WrapTextOutlined />}
-                      variant={filters.wrapLines ? 'primary' : 'secondary'}
-                      aria-pressed={filters.wrapLines}
+                      variant={isWrapped ? 'primary' : 'secondary'}
+                      aria-pressed={isWrapped}
                       aria-label={t('logs.wrap')}
-                      onClick={() => patchFilters({ wrapLines: !filters.wrapLines })}
+                      onClick={() => patchFilters({ wrapLines: !isWrapped })}
                     />
                   </Tooltip>
                 )}
@@ -563,7 +568,7 @@ export const CpaLogPanel: React.FC = () => {
                         items={rows}
                         itemKey={(parts, index) => `${parts.raw}-${index}`}
                         isLoading={isLoading}
-                        isWrapped={filters.wrapLines}
+                        isWrapped={isWrapped}
                         emptyText={parsed.length > 0 ? t('logs.filter_empty') : t('logs.tail_empty')}
                         renderItem={(parts, isOpen) => <CpaLogLine parts={parts} isOpen={isOpen} onViewRequest={viewRequest} />}
                       />

@@ -130,7 +130,7 @@ export function ProviderStrip(props: ProviderStripProps) {
   }
   return (
     <nav className={styles.strip} aria-label={t('omc.fleet_providers')}>
-      <div ref={scroller} className={styles.tabs}>
+      <div ref={scroller} className={clsx(styles.tabs, 'scroll-fade-x')}>
         {tab('all', <AppstoreOutlined aria-hidden />, t('omc.fleet_all_accounts'), total, attention, 'oauth-provider-all')}
         {summaries.map((summary) => tab(
           summary.provider,

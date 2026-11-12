@@ -188,9 +188,11 @@ export function Input({
           type="button"
           data-slot="input-clear"
           aria-label={clearLabel}
+          // Clearing is a shortcut for what the keyboard already does in the field, so the button
+          // stays out of the tab order and Tab moves on to the next field.
           tabIndex={-1}
           onClick={triggerClear}
-          className="inline-flex items-center justify-center shrink-0 border-0 bg-transparent p-0 text-meta hover:text-foreground cursor-pointer rounded-xs"
+          className="inline-flex items-center justify-center shrink-0 border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground cursor-pointer rounded-xs"
         >
           {customClearIcon ?? <X className="size-3.5" aria-hidden="true" />}
         </button>
@@ -233,9 +235,8 @@ export function PasswordInput({
             type="button"
             aria-label={label}
             aria-pressed={isVisible}
-            tabIndex={-1}
             onClick={() => setIsVisible((prev) => !prev)}
-            className="inline-flex items-center justify-center border-0 bg-transparent p-0 text-meta hover:text-foreground cursor-pointer"
+            className="inline-flex items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground cursor-pointer rounded-xs"
           >
             {isVisible ? <Eye className="size-3.5" aria-hidden="true" /> : <EyeOff className="size-3.5" aria-hidden="true" />}
           </button>

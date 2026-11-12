@@ -522,6 +522,7 @@ export const PricingPage: React.FC = () => {
         <section className={styles.workbench} data-testid="pricing-model-list" ref={listRef}>
           <Toolbar className={styles.toolbar}>
             <Segmented<ModelFilter>
+              className="scroll-fade-x"
               value={filter}
               onChange={setFilter}
               options={(['all', 'auto', 'linked', 'custom', 'unpriced', 'candidates'] as const)

@@ -86,7 +86,7 @@
 .time-range-option:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
 .time-range-option:focus-visible,
 .time-range-day:focus-visible,
-.time-range-month-step:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.time-range-month-step:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 /* The selected row is marked the way the side rail marks its page: a soft wash and the weight. */
 .time-range-option.is-active {
   background: color-mix(in srgb, var(--fg) 8%, transparent);

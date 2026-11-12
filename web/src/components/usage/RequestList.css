@@ -271,7 +271,7 @@
 }
 .req-id-quick-copy:hover {
   color: var(--fg);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
 }
 /* Column 2: Result (success/failed pill) */
 .req-col-result {
@@ -368,8 +368,8 @@
   font-weight: 500;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--warning, #b26b00) 14%, transparent);
-  color: var(--warning, #b26b00);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
   flex-shrink: 0;
   line-height: 1.4;
 }
@@ -593,7 +593,7 @@
 .req-cost-set:hover,
 .req-cost-set:focus-visible {
   color: var(--fg);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
 }
 /* Column 8: Cache Rate — one continuous scale, 0% yellow → 100% green. Red is
    deliberately absent: a low hit rate is not a failure, and the danger hue

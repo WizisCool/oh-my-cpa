@@ -944,24 +944,15 @@ export function ProviderEditorDrawer({
                                     m.thinking?.levels?.includes(opt.value) || false;
                                   return (
                                     <div key={opt.value}>
-                                      <div
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => toggleThinkingLevel(m.id, opt.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === ' ' || e.key === 'Enter') {
-                                            e.preventDefault();
-                                            toggleThinkingLevel(m.id, opt.value);
-                                          }
-                                        }}
-                                        aria-pressed={isChecked}
-                                        className={`${styles['level-option']} ${isChecked ? styles['level-option-checked'] : ''}`}
-                                      >
-                                        <Checkbox checked={isChecked} tabIndex={-1} className={styles['level-check']}>
+                                      {/* The tile is the checkbox's label: one control, so the whole
+                                          tile takes the click and a keyboard reaches the box once. */}
+                                      <label className={`${styles['level-option']} ${isChecked ? styles['level-option-checked'] : ''}`}>
+                                        <span className={styles['level-start']}>
+                                          <Checkbox checked={isChecked} onCheckedChange={() => toggleThinkingLevel(m.id, opt.value)} />
                                           <span className={styles['level-label']}>{t(opt.labelKey)}</span>
-                                        </Checkbox>
+                                        </span>
                                         <span className={styles['level-value']}>{opt.value}</span>
-                                      </div>
+                                      </label>
                                     </div>
                                   );
                                 })}

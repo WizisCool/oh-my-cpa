@@ -149,7 +149,7 @@ export function QuestionPanel({ operation, onDecided }: QuestionPanelProps) {
       </header>
 
       {hasReview && (
-        <div className={styles['question-tabs']} role="tablist" aria-label={t('agent.question.title')}>
+        <div className={clsx(styles['question-tabs'], 'scroll-fade-x')} role="tablist" aria-label={t('agent.question.title')}>
           {questions.map((item, index) => (
             <button
               key={`${index}-${item.question}`}

@@ -59,7 +59,7 @@
 .model-sources { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; min-width: 0; margin-left: auto; }
 .model-source { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg-2); font-size: var(--text-sm); }
 .source-marks { display: inline-flex; align-items: center; gap: 4px; }
-.model-details { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0; border: 0; background: transparent; color: var(--meta); cursor: pointer; }
+.model-details { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .model-details::after { content: ""; position: absolute; inset: 0; }
 .model-row:hover .model-details { color: var(--fg-2); }
 .is-absent { color: var(--meta); }
@@ -122,7 +122,7 @@
 @media (max-width: 640px) {
   .chip { min-height: 36px; padding: 6px 12px; }
   /* Makers scroll inside their own strip so a long roster costs one line, and the page itself never moves sideways. */
-  .maker-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .maker-strip { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; }
   .maker-strip .chip { flex: none; }
   .copy-name { min-height: 44px; }
   /* The name's touch height is taller than its text; the caption closes the gap it leaves. */
