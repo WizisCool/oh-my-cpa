@@ -170,7 +170,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
           onChange={setQuery}
           label={t('plugin.search_store')}
         />
-        <FilterDisclosure activeLabel={activeLabels.join(' · ')}>
+        <FilterDisclosure activeLabel={activeLabels}>
           {allSections.length > 1 && (
             <Select
               className={styles['source-select']}

@@ -1,4 +1,5 @@
 import type { MessageKey } from '../../i18n/catalog';
+import { quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
 import React from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -101,7 +102,7 @@ const QuotaWindowMeter: React.FC<{ window: QuotaWindow }> = ({ window }) => {
       {/* The panel keeps one compact line per credential; a plugin's own words for what is left
           (its only amounts) ride in the shared hint, which touch and keyboard focus reach too,
           rather than widening the row. */}
-      <Tooltip title={<>{window.label}{window.description && <div>{window.description}</div>}</>}>
+      <Tooltip card={{ heading: quotaWindowParts(window).name, notes: [quotaWindowParts(window).group, window.description] }}>
         <span className="quota-window-label" tabIndex={0}>{label}</span>
       </Tooltip>
       <span

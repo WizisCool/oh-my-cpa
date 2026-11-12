@@ -22,7 +22,7 @@ import { canonicalDisplayProviderKey } from '../../src/types/credentialIdentity.
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../../src/pages/oauthProviderLogic.ts';
 import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
-import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../../src/pages/quota/quotaWindowSelection.ts';
+import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
 import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
@@ -453,7 +453,7 @@ test('a countdown marks an instant the provider did not state exactly', () => {
   );
   assert.equal(
     quotaResetText({ reset_at_ms: inTwoHours, reset_accuracy: 'derived' }, now, echoT),
-    `~${formatShortDateTime(inTwoHours)} · quota.in_hours:2`,
+    `~quota.time_with_countdown:${formatShortDateTime(inTwoHours)}/quota.in_hours:2`,
     'the tooltip keeps the marker too, so the two readings cannot disagree',
   );
 });
@@ -466,6 +466,14 @@ test('a window without a kind is named from the period it covers', () => {
   assert.equal(quotaWindowKindOf(groupWindow(720)), 'monthly');
   assert.equal(quotaWindowKindOf(groupWindow(2)), undefined, 'an unknown period stays unnamed rather than being forced into a bucket');
   assert.equal(quotaWindowKindOf({ ...groupWindow(2), kind: 'custom' }), 'custom', 'an explicit kind always wins');
+});
+
+test('a stored group label is read once and shown as its two parts', () => {
+  const window = { label: 'Gift plans \u00b7 ZCODE WEEKEND BUILD \u00b7 glm-5.3-flash', scope: 'group' as const };
+  // Only the first dot is the group's: a plugin's own window name may carry the same glyph.
+  assert.deepEqual(quotaWindowParts(window), { group: 'Gift plans', name: 'ZCODE WEEKEND BUILD \u00b7 glm-5.3-flash' });
+  assert.equal(quotaWindowFullName(window), 'Gift plans ZCODE WEEKEND BUILD \u00b7 glm-5.3-flash');
+  assert.deepEqual(quotaWindowParts({ label: '5h', scope: 'standard' }), { group: null, name: '5h' });
 });
 
 const creditInfo = (available: number, applicable: number): QuotaItem['reset_credits'] => ({

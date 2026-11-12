@@ -437,8 +437,8 @@ const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> 
   // cell opens the price editor for it rather than only explaining the gap.
   if (onPrice) {
     return (
-      <Tooltip title={`${note} · ${t('dash.models.set_price')}`}>
-        <button type="button" className={`${className} model-usage-cost-action`} onClick={onPrice} aria-label={`${note} · ${t('dash.models.set_price')}`}>
+      <Tooltip card={{ notes: [note, t('dash.models.set_price')] }}>
+        <button type="button" className={`${className} model-usage-cost-action`} onClick={onPrice} aria-label={`${text}, ${note}. ${t('dash.models.set_price')}`}>
           {text}
         </button>
       </Tooltip>

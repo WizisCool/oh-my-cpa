@@ -47,9 +47,8 @@ export function OAuthSessionStrip({ sessions, choices, onOpen }: OAuthSessionStr
       {entries.map(({ providerId, state, title }) => (
         <span className={styles.pill} data-testid="oauth-session-pill" key={providerId}>
           <span className={styles['pill-text']}>
-            <span>{title}</span>
-            <span aria-hidden="true">·</span>
-            <span>{statusText(state)}</span>
+            <span className={styles['pill-title']}>{title}</span>
+            <span className={styles['pill-status']}>{statusText(state)}</span>
           </span>
           <span className={styles['pill-actions']}>
             <Button

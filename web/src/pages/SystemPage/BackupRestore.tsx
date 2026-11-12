@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MetaLine } from '../../components/common/MetaLine';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { useQuery } from '@tanstack/react-query';
@@ -174,9 +175,10 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
             onFiles={(files) => setFile(files[0] ?? null)}
           >
             {file && (
-              <span>
-                {file.name} · {formatBytes(file.size)}
-              </span>
+              <MetaLine>
+                <b>{file.name}</b>
+                {formatBytes(file.size)}
+              </MetaLine>
             )}
           </FileDropzone>
           {file && passphraseField}

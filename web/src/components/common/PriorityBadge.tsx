@@ -20,7 +20,7 @@ export function PriorityBadge({ priority, weight, isStatic }: PriorityBadgeProps
   const label = [
     t('omc.priority_value', { n: priority ?? 0 }),
     weight !== undefined ? t('omc.weight_value', { n: weight }) : '',
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join(', ');
   return (
     <GlyphBadge glyph={<StepsOutlined />} label={label} hint={t('omc.priority_badge_hint')} isStatic={isStatic} data-priority-badge="true">
       <span>{priority ?? 0}</span>

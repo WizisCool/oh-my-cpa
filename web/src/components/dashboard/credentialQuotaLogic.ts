@@ -1,4 +1,5 @@
 import { credentialBrandIdentity, credentialProviderFamily, type CredentialBrandIdentity } from '../../types/credentialIdentity';
+import { quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../../types/quota';
 import { credentialTitle } from '../../types/usageEventIdentity';
@@ -64,7 +65,7 @@ function slotOf(window: QuotaWindow): 0 | 1 | undefined {
 }
 
 function familyOf(window: QuotaWindow): string {
-  return window.scope === 'group' ? `group:${window.label.split(' · ')[0]}` : window.scope === 'model' ? `model:${window.model || window.label}` : window.scope;
+  return window.scope === 'group' ? `group:${quotaWindowParts(window).group}` : window.scope === 'model' ? `model:${window.model || window.label}` : window.scope;
 }
 
 /**

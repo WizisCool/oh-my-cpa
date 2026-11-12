@@ -76,7 +76,7 @@ export function createWarmupFixture({ initialTasks } = {}) {
       const account = input.account || input.auth_index || 'claude.json';
       const task = {
         id,
-        name: input.name?.trim() || `${account} · 窗口重置后 (5h)`,
+        name: input.name?.trim() || `${account} 窗口重置后 (5h)`,
         enabled: Boolean(input.enabled),
         provider: input.provider,
         auth_index: input.auth_index || 'exact-claude',

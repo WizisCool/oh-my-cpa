@@ -223,15 +223,23 @@
 .phone-card-route {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* The protocol, the host and the transport are separate facts: space sets them apart. */
+  gap: 10px;
   min-width: 0;
   color: var(--fg-2);
   font-size: var(--text-xs);
   white-space: nowrap;
 }
 
-.phone-card-route > :global(.omc-icon),
-.phone-card-route > svg {
+.phone-card-family {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.phone-card-family > :global(.omc-icon),
+.phone-card-family > svg {
   flex: none;
   color: var(--muted);
 }
@@ -242,10 +250,6 @@
   color: var(--muted);
   font-family: var(--font-mono);
   text-overflow: ellipsis;
-}
-
-.phone-card-host::before {
-  content: '· ';
 }
 
 .phone-card-health {

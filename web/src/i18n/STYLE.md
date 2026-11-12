@@ -27,6 +27,10 @@ does and what a control changes; it does not congratulate, apologise, or explain
 - **An ICU plural only where the language inflects.** English and Malay take `one`/`other`; Chinese
   takes `other` alone, because it has no plural form. Every plural keeps `other`.
 - **No leading or trailing whitespace**, and no double space. The layout owns spacing.
+- **No middle dot (`\u00b7`) between parts.** A catalog sentence relates its parts in words, a
+  comma or parentheses: `第 {page} 页，共 {n} 条记录`, `Auto ({model})`, `缓存写入（5 分钟）`. Two facts
+  that are not one phrase are two catalog entries the layout sets apart (`MetaLine`, a tooltip
+  card). `pnpm check:feedback` refuses the dot in catalogs too.
 
 ## Names of things
 
@@ -48,7 +52,8 @@ rather than "操作失败".
 
 A label has one line. When a sentence does not fit in a control, the answer is a shorter sentence,
 not a wider control: the mobile console renders the same catalog. A tooltip may hold the longer
-explanation, and that is where a caveat belongs.
+explanation, and that is where a caveat belongs. A tooltip never repeats the control's own label or
+explains how to press it ("点击以筛选"); see `docs/design.md`, Tooltips.
 
 ## Subtitles, hints, and secondary copy (Captions)
 

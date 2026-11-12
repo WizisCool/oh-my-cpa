@@ -1,4 +1,5 @@
 import React from 'react';
+import { MetaLine } from '../../components/common/MetaLine';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { NumberInput } from '../../components/common/NumberInput';
 import clsx from 'clsx';
@@ -465,10 +466,10 @@ const TierBand: React.FC<{
           </span>
         </div>
         <div className={styles['tier-body']}>
-          <span className={styles['tier-role']}>
+          <MetaLine className={styles['tier-role']}>
             {role}
-            {sharing > 1 && <> · {t(IN_TIER_KEYS[strategy])}</>}
-          </span>
+            {sharing > 1 && t(IN_TIER_KEYS[strategy])}
+          </MetaLine>
           <ul
             ref={cardsRef}
             className={clsx(styles['tier-cards'], isPresent && tier.memberKeys.length === 0 && styles['tier-cards-vacant'])}
@@ -501,11 +502,11 @@ const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember
           revealLabel={t('omc.account_reveal')}
           hideLabel={t('omc.account_hide')}
         />
-        <span className={styles['card-sub']}>
+        <MetaLine className={styles['card-sub']}>
           {t(member.kind === 'provider' ? 'orch.kind_provider' : 'orch.kind_credential')}
-          {member.key_count > 1 && <> · {t('orch.key_count', { n: member.key_count })}</>}
-          {member.prefix && <> · <code>{member.prefix}/</code></>}
-        </span>
+          {member.key_count > 1 && t('orch.key_count', { n: member.key_count })}
+          {member.prefix && <code>{member.prefix}/</code>}
+        </MetaLine>
       </span>
       {children}
     </div>

@@ -1,4 +1,5 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
+import { MetaLine } from '../../components/common/MetaLine';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Select } from '@/components/ui/select';
@@ -75,7 +76,7 @@ function syncTone(data: PricingResponse | undefined): StatusTone {
 }
 
 function syncSummary(t: TFunc, data: PricingResponse | undefined): string {
-  if (!data) return t('pricing.sync.source_name');
+  if (!data) return t('common.loading');
   if (data.sync.running) return t('pricing.sync.running');
   if (data.sync.state.last_error) return t('pricing.sync.failed_short');
   const success = data.sync.state.last_success_at_ms;
@@ -283,7 +284,7 @@ export const PricingPage: React.FC = () => {
       render: (_: unknown, row: BookRow) => (
         <div className={styles['model-cell']}>
           <div className={styles['model-text']}>
-            {row.channel && <span className={styles['model-sub']}>{t('pricing.scope.channel')} · {row.channelLabel || row.channel}</span>}
+            {row.channel && <span className={styles['model-sub']}>{t('pricing.scope.channel_named', { channel: row.channelLabel || row.channel })}</span>}
             {row.targetChannel && row.rowKind === 'priced' && <span className={styles['model-sub']}>{t('pricing.scope.inherited')}</span>}
             <span className={styles['model-name']} data-tip={row.model} data-tip-overflow="">{pricingModelIdentity(row.model).label}</span>
             {row.rowKind === 'priced' ? (
@@ -366,12 +367,10 @@ export const PricingPage: React.FC = () => {
             </StatusLabel>
             </Tooltip>
             {row.rowKind === 'priced' && (mode === 'auto' && row.match_kind && row.match_kind !== 'exact' || row.price_multiplier !== 1) && (
-              <span className={styles['model-sub']}>
-                {[
-                  mode === 'auto' && row.match_kind && row.match_kind !== 'exact' ? t(`pricing.match.${row.match_kind}`) : '',
-                  row.price_multiplier !== 1 ? formatMultiplier(row.price_multiplier) : '',
-                ].filter(Boolean).join(' · ')}
-              </span>
+              <MetaLine className={styles['model-sub']}>
+                {mode === 'auto' && row.match_kind && row.match_kind !== 'exact' ? t(`pricing.match.${row.match_kind}`) : ''}
+                {row.price_multiplier !== 1 ? formatMultiplier(row.price_multiplier) : ''}
+              </MetaLine>
             )}
           </div>
         );
@@ -499,6 +498,7 @@ export const PricingPage: React.FC = () => {
               <PopoverTrigger
                 render={
                   <Button className={styles['sync-button']} data-testid="pricing-sync-status">
+                    <span className={styles['sync-source']}>{t('pricing.sync.source_name')}</span>
                     <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
                   </Button>
                 }
@@ -570,7 +570,12 @@ export const PricingPage: React.FC = () => {
                 <header className={styles['provider-heading']}>
                   {group.provider && <ProviderBrandIcon mark={identity!} size={20} />}
                   <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
-                  {group.provider && <span className={styles.dimmed}>{group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')} · {t('omc.priority_value', { n: group.provider.priority })}</span>}
+                  {group.provider && (
+                    <MetaLine className={styles.dimmed}>
+                      {group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')}
+                      {t('omc.priority_value', { n: group.provider.priority })}
+                    </MetaLine>
+                  )}
                 </header>
                 {/* The columns are the same fixed set in every group, so their names are drawn
                     once, above the first group; repeating them per provider put a header row

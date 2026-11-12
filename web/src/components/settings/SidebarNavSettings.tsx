@@ -230,7 +230,7 @@ const NavEntryRow: React.FC<{
                   size="sm"
                   variant="ghost"
                   icon={<UpOutlined />}
-                  aria-label={`${t('omc.sidebar_move_earlier')} · ${label}`}
+                  aria-label={t('common.action_on', { action: t('omc.sidebar_move_earlier'), target: label })}
                   disabled={!canWrite || index === 0}
                   onClick={() => step(entry.key, -1)}
                 />
@@ -240,7 +240,7 @@ const NavEntryRow: React.FC<{
                   size="sm"
                   variant="ghost"
                   icon={<DownOutlined />}
-                  aria-label={`${t('omc.sidebar_move_later')} · ${label}`}
+                  aria-label={t('common.action_on', { action: t('omc.sidebar_move_later'), target: label })}
                   disabled={!canWrite || index === count - 1}
                   onClick={() => step(entry.key, 1)}
                 />

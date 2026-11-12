@@ -373,14 +373,8 @@ export function ProviderEditorDrawer({
           {/* Base URL */}
           <Field
             required={lookupProviderFamily(formFamily)?.requiresBaseURL ?? false}
-            label={
-              <span>
-                {t('pro.field_base_url')}{' '}
-                <span className={styles['label-hint']}>
-                  · {t('pro.field_base_url_desc')}
-                </span>
-              </span>
-            }
+            label={t('pro.field_base_url')}
+            extra={t('pro.field_base_url_desc')}
           >
             <Input
               value={formBaseURL}
@@ -435,16 +429,9 @@ export function ProviderEditorDrawer({
 
           {/* Website: console metadata, deliberately not a CPA field. */}
           <Field
-            label={
-              <span>
-                {t('pro.field_website')}{' '}
-                <span className={styles['label-hint']}>
-                  · {t('pro.field_website_desc')}
-                </span>
-              </span>
-            }
+            label={t('pro.field_website')}
             error={websiteInputState.status === 'error' ? websiteInputState.help : undefined}
-            extra={websiteInputState.status !== 'error' ? websiteInputState.help : undefined}
+            extra={t('pro.field_website_desc')}
           >
             <Input
               value={formWebsite}

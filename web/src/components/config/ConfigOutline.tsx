@@ -96,7 +96,6 @@ export const ConfigOutline: React.FC<{ entries: ConfigOutlineEntry[] }> = ({ ent
                   type="button"
                   className={`config-outline-link${isCurrent ? ' is-current' : isOnScreen ? ' is-on-screen' : ''}`}
                   aria-current={isCurrent ? 'location' : undefined}
-                  data-tip={entry.label}
                   onPointerEnter={() => markTarget(entry.id, true)}
                   onPointerLeave={() => markTarget(entry.id, false)}
                   onFocus={() => markTarget(entry.id, true)}
@@ -109,7 +108,7 @@ export const ConfigOutline: React.FC<{ entries: ConfigOutlineEntry[] }> = ({ ent
                     target.scrollIntoView({ behavior: isMotionReduced() ? 'auto' : 'smooth', block: 'start' });
                   }}
                 >
-                  <span className="config-outline-label">{entry.label}</span>
+                  <span className="config-outline-label" data-tip={entry.label} data-tip-overflow="">{entry.label}</span>
                   {entry.isDirty && <span className="config-change-dot" role="img" aria-label={t('cfg.source_dirty')} />}
                   <span className="config-outline-count">{entry.count}</span>
                 </button>

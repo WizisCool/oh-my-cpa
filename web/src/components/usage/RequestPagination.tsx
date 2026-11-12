@@ -1,4 +1,5 @@
 
+import { MetaLine } from '../common/MetaLine';
 import React from 'react';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -60,10 +61,12 @@ export const RequestPagination = React.memo(function RequestPagination({
 
         <footer className="request-pagination">
           <span aria-live="polite">
-            {stale
-              ? t('events.previous_results')
-              : t('events.page_loaded', { page, n: count })}
-            {isPlaceholderData && ` · ${t('events.updating')}`}
+            <MetaLine>
+              {stale
+                ? t('events.previous_results')
+                : t('events.page_loaded', { page, n: count })}
+              {isPlaceholderData && t('events.updating')}
+            </MetaLine>
           </span>
           <div className="request-actions">
             {collapse && onRestoreHeader && (

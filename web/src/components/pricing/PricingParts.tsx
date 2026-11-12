@@ -1,4 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
+import { MetaLine } from '../common/MetaLine';
+import { joinPhrases } from '../../utils/format';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { TimeRangeField } from '@/components/ui/time-picker';
@@ -58,7 +60,7 @@ export function describeTier(t: TFunc, tier: PriceTier): string {
   if (hasTimeWindow(tier)) {
     parts.push(t('pricing.tier.window', { start: formatHHMM(tier.utc_start), end: formatHHMM(tier.utc_end), zone: tierTimeZone(tier) }));
   }
-  return parts.join(' · ');
+  return joinPhrases(t, parts);
 }
 
 /** Small marks naming a price's tiers; a price without tiers draws nothing. */
@@ -114,10 +116,10 @@ export const UpstreamSummary: React.FC<{ model: UpstreamModel; extra?: React.Rea
         <div className={styles['upstream-identity']}>
           <span className={styles['upstream-id']}>{model.id}</span>
           {model.name && (
-            <span className={styles['upstream-name']}>
+            <MetaLine className={styles['upstream-name']}>
               {model.name}
-              {model.context_length > 0 && ` · ${t('pricing.context_length', { n: formatTokensFull(model.context_length) })}`}
-            </span>
+              {model.context_length > 0 && t('pricing.context_length', { n: formatTokensFull(model.context_length) })}
+            </MetaLine>
           )}
         </div>
         {extra}
@@ -235,7 +237,7 @@ function useScheduleCondition() {
       }
       parts.push(window);
     }
-    return parts.join(' · ');
+    return joinPhrases(t, parts);
   }, [t, consoleZone]);
 }
 

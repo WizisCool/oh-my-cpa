@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatErrorCode } from '../../utils/format';
 import { Tabs } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { HistoryOutlined } from '../../components/icons';
@@ -82,7 +83,7 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
           <Notice
             tone="error"
             title={t(playgroundErrorKey(turn.error.code ?? ''))}
-            description={<code>{[turn.error.code, turn.error.upstream_status, turn.error.parameter].filter(Boolean).join(' · ')}</code>}
+            description={<code>{formatErrorCode({ code: turn.error.code, status: turn.error.upstream_status, parameter: turn.error.parameter })}</code>}
           />
         )}
         <div className={styles['related']}>

@@ -120,7 +120,7 @@ export const RequestToolbar = React.memo(function RequestToolbar({
             key === 'provider'
               ? resolveProviderName(value)
               : key === 'auth_index'
-                ? `${credentialOptionLabel(credentials.get(value)) || value} · ${value}`
+                ? (credentialOptionLabel(credentials.get(value)) ? `${credentialOptionLabel(credentials.get(value))} (${value})` : value)
                 : value,
         )}
         notFoundContent={facetsFailed ? t('events.facets_error') : undefined}

@@ -416,3 +416,11 @@ test('pricing display', () => {
     assert.equal(rows[0].upTo, 200_000, 'a lane step sets no bound on the standard rates');
   });
 });
+
+test('clauses of one description join with the reading language\'s comma', async () => {
+  const { joinPhrases } = await import('../../src/utils/format.ts');
+  const zh = ((_key: string, vars?: Record<string, unknown>) => `${vars?.first}，${vars?.rest}`) as Parameters<typeof joinPhrases>[0];
+  assert.equal(joinPhrases(zh, ['长上下文 ≥ 200K', '', null, '09:00–18:00 UTC', 'Flex 服务等级']), '长上下文 ≥ 200K，09:00–18:00 UTC，Flex 服务等级');
+  assert.equal(joinPhrases(zh, ['标准价']), '标准价');
+  assert.equal(joinPhrases(zh, []), '');
+});

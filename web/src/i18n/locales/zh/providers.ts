@@ -83,7 +83,7 @@ export default {
   'pro.weight_label': '调度权重',
   'pro.weight_desc': '加权轮询权重（1–1,000,000）',
   'pro.field_test_model': '测试模型',
-  'pro.test_auto': '自动 · {model}',
+  'pro.test_auto': '自动（{model}）',
   'pro.test_auto_default': '自动 (默认)',
   'pro.testing_key': '正在测试密钥 #{n}...',
   'pro.test_key_ok': '密钥 #{n} 连通性测试通过',

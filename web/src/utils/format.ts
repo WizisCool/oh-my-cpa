@@ -44,3 +44,23 @@ export function formatTimeAgo(ms: number, nowMS: number, t: TFunc): string {
   if (diffHours < 24) return `${diffHours} ${t('quota.hours_ago')}`;
   return t('quota.days_ago', { n: Math.floor(diffHours / 24) });
 }
+
+/**
+ * A machine error as one reading: the code first, the HTTP status in parentheses and the offending
+ * parameter after a colon - `invalid_request (HTTP 400): max_tokens`. Any part may be missing.
+ */
+export function formatErrorCode(parts: { code?: string | null; status?: number | string | null; parameter?: string | null }): string {
+  const status = parts.status ? `HTTP ${parts.status}` : '';
+  const head = parts.code ? (status ? `${parts.code} (${status})` : parts.code) : status;
+  if (!parts.parameter) return head;
+  return head ? `${head}: ${parts.parameter}` : parts.parameter;
+}
+
+/**
+ * Clauses of one description as a sentence list in the reader's language - "长上下文 ≥ 200K，
+ * 09:00–18:00 UTC" or "long context ≥ 200K, 09:00–18:00 UTC". Empty clauses are dropped.
+ */
+export function joinPhrases(t: TFunc, phrases: readonly (string | false | null | undefined)[]): string {
+  const shown = phrases.filter((phrase): phrase is string => typeof phrase === 'string' && phrase !== '');
+  return shown.reduceRight<string>((rest, first) => (rest ? t('common.list_pair', { first, rest }) : first), '');
+}

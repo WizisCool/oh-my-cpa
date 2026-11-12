@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { formatErrorCode } from '../../utils/format';
 import { useMutation } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { api, describeError } from '../../api/client';
@@ -76,7 +77,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
         <div><dt>{t('recovery.next_refresh')}</dt><dd className="mono-num">{timestamp(file.next_refresh_after)}</dd></div>
         {file.refresh_error && <div>
           <dt>{t('recovery.refresh_error')}</dt>
-          <dd className="mono-num"><span className={styles['fact-error']}>{[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}</span></dd>
+          <dd className="mono-num"><span className={styles['fact-error']}>{formatErrorCode({ code: file.refresh_error.code, status: file.refresh_error.http_status })}</span></dd>
         </div>}
       </dl>
     </div>

@@ -2,10 +2,6 @@
    trend also draws; every other mark is ink. */
 
 .page {
-  /* A change's direction: the state hues mixed well toward the ink, so a rise or a fall is legible
-     without reading as the saturated red and green that mark a failure or a success. */
-  --trend-up: color-mix(in oklch, var(--danger) 64%, var(--fg-2));
-  --trend-down: color-mix(in oklch, var(--success) 64%, var(--fg-2));
   max-width: 1440px;
   /* useScrollAnchor keeps a pressed row in place; the browser's anchoring would correct it twice. */
   overflow-anchor: none;

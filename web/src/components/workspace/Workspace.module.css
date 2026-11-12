@@ -829,10 +829,24 @@
 }
 
 .composer-chip-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.composer-chip-title {
+  flex-shrink: 0;
+}
+
+/* What the edited message carries - its files and images - sits after the title in the hint ink. */
+.composer-chip-attachment {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
 }
 
 .composer-chip :global([data-slot='button']) {

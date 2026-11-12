@@ -1,4 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
+import { quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
+import { MetaLine } from '../common/MetaLine';
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,7 +104,20 @@ function accountLabel(account: WarmupCatalogAccount | undefined, task: Pick<Warm
 function windowLabel(id: string | undefined, account: WarmupCatalogAccount | undefined, t: TFunc): string {
   const key = id ? WINDOW_KEYS[id] : undefined;
   if (key) return t(key);
-  return account?.windows.find((w) => w.id === id)?.label || id || '';
+  const label = account?.windows.find((w) => w.id === id)?.label;
+  return label ? quotaWindowParts({ label, scope: id?.startsWith('ag_') ? 'group' : 'standard' }).name : id || '';
+}
+
+/** A window option: its own name, with the model group it belongs to as a quiet line beneath. */
+function WindowOption({ id, account, t }: { id: string; account: WarmupCatalogAccount | undefined; t: TFunc }) {
+  const label = account?.windows.find((w) => w.id === id)?.label;
+  const group = label && id.startsWith('ag_') ? quotaWindowParts({ label, scope: 'group' }).group : null;
+  return (
+    <span className={styles['window-option']}>
+      <span>{windowLabel(id, account, t)}</span>
+      {group && <span className={styles['window-option-group']}>{group}</span>}
+    </span>
+  );
 }
 
 function describeTrigger(trigger: WarmupTrigger, account: WarmupCatalogAccount | undefined, fallbackZone: string, t: TFunc): string {
@@ -275,7 +290,7 @@ function TaskEditorModal({
         {draft.trigger.kind === 'window' && (
           <div className={styles['field']}>
             <span className={styles['field-label']}>{t('warmup.window_select')}</span>
-            {/* A window's label is the provider's own, such as "Gemini Models · 5小时限制", so the
+            {/* A grouped window names its model group too ("5小时限制" in "Gemini Models"), so the
                 options do not fit one row at any dialog width: laid out as a row each one was
                 truncated to its middle, which left two families' five-hour windows reading alike. */}
             <Segmented
@@ -285,7 +300,7 @@ function TaskEditorModal({
               aria-label={t('warmup.window_select')}
               value={draft.trigger.window || windows[0]}
               disabled={isDisabled}
-              options={windows.map((id) => ({ value: id, label: windowLabel(id, account, t) }))}
+              options={windows.map((id) => ({ value: id, label: <WindowOption id={id} account={account} t={t} /> }))}
               onChange={(win) => setTrigger({ window: String(win) })}
             />
           </div>
@@ -350,7 +365,7 @@ function TaskEditorModal({
             aria-label={t('warmup.task_name')}
             value={draft.name}
             maxLength={120}
-            placeholder={`${accountLabel(account, draft)} · ${describeTrigger(draft.trigger, account, timezone, t)}`}
+            placeholder={t('warmup.task_name_placeholder', { account: accountLabel(account, draft), trigger: describeTrigger(draft.trigger, account, timezone, t) })}
             disabled={isDisabled}
             onChange={(e) => set({ name: e.target.value })}
           />
@@ -530,7 +545,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                   <CredentialMark className={styles['task-mark']} credential={{ provider: task.provider, hint: task.account }} size={20} />
                   <div className={styles['task-copy']}>
                     <span className={styles['task-title']} data-tip={view.title} data-tip-overflow="">{view.title}</span>
-                    <span className={styles['task-meta']}>{view.meta.join(' · ')}</span>
+                    <MetaLine className={styles['task-meta']}>{view.meta.map((part) => <span key={part}>{part}</span>)}</MetaLine>
                     {next && <span className={styles['task-next']}>{next}</span>}
                   </div>
                   <div className={styles['task-actions']}>
@@ -604,11 +619,13 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
           <>
             <ul className={styles['list']} data-testid="warmup-last-result">
               {shownRuns.map((run) => {
-                const meta = [
-                  t(SOURCE_KEYS[run.source] ?? 'warmup.source_manual'),
-                  run.model,
-                  typeof run.ms === 'number' ? formatEventDuration(run.ms) : null,
-                ].filter(Boolean).join(' · ');
+                const meta = (
+                  <MetaLine>
+                    {t(SOURCE_KEYS[run.source] ?? 'warmup.source_manual')}
+                    {run.model ? <span className="mono-num">{run.model}</span> : null}
+                    {typeof run.ms === 'number' ? formatEventDuration(run.ms) : null}
+                  </MetaLine>
+                );
                 return (
                   <li key={run.id} className={styles['run-row']}>
                     <div className={styles['run-head']}>

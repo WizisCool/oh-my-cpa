@@ -1,4 +1,5 @@
 import { Tooltip } from '../common/Tooltip';
+import { formatErrorCode } from '../../utils/format';
 import clsx from 'clsx';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -84,7 +85,7 @@ export function CredentialRenewalBadge({ file, onOpen, className }: CredentialRe
             <div className={clsx(styles['tooltip-meta-row'], styles['tooltip-error'])}>
               <span className={styles['tooltip-meta-label']}>{t('recovery.refresh_error')}</span>
               <span className={styles['tooltip-meta-value']}>
-                {[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}
+                {formatErrorCode({ code: file.refresh_error.code, status: file.refresh_error.http_status })}
               </span>
             </div>
           )}

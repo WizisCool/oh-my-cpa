@@ -47,7 +47,6 @@ export default {
   "recovery.adopted": "Runtime load",
   "recovery.inference": "Inference verification",
   "recovery.refresh_error": "Last renewal failure",
-  "recovery.expires_at": "Access token expires {time}",
   "oauth.use_default_route": "Use CPA’s default route",
   "oauth.session_proxy": "Session proxy (optional)",
   "oauth.session_proxy_hint": "Supports HTTP(S) and SOCKS5(H); saved as dedicated proxy for this account upon authorization",

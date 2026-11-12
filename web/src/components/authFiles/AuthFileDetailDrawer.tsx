@@ -1,4 +1,5 @@
 import { CredentialRecoveryPanel } from './CredentialRecoveryPanel';
+import { MetaLine } from '../common/MetaLine';
 import { SecretInput } from '../common/SecretInput';
 import type { MessageKey } from '../../i18n/catalog';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -708,10 +709,10 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               </span>
               <div className={styles['hero-names']}>
                 <h2 className={styles['hero-title']}>{heroTitle}</h2>
-                <span className={styles['hero-subtitle']}>
+                <MetaLine className={styles['hero-subtitle']}>
                   {getCredentialProviderMetadata(providerKey).label}
-                  {heroSubtitle && <> · <span className="mono-num">{heroSubtitle}</span></>}
-                </span>
+                  {heroSubtitle && <span className="mono-num">{heroSubtitle}</span>}
+                </MetaLine>
               </div>
               <span className={styles['hero-status']}>{statusBadge}</span>
             </div>
@@ -775,9 +776,10 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                                 key: 'requests',
                                 label: t('af.detail_total_requests'),
                                 value: (
-                                  <span className="mono-num">
-                                    {t('dash.success_n', { n: file.success })} · {t('dash.failure_n', { n: file.failed })}
-                                  </span>
+                                  <MetaLine className="mono-num">
+                                    {t('dash.success_n', { n: file.success })}
+                                    <span className={file.failed > 0 ? 'text-danger' : undefined}>{t('dash.failure_n', { n: file.failed })}</span>
+                                  </MetaLine>
                                 ),
                               },
                             ]}

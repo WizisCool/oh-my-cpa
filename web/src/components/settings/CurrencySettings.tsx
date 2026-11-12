@@ -35,7 +35,7 @@ export const CurrencySettings: React.FC = () => {
   });
   const options = React.useMemo(() => {
     const available = new Set<string>(['USD', ...(rates.data?.rates.map((entry) => entry.currency) ?? [])]);
-    return DISPLAY_CURRENCIES.map((code) => ({ value: code, label: `${code} · ${names.of(code)}`, name: names.of(code) ?? code, disabled: !available.has(code) }));
+    return DISPLAY_CURRENCIES.map((code) => ({ value: code, label: `${code} ${names.of(code)}`, name: names.of(code) ?? code, disabled: !available.has(code) }));
   }, [rates.data?.rates, names]);
   const updatedAt = rates.data?.updated_at_ms;
   const hasRefreshError = rates.isError || Boolean(rates.data?.last_error);

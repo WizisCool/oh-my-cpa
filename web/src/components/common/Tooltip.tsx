@@ -1,7 +1,11 @@
 import React from 'react';
-import { TooltipPrimitive } from '@/components/ui/tooltip';
+import { TipCardView, TooltipPrimitive } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { hasOpenPopup, hoverIntentDelay, isControl, noteHintClosed } from './tooltipIntent';
+import type { TipCard } from './tipCard';
+import { hasOpenPopup, hoverIntentDelay, isControl, noteHintClosed, repeatsVisibleText } from './tooltipIntent';
+
+/** The card layout every multi-fact hint draws with; see docs/design.md, Tooltips. */
+export { TooltipReadout, type TooltipReadoutRow } from '@/components/ui/tooltip';
 
 export type TooltipPlacement =
   | 'top'
@@ -41,8 +45,14 @@ type TriggerEvents = Pick<
 
 export interface TooltipProps extends TriggerEvents, Omit<React.AriaAttributes, 'aria-describedby'> {
   children: React.ReactNode;
+  /** A single phrase: the name of an icon control, or one sentence that explains a mark. */
   title?: React.ReactNode | (() => React.ReactNode);
   overlay?: React.ReactNode | (() => React.ReactNode);
+  /**
+   * More than one fact: a heading, label/value rows and quiet notes, drawn by the shared readout.
+   * Use this instead of joining facts into one `title` string.
+   */
+  card?: TipCard | null;
   placement?: TooltipPlacement;
   open?: boolean;
   disabled?: boolean;
@@ -111,6 +121,7 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
       isFocusOnly = false,
       title,
       overlay,
+      card,
       placement = 'top',
       id,
       className,
@@ -147,10 +158,14 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
     const timerRef = React.useRef<number | undefined>(undefined);
     const isPressedRef = React.useRef(false);
     const lastPointerRef = React.useRef<string>('mouse');
+    const hasCard = Boolean(card && (card.heading || card.rows?.length || card.notes?.some(Boolean)));
     const hasContent =
+      hasCard ||
       (title !== undefined && title !== null && title !== '' && title !== false) ||
       (overlay !== undefined && overlay !== null && overlay !== false);
 
+    // A plain-text hint that only repeats the trigger's own visible words never opens.
+    const isEcho = (element: HTMLElement) => !hasCard && typeof title === 'string' && repeatsVisibleText(element, title);
     const cancelPending = React.useCallback(() => {
       if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
       timerRef.current = undefined;
@@ -245,7 +260,7 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
         triggerRef.current = event.currentTarget;
         if (!hasContent || isPressedRef.current || isOpen || timerRef.current !== undefined) return;
         const element = event.currentTarget;
-        if (hasOpenPopup(element)) return;
+        if (hasOpenPopup(element) || isEcho(element)) return;
         timerRef.current = window.setTimeout(() => {
           timerRef.current = undefined;
           if (element.isConnected && !isPressedRef.current && !hasOpenPopup(element)) setIsOpen(true);
@@ -268,11 +283,12 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
         lastPointerRef.current = 'mouse';
         if (!isTap || !hasContent || isFocusOnly || heldOpen !== undefined) return;
         if (!isTapReadable && isControl(event.currentTarget)) return;
+        if (isEcho(event.currentTarget)) return;
         setIsOpen((current) => !current);
       }),
       onFocus: compose(compose(childProps.onFocus, onFocus), (event: React.FocusEvent<HTMLElement>) => {
         const element = event.currentTarget;
-        if (!hasContent || heldOpen !== undefined || !element.matches(':focus-visible') || hasOpenPopup(element)) return;
+        if (!hasContent || heldOpen !== undefined || !element.matches(':focus-visible') || hasOpenPopup(element) || isEcho(element)) return;
         triggerRef.current = element;
         setIsOpen(true);
       }),
@@ -280,7 +296,7 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
     });
 
     const { side, align } = resolvePlacement(placement);
-    const renderedContent = isShown ? evaluateContent(title ?? overlay) : null;
+    const renderedContent = !isShown ? null : hasCard && card ? <TipCardView card={card} /> : evaluateContent(title ?? overlay);
 
     return (
       <>
@@ -304,7 +320,8 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
                     data-slot="tooltip"
                     style={styles?.container}
                     className={cn(
-                      'omc-float-surface max-w-[min(320px,calc(100vw-24px))] rounded-md bg-popover px-2.5 py-1.5 text-sm leading-snug text-popover-foreground shadow-float break-words',
+                      'omc-float-surface max-w-[min(320px,calc(100vw-24px))] rounded-md bg-popover text-sm leading-snug text-popover-foreground shadow-float break-words',
+                      hasCard ? 'px-3 py-2' : 'px-2.5 py-1.5',
                       classNames?.container,
                     )}
                   >

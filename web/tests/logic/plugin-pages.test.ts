@@ -48,7 +48,7 @@ test('plugin pages', async () => {
   assert.equal(entries[0].description, 'Accounts and usage');
   assert.equal(entries[0].logo, 'data:image/png;base64,AAAA');
   // A plugin with several pages is named in a list that mixes plugins; an unlabelled page takes the plugin's name.
-  assert.equal(entries[1].navLabel, 'multi · Status');
+  assert.equal(entries[1].navLabel, 'Status (multi)');
   assert.equal(entries[2].label, 'multi');
   assert.equal(entries[2].navLabel, 'multi');
   assert.deepEqual(collectPluginPages(undefined), []);

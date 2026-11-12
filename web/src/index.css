@@ -33,6 +33,7 @@
   --color-card-foreground: var(--fg);
   --color-popover: var(--elevated);
   --color-popover-foreground: var(--fg);
+  --color-float-rule: var(--float-rule);
   --color-tooltip: var(--tooltip-bg);
   --color-tooltip-foreground: var(--tooltip-fg);
   --color-thumb: var(--thumb-bg);
@@ -213,6 +214,15 @@
   --effort-5: #f08dee;
   --effort-6: #ff8cc1;
   --effort-tint: 14%;
+  /* A change's direction: the state hues mixed well toward the ink, so a rise or a fall is legible
+     without reading as the saturated red and green that mark a failure or a success. Global because
+     the same figure is drawn in a tile and again in its portalled tooltip. */
+  --trend-up: color-mix(in oklch, var(--danger) 64%, var(--fg-2));
+  --trend-down: color-mix(in oklch, var(--success) 64%, var(--fg-2));
+  /* A rule inside a floating surface (a tooltip card's heading and notes). It is mixed from the ink
+     rather than taken from the border steps, which are tuned against the page and fall below the
+     raised popover fill in the dark palettes. */
+  --float-rule: color-mix(in srgb, var(--fg) 10%, transparent);
   /* 4-step typography scale (>= 12px floor: 12 / 13 / 16 / 20). Legacy aliases
      (--text-2xs, --text-xs, --text-base) collapse onto the four steps so no surface
      drops below 12px or introduces extra fractional tiers. */
@@ -1350,6 +1360,22 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    on every surface the field appears on. */
 .search-input [data-slot="input-prefix"] { color: var(--muted); }
 
+/* A row of short facts (`MetaLine`). Facts are set apart by space, never by a glyph between them;
+   each wraps as a whole. Figures inside take `<b>` to step up to the reading ink. */
+.meta-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 2px;
+  min-width: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.meta-line.is-quiet { color: var(--meta); }
+.meta-line-item { min-width: 0; }
+.meta-line b { color: var(--fg-2); font-weight: 500; }
+
 /* A label/value list (`FactList`). */
 .fact-list { margin: 0; }
 /* Rows are separated by their rhythm, not by rules: a label and its value already share a
@@ -2149,6 +2175,15 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   min-width: 0;
 }
 
+/* The field count sits beside the sync status as its own quiet figure, not inside the status tag. */
+.config-field-count {
+  margin-inline-start: -6px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .config-toolbar-left .terminal-title {
   margin: 0;
   font-size: var(--text-xl);
@@ -2788,6 +2823,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .phone-filter-disclosure { width: 100%; min-width: 0; }
 .phone-filter-disclosure > summary { min-height: 44px; cursor: pointer; padding-block: 10px; color: var(--fg-2); }
-.phone-filter-current { margin-inline-start: 8px; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+.phone-filter-current {
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
 .phone-filter-content { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 8px; }
 .phone-filter-content > :is([data-slot="select-trigger"], [data-slot="combobox-trigger"]) { width: 100%; min-width: 0; }

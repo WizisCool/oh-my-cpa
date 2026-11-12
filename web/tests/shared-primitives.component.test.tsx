@@ -318,12 +318,12 @@ describe('the translator', () => {
     const t = useT();
     // A miss reaches the translator as plain text: the runtime answers any string with itself, and
     // this is the one place a caller has to say so.
-    return <span>{t('toString' as MessageKey)} · {t('no.such.id' as MessageKey, { n: 1 })}</span>;
+    return <span>{t('toString' as MessageKey)} / {t('no.such.id' as MessageKey, { n: 1 })}</span>;
   }
 
   it('renders an id the catalog does not define as itself, including a name the prototype carries', () => {
     render(<I18nProvider><UnknownIds /></I18nProvider>);
-    expect(document.body.textContent).toContain('toString · no.such.id');
+    expect(document.body.textContent).toContain('toString / no.such.id');
   });
 });
 
@@ -656,13 +656,13 @@ describe('RemoteImage', () => {
 
 describe('PageHeader', () => {
   it('renders a text subtitle in a paragraph element', () => {
-    render(<PageHeader title="AI 提供商" subtitle="5 个提供商 · 8 个模型" />);
+    render(<PageHeader title="AI 提供商" subtitle="5 个提供商，8 个模型" />);
     const heading = screen.getByRole('heading', { level: 1, name: 'AI 提供商' });
     expect(heading).toBeTruthy();
 
     const subtitle = document.querySelector('.terminal-subtitle');
     expect(subtitle?.tagName.toLowerCase()).toBe('p');
-    expect(subtitle?.textContent).toBe('5 个提供商 · 8 个模型');
+    expect(subtitle?.textContent).toBe('5 个提供商，8 个模型');
   });
 
   it('renders a SummaryStrip child under the title without paragraph wrapping', () => {

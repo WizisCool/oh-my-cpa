@@ -506,13 +506,15 @@ func DefaultTaskName(input TaskInput) string {
 	if target == "" {
 		target = strings.TrimSpace(input.Provider)
 	}
+	// The trigger reads as a parenthetical on the credential, "claude.json (08:55)", so the stored
+	// name is one phrase rather than two values strung on a separator.
 	switch input.Trigger.Kind {
 	case "window":
-		return fmt.Sprintf("%s · %s", target, input.Trigger.Window)
+		return fmt.Sprintf("%s (%s)", target, input.Trigger.Window)
 	case "daily":
-		return fmt.Sprintf("%s · %s", target, input.Trigger.Time)
+		return fmt.Sprintf("%s (%s)", target, input.Trigger.Time)
 	case "every":
-		return fmt.Sprintf("%s · %dh", target, input.Trigger.Hours)
+		return fmt.Sprintf("%s (%dh)", target, input.Trigger.Hours)
 	default:
 		return target
 	}

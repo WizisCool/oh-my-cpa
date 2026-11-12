@@ -588,9 +588,9 @@ export function AgentPage() {
         <span className={workspace['composer-chip']} data-testid="agent-editing">
           <EditOutlined aria-hidden="true" />
           <span className={workspace['composer-chip-text']}>
-            {t('agent.turn.editing')}
-            {editedMessage.files.map(file => <React.Fragment key={file.name}> · <code>{file.name}</code></React.Fragment>)}
-            {!!newestTurn?.images?.length && <> · {t('agent.turn.images', { n: newestTurn.images.length })}</>}
+            <span className={workspace['composer-chip-title']}>{t('agent.turn.editing')}</span>
+            {editedMessage.files.map(file => <code key={file.name} className={workspace['composer-chip-attachment']}>{file.name}</code>)}
+            {!!newestTurn?.images?.length && <span className={workspace['composer-chip-attachment']}>{t('agent.turn.images', { n: newestTurn.images.length })}</span>}
           </span>
           <Tooltip title={t('agent.turn.edit_cancel')}>
             <Button variant="ghost" size="sm" aria-label={t('agent.turn.edit_cancel')} icon={<CloseOutlined />} onClick={() => { setEditTarget(''); runtime.thread.composer.setText(''); }} />

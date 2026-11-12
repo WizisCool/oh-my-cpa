@@ -116,7 +116,7 @@ export default {
   'af.rules_intro': 'Provider exclusions serve as defaults for credentials. A custom list on a credential replaces these defaults. Exclusions apply before aliases.',
   'af.rules_provider_label': 'Provider',
   'af.rules_provider_placeholder': 'Select a provider or type a provider key',
-  'af.rules_provider_counts': '{aliases} aliases · {excluded} exclusions',
+  'af.rules_provider_counts': '{aliases} aliases, {excluded} exclusions',
   'af.rules_provider_use': 'Use provider key {provider}',
   'af.rules_tab_aliases': 'Model aliases {n}',
   'af.rules_tab_excluded': 'Disabled models {n}',

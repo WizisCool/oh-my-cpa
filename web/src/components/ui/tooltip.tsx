@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-import { hasOpenPopup, hoverIntentDelay, noteHintClosed } from '@/components/common/tooltipIntent';
+import { hasOpenPopup, hoverIntentDelay, noteHintClosed, repeatsVisibleText } from '@/components/common/tooltipIntent';
+import { readTipCard, type TipCard, type TipTone } from '@/components/common/tipCard';
 import { cn } from '@/lib/utils';
 
 const TooltipProvider = TooltipPrimitive.Provider;
@@ -60,31 +61,53 @@ export interface TooltipReadoutRow {
   share?: React.ReactNode;
   note?: React.ReactNode;
   isTotal?: boolean;
+  tone?: TipTone;
 }
 
 export interface TooltipReadoutProps {
   heading?: React.ReactNode;
-  rows: readonly TooltipReadoutRow[];
+  rows?: readonly TooltipReadoutRow[];
+  /** Quiet sentences under the rows: how the figures were derived, or a caveat. */
+  notes?: readonly React.ReactNode[];
   footer?: React.ReactNode;
   className?: string;
 }
 
+const VALUE_TONES: Record<TipTone, string> = {
+  up: 'text-[var(--trend-up)]',
+  down: 'text-[var(--trend-down)]',
+  warn: 'text-warn',
+  danger: 'text-danger',
+  muted: 'text-fg-2 font-normal',
+};
+
 /**
- * Shared structured telemetry readout used across ChartTooltipContent, heatmap cells,
- * rhythm/matrix grids, and exact-token popups.
+ * The one layout for a tooltip that carries more than a single phrase: a heading, label/value rows
+ * with the labels muted and the values tabular on the right, then quiet notes. Charts, heatmap cells,
+ * rhythm and matrix grids, comparison badges and delegated `data-tip-card` hints all draw through it,
+ * so facts are never strung together on one line with separators.
  */
-function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProps) {
+function TooltipReadout({ heading, rows = [], notes, footer, className }: TooltipReadoutProps) {
   const hasNames = rows.some((row) => row.name !== undefined && row.name !== '');
+  const hasSwatches = rows.some((row) => Boolean(row.color));
   const hasMeta = rows.some((row) => row.share !== undefined || row.note !== undefined);
+  const shownNotes = (notes ?? []).filter((note) => note !== undefined && note !== null && note !== false && note !== '');
 
   return (
     <div data-slot="tooltip-readout" className={cn('flex flex-col gap-1.5 min-w-[120px]', className)}>
       {heading !== undefined && heading !== '' && (
-        <div className="pb-1.5 text-sm font-medium text-fg-2 tabular-nums border-b-[length:var(--hairline)] border-b-border-soft">
+        <div
+          className={cn(
+            'text-sm font-medium tabular-nums',
+            rows.length > 0 || shownNotes.length > 0 || footer
+              ? 'pb-1.5 text-fg-2 border-b-[length:var(--hairline)] border-b-float-rule'
+              : 'text-foreground',
+          )}
+        >
           {heading}
         </div>
       )}
-      <div className="flex flex-col gap-1.5">
+      {rows.length > 0 && <div className="flex flex-col gap-1.5">
         {rows.map((row, index) => {
           const indicator = row.indicator ?? 'dot';
           return (
@@ -93,7 +116,7 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
               className={cn(
                 'flex items-center gap-3 tabular-nums text-sm leading-snug',
                 hasNames ? 'justify-between' : 'justify-start gap-2',
-                row.isTotal && index > 0 && 'mt-0.5 pt-1 border-t-[length:var(--hairline)] border-t-border-soft',
+                row.isTotal && index > 0 && 'mt-0.5 pt-1 border-t-[length:var(--hairline)] border-t-float-rule',
               )}
             >
               {(hasNames || row.color) && (
@@ -118,18 +141,23 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
                         style={{ backgroundColor: row.color }}
                       />
                     )
-                  ) : hasNames ? (
+                  ) : hasSwatches ? (
                     <span aria-hidden="true" className="size-2 shrink-0 opacity-0" />
                   ) : null}
                   {row.name !== undefined && (
-                    <span className={cn('max-w-[196px] truncate', row.isTotal ? 'text-muted-foreground font-medium' : 'text-foreground')}>
+                    <span
+                      className={cn(
+                        'max-w-[196px] truncate',
+                        row.isTotal ? 'text-muted-foreground font-medium' : hasSwatches ? 'text-foreground' : 'text-fg-2',
+                      )}
+                    >
                       {row.name}
                     </span>
                   )}
                 </span>
               )}
               <span className={cn('inline-flex items-baseline gap-1.5 shrink-0', hasNames && 'ml-auto')}>
-                <span className="font-medium text-foreground whitespace-nowrap">{row.value}</span>
+                <span className={cn('font-medium text-foreground whitespace-nowrap', row.tone && VALUE_TONES[row.tone])}>{row.value}</span>
                 {hasMeta && (row.share !== undefined || row.note !== undefined) && (
                   <span className="min-w-[4ch] text-right text-fg-2 whitespace-nowrap">
                     {row.share ?? row.note}
@@ -139,9 +167,19 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
             </div>
           );
         })}
-      </div>
+      </div>}
+      {shownNotes.length > 0 && (
+        <div
+          className={cn(
+            'flex flex-col gap-0.5 text-sm leading-snug text-muted-foreground',
+            rows.length > 0 && 'pt-1.5 border-t-[length:var(--hairline)] border-t-float-rule',
+          )}
+        >
+          {shownNotes.map((note, index) => <p key={index} className="m-0">{note}</p>)}
+        </div>
+      )}
       {footer && (
-        <div className="pt-1.5 border-t-[length:var(--hairline)] border-t-border-soft">
+        <div className="pt-1.5 border-t-[length:var(--hairline)] border-t-float-rule">
           {footer}
         </div>
       )}
@@ -149,9 +187,21 @@ function TooltipReadout({ heading, rows, footer, className }: TooltipReadoutProp
   );
 }
 
+/** Draws a serialised `TipCard` (see `components/common/tipCard.ts`) with the shared readout. */
+function TipCardView({ card }: { card: TipCard }) {
+  return (
+    <TooltipReadout
+      heading={card.heading}
+      rows={(card.rows ?? []).map((row) => ({ name: row.label, value: row.value, tone: row.tone }))}
+      notes={(card.notes ?? []).filter((note): note is string => typeof note === 'string' && note !== '')}
+    />
+  );
+}
+
 interface DelegatedTipState {
   element: HTMLElement;
   text: string;
+  card: TipCard | null;
   side: TooltipPrimitive.Positioner.Props['side'];
   isOpen: boolean;
 }
@@ -192,6 +242,7 @@ function DelegatedTooltipLayer() {
       if (!text || !element.isConnected) return null;
       if (hasOpenPopup(element)) return null;
       if (element.hasAttribute('data-tip-overflow') && !isOverflowing(element)) return null;
+      if (!element.dataset.tipCard && repeatsVisibleText(element, text)) return null;
       return text;
     };
 
@@ -206,7 +257,7 @@ function DelegatedTooltipLayer() {
       const text = canShow(element);
       if (!text) return;
       isShowing = true;
-      setTarget({ element, text, side: resolveSide(element), isOpen: true });
+      setTarget({ element, text, card: readTipCard(element.dataset.tipCard), side: resolveSide(element), isOpen: true });
     };
 
     const hide = () => {
@@ -365,9 +416,9 @@ function DelegatedTooltipLayer() {
         anchor={target.element}
         side={target.side}
         sideOffset={6}
-        className="whitespace-pre-line"
+        className={target.card ? 'px-3 py-2' : 'whitespace-pre-line'}
       >
-        {target.text}
+        {target.card ? <TipCardView card={target.card} /> : target.text}
       </TooltipContent>
     </TooltipRoot>
   );
@@ -379,6 +430,7 @@ export {
   TooltipTrigger,
   TooltipContent,
   TooltipReadout,
+  TipCardView,
   DelegatedTooltipLayer,
   TooltipPrimitive,
 };

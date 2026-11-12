@@ -277,13 +277,17 @@ function TurnFooter({ turn }: { turn: Turn }) {
   // The footer answers two questions a reader asks of a finished answer: did it succeed, and how
   // much did it cost. The clock, the round count and the call count stay reachable on the status
   // line instead of standing beside it as a row of unrelated readouts.
-  const detail = [
-    clock,
-    (turn.rounds ?? 0) > 0 ? t('agent.foot.rounds', { rounds: String(turn.rounds), calls: String(calls) }) : '',
-  ].filter(Boolean).join(' · ');
+  const hasRounds = (turn.rounds ?? 0) > 0;
+  const detail = clock || hasRounds ? {
+    rows: [
+      clock ? { label: t('agent.foot.started'), value: clock } : null,
+      hasRounds ? { label: t('agent.foot.rounds_label'), value: String(turn.rounds) } : null,
+      hasRounds ? { label: t('agent.foot.calls_label'), value: String(calls) } : null,
+    ].filter((row) => row !== null),
+  } : null;
   return (
     <div className={workspace['message-foot']}>
-      <Tooltip title={detail || undefined}>
+      <Tooltip card={detail}>
         {/* Focusable so the clock and the round and call counts are reachable from the keyboard and
             by touch: a tooltip that only answers a pointer hides them from everyone else. */}
         <span className={workspace['status']} data-testid="agent-status" tabIndex={detail ? 0 : undefined}>

@@ -2,7 +2,7 @@ import { applyKeyOrder } from '../../types/displayOrder';
 import type { MessageKey } from '../../i18n/catalog';
 import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../types/credentialProviders';
 import type { QuotaWindow } from '../../types/quota';
-import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../quota/quotaWindowSelection';
+import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../quota/quotaWindowSelection';
 import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 
 /**
@@ -61,9 +61,9 @@ function periodOf(window: QuotaWindow): QuotaPeriod | undefined {
   return kind === 'five_hour' || kind === 'daily' || kind === 'weekly' || kind === 'monthly' ? kind : undefined;
 }
 
-/** "Gemini Models · Weekly Limit" is the group "Gemini"; "Gemini 4 Argon" keeps its whole name. */
+/** The group "Gemini Models" reads as "Gemini"; "Gemini 4 Argon" keeps its whole name. */
 function groupLabel(window: QuotaWindow): string {
-  const group = window.label.split(' · ')[0].trim();
+  const group = quotaWindowParts(window).group ?? window.label;
   return group.replace(/\s+models$/i, '') || group;
 }
 
@@ -79,10 +79,9 @@ function familyLabel(window: QuotaWindow): string | undefined {
   return undefined;
 }
 
-/** What a column says when its period has no name: the window's label without its group prefix. */
+/** What a column says when its period has no name: the window's own name without its group. */
 function columnLabel(window: QuotaWindow): string {
-  const parts = window.label.split(' · ');
-  return (parts.length > 1 ? parts.slice(1).join(' · ') : window.label).trim();
+  return quotaWindowParts(window).name;
 }
 
 /** The family part of a cell key: "group:Gemini Models|five_hour" belongs to "group:Gemini Models". */

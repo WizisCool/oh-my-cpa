@@ -1,6 +1,7 @@
 import { type InsightsCompareWindow } from '../../../types/insights';
 import { useInsightsFormat } from '../useInsightsFormat';
-import { useCompareWindowLabel } from '../../../hooks/useCompareWindowLabel';
+import { useComparisonTip } from '../../../hooks/useCompareWindowLabel';
+import { tipCard } from '../../../components/common/tipCard';
 import React from 'react';
 import clsx from 'clsx';
 import { ArrowDownOutlined, ArrowUpOutlined } from '../../../components/icons';
@@ -32,7 +33,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
   const t = useT();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
-  const formatCompareWindow = useCompareWindowLabel();
+  const comparisonTip = useComparisonTip();
 
   return (
     <div className={styles['tiles']} role="tablist" aria-label={t('insights.metric_switch')} data-testid="insights-tiles">
@@ -41,11 +42,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
         const before = baseline ? metricValue(baseline.measures, item) : null;
         const comparison = baseline ? compareMetric(current, baseline.measures, item, baseline.raw) : null;
         const changeText = comparison?.kind === 'change' ? formatChange(comparison.change) : null;
-        const changeTitle = [
-          comparison?.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : null,
-          baseline ? formatCompareWindow(baseline.window) : null,
-          baseline ? t('insights.compare_baseline_note') : null,
-        ].filter(Boolean).join(' · ');
+        const changeCard = comparison && baseline ? comparisonTip({ comparison, compare: baseline.window }) : null;
         const isActive = item === metric;
         return (
           <button
@@ -67,7 +64,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
             <span
               className={styles['tile-change']}
               data-trend={comparison ? changeTrend(comparison) : undefined}
-              data-tip={changeTitle || undefined}
+              {...tipCard(changeCard)}
             >
               {comparison === null ? null : comparison.kind !== 'change' || changeText === null ? (
                 <span className={styles['tile-change-none']}>

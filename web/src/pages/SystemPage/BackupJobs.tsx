@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MetaLine } from '../../components/common/MetaLine';
 import { Button } from '@/components/ui/button';
 import { api, apiErrorCode } from '../../api/client';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
@@ -156,10 +157,10 @@ function JobCard({
               <span role="status">{t(STATE_KEYS[job.state])}</span>
             </StatusLabel>
           </span>
-          <span>
+          <MetaLine>
             {dayjs(job.created_at_ms).format('YYYY-MM-DD HH:mm:ss')}
-            {job.size_bytes > 0 && ` · ${formatBytes(job.size_bytes)}`}
-          </span>
+            {job.size_bytes > 0 && formatBytes(job.size_bytes)}
+          </MetaLine>
         </div>
         <div className={styles['location-actions']}>
           {canDownload && (

@@ -203,6 +203,62 @@ wiring: a grouped order document when its keys are stable, such as credential fi
 rank document of its own when they carry a provider's positional id, which the server re-keys
 with the other provider overlays when a delete or move shifts later entries.
 
+## Information expression
+
+Facts about one thing are structured by layout, not by punctuation. The middle dot (`·`) is not a
+separator in this console: a run of values strung on dots has no hierarchy, wraps mid-fact and
+reads as one undifferentiated line. Pick the structure the content already has:
+
+| Content | Use |
+| --- | --- |
+| Short facts side by side (size and line count, provider and priority, requests and failures) | [`MetaLine`](../web/src/components/common/MetaLine.tsx): space between facts, each wraps whole; a figure that matters takes `<b>`, a failure its tone |
+| A label with its value | [`FactList`](../web/src/components/common/FactList.tsx) in a panel, label/value rows in a tooltip |
+| A name and the thing it qualifies (an instant and its countdown, a channel, an id behind a name) | Parentheses through a catalog sentence: `09/30 01:05 (4h left)`, `Channel price (relay)` |
+| Clauses of one description | A sentence: `joinPhrases` in [`utils/format.ts`](../web/src/utils/format.ts) uses the locale's comma |
+| A machine error | `formatErrorCode`: `invalid_grant (HTTP 400): max_tokens` |
+| An action on a target, as an accessible name | `common.action_on`: `Move earlier: Playground` |
+| A title and its secondary line | Two elements with two inks, never one joined string |
+| Several active filters | Separate chips (`FilterDisclosure` takes a list) |
+
+A field's description goes under the control through `Field`'s `extra`, not after the label.
+Catalog sentences follow the same rule: write the relation in words or parentheses instead of
+`A · B`. Data that arrives joined from upstream (Antigravity's stored group label) is parsed in
+one named helper and shown as its parts. `pnpm check:feedback` refuses a middle dot in web source,
+styles and catalogs.
+
+## Tooltips
+
+A tooltip answers a reader who stopped on something and wants what the page cannot show in place.
+It is the last resort, after a visible label, a description under the control, or a column.
+
+A tooltip earns its place when it:
+
+- names an icon-only control (the `aria-label` alone does not reach a sighted pointer user);
+- says why a control is disabled;
+- completes text the layout truncates (`data-tip-overflow`, shown only while it is cut off);
+- gives the exact figure behind a rounded one, or the instant behind a relative time;
+- reads a data mark that has no text of its own: a heatmap cell, a sparkline block, a chart point.
+
+It does not repeat visible text, restate what the control's label already says ("click to
+filter", "click to select"), carry content the reader needs to complete a task, or hold an action.
+The delegated layers and `Tooltip` refuse to open a plain hint whose text equals the trigger's own
+visible text, so an exact count beside a count already printed in full stays quiet on its own.
+
+One phrase goes in `title` (or `data-tip`). More than one fact is a card: a heading, label/value
+rows and quiet notes, drawn by `TooltipReadout` in
+[`components/ui/tooltip.tsx`](../web/src/components/ui/tooltip.tsx). Every route takes the same
+card shape (`TipCard` in [`tipCard.ts`](../web/src/components/common/tipCard.ts)):
+
+- `Tooltip card={...}` for a React trigger;
+- `{...tipCard(...)}` on any element for the document-level `data-tip` layer;
+- `{...requestTipCard(...)}` inside the virtualised request list;
+- `ChartTooltipContent` / `TooltipReadout` directly for charts and heatmaps.
+
+In a card the labels sit in the secondary ink and the values right-aligned and tabular; a value may
+take a tone (`up`/`down` for a change, `warn`/`danger` for a degraded or failing reading) and how a
+figure was derived goes in `notes`, under a hairline. Never build a tooltip by joining strings with
+separators or by stacking ad-hoc `<div>` lines.
+
 ## Feedback and loading
 
 - Toasts describe events: a completed save, a failed operation, a copied value.

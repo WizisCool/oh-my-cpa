@@ -1,4 +1,5 @@
 import React from 'react';
+import { MetaLine } from '../components/common/MetaLine';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
@@ -287,7 +288,12 @@ export const ConfigPage: React.FC = () => {
             <ActionMenu label={t('cfg.tools')}>
               <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
               <ToolButton icon={<ReloadOutlined />} label={t('cfg.reload')} disabled={isDirty || configQuery.isFetching} onClick={() => void configQuery.refetch()} />
-              <span className="action-menu-label">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: isDirty ? t('cfg.source_dirty') : t('cfg.source_clean') })}</span>
+              <span className="action-menu-label">
+                <MetaLine>
+                  <b>{isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}</b>
+                  {t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length })}
+                </MetaLine>
+              </span>
             </ActionMenu>
           </div>
           {viewMode === 'visual' && (
@@ -301,16 +307,17 @@ export const ConfigPage: React.FC = () => {
           <div className="config-toolbar-left">
             <h1 className="terminal-title">{t('nav.config')}</h1>
             {configQuery.isPending && !rawYaml ? (
-              <Tag className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_loading') })}</Tag>
+              <Tag className="config-sync-badge">{t('cfg.status_loading')}</Tag>
             ) : configQuery.isError && !rawYaml ? (
               <Tag tone="danger" className="config-sync-badge">{t('cfg.status_error')}</Tag>
             ) : configQuery.isError && rawYaml ? (
-              <Tag tone="warn" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_stale') })}</Tag>
+              <Tag tone="warn" className="config-sync-badge">{t('cfg.status_stale')}</Tag>
             ) : isDirty ? (
-              <Tag tone="warn" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_dirty') })}</Tag>
+              <Tag tone="warn" className="config-sync-badge">{t('cfg.source_dirty')}</Tag>
             ) : (
-              <Tag tone="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
+              <Tag tone="success" className="config-sync-badge">{t('cfg.source_clean')}</Tag>
             )}
+            <span className="config-field-count">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length })}</span>
             <Segmented
               value={viewMode}
               onChange={(val) => void handleViewModeChange(val as 'visual' | 'source')}
@@ -494,9 +501,10 @@ export const ConfigPage: React.FC = () => {
                 {isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
               </Tag>
               {rawYaml && (
-                <span className="mono-num text-xs text-muted-foreground">
-                  {(new Blob([rawYaml]).size / 1024).toFixed(1)} KB · {t('cfg.lines_count', { n: rawYaml.split('\n').length })}
-                </span>
+                <MetaLine className="mono-num text-xs">
+                  {`${(new Blob([rawYaml]).size / 1024).toFixed(1)} KB`}
+                  {t('cfg.lines_count', { n: rawYaml.split('\n').length })}
+                </MetaLine>
               )}
             </div>}
             <div className="config-source-actions">
@@ -518,7 +526,12 @@ export const ConfigPage: React.FC = () => {
               {isPhone || isSourceFocused ? (
                 <ActionMenu label={t('cfg.source_tools')}>
                   {sourceTools}
-                  <span className="action-menu-label">{(new Blob([rawYaml]).size / 1024).toFixed(1)} KB · {t('cfg.lines_count', { n: rawYaml.split('\n').length })}</span>
+                  <span className="action-menu-label">
+                    <MetaLine className="mono-num">
+                      {`${(new Blob([rawYaml]).size / 1024).toFixed(1)} KB`}
+                      {t('cfg.lines_count', { n: rawYaml.split('\n').length })}
+                    </MetaLine>
+                  </span>
                 </ActionMenu>
               ) : sourceTools}
             </div>

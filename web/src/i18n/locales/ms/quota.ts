@@ -94,7 +94,7 @@ export default {
   "quota.reset_credit_expires": "Tamat paling awal {when}",
   "quota.reset_grant_untitled": "Geran set semula",
   "quota.reset_grant_until": "Sah hingga {when}",
-  "quota.capacity_dialog_title": "{window} · Kapasiti",
+  "quota.capacity_dialog_title": "Kapasiti {window}",
   "quota.capacity_open_details": "Butiran kapasiti",
   "quota.capacity_error_hint": "Ketidakpastian daripada pembundaran peratus penggunaan oleh huluan",
   "quota.capacity_resets": "Set semula: {when}",
@@ -115,5 +115,6 @@ export default {
   "quota.in_hours_min": "{h}j {m}m lagi",
   "quota.in_days": "{n}h kiri",
   "quota.in_days_min": "{d}h {h}j kiri",
+  "quota.time_with_countdown": "{time} ({countdown})",
   "quota.days_ago": "{n}h yang lalu",
 } satisfies Translation<typeof source>;

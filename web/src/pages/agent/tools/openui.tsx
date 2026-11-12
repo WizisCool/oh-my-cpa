@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatErrorCode } from '../../../utils/format';
 import { Button } from '@/components/ui/button';
 import { useAui, useAuiState } from '@assistant-ui/react';
 import { createOpenUIToolkit, OpenUIContent } from '@openuidev/assistant-ui';
@@ -34,7 +35,7 @@ export const OpenUIFailure: OpenUIErrorFallback = ({ errors }: { errors: readonl
     <Notice
       tone="warning"
       title={t('agent.openui.failed')}
-      description={<code>{errors.slice(0, 3).map(error => `${error.code}${error.statementId ? ` · ${error.statementId}` : ''}`).join('\n')}</code>}
+      description={<code>{errors.slice(0, 3).map(error => formatErrorCode({ code: error.code, parameter: error.statementId })).join('\n')}</code>}
       action={(
         <Button size="sm" disabled={isRunning} onClick={() => aui.thread().append({ role: 'user', content: [{ type: 'text', text: `${t('agent.openui.repair')}\n\n${JSON.stringify(report)}` }] })}>
           {t('agent.openui.ask_repair')}

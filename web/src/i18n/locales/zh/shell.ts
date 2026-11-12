@@ -98,6 +98,8 @@ export default {
   'common.hide_secret': '隐藏密钥',
   'common.all': '全部',
   'common.copy': '复制',
+  'common.action_on': '{action}：{target}',
+  'common.list_pair': '{first}，{rest}',
   'common.copied': '已复制',
   'common.copy_failed': '复制失败',
   'nav.group.operate': '运行',

@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { quotaWindowFullName } from '../quota/quotaWindowSelection';
 import { Meter } from '../../components/common/Meter';
 import { useT, type TFunc } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
@@ -108,14 +109,14 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
       data-quota-window-label={window.label}
       data-quota-spans={cell.spans ? 'true' : undefined}
     >
-      <div className={styles.reading} role="group" aria-label={window.label}>
+      <div className={styles.reading} role="group" aria-label={quotaWindowFullName(window)}>
         <span className={styles.name} data-tip={name} data-tip-overflow="">{name}</span>
         <span className={styles.value}>
           <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
           {/* The bar carries the tone; the figure takes it only once the window is nearly spent. */}
           <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
         </span>
-        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
+        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : quotaWindowFullName(window)} />
         {estimate && (owner && window.capacity ? (
           <span className={styles.estimate}>
             <QuotaCapacityButton owner={owner} window={window} windows={siblings}>{estimate}</QuotaCapacityButton>

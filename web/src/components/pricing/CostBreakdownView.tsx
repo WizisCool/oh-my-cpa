@@ -1,4 +1,5 @@
 import { formatCurrency } from '../../types/currencyDisplay';
+import { MetaLine } from '../common/MetaLine';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from '../usage/TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -128,15 +129,14 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
         <p className={styles['field-error']}>{t('cost.mismatch')}</p>
       )}
       {version && (
-        <p className={styles['breakdown-source']}>
+        <MetaLine className={styles['breakdown-source']}>
           {version.price.source === 'manual'
             ? t('cost.source_manual')
             : version.price.source === 'modelsdev'
               ? t('cost.source_modelsdev')
               : t('cost.source_openrouter', { id: version.price.upstream_id || version.price.model })}
-          {' · '}
           {t('cost.effective', { time: dayjs(version.effective_from_ms).format('YYYY-MM-DD HH:mm') })}
-        </p>
+        </MetaLine>
       )}
     </div>
   );

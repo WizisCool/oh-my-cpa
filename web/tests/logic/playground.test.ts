@@ -457,3 +457,11 @@ test('a turn whose image did not survive storage is recognised as unreplayable',
 test('the Playground compatibility export shares the neutral ID generator', () => {
   assert.equal(createID, sharedCreateID);
 });
+
+test('a machine error reads as one phrase: code, status in parentheses, then the parameter', async () => {
+  const { formatErrorCode } = await import('../../src/utils/format.ts');
+  assert.equal(formatErrorCode({ code: 'invalid_request', status: 400, parameter: 'max_tokens' }), 'invalid_request (HTTP 400): max_tokens');
+  assert.equal(formatErrorCode({ code: 'invalid_grant' }), 'invalid_grant');
+  assert.equal(formatErrorCode({ status: 502 }), 'HTTP 502');
+  assert.equal(formatErrorCode({ parameter: 'model' }), 'model');
+});

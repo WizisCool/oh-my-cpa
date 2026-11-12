@@ -113,7 +113,7 @@ export default {
   'af.rules_intro': '提供商禁用规则为凭据继承的默认规则，凭据的自定义列表会替代默认规则。先应用禁用规则，再应用别名。',
   'af.rules_provider_label': '提供商',
   'af.rules_provider_placeholder': '选择提供商，或输入提供商键',
-  'af.rules_provider_counts': '{aliases} 个别名 · {excluded} 条禁用规则',
+  'af.rules_provider_counts': '{aliases} 个别名，{excluded} 条禁用规则',
   'af.rules_provider_use': '使用提供商键 {provider}',
   'af.rules_tab_aliases': '模型别名 {n}',
   'af.rules_tab_excluded': '模型禁用 {n}',

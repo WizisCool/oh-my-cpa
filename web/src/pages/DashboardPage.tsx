@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { AppstoreOutlined, ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined, SwapOutlined } from '../components/icons';
 import { calendarPresetLabel } from '../components/common/timeRange/presetGroups';
 import { changeTrend, formatChange, formatCountBaseline } from '../types/insightsFormat';
-import { useCompareWindowLabel } from '../hooks/useCompareWindowLabel';
+import { useComparisonTip } from '../hooks/useCompareWindowLabel';
+import { tipCard } from '../components/common/tipCard';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -142,28 +143,20 @@ const KpiDelta: React.FC<{
   testId?: string;
 }> = ({ delta, formatPrevious, testId }) => {
   const t = useT();
-  const formatCompareWindow = useCompareWindowLabel();
+  const comparisonTip = useComparisonTip();
   if (!delta) return null;
   const { comparison, previousValue, window: compareWindow } = delta;
   const changeText = comparison.kind === 'change' ? formatChange(comparison.change) : null;
   const hasChange = comparison.kind === 'new' || changeText !== null;
   if (!hasChange) return null;
-  const wasText = previousValue !== null
-    ? t('insights.change_was', { value: formatPrevious(previousValue) })
-    : null;
-  const compareWindowText = formatCompareWindow(compareWindow);
-  const tip = [
-    comparison.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : null,
-    compareWindowText,
-    t('insights.compare_baseline_note'),
-    wasText,
-  ].filter(Boolean).join(' · ');
+  const previousText = previousValue !== null ? formatPrevious(previousValue) : null;
+  const card = comparisonTip({ comparison, compare: compareWindow, previous: previousText });
   return (
     <span
       className="tile-delta tile-delta-has-change"
       data-trend={changeTrend(comparison)}
-      data-tip={tip || undefined}
-      tabIndex={tip ? 0 : undefined}
+      {...tipCard(card)}
+      tabIndex={card ? 0 : undefined}
       data-testid={testId}
     >
       {comparison.kind === 'new' ? (
@@ -183,7 +176,7 @@ const KpiDelta: React.FC<{
           {comparison.isNoise && <span className="sr-only"> {t('insights.change_noise')}</span>}
         </>
       ) : null}
-      <span className="sr-only"> ({[compareWindowText, wasText].filter(Boolean).join(' · ')})</span>
+      {previousText && <span className="sr-only">, {t('insights.change_was', { value: previousText })}</span>}
     </span>
   );
 };
@@ -822,7 +815,9 @@ export const DashboardPage: React.FC = () => {
           className="dashboard-alert"
           tone="warning"
           title={t('dash.partial_title')}
-          detail={data.partial_errors.join(' · ')}
+          detail={data.partial_errors.length === 1
+            ? data.partial_errors[0]
+            : <ul className="dashboard-alert-list">{data.partial_errors.map((error) => <li key={error}>{error}</li>)}</ul>}
           onRetry={refreshAll}
         />
       )}

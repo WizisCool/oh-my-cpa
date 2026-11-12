@@ -532,7 +532,6 @@ export const InsightsPage: React.FC = () => {
                     ? <span>{t('insights.folded')}</span>
                     : <InsightsValue dimension={groupingDimension} id={group.id} labels={labels} />,
                   // The legend chooses which series the chart draws; it never filters the page.
-                  title: t('insights.legend_toggle'),
                   isPressed: selectedTrendIds.includes(group.id),
                   isDimmed: selectedTrendIds.length > 0 && !selectedTrendIds.includes(group.id),
                   onToggle: () => toggleTrendGroup(group.id),
@@ -676,7 +675,7 @@ export const InsightsPage: React.FC = () => {
       </DeferredPanel>
       <div className={styles['footnote']}>
         {cube.window.widened && <span>{t('insights.widened')}</span>}
-        {baseline && <span>{formatCompareWindow(baseline.window)} · {t('insights.compare_baseline_note')}</span>}
+        {baseline && <span>{formatCompareWindow(baseline.window)}</span>}
         {current.requests > 0 && current.costedRequests < current.requests && (
           <span>{t('insights.cost_partial', { n: Math.round((current.costedRequests / current.requests) * 100) })}</span>
         )}

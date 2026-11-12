@@ -1,4 +1,5 @@
 import React from 'react';
+import { MetaLine } from '../components/common/MetaLine';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -127,10 +128,10 @@ export const PluginPageHost: React.FC = () => {
         <span className={styles.mark}><PluginLogo logo={entry.logo} /></span>
         <div className={styles.identity}>
           <span className={styles.title}>{entry.label}</span>
-          <span className={styles.subtitle}>
-            {entry.label !== entry.pluginName ? `${entry.pluginName} · ` : ''}
+          <MetaLine className={styles.subtitle}>
+            {entry.label !== entry.pluginName ? <b>{entry.pluginName}</b> : null}
             {entry.description || t('plugin.page_provided_by_plugin')}
-          </span>
+          </MetaLine>
         </div>
         <span className={styles.actions}>
           <Tooltip title={t('plugin.page_reload')}>

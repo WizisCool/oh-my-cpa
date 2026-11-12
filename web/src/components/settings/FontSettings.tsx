@@ -1,4 +1,5 @@
 import type { MessageKey } from '../../i18n/catalog';
+import { MetaLine } from '../common/MetaLine';
 import React from 'react';
 import { AutoComplete } from '@/components/ui/autocomplete';
 import { Select, type SelectOptionItem } from '@/components/ui/select';
@@ -22,7 +23,7 @@ import {
   type FontRole,
   type InstalledFont,
 } from '../../types/fonts';
-import { formatBytes } from '../../utils/format';
+import { formatBytes, joinPhrases } from '../../utils/format';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { EmptyState } from '../common/EmptyState';
 import { SettingRow } from '../common/SettingRow';
@@ -187,7 +188,10 @@ const FontLibraryDialog: React.FC<{ open: boolean; fonts: readonly InstalledFont
       label: (
         <span className={styles.suggestion}>
           <span>{suggestion.family}</span>
-          <span className={styles.meta}>{t(`omc.font_category_${suggestion.category}`)}{suggestion.isCjk ? ` · ${t('omc.font_cjk')}` : ''}</span>
+          <MetaLine className={styles.meta}>
+            {t(`omc.font_category_${suggestion.category}`)}
+            {suggestion.isCjk ? t('omc.font_cjk') : ''}
+          </MetaLine>
         </span>
       ),
     }));
@@ -297,14 +301,12 @@ const FontLibraryList: React.FC<{ fonts: readonly InstalledFont[] }> = ({ fonts 
           <li key={font.id} className={styles.row}>
             <div className={styles.identity}>
               <span className={styles.family} style={{ fontFamily: stack }}>{font.family}</span>
-              <span className={styles.meta}>
-                {[
-                  t(font.source === 'google' ? 'omc.font_source_google' : 'omc.font_source_upload'),
-                  font.faces.length === 1 ? t('omc.font_file_single') : t('omc.font_files', { n: font.faces.length }),
-                  formatBytes(font.byte_size),
-                  ...(usedBy.length ? [t('omc.font_in_use', { roles: usedBy.join(' / ') })] : []),
-                ].join(' · ')}
-              </span>
+              <MetaLine className={styles.meta}>
+                {t(font.source === 'google' ? 'omc.font_source_google' : 'omc.font_source_upload')}
+                {font.faces.length === 1 ? t('omc.font_file_single') : t('omc.font_files', { n: font.faces.length })}
+                {formatBytes(font.byte_size)}
+                {usedBy.length > 0 && <b>{t('omc.font_in_use', { roles: joinPhrases(t, usedBy) })}</b>}
+              </MetaLine>
             </div>
             <ConfirmAction
               title={t('omc.font_delete_confirm', { family: font.family })}

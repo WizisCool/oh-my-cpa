@@ -77,7 +77,7 @@ describe('sidebar layout panel', () => {
     api.state.preferences.omc_nav_hidden = ['/agent'];
     mount();
     const dialog = await openPanel();
-    fireEvent.click(await readyButton('Move earlier · Playground'));
+    fireEvent.click(await readyButton('Move earlier: Playground'));
     await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
     expect(api.preferenceWrites()[0]).toEqual({
       key: 'omc_nav_order',

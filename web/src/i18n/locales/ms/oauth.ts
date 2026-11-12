@@ -47,7 +47,6 @@ export default {
   "recovery.adopted": "Pemuatan masa jalan",
   "recovery.inference": "Pengesahan inferens",
   "recovery.refresh_error": "Kegagalan pembaharuan terakhir",
-  "recovery.expires_at": "Token akses tamat tempoh {time}",
   "oauth.use_default_route": "Gunakan laluan lalai CPA",
   "oauth.session_proxy": "Proksi sesi (pilihan)",
   "oauth.session_proxy_hint": "Menyokong HTTP(S) dan SOCKS5(H); disimpan sebagai proksi khusus untuk akaun ini selepas kebenaran",

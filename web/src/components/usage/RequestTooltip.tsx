@@ -1,8 +1,9 @@
 import React from 'react';
 import { Popover, PopoverContent } from '@/components/ui/popover';
-import { TooltipContent, TooltipRoot } from '@/components/ui/tooltip';
+import { TipCardView, TooltipContent, TooltipRoot } from '@/components/ui/tooltip';
+import { readTipCard, tipCardText, type TipCard } from '../common/tipCard';
 import { RequestFailureDetail } from './RequestFailureDetail';
-import { hoverIntentDelay, noteHintClosed } from '../common/tooltipIntent';
+import { hoverIntentDelay, noteHintClosed, repeatsVisibleText } from '../common/tooltipIntent';
 import './requestMarks.css';
 
 const TOOLTIP_SWITCH_DELAY_MS = 100;
@@ -14,6 +15,15 @@ export function RequestTooltip({ title, children }: {
   children: React.ReactElement<{ 'data-request-tooltip'?: string }>;
 }) {
   return React.cloneElement(children, { 'data-request-tooltip': title });
+}
+
+/**
+ * Spreads a structured hint onto a request cell: the plain reading on `data-request-tooltip`
+ * (which marks the cell as having a hint) and the card the list's popup draws.
+ */
+export function requestTipCard(card: TipCard): { 'data-request-tooltip'?: string; 'data-request-tooltip-card'?: string } {
+  const text = tipCardText(card);
+  return text ? { 'data-request-tooltip': text, 'data-request-tooltip-card': JSON.stringify(card) } : {};
 }
 
 interface TooltipTarget {
@@ -57,6 +67,7 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       ) {
         return;
       }
+      if (!element.dataset.requestFailure && !element.dataset.requestTooltipCard && repeatsVisibleText(element, title)) return;
       isShowing = true;
       setTarget({ element, title, isOpen: true });
     };
@@ -163,6 +174,7 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
   const element = target?.element;
   const isOpen = Boolean(target?.isOpen);
   const title = target?.title;
+  const card = target?.element.dataset.requestTooltipCard ? readTipCard(target.element.dataset.requestTooltipCard) : null;
   const failureEventId = Number(element?.dataset.requestFailure) || null;
 
   React.useLayoutEffect(() => {
@@ -219,8 +231,8 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
 
   return (
     <TooltipRoot open={isOpen} onOpenChangeComplete={afterOpenChange}>
-      <TooltipContent id={popupId} anchor={target.element} side="top" sideOffset={6} className={POPUP_CLASS}>
-        {title}
+      <TooltipContent id={popupId} anchor={target.element} side="top" sideOffset={6} className={card ? `${POPUP_CLASS} px-3 py-2` : POPUP_CLASS}>
+        {card ? <TipCardView card={card} /> : title}
       </TooltipContent>
     </TooltipRoot>
   );

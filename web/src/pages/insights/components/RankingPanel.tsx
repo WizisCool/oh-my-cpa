@@ -109,7 +109,6 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                       type: 'button' as const,
                       'aria-pressed': isSelected,
                       onClick: () => onSelect(dimension, group.id),
-                      title: t(isSelected ? 'insights.click_to_unfilter' : 'insights.click_to_filter'),
                     } : {})}
                     className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'], isSelected && styles['ranking-row-selected'])}
                   >

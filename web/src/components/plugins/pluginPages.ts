@@ -58,7 +58,8 @@ export function collectPluginPages(plugins: readonly PluginItem[] | undefined): 
         pageIndex,
         pluginName,
         label,
-        navLabel: pages.length > 1 && label !== pluginName ? `${pluginName} · ${label}` : label,
+        // A plugin with several pages names each in a list that mixes plugins: "Status (multi)".
+        navLabel: pages.length > 1 && label !== pluginName ? `${label} (${pluginName})` : label,
         description: page.description?.trim() || undefined,
         logo: plugin.logo || plugin.metadata?.logo,
         resourcePath: page.path,

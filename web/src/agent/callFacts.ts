@@ -49,8 +49,9 @@ export function argumentSummary(argumentsText: string | undefined): string {
   const fields = Object.entries(value)
     .filter(([, field]) => field !== null && field !== '' && !(Array.isArray(field) && field.length === 0))
     .map(([key, field]) => `${key}=${clip(typeof field === 'string' ? field : JSON.stringify(field))}`);
-  const shown = fields.slice(0, ARGUMENT_SUMMARY_FIELDS).join(' · ');
-  return fields.length > ARGUMENT_SUMMARY_FIELDS ? `${shown} · +${fields.length - ARGUMENT_SUMMARY_FIELDS}` : shown;
+  // Arguments read the way they were written: comma-separated key=value pairs.
+  const shown = fields.slice(0, ARGUMENT_SUMMARY_FIELDS).join(', ');
+  return fields.length > ARGUMENT_SUMMARY_FIELDS ? `${shown}, +${fields.length - ARGUMENT_SUMMARY_FIELDS}` : shown;
 }
 
 /** How long a call took, or how long it has been running when `nowMS` is given. */

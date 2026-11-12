@@ -53,3 +53,17 @@ export function hasOpenPopup(element: Element): boolean {
   return element.matches('[aria-expanded="true"], [data-popup-open]')
     || element.querySelector('[aria-expanded="true"], [data-popup-open]') !== null;
 }
+
+function normalized(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * The hint only repeats what the element already prints: an exact count beside a count already
+ * printed in full, or a name that is not cut off. Such a hint never opens - a tooltip that echoes
+ * the page tells the reader nothing and costs them a covered row.
+ */
+export function repeatsVisibleText(element: Element, hint: string): boolean {
+  const shown = element.textContent;
+  return Boolean(shown) && normalized(shown ?? '') === normalized(hint);
+}

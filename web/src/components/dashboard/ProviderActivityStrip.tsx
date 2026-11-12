@@ -1,7 +1,7 @@
 import React from 'react';
 import { useT } from '../../i18n';
 import { successRateTone } from '../../types/usageEventMetrics';
-import { Tooltip } from '../common/Tooltip';
+import { Tooltip, TooltipReadout } from '../common/Tooltip';
 import type { ActivityBlock } from './dashboardProvidersLogic';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -24,12 +24,15 @@ export const ProviderActivityStrip = React.memo(function ProviderActivityStrip({
   const t = useT();
   const history = React.useMemo(() => blocks.flatMap((block, index) => {
     if (block.total <= 0 || block.successRate === null) return [];
+    const requests = PLAIN_NUMBER_FORMAT.format(block.total);
+    const rate = `${block.successRate.toFixed(1)}%`;
     return [{
       key: block.startMs,
-      text: `${labels[index]} · ${t('dash.providers_activity_block', {
-        n: PLAIN_NUMBER_FORMAT.format(block.total),
-        rate: `${block.successRate.toFixed(1)}%`,
-      })}`,
+      label: labels[index],
+      requests,
+      rate,
+      tone: successRateTone(block.successRate),
+      text: `${labels[index]}: ${t('dash.providers_activity_block', { n: requests, rate })}`,
     }];
   }), [blocks, labels, t]);
   const idleCount = blocks.length - history.length;
@@ -39,12 +42,21 @@ export const ProviderActivityStrip = React.memo(function ProviderActivityStrip({
   const historyText = history.length > 0
     ? `${history.map((reading) => reading.text).join('; ')}${idleNote ? `; ${idleNote}` : ''}`
     : t('dash.providers_activity_idle');
+  // The keyboard reading of the whole window: one row per active bucket, its time on the left and
+  // the request count and success rate as two aligned columns on the right.
   const historyHint = () => history.length > 0
     ? (
-      <div className="provider-activity-history">
-        {history.map((reading) => <div key={reading.key}>{reading.text}</div>)}
-        {idleNote && <div>{idleNote}</div>}
-      </div>
+      <TooltipReadout
+        className="provider-activity-history"
+        heading={t('dash.providers_activity', { name })}
+        rows={history.map((reading) => ({
+          key: String(reading.key),
+          name: reading.label,
+          value: reading.requests,
+          share: <span className={reading.tone === 'warn' ? 'text-warn' : reading.tone === 'danger' ? 'text-danger' : undefined}>{reading.rate}</span>,
+        }))}
+        notes={idleNote ? [idleNote] : undefined}
+      />
     )
     : t('dash.providers_activity_idle');
   return (
@@ -65,22 +77,21 @@ export const ProviderActivityStrip = React.memo(function ProviderActivityStrip({
       >
         {blocks.map((block, index) => {
           const tone = block.successRate === null ? 'idle' : successRateTone(block.successRate);
-          const reading = block.successRate === null
-            ? t('dash.providers_activity_idle')
-            : t('dash.providers_activity_block', {
-              n: PLAIN_NUMBER_FORMAT.format(block.total),
-              rate: `${block.successRate.toFixed(1)}%`,
-            });
+          const card = block.successRate === null
+            ? { heading: labels[index], notes: [t('dash.providers_activity_idle')] }
+            : {
+              heading: labels[index],
+              rows: [
+                { label: t('dash.providers_activity_requests'), value: PLAIN_NUMBER_FORMAT.format(block.total) },
+                {
+                  label: t('dash.success_rate_short'),
+                  value: `${block.successRate.toFixed(1)}%`,
+                  tone: tone === 'warn' || tone === 'danger' ? tone : undefined,
+                },
+              ],
+            };
           return (
-            <Tooltip
-              key={block.startMs}
-              title={() => (
-                <>
-                  <div>{labels[index]}</div>
-                  <div>{reading}</div>
-                </>
-              )}
-            >
+            <Tooltip key={block.startMs} card={card}>
               {/* A block is a reading, not a second action for the row it sits in: tapping it
                   opens its hint instead of following the row to provider management. */}
               <span

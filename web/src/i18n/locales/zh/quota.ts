@@ -91,7 +91,7 @@ export default {
   'quota.reset_credit_expires': '最早 {when} 到期',
   'quota.reset_grant_untitled': '重置授权',
   'quota.reset_grant_until': '{when} 前有效',
-  'quota.capacity_dialog_title': '{window} · 额度估算',
+  'quota.capacity_dialog_title': '{window}额度估算',
   'quota.capacity_open_details': '查看额度估算详情',
   'quota.capacity_error_hint': '上游按整数百分比上报用量带来的误差',
   'quota.capacity_resets': '{when}重置',
@@ -112,5 +112,6 @@ export default {
   'quota.in_hours_min': '{h}小时{m}分后',
   'quota.in_days': '{n}天后',
   'quota.in_days_min': '{d}天{h}小时后',
+  'quota.time_with_countdown': '{time}（{countdown}）',
   'quota.days_ago': '{n}天前',
 };

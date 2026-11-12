@@ -106,7 +106,7 @@
 .tier-name { color: var(--fg); font-size: var(--text-sm); font-weight: 600; }
 .tier-priority { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .tier-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.tier-role { color: var(--muted); font-size: var(--text-xs); }
+.tier-role { column-gap: 8px; color: var(--muted); font-size: var(--text-xs); }
 .tier-primary .tier-role { color: var(--accent); }
 .tier-cards { display: flex; flex-wrap: wrap; min-width: 0; margin: 0 -8px -8px 0; padding: 0; list-style: none; }
 /* A tier whose only card is in hand elsewhere keeps a card's height, so the route does not close up
@@ -152,7 +152,7 @@
 .card:not(.card-draggable) .card-grip { visibility: hidden; }
 .card-text { display: flex; flex-direction: column; min-width: 0; }
 .card-name { overflow: hidden; color: var(--fg); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; max-width: 240px; }
-.card-sub { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+.card-sub { flex-wrap: nowrap; column-gap: 8px; color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 .card-sub code { font-family: var(--font-mono); }
 .card-end { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding-left: 4px; }
 .card-share { color: var(--accent); font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }

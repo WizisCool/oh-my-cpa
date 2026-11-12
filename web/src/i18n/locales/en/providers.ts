@@ -86,7 +86,7 @@ export default {
   'pro.weight_label': 'Weight',
   'pro.weight_desc': 'Weighted round-robin weight (1–1,000,000)',
   'pro.field_test_model': 'Test Model',
-  'pro.test_auto': 'Auto · {model}',
+  'pro.test_auto': 'Auto ({model})',
   'pro.test_auto_default': 'Auto (Default)',
   'pro.testing_key': 'Testing key #{n}...',
   'pro.test_key_ok': 'Key #{n} connectivity verified',
