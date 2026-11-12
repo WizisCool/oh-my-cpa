@@ -54,9 +54,11 @@ type projectedConfigState struct {
 	ClientKeys               []string                                                        `json:"client_keys"`
 	ConfigFamilies           map[management.ConfigKeyFamily][]management.ConfigAPIKey        `json:"config_families"`
 	RuntimeOnlyFam           map[management.ConfigKeyFamily]bool                             `json:"runtime_only_fam,omitempty"`
+	FailedProviderFamilies   map[management.ConfigKeyFamily]bool                             `json:"failed_provider_families,omitempty"`
 	ProviderSliceFailed      bool                                                            `json:"provider_slice_failed,omitempty"`
 	OpenAICompat             []management.OpenAICompatibility                                `json:"openai_compat"`
 	OpenAIRuntime            bool                                                            `json:"openai_runtime,omitempty"`
+	OpenAISliceFailed        bool                                                            `json:"openai_slice_failed,omitempty"`
 	OAuthAliases             map[string][]managementOAuthModelAlias                          `json:"oauth_aliases"`
 	OAuthAliasesUnavailable  bool                                                            `json:"oauth_aliases_unavailable,omitempty"`
 	OAuthExcluded            map[string][]string                                             `json:"oauth_excluded"`
@@ -166,9 +168,11 @@ func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 		ClientKeys:               slices.Clone(src.ClientKeys),
 		ConfigFamilies:           families,
 		RuntimeOnlyFam:           maps.Clone(src.RuntimeOnlyFam),
+		FailedProviderFamilies:   maps.Clone(src.FailedProviderFamilies),
 		ProviderSliceFailed:      src.ProviderSliceFailed,
 		OpenAICompat:             cloneViaJSON(src.OpenAICompat),
 		OpenAIRuntime:            src.OpenAIRuntime,
+		OpenAISliceFailed:        src.OpenAISliceFailed,
 		OAuthAliases:             aliases,
 		OAuthAliasesUnavailable:  src.OAuthAliasesUnavailable,
 		OAuthExcluded:            excluded,
@@ -473,17 +477,19 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 				return err
 			}
 			for targetKey, toggle := range snapshot.PendingOpenAIToggles {
-				matched := false
+				matches := 0
+				var matchedIdx int
 				for idx := range liveEntries {
 					key := openAIToggleSelector(idx, liveEntries[idx].Name)
 					if key == targetKey || (strings.HasPrefix(targetKey, "name:") && "name:"+strings.TrimSpace(liveEntries[idx].Name) == targetKey) {
-						liveEntries[idx].Disabled = toggle.Disabled
-						matched = true
+						matchedIdx = idx
+						matches++
 					}
 				}
-				if !matched {
+				if matches != 1 {
 					return management.ErrConfigChanged
 				}
+				liveEntries[matchedIdx].Disabled = toggle.Disabled
 			}
 			return client.UpdateOpenAICompatibility(ctx, liveEntries)
 		},
@@ -835,6 +841,7 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 
 	configFamilies := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey, len(providerConfigFamilies))
 	runtimeOnlyFam := make(map[management.ConfigKeyFamily]bool)
+	failedFamilies := make(map[management.ConfigKeyFamily]bool)
 	anyProviderSliceFailed := openAIFailed
 	for idx, spec := range providerConfigFamilies {
 		if familyEntries[idx] != nil {
@@ -846,6 +853,7 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 			runtimeOnlyFam[spec.Family] = true
 		}
 		if familyFailed[idx] {
+			failedFamilies[spec.Family] = true
 			anyProviderSliceFailed = true
 		}
 	}
@@ -876,9 +884,11 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 		ClientKeys:               clientKeys,
 		ConfigFamilies:           configFamilies,
 		RuntimeOnlyFam:           runtimeOnlyFam,
+		FailedProviderFamilies:   failedFamilies,
 		ProviderSliceFailed:      anyProviderSliceFailed,
 		OpenAICompat:             openAICompat,
 		OpenAIRuntime:            openAIRuntime,
+		OpenAISliceFailed:        openAIFailed,
 		OAuthAliases:             oauthAliases,
 		OAuthAliasesUnavailable:  oauthAliasesUnavailable,
 		OAuthExcluded:            oauthExcluded,
@@ -1026,6 +1036,9 @@ func (h *Handler) mutateCoordinatorWithAudit(
 	defer h.providerWrites.release()
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
+	// Drain any pre-existing dirty domains before publishing this synchronous mutation so
+	// an unrelated earlier domain's flush failure is never misreported as this write failing.
+	_ = h.stateCoord.FlushWithinGate(request.Context())
 	version, err := h.stateCoord.MutateWithAudit(request.Context(), domain, &rec, mutateFn)
 	if err != nil {
 		return 0, err

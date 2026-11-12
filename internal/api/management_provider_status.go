@@ -256,6 +256,18 @@ func (h *Handler) mutateProviderStatusOptimistic(request *http.Request, req patc
 			if err := req.verifyName(state.OpenAICompat[req.Index].Name); err != nil {
 				return err
 			}
+			targetName := strings.TrimSpace(state.OpenAICompat[req.Index].Name)
+			if targetName != "" {
+				sameNameCount := 0
+				for idx := range state.OpenAICompat {
+					if strings.TrimSpace(state.OpenAICompat[idx].Name) == targetName {
+						sameNameCount++
+					}
+				}
+				if sameNameCount > 1 {
+					return errRuntimeOnlyProviderSlice
+				}
+			}
 			state.OpenAICompat[req.Index].Disabled = req.Disabled
 			if state.PendingOpenAIToggles == nil {
 				state.PendingOpenAIToggles = make(map[string]pendingProviderToggle)

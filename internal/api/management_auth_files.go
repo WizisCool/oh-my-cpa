@@ -274,65 +274,102 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 	}
 	trimmedAuthIndex := strings.TrimSpace(payload.AuthIndex)
 	if h.stateCoord != nil {
-		selector := encodeAuthFileSelector(name, trimmedAuthIndex)
-		domain := statecoord.DomainKey(stateDomainAuthFileStatusPrefix + selector)
 		var useFallback bool
-		version, mutErr := h.mutateCoordinatorWithAudit(
-			request,
-			domain,
-			"auth_file.status_update",
-			"auth_file",
-			name,
-			map[string]any{"disabled": *payload.Disabled},
-			func(state *projectedConfigState) error {
-				if state.AuthFilesUnavailable {
-					useFallback = true
-					return errStateSliceUnavailable
+		var canonicalSelector string
+		if env, readErr := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (string, error) {
+			if state.AuthFilesUnavailable {
+				return "", errStateSliceUnavailable
+			}
+			matches := 0
+			var matched management.AuthFile
+			for idx := range state.AuthFiles {
+				file := state.AuthFiles[idx]
+				if file.Name != name && file.ID != name {
+					continue
 				}
-				matched := false
-				for idx := range state.AuthFiles {
-					file := &state.AuthFiles[idx]
-					if file.Name != name && file.ID != name {
-						continue
-					}
-					if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
-						continue
-					}
-					file.Disabled = *payload.Disabled
-					matched = true
+				if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
+					continue
 				}
-				if !matched {
-					// Fall through to synchronous CPA write when the target is absent from
-					// the in-memory list (e.g. recently created out-of-band or demo probe).
-					useFallback = true
-					return errStateSliceUnavailable
-				}
-				if state.PendingAuthStatus == nil {
-					state.PendingAuthStatus = make(map[string]pendingAuthFileStatus)
-				}
-				state.AuthStatusSeq++
-				state.PendingAuthStatus[selector] = pendingAuthFileStatus{
-					Name:      name,
-					AuthIndex: trimmedAuthIndex,
-					Disabled:  *payload.Disabled,
-					Seq:       state.AuthStatusSeq,
-				}
-				return nil
-			},
-		)
+				matched = file
+				matches++
+			}
+			if matches != 1 {
+				return "", errStateSliceUnavailable
+			}
+			canonicalName := firstNonEmpty(matched.Name, matched.ID)
+			return encodeAuthFileSelector(canonicalName, strings.TrimSpace(matched.AuthIndex)), nil
+		}); readErr == nil {
+			canonicalSelector = env.Data
+		} else {
+			useFallback = true
+		}
+
 		if !useFallback {
-			if mutErr != nil {
-				_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "failure", map[string]any{"error": mutErr.Error()})
-				writeProviderWriteError(writer, mutErr)
+			domain := statecoord.DomainKey(stateDomainAuthFileStatusPrefix + canonicalSelector)
+			version, mutErr := h.mutateCoordinatorWithAudit(
+				request,
+				domain,
+				"auth_file.status_update",
+				"auth_file",
+				name,
+				map[string]any{"disabled": *payload.Disabled},
+				func(state *projectedConfigState) error {
+					if state.AuthFilesUnavailable {
+						useFallback = true
+						return errStateSliceUnavailable
+					}
+					matches := 0
+					var matchedIdx int
+					for idx := range state.AuthFiles {
+						file := &state.AuthFiles[idx]
+						if file.Name != name && file.ID != name {
+							continue
+						}
+						if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
+							continue
+						}
+						matchedIdx = idx
+						matches++
+					}
+					if matches != 1 {
+						useFallback = true
+						return errStateSliceUnavailable
+					}
+					matched := &state.AuthFiles[matchedIdx]
+					canonicalName := firstNonEmpty(matched.Name, matched.ID)
+					canonicalAuthIndex := strings.TrimSpace(matched.AuthIndex)
+					if encodeAuthFileSelector(canonicalName, canonicalAuthIndex) != canonicalSelector {
+						useFallback = true
+						return errStateSliceUnavailable
+					}
+					matched.Disabled = *payload.Disabled
+					if state.PendingAuthStatus == nil {
+						state.PendingAuthStatus = make(map[string]pendingAuthFileStatus)
+					}
+					state.AuthStatusSeq++
+					state.PendingAuthStatus[canonicalSelector] = pendingAuthFileStatus{
+						Name:      canonicalName,
+						AuthIndex: canonicalAuthIndex,
+						Disabled:  *payload.Disabled,
+						Seq:       state.AuthStatusSeq,
+					}
+					return nil
+				},
+			)
+			if !useFallback {
+				if mutErr != nil {
+					_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "failure", map[string]any{"error": mutErr.Error()})
+					writeProviderWriteError(writer, mutErr)
+					return
+				}
+				setStateVersionHeader(writer, version)
+				writeJSON(writer, http.StatusOK, map[string]any{
+					"status":   "ok",
+					"disabled": *payload.Disabled,
+					"version":  version,
+				})
 				return
 			}
-			setStateVersionHeader(writer, version)
-			writeJSON(writer, http.StatusOK, map[string]any{
-				"status":   "ok",
-				"disabled": *payload.Disabled,
-				"version":  version,
-			})
-			return
 		}
 	}
 	if err := h.operationsService().SetCredentialStatus(request.Context(), operations.CredentialTarget{Name: name, AuthIndex: trimmedAuthIndex}, *payload.Disabled, ""); err != nil {

@@ -15,15 +15,6 @@ import (
 )
 
 func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
-	if err := h.providerWrites.acquire(request.Context()); err != nil {
-		writeError(writer, http.StatusServiceUnavailable, "management write busy")
-		return
-	}
-	defer h.providerWrites.release()
-	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
-		writeCPAFacadeError(writer, err)
-		return
-	}
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileUploadLimit)
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
@@ -74,6 +65,15 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	if _, err := client.UploadAuthFile(request.Context(), name, data); err != nil {
 		writeCPAFacadeError(writer, err)
 		return
@@ -91,6 +91,11 @@ type multipartFileHeader struct {
 }
 
 func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Context, client *management.Client, files []*multipartFileHeader) {
+	type preparedUpload struct {
+		name string
+		data []byte
+	}
+	prepared := make([]preparedUpload, 0, len(files))
 	uploaded := make([]string, 0, len(files))
 	failed := make([]map[string]string, 0)
 	for _, file := range files {
@@ -114,11 +119,25 @@ func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Co
 			failed = append(failed, map[string]string{"name": name, "error": jsonErr.Error()})
 			continue
 		}
-		if _, uploadErr := client.UploadAuthFile(ctx, name, data); uploadErr != nil {
-			failed = append(failed, map[string]string{"name": name, "error": publicCPAErrorMessage(uploadErr)})
-			continue
+		prepared = append(prepared, preparedUpload{name: name, data: data})
+	}
+	if len(prepared) > 0 {
+		if err := h.providerWrites.acquire(ctx); err != nil {
+			writeProviderWriteError(writer, err)
+			return
 		}
-		uploaded = append(uploaded, name)
+		defer h.providerWrites.release()
+		if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		for _, item := range prepared {
+			if _, uploadErr := client.UploadAuthFile(ctx, item.name, item.data); uploadErr != nil {
+				failed = append(failed, map[string]string{"name": item.name, "error": publicCPAErrorMessage(uploadErr)})
+				continue
+			}
+			uploaded = append(uploaded, item.name)
+		}
 	}
 	if len(uploaded) > 0 {
 		if h.pricing != nil {

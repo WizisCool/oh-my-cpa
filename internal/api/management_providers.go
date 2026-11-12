@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -294,14 +295,89 @@ func (h *Handler) readProviderItemsWithVersion(ctx context.Context, client *mana
 		customNames := h.loadProviderNames(ctx)
 		customWebsites := h.loadProviderWebsites(ctx)
 		testModels, _ := h.loadStringPreference(ctx, repository.PreferenceProviderTestModels)
-		env, err := statecoord.ProjectTyped(ctx, h.stateCoord, func(state projectedConfigState, _ uint64) ([]ProviderItemDTO, error) {
-			if state.ProviderSliceFailed {
-				return nil, errStateSliceUnavailable
+		type projectedProviderInput struct {
+			families      map[management.ConfigKeyFamily][]management.ConfigAPIKey
+			failedFam     map[management.ConfigKeyFamily]bool
+			openAI        []management.OpenAICompatibility
+			openAIFailed  bool
+			hasAnyFailure bool
+		}
+		env, err := statecoord.ProjectTyped(ctx, h.stateCoord, func(state projectedConfigState, _ uint64) (projectedProviderInput, error) {
+			fams := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey, len(state.ConfigFamilies))
+			for fam, list := range state.ConfigFamilies {
+				fams[fam] = cloneViaJSON(list)
 			}
-			return projectProviderItemsFromRaw(state.ConfigFamilies, state.OpenAICompat, customNames, customWebsites, testModels), nil
+			return projectedProviderInput{
+				families:      fams,
+				failedFam:     maps.Clone(state.FailedProviderFamilies),
+				openAI:        cloneViaJSON(state.OpenAICompat),
+				openAIFailed:  state.OpenAISliceFailed,
+				hasAnyFailure: state.ProviderSliceFailed,
+			}, nil
 		})
 		if err == nil {
-			return env.Data, env.Version
+			input := env.Data
+			if input.hasAnyFailure {
+				recoveredFamilies := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey)
+				recoveredRuntimeOnly := make(map[management.ConfigKeyFamily]bool)
+				for fam := range input.failedFam {
+					if entries, editErr := client.EditableConfigAPIKeys(ctx, fam); editErr == nil {
+						input.families[fam] = entries
+						recoveredFamilies[fam] = entries
+					} else if runtimeEntries, runErr := client.ConfigAPIKeys(ctx, fam); runErr == nil {
+						for idx := range runtimeEntries {
+							runtimeEntries[idx].ConnectionPool = nil
+						}
+						input.families[fam] = runtimeEntries
+						recoveredFamilies[fam] = runtimeEntries
+						recoveredRuntimeOnly[fam] = true
+					}
+				}
+				var recoveredOpenAI []management.OpenAICompatibility
+				var didRecoverOpenAI, recoveredOpenAIRuntime bool
+				if input.openAIFailed {
+					if entries, editErr := client.EditableOpenAICompatibility(ctx); editErr == nil {
+						input.openAI = entries
+						recoveredOpenAI = entries
+						didRecoverOpenAI = true
+					} else if runtime, runErr := client.OpenAICompatibility(ctx); runErr == nil {
+						for idx := range runtime.Entries {
+							runtime.Entries[idx].ConnectionPool = nil
+							for ki := range runtime.Entries[idx].APIKeyEntries {
+								runtime.Entries[idx].APIKeyEntries[ki].ConnectionPool = nil
+							}
+						}
+						input.openAI = runtime.Entries
+						recoveredOpenAI = runtime.Entries
+						didRecoverOpenAI = true
+						recoveredOpenAIRuntime = true
+					}
+				}
+				if len(recoveredFamilies) > 0 || didRecoverOpenAI {
+					h.stateCoord.UpdateBaseline(func(state *projectedConfigState, _ bool) {
+						for fam, entries := range recoveredFamilies {
+							if len(state.PendingFamilyToggles[fam]) == 0 {
+								state.ConfigFamilies[fam] = cloneViaJSON(entries)
+							}
+							delete(state.FailedProviderFamilies, fam)
+							if recoveredRuntimeOnly[fam] {
+								state.RuntimeOnlyFam[fam] = true
+							} else {
+								delete(state.RuntimeOnlyFam, fam)
+							}
+						}
+						if didRecoverOpenAI {
+							if len(state.PendingOpenAIToggles) == 0 {
+								state.OpenAICompat = cloneViaJSON(recoveredOpenAI)
+							}
+							state.OpenAISliceFailed = false
+							state.OpenAIRuntime = recoveredOpenAIRuntime
+						}
+						state.ProviderSliceFailed = state.OpenAISliceFailed || len(state.FailedProviderFamilies) > 0
+					})
+				}
+			}
+			return projectProviderItemsFromRaw(input.families, input.openAI, customNames, customWebsites, testModels), env.Version
 		}
 	}
 	return h.readProviderItemsUpstream(ctx, client), 0

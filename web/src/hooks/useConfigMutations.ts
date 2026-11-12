@@ -1,4 +1,4 @@
-import { api, describeError } from '../api/client';
+import { ApiError, api, describeError } from '../api/client';
 import { MUTATION_KEYS, QUERY_KEYS } from '../api/queryKeys';
 import type { ConfigScalars, ConfigScalarsResponse } from '../types/configManagement';
 import type { ManagementAuthFilesResponse } from '../types/managementAuthFile';
@@ -306,7 +306,7 @@ export function useOptimisticClientKeyMutation(options?: {
         return api.createClientAPIKey(op.key);
       }
       if (!op.expectedFingerprint) {
-        throw new Error('Client key identity is still loading; try again in a moment');
+        throw new ApiError('key identity unavailable', 409, { code: 'key_identity_pending' });
       }
       if (op.kind === 'update') {
         return api.updateClientAPIKey(op.index, op.key, op.expectedFingerprint);

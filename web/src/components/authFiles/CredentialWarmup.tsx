@@ -566,7 +566,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       size="small"
                       className={styles['task-switch']}
                       aria-label={view.title}
-                      aria-busy={(toggleMutation.isPending && toggleMutation.variables?.task.id === task.id) || undefined}
+                      loading={toggleMutation.isPending && toggleMutation.variables?.task.id === task.id}
                       checked={task.enabled}
                       disabled={isDemo}
                       onChange={(enabled) => toggleMutation.mutate({ task, enabled })}

@@ -140,7 +140,9 @@ export const ApiKeysPage: React.FC = () => {
 
   const keyMutation = useOptimisticClientKeyMutation({
     formatError: (err) => {
-      if (apiErrorCode(err) === 'resource_conflict') return t('keys.duplicate');
+      const code = apiErrorCode(err);
+      if (code === 'resource_conflict') return t('keys.duplicate');
+      if (code === 'key_identity_pending') return t('keys.rename_conflict');
       return describeError(err);
     },
   });
@@ -313,14 +315,16 @@ export const ApiKeysPage: React.FC = () => {
       }
 
       if (editor.index === null ? Boolean(trimmedAlias) : true) {
-        const existingAlias = keysQuery.data?.keys?.find(
-          (item) =>
-            (item.usage_fingerprint && item.usage_fingerprint === res.usage_fingerprint) ||
-            (editor.originalKey && item.key === editor.originalKey),
-        );
+        const targetEntry = res.usage_fingerprint
+          ? keysQuery.data?.keys?.find((item) => item.usage_fingerprint === res.usage_fingerprint)
+          : undefined;
+        const previousEntry = editor.originalKey
+          ? keysQuery.data?.keys?.find((item) => item.key === editor.originalKey)
+          : undefined;
+        const confirmedForNewKey = targetEntry?.alias ?? '';
         const fingerprint = res.usage_fingerprint;
         const shouldSaveAlias =
-          Boolean(trimmedAlias) || Boolean(existingAlias?.alias);
+          Boolean(trimmedAlias) || Boolean(targetEntry?.alias) || Boolean(previousEntry?.alias && !res.usage_fingerprint);
         if (shouldSaveAlias) {
           if (!fingerprint) {
             toast.error(t('keys.alias_save_failed'));
@@ -329,16 +333,12 @@ export const ApiKeysPage: React.FC = () => {
               index: res.index,
               originalKey: trimmedKey,
               originalFingerprint: res.fingerprint ?? '',
-              confirmedAlias: existingAlias?.alias ?? '',
+              confirmedAlias: confirmedForNewKey,
             });
             return;
           }
           try {
-            const targetAliasVersion =
-              res.usage_fingerprint === existingAlias?.usage_fingerprint
-                ? (existingAlias?.alias_version ?? 0)
-                : 0;
-            await api.setClientKeyAlias(fingerprint, trimmedAlias, targetAliasVersion);
+            await api.setClientKeyAlias(fingerprint, trimmedAlias, targetEntry?.alias_version ?? 0);
             await invalidateKeyReaders();
           } catch (err: unknown) {
             toast.error(describeError(err) || t('keys.alias_save_failed'));
@@ -347,7 +347,7 @@ export const ApiKeysPage: React.FC = () => {
               index: res.index,
               originalKey: trimmedKey,
               originalFingerprint: res.fingerprint ?? '',
-              confirmedAlias: existingAlias?.alias ?? '',
+              confirmedAlias: confirmedForNewKey,
             });
             return;
           }
