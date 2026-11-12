@@ -225,6 +225,7 @@ export default {
   "omc.fleet_add_other": "其他新增方式",
   "omc.fleet_action_select": "選取",
   "omc.fleet_select_page": "選取本頁全部憑證",
+  "omc.fleet_col_account": "帳號",
   "omc.fleet_col_state": "狀態",
   "omc.fleet_col_quota": "額度",
   "omc.fleet_col_switch": "開關",

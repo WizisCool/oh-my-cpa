@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapse } from '@/components/ui/accordion';
 import { CloseOutlined, PlusOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
 import type { ManagementOAuthProviderModel } from '../../types/managementOAuthModelAlias';
@@ -34,6 +35,11 @@ interface OAuthExcludedModelsPanelProps {
   catalogError?: unknown;
   onRetryCatalog: () => void;
   isDisabled: boolean;
+  /**
+   * Whose list this is: a provider's defaults, inherited by credentials without a list of their
+   * own, or one credential's own list, which replaces those defaults.
+   */
+  scope?: 'provider' | 'credential';
 }
 
 function ruleErrorMessage(error: ExcludedModelRuleError, t: TFunc): string {
@@ -74,11 +80,14 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
   catalogError,
   onRetryCatalog,
   isDisabled,
+  scope = 'provider',
 }) => {
+  const summaryKey = scope === 'credential' ? 'af.excluded_summary_models_credential' : 'af.excluded_summary_models';
   const t = useT();
   const [ruleInput, setRuleInput] = useState('');
   const [ruleError, setRuleError] = useState<ExcludedModelRuleError>();
   const [query, setQuery] = useState('');
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const view = useMemo(() => describeExcludedModels(rules, catalog), [rules, catalog]);
   const visibleModels = useMemo(() => filterCatalogModels(view.models, query), [view.models, query]);
@@ -118,21 +127,21 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
       <div className={styles['summary']}>
         <span className={styles['summary-count']} data-testid="oauth-excluded-models-summary">
           {hasCatalog
-            ? t('af.excluded_summary_models', { excluded: view.excludedCount, total: view.totalCount })
+            ? t(summaryKey, { excluded: view.excludedCount, total: view.totalCount })
             : t('af.excluded_summary_rules', { n: rules.length })}
         </span>
         {hasCatalog && (
           <Meter
             value={view.excludedCount}
             max={view.totalCount}
-            label={t('af.excluded_summary_models', { excluded: view.excludedCount, total: view.totalCount })}
+            label={t(summaryKey, { excluded: view.excludedCount, total: view.totalCount })}
           />
         )}
       </div>
 
-      {view.isEverythingExcluded && (
-        <Notice tone="warning" title={t('af.excluded_all_title')} description={t('af.excluded_all_desc')} />
-      )}
+      {view.isEverythingExcluded && (scope === 'credential'
+        ? <Notice tone="warning" title={t('af.excluded_all_title_credential')} />
+        : <Notice tone="warning" title={t('af.excluded_all_title')} description={t('af.excluded_all_desc')} />)}
 
       <section className={styles['section']} aria-labelledby="oauth-excluded-rules-heading">
         <SectionHeading level="label" id="oauth-excluded-rules-heading" title={t('af.excluded_rules_title')} />
@@ -189,8 +198,23 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
         )}
       </section>
 
-      <section className={styles['section']} aria-labelledby="oauth-excluded-catalog-heading">
-        <SectionHeading level="label" id="oauth-excluded-catalog-heading" title={t('af.excluded_catalog_title')} />
+      {/* The catalogue folds: a provider can list hundreds of models, and the summary above already
+          says how many are excluded. It starts folded and opens on the reader's click. */}
+      <Collapse
+        ghost
+        className={styles['catalog-fold']}
+        activeKey={isCatalogOpen ? ['catalog'] : []}
+        onChange={(keys) => setIsCatalogOpen(keys.includes('catalog'))}
+        items={[{
+          key: 'catalog',
+          label: (
+            <span className={styles['catalog-fold-label']} data-testid="oauth-excluded-models-catalog-toggle">
+              {t('af.excluded_catalog_title')}
+              {hasCatalog && <span className={styles['catalog-fold-count']}>{view.totalCount}</span>}
+            </span>
+          ),
+          children: (
+            <div className={styles['section']}>
         {catalogState === 'loading' && <p className={styles['hint']}>{t('af.rules_catalog_loading')}</p>}
         {catalogState === 'error' && (
           <LoadFailure title={t('af.rules_catalog_failed')} error={catalogError} onRetry={onRetryCatalog} />
@@ -256,7 +280,10 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
             )}
           </>
         )}
-      </section>
+            </div>
+          ),
+        }]}
+      />
     </div>
   );
 };

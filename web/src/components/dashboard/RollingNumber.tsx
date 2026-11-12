@@ -33,7 +33,7 @@ interface RollingNumberProps {
  * The locale is pinned to `en` because that is what every formatter in this console prints in;
  * leaving it unset would silently follow the browser instead.
  */
-export const RollingNumber: React.FC<RollingNumberProps> = ({ readout }) => {
+const RollingNumberView: React.FC<RollingNumberProps> = ({ readout }) => {
   const isReducedMotion = usePrefersReducedMotion();
   const unit = `${readout?.prefix ?? ''}\0${readout?.suffix ?? ''}`;
   const previousUnit = React.useRef(unit);
@@ -66,3 +66,23 @@ export const RollingNumber: React.FC<RollingNumberProps> = ({ readout }) => {
     />
   );
 };
+
+function isSameFormat(a: RollingReadout['format'], b: RollingReadout['format']): boolean {
+  const aKeys = Object.keys(a) as (keyof RollingReadout['format'])[];
+  return aKeys.length === Object.keys(b).length && aKeys.every((key) => a[key] === b[key]);
+}
+
+/** Whether two readouts print the same reading: same number, marks and shape. */
+export function isSameReadout(a: RollingReadout | undefined, b: RollingReadout | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.number === b.number && a.prefix === b.prefix && a.suffix === b.suffix && isSameFormat(a.format, b.format);
+}
+
+/**
+ * Re-rendered only when the reading changes. A readout is built afresh on every render of the page
+ * that owns it, and NumberFlow measures its glyphs - a forced layout of the whole page - on every
+ * update it is handed, so an unrelated re-render (a filter, a chart's hover) used to cost a layout
+ * per number on screen.
+ */
+export const RollingNumber = React.memo(RollingNumberView, (previous, next) => isSameReadout(previous.readout, next.readout));

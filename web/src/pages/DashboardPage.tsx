@@ -184,6 +184,9 @@ export const DashboardPage: React.FC = () => {
       .map((k) => ({
         label: k.alias ? `${k.alias} (${maskKeyText(k.key)})` : maskKeyText(k.key),
         value: k.usage_fingerprint as string,
+        // A phone's closed filter has room for a few glyphs: the alias, or the mask's tail - the end
+        // of a key is what tells two `sk-cpa-` keys apart; the open list keeps the full label.
+        short: k.alias || `••${maskKeyText(k.key).slice(-4)}`,
       }));
   }, [keysQuery.data]);
 
@@ -306,9 +309,25 @@ export const DashboardPage: React.FC = () => {
   const header = (
     <PageHeader
       title={t('nav.dashboard')}
+      // A phone's head is one row that fills the width: the window, the key filter when there are
+      // keys to filter by, and the menu at the edge. Two controls of different widths floated on
+      // two ragged lines read as misplaced.
       mobileActions={isArranging ? arrangeActions : (
-        <>
+        <div className="dashboard-phone-head">
           <TimeRangeControl range={range} onChange={applyRange} isDisabled={!isRangeStored} />
+          {clientKeyOptions.length > 0 && (
+            <Select
+              allowClear
+              className="dashboard-key-filter"
+              placeholder={t('dash.filter_by_key_short')}
+              aria-label={t('dash.filter_by_key')}
+              value={selectedApiKey}
+              onChange={setSelectedApiKey}
+              options={clientKeyOptions}
+              labelRender={({ value }) => clientKeyOptions.find((option) => option.value === value)?.short ?? null}
+              prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
+            />
+          )}
           <ActionMenu>
             {hasCostHidden && (
               <ToolButton
@@ -335,18 +354,7 @@ export const DashboardPage: React.FC = () => {
               disabled={!data}
             />
           </ActionMenu>
-          {clientKeyOptions.length > 0 && (
-            <Select
-              allowClear
-              className="dashboard-key-filter"
-              placeholder={t('dash.filter_by_key')}
-              value={selectedApiKey}
-              onChange={setSelectedApiKey}
-              options={clientKeyOptions}
-              prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
-            />
-          )}
-        </>
+        </div>
       )}
       actions={isArranging ? arrangeActions : (
         <>
@@ -359,6 +367,7 @@ export const DashboardPage: React.FC = () => {
               value={selectedApiKey}
               onChange={(val) => setSelectedApiKey(val)}
               options={clientKeyOptions}
+              labelRender={({ value }) => clientKeyOptions.find((option) => option.value === value)?.short ?? null}
               prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
             />
           )}

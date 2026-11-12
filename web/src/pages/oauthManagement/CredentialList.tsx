@@ -43,6 +43,8 @@ export interface CredentialViewProps {
   actions: CredentialActions;
   /** Puts a dragged credential beside another; absent while the order is not the operator's own. */
   onReorder?: (record: OAuthWorkspaceRecord, target: OAuthWorkspaceRecord, side: DropSide) => unknown;
+  /** The selection of every credential on the page, drawn in the header's checkbox column. */
+  pageSelection?: React.ReactNode;
 }
 
 const recordKey = (record: OAuthWorkspaceRecord) => record.key;
@@ -60,9 +62,20 @@ const recordKey = (record: OAuthWorkspaceRecord) => record.key;
  * switch, refresh and menu close the row. A row opens the credential's details, and rows of one
  * provider can be dragged into the operator's own order.
  */
-export function CredentialList({ groups, pluginLogos, selectedKeys, nowMS, actions, onReorder }: CredentialViewProps) {
+export function CredentialList({ groups, pluginLogos, selectedKeys, nowMS, actions, onReorder, pageSelection }: CredentialViewProps) {
+  const t = useT();
   return (
     <div className={styles.list}>
+      {/* One header for every provider: the columns are named once, and the page's selection sits
+          in the checkbox column it selects. */}
+      <div className={clsx(styles.line, styles['table-head'])}>
+        <span className={styles.lead}>{pageSelection}</span>
+        <span className={styles['head-who']}>{t('omc.fleet_col_account')}</span>
+        <span className={styles['head-state']}>{t('omc.fleet_col_state')}</span>
+        <span className={styles['head-quota']}>{t('omc.fleet_col_quota')}</span>
+        <span className={styles['head-toggle']}>{t('omc.fleet_col_switch')}</span>
+        <span className={styles['head-controls']}><span className="sr-only">{t('omc.fleet_col_actions')}</span></span>
+      </div>
       <FilterTransition itemKeys={groups.map((group) => group.provider)}>
         {groups.map((group) => (
           <ListGroup
@@ -104,7 +117,7 @@ function ListGroup({ group, pluginLogos, selectedKeys, nowMS, actions, onReorder
     <m.section {...filterMotion} className={styles.group} data-testid="oauth-credential-section" data-provider={group.provider}>
       <RowReorder items={rowKeys} isEnabled={Boolean(onReorder)} onMove={reorder.move} onStep={step}>
         <div className={styles.rows}>
-          <GroupHead group={group} pluginLogos={pluginLogos} selectedKeys={selectedKeys} actions={actions} hasColumns />
+          <GroupHead group={group} pluginLogos={pluginLogos} selectedKeys={selectedKeys} actions={actions} isBand />
           <FilterTransition itemKeys={rowKeys}>
             {reorder.ordered.map((record) => (
               <CredentialRow
@@ -125,22 +138,21 @@ function ListGroup({ group, pluginLogos, selectedKeys, nowMS, actions, onReorder
   );
 }
 
-/** A provider's title over its rows: its selection, name, count and exceptions. */
-export function GroupHead({ group, pluginLogos, selectedKeys, actions, hasColumns = false, className }: {
+/** A provider's title over its credentials: the selection of all of them, its mark, name and count. */
+export function GroupHead({ group, pluginLogos, selectedKeys, actions, isBand = false, className }: {
   group: CredentialGroup;
   pluginLogos?: PluginOAuthLogos;
   selectedKeys: ReadonlySet<string>;
   actions: CredentialActions;
-  /** Whether the head is the list's header strip, naming the columns of the rows under it. */
-  hasColumns?: boolean;
+  /** Whether the head is a band inside the list's table, on the rows' checkbox column. */
+  isBand?: boolean;
   className?: string;
 }) {
   const t = useT();
   const selectable = group.records.filter((record) => record.canSelectForFileBatch);
   const selectedCount = selectable.filter((record) => selectedKeys.has(record.key)).length;
   return (
-    <header className={clsx(styles['group-head'], hasColumns && styles['table-head'], className)}>
-      <span className={styles['head-who']}>
+    <header className={clsx(styles['group-head'], isBand && styles.band, className)}>
       <span className={styles.lead}>
         <Checkbox
           checked={selectable.length > 0 && selectedCount === selectable.length}
@@ -151,19 +163,10 @@ export function GroupHead({ group, pluginLogos, selectedKeys, actions, hasColumn
         />
       </span>
       <span className={styles['group-identity']}>
-        <CredentialMark credential={{ provider: group.provider }} pluginLogos={pluginLogos} size={18} />
+        <CredentialMark credential={{ provider: group.provider }} pluginLogos={pluginLogos} size={16} />
         <h2 className={styles['group-title']}>{group.title}</h2>
         <span className={styles['group-count']}>{group.visibleRecords.length}</span>
       </span>
-      </span>
-      {hasColumns && (
-        <>
-          <span className={styles['head-state']}>{t('omc.fleet_col_state')}</span>
-          <span className={styles['head-quota']}>{t('omc.fleet_col_quota')}</span>
-          <span className={styles['head-toggle']}>{t('omc.fleet_col_switch')}</span>
-          <span className={styles['head-controls']}>{t('omc.fleet_col_actions')}</span>
-        </>
-      )}
     </header>
   );
 }
@@ -179,7 +182,8 @@ export function isRecordBodyClick(event: React.MouseEvent<HTMLElement>): boolean
   if (target && !event.currentTarget.contains(target)) return false;
   if (!target) return false;
   if (window.getSelection()?.toString()) return false;
-  return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], [data-slot="dropdown-menu-content"], [data-slot="popover-content"]');
+  // A control's own hit box - the switch's - belongs to the control, not to the row around it.
+  return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], [data-control-hit], [data-slot="dropdown-menu-content"], [data-slot="popover-content"]');
 }
 
 function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, actions, pluginLogos }: {
@@ -239,14 +243,12 @@ function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, act
           else if (record.canSelectForFileBatch && !facts.isBusy) actions.onPick(record, intent === 'range');
         }}
       >
+        <div className={styles.lead}>
+          <SelectBox record={record} isSelected={isSelected} isBusy={facts.isBusy} actions={actions} />
+        </div>
         <div className={styles.who}>
-          <div className={styles.lead}>
-            <SelectBox record={record} isSelected={isSelected} isBusy={facts.isBusy} actions={actions} />
-          </div>
-          <div className={styles.identity}>
-            <CredentialName record={record} facts={facts} isRenaming={isRenaming} onRename={() => setIsRenaming(true)} onRenamed={() => setIsRenaming(false)} actions={actions} />
-            <CredentialTraits record={record} facts={facts} actions={actions} />
-          </div>
+          <CredentialName record={record} facts={facts} isRenaming={isRenaming} onRename={() => setIsRenaming(true)} onRenamed={() => setIsRenaming(false)} actions={actions} />
+          <CredentialTraits record={record} facts={facts} actions={actions} />
         </div>
         <div className={styles.state}>
           <CredentialState record={record} facts={facts} actions={actions} nowMS={nowMS} />
@@ -255,7 +257,7 @@ function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, act
           {quota}
         </div>
         <div className={styles.toggle}>
-          <CredentialSwitch record={record} facts={facts} actions={actions} />
+          <CredentialSwitch record={record} facts={facts} actions={actions} className={styles['toggle-hit']} />
         </div>
         <div className={styles.controls}>
           {hasHandle && isPhone && <ReorderHandle {...reorder.handle} name={maskedCredentialLabel(record)} variant="inline" />}

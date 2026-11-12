@@ -72,8 +72,6 @@ function HealthFilter({ counts, isPending, lens, onLens }: Pick<FleetToolbarProp
 }
 
 export interface FleetToolbarProps {
-  /** Leads the row: the selection of everything shown, and the provider switcher on a narrow screen. */
-  leading?: React.ReactNode;
   search: string;
   onSearch: (value: string) => void;
   counts: Record<HealthBucket, number>;
@@ -110,22 +108,28 @@ const SORTS: { key: OAuthWorkspaceSortKey; label: MessageKey; icon?: React.React
 ];
 
 /**
- * One row over the credentials in scope: find them, triage them by health, narrow and order them,
+ * The row over the credentials in scope: find them, triage them by health, narrow and order them,
  * choose how to look at them and refresh their quota. Only the search takes a label; the other
  * tools are glyphs that name themselves on hover.
+ *
+ * It is laid out on a grid of three areas rather than a wrapping row, so the parts land in the same
+ * place at every width: the search, the health verdicts and the tools side by side on a wide page;
+ * the search on a line of its own over the verdicts and the tools on a narrow one.
  */
 export function FleetToolbar({
-  leading, search, onSearch, counts, isPending, lens, onLens, status, quota, sort, isViewLoaded, onFilters, onSort, onReset, layout, onLayout, refresh,
+  search, onSearch, counts, isPending, lens, onLens, status, quota, sort, isViewLoaded, onFilters, onSort, onReset, layout, onLayout, refresh,
 }: FleetToolbarProps) {
   const t = useT();
   const filterCount = Number(status !== 'all') + Number(quota !== 'all');
   const sortLabel = t(SORTS.find((entry) => entry.key === sort)?.label ?? 'omc.sort_custom');
   return (
+    <div className={styles.frame}>
     <div className={styles.toolbar}>
-      {leading}
       <SearchInput className={styles.search} value={search} onChange={onSearch} label={t('af.search_ph')} />
       <HealthFilter counts={counts} isPending={isPending} lens={lens} onLens={onLens} />
-      <div className={styles.tools}>
+      {/* What narrows and orders the list sits with the search; how it is drawn and refreshed, with
+          the verdicts. On a wide page the two groups read as one row of tools. */}
+      <div className={clsx(styles.tools, styles['query-tools'])}>
         <Popover>
           <PopoverTrigger
             render={
@@ -208,6 +212,8 @@ export function FleetToolbar({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+      <div className={clsx(styles.tools, styles['view-tools'])}>
         <Segmented<OAuthWorkspaceLayout>
           className={styles.layout}
           value={layout}
@@ -220,6 +226,7 @@ export function FleetToolbar({
         />
         {/* The main segment refreshes what the workspace is showing; the caret offers the other scopes. */}
         <ButtonGroup>
+          {/* Fetching quota is a call to every provider in scope, so the button says what it does. */}
           <Tooltip title={t('omc.refresh_quota_count', { n: refresh.filtered })}>
             <Button
               icon={<SyncOutlined spin={refresh.isBusy} />}
@@ -227,7 +234,9 @@ export function FleetToolbar({
               onClick={() => refresh.onRefresh('filtered')}
               aria-label={t('omc.refresh_quota_count', { n: refresh.filtered })}
               data-testid="oauth-refresh-quota"
-            />
+            >
+              {t('quota.btn_refresh_quota')}
+            </Button>
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -250,6 +259,7 @@ export function FleetToolbar({
           </DropdownMenu>
         </ButtonGroup>
       </div>
+    </div>
     </div>
   );
 }

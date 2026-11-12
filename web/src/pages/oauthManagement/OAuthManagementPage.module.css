@@ -14,12 +14,6 @@
   min-width: 0;
 }
 
-/* Sits over the rows' own checkboxes, so the column of boxes reads straight down. */
-.select-all {
-  flex: none;
-  margin-inline: 12px 4px;
-}
-
 .empty {
   display: flex;
   align-items: center;
@@ -61,8 +55,10 @@
 }
 
 @media (max-width: 640px) {
-  .select-all {
-    margin-inline-start: 12px;
+  /* The head's row is the scope and the page's actions: the scope takes what the actions leave. */
+  .page :global(.terminal-page-head > .terminal-page-actions) {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
   }
 
   .pagination {

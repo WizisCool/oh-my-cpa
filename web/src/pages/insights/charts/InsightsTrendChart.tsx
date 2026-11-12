@@ -1,4 +1,5 @@
 import React from 'react';
+import { useMorphedProps } from '../../../charts/useChartMorph';
 import {
   Bar,
   CartesianGrid,
@@ -14,7 +15,6 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { useMotionPreference } from '@/utils/motionPreference';
 import { STACK_CAP_KEY, stackCapOf, stackCapShape } from '../../../charts/stackCap';
 import { BucketBrush } from '../../../charts/BucketBrush';
 import dayjs from '../../../utils/time';
@@ -86,7 +86,6 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
   useTimeZone();
   const t = useT();
   const { theme } = useTheme();
-  const { isReducedMotion } = useMotionPreference();
   const { style } = useTokenDisplayStyle();
   const { formatMetric } = useInsightsFormat();
   const isAdditive = isAdditiveMetric(metric);
@@ -286,8 +285,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
                   maxBarSize={28}
                   fill={color}
                   shape={stackCapShape(key)}
-                  isAnimationActive={!isReducedMotion}
-                  animationDuration={180}
+                  isAnimationActive={false}
                   onClick={() => {
                     didInteractSeriesRef.current = true;
                     onSelectGroup(group.id);
@@ -344,8 +342,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
                     didInteractSeriesRef.current = true;
                     onSelectGroup(group.id);
                   }}
-                  isAnimationActive={!isReducedMotion}
-                  animationDuration={180}
+                  isAnimationActive={false}
                 />
               );
             })}
@@ -359,8 +356,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
             strokeWidth={1.35}
             dot={false}
             connectNulls={false}
-            isAnimationActive={!isReducedMotion}
-            animationDuration={180}
+            isAnimationActive={false}
           />
         )}
         {onBrush && <BucketBrush bucketCount={data.length} onBrush={onBrush} />}
@@ -369,5 +365,19 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
   );
 };
 
-export const InsightsTrendChart = React.memo(InsightsTrendChartView);
+/**
+ * The chart takes its props through `useChartMorph`: a new dataset is one render of the marks inside
+ * a compositor cross-fade, not a library tween that re-renders every SVG mark on every frame - which
+ * is what made a filter or metric change stall the page.
+ */
+const InsightsTrendChartPlot = React.memo(InsightsTrendChartView);
+export const InsightsTrendChart = React.memo<InsightsTrendChartProps>((props) => {
+  const { shown, scopeRef } = useMorphedProps(props);
+  return (
+    <div ref={scopeRef} className="omc-chart-morph">
+      <InsightsTrendChartPlot {...shown} />
+    </div>
+  );
+});
+InsightsTrendChart.displayName = 'InsightsTrendChart';
 export default InsightsTrendChart;

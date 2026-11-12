@@ -6,6 +6,9 @@ import { ReorderHandle, RowReorder, useReorderRow } from '../../components/commo
 import { SearchInput } from '../../components/common/SearchInput';
 import { ToolButton } from '../../components/common/ToolButton';
 import { AppstoreOutlined, PlusOutlined, ListOutlined } from '../../components/icons';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
+import { Button } from '@/components/ui/button';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useT } from '../../i18n';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { providerDisplayName } from '../../types/providerMetadata';
@@ -46,6 +49,7 @@ export function ProviderStrip(props: ProviderStripProps) {
   const t = useT();
   const { summaries, total, attention, active, onChange, pluginLogos, pluginTitles } = props;
   const [isOpen, setIsOpen] = React.useState(false);
+  const isPhone = useIsPhoneViewport();
   const scroller = React.useRef<HTMLDivElement>(null);
   // The tab in scope is kept in view, whichever way the scope changed.
   React.useEffect(() => {
@@ -71,6 +75,54 @@ export function ProviderStrip(props: ProviderStripProps) {
       <span className={styles['tab-count']}>{count}</span>
     </button>
   );
+  const activeSummary = summaries.find((summary) => summary.provider === active);
+  // A provider whose last credential went stays in scope, named and at zero, rather than reading as all.
+  const isAll = active === 'all';
+  const scopeAttention = isAll ? attention : (activeSummary?.attention ?? 0);
+  const list = (
+    <AppModal open={isOpen} title={t('omc.fleet_providers')} size="small" footer={null} destroyOnHidden onCancel={() => setIsOpen(false)}>
+      <ProviderList
+        {...props}
+        onChange={(provider) => {
+          onChange(provider);
+          setIsOpen(false);
+        }}
+        onConnect={() => {
+          setIsOpen(false);
+          props.onConnect();
+        }}
+      />
+    </AppModal>
+  );
+  // A phone has no room for a row of tabs, and a row that slides sideways under the thumb fights the
+  // page's own scroll. The scope is one control there instead: what is in scope, and a tap to change it.
+  if (isPhone) {
+    return (
+      <nav className={styles.strip} aria-label={t('omc.fleet_providers')}>
+        <Button
+          className={styles.scope}
+          onClick={() => setIsOpen(true)}
+          aria-haspopup="dialog"
+          data-testid="oauth-provider-switcher"
+          icon={(
+            <span className={styles['tab-mark']}>
+              {isAll
+                ? <AppstoreOutlined aria-hidden />
+                : <CredentialMark credential={{ provider: active }} pluginLogos={pluginLogos} size={16} />}
+              {scopeAttention > 0 && <span className={styles.attention} role="img" aria-label={t('omc.fleet_attention_n', { n: scopeAttention })} />}
+            </span>
+          )}
+        >
+          <span className={styles['scope-name']}>
+            {isAll ? t('omc.fleet_all_accounts') : providerDisplayName(active, pluginTitles)}
+          </span>
+          <span className={styles['tab-count']}>{isAll ? total : (activeSummary?.total ?? 0)}</span>
+          <span className={styles['scope-caret']}><DropdownCaret /></span>
+        </Button>
+        {list}
+      </nav>
+    );
+  }
   return (
     <nav className={styles.strip} aria-label={t('omc.fleet_providers')}>
       <div ref={scroller} className={styles.tabs}>
@@ -91,19 +143,7 @@ export function ProviderStrip(props: ProviderStripProps) {
         aria-haspopup="dialog"
         data-testid="oauth-provider-switcher"
       />
-      <AppModal open={isOpen} title={t('omc.fleet_providers')} size="small" footer={null} destroyOnHidden onCancel={() => setIsOpen(false)}>
-        <ProviderList
-          {...props}
-          onChange={(provider) => {
-            onChange(provider);
-            setIsOpen(false);
-          }}
-          onConnect={() => {
-            setIsOpen(false);
-            props.onConnect();
-          }}
-        />
-      </AppModal>
+      {list}
     </nav>
   );
 }

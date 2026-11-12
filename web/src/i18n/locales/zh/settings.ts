@@ -222,6 +222,7 @@ export default {
   'omc.fleet_add_other': '其他添加方式',
   'omc.fleet_action_select': '选择',
   'omc.fleet_select_page': '选择本页全部凭据',
+  'omc.fleet_col_account': '账号',
   'omc.fleet_col_state': '状态',
   'omc.fleet_col_quota': '额度',
   'omc.fleet_col_switch': '开关',

@@ -2,7 +2,14 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { AuthFileDetailDrawer } from '../src/components/authFiles/AuthFileDetailDrawer';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
-import { installOmcApi } from './support/omcApi';
+import { installOmcApi, type OmcApi } from './support/omcApi';
+
+// The configuration section lists the provider's model catalogue for its excluded-models picker.
+function serveProviderCatalog(api: OmcApi) {
+  api.on('GET', '/management/auth-files/provider-models', (request) => ({
+    provider: request.query.get('provider') ?? '', available: true, models: [],
+  }));
+}
 import { renderWithOmc } from './support/render';
 
 const FILE: ManagementAuthFile = { recovery_supported: true, name: 'claude.json', auth_index: 'exact-claude', type: 'claude', provider: 'claude', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, note: 'Original note' };
@@ -10,6 +17,7 @@ const FIELDS = { proxy_url: 'socks5h://%5Bredacted%5D@proxy.example.test:1080', 
 
 it('saves credential field changes without sending redacted proxy URLs', async () => {
   const api = installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }] });
+  serveProviderCatalog(api);
   const onClose = vi.fn();
   const onSaved = vi.fn();
   const view = renderWithOmc(<AuthFileDetailDrawer file={FILE} open canEdit initialSection="configuration" onClose={onClose} onSaved={onSaved} onDownload={vi.fn()} />, { isStrict: true });
@@ -32,6 +40,7 @@ it('saves credential field changes without sending redacted proxy URLs', async (
 it('preserves credential status when only its display name is saved', async () => {
   const file = { ...FILE, status: 'error' };
   const api = installOmcApi({ authFiles: [{ file, fields: FIELDS }] });
+  serveProviderCatalog(api);
   api.on('PUT', '/management/auth-files/display-name', () => ({ status: 'ok', display_name: 'Team seat', display_name_version: 1 }));
   const onSaved = vi.fn();
   const view = renderWithOmc(<AuthFileDetailDrawer file={file} open canEdit initialSection="configuration" onClose={vi.fn()} onSaved={onSaved} onDownload={vi.fn()} />);

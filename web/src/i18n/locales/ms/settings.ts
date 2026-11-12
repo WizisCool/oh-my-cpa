@@ -225,6 +225,7 @@ export default {
   "omc.fleet_add_other": "Cara lain untuk menambah",
   "omc.fleet_action_select": "Pilih",
   "omc.fleet_select_page": "Pilih setiap kelayakan pada halaman ini",
+  "omc.fleet_col_account": "Akaun",
   "omc.fleet_col_state": "Status",
   "omc.fleet_col_quota": "Kuota",
   "omc.fleet_col_switch": "Aktif",
