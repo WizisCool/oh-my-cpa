@@ -4,10 +4,13 @@ import type { TFunc } from '../../src/i18n/index.tsx';
 import type { QuotaWindowCapacity } from '../../src/types/quota.ts';
 import {
   compactQuotaCapacity,
+  describeForecastCard,
   describeQuotaCapacity,
+  formatCycleCardFigures,
   formatEstimatedUsd,
 } from '../../src/pages/quota/quotaCapacity.ts';
 import { formatQuotaMetric, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
+import { siblingCapacityWindows } from '../../src/pages/quota/quotaWindowSelection.ts';
 
 const t = ((key: string, params?: Record<string, unknown>) =>
   params ? `${key}(${Object.values(params).join(',')})` : key) as TFunc;
@@ -84,3 +87,63 @@ test('a plugin reading lists what it was built from; a built-in reading lists no
   ]);
   assert.deepEqual(quotaPayloadSummary({ windows: [{ id: 'c', label: '5h', scope: 'standard', remaining_percent: 70 }] }), []);
 });
+
+test('forecast card states total window capacity and converts onto a chosen model', () => {
+  const window = {
+    remaining_percent: 80,
+    capacity: {
+      ...capacity,
+      projection: { model: 'claude-sonnet-4-6', sample_requests: 80, cache_rate: 82.5, requests: 890, tokens: 17_750_000 },
+    },
+  };
+  const sonnetForecast = describeForecastCard(window, null, 'en-compact');
+  assert.equal(sonnetForecast.model, 'claude-sonnet-4-6');
+  assert.equal(sonnetForecast.figures.cost, '≈ $24.00');
+  assert.equal(sonnetForecast.figures.requests, '≈ 890');
+  assert.equal(sonnetForecast.figures.tokens, '≈ 17.8M');
+  assert.equal(sonnetForecast.figures.cacheRate, 82.5);
+
+  const opusForecast = describeForecastCard(window, null, 'en-compact', {
+    model: 'claude-opus-4-6',
+    sample_requests: 10,
+    cache_rate: 50,
+    requests: 157,
+    tokens: 2_350_000,
+  });
+  assert.equal(opusForecast.model, 'claude-opus-4-6');
+  assert.equal(opusForecast.figures.cost, '≈ $24.00');
+  assert.equal(opusForecast.figures.requests, '≈ 157');
+  assert.equal(opusForecast.figures.tokens, '≈ 2.4M');
+  assert.equal(opusForecast.figures.cacheRate, 50);
+});
+
+test('cycle card figures distinguish fully priced, partially priced, and unpriced usage', () => {
+  const full = formatCycleCardFigures(
+    { from_ms: 0, reset_at_ms: 1, usage: { ...usage, cache_rate: 75 } },
+    'en-compact',
+    t,
+  );
+  assert.equal(full.cost, '$1.20');
+  assert.equal(full.costHint, null);
+  assert.equal(full.cacheRate, 75);
+
+  const partial = formatCycleCardFigures(
+    { from_ms: 0, reset_at_ms: 1, usage: { ...usage, priced_requests: 20 } },
+    'en-compact',
+    t,
+  );
+  assert.equal(partial.cost, '≥ $1.20');
+  assert.equal(partial.costHint, 'quota.capacity_partial_priced_hint(20,40)');
+});
+
+test('sibling capacity windows group by quota family and sort shortest period first', () => {
+  const fiveHour = { id: 'five_hour', label: '5h', kind: 'five_hour' as const, scope: 'standard' as const, capacity };
+  const weekly = { id: 'seven_day', label: '7d', kind: 'weekly' as const, scope: 'standard' as const, capacity_unavailable: 'low_usage' as const };
+  const codeReview = { id: 'review', label: 'Review', scope: 'code_review' as const, remaining_percent: 100 };
+  const sonnetModel = { id: 'sonnet', label: 'Sonnet', scope: 'model' as const, model: 'claude-sonnet-4-6', capacity };
+  assert.deepEqual(
+    siblingCapacityWindows(weekly, [weekly, codeReview, sonnetModel, fiveHour]).map((w) => w.id),
+    ['five_hour', 'seven_day'],
+  );
+});
+

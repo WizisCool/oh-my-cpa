@@ -6,7 +6,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  min-inline-size: 0;
 }
 
 .mark-tile {
@@ -15,18 +15,30 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  inline-size: 32px;
+  block-size: 32px;
   box-shadow: var(--shadow-edge);
   border-radius: var(--radius-md);
   background: var(--bg);
 }
 
 .title-text {
-  min-width: 0;
-  overflow: hidden;
+  min-inline-size: 0;
+  overflow: clip;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Period switcher above the three cards when a quota family has sibling windows. */
+.cycle-bar {
+  display: flex;
+  align-items: center;
+  margin-block-end: 12px;
+}
+
+.window-switch {
+  flex: none;
+  max-inline-size: 100%;
 }
 
 /* The cards share the grid's row tracks, so a head or label that wraps in a longer language
@@ -43,10 +55,11 @@
   border: 0;
   display: grid;
   grid-row: span 4;
+  grid-template-rows: auto auto 1fr auto;
   grid-template-rows: subgrid;
   row-gap: 0;
-  min-width: 0;
-  overflow: hidden;
+  min-inline-size: 0;
+  overflow: clip;
   box-shadow: var(--shadow-edge);
   border-radius: var(--radius-lg);
   background: var(--bg);
@@ -60,16 +73,16 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  min-inline-size: 0;
   padding: 12px 14px 10px;
-  border-bottom: 1px solid var(--border-soft);
+  border-block-end: 1px solid var(--border-soft);
   font-size: var(--text-sm);
   font-weight: 600;
 }
 
 .caption {
-  min-width: 0;
-  overflow: hidden;
+  min-inline-size: 0;
+  overflow: clip;
   color: var(--meta);
   font-size: var(--text-2xs);
   font-weight: 400;
@@ -77,11 +90,28 @@
   white-space: nowrap;
 }
 
+.model-select {
+  align-self: flex-start;
+  max-inline-size: calc(100% + 12px);
+  block-size: 20px;
+  margin-inline: -6px;
+  padding-inline: 6px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 400;
+}
+
+.model-select:hover {
+  color: var(--fg);
+}
+
 .lead {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  min-inline-size: 0;
   padding: 14px 14px 12px;
 }
 
@@ -92,7 +122,7 @@
 }
 
 .lead-value {
-  overflow: hidden;
+  overflow: clip;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: var(--text-xl);
@@ -112,19 +142,33 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  min-width: 0;
+  min-inline-size: 0;
   padding: 9px 0;
-  border-top: 1px solid var(--border-soft);
+  border-block-start: 1px solid var(--border-soft);
 }
 
 .row dd {
   margin: 0;
-  overflow: hidden;
+  overflow: clip;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cache-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cache-dot {
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in oklch, var(--cache-rate-from) var(--cache-rate-from-share), var(--cache-rate-to));
 }
 
 /* With no reading the card keeps its rows, and the dashes in the quiet ink stand in for figures. */
@@ -138,31 +182,38 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 38px;
+  min-block-size: 38px;
   padding: 8px 14px;
-  border-top: 1px solid var(--border-soft);
+  border-block-start: 1px solid var(--border-soft);
   background: var(--surface);
   color: var(--meta);
   font-size: var(--text-2xs);
 }
 
 .meter {
-  flex: 1;
+  flex: 1 1 36px;
+  min-inline-size: 28px;
+}
+
+:global(:root:not([data-reduced-motion='true'])) .meter > :global(.meter-fill) {
+  transition: inline-size 240ms var(--ease-out);
 }
 
 .foot-figure {
   flex: none;
+  min-inline-size: 0;
+  white-space: nowrap;
 }
 
 .foot-tag {
   flex: none;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 /* A note too long for the foot wraps beside the tag instead of pushing it out of the card. */
 .foot-text {
   flex: 1 1 auto;
-  min-width: 0;
+  min-inline-size: 0;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -171,7 +222,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-top: 14px;
+  margin-block-start: 14px;
   color: var(--meta);
   font-size: var(--text-2xs);
   line-height: 1.6;
@@ -179,13 +230,17 @@
 
 .note-glyph {
   flex: none;
-  margin-top: 3px;
+  margin-block-start: 3px;
 }
 
 /* A phone reads the dialog top to bottom, so the forecast - what the dialog is opened for - leads,
-   this window's usage that it is built on follows, and the window before closes; each card folds into one block: its name and span on one line, its three figures side by
-   side, and the share used. A card with no reading keeps only its head, whose caption says why. */
+   this window's usage that it is built on follows, and the window before closes; each card folds
+   its four figures into a balanced 2x2 grid over the used-share foot. */
 @media (max-width: 640px) {
+  .window-switch {
+    inline-size: 100%;
+  }
+
   .cards {
     display: flex;
     flex-direction: column;
@@ -195,7 +250,7 @@
   .card {
     border: 0;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: none;
     grid-row: auto;
   }
@@ -212,7 +267,7 @@
   .head {
     grid-column: 1 / -1;
     flex-direction: row;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding: 10px 12px;
@@ -220,7 +275,13 @@
 
   .caption {
     font-size: var(--text-xs);
-    text-align: right;
+    text-align: end;
+  }
+
+  .model-select {
+    align-self: center;
+    margin-inline: 0 -6px;
+    font-size: var(--text-xs);
   }
 
   .rows {
@@ -234,17 +295,22 @@
     justify-content: flex-start;
     gap: 2px;
     padding: 10px 12px;
-    border-top: 0;
+    border-block-start: 0;
   }
 
-  .row + .row,
-  .lead + .rows .row:first-child {
-    border-left: 1px solid var(--border-soft);
+  .lead,
+  .rows .row:nth-child(1) {
+    border-block-end: 1px solid var(--border-soft);
+  }
+
+  .rows .row:nth-child(1),
+  .rows .row:nth-child(3) {
+    border-inline-start: 1px solid var(--border-soft);
   }
 
   .lead-value,
   .row dd {
-    max-width: 100%;
+    max-inline-size: 100%;
     font-size: var(--text-base);
     line-height: 1.3;
   }
@@ -258,7 +324,7 @@
   .foot {
     grid-column: 1 / -1;
     flex-wrap: wrap;
-    min-height: 0;
+    min-block-size: 0;
     padding: 8px 12px;
   }
 
@@ -268,7 +334,7 @@
   }
 
   .card[data-empty] .head {
-    border-bottom: 0;
+    border-block-end: 0;
   }
 
   .card[data-empty]:not([data-tone='forecast']) .lead,
@@ -280,10 +346,10 @@
   }
 
   .card[data-tone='forecast'][data-empty] .head {
-    border-bottom: 1px solid var(--border-soft);
+    border-block-end: 1px solid var(--border-soft);
   }
 
   .note {
-    margin-top: 12px;
+    margin-block-start: 12px;
   }
 }

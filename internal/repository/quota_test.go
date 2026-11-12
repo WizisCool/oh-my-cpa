@@ -535,9 +535,32 @@ func TestQueryCapacityUsage(t *testing.T) {
 	if err != nil || reason != "" {
 		t.Fatalf("QueryCapacityUsage failed: %v %q", err, reason)
 	}
-	want := quota.WindowUsage{FromMS: 1000, ToMS: 2000, Requests: 2, PricedRequests: 1, Tokens: 150, CostNanos: 2_000}
+	want := quota.WindowUsage{
+		FromMS: 1000, ToMS: 2000, Requests: 2, PricedRequests: 1,
+		Tokens: 150, PricedTokens: 100, CostNanos: 2_000,
+	}
 	if usage != want {
 		t.Fatalf("usage = %+v, want %+v", usage, want)
+	}
+
+	// Independent-cache dialect with validated canonical v2 token_accounting
+	// (1,000 uncached input + 200 cache_read + 300 output = 1,500 total, where
+	// cache_read <= input_tokens) uses the canonical 1,200 prompt denominator
+	// (200 / 1,200 = 16.7%) rather than raw 1,000 (20.0%).
+	canonicalJSON := `{"version":2,"status":"complete","raw_tokens":{"input_tokens":1000,"output_tokens":300,"cache_read_tokens":200,"total_tokens":1500},"token_breakdown":{"schema_version":2,"quality":"complete","total_tokens":1500,"input":{"total_tokens":1200,"uncached_tokens":1000,"cache_read_tokens":200,"cache_write_tokens":0},"output":{"total_tokens":300,"non_reasoning_tokens":300,"reasoning_tokens":0},"unclassified_tokens":0}}`
+	if _, err := r.SQL().ExecContext(ctx,
+		`INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, input_tokens, output_tokens, cache_read_tokens, total_tokens, cost_nanos, token_accounting)
+		 VALUES ('default', 'canonical-indep', 'group', 'auth-canon', 'claude-sonnet-4-6', 1200, 1200, 1000, 300, 200, 1500, 5000, ?)`,
+		canonicalJSON,
+	); err != nil {
+		t.Fatal(err)
+	}
+	canonUsage, canonReason, err := r.QueryCapacityUsage(ctx, "auth-canon", window, 1000, 2000)
+	if err != nil || canonReason != "" {
+		t.Fatalf("canonical QueryCapacityUsage failed: %v %q", err, canonReason)
+	}
+	if canonUsage.PromptTokens != 1200 || canonUsage.CachedTokens != 200 || !canonUsage.HasInputBounds || canonUsage.MinInputTokens != 1200 || canonUsage.MaxInputTokens != 1200 || canonUsage.CacheRate == nil || *canonUsage.CacheRate != 16.7 {
+		t.Fatalf("canonical independent-cache usage = %+v, want PromptTokens=1200 Min/MaxInput=1200 CachedTokens=200 CacheRate=16.7", canonUsage)
 	}
 	empty, _, err := r.QueryCapacityUsage(ctx, "auth-none", window, 1000, 2000)
 	if err != nil || empty != (quota.WindowUsage{FromMS: 1000, ToMS: 2000}) {

@@ -180,12 +180,20 @@ func demoExportCases() []demoExportCase {
 		{Name: "quota", Path: "/api/v1/management/quota"},
 		// One credential's quota detail, for the page the quota list links into.
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},
-		// The capacity details of the windows whose estimates the list shows. The second
-		// Codex credential carries a previous cycle beside a fresh one.
+		// The capacity details of the windows whose estimates the list shows. Every
+		// sibling window of each demo credential is exported so switching periods inside
+		// the capacity dialog works on the static demo Worker too.
 		{Name: "quota-capacity-auth-codex-01-five_hour", Path: "/api/v1/management/quota/auth-codex-01/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-codex-01-weekly", Path: "/api/v1/management/quota/auth-codex-01/capacity?window=weekly", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-codex-02-five_hour", Path: "/api/v1/management/quota/auth-codex-02/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-codex-02-weekly", Path: "/api/v1/management/quota/auth-codex-02/capacity?window=weekly", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-claude-01-five_hour", Path: "/api/v1/management/quota/auth-claude-01/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-claude-01-seven_day", Path: "/api/v1/management/quota/auth-claude-01/capacity?window=seven_day", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-antigravity-01-ag_Gemini Models_gemini-shared-5h", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Gemini+Models_gemini-shared-5h", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-antigravity-01-ag_Gemini Models_gemini-shared-week", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Gemini+Models_gemini-shared-week", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-antigravity-01-ag_Claude and GPT models_aerolith-5h", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Claude+and+GPT+models_aerolith-5h", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-antigravity-01-ag_Claude and GPT models_aerolith-week", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Claude+and+GPT+models_aerolith-week", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		{Name: "quota-capacity-auth-antigravity-01-ag_Gemini 4 Argon_gemini-4-argon-week", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Gemini+4+Argon_gemini-4-argon-week", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "logs", Path: "/api/v1/management/logs?limit=200"},
 		{Name: "logs-status", Path: "/api/v1/management/logs/status"},
 		{Name: "service-logs", Path: "/api/v1/management/service-logs"},

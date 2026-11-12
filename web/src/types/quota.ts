@@ -35,7 +35,18 @@ export interface QuotaWindowUsage {
   requests: number;
   priced_requests: number;
   tokens: number;
+  prompt_tokens?: number;
+  cached_tokens?: number;
+  cache_rate?: number;
   cost_nanos: number;
+}
+
+export interface QuotaModelProjection {
+  model: string;
+  sample_requests: number;
+  cache_rate?: number;
+  requests: number;
+  tokens: number;
 }
 
 export interface QuotaWindowCapacity {
@@ -51,6 +62,8 @@ export interface QuotaWindowCapacity {
   /** What is left of the window, given only with a live reading of the used share. */
   remaining_tokens?: number;
   remaining_cost_nanos?: number;
+  /** Whole-window projection expressed in the credential's dominant recent model. */
+  projection?: QuotaModelProjection;
   /** Relative effect, in percent, of upstream rounding the used share to whole points. */
   error_percent: number;
 }
@@ -65,11 +78,12 @@ export interface QuotaCapacityCycle {
   usage?: QuotaWindowUsage;
 }
 
-/** `GET /management/quota/{authIndex}/capacity?window=`: the cycle being read and the one before it. */
+/** `GET /management/quota/{authIndex}/capacity?window=`: the cycle being read, the one before it, and per-model window projections. */
 export interface QuotaCapacityHistory {
   window_id: string;
   current: QuotaCapacityCycle | null;
   previous: QuotaCapacityCycle | null;
+  model_projections?: QuotaModelProjection[];
 }
 
 export type QuotaCapacityUnavailableReason =

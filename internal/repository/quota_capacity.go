@@ -87,27 +87,39 @@ func recordCapacityCycles(ctx context.Context, tx *sql.Tx, snapshot QuotaSnapsho
 // the running sum covers records that retention removed since the last point.
 func capacityPoint(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycle quota.CycleCalibration, observedAtMS int64) (quota.CalibrationPoint, bool, error) {
 	used, _ := quota.WindowUsedPercent(window)
-	usage, scopeReason, err := queryCapacityUsage(ctx, q, authIndex, window, cycle.CycleStartMS(), observedAtMS)
+	usage, _, scopeReason, err := queryCapacityUsage(ctx, q, authIndex, window, cycle.CycleStartMS(), observedAtMS)
 	if err != nil || scopeReason != "" {
 		return quota.CalibrationPoint{}, false, err
 	}
 	if len(cycle.Points) > 0 {
 		last := cycle.Points[len(cycle.Points)-1]
-		since, _, err := queryCapacityUsage(ctx, q, authIndex, window, last.ObservedAtMS, observedAtMS)
+		since, _, _, err := queryCapacityUsage(ctx, q, authIndex, window, last.ObservedAtMS, observedAtMS)
 		if err != nil {
 			return quota.CalibrationPoint{}, false, err
 		}
 		if last.Requests+since.Requests > usage.Requests {
 			usage = quota.WindowUsage{
-				Requests: last.Requests + since.Requests, PricedRequests: last.PricedRequests + since.PricedRequests,
-				Tokens: last.Tokens + since.Tokens, CostNanos: last.CostNanos + since.CostNanos,
+				Requests:          last.Requests + since.Requests,
+				PricedRequests:    last.PricedRequests + since.PricedRequests,
+				Tokens:            last.Tokens + since.Tokens,
+				PricedTokens:      last.PricedTokens + since.PricedTokens,
+				PromptTokens:      last.PromptTokens + since.PromptTokens,
+				CachedTokens:      last.CachedTokens + since.CachedTokens,
+				CostNanos:         last.CostNanos + since.CostNanos,
 				UnmatchedRequests: last.UnmatchedRequests + since.UnmatchedRequests,
 			}
 		}
 	}
 	return quota.CalibrationPoint{
-		ObservedAtMS: observedAtMS, UsedPercent: used,
-		Requests: usage.Requests, PricedRequests: usage.PricedRequests, Tokens: usage.Tokens, CostNanos: usage.CostNanos,
+		ObservedAtMS:      observedAtMS,
+		UsedPercent:       used,
+		Requests:          usage.Requests,
+		PricedRequests:    usage.PricedRequests,
+		Tokens:            usage.Tokens,
+		PricedTokens:      usage.PricedTokens,
+		PromptTokens:      usage.PromptTokens,
+		CachedTokens:      usage.CachedTokens,
+		CostNanos:         usage.CostNanos,
 		UnmatchedRequests: usage.UnmatchedRequests,
 	}, true, nil
 }
@@ -164,49 +176,186 @@ func queryCapacityCycles(ctx context.Context, q capacityQuerier, authIndex, key 
 // one that produced no tokens consumed nothing. A scoped window counts only the
 // models it meters, by served identity when CPA published one.
 func (r *Repository) QueryCapacityUsage(ctx context.Context, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, string, error) {
+	usage, _, reason, err := r.QueryCapacityUsageWithModels(ctx, authIndex, window, fromMS, toMS)
+	return usage, reason, err
+}
+
+// QueryCapacityUsageWithModels returns both the aggregated window usage and the
+// per-model breakdown in [fromMS, toMS) so callers can project remaining
+// capacity onto the credential's dominant recent model without a second scan.
+func (r *Repository) QueryCapacityUsageWithModels(ctx context.Context, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
 	if r == nil || r.SQL() == nil {
-		return quota.WindowUsage{}, "", errors.New("repository is not initialized")
+		return quota.WindowUsage{}, nil, "", errors.New("repository is not initialized")
 	}
 	return queryCapacityUsage(ctx, r.SQL(), strings.TrimSpace(authIndex), window, fromMS, toMS)
 }
 
-func queryCapacityUsage(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, string, error) {
+func queryCapacityUsage(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT COALESCE(NULLIF(response_model, ''), model), COUNT(1), COALESCE(SUM(cost_nanos IS NOT NULL), 0),
-		       COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_nanos), 0)
-		FROM usage_events
-		WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
-		  AND timestamp_ms + MAX(latency_ms, 0) < ? AND total_tokens > 0
+		WITH events AS (
+			SELECT
+				COALESCE(NULLIF(response_model, ''), model) AS resolved_model,
+				cost_nanos,
+				total_tokens,
+				CASE
+					WHEN billed_service_tier IS NOT NULL THEN LOWER(TRIM(billed_service_tier))
+					WHEN LOWER(TRIM(COALESCE(response_service_tier, ''))) NOT IN ('', 'auto') THEN LOWER(TRIM(response_service_tier))
+					WHEN LOWER(TRIM(COALESCE(service_tier, ''))) NOT IN ('', 'auto') THEN LOWER(TRIM(service_tier))
+					ELSE ''
+				END AS resolved_tier,
+				CASE
+					WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete' THEN 1
+					ELSE 0
+				END AS is_canonical,
+				CASE
+					WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete'
+						THEN COALESCE(json_extract(token_accounting, '$.token_breakdown.input.total_tokens'), 0)
+					WHEN input_tokens > 0 THEN input_tokens
+					ELSE MAX(total_tokens - MAX(output_tokens, 0), 0)
+				END AS raw_prompt,
+				CASE
+					WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete'
+						THEN COALESCE(json_extract(token_accounting, '$.token_breakdown.input.cache_read_tokens'), 0)
+					WHEN cache_read_tokens > 0 THEN cache_read_tokens
+					ELSE MAX(cached_tokens, 0)
+				END AS cached_read,
+				CASE
+					WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete'
+						THEN COALESCE(json_extract(token_accounting, '$.token_breakdown.input.cache_write_tokens'), 0)
+					ELSE MAX(cache_creation_tokens, 0)
+				END AS cache_write,
+				CASE
+					WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete'
+						THEN COALESCE(json_extract(token_accounting, '$.token_breakdown.output.total_tokens'), 0)
+					ELSE MAX(output_tokens, 0)
+				END AS out_tokens,
+				CASE
+					WHEN (token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete')
+						OR input_tokens > 0 OR output_tokens > 0 OR cached_tokens > 0 OR cache_read_tokens > 0 OR cache_creation_tokens > 0
+						THEN 1
+					ELSE 0
+				END AS has_breakdown
+			FROM usage_events
+			WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
+			  AND timestamp_ms + MAX(latency_ms, 0) < ? AND total_tokens > 0
+		)
+		SELECT
+			resolved_model,
+			COUNT(1),
+			COALESCE(SUM(has_breakdown), 0),
+			COALESCE(SUM(cost_nanos IS NOT NULL), 0),
+			COALESCE(SUM(total_tokens), 0),
+			COALESCE(SUM(CASE WHEN cost_nanos IS NOT NULL THEN total_tokens ELSE 0 END), 0),
+			COALESCE(SUM(CASE
+				WHEN has_breakdown = 0 THEN 0
+				WHEN is_canonical = 1 THEN raw_prompt
+				WHEN cached_read > raw_prompt THEN raw_prompt + cached_read
+				ELSE raw_prompt
+			END), 0),
+			COALESCE(SUM(CASE WHEN has_breakdown = 0 THEN 0 ELSE cached_read END), 0),
+			COALESCE(SUM(CASE WHEN has_breakdown = 0 THEN 0 ELSE cache_write END), 0),
+			COALESCE(SUM(CASE WHEN has_breakdown = 0 THEN 0 ELSE out_tokens END), 0),
+			COALESCE(MIN(CASE
+				WHEN has_breakdown = 1 THEN
+					CASE
+						WHEN is_canonical = 1 THEN raw_prompt
+						ELSE MAX(CASE WHEN cached_read > raw_prompt THEN raw_prompt + cached_read ELSE raw_prompt END, cached_read + cache_write)
+					END
+			END), 0),
+			COALESCE(MAX(CASE
+				WHEN has_breakdown = 1 THEN
+					CASE
+						WHEN is_canonical = 1 THEN raw_prompt
+						ELSE MAX(CASE WHEN cached_read > raw_prompt THEN raw_prompt + cached_read ELSE raw_prompt END, cached_read + cache_write)
+					END
+			END), 0),
+			COALESCE(SUM(cost_nanos), 0),
+			COALESCE(MIN(resolved_tier), ''),
+			COALESCE(MAX(resolved_tier), '')
+		FROM events
 		GROUP BY 1`,
 		authIndex, fromMS, toMS, toMS,
 	)
 	if err != nil {
-		return quota.WindowUsage{}, "", fmt.Errorf("query capacity usage: %w", err)
+		return quota.WindowUsage{}, nil, "", fmt.Errorf("query capacity usage: %w", err)
 	}
 	defer rows.Close()
 	var groups []quota.ModelWindowUsage
 	for rows.Next() {
 		var group quota.ModelWindowUsage
-		if err := rows.Scan(&group.Model, &group.Usage.Requests, &group.Usage.PricedRequests, &group.Usage.Tokens, &group.Usage.CostNanos); err != nil {
-			return quota.WindowUsage{}, "", fmt.Errorf("scan capacity usage: %w", err)
+		var minTier, maxTier string
+		if err := rows.Scan(
+			&group.Model,
+			&group.Usage.Requests,
+			&group.Usage.BreakdownRequests,
+			&group.Usage.PricedRequests,
+			&group.Usage.Tokens,
+			&group.Usage.PricedTokens,
+			&group.Usage.PromptTokens,
+			&group.Usage.CachedTokens,
+			&group.Usage.CacheWriteTokens,
+			&group.Usage.OutputTokens,
+			&group.Usage.MinInputTokens,
+			&group.Usage.MaxInputTokens,
+			&group.Usage.CostNanos,
+			&minTier,
+			&maxTier,
+		); err != nil {
+			return quota.WindowUsage{}, nil, "", fmt.Errorf("scan capacity usage: %w", err)
 		}
+		group.Usage.HasInputBounds = group.Usage.Requests > 0 && group.Usage.BreakdownRequests == group.Usage.Requests
+		if minTier == maxTier {
+			group.Usage.ServiceTier = minTier
+		} else {
+			group.Usage.HasMixedServiceTiers = true
+		}
+		group.Usage.CacheRate = quota.ComputeCacheRate(group.Usage.CachedTokens, group.Usage.PromptTokens)
 		groups = append(groups, group)
 	}
 	if err := rows.Err(); err != nil {
-		return quota.WindowUsage{}, "", fmt.Errorf("query capacity usage: %w", err)
+		return quota.WindowUsage{}, nil, "", fmt.Errorf("query capacity usage: %w", err)
 	}
 	var usage quota.WindowUsage
 	reason := ""
 	if window.Scope == "model" || window.Scope == "group" {
 		usage, reason = quota.SelectWindowUsage(window, groups)
 	} else {
+		hasFirstTier := false
+		hasFirstBounds := false
+		hasAllBounds := true
 		for _, group := range groups {
 			usage.Requests += group.Usage.Requests
+			usage.BreakdownRequests += group.Usage.BreakdownRequests
 			usage.PricedRequests += group.Usage.PricedRequests
 			usage.Tokens += group.Usage.Tokens
+			usage.PricedTokens += group.Usage.PricedTokens
+			usage.PromptTokens += group.Usage.PromptTokens
+			usage.CachedTokens += group.Usage.CachedTokens
+			usage.CacheWriteTokens += group.Usage.CacheWriteTokens
+			usage.OutputTokens += group.Usage.OutputTokens
 			usage.CostNanos += group.Usage.CostNanos
+			if !group.Usage.HasInputBounds {
+				hasAllBounds = false
+			} else if !hasFirstBounds {
+				usage.MinInputTokens, usage.MaxInputTokens = group.Usage.MinInputTokens, group.Usage.MaxInputTokens
+				hasFirstBounds = true
+			} else {
+				usage.MinInputTokens = min(usage.MinInputTokens, group.Usage.MinInputTokens)
+				usage.MaxInputTokens = max(usage.MaxInputTokens, group.Usage.MaxInputTokens)
+			}
+			if group.Usage.HasMixedServiceTiers {
+				usage.HasMixedServiceTiers = true
+				hasFirstTier = true
+			} else if !hasFirstTier {
+				usage.ServiceTier = group.Usage.ServiceTier
+				hasFirstTier = true
+			} else if usage.ServiceTier != group.Usage.ServiceTier {
+				usage.HasMixedServiceTiers = true
+			}
 		}
+		usage.HasInputBounds = hasFirstBounds && hasAllBounds
+		usage.CacheRate = quota.ComputeCacheRate(usage.CachedTokens, usage.PromptTokens)
 	}
 	usage.FromMS, usage.ToMS = fromMS, toMS
-	return usage, reason, nil
+	return usage, groups, reason, nil
 }

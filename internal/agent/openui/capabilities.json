@@ -4057,6 +4057,18 @@
                         "tokens": {
                           "type": "integer"
                         },
+                        "prompt_tokens": {
+                          "type": "integer"
+                        },
+                        "cached_tokens": {
+                          "type": "integer"
+                        },
+                        "cache_rate": {
+                          "type": [
+                            "null",
+                            "number"
+                          ]
+                        },
                         "cost_nanos": {
                           "type": "integer"
                         }
@@ -4112,6 +4124,39 @@
                             "null",
                             "integer"
                           ]
+                        },
+                        "projection": {
+                          "type": [
+                            "null",
+                            "object"
+                          ],
+                          "properties": {
+                            "model": {
+                              "type": "string"
+                            },
+                            "sample_requests": {
+                              "type": "integer"
+                            },
+                            "cache_rate": {
+                              "type": [
+                                "null",
+                                "number"
+                              ]
+                            },
+                            "requests": {
+                              "type": "integer"
+                            },
+                            "tokens": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "model",
+                            "sample_requests",
+                            "requests",
+                            "tokens"
+                          ],
+                          "additionalProperties": false
                         },
                         "error_percent": {
                           "type": "number"
@@ -4378,6 +4423,18 @@
                   "tokens": {
                     "type": "integer"
                   },
+                  "prompt_tokens": {
+                    "type": "integer"
+                  },
+                  "cached_tokens": {
+                    "type": "integer"
+                  },
+                  "cache_rate": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
                   "cost_nanos": {
                     "type": "integer"
                   }
@@ -4433,6 +4490,39 @@
                       "null",
                       "integer"
                     ]
+                  },
+                  "projection": {
+                    "type": [
+                      "null",
+                      "object"
+                    ],
+                    "properties": {
+                      "model": {
+                        "type": "string"
+                      },
+                      "sample_requests": {
+                        "type": "integer"
+                      },
+                      "cache_rate": {
+                        "type": [
+                          "null",
+                          "number"
+                        ]
+                      },
+                      "requests": {
+                        "type": "integer"
+                      },
+                      "tokens": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "sample_requests",
+                      "requests",
+                      "tokens"
+                    ],
+                    "additionalProperties": false
                   },
                   "error_percent": {
                     "type": "number"

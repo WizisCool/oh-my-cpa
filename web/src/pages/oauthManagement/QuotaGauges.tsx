@@ -47,12 +47,14 @@ export function QuotaLines({ lines, provider, isMuted, nowMS, owner }: {
   owner?: QuotaCapacityOwner;
 }) {
   const t = useT();
+  const allWindows = lines.flatMap((line) => line.cells.map((cell) => cell.window));
   return (
     <div className={styles.lines}>
       {packQuotaLines(lines).map(({ line, cell }) => (
         <QuotaReading
           key={cell.key}
           cell={cell}
+          siblings={allWindows}
           // Every reading names itself, so "5 hours Gemini" and "Weekly Gemini 4 Argon" cannot be
           // mistaken for each other without a header to read them by.
           name={readingName(line, cell, t)}
@@ -71,8 +73,9 @@ export function QuotaLines({ lines, provider, isMuted, nowMS, owner }: {
  * resets. Explicitly unused, full Codex five-hour readings show the window duration; rounded or
  * unknown usage keeps a countdown. The estimate opens the window's capacity details.
  */
-function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
+function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }: {
   cell: QuotaLineCell;
+  siblings: readonly QuotaLineCell['window'][];
   name: string;
   provider: string;
   isMuted: boolean;
@@ -115,7 +118,7 @@ function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
         <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
         {estimate && (owner && window.capacity ? (
           <span className={styles.estimate}>
-            <QuotaCapacityButton owner={owner} window={window}>{estimate}</QuotaCapacityButton>
+            <QuotaCapacityButton owner={owner} window={window} windows={siblings}>{estimate}</QuotaCapacityButton>
           </span>
         ) : <span className={styles.estimate}>{estimate}</span>)}
         {reset && <span className={styles.reset}>{reset}</span>}

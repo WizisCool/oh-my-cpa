@@ -355,3 +355,106 @@ func TestWindowCapacityDoesNotPersistFailedCooldownObservation(t *testing.T) {
 		t.Fatalf("failed reading calibrated: %+v error=%v", cycles, err)
 	}
 }
+
+func TestWindowCapacityMultiModelCacheAndProjection(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	const hour = int64(3600 * 1000)
+	nowMS := time.Now().UnixMilli()
+	prevReset := nowMS - hour
+	prevStart := prevReset - 5*hour
+
+	insertDetailed := func(key, model string, atMS, input, cached, output, total int64, costNanos any) {
+		t.Helper()
+		if _, err := handler.repo.SQL().ExecContext(ctx, `
+			INSERT INTO usage_events (
+				instance_id, event_key, api_group_key, auth_index, model,
+				timestamp_ms, created_at_ms, input_tokens, cache_read_tokens, output_tokens, total_tokens, cost_nanos
+			) VALUES ('default', ?, 'group', 'codex-1', ?, ?, ?, ?, ?, ?, ?, ?)`,
+			key, model, atMS, atMS, input, cached, output, total, costNanos,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Previous cycle: 6 requests of gpt-5.4 (dominant, $0.50/req, 100k tok/req, 80% cache rate = $3.00)
+	// plus 2 requests of gpt-5.4-pro ($3.50/req = $7.00), burning 20% ($10 -> $50 window).
+	for idx := range 6 {
+		insertDetailed(fmt.Sprintf("prev-main-%d", idx), "gpt-5.4", prevStart+int64(idx+1)*60_000, 90_000, 72_000, 10_000, 100_000, int64(500_000_000))
+	}
+	for idx := range 2 {
+		insertDetailed(fmt.Sprintf("prev-pro-%d", idx), "gpt-5.4-pro", prevStart+10*60_000+int64(idx)*60_000, 50_000, 0, 10_000, 60_000, int64(3_500_000_000))
+	}
+	prevWindow := observeCapacity(t, handler, capacityReading(prevReset-60_000, prevReset, 5, 20), prevReset-60_000)
+	if prevWindow.Usage == nil || prevWindow.Usage.CacheRate == nil || *prevWindow.Usage.CacheRate != 67.5 {
+		t.Fatalf("previous usage cache rate = %+v, want 432k / 640k = 67.5%%", prevWindow.Usage)
+	}
+	if prevWindow.Capacity == nil || prevWindow.Capacity.Projection == nil || prevWindow.Capacity.Projection.Model != "gpt-5.4" {
+		t.Fatalf("previous projection = %+v, want gpt-5.4", prevWindow.Capacity)
+	}
+	// $50 window converted onto gpt-5.4 ($0.50/req): 100 total requests.
+	if prevWindow.Capacity.Projection.Requests != 100 {
+		t.Fatalf("projected total requests = %d, want 100", prevWindow.Capacity.Projection.Requests)
+	}
+
+	// Freshly reset current cycle (0% used, 0 requests in cycle): lookback still
+	// projects total window requests onto the recent dominant model gpt-5.4 (100 requests).
+	fresh := observeCapacity(t, handler, capacityReading(nowMS-30_000, nowMS+4*hour, 5, 0), nowMS)
+	if fresh.Capacity == nil || fresh.Capacity.Projection == nil || fresh.Capacity.Projection.Model != "gpt-5.4" {
+		t.Fatalf("fresh cycle projection = %+v, want lookback dominant model gpt-5.4", fresh.Capacity)
+	}
+	if fresh.Capacity.Projection.Requests != 100 {
+		t.Fatalf("fresh projected requests = %d, want full 100 gpt-5.4 requests", fresh.Capacity.Projection.Requests)
+	}
+
+	// Even after usage_events are pruned, the capacity history endpoint retains
+	// the previous cycle's frozen cache rate.
+	if _, err := handler.repo.SQL().ExecContext(ctx, `DELETE FROM usage_events`); err != nil {
+		t.Fatal(err)
+	}
+	status, body := getCapacityHistory(t, handler, "?window=five_hour")
+	if status != http.StatusOK {
+		t.Fatalf("history status = %d (%v)", status, body)
+	}
+	previous, _ := body["previous"].(map[string]any)
+	prevUsage, _ := previous["usage"].(map[string]any)
+	if prevUsage["cache_rate"] != 67.5 || prevUsage["prompt_tokens"] != float64(640_000) || prevUsage["cached_tokens"] != float64(432_000) {
+		t.Fatalf("frozen previous usage = %v, want cache_rate=67.5 prompt_tokens=640000 cached_tokens=432000", prevUsage)
+	}
+	// Without runtime-cache or provider-catalog membership, loadCapacityCandidateModels
+	// returns empty even for Antigravity rather than reading the global price book.
+	if got := handler.loadCapacityCandidateModels(ctx, "antigravity"); len(got) != 0 {
+		t.Fatalf("antigravity candidate models without provider membership = %v, want empty", got)
+	}
+}
+
+func TestQuotaCapacityHistorySkipsOverlappingSupersededCycle(t *testing.T) {
+	handler := capacityTestHandler(t)
+	const day = int64(24 * 3600 * 1000)
+	nowMS := time.Now().UnixMilli()
+
+	// Pre-subscription weekly cycle (ends in the future at nowMS + 1d, started nowMS - 6d)
+	supersededReset := nowMS + day
+	supersededStart := supersededReset - 7*day
+	insertCapacityUsage(t, handler, "pre-sub", supersededStart+day, 61_400_000, 10_650_000_000)
+	observeCapacity(t, handler, capacityReading(nowMS-2*day, supersededReset, 168, 7), nowMS-2*day)
+
+	// User subscribes yesterday (nowMS - 1d): upstream starts a fresh 7-day cycle [nowMS - 1d, nowMS + 6d).
+	activeReset := nowMS + 6*day
+	activeStart := activeReset - 7*day
+	insertCapacityUsage(t, handler, "active-sub", activeStart+day/2, 455_000_000, 103_720_000_000)
+	observeCapacity(t, handler, capacityReading(nowMS-60_000, activeReset, 168, 53), nowMS)
+
+	status, body := getCapacityHistory(t, handler, "?window=five_hour")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d (%v), want 200", status, body)
+	}
+	if body["previous"] != nil {
+		t.Fatalf("overlapping pre-subscription cycle leaked as previous = %v, want nil", body["previous"])
+	}
+	current, _ := body["current"].(map[string]any)
+	currentUsage, _ := current["usage"].(map[string]any)
+	if current["from_ms"] != float64(activeStart) || currentUsage["cost_nanos"] != float64(103_720_000_000) {
+		t.Fatalf("current = %v, want active cycle from %d with $103.72", current, activeStart)
+	}
+}
