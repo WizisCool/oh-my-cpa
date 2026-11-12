@@ -416,6 +416,11 @@ export const ModelSquarePage: React.FC = () => {
     if (targets.length === 1) openEditor(targets[0].model, targets[0]);
     else if (targets.length > 1) setSelectedIdentity(identity);
   } : undefined;
+  // The editor takes over from the details rather than opening a second drawer over them.
+  const priceFromDetails = openEditor ? (target: ModelPricingTarget) => {
+    closeDetails();
+    openEditor(target.model, target);
+  } : undefined;
   const reread = () => Promise.all([directory.refetch(), pricing.refetch(), requests.refetch()]);
 
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
@@ -513,7 +518,7 @@ export const ModelSquarePage: React.FC = () => {
       footer={selected && selectedIndex >= 0 && entries.length > 1 && <span className={styles['details-position']}>{selectedIndex + 1} / {entries.length}</span>}
     >
       {selected && <div ref={detailsRef}>
-        <ModelCost identity={selected.identity} ledger={ledger.entryFor(selected.identity)} onSetPrice={openEditor ? target => openEditor(target.model, target) : undefined} />
+        <ModelCost identity={selected.identity} ledger={ledger.entryFor(selected.identity)} onSetPrice={priceFromDetails} />
         {selectedRoutes.length > 0 && <div className={styles['served-by']}>
           <h3>{t('models.served_by')}</h3>
           <ul>
