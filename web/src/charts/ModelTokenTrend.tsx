@@ -10,10 +10,10 @@ import dayjs from '../utils/time';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import { useTheme } from '../theme/ThemeContext';
 import { ChartSurface } from './ChartSurface';
-import { buildModelTrendSeries } from './modelTrendData';
+import { buildModelTrendSeries, buildModelTrendTooltipRows } from './modelTrendData';
 import { seriesColorRange, seriesDomainKey, seriesGroupLabel } from './chartTheme';
-import { formatTokensFull } from '../types/tokenDisplay';
-import { formatModelShare, type DashboardModelUsage } from '../types/dashboardModels';
+import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
+import type { DashboardModelUsage } from '../types/dashboardModels';
 import { RADIUS } from '../theme/radius';
 import { useChartMorph } from './useChartMorph';
 
@@ -62,6 +62,7 @@ const TrendPlot = React.memo<ModelTokenTrendProps>(({
 }) => {
   useTimeZone();
   const { theme } = useTheme();
+  const { style: tokenStyle } = useTokenDisplayStyle();
 
   const { categories, series } = React.useMemo(() => buildModelTrendSeries(groups), [groups]);
   const domain = React.useMemo(() => groups.map(seriesDomainKey), [groups]);
@@ -154,27 +155,17 @@ const TrendPlot = React.memo<ModelTokenTrendProps>(({
                   buildRows={(payload) => {
                     const row = payload[0]?.payload as TrendRow | undefined;
                     if (!row) return null;
-                    const suffix = tokenUnitLabel ? ` ${tokenUnitLabel}` : '';
-                    // Only the models that moved in this bucket, largest first: a column of zeros
-                    // buried the one or two rows the reader was hovering for.
-                    const moved = domain
-                      .map((key, idx) => ({ key, idx, value: Number(row[key] ?? 0) }))
-                      .filter((entry) => entry.value > 0)
-                      .sort((left, right) => right.value - left.value);
                     return {
                       heading: dayjs(Number(row.t)).format('MM-DD HH:mm'),
-                      rows: [
-                        ...moved.map(({ key, idx, value }) => ({
-                          key,
-                          name: labelOf(key),
-                          color: range[idx],
-                          // A tooltip is where a reader goes for the number itself, so it prints the
-                          // exact count; the cards keep the compact form.
-                          value: formatTokensFull(value),
-                          share: moved.length > 1 ? formatModelShare(value, row.total) : undefined,
-                        })),
-                        { key: 'total', name: totalLabel, value: `${formatTokensFull(row.total)}${suffix}`, isTotal: true },
-                      ],
+                      rows: buildModelTrendTooltipRows({
+                        row,
+                        domain,
+                        range,
+                        labelOf,
+                        totalLabel,
+                        tokenUnitLabel,
+                        tokenStyle,
+                      }),
                     };
                   }}
                 />
