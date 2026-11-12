@@ -50,11 +50,6 @@ export function seriesColor(palette: ThemePalette, index: number): string {
   return slots[slot] ?? slots[0] ?? palette.accent;
 }
 
-/** The trend's plot floor and the usage ring's unfilled track. */
-export function seriesTrackColor(palette: ThemePalette): string {
-  return palette.seriesTrack;
-}
-
 /**
  * seriesDomain maps legend entries to their slot.
  *

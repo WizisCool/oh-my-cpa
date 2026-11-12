@@ -46,6 +46,7 @@ export default {
   'dash.models.focus_series': 'Click to highlight this series',
   'dash.models.clear_series_focus': 'Click to clear the highlight',
   'dash.models.empty': 'No model usage in this time window',
+  'dash.models.total': 'Total',
   'dash.models.error': 'Failed to load model usage',
   'dash.models.stale': 'Refreshing model usage failed; showing the last successful reading',
   'dash.heatmap.grid_label': 'Daily token usage over the past year; open a day to see its requests',

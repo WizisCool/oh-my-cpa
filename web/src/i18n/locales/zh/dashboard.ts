@@ -43,6 +43,7 @@ export default {
   'dash.models.focus_series': '点击以高亮此系列',
   'dash.models.clear_series_focus': '点击以取消高亮',
   'dash.models.empty': '该时间窗口内没有模型用量',
+  'dash.models.total': '合计',
   'dash.models.error': '无法读取模型用量',
   'dash.models.stale': '模型用量刷新失败，当前显示的是上一次的数据',
   'dash.heatmap.grid_label': '近一年每日 Token 用量；点击某天可查看当天请求',

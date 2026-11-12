@@ -1,7 +1,6 @@
 import { createNamedLoader, createRouteLoader, lazyRoute } from '../utils/routeLoader';
 import type { DashboardTrendChartProps } from './DashboardTrendChart';
 import type { ModelTokenTrendProps } from './ModelTokenTrend';
-import type { ModelUsageDonutProps } from './ModelUsageDonut';
 import type { InsightsTrendChartProps } from '../pages/insights/charts/InsightsTrendChart';
 import type { InsightsFlowChartProps } from '../pages/insights/charts/InsightsFlowChart';
 import type { InsightsCompositionChartProps } from '../pages/insights/charts/InsightsCompositionChart';
@@ -27,12 +26,6 @@ export const loadModelTokenTrend = createNamedLoader(
 );
 export const LazyModelTokenTrend = lazyRoute<ModelTokenTrendProps>(loadModelTokenTrend);
 
-export const loadModelUsageDonut = createNamedLoader(
-  () => import('./ModelUsageDonut'),
-  'ModelUsageDonut',
-);
-export const LazyModelUsageDonut = lazyRoute<ModelUsageDonutProps>(loadModelUsageDonut);
-
 export const loadInsightsTrendChart = createRouteLoader(
   () => import('../pages/insights/charts/InsightsTrendChart'),
 );
@@ -57,7 +50,6 @@ export function preloadDashboardCharts(): Promise<unknown> {
   return Promise.all([
     loadDashboardTrendChart(),
     loadModelTokenTrend(),
-    loadModelUsageDonut(),
   ]);
 }
 
