@@ -27,6 +27,13 @@ reviews:
   # `scripts/release-plan.mjs`. The keyword is the title prefix such a pull
   # request carries (`chore(release): prepare vX.Y.Z`), matched case-insensitively.
   auto_review:
+    drafts: false
+    # Extend auto-review beyond `main` so GitHub Stacked PRs targeting another
+    # PR's branch are reviewed when opened. Keeping multiple patterns prevents
+    # the local CLI from treating a single entry as its default comparison base.
+    base_branches:
+      - '^main$'
+      - '.*'
     ignore_title_keywords:
       - 'chore(release)'
     # One automatic review per non-draft pull request, when it opens. A push
@@ -151,17 +158,17 @@ reviews:
         as `styles['kebab-case']`. The SPA must stay embeddable in the single Go
         binary; an asset loaded from a CDN needs a working local fallback.
         State must not be communicated by color alone: keep keyboard
-        operability, visible focus, WCAG AA contrast, and
-        `prefers-reduced-motion`. Disposable resources must survive React
-        StrictMode's mount-unmount-mount, which only the dev-server path
-        exercises.
+        operability, visible focus, WCAG AA contrast, and respect the root
+        `data-reduced-motion` attribute rather than `@media (prefers-reduced-motion)`.
+        Disposable resources must survive React StrictMode's mount-unmount-mount,
+        which only the dev-server path exercises.
     - path: 'web/src/**/*.css'
       instructions: >-
         Styles consume the palette through CSS variables; a hardcoded color, a
         page-local replacement for a shared design token, or a class name that does not match its CSS-module
         definition (checked by `pnpm check-css-modules`) is a defect. Prefer an
-        existing token over a new one, and keep motion optional under
-        `prefers-reduced-motion`.
+        existing token over a new one, and follow the root `data-reduced-motion`
+        policy instead of adding `@media (prefers-reduced-motion)` rules.
     - path: '**/*.md'
       instructions: >-
         Flag documentation this change makes wrong: any statement it
