@@ -1,6 +1,6 @@
 import { type InsightsCompareWindow } from '../../../types/insights';
 import { useInsightsFormat } from '../useInsightsFormat';
-import { useCompareWindowLabel } from '../useCompareWindowLabel';
+import { useCompareWindowLabel } from '../../../hooks/useCompareWindowLabel';
 import React from 'react';
 import clsx from 'clsx';
 import { ArrowDownOutlined, ArrowUpOutlined } from '../../../components/icons';

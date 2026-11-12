@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { AppstoreOutlined, ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
 import { calendarPresetLabel } from '../components/common/timeRange/presetGroups';
 import { changeTrend, formatChange } from '../types/insightsFormat';
-import { useCompareWindowLabel } from './insights/useCompareWindowLabel';
+import { useCompareWindowLabel } from '../hooks/useCompareWindowLabel';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -148,9 +148,10 @@ const KpiDelta: React.FC<{
     ? t(isSameStretch ? 'insights.change_was_same_stretch' : 'insights.change_was', { value: formatPrevious(previousValue) })
     : null;
   if (!hasChange && !wasText) return null;
+  const compareWindowText = formatCompareWindow(compareWindow);
   const tip = [
     comparison.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : null,
-    formatCompareWindow(compareWindow),
+    compareWindowText,
     wasText,
   ].filter(Boolean).join(' · ');
   return (
@@ -158,6 +159,7 @@ const KpiDelta: React.FC<{
       className={hasChange ? 'tile-delta tile-delta-has-change' : 'tile-delta'}
       data-trend={changeTrend(comparison)}
       data-tip={tip || undefined}
+      tabIndex={tip ? 0 : undefined}
       data-testid={testId}
     >
       {comparison.kind === 'new' ? (
@@ -174,10 +176,11 @@ const KpiDelta: React.FC<{
               <span className="sr-only">{changeText}</span>
             </>
           )}
-          {comparison.isNoise && <span className="sr-only">{t('insights.change_noise')}</span>}
+          {comparison.isNoise && <span className="sr-only"> {t('insights.change_noise')}</span>}
         </>
       ) : null}
       {wasText && <span className="tile-delta-was">{wasText}</span>}
+      <span className="sr-only"> ({compareWindowText})</span>
     </span>
   );
 };

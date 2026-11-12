@@ -18,6 +18,7 @@ import {
   type DashboardResponse,
   type DashboardTailResponse,
 } from '../../src/types/dashboard';
+import { formatCompareWindowBounds } from '../../src/types/insightsFormat';
 import { test } from 'vitest';
 
 test('dashboard providers', () => {
@@ -881,4 +882,20 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
   assert.equal(previousCalendarPreset('this_week'), 'last_week');
   assert.equal(previousCalendarPreset('this_month'), 'last_month');
   assert.equal(previousCalendarPreset('24h'), undefined);
+
+  // Compare-window formatting omits the year only when both endpoints fall inside the active year.
+  const sameYearBounds = formatCompareWindowBounds(
+    { from: Date.UTC(2026, 10, 12, 0, 0), to: Date.UTC(2026, 10, 12, 0, 5) },
+    2026,
+    (ms, layout) => `${layout}:${new Date(ms).toISOString().slice(0, 16)}`,
+    (ms) => new Date(ms).getUTCFullYear(),
+  );
+  assert.equal(sameYearBounds.from, 'MM-DD HH:mm:2026-11-12T00:00');
+  const crossYearBounds = formatCompareWindowBounds(
+    { from: Date.UTC(2025, 11, 31, 0, 0), to: Date.UTC(2026, 0, 1, 0, 0) },
+    2026,
+    (ms, layout) => `${layout}:${new Date(ms).toISOString().slice(0, 16)}`,
+    (ms) => new Date(ms).getUTCFullYear(),
+  );
+  assert.equal(crossYearBounds.from, 'YYYY-MM-DD HH:mm:2025-12-31T00:00');
 });

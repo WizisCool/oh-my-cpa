@@ -3,7 +3,7 @@ import { useT } from '../../../i18n';
 import type { InsightsCompareWindow } from '../../../types/insights';
 import type { MetricComparison } from '../../../types/insightsCube';
 import { changeTrend, formatChange } from '../../../types/insightsFormat';
-import { useCompareWindowLabel } from '../useCompareWindowLabel';
+import { useCompareWindowLabel } from '../../../hooks/useCompareWindowLabel';
 
 interface ComparisonTextProps {
   comparison: MetricComparison;

@@ -63,7 +63,7 @@ import {
   type InsightsViewState,
 } from './insightsViewState';
 import { useInsightsLabels } from '../../hooks/useInsightsLabels';
-import { useCompareWindowLabel } from './useCompareWindowLabel';
+import { useCompareWindowLabel } from '../../hooks/useCompareWindowLabel';
 import { InsightsRangeControl } from './components/InsightsRangeControl';
 import { InsightsFilterBar } from './components/InsightsFilterBar';
 import { MetricTiles } from './components/MetricTiles';
