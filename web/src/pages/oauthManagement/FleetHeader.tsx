@@ -47,7 +47,7 @@ const BUCKET_LABELS: Record<HealthBucket, MessageKey> = {
 function HealthFilter({ counts, isPending, lens, onLens }: Pick<FleetToolbarProps, 'counts' | 'isPending' | 'lens' | 'onLens'>) {
   const t = useT();
   return (
-    <div className={styles.health} role="group" aria-label={t('omc.fleet_health')} data-testid="oauth-health-filter">
+    <div className={clsx(styles.health, 'scroll-fade-x')} role="group" aria-label={t('omc.fleet_health')} data-testid="oauth-health-filter">
       {HEALTH_BUCKETS.map((bucket) => {
         const count = counts[bucket];
         const isActive = lens === bucket;

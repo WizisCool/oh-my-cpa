@@ -1374,11 +1374,6 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .fact-list.is-strong dd { color: var(--fg); font-weight: 600; }
 .fact-list.is-quiet dd { color: var(--fg-2); }
 
-/* A wide table scrolls sideways inside its card, never the page. */
-/* A wide table scrolls sideways only. `overflow-x: auto` alone computes the other axis to `auto`
-   too, and a table's bottom border overflows by a subpixel, so every list became a vertical
-   scroller of one pixel that caught the wheel: over a stack of lists the page would not scroll. */
-.table-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
 /* The console's one list surface, drawn after the OAuth credential list: an edge-shadow frame, the
    header strip above, rows on the page background divided by soft rules. */
 .data-table {
@@ -1388,6 +1383,45 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   background: var(--bg);
   overflow: clip;
 }
+/* A wide table scrolls sideways inside its card, never the page. It comes after `.data-table`
+   because the two share an element and the frame's `overflow: clip` would otherwise win: between
+   the phone and desktop widths a provider table was cut off at the card's edge with no way to
+   reach its last columns. `overflow-x: auto` alone computes the other axis to `auto` too, and a
+   table's bottom border overflows by a subpixel, so every list became a vertical scroller of one
+   pixel that caught the wheel: over a stack of lists the page would not scroll. */
+.table-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+
+/* A strip that scrolls sideways with its scrollbar hidden (filters, makers, sections) fades out at
+   an edge that has more behind it, so a clipped label reads as "more this way" rather than as a
+   broken one. The fade follows the strip's own scroll position and is absent when everything fits.
+   The class adds the cue only; the strip owns its `overflow-x`, which is often a narrow-width rule.
+   Where scroll-driven animations are missing the strip shows its thin scrollbar instead: a hidden
+   scrollbar with no other cue would leave the clipped items undiscoverable. */
+@property --scroll-fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --scroll-fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.scroll-fade-x {
+  --scroll-fade-size: 24px;
+  scrollbar-width: none !important;
+  scroll-padding-inline: var(--scroll-fade-size);
+  mask:
+    linear-gradient(#000, #000) no-clip subtract,
+    linear-gradient(to right, #000, transparent) 0 0 / var(--scroll-fade-start) 100% no-repeat no-clip,
+    linear-gradient(to right, transparent, #000) 100% 0 / var(--scroll-fade-end) 100% no-repeat no-clip;
+  animation: scroll-fade-start linear both, scroll-fade-end linear both;
+  animation-timeline: scroll(self inline);
+  animation-range: 0 var(--scroll-fade-size), calc(100% - var(--scroll-fade-size)) 100%;
+}
+.scroll-fade-x::-webkit-scrollbar { display: none; }
+@keyframes scroll-fade-start { to { --scroll-fade-start: var(--scroll-fade-size); } }
+@keyframes scroll-fade-end { from { --scroll-fade-end: var(--scroll-fade-size); } }
+@supports not (animation-timeline: scroll()) {
+  .scroll-fade-x { mask: none; scrollbar-width: thin !important; }
+  .scroll-fade-x::-webkit-scrollbar { display: block; }
+}
+/* The fade is a reading of the scroll position, not motion: reduced motion keeps it. The console's
+   reduced-motion rule zeroes every animation's duration, which would leave the fade at its first
+   frame, so the strip keeps its own timeline here. */
+:root[data-reduced-motion='true'] .scroll-fade-x { animation-duration: auto !important; }
 .responsive-list [data-slot="pager"] { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
@@ -2313,17 +2347,19 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* The configuration workbench on a phone: its toolbar stacks and its paired host/port fields
    become one column. At the console's phone breakpoint, not a number of its own. */
-@media (max-width: 640px) {
+/* At the shell's narrow width the toolbar stacks: the title row above, the search and its tools
+   below. The title and the status pills wrap rather than share one squeezed line, and the title does
+   not shrink below its own text. It was shrinking to its min-content width, which for a CJK title
+   is one character - the measured defect was "配置面板" printed as four stacked glyphs beside the
+   mode picker, because a flex item may shrink below its content and a title has no break
+   opportunity to offer in exchange. The rule follows the shell's breakpoint, not the phone's: the
+   sidebar leaves at 900px, and a tablet-width window met the defect with the desktop toolbar. */
+@media (max-width: 900px) {
   .config-toolbar {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
-  /* The title and the status pills wrap rather than share one squeezed line, and the title does
-     not shrink below its own text. It was shrinking to its min-content width, which for a CJK title
-     is one character - the measured defect was "配置面板" printed as four stacked glyphs beside the
-     mode picker, because a flex item may shrink below its content and a title has no break
-     opportunity to offer in exchange. */
   .config-toolbar-left {
     justify-content: flex-start;
     flex-wrap: wrap;
@@ -2331,6 +2367,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .config-toolbar-left .terminal-title {
     flex: 0 0 auto;
   }
+}
+@media (max-width: 640px) {
   .settings-toggle-row {
     /* `minmax(0, 1fr)` rather than `1fr`: a bare `1fr` is `minmax(auto, 1fr)`, and `auto` is the
        track's *min-content* width - which for a segmented control is the sum of its labels. A

@@ -48,8 +48,8 @@
   margin-left: 6px;
   padding: 0 5px;
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--surface);
+  background: var(--primary);
+  color: var(--primary-on);
   font-size: var(--text-2xs);
   font-weight: 600;
   line-height: 1;

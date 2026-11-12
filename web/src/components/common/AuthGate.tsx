@@ -93,6 +93,9 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [failures, setFailures] = React.useState(0);
   const [password, setPassword] = React.useState(() => (isDemo ? 'omc-demo' : ''));
   const [fieldError, setFieldError] = React.useState<string>();
+  // A refused password is the field's own failure, so the field shows it until the next keystroke;
+  // a rate limit or an unreachable gateway is not, and stays in the notice alone.
+  const [isRejected, setIsRejected] = React.useState(false);
   const fieldRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const isNarrow = useIsNarrowViewport();
@@ -147,6 +150,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
       toast.success(t('auth.success'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.failed'));
+      setIsRejected(err instanceof ApiError && err.status === 401);
       setStatus('unauthenticated');
       setFailures((count) => count + 1);
     } finally {
@@ -232,7 +236,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       autoFocus
                       name="password"
                       value={password}
-                      aria-invalid={Boolean(fieldError) || undefined}
+                      aria-invalid={Boolean(fieldError) || isRejected || undefined}
                       aria-describedby={fieldError ? 'auth-password-error' : undefined}
                       prefix={<LockOutlined className="terminal-muted" />}
                       revealLabel={t('common.reveal_secret')}
@@ -241,6 +245,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       spellCheck={false}
                       onChange={(event) => {
                         setPassword(event.target.value);
+                        setIsRejected(false);
                         if (fieldError && event.target.value) setFieldError(undefined);
                       }}
                     />

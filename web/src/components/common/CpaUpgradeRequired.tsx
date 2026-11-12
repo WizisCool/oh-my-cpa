@@ -11,7 +11,7 @@ export const CpaUpgradeRequired: React.FC = () => {
   return (
     <div className="cpa-blocked" data-cpa-upgrade-required>
       <div className="flex flex-col items-center gap-3 py-8 text-center">
-        <span className="inline-flex size-12 items-center justify-center rounded-full bg-[var(--warning-bg)] text-[var(--warn)]">
+        <span className="inline-flex size-12 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--warn)_14%,transparent)] text-[var(--warn)]">
           <WarningOutlined style={{ fontSize: 24 }} />
         </span>
         <h2 className="m-0 text-lg font-semibold text-foreground">{t('shell.cpa_v8_required_title')}</h2>

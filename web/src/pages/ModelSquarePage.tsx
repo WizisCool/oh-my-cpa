@@ -20,6 +20,7 @@ import { LoadFailure, Notice, useToast, type ToastItem } from '../components/fee
 import { useOpenPriceEditor } from '../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
 import { copyText } from '../utils/clipboard';
+import { formatGatewayTimestamp } from '../utils/time';
 import { formatRatePer1M } from '../types/pricingDisplay';
 import { isUsageFacetsResponse } from '../types/usageEvents';
 import { MODEL_REQUEST_FACET_QUERY, buildModelLedger, modelRequestsLink, type ModelLedgerEntry, type ModelPricingTarget } from '../types/modelSquareLedger';
@@ -369,6 +370,11 @@ const CatalogRefreshButton: React.FC<{ onReread: () => Promise<unknown> }> = ({ 
   </Button>;
 };
 
+/** The snapshot's day: the catalogue names a date, and a full instant reads as its local day. */
+function snapshotDay(value: string): string {
+  return formatGatewayTimestamp(value).slice(0, 10);
+}
+
 export const ModelSquarePage: React.FC = () => {
   const branding = useProviderBranding();
   const t = useT();
@@ -458,7 +464,7 @@ export const ModelSquarePage: React.FC = () => {
   const subtitle = directory.data && t('models.summary_line', {
     models: directory.data.models.length,
     makers: countModelManufacturers(allEntries).length,
-    date: directory.data.metadata_updated_at,
+    date: snapshotDay(directory.data.metadata_updated_at),
   });
 
   return <div className={clsx(styles['page'], 'terminal-page', 'model-square-page')}>
@@ -473,7 +479,7 @@ export const ModelSquarePage: React.FC = () => {
         </span>
         {isFiltered && <Button variant="link" size="sm" className={styles['clear-filters']} onClick={clearFilters}>{t('models.clear_filters')}</Button>}
       </Toolbar>
-      <div className={clsx(styles['chip-group'], styles['maker-strip'])} role="group" aria-label={t('models.filter_makers')}>
+      <div className={clsx(styles['chip-group'], styles['maker-strip'], 'scroll-fade-x')} role="group" aria-label={t('models.filter_makers')}>
         <button type="button" className={clsx(styles['chip'], selectionStyles['selection-control'])} aria-pressed={manufacturerId === ''} onClick={() => setParam('maker', '')}>
           {t('common.all')}<Count size="small">{searched.length}</Count>
         </button>
@@ -537,7 +543,7 @@ export const ModelSquarePage: React.FC = () => {
         {selected.profiles.map(profile => <ModelProfile key={profile.identity} identity={profile.identity} metadata={profile.metadata} />)}
         <p className={styles['scope-note']}>
           {t('models.reference_note')}
-          {directory.data?.metadata_updated_at && <> {t('models.snapshot_date', { date: directory.data.metadata_updated_at })}</>}
+          {directory.data?.metadata_updated_at && <> {t('models.snapshot_date', { date: snapshotDay(directory.data.metadata_updated_at) })}</>}
         </p>
       </div>}
     </AppDrawer>

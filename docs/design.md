@@ -21,6 +21,14 @@ Change a token in its implementation, not in a second table of color values. Use
 resolved tokens/CSS variables in components; derive relationships once in the theme.
 The pre-hydration appearance must agree with the chosen theme after mounting.
 
+Read only tokens the console declares. An undeclared `var(--name)` resolves to nothing without
+an error - a focus ring that never draws, a hover with no fill - and a fallback such as
+`var(--warning, #b26b00)` hides the misspelling in one palette while painting the wrong colour in
+the others. A logic test rejects any custom property that is read but never declared.
+A filled shape that carries text, such as a count badge or an active step number, uses the
+solved pair `--primary` with `--primary-on`: `--accent` is tuned as link ink on the page and
+is not guaranteed to hold a label.
+
 ## Visual language
 
 The navigation sits on a canvas; the working page is one inset rounded panel.
@@ -34,6 +42,12 @@ Sarasa Mono SC: its Latin side is bundled and hinted, the CJK glyphs it leaves o
 Fonts' Noto Sans SC, the same Source Han Sans design (`web/src/theme/cjkFont.ts`).
 Operator-selected fonts must preserve readability.
 Publisher-owned plugin logos are optional assets, as described below.
+
+Text inks have roles with their own contrast floors (`CONTRAST_FLOORS` in `palette.ts`): body
+text, the hint step (`--muted`) and the footnote step (`--meta`). The footnote step is for quiet
+prose only - timestamps, counts, captions. Anything the reader presses or must notice, such as a
+link, an icon button, a field's clear or reveal glyph, or a row's open arrow, starts at the hint
+step and brightens under the pointer.
 
 Keep chrome muted. Semantic status colors convey actual health/state; categorical
 chart colors identify series and must remain distinguishable in both modes. Do not
@@ -204,7 +218,11 @@ with the other provider overlays when a delete or move shifts later entries.
   exact accessibility percentage for work whose total cannot be measured.
 
 Prefer concise, actionable copy. Secondary text explains what the user can do or what
-a value means, not internal version history or defensive disclaimers.
+a value means, not internal version history or defensive disclaimers. A record the server
+names by a code - an audit action, a category - reads as a sentence in every locale; a raw
+identifier among translated rows is a missing catalog entry, and a logic test compares the
+server's audit actions with the catalog. Instants are shown in the console's time zone and
+format, never as a raw ISO string.
 
 ## Motion and lifecycle
 
@@ -241,7 +259,10 @@ would cost more than a frame is drawn in its new shape at once, so a large catal
 the row it was searched for rather than with motion.
 Library overlays (drawers, dialogs, menus) keep the CSS motion tokens in `index.css`.
 
-Honor reduced motion and visibility changes. Timers, observers, animation frames,
+Honor reduced motion and visibility changes. Reduced motion is one console setting (OMC
+Settings, defaulting to the system's), published as `data-reduced-motion` on the root; a
+stylesheet keys on that attribute and never asks `prefers-reduced-motion` directly, which would
+keep animating after the operator switched motion off in the console. A logic test enforces it. Timers, observers, animation frames,
 subscriptions and native listeners belong to a disposable lifetime. Background or
 unmounted views must not continue doing presentation work. Test behavior in the lowest
 credible layer; browser timing is useful only where the browser engine is the subject.
@@ -249,14 +270,31 @@ credible layer; browser timing is useful only where the browser engine is the su
 ## Small screens, keyboard and touch
 
 Design for content first, including a 390px-wide phone, dynamic viewport height and
-safe-area insets. Avoid page-level horizontal overflow. Dialogs and drawers must keep
+safe-area insets. Avoid page-level horizontal overflow.
+
+The console has two breakpoints and they mean different things (`useIsNarrowViewport`,
+`useIsPhoneViewport`). At 900px the shell changes shape: the sidebar becomes a sheet and the
+header names the page. At 640px the device is a phone, and a list stops being a table. Between
+them a page has no sidebar but still draws its desktop content, so a rule that follows the
+shell's shape - a toolbar that must stack, a bar placed beside the sidebar - uses 900px, and only
+a rule about the content itself uses 640px. Check that band at 768px. A wide table there scrolls
+inside its own card; a frame that clips its content must not sit on the element that scrolls.
+
+A strip that scrolls sideways with its scrollbar hidden - filter segments, maker chips, section
+tabs - takes the shared `scroll-fade-x` class, which fades the edge that has more behind it. A
+clipped label with no such cue reads as broken, not as more to see. Dialogs and drawers must keep
 the current action and focused field reachable when the keyboard appears. Opening a
 list must not raise the keyboard over it: a select the reader can type into uses
 [`SearchSelect`](../web/src/components/common/SearchSelect.tsx), which becomes a
 bottom sheet on narrow screens.
 
 Use visible labels, keyboard navigation, clear focus indicators and appropriate hit
-areas. Do not make hover the only route to information or an action. On coarse pointers,
+areas. Do not make hover the only route to information or an action. A control inside a
+field that holds state the reader cannot otherwise change, such as revealing a secret, is in the
+tab order; one that repeats what the keyboard already does in the field, such as clearing it,
+may stay out of it. Never nest one interactive role in another: a tile that toggles a checkbox
+is that checkbox's `<label>`, not a `role="button"` around it. When a submission fails because
+of what was typed, the field carries `aria-invalid` as well as the notice above the form. On coarse pointers,
 keep editable text large enough to avoid browser focus zoom. A phone layout must retain
 the same information and capabilities as the desktop layout.
 

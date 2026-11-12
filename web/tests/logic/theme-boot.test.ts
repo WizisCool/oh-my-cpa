@@ -337,6 +337,49 @@ test('nothing encloses content with a neutral border', () => {
   assert.deepEqual(enclosed, []);
 });
 
+/*
+ * A custom property nobody declares resolves to nothing, silently: a focus ring that never draws, a
+ * hover with no fill. Every `var(--name)` must name a property the console declares - in a
+ * stylesheet, or as a `'--name'` the theme projection or a component writes - or one Base UI sets on
+ * its own parts. A reference that carries a fallback still counts: the fallback hides a misspelt
+ * token in one palette and paints the wrong colour in every other.
+ */
+const LIBRARY_PROPERTIES = new Set([
+  '--anchor-width', '--available-height', '--transform-origin', '--accordion-panel-height', '--collapsible-panel-height',
+]);
+
+test('every custom property the console reads is one it declares', () => {
+  const declared = new Set(LIBRARY_PROPERTIES);
+  const files = sourceFiles(sourceRoot);
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    for (const [, name] of text.matchAll(/(--[a-zA-Z][\w-]*)\s*:/g)) declared.add(name!);
+    for (const [, name] of text.matchAll(/['"`](--[a-zA-Z][\w-]*)['"`]/g)) declared.add(name!);
+  }
+  const unresolved: string[] = [];
+  for (const file of files) {
+    const text = stripCodeComments(readFileSync(file, 'utf8'));
+    for (const [, name] of text.matchAll(/var\((--[a-zA-Z][\w-]*)/g)) {
+      // A name built at run time (`var(--effort-${step})`) is checked by the palette tests instead.
+      if (name!.endsWith('-') || declared.has(name!)) continue;
+      unresolved.push(`${path.relative(sourceRoot, file)}: ${name}`);
+    }
+  }
+  assert.deepEqual([...new Set(unresolved)], []);
+});
+
+/*
+ * Reduced motion is one console policy (OMC Settings → Appearance, defaulting to the system), which
+ * `motionPreference.ts` publishes as `data-reduced-motion` on the root. A stylesheet that asks the
+ * operating system directly keeps animating after the operator turned motion off in the console.
+ */
+test('stylesheets follow the console reduced-motion policy, not the system query', () => {
+  const direct = sourceFiles(sourceRoot)
+    .filter((file) => file.endsWith('.css') && /@media[^{]*prefers-reduced-motion/.test(readFileSync(file, 'utf8')))
+    .map((file) => path.relative(sourceRoot, file));
+  assert.deepEqual(direct, []);
+});
+
 const DOM_FORWARDING_PRIMITIVES = new Set([
   'Button', 'Input', 'Textarea', 'Checkbox', 'Switch', 'Badge', 'Tag',
   'Select', 'SelectTrigger', 'Combobox', 'AutoComplete', 'NumberInput',

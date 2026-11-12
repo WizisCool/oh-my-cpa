@@ -639,6 +639,8 @@ export function AgentPage() {
         {/* Interfaces OpenUI renders take the console's tokens; scoped to the page, not the body. */}
         <OpenUIThemeProvider mode={themeMode} lightTheme={openUIThemeTokens} darkTheme={openUIThemeTokens} cssSelector={`.${styles['shell']}`}>
         <div ref={pageRef} className={styles['shell']} data-testid="agent-page" data-hero={isHero || undefined} data-keyboard={isKeyboardOpen || undefined}>
+          {/* The conversation is the page, so its name is not drawn; the outline still has it. */}
+          <h1 className="sr-only">{t('nav.agent')}</h1>
           {bar}
           <main className={styles['shell-main']}>
             {notices}

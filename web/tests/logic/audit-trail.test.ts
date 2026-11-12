@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
+
+import { auditActionLabel } from '../../src/components/audit/auditText.ts';
 
 import {
   auditFacets,
@@ -40,6 +45,35 @@ test('a category covers every action prefix it names, and nothing that merely st
   assert.equal(categoryOf('capability.usage_aggregate'), 'agent');
   assert.equal(categoryOf('system.maintenance.checkpoint'), 'system');
   assert.equal(categoryOf('apixkey.create'), undefined);
+});
+
+/*
+ * The trail prints an action's code when the console has no sentence for it, and a dash when it
+ * has no category, so a server action added without copy shows up as a raw identifier among
+ * translated rows. Every action the server writes as a literal must read as a sentence and sit
+ * in a category; the open-ended families (`capability.*`, `system.maintenance.*`) are templates.
+ */
+const ACTION_CALL = /(?:recordAudit\(\w+, |recordAuditWithoutRequest\(|WithAudit\(\w+, \w+, |writeWarmupAudit\(\w+, |\baudit\(|Action: +|action :?= )"([a-z_]+(?:\.[a-z_]+)+)"/g;
+
+function goSources(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) return goSources(full);
+    return entry.name.endsWith('.go') && !entry.name.endsWith('_test.go') ? [full] : [];
+  });
+}
+
+test('every audit action the server records reads as a sentence in a category', () => {
+  const internal = fileURLToPath(new URL('../../../internal', import.meta.url));
+  const actions = new Set<string>();
+  for (const file of goSources(internal)) {
+    for (const [, action] of readFileSync(file, 'utf8').matchAll(ACTION_CALL)) actions.add(action!);
+  }
+  assert.ok(actions.size > 50, `found only ${actions.size} audit actions; the pattern no longer matches the server`);
+  const t = (key: string, values?: Record<string, unknown>) => `${key}${values ? JSON.stringify(values) : ''}`;
+  const raw = [...actions].filter((action) => auditActionLabel(action, t) === action);
+  const uncategorised = [...actions].filter((action) => categoryOf(action) === undefined);
+  assert.deepEqual({ raw, uncategorised }, { raw: [], uncategorised: [] });
 });
 
 test('a target is printed only when it names something a reader recognises', () => {

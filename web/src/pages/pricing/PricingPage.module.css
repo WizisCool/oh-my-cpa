@@ -190,6 +190,12 @@ a.usage-unpriced:hover {
     width: 100%;
   }
 
+  /* A phone row reads its values from one left edge, so the amount sits over its request count
+     instead of hanging off the right end of it. */
+  .usage {
+    align-items: flex-start;
+  }
+
   .provider-filter {
     width: 100%;
     margin-left: 0;
@@ -202,11 +208,6 @@ a.usage-unpriced:hover {
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
-    scrollbar-width: none !important;
-  }
-
-  .toolbar :global([data-slot='segmented'])::-webkit-scrollbar {
-    display: none !important;
   }
 }
 

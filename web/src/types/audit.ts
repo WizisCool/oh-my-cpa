@@ -73,11 +73,11 @@ export const AUDIT_CATEGORIES: Readonly<Record<string, readonly string[]>> = {
   providers: ['provider', 'model_catalog'],
   credentials: ['auth_file', 'oauth', 'oauth_model_alias', 'oauth_excluded_models', 'cpa_credential'],
   quota: ['quota'],
-  config: ['config'],
+  config: ['config', 'routing', 'outbound_proxy'],
   pricing: ['pricing'],
   plugins: ['plugin'],
   agent: ['capability'],
-  system: ['system', 'logs', 'request_log', 'audit'],
+  system: ['system', 'logs', 'request_log', 'audit', 'warmup'],
 };
 
 export type AuditCategory = keyof typeof AUDIT_CATEGORIES;

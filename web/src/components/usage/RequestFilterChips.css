@@ -27,7 +27,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   border-radius: var(--radius-sm);
   color: var(--fg);
   font-family: var(--font-mono, monospace);

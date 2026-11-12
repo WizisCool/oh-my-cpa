@@ -77,7 +77,8 @@ test('stored filters are validated and never keep a query string', () => {
   assert.equal(parsed?.paths[0], '/v1/models');
   assert.equal(parsed?.paths.length, MAX_LOG_PATH_FILTERS);
   assert.equal(parsed?.paths.some((path) => path.includes('?')), false);
-  assert.equal(parsed?.wrapLines, false);
+  assert.equal(parsed?.wrapLines, undefined);
+  assert.equal(parseLogFilters({ wrapLines: false })?.wrapLines, false);
   // A preference written before these fields existed reads as "no request filter".
   assert.deepEqual(parseLogFilters({ hideManagement: false }), { ...DEFAULT_LOG_FILTERS, hideManagement: false });
 });

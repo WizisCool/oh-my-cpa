@@ -422,7 +422,7 @@ export const ConfigPage: React.FC = () => {
            wide viewport carries the section's card nav as its own second track. */
         <div className="config-workbench">
           {/* Left: sticky section navigation in the 216px track */}
-          <aside className="config-section-nav" aria-label={t('cfg.nav_aria')}>
+          <aside className="config-section-nav scroll-fade-x" aria-label={t('cfg.nav_aria')}>
             {CONFIG_SECTIONS.map((sec) => {
               const isActive = !searchQuery && activeSection === sec.id;
               return (
