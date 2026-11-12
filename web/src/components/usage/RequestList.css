@@ -535,7 +535,7 @@
   flex-wrap: nowrap;
   gap: 6px;
   /* An outsized count is clipped at the track's edge instead of painting over the TTFT
-     in the neighbouring column; every figure keeps its exact value in the tooltip. */
+     in the neighbouring column; the line's own tooltip lists every exact count. */
   max-width: 100%;
   overflow: hidden;
   justify-content: flex-end;

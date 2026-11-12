@@ -469,7 +469,16 @@ export const RequestRow = React.memo<RequestRowProps>(
             <strong data-request-tooltip={`${formatTokensFull(event.tokens.total)} ${t('dash.unit_tokens')}`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
             <small>tokens</small>
           </div>
-          <div className="req-tokens-breakdown">
+          {/* The line clips an outsized count at the track's edge, so the line itself also
+              carries every exact count; a visible count still answers with its own. */}
+          <div
+            className="req-tokens-breakdown"
+            data-request-tooltip={[
+              `${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`,
+              `${t('events.output_tokens')}: ${formatTokensFull(event.tokens.output)}`,
+              ...(event.tokens.reasoning > 0 ? [`${t('events.reasoning_tokens')}: ${formatTokensFull(event.tokens.reasoning)}`] : []),
+            ].join(' · ')}
+          >
             <span data-request-tooltip={`${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`}>
               ↑ {formatTokens(event.tokens.input, tokenStyle)}
             </span>
