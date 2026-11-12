@@ -54,12 +54,13 @@ const dashboardPresetAll = "all"
 const dashboardAllFallback = 24 * time.Hour
 
 type dashboardResponse struct {
-	Window   dashboardWindow   `json:"window"`
-	Requests dashboardRequests `json:"requests"`
-	Tokens   dashboardTokens   `json:"tokens"`
-	Metrics  dashboardMetrics  `json:"metrics"`
-	Coverage dashboardCoverage `json:"coverage"`
-	Errors   []string          `json:"partial_errors"`
+	Window     dashboardWindow      `json:"window"`
+	Requests   dashboardRequests    `json:"requests"`
+	Tokens     dashboardTokens      `json:"tokens"`
+	Metrics    dashboardMetrics     `json:"metrics"`
+	Comparison *dashboardComparison `json:"comparison,omitempty"`
+	Coverage   dashboardCoverage    `json:"coverage"`
+	Errors     []string             `json:"partial_errors"`
 }
 
 type dashboardWindow struct {
@@ -108,14 +109,29 @@ type dashboardSeriesPoint struct {
 }
 
 type dashboardMetrics struct {
-	RPM          *float64 `json:"rpm"`
-	TPM          *float64 `json:"tpm"`
-	CacheRate    *float64 `json:"cache_rate"`
-	Cost         float64  `json:"cost"`
-	CostSource   string   `json:"cost_source"`
-	CostNote     string   `json:"cost_note"`
-	AvgLatencyMS *float64 `json:"avg_latency_ms"`
-	AvgTTFTMS    *float64 `json:"avg_ttft_ms"`
+	RPM            *float64 `json:"rpm"`
+	TPM            *float64 `json:"tpm"`
+	CacheRate      *float64 `json:"cache_rate"`
+	Cost           float64  `json:"cost"`
+	CostNanos      int64    `json:"cost_nanos"`
+	CostedRequests int64    `json:"costed_requests"`
+	CostSource     string   `json:"cost_source"`
+	CostNote       string   `json:"cost_note"`
+	AvgLatencyMS   *float64 `json:"avg_latency_ms"`
+	AvgTTFTMS      *float64 `json:"avg_ttft_ms"`
+}
+
+// dashboardComparison summarises the preceding window a dashboard read is
+// measured against. Open calendar units compare against the same elapsed
+// wall-clock stretch of the previous unit rather than the whole closed unit.
+type dashboardComparison struct {
+	FromMS         int64 `json:"from"`
+	ToMS           int64 `json:"to"`
+	SameStretch    bool  `json:"same_stretch"`
+	Requests       int64 `json:"requests"`
+	Tokens         int64 `json:"tokens"`
+	CostNanos      int64 `json:"cost_nanos"`
+	CostedRequests int64 `json:"costed_requests"`
 }
 
 type dashboardCoverage struct {
@@ -133,12 +149,13 @@ type dashboardCoverage struct {
 // coverage block: a poll that answers with zero-valued coverage would let the
 // UI paint "0 stored events" while the collector is quietly healthy.
 type dashboardTailResponse struct {
-	Window   dashboardWindow   `json:"window"`
-	Requests dashboardRequests `json:"requests"`
-	Tokens   dashboardTokens   `json:"tokens"`
-	Metrics  dashboardMetrics  `json:"metrics"`
-	Live     dashboardLive     `json:"live"`
-	Errors   []string          `json:"partial_errors"`
+	Window     dashboardWindow      `json:"window"`
+	Requests   dashboardRequests    `json:"requests"`
+	Tokens     dashboardTokens      `json:"tokens"`
+	Metrics    dashboardMetrics     `json:"metrics"`
+	Comparison *dashboardComparison `json:"comparison,omitempty"`
+	Live       dashboardLive        `json:"live"`
+	Errors     []string             `json:"partial_errors"`
 }
 
 // dashboardLive tells the client where the returned tail sits so it can splice
@@ -231,6 +248,8 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 	response.Requests = facts.requests
 	response.Tokens = facts.tokens
 	response.Metrics = facts.metrics
+	response.Comparison = facts.comparison
+	response.Errors = append(response.Errors, facts.partialErrors...)
 	response.Coverage.FromRollup = facts.rollup
 	response.Coverage.FromDetails = facts.details
 	// Collector stats are the one block a live poll skips: they describe the
@@ -307,6 +326,8 @@ func (h *Handler) dashboardTail(writer http.ResponseWriter, request *http.Reques
 	response.Tokens = facts.tokens
 	response.Tokens.Series = tailBuckets(facts.tokens.Series, dashboardTailBuckets)
 	response.Metrics = facts.metrics
+	response.Comparison = facts.comparison
+	response.Errors = append(response.Errors, facts.partialErrors...)
 	// Both series come off the same zero-filled grid, so one pair of markers
 	// describes where the tail sits for both of them.
 	response.Live.SeriesStartMS = firstBucketMS(facts.requests.Series)
@@ -355,14 +376,19 @@ func firstBucketMS(points []dashboardSeriesPoint) int64 {
 // Keeping the mapping in one place is what lets the tail answer claim the same
 // totals as the full response without a second implementation to drift.
 type dashboardFacts struct {
-	requests dashboardRequests
-	tokens   dashboardTokens
-	metrics  dashboardMetrics
-	rollup   int64
-	details  int64
+	requests      dashboardRequests
+	tokens        dashboardTokens
+	metrics       dashboardMetrics
+	comparison    *dashboardComparison
+	partialErrors []string
+	rollup        int64
+	details       int64
 }
 
-// queryDashboard aggregates the window into response bodies.
+// queryDashboard aggregates the window into response bodies alongside a
+// totals-only read of the preceding comparison window. Comparison failures
+// degrade into partialErrors ("comparison unavailable") so current figures
+// remain readable.
 func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, apiKey string) (dashboardFacts, error) {
 	facts := dashboardFacts{
 		requests: dashboardRequests{Series: []dashboardSeriesPoint{}},
@@ -439,6 +465,8 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 	// fabricated zero.
 	if totals.Requests > 0 {
 		facts.metrics.Cost = float64(totals.CostNanos) / 1e9
+		facts.metrics.CostNanos = totals.CostNanos
+		facts.metrics.CostedRequests = totals.CostedRequests
 		facts.metrics.CostSource = "estimated"
 		facts.metrics.CostNote = ""
 		if totals.PricedRequests < totals.Requests {
@@ -466,9 +494,73 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 		})
 	}
 
+	if comparison, errCmp := h.queryDashboardComparison(ctx, window, apiKey); errCmp != nil {
+		// Previous-period comparison is advisory context; keep the current window's
+		// figures readable and surface the degraded read in partial_errors.
+		facts.partialErrors = append(facts.partialErrors, "comparison unavailable")
+	} else {
+		facts.comparison = comparison
+	}
 	facts.rollup = analytics.FromRollup
 	facts.details = analytics.FromEvents
 	return facts, nil
+}
+
+func (h *Handler) queryDashboardComparison(ctx context.Context, window dashboardWindow, apiKey string) (*dashboardComparison, error) {
+	fromMS, toMS, isSameStretch, hasComparison := dashboardComparisonBounds(window, h.insightsZone())
+	if !hasComparison {
+		return nil, nil
+	}
+	facts, err := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
+		InstanceID: defaultInstanceID(),
+		FromMS:     fromMS,
+		ToMS:       toMS,
+		BucketMS:   0,
+		Filters:    repository.ClientKeyFilter(apiKey),
+	})
+	if err != nil {
+		return nil, err
+	}
+	comparison := &dashboardComparison{
+		FromMS:      facts.FromMS,
+		ToMS:        facts.ToMS,
+		SameStretch: isSameStretch,
+	}
+	for _, row := range facts.Rows {
+		comparison.Requests += row.Requests
+		comparison.Tokens += row.TotalTokens
+		comparison.CostNanos += row.CostNanos
+		comparison.CostedRequests += row.CostedRequests
+	}
+	return comparison, nil
+}
+
+func dashboardComparisonBounds(window dashboardWindow, zone *time.Location) (fromMS, toMS int64, isSameStretch, hasComparison bool) {
+	if window.Preset == dashboardPresetAll || window.ToMS <= window.FromMS {
+		return 0, 0, false, false
+	}
+	if calendar, isCalendar := insightsCalendarPresets[window.Preset]; isCalendar {
+		if zone == nil {
+			zone = time.UTC
+		}
+		if calendar.previous == 0 {
+			anchor := time.UnixMilli(window.ToMS).In(zone)
+			fromMS = civilStart(anchor, zone, calendar.unit, 1).UnixMilli()
+			toMS = max(civilShift(anchor, zone, calendar.unit).UnixMilli(), fromMS+1)
+			return fromMS, toMS, true, true
+		}
+		mid := time.UnixMilli(window.FromMS + (window.ToMS-window.FromMS)/2).In(zone)
+		fromMS = civilStart(mid, zone, calendar.unit, 1).UnixMilli()
+		toMS = window.FromMS - 1
+		return fromMS, toMS, false, toMS > fromMS
+	}
+	span := window.ToMS - window.FromMS
+	toMS = window.FromMS - 1
+	fromMS = toMS - span
+	if fromMS <= 0 || toMS <= fromMS {
+		return 0, 0, false, false
+	}
+	return fromMS, toMS, false, true
 }
 
 // dashboardIngestStatus reports the capture/decode/maintenance loops.
@@ -619,10 +711,11 @@ func (h *Handler) dashboardWindow(request *http.Request, now time.Time) (dashboa
 }
 
 // dashboardCalendarWindow places a calendar preset ("today", "last_week") on the
-// deployment's calendar in the OMC Time Zone, the way Insights places it. The
-// current unit runs to now and the previous one is closed. The bucket width is
-// chosen for the whole unit rather than the part already elapsed, so "today"
-// keeps one grid from midnight to midnight instead of re-snapping as it grows.
+// deployment's calendar in the OMC Time Zone, the way Insights places it. Closed
+// previous units keep the full-unit bucket grid, while running units ("today",
+// "this_week", "this_month") size their buckets from the elapsed span so early
+// minutes after midnight, Monday, or the 1st of the month have fine resolution
+// instead of collapsing into a single coarse bucket.
 func dashboardCalendarWindow(request *http.Request, now time.Time, zone *time.Location) (dashboardWindow, bool) {
 	query := request.URL.Query()
 	if query.Get("from") != "" || query.Get("to") != "" {
@@ -635,16 +728,22 @@ func dashboardCalendarWindow(request *http.Request, now time.Time, zone *time.Lo
 	}
 	start := civilStart(now, zone, calendar.unit, calendar.previous)
 	end := civilStart(now, zone, calendar.unit, calendar.previous-1)
+	fromMS := start.UnixMilli()
 	toMS := end.UnixMilli() - 1
+	bucketSpan := end.Sub(start)
+	isOpenEnd := false
 	if calendar.previous == 0 {
-		toMS = now.UnixMilli()
+		toMS = max(now.UnixMilli(), fromMS+1)
+		bucketSpan = time.Duration(toMS-fromMS) * time.Millisecond
+		isOpenEnd = true
 	}
 	window := dashboardWindow{
 		Preset:   preset,
-		FromMS:   start.UnixMilli(),
+		FromMS:   fromMS,
 		ToMS:     toMS,
-		BucketMS: dashboardBucketWidth(end.Sub(start)).Milliseconds(),
+		BucketMS: dashboardBucketWidth(bucketSpan).Milliseconds(),
 		Complete: true,
+		OpenEnd:  isOpenEnd,
 	}
 	window.Minutes = int((window.ToMS - window.FromMS) / 60000)
 	return window, true

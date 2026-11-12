@@ -203,6 +203,9 @@ const TrendPlot = React.memo<ModelTokenTrendProps>(({
 /** The share of each bucket's band left empty between bars, as the chart's `barCategoryGap`. */
 const BAR_GAP = 0.22;
 
+/** Caps bar width on sparse windows (e.g. 1-4 buckets right after midnight) so one bucket never fills the card. */
+const MAX_BAR_WIDTH = 28;
+
 /**
  * StackLayer draws the stacked segments: one path per model holding all of its segments, rather
  * than one component per segment. A grouping of five models over a day is a hundred and fifty
@@ -231,7 +234,7 @@ function StackLayer({
     const out = new Map<string, string>(order.map((id) => [id, '']));
     if (!plot || !xScale || !yScale || data.length === 0) return out;
     const band = plot.width / data.length;
-    const width = band * (1 - BAR_GAP);
+    const width = Math.min(band * (1 - BAR_GAP), MAX_BAR_WIDTH);
     for (const row of data) {
       const start = Number(xScale(row.t));
       if (!Number.isFinite(start)) continue;

@@ -1,3 +1,7 @@
+.dashboard-page {
+  --trend-up: color-mix(in oklch, var(--danger) 64%, var(--fg-2));
+  --trend-down: color-mix(in oklch, var(--success) 64%, var(--fg-2));
+}
 .dashboard-alert { margin-bottom: 16px; }
 .dashboard-section { margin-bottom: 32px; }
 .section-heading { margin-bottom: 12px; }
@@ -205,8 +209,32 @@
    quarter of the board takes the compact size, anything wider the large one. */
 .kpi-tile { container: kpi-tile / inline-size; }
 .tile-value > * { font-size: var(--kpi-figure-size, 1em); line-height: 1; vertical-align: baseline; }
+/* Pace-matched comparison sits on the hero figure's baseline without altering its strut height,
+   so tiles with and without a delta start their captions and sparklines on the same horizontal line. */
+.tile-value > .tile-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: 10px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.tile-delta[data-trend='up'] { color: var(--trend-up); }
+.tile-delta[data-trend='down'] { color: var(--trend-down); }
+.tile-delta-none { color: var(--meta); }
+.tile-delta-was { margin-inline-start: 4px; color: var(--meta); font-weight: 400; }
 @container kpi-tile (max-width: 360px) {
   .tile-value { --kpi-figure-size: 26px; letter-spacing: -.02em; }
+  .tile-delta-has-change .tile-delta-was { display: none; }
+}
+@media (max-width: 640px) {
+  .tile-delta-has-change .tile-delta-was { display: none; }
 }
 /* One pip, on the verdict. What sits beside it is the evidence for that number,
    so a hairline separates the two and the failure count carries the colour the

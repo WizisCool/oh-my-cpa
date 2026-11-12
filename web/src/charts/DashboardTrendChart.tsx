@@ -1,5 +1,5 @@
 import React from 'react';
-import { Area, AreaChart, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import {
   ChartContainer,
   ChartTooltip,
@@ -55,9 +55,12 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
     [color],
   );
 
-  if (data.length < 2) {
+  if (data.length === 0) {
     return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
   }
+
+  const isSinglePoint = data.length === 1;
+  const hasPositiveValue = data.some((entry) => entry.value > 0);
 
   return (
     <div className="chart-slot" style={{ minHeight: height }}>
@@ -69,7 +72,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
           className="h-full w-full"
           initialDimension={{ width: 240, height }}
         >
-          <AreaChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }}>
+          <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 2, left: 6 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={color} stopOpacity={0.2} />
@@ -77,7 +80,13 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
               </linearGradient>
             </defs>
             <XAxis dataKey="t" hide />
-            <YAxis domain={[0, 'auto']} hide />
+            <YAxis domain={[0, (dataMax: number) => (dataMax > 0 ? dataMax : 1)]} hide />
+            {(isSinglePoint || !hasPositiveValue) && (
+              <ReferenceLine y={0} stroke="var(--border-soft)" strokeWidth={1} />
+            )}
+            {isSinglePoint && hasPositiveValue && (
+              <ReferenceLine x={data[0]!.t} stroke={color} strokeOpacity={0.28} strokeDasharray="2 2" strokeWidth={1} />
+            )}
             <ChartTooltip
               isPinnedTop
               cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
@@ -100,11 +109,17 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
             <Area
               type="monotone"
               dataKey="value"
-              stroke={color}
+              stroke={hasPositiveValue ? color : 'var(--border)'}
               strokeWidth={1.5}
-              fill={`url(#${gradientId})`}
-              dot={false}
-              activeDot={{ r: 3, fill: color, strokeWidth: 0 }}
+              fill={hasPositiveValue ? `url(#${gradientId})` : 'none'}
+              dot={
+                isSinglePoint
+                  ? hasPositiveValue
+                    ? { r: 3.5, fill: color, stroke: color, strokeOpacity: 0.24, strokeWidth: 6 }
+                    : { r: 2.5, fill: 'var(--muted)', strokeWidth: 0 }
+                  : false
+              }
+              activeDot={{ r: 3.5, fill: color, strokeWidth: 0 }}
               isAnimationActive={!isReducedMotion}
               animationDuration={180}
             />

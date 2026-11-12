@@ -7,7 +7,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
+import { AppstoreOutlined, ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
+import { calendarPresetLabel } from '../components/common/timeRange/presetGroups';
+import { changeTrend, formatChange } from '../types/insightsFormat';
+import { useCompareWindowLabel } from './insights/useCompareWindowLabel';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -59,13 +62,17 @@ import { preloadRegisteredRoute, useTransitionNavigate } from '../performance/ro
 import {
   applyTail,
   DASHBOARD_RANGE_PREFERENCE,
+  dashboardMetricComparison,
   dashboardRangeParams,
   DEFAULT_DASHBOARD_RANGE,
+  isOpenCalendarPreset,
   isSlidingRange,
+  previousCalendarPreset,
   requestListWindowParams,
   livePollInterval,
   parseDashboardRange,
   costNoteKey,
+  type DashboardMetricDelta,
   type DashboardRange,
   type DashboardWindow,
   type DashboardResponse,
@@ -79,7 +86,7 @@ import {
   type DashboardLayout,
   type DashboardWidgetId,
 } from '../types/dashboardLayout';
-import { LoadFailure, useToast } from '../components/feedback';
+import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { Panel } from '../components/common/Panel';
 import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
@@ -125,6 +132,55 @@ const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
 function rateTone(successRate: number | null | undefined): ChartTone {
   return successRateTone(successRate);
 }
+
+const KpiDelta: React.FC<{
+  delta: DashboardMetricDelta | null;
+  formatPrevious: (value: number) => string;
+  testId?: string;
+}> = ({ delta, formatPrevious, testId }) => {
+  const t = useT();
+  const formatCompareWindow = useCompareWindowLabel();
+  if (!delta) return null;
+  const { comparison, previousValue, window: compareWindow, isSameStretch } = delta;
+  const changeText = comparison.kind === 'change' ? formatChange(comparison.change) : null;
+  const hasChange = comparison.kind === 'new' || changeText !== null;
+  const wasText = previousValue !== null
+    ? t(isSameStretch ? 'insights.change_was_same_stretch' : 'insights.change_was', { value: formatPrevious(previousValue) })
+    : null;
+  if (!hasChange && !wasText) return null;
+  const tip = [
+    comparison.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : null,
+    formatCompareWindow(compareWindow),
+    wasText,
+  ].filter(Boolean).join(' · ');
+  return (
+    <span
+      className={hasChange ? 'tile-delta tile-delta-has-change' : 'tile-delta'}
+      data-trend={changeTrend(comparison)}
+      data-tip={tip || undefined}
+      data-testid={testId}
+    >
+      {comparison.kind === 'new' ? (
+        <span className="tile-delta-none">{t('insights.change_new')}</span>
+      ) : comparison.kind === 'change' && changeText !== null ? (
+        <>
+          {comparison.change > 0 && <ArrowUpOutlined aria-hidden="true" />}
+          {comparison.change < 0 && <ArrowDownOutlined aria-hidden="true" />}
+          {comparison.change === 0 ? (
+            <span>{changeText}</span>
+          ) : (
+            <>
+              <span aria-hidden="true">{changeText.replace(/^[+−]/, '')}</span>
+              <span className="sr-only">{changeText}</span>
+            </>
+          )}
+          {comparison.isNoise && <span className="sr-only">{t('insights.change_noise')}</span>}
+        </>
+      ) : null}
+      {wasText && <span className="tile-delta-was">{wasText}</span>}
+    </span>
+  );
+};
 
 export const DashboardPage: React.FC = () => {
   const timeZone = useTimeZone();
@@ -404,6 +460,11 @@ export const DashboardPage: React.FC = () => {
     />
   );
 
+  const requestsDelta = React.useMemo(() => (data ? dashboardMetricComparison(data, 'requests') : null), [data]);
+  const tokensDelta = React.useMemo(() => (data ? dashboardMetricComparison(data, 'tokens') : null), [data]);
+  const costDelta = React.useMemo(() => (data ? dashboardMetricComparison(data, 'cost') : null), [data]);
+  const formatPreviousTokens = React.useCallback((value: number) => formatTokensStyled(value, tokenStyle), [tokenStyle]);
+
   if (!data && isError) {
     return (
       <div className="terminal-page dashboard-page">
@@ -422,6 +483,15 @@ export const DashboardPage: React.FC = () => {
   const hasWarmHeatmap = Boolean(dashboardHeatmapSwr.readSnapshot(queryClient, timeZone));
   const hasWarmQuota = Boolean(queryClient.getQueryData([CREDENTIAL_FILES_QUERY_KEY]));
   const hasModelUsageHidden = layout.some((item) => item.id === 'model_usage' && item.hidden);
+  const previousPreset = previousCalendarPreset(range.preset);
+  const isQuietOpenCalendar = Boolean(
+    data
+    && !isPlaceholderData
+    && data.coverage.has_usage
+    && data.requests.total === 0
+    && !selectedApiKey
+    && isOpenCalendarPreset(range.preset),
+  );
 
   const renderWidget = (id: DashboardWidgetId): React.ReactNode => {
     switch (id) {
@@ -445,6 +515,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="tile-value">
               <RollingNumber readout={resolveCountFlowReadout(data.requests.total)} />
+              <KpiDelta delta={requestsDelta} formatPrevious={formatCount} testId="dashboard-requests-delta" />
             </div>
             <div className="tile-caption">
               <span className="tile-rate">
@@ -476,6 +547,7 @@ export const DashboardPage: React.FC = () => {
             <div className="tile-label">{t('dash.total_tokens')}</div>
             <div className="tile-value" data-tip={formatTokensFull(data.tokens.total)}>
               <RollingNumber readout={resolveTokenFlowReadout(data.tokens.total, tokenStyle)} />
+              <KpiDelta delta={tokensDelta} formatPrevious={formatPreviousTokens} testId="dashboard-tokens-delta" />
             </div>
             <div className="tile-caption">
               <span>{t('dash.tokens_input')} <b data-tip={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
@@ -595,6 +667,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="tile-value">
               <RollingNumber readout={currencyReadout(data.metrics.cost, currency)} />
+              <KpiDelta delta={costDelta} formatPrevious={formatTrendCost} testId="dashboard-cost-delta" />
             </div>
             <div className="tile-caption">
               <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
@@ -726,6 +799,27 @@ export const DashboardPage: React.FC = () => {
           title={t('dash.partial_title')}
           detail={data.partial_errors.join(' · ')}
           onRetry={refreshAll}
+        />
+      )}
+
+      {isQuietOpenCalendar && !isArranging && (
+        <Notice
+          tone="info"
+          className="dashboard-alert"
+          data-testid="dashboard-calendar-quiet"
+          title={t('dash.calendar_quiet')}
+          action={(
+            <>
+              <Button size="sm" onClick={() => void applyRange({ preset: '24h' })} data-testid="dashboard-switch-24h">
+                {t('dash.range.24h')}
+              </Button>
+              {previousPreset && (
+                <Button size="sm" onClick={() => void applyRange({ preset: previousPreset })} data-testid="dashboard-switch-previous">
+                  {calendarPresetLabel(t, previousPreset)}
+                </Button>
+              )}
+            </>
+          )}
         />
       )}
 
