@@ -1580,26 +1580,26 @@ test('usage event view', () => {
   assert.ok(manualGrid.endsWith('14px'));
 
   // computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 13 gaps + inline padding
-  // 96 + 88 + 140 + 130 + 84 + 76 + 78 + 132 + 64 + 64 + 124 + 76 = 1152; selection 20 + chevron 14 = 34;
-  // gaps 13*16 = 208; padding 24 = 1418
-  const baseMin = 1152 + 34;
+  // 96 + 88 + 140 + 130 + 84 + 76 + 78 + 140 + 64 + 64 + 124 + 76 = 1160; selection 20 + chevron 14 = 34;
+  // gaps 13*16 = 208; padding 24 = 1426
+  const baseMin = 1160 + 34;
   assert.equal(computeGridMinWidth({}), baseMin + 208 + 24);
   // A manual override replaces the flexible minimum with the requested width
   assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 208 + 24);
   // Out-of-range overrides are clamped exactly as the template builder clamps them
   assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 208 + 24);
   // The sheet drops both fixed tracks and the two gaps that separated them from the data.
-  assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1152 + 176 + 24);
+  assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1160 + 176 + 24);
   assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
   // foldRequestColumns: a list too narrow for every column leaves the least-scanned ones out, in order.
   const foldedAt = (width: number | null, widths = {}) => [...foldRequestColumns(width, widths)];
   assert.deepEqual(foldedAt(null), [], 'nothing folds before the list is measured');
-  assert.deepEqual(foldedAt(1418), [], 'every column fits at the grid floor');
+  assert.deepEqual(foldedAt(1426), [], 'every column fits at the grid floor');
   assert.deepEqual(foldedAt(2400), []);
-  assert.deepEqual(foldedAt(1417), ['ua'], 'one pixel short folds the first column only');
-  assert.deepEqual(foldedAt(1326), ['ua']);
-  assert.deepEqual(foldedAt(1325), ['ua', 'key']);
+  assert.deepEqual(foldedAt(1425), ['ua'], 'one pixel short folds the first column only');
+  assert.deepEqual(foldedAt(1334), ['ua']);
+  assert.deepEqual(foldedAt(1333), ['ua', 'key']);
   assert.deepEqual(foldedAt(1140), ['ua', 'key', 'tps'], 'a 1440px window with the rail open keeps the cache rate and the mode');
   assert.deepEqual(foldedAt(921), ['ua', 'key', 'tps', 'cache', 'mode']);
   // A stacked record labels every field, so the card width folds nothing.
