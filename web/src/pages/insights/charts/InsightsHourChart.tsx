@@ -7,7 +7,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { useMotionPreference } from '@/utils/motionPreference';
-import { RADIUS } from '../../../theme/radius';
+import { COLUMN_CAP } from '../../../charts/stackCap';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../../../types/insightsCube';
@@ -109,6 +109,7 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({
           />
         ))}
         <ChartTooltip
+          isPinnedTop
           content={
             <ChartTooltipContent
               buildRows={(payload) => {
@@ -133,7 +134,7 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({
         />
         <Bar
           dataKey="value"
-          radius={[RADIUS.xs, RADIUS.xs, 0, 0]}
+          radius={COLUMN_CAP}
           isAnimationActive={!isReducedMotion}
           animationDuration={180}
         >

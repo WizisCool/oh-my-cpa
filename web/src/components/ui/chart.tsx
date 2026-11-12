@@ -63,7 +63,6 @@ export function ChartContainer({
   const { isReducedMotion } = useMotionPreference();
 
   const hostRef = React.useRef<HTMLDivElement | null>(null);
-  const [hasMeasuredBox, setHasMeasuredBox] = React.useState(false);
   const [isTooltipDismissed, setIsTooltipDismissed] = React.useState(false);
   const [isTouchEngaged, setIsTouchEngaged] = React.useState(false);
   const lastActiveKeyRef = React.useRef<string>('');
@@ -83,21 +82,6 @@ export function ChartContainer({
     },
     [ref],
   );
-
-  React.useLayoutEffect(() => {
-    const el = hostRef.current;
-    if (!el || !responsive) return;
-    const check = () => {
-      if (el.clientWidth > 0 && el.clientHeight > 0) {
-        setHasMeasuredBox(true);
-      }
-    };
-    check();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [responsive]);
 
   const dismissTouchTooltip = React.useCallback(() => {
     setIsTooltipDismissed(true);
@@ -221,25 +205,22 @@ export function ChartContainer({
           '[&_.recharts-cartesian-grid_line]:stroke-[var(--border-soft)] [&_.recharts-cartesian-grid_line]:[stroke-width:var(--hairline)]',
           '[&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--border)] [&_.recharts-curve.recharts-tooltip-cursor]:[stroke-width:1px]',
           '[&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[color-mix(in_srgb,var(--fg)_4%,transparent)]',
-          '[&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none [&_.recharts-layer]:outline-none',
           className,
         )}
         {...props}
       >
-        <ChartStyle id={chartId} config={config} />
         {responsive ? (
-          hasMeasuredBox ? (
-            <RechartsPrimitive.ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-              {children}
-            </RechartsPrimitive.ResponsiveContainer>
-          ) : (
-            <RechartsPrimitive.ResponsiveContainer
-              width={initialDimension.width}
-              height={initialDimension.height}
-            >
-              {children}
-            </RechartsPrimitive.ResponsiveContainer>
-          )
+          // The container renders at `initialDimension` until its own observer has measured the
+          // box, so a chart never waits on a synchronous measure of the page or a second pass.
+          <RechartsPrimitive.ResponsiveContainer
+            width="100%"
+            height="100%"
+            minWidth={1}
+            minHeight={1}
+            initialDimension={initialDimension}
+          >
+            {children}
+          </RechartsPrimitive.ResponsiveContainer>
         ) : (
           children
         )}
@@ -248,37 +229,39 @@ export function ChartContainer({
   );
 }
 
-export function ChartStyle({ id, config }: { id: string; config: ChartConfig }) {
-  const colorConfig = Object.entries(config).filter(([, item]) => item.theme ?? item.color);
-  if (!colorConfig.length) return null;
-
-  const css = Object.entries(THEMES)
-    .map(([mode, selector]) => {
-      const vars = colorConfig
-        .map(([key, item]) => {
-          const color = item.theme?.[mode as keyof typeof item.theme] ?? item.color;
-          return color ? `  --color-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}: ${color};` : null;
-        })
-        .filter(Boolean)
-        .join('\n');
-      return vars ? `${selector} [data-chart="${id}"] {\n${vars}\n}` : '';
-    })
-    .filter(Boolean)
-    .join('\n');
-
-  if (!css) return null;
-  return <style dangerouslySetInnerHTML={{ __html: css }} />;
-}
-
-export function ChartTooltip(props: React.ComponentProps<typeof RechartsPrimitive.Tooltip>) {
+/**
+ * The readout follows the pointer closely: a short decelerating glide between buckets, on a
+ * layer of its own so the move is composited instead of repainted. The library's default - a
+ * 400ms symmetric ease - trailed the pointer by a whole bucket on a quick sweep.
+ *
+ * It keeps clear of what the reader is looking at. It stands well off the pointer, and a chart
+ * read along its x axis rides it along the top of the plot (`isPinnedTop`): the readout then only
+ * slides sideways beside the hovered bucket, instead of sitting on the marks at the pointer's
+ * height and chasing it up and down.
+ */
+export function ChartTooltip({
+  isPinnedTop = false,
+  ...props
+}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> & { isPinnedTop?: boolean }) {
+  const { isReducedMotion } = useMotionPreference();
   return (
     <RechartsPrimitive.Tooltip
       allowEscapeViewBox={{ x: false, y: false }}
-      wrapperStyle={{ pointerEvents: 'none', maxWidth: 'calc(100vw - 24px)', zIndex: 30 }}
+      offset={TOOLTIP_OFFSET}
+      position={isPinnedTop ? { y: 0 } : undefined}
+      useTranslate3d
+      isAnimationActive={!isReducedMotion}
+      animationDuration={TOOLTIP_GLIDE_MS}
+      // The library concatenates this into `transition`, so a token reads as it does in CSS.
+      animationEasing={'var(--ease-out)' as 'ease-out'}
       {...props}
+      wrapperStyle={{ pointerEvents: 'none', maxWidth: 'calc(100vw - 24px)', zIndex: 30, willChange: 'transform', ...props.wrapperStyle }}
     />
   );
 }
+
+const TOOLTIP_OFFSET = 18;
+const TOOLTIP_GLIDE_MS = 110;
 
 export const ChartLegend = RechartsPrimitive.Legend;
 

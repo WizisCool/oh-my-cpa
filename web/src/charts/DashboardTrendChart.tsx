@@ -22,7 +22,6 @@ export interface DashboardTrendChartProps {
   height?: number;
   label?: (timeMs: number) => string;
   format?: (value: number) => string;
-  formatExact?: (value: number) => string;
 }
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -35,7 +34,6 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   height = 46,
   label,
   format,
-  formatExact,
 }) => {
   useTimeZone();
   const { theme } = useTheme();
@@ -81,23 +79,19 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
             <XAxis dataKey="t" hide />
             <YAxis domain={[0, 'auto']} hide />
             <ChartTooltip
+              isPinnedTop
               cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
               content={
                 <ChartTooltipContent
                   buildRows={(payload) => {
                     const entry = payload[0]?.payload as { t: number; value: number } | undefined;
                     if (!entry) return null;
+                    // One number per readout: the compact figure the tile prints. Its exact twin beside
+                    // it repeated the same value in a second spelling and halved the readout's legibility.
                     const display = format?.(entry.value) ?? PLAIN_NUMBER_FORMAT.format(entry.value);
-                    const exact = formatExact?.(entry.value);
                     return {
                       heading: (label ?? ((at: number) => dayjs(at).format('MM-DD HH:mm')))(entry.t),
-                      rows: [
-                        {
-                          color,
-                          value: display,
-                          note: exact && exact !== display ? exact : undefined,
-                        },
-                      ],
+                      rows: [{ color, value: display }],
                     };
                   }}
                 />

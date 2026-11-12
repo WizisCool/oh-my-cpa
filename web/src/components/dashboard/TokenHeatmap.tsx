@@ -64,7 +64,9 @@ const WEEKDAY_KEYS: readonly MessageKey[] = [
 const HEATMAP_SCROLL_END = 1_000_000;
 
 /** Quiet-stop weights of the legend's swatches, from an empty day to the window's busiest. */
-const HEATMAP_LEGEND_SHARES = ['100%', '75%', '50%', '25%', '0%'];
+/** Steps of the measured ramp; `dashboard.css` carries one `.is-q*` rule per step. */
+const HEATMAP_RAMP_STEPS = 20;
+const HEATMAP_LEGEND_STEPS = [20, 15, 10, 5, 0];
 
 /**
  * The panel's own refresh cadence.
@@ -471,6 +473,7 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
     return rows;
   }, [cells]);
 
+
   const classifyCell = React.useMemo(
     () => createHeatmapCellClassifier(data?.first_stored_ms ?? null, data?.as_of_ms ?? null),
     [data?.first_stored_ms, data?.as_of_ms, timezone],
@@ -506,43 +509,40 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
       // The continuous ramp: the weight of the quiet stop, as a percentage. A measured cell carries
       // it as a custom property and CSS mixes the two stops; every other state is drawn by its class
       // and gets no ramp at all, so "no traffic" can never be confused with a light measured shade.
-      const quietShare = state === 'measured'
-        ? `${Math.round((1 - heatmapRampPosition(entry?.tokens ?? 0, rampMax)) * 10000) / 100}%`
+      // Quantised to the ramp's twenty-one steps, which a reader cannot tell apart, so that cells
+      // of a step carry identical styles and the browser computes each step's colour once instead
+      // of once per cell (see `.heatmap-cell.is-q*`).
+      const quietStep = state === 'measured'
+        ? Math.round((1 - heatmapRampPosition(entry?.tokens ?? 0, rampMax)) * HEATMAP_RAMP_STEPS)
         : null;
-      // The visual square is an inner element, and the hover scale applies to *it* rather than to
-      // the cell, because the cell is what antd measures to place the tooltip: a transform on the
-      // anchor is a moving target, and the box would be placed against whichever rect existed when
-      // it was opened rather than the one on screen afterwards. The mark is `pointer-events: none`
-      // so the hover target stays the stationary cell.
       const node = (
         <div
           key={cell.day}
           data-day={cell.day}
           role="gridcell"
-          className={`heatmap-cell is-${state}${quietShare ? ' is-measured' : ''} is-interactive`}
-          // The ramp weight travels as a custom property rather than an inline `background`, which
-          // keeps the two stops in the stylesheet and the mixing in the browser's OKLCH.
-          style={{
-            gridColumn: cell.column + 1,
-            gridRow: cell.row + 1,
-            ...(quietShare ? { '--heatmap-quiet-share': quietShare } : {}),
-          } as React.CSSProperties}
+          className={`heatmap-cell is-${state}${quietStep === null ? '' : ` is-measured is-q${quietStep}`} is-interactive`}
           // Only interactive cells take a tab stop. A field where every cell were focusable would
           // put ~370 stops in the tab order, and one where a dead cell were focusable would make
           // the keyboard promise an interaction that cannot happen.
           tabIndex={cell.day === resolvedFocus ? 0 : -1}
           aria-label={label}
-        >
-          <span className="heatmap-cell-mark" aria-hidden="true" />
-        </div>
+        />
       );
       return node;
   }, [entries, rampMax, t, lang, resolvedFocus, classifyCell]);
 
   const cellRows = React.useMemo(
+    // A cell carries no inline style, so cells of one ramp step share one computed style: the row
+    // places its cells (`grid-row: inherit`) and the grid's flow gives each the next column. A
+    // column the row has no day for - the start of a partial week - is held by an inert gap.
     () => cellsByRow.map((row, index) => (
-      <div key={index} className="heatmap-row" role="row">
-        {row.map(renderCell)}
+      <div key={index} className="heatmap-row" role="row" style={{ gridRow: index + 1 }}>
+        {row.flatMap((cell, at) => {
+          const gap = cell.column - (at === 0 ? 0 : row[at - 1]!.column + 1);
+          return gap > 0
+            ? [<span key={`gap-${cell.day}`} className="heatmap-gap" aria-hidden="true" style={{ gridColumn: `span ${gap}` }} />, renderCell(cell)]
+            : [renderCell(cell)];
+        })}
       </div>
     )),
     [cellsByRow, renderCell],
@@ -659,12 +659,8 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
           <div className="heatmap-legend" aria-hidden="true">
             <span>{t('dash.heatmap.legend_less')}</span>
             <span className="heatmap-legend-scale">
-              {HEATMAP_LEGEND_SHARES.map((share) => (
-                <i
-                  key={share}
-                  className="heatmap-legend-swatch"
-                  style={{ '--heatmap-quiet-share': share } as React.CSSProperties}
-                />
+              {HEATMAP_LEGEND_STEPS.map((step) => (
+                <i key={step} className={`heatmap-legend-swatch is-q${step}`} />
               ))}
             </span>
             <span>{t('dash.heatmap.legend_more')}</span>
