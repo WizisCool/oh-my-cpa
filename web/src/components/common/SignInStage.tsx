@@ -24,13 +24,13 @@ const NODE_HALF = 22;
 const CLIENTS = [
   { iconId: 'ClaudeCode', y: 110 },
   { iconId: 'Codex', y: 200 },
-  { iconId: 'GeminiCLI', y: 290 },
+  { iconId: 'Antigravity', y: 290 },
 ];
 const PROVIDERS = [
   { iconId: 'Claude', y: 76 },
   { iconId: 'OpenAI', y: 160 },
   { iconId: 'Gemini', y: 240 },
-  { iconId: 'Qwen', y: 324 },
+  { iconId: 'DeepSeek', y: 324 },
 ];
 const CLIENT_X = 76;
 const PROVIDER_X = 564;
