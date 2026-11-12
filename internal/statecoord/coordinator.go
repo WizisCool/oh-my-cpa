@@ -32,6 +32,10 @@ const (
 // ErrCoordinatorClosed reports mutations attempted after shutdown started.
 var ErrCoordinatorClosed = errors.New("state coordinator is closed")
 
+// ErrCoordinatorUnready reports that repeated concurrent invalidations prevented
+// loading a clean baseline for an optimistic mutation.
+var ErrCoordinatorUnready = errors.New("state coordinator projection is temporarily unready")
+
 // DomainKey identifies an independent flushable slice of the projected state
 // (e.g. "scalars", "client_keys", "provider_family:codex", "oauth_aliases:claude").
 type DomainKey string
@@ -431,6 +435,13 @@ func (c *Coordinator[S]) ensureLoaded(ctx context.Context) error {
 //  2. Applies mutateFn to an isolated clone under write lock (rolling back automatically if mutateFn errors);
 //  3. Increments Version++, marks domain dirty at the new version, and non-blockingly wakes writeBehindLoop.
 func (c *Coordinator[S]) Mutate(ctx context.Context, domain DomainKey, mutateFn func(state *S) error) (uint64, error) {
+	return c.MutateWithAudit(ctx, domain, nil, mutateFn)
+}
+
+// MutateWithAudit atomically applies mutateFn, marks domain dirty, and attaches an optional
+// PendingAuditRecord under the same coordinator write lock before waking writeBehindLoop,
+// ensuring no concurrent flush can observe the mutation without its paired audit record.
+func (c *Coordinator[S]) MutateWithAudit(ctx context.Context, domain DomainKey, audit *PendingAuditRecord, mutateFn func(state *S) error) (uint64, error) {
 	if err := c.ensureLoaded(ctx); err != nil {
 		return 0, err
 	}
@@ -450,6 +461,10 @@ func (c *Coordinator[S]) Mutate(ctx context.Context, domain DomainKey, mutateFn 
 			c.mu.Unlock()
 			return 0, ErrCoordinatorClosed
 		}
+		if !c.isReady {
+			c.mu.Unlock()
+			return 0, ErrCoordinatorUnready
+		}
 	}
 
 	if _, known := c.resolveDomainLocked(domain); !known {
@@ -468,6 +483,9 @@ func (c *Coordinator[S]) Mutate(ctx context.Context, domain DomainKey, mutateFn 
 	c.version++
 	version := c.version
 	c.dirtyGen[domain] = version
+	if audit != nil && audit.Action != "" {
+		c.pendingAudits[domain] = append(c.pendingAudits[domain], *audit)
+	}
 	c.mu.Unlock()
 
 	c.signalWakeup()
@@ -791,6 +809,15 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 
 	c.mu.Lock()
 	latestSnapshot = c.opts.Clone(c.state)
+	// Include scopes for any domain that became dirty during Flush/Load I/O so SSE
+	// subscribers reconcile every rolled-back scope, not only the attempted subset.
+	for key := range c.dirtyGen {
+		if spec, ok := c.resolveDomainLocked(key); ok {
+			for _, scope := range spec.Scopes {
+				scopeSet[scope] = struct{}{}
+			}
+		}
+	}
 	// Any audit records queued while Flush/Load I/O was running are rolled back by
 	// the authoritative reload, so collect them now and emit terminal failure outcomes.
 	for key, records := range c.pendingAudits {
@@ -835,6 +862,20 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 		Error:   message,
 		Data:    safePayload,
 	})
+}
+
+// UpdateBaseline updates upstream-owned baseline metadata in place even when unrelated
+// domains have pending mutations, passing clean=true when dirtyGen is empty.
+func (c *Coordinator[S]) UpdateBaseline(updateFn func(state *S, isClean bool)) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.isClosed || !c.isReady {
+		return false
+	}
+	candidate := c.opts.Clone(c.state)
+	updateFn(&candidate, len(c.dirtyGen) == 0)
+	c.state = candidate
+	return true
 }
 
 // RefreshCleanBaseline updates non-dirty baseline metadata in place only when

@@ -295,6 +295,9 @@ func (h *Handler) readProviderItemsWithVersion(ctx context.Context, client *mana
 		customWebsites := h.loadProviderWebsites(ctx)
 		testModels, _ := h.loadStringPreference(ctx, repository.PreferenceProviderTestModels)
 		env, err := statecoord.ProjectTyped(ctx, h.stateCoord, func(state projectedConfigState, _ uint64) ([]ProviderItemDTO, error) {
+			if state.ProviderSliceFailed {
+				return nil, errStateSliceUnavailable
+			}
 			return projectProviderItemsFromRaw(state.ConfigFamilies, state.OpenAICompat, customNames, customWebsites, testModels), nil
 		})
 		if err == nil {

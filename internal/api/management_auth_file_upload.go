@@ -15,6 +15,15 @@ import (
 )
 
 func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeError(writer, http.StatusServiceUnavailable, "management write busy")
+		return
+	}
+	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileUploadLimit)
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {

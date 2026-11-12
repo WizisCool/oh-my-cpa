@@ -59,14 +59,13 @@ export function useProviderManagement({
   providerIcons,
   writeProviderIcon,
   shiftCachedProviderIcons,
-  settleProviderRow,
 }: {
   toast: Toast;
   t: ReturnType<typeof useT>;
   providerIcons: Record<string, string>;
   writeProviderIcon: (id: string, icon: string) => Promise<{ ok: boolean }>;
   shiftCachedProviderIcons: (id: string) => void;
-  settleProviderRow: (id: string, isEnabled: boolean) => void;
+  settleProviderRow?: (id: string, isEnabled: boolean) => void;
 }) {
   const queryClient = useQueryClient();
 
@@ -114,12 +113,45 @@ export function useProviderManagement({
 
   // Endpoint models pull state, per-key connectivity probe state & custom models expand state
   const modelFetchSeqRef = useRef<number>(0);
+  const probeSessionRef = useRef<number>(0);
+  const probeCountsRef = useRef<Map<string, number>>(new Map());
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [testingKeyIds, setTestingKeyIds] = useState<Set<string>>(new Set());
   const [isTestingAllKeys, setIsTestingAllKeys] = useState(false);
   const [endpointModels, setEndpointModels] = useState<string[]>([]);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(new Set());
+
+  const incrementProbeKeys = (ids: readonly string[]) => {
+    for (const id of ids) {
+      probeCountsRef.current.set(id, (probeCountsRef.current.get(id) ?? 0) + 1);
+    }
+    setTestingKeyIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+  };
+
+  const decrementProbeKeys = (ids: readonly string[]) => {
+    const released: string[] = [];
+    for (const id of ids) {
+      const rem = (probeCountsRef.current.get(id) ?? 1) - 1;
+      if (rem <= 0) {
+        probeCountsRef.current.delete(id);
+        released.push(id);
+      } else {
+        probeCountsRef.current.set(id, rem);
+      }
+    }
+    if (released.length > 0) {
+      setTestingKeyIds((prev) => {
+        const next = new Set(prev);
+        for (const id of released) next.delete(id);
+        return next;
+      });
+    }
+  };
 
   const handlePullModels = async () => {
     const rawUrl = formBaseURL.trim();
@@ -359,10 +391,12 @@ export function useProviderManagement({
   };
 
   const handleTestKey = async (k: FormKeyItem, idx: number) => {
-    setTestingKeyIds((prev) => new Set(prev).add(k.id));
+    const session = probeSessionRef.current;
+    incrementProbeKeys([k.id]);
     const hide = toast.pending(t('pro.testing_key', { n: idx + 1 }));
     try {
       const result = await testProviderKey(k);
+      if (probeSessionRef.current !== session) return;
       if (result.ok) {
         toast.success(t('pro.test_key_ok', { n: idx + 1 }));
         return;
@@ -372,11 +406,9 @@ export function useProviderManagement({
       }
     } finally {
       hide();
-      setTestingKeyIds((prev) => {
-        const next = new Set(prev);
-        next.delete(k.id);
-        return next;
-      });
+      if (probeSessionRef.current === session) {
+        decrementProbeKeys([k.id]);
+      }
     }
   };
 
@@ -399,15 +431,14 @@ export function useProviderManagement({
       toast.warning(t('pro.test_model_required'));
       return;
     }
+    const session = probeSessionRef.current;
+    const keyIds = keys.map((key) => key.id);
     setIsTestingAllKeys(true);
-    setTestingKeyIds((prev) => {
-      const next = new Set(prev);
-      for (const key of keys) next.add(key.id);
-      return next;
-    });
+    incrementProbeKeys(keyIds);
     const hide = toast.pending(t('pro.testing_all'));
     try {
       const results = await Promise.all(keys.map((key) => testProviderKey(key)));
+      if (probeSessionRef.current !== session) return;
       // Every unsuccessful probe counts, including ones that warned instead of
       // erroring: the success toast must mean every key answered.
       const failed = results.filter((result) => !result.ok);
@@ -419,17 +450,17 @@ export function useProviderManagement({
       toast.error(t('pro.test_key_failed'), { detail: describeError(firstError), isPersistent: true });
     } finally {
       hide();
-      setIsTestingAllKeys(false);
-      setTestingKeyIds((prev) => {
-        const next = new Set(prev);
-        for (const key of keys) next.delete(key.id);
-        return next;
-      });
+      if (probeSessionRef.current === session) {
+        setIsTestingAllKeys(false);
+        decrementProbeKeys(keyIds);
+      }
     }
   };
 
   const handleCloseProviderDrawer = () => {
     modelFetchSeqRef.current += 1;
+    probeSessionRef.current += 1;
+    probeCountsRef.current.clear();
     setEndpointModels([]);
     setIsPullingModels(false);
     setTestingKeyIds(new Set());
@@ -479,7 +510,7 @@ export function useProviderManagement({
 
   const [busyProviderIds, setBusyProviderIds] = useState<Set<string>>(new Set());
   const inFlightCountRef = useRef<Map<string, number>>(new Map());
-  const latestToggleSeqRef = useRef<Map<string, number>>(new Map());
+  const providerToggleChainRef = useRef<Map<string, Promise<void>>>(new Map());
 
   const statusMutation = useOptimisticProviderStatusMutation({
     formatError: (err) => t('pro.status_update_failed', { msg: providerWriteMessage(err) }),
@@ -489,28 +520,49 @@ export function useProviderManagement({
     const row = queryClient
       .getQueryData<ManagementProvidersData>(['management-providers', true])
       ?.providers.find((provider) => provider.id === id);
-    const seq = (latestToggleSeqRef.current.get(id) ?? 0) + 1;
-    latestToggleSeqRef.current.set(id, seq);
+    const expectedAuthIndex = row?.auth_index;
+    const expectedName = row?.upstream_name || row?.name;
+
+    // Paint the optimistic switch flip synchronously on the click frame even when an
+    // earlier request for the same provider is still in flight on the wire.
+    for (const includeKeys of [true, false] as const) {
+      queryClient.setQueryData<ManagementProvidersData>(
+        ['management-providers', includeKeys],
+        (current) =>
+          current
+            ? {
+                ...current,
+                providers: current.providers.map((p) =>
+                  p.id === id ? { ...p, disabled: !isEnabled } : p,
+                ),
+              }
+            : current,
+      );
+    }
+
     const nextInFlight = (inFlightCountRef.current.get(id) ?? 0) + 1;
     inFlightCountRef.current.set(id, nextInFlight);
     setBusyProviderIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
 
-    void statusMutation
-      .mutateAsync({
-        id,
-        isEnabled,
-        expectedAuthIndex: row?.auth_index,
-        expectedName: row?.upstream_name || row?.name,
-      })
-      .then(() => {
-        if (latestToggleSeqRef.current.get(id) === seq) {
-          settleProviderRow(id, isEnabled);
+    const previous = providerToggleChainRef.current.get(id) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await statusMutation.mutateAsync({
+            id,
+            isEnabled,
+            expectedAuthIndex,
+            expectedName,
+          });
+        } catch {
+          // Snapshot rollback and localized toast are handled by useOptimisticProviderStatusMutation.
         }
       })
-      .catch(() => {
-        // Snapshot rollback and localized toast are handled by useOptimisticProviderStatusMutation.
-      })
       .finally(() => {
+        if (providerToggleChainRef.current.get(id) === run) {
+          providerToggleChainRef.current.delete(id);
+        }
         const remaining = (inFlightCountRef.current.get(id) ?? 1) - 1;
         if (remaining <= 0) {
           inFlightCountRef.current.delete(id);
@@ -524,6 +576,7 @@ export function useProviderManagement({
           inFlightCountRef.current.set(id, remaining);
         }
       });
+    providerToggleChainRef.current.set(id, run);
   };
 
 

@@ -305,6 +305,9 @@ export function useOptimisticClientKeyMutation(options?: {
       if (op.kind === 'create') {
         return api.createClientAPIKey(op.key);
       }
+      if (!op.expectedFingerprint) {
+        throw new Error('Client key identity is still loading; try again in a moment');
+      }
       if (op.kind === 'update') {
         return api.updateClientAPIKey(op.index, op.key, op.expectedFingerprint);
       }

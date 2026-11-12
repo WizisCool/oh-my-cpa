@@ -83,7 +83,7 @@ func (s *Service) lock(ctx context.Context) (func(), error) {
 		return func() {}, nil
 	}
 	if err := s.Acquire(ctx); err != nil {
-		return nil, errors.New("write_busy")
+		return nil, err
 	}
 	return s.Release, nil
 }

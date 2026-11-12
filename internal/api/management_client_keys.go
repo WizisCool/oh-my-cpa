@@ -191,7 +191,7 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 		}
 
 		createdIndex := 0
-		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainClientKeys, func(state *projectedConfigState) error {
+		version, mutErr := h.mutateCoordinatorWithAudit(request, stateDomainClientKeys, "api_key.create", "client_api_key", targetLabel, nil, func(state *projectedConfigState) error {
 			for _, existing := range state.ClientKeys {
 				if strings.TrimSpace(existing) == newKey {
 					return errClientKeyDuplicate
@@ -207,14 +207,10 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 				writeJSON(writer, http.StatusConflict, map[string]string{"error": mutErr.Error(), "code": "resource_conflict"})
 				return
 			}
-			writeCPAFacadeError(writer, mutErr)
+			writeProviderWriteError(writer, mutErr)
 			return
 		}
 		h.invalidateClientKeyCatalog()
-		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainClientKeys, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", createdIndex), nil); flushErr != nil {
-			writeCPAFacadeError(writer, flushErr)
-			return
-		}
 		setStateVersionHeader(writer, version)
 		resp := map[string]any{
 			"status":      "ok",
@@ -329,7 +325,7 @@ func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.R
 			return
 		}
 
-		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainClientKeys, func(state *projectedConfigState) error {
+		version, mutErr := h.mutateCoordinatorWithAudit(request, stateDomainClientKeys, "api_key.update", "client_api_key", targetLabel, nil, func(state *projectedConfigState) error {
 			if index >= len(state.ClientKeys) {
 				return errClientKeyOutOfBounds
 			}
@@ -357,14 +353,10 @@ func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.R
 				writeJSON(writer, http.StatusConflict, map[string]string{"error": mutErr.Error(), "code": "resource_conflict"})
 				return
 			}
-			writeCPAFacadeError(writer, mutErr)
+			writeProviderWriteError(writer, mutErr)
 			return
 		}
 		h.invalidateClientKeyCatalog()
-		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainClientKeys, "api_key.update", "client_api_key", targetLabel, nil); flushErr != nil {
-			writeCPAFacadeError(writer, flushErr)
-			return
-		}
 		setStateVersionHeader(writer, version)
 		resp := map[string]any{
 			"status":      "ok",
@@ -476,7 +468,7 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 			return
 		}
 
-		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainClientKeys, func(state *projectedConfigState) error {
+		version, mutErr := h.mutateCoordinatorWithAudit(request, stateDomainClientKeys, "api_key.delete", "client_api_key", targetLabel, nil, func(state *projectedConfigState) error {
 			if index >= len(state.ClientKeys) {
 				return errClientKeyOutOfBounds
 			}
@@ -499,14 +491,10 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 				writeJSON(writer, http.StatusConflict, map[string]string{"error": mutErr.Error(), "code": "resource_conflict"})
 				return
 			}
-			writeCPAFacadeError(writer, mutErr)
+			writeProviderWriteError(writer, mutErr)
 			return
 		}
 		h.invalidateClientKeyCatalog()
-		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainClientKeys, "api_key.delete", "client_api_key", targetLabel, nil); flushErr != nil {
-			writeCPAFacadeError(writer, flushErr)
-			return
-		}
 		setStateVersionHeader(writer, version)
 		writeJSON(writer, http.StatusOK, map[string]any{
 			"status":  "ok",

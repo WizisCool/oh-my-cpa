@@ -271,6 +271,7 @@ func (h *Handler) handleOAuthCallback(writer http.ResponseWriter, request *http.
 
 	if result.Completed {
 		_ = h.recordAudit(request, "oauth.callback", "oauth_callback", security.RedactText(auditIdentifier), "success", map[string]any{"already_completed": true})
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 
 		writeJSON(writer, http.StatusOK, map[string]any{
 			"status":    "ok",

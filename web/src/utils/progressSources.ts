@@ -50,20 +50,19 @@ export async function invalidateQueriesSilently(
     return;
   }
 
-  for (const hash of candidates) {
+  const candidateSet = new Set(candidates);
+  const startedFetching = new Set<string>();
+  for (const hash of candidateSet) {
     silentBackgroundQueries.add(hash);
   }
 
-  let didStartFetching = false;
   const unsubscribe = cache.subscribe((event) => {
     const query = event.query;
-    if (!query || !silentBackgroundQueries.has(query.queryHash)) return;
+    if (!query || !candidateSet.has(query.queryHash) || !silentBackgroundQueries.has(query.queryHash)) return;
     if (query.state.fetchStatus === 'fetching') {
-      didStartFetching = true;
-    } else if (didStartFetching) {
-      // Only clear once a background fetch actually ran and transitioned back to idle.
-      // Ignoring the synchronous 'invalidated' cache event (where fetchStatus is still 'idle'
-      // before refetchQueries starts the request) is what keeps DataProgress suppressed!
+      startedFetching.add(query.queryHash);
+    } else if (startedFetching.has(query.queryHash)) {
+      // Only clear once this specific query's background fetch ran and returned to idle.
       silentBackgroundQueries.delete(query.queryHash);
     }
   });

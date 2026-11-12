@@ -44,26 +44,35 @@ type pendingScalarEntry struct {
 // projectedConfigState holds the in-memory hot projection of CPA configuration slices.
 // Instances stored inside statecoord.Coordinator are never mutated in place outside Coordinator.Mutate.
 type projectedConfigState struct {
-	Scalars                  management.ConfigScalarsDTO                              `json:"scalars"`
-	PendingScalars           map[string]pendingScalarEntry                            `json:"pending_scalars,omitempty"`
-	ScalarSeq                uint64                                                   `json:"scalar_seq"`
-	ViewYAML                 string                                                   `json:"view_yaml"`
-	SafeYAML                 string                                                   `json:"safe_yaml"`
-	Revision                 string                                                   `json:"revision"`
-	StoredLayout             string                                                   `json:"stored_layout"`
-	ClientKeys               []string                                                 `json:"client_keys"`
-	ConfigFamilies           map[management.ConfigKeyFamily][]management.ConfigAPIKey `json:"config_families"`
-	RuntimeOnlyFam           map[management.ConfigKeyFamily]bool                      `json:"runtime_only_fam,omitempty"`
-	OpenAICompat             []management.OpenAICompatibility                         `json:"openai_compat"`
-	OpenAIRuntime            bool                                                     `json:"openai_runtime,omitempty"`
-	OAuthAliases             map[string][]managementOAuthModelAlias                   `json:"oauth_aliases"`
-	OAuthAliasesUnavailable  bool                                                     `json:"oauth_aliases_unavailable,omitempty"`
-	OAuthExcluded            map[string][]string                                      `json:"oauth_excluded"`
-	OAuthExcludedUnavailable bool                                                     `json:"oauth_excluded_unavailable,omitempty"`
-	AuthFiles                []management.AuthFile                                    `json:"auth_files"`
-	AuthFilesUnavailable     bool                                                     `json:"auth_files_unavailable,omitempty"`
-	PendingAuthStatus        map[string]pendingAuthFileStatus                         `json:"pending_auth_status,omitempty"`
-	AuthStatusSeq            uint64                                                   `json:"auth_status_seq"`
+	Scalars                  management.ConfigScalarsDTO                                     `json:"scalars"`
+	PendingScalars           map[string]pendingScalarEntry                                   `json:"pending_scalars,omitempty"`
+	ScalarSeq                uint64                                                          `json:"scalar_seq"`
+	ViewYAML                 string                                                          `json:"view_yaml"`
+	SafeYAML                 string                                                          `json:"safe_yaml"`
+	Revision                 string                                                          `json:"revision"`
+	StoredLayout             string                                                          `json:"stored_layout"`
+	ClientKeys               []string                                                        `json:"client_keys"`
+	ConfigFamilies           map[management.ConfigKeyFamily][]management.ConfigAPIKey        `json:"config_families"`
+	RuntimeOnlyFam           map[management.ConfigKeyFamily]bool                             `json:"runtime_only_fam,omitempty"`
+	ProviderSliceFailed      bool                                                            `json:"provider_slice_failed,omitempty"`
+	OpenAICompat             []management.OpenAICompatibility                                `json:"openai_compat"`
+	OpenAIRuntime            bool                                                            `json:"openai_runtime,omitempty"`
+	OAuthAliases             map[string][]managementOAuthModelAlias                          `json:"oauth_aliases"`
+	OAuthAliasesUnavailable  bool                                                            `json:"oauth_aliases_unavailable,omitempty"`
+	OAuthExcluded            map[string][]string                                             `json:"oauth_excluded"`
+	OAuthExcludedUnavailable bool                                                            `json:"oauth_excluded_unavailable,omitempty"`
+	AuthFiles                []management.AuthFile                                           `json:"auth_files"`
+	AuthFilesUnavailable     bool                                                            `json:"auth_files_unavailable,omitempty"`
+	PendingAuthStatus        map[string]pendingAuthFileStatus                                `json:"pending_auth_status,omitempty"`
+	AuthStatusSeq            uint64                                                          `json:"auth_status_seq"`
+	PendingOpenAIToggles     map[string]pendingProviderToggle                                `json:"pending_openai_toggles,omitempty"`
+	PendingFamilyToggles     map[management.ConfigKeyFamily]map[string]pendingProviderToggle `json:"pending_family_toggles,omitempty"`
+	ProviderToggleSeq        uint64                                                          `json:"provider_toggle_seq"`
+}
+
+type pendingProviderToggle struct {
+	Disabled bool   `json:"disabled"`
+	Seq      uint64 `json:"seq"`
 }
 
 type pendingAuthFileStatus struct {
@@ -142,6 +151,10 @@ func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 	for provider, rules := range src.OAuthExcluded {
 		excluded[provider] = slices.Clone(rules)
 	}
+	familyToggles := make(map[management.ConfigKeyFamily]map[string]pendingProviderToggle, len(src.PendingFamilyToggles))
+	for fam, m := range src.PendingFamilyToggles {
+		familyToggles[fam] = maps.Clone(m)
+	}
 	return projectedConfigState{
 		Scalars:                  src.Scalars,
 		PendingScalars:           maps.Clone(src.PendingScalars),
@@ -153,6 +166,7 @@ func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 		ClientKeys:               slices.Clone(src.ClientKeys),
 		ConfigFamilies:           families,
 		RuntimeOnlyFam:           maps.Clone(src.RuntimeOnlyFam),
+		ProviderSliceFailed:      src.ProviderSliceFailed,
 		OpenAICompat:             cloneViaJSON(src.OpenAICompat),
 		OpenAIRuntime:            src.OpenAIRuntime,
 		OAuthAliases:             aliases,
@@ -163,6 +177,9 @@ func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 		AuthFilesUnavailable:     src.AuthFilesUnavailable,
 		PendingAuthStatus:        maps.Clone(src.PendingAuthStatus),
 		AuthStatusSeq:            src.AuthStatusSeq,
+		PendingOpenAIToggles:     maps.Clone(src.PendingOpenAIToggles),
+		PendingFamilyToggles:     familyToggles,
+		ProviderToggleSeq:        src.ProviderToggleSeq,
 	}
 }
 
@@ -427,10 +444,6 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 			if err != nil {
 				return err
 			}
-			// Compare against upstream revision when no earlier domain in this batch mutated YAML.
-			// Scalar writes (Order 10) advance YAML revision if present in the same batch; if PendingScalars
-			// was empty, snapshot.Revision must still match CPA's current config.yaml or we refuse to overwrite
-			// out-of-band key edits.
 			if len(snapshot.PendingScalars) == 0 {
 				if err := h.ensureSnapshotRevisionMatchesUpstream(ctx, client, snapshot.Revision); err != nil {
 					return err
@@ -441,65 +454,96 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 		},
 	})
 
-	// 3. OpenAI-compatibility provider status toggles.
+	// 3. OpenAI-compatibility provider status toggles: reads fresh editable entries inside the gate
+	// and overlays only pending status toggles so concurrent structural edits (BaseURL, routing priority/weights)
+	// are never overwritten.
 	coord.RegisterDomain(stateDomainOpenAICompat, statecoord.DomainSpec[projectedConfigState]{
 		Order:  30,
 		Scopes: []string{"management-providers", "management-providers-sanitized", "management-routing", "management-config"},
 		Flush: func(ctx context.Context, _ statecoord.DomainKey, snapshot projectedConfigState) error {
+			if len(snapshot.PendingOpenAIToggles) == 0 {
+				return nil
+			}
 			client, err := h.capabilityClient(ctx)
 			if err != nil {
 				return err
 			}
-			if len(snapshot.PendingScalars) == 0 {
-				// Re-read editable OpenAI-compatibility entries if snapshot.Revision moved because
-				// client_keys flushed earlier in the same batch; otherwise enforce exact revision match.
-				currentYAML, yamlErr := client.ConfigYAML(ctx)
-				if yamlErr != nil {
-					return yamlErr
+			liveEntries, err := client.EditableOpenAICompatibility(ctx)
+			if err != nil {
+				return err
+			}
+			for targetKey, toggle := range snapshot.PendingOpenAIToggles {
+				matched := false
+				for idx := range liveEntries {
+					key := openAIToggleSelector(idx, liveEntries[idx].Name)
+					if key == targetKey || (strings.HasPrefix(targetKey, "name:") && "name:"+strings.TrimSpace(liveEntries[idx].Name) == targetKey) {
+						liveEntries[idx].Disabled = toggle.Disabled
+						matched = true
+					}
 				}
-				if snapshot.Revision != "" && !strings.EqualFold(snapshot.Revision, configyaml.ComputeRevision(currentYAML)) {
-					// Check whether an out-of-band writer changed openai-compatibility itself by comparing lengths/names.
-					liveEntries, liveErr := client.EditableOpenAICompatibility(ctx)
-					if liveErr != nil || len(liveEntries) != len(snapshot.OpenAICompat) {
-						return management.ErrConfigChanged
-					}
-					for idx := range liveEntries {
-						if liveEntries[idx].Name != snapshot.OpenAICompat[idx].Name {
-							return management.ErrConfigChanged
-						}
-					}
+				if !matched {
+					return management.ErrConfigChanged
 				}
 			}
-			return client.UpdateOpenAICompatibility(ctx, snapshot.OpenAICompat)
+			return client.UpdateOpenAICompatibility(ctx, liveEntries)
+		},
+		CleanPending: func(state *projectedConfigState, _ statecoord.DomainKey, flushed projectedConfigState) {
+			for k, entry := range flushed.PendingOpenAIToggles {
+				if cur, ok := state.PendingOpenAIToggles[k]; ok && cur.Seq <= entry.Seq {
+					delete(state.PendingOpenAIToggles, k)
+				}
+			}
 		},
 	})
 
-	// 4. Per-family config API-key provider status toggles (codex, claude, gemini, meta, xai, vertex, interactions).
+	// 4. Per-family config API-key provider status toggles (codex, claude, gemini, meta, xai, vertex, interactions):
+	// reads fresh editable family entries inside the gate and overlays only ExcludedModels status toggles.
 	coord.RegisterDomainPrefix(stateDomainProviderFamilyPrefix, statecoord.DomainSpec[projectedConfigState]{
 		Order:  35,
 		Scopes: []string{"management-providers", "management-providers-sanitized", "management-routing", "management-config"},
 		Flush: func(ctx context.Context, key statecoord.DomainKey, snapshot projectedConfigState) error {
 			family := management.ConfigKeyFamily(strings.TrimPrefix(string(key), stateDomainProviderFamilyPrefix))
+			pendingMap := snapshot.PendingFamilyToggles[family]
+			if len(pendingMap) == 0 {
+				return nil
+			}
 			client, err := h.capabilityClient(ctx)
 			if err != nil {
 				return err
 			}
-			currentYAML, yamlErr := client.ConfigYAML(ctx)
-			if yamlErr != nil {
-				return yamlErr
+			liveEntries, err := client.EditableConfigAPIKeys(ctx, family)
+			if err != nil {
+				return err
 			}
-			if snapshot.Revision != "" && !strings.EqualFold(snapshot.Revision, configyaml.ComputeRevision(currentYAML)) {
-				liveEntries, liveErr := client.EditableConfigAPIKeys(ctx, family)
-				if liveErr != nil || len(liveEntries) != len(snapshot.ConfigFamilies[family]) {
-					return management.ErrConfigChanged
-				}
+			for targetKey, toggle := range pendingMap {
+				matched := false
 				for idx := range liveEntries {
-					if strings.TrimSpace(liveEntries[idx].APIKey) != strings.TrimSpace(snapshot.ConfigFamilies[family][idx].APIKey) {
-						return management.ErrConfigChanged
+					entrySelector := familyToggleSelector(idx, liveEntries[idx].AuthIndex, liveEntries[idx].APIKey)
+					if entrySelector == targetKey ||
+						(strings.HasPrefix(targetKey, "auth:") && "auth:"+strings.TrimSpace(liveEntries[idx].AuthIndex) == targetKey) ||
+						(strings.HasPrefix(targetKey, "key:") && "key:"+strings.TrimSpace(liveEntries[idx].APIKey) == targetKey) {
+						liveEntries[idx].ExcludedModels = management.SetExcludedAll(liveEntries[idx].ExcludedModels, toggle.Disabled)
+						matched = true
 					}
 				}
+				if !matched {
+					return management.ErrConfigChanged
+				}
 			}
-			return client.UpdateConfigAPIKeys(ctx, family, snapshot.ConfigFamilies[family])
+			return client.UpdateConfigAPIKeys(ctx, family, liveEntries)
+		},
+		CleanPending: func(state *projectedConfigState, key statecoord.DomainKey, flushed projectedConfigState) {
+			family := management.ConfigKeyFamily(strings.TrimPrefix(string(key), stateDomainProviderFamilyPrefix))
+			flushedMap := flushed.PendingFamilyToggles[family]
+			curMap := state.PendingFamilyToggles[family]
+			if curMap == nil {
+				return
+			}
+			for k, entry := range flushedMap {
+				if cur, ok := curMap[k]; ok && cur.Seq <= entry.Seq {
+					delete(curMap, k)
+				}
+			}
 		},
 	})
 
@@ -608,9 +652,10 @@ func (h *Handler) invalidateClientKeyCatalog() {
 }
 
 // refreshCoordinatorYAMLBaseline updates the cached YAML/revision fields after a
-// write-behind flush commits so subsequent ConfigPage reads see the new ETag in <1ms.
+// write-behind flush commits so subsequent ConfigPage reads and revision checks see
+// the new upstream ETag immediately, even if another domain became dirty during flush.
 func (h *Handler) refreshCoordinatorYAMLBaseline() {
-	if h.stateCoord == nil || h.stateCoord.IsDirty() {
+	if h.stateCoord == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -635,13 +680,17 @@ func (h *Handler) refreshCoordinatorYAMLBaseline() {
 		safeYAML = ""
 	}
 	rev := configyaml.ComputeRevision(viewYAML)
-	h.stateCoord.RefreshCleanBaseline(func(state *projectedConfigState) {
+	h.stateCoord.UpdateBaseline(func(state *projectedConfigState, isClean bool) {
 		state.ViewYAML = viewYAML
 		state.SafeYAML = safeYAML
 		state.Revision = rev
 		state.StoredLayout = storedLayout
-		clear(state.PendingScalars)
-		clear(state.PendingAuthStatus)
+		if isClean {
+			clear(state.PendingScalars)
+			clear(state.PendingAuthStatus)
+			clear(state.PendingOpenAIToggles)
+			clear(state.PendingFamilyToggles)
+		}
 	})
 }
 
@@ -786,6 +835,7 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 
 	configFamilies := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey, len(providerConfigFamilies))
 	runtimeOnlyFam := make(map[management.ConfigKeyFamily]bool)
+	anyProviderSliceFailed := openAIFailed
 	for idx, spec := range providerConfigFamilies {
 		if familyEntries[idx] != nil {
 			configFamilies[spec.Family] = familyEntries[idx]
@@ -794,6 +844,9 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 		}
 		if familyFallback[idx] || familyFailed[idx] {
 			runtimeOnlyFam[spec.Family] = true
+		}
+		if familyFailed[idx] {
+			anyProviderSliceFailed = true
 		}
 	}
 	if openAIFailed {
@@ -823,6 +876,7 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 		ClientKeys:               clientKeys,
 		ConfigFamilies:           configFamilies,
 		RuntimeOnlyFam:           runtimeOnlyFam,
+		ProviderSliceFailed:      anyProviderSliceFailed,
 		OpenAICompat:             openAICompat,
 		OpenAIRuntime:            openAIRuntime,
 		OAuthAliases:             oauthAliases,
@@ -845,7 +899,9 @@ func (h *Handler) CloseStateCoordinator(ctx context.Context) {
 		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 	}
-	_ = h.stateCoord.Close(ctx)
+	if err := h.stateCoord.Close(ctx); err != nil && h.logger != nil {
+		h.logger.Warn("state coordinator close flush failed", "error", publicCPAErrorMessage(err))
+	}
 }
 
 // flushCoordinatorWithinGate drains pending write-behind state when the caller already
@@ -931,20 +987,53 @@ func (h *Handler) recordDeferredDomainAudit(rec statecoord.PendingAuditRecord, f
 	})
 }
 
-// queueOrFlushDomainAudit wires audit recording cleanly for both async write-behind
-// and explicit X-OMC-Sync callers. Recording via QueueDomainAudit before FlushNow
-// guarantees that even if FlushNow hits a transient write_busy on the gate, the audit
-// stays attached to the dirty domain until writeBehindLoop actually commits or rolls back.
-func (h *Handler) queueOrFlushDomainAudit(request *http.Request, domain statecoord.DomainKey, action, targetType, targetID string, details map[string]any) error {
-	if h.stateCoord == nil {
-		return nil
+func openAIToggleSelector(index int, name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed != "" {
+		return "name:" + trimmed
 	}
+	return fmt.Sprintf("idx:%d", index)
+}
+
+func familyToggleSelector(index int, authIndex, apiKey string) string {
+	if trimmedAuth := strings.TrimSpace(authIndex); trimmedAuth != "" {
+		return "auth:" + trimmedAuth
+	}
+	if trimmedKey := strings.TrimSpace(apiKey); trimmedKey != "" {
+		return "key:" + trimmedKey
+	}
+	return fmt.Sprintf("idx:%d", index)
+}
+
+// mutateCoordinatorWithAudit atomically publishes an in-memory mutation together with its
+// request-scoped deferred audit record, and for explicit X-OMC-Sync callers acquires the
+// write gate BEFORE publishing the mutation so a gate timeout never leaves a rejected sync
+// write queued in memory.
+func (h *Handler) mutateCoordinatorWithAudit(
+	request *http.Request,
+	domain statecoord.DomainKey,
+	action, targetType, targetID string,
+	details map[string]any,
+	mutateFn func(state *projectedConfigState) error,
+) (uint64, error) {
+	rec := h.buildPendingAuditRecord(request, action, targetType, targetID, details)
 	if !isSyncWriteRequested(request) {
-		h.stateCoord.QueueDomainAudit(domain, h.buildPendingAuditRecord(request, action, targetType, targetID, details))
-		return nil
+		return h.stateCoord.MutateWithAudit(request.Context(), domain, &rec, mutateFn)
 	}
-	h.stateCoord.QueueDomainAudit(domain, h.buildPendingAuditRecord(request, action, targetType, targetID, details))
-	return h.stateCoord.FlushNow(request.Context())
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		return 0, err
+	}
+	defer h.providerWrites.release()
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+	version, err := h.stateCoord.MutateWithAudit(request.Context(), domain, &rec, mutateFn)
+	if err != nil {
+		return 0, err
+	}
+	if flushErr := h.stateCoord.FlushWithinGate(request.Context()); flushErr != nil {
+		return 0, flushErr
+	}
+	return version, nil
 }
 
 // projectProviderItemsFromRaw builds ProviderItemDTO rows from raw family slices and SQLite metadata overlays.

@@ -170,24 +170,42 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 		rawFiles     []management.AuthFile
 		stateVersion uint64
 	)
-	if h.stateCoord != nil {
-		envelope, coordErr := h.stateCoord.Read(request.Context())
-		if coordErr != nil {
-			writeCPAFacadeError(writer, coordErr)
-			return
+	if files, err := client.AuthFiles(request.Context()); err == nil {
+		rawFiles = files.Files
+		if h.stateCoord != nil {
+			if envelope, coordErr := h.stateCoord.Read(request.Context()); coordErr == nil {
+				stateVersion = envelope.Version
+				if len(envelope.Data.PendingAuthStatus) > 0 {
+					for idx := range rawFiles {
+						for _, pending := range envelope.Data.PendingAuthStatus {
+							if rawFiles[idx].Name != pending.Name && rawFiles[idx].ID != pending.Name {
+								continue
+							}
+							if pending.AuthIndex != "" && rawFiles[idx].AuthIndex != pending.AuthIndex {
+								continue
+							}
+							rawFiles[idx].Disabled = pending.Disabled
+							if pending.Disabled {
+								rawFiles[idx].Status = "disabled"
+							} else if rawFiles[idx].Status == "disabled" {
+								rawFiles[idx].Status = "ready"
+							}
+						}
+					}
+				}
+			}
 		}
-		if !envelope.Data.AuthFilesUnavailable {
+	} else if h.stateCoord != nil {
+		if envelope, coordErr := h.stateCoord.Read(request.Context()); coordErr == nil && !envelope.Data.AuthFilesUnavailable {
 			rawFiles = envelope.Data.AuthFiles
 			stateVersion = envelope.Version
-		}
-	}
-	if rawFiles == nil {
-		files, err := client.AuthFiles(request.Context())
-		if err != nil {
+		} else {
 			writeCPAFacadeError(writer, err)
 			return
 		}
-		rawFiles = files.Files
+	} else {
+		writeCPAFacadeError(writer, err)
+		return
 	}
 
 	nameFilter := strings.TrimSpace(request.URL.Query().Get("name"))
@@ -259,49 +277,53 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 		selector := encodeAuthFileSelector(name, trimmedAuthIndex)
 		domain := statecoord.DomainKey(stateDomainAuthFileStatusPrefix + selector)
 		var useFallback bool
-		version, mutErr := h.stateCoord.Mutate(request.Context(), domain, func(state *projectedConfigState) error {
-			if state.AuthFilesUnavailable {
-				useFallback = true
-				return errStateSliceUnavailable
-			}
-			matched := false
-			for idx := range state.AuthFiles {
-				file := &state.AuthFiles[idx]
-				if file.Name != name && file.ID != name {
-					continue
+		version, mutErr := h.mutateCoordinatorWithAudit(
+			request,
+			domain,
+			"auth_file.status_update",
+			"auth_file",
+			name,
+			map[string]any{"disabled": *payload.Disabled},
+			func(state *projectedConfigState) error {
+				if state.AuthFilesUnavailable {
+					useFallback = true
+					return errStateSliceUnavailable
 				}
-				if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
-					continue
+				matched := false
+				for idx := range state.AuthFiles {
+					file := &state.AuthFiles[idx]
+					if file.Name != name && file.ID != name {
+						continue
+					}
+					if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
+						continue
+					}
+					file.Disabled = *payload.Disabled
+					matched = true
 				}
-				file.Disabled = *payload.Disabled
-				matched = true
-			}
-			if !matched {
-				// Fall through to synchronous CPA write when the target is absent from
-				// the in-memory list (e.g. recently created out-of-band or demo probe).
-				useFallback = true
-				return errStateSliceUnavailable
-			}
-			if state.PendingAuthStatus == nil {
-				state.PendingAuthStatus = make(map[string]pendingAuthFileStatus)
-			}
-			state.AuthStatusSeq++
-			state.PendingAuthStatus[selector] = pendingAuthFileStatus{
-				Name:      name,
-				AuthIndex: trimmedAuthIndex,
-				Disabled:  *payload.Disabled,
-				Seq:       state.AuthStatusSeq,
-			}
-			return nil
-		})
+				if !matched {
+					// Fall through to synchronous CPA write when the target is absent from
+					// the in-memory list (e.g. recently created out-of-band or demo probe).
+					useFallback = true
+					return errStateSliceUnavailable
+				}
+				if state.PendingAuthStatus == nil {
+					state.PendingAuthStatus = make(map[string]pendingAuthFileStatus)
+				}
+				state.AuthStatusSeq++
+				state.PendingAuthStatus[selector] = pendingAuthFileStatus{
+					Name:      name,
+					AuthIndex: trimmedAuthIndex,
+					Disabled:  *payload.Disabled,
+					Seq:       state.AuthStatusSeq,
+				}
+				return nil
+			},
+		)
 		if !useFallback {
 			if mutErr != nil {
 				_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "failure", map[string]any{"error": mutErr.Error()})
-				writeCPAFacadeError(writer, mutErr)
-				return
-			}
-			if flushErr := h.queueOrFlushDomainAudit(request, domain, "auth_file.status_update", "auth_file", name, map[string]any{"disabled": *payload.Disabled}); flushErr != nil {
-				writeCPAFacadeError(writer, flushErr)
+				writeProviderWriteError(writer, mutErr)
 				return
 			}
 			setStateVersionHeader(writer, version)

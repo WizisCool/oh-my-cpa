@@ -52,6 +52,7 @@ func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *man
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	safeFields := managementAuthFileSafeFields{Name: name}
 	hasSafeReadback := managementAuthFileNeedsSafeReadback(fields)
 	if hasSafeReadback {
@@ -163,7 +164,6 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	if auditErr := h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "success", map[string]any{"fields": sortedMapKeys(fields), "verified": true}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after field update")
 		return

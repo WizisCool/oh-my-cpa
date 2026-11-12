@@ -426,18 +426,29 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
     mutationFn: ({ task, enabled }: { task: WarmupTask; enabled: boolean }) =>
       api.updateWarmupTask(task.id, toPayload({ ...taskToInput(task, timezone), name: task.name, enabled }, timezone)),
     onMutate: ({ task, enabled }) => {
-      const previous = queryClient.getQueryData<WarmupStateView>(WARMUP_QUERY_KEY);
-      if (previous) {
+      const current = queryClient.getQueryData<WarmupStateView>(WARMUP_QUERY_KEY);
+      const priorEnabled = current?.tasks.find((item) => item.id === task.id)?.enabled ?? task.enabled;
+      if (current) {
         applyState({
-          ...previous,
-          tasks: previous.tasks.map((item) => (item.id === task.id ? { ...item, enabled } : item)),
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, enabled } : item)),
         });
       }
-      return { previous };
+      return { taskId: task.id, priorEnabled };
     },
     onSuccess: applyState,
     onError: (err, _variables, context) => {
-      if (context?.previous) applyState(context.previous);
+      if (context) {
+        const latest = queryClient.getQueryData<WarmupStateView>(WARMUP_QUERY_KEY);
+        if (latest) {
+          applyState({
+            ...latest,
+            tasks: latest.tasks.map((item) =>
+              item.id === context.taskId ? { ...item, enabled: context.priorEnabled } : item,
+            ),
+          });
+        }
+      }
       reportFailure('warmup.update_failed')(err);
     },
   });

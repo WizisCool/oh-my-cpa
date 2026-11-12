@@ -177,7 +177,8 @@ stored file taken immediately before mutation. A failed copy blocks the write. H
 idempotent settings and enablement switches project into `StateCoordinator` memory with
 monotonic versions and coalesce under the same write gate across a 250ms write-behind window;
 structural writes drain pending domains before reading or replacing `config.yaml`, and a
-failed background flush reloads CPA's authoritative state and broadcasts a secret-scrubbed
+failed background flush attempts to reload CPA's authoritative state (marking the projection
+unready for lazy re-fetch if CPA is unreachable) and broadcasts a secret-scrubbed
 `sync_error` frame on `/api/events` while recording the deferred audit outcome.
 [CPA integration](cpa-v8-compat.md) explains adoption and legacy-layout handling.
 

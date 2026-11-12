@@ -95,15 +95,11 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 	}
 
 	if h.stateCoord != nil && req.beforeWrite == nil {
-		version, domain, handled, mutErr := h.mutateProviderStatusOptimistic(ctx, req)
+		version, handled, mutErr := h.mutateProviderStatusOptimistic(request, req, targetID)
 		if handled {
 			if mutErr != nil {
 				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": mutErr.Error()})
 				writeProviderWriteError(writer, mutErr)
-				return
-			}
-			if flushErr := h.queueOrFlushDomainAudit(request, domain, "provider.toggle_status", "provider", targetID, map[string]any{"disabled": req.Disabled}); flushErr != nil {
-				writeProviderWriteError(writer, flushErr)
 				return
 			}
 			setStateVersionHeader(writer, version)
@@ -208,12 +204,12 @@ func (h *Handler) writeConfigKeyProviderStatus(ctx context.Context, client *mana
 
 // mutateProviderStatusOptimistic applies a provider enable/disable toggle directly
 // onto the in-memory StateCoordinator projection in <1ms and schedules a 250ms
-// debounced flush. Returns handled=false only when the cached family slice came
-// from a runtime-only fallback lacking stored group ownership.
-func (h *Handler) mutateProviderStatusOptimistic(ctx context.Context, req patchProviderStatusRequest) (uint64, statecoord.DomainKey, bool, error) {
+// debounced flush, attaching the deferred outcome audit atomically under the same lock.
+func (h *Handler) mutateProviderStatusOptimistic(request *http.Request, req patchProviderStatusRequest, targetID string) (uint64, bool, error) {
+	details := map[string]any{"disabled": req.Disabled}
 	if spec, ok := lookupProviderConfigFamily(req.Family); ok {
 		domain := statecoord.DomainKey(stateDomainProviderFamilyPrefix + string(spec.Family))
-		version, err := h.stateCoord.Mutate(ctx, domain, func(state *projectedConfigState) error {
+		version, err := h.mutateCoordinatorWithAudit(request, domain, "provider.toggle_status", "provider", targetID, details, func(state *projectedConfigState) error {
 			if state.RuntimeOnlyFam[spec.Family] {
 				return errRuntimeOnlyProviderSlice
 			}
@@ -226,19 +222,31 @@ func (h *Handler) mutateProviderStatusOptimistic(ctx context.Context, req patchP
 			}
 			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
 			state.ConfigFamilies[spec.Family] = entries
+			if state.PendingFamilyToggles == nil {
+				state.PendingFamilyToggles = make(map[management.ConfigKeyFamily]map[string]pendingProviderToggle)
+			}
+			if state.PendingFamilyToggles[spec.Family] == nil {
+				state.PendingFamilyToggles[spec.Family] = make(map[string]pendingProviderToggle)
+			}
+			state.ProviderToggleSeq++
+			selector := familyToggleSelector(req.Index, entries[req.Index].AuthIndex, entries[req.Index].APIKey)
+			state.PendingFamilyToggles[spec.Family][selector] = pendingProviderToggle{
+				Disabled: req.Disabled,
+				Seq:      state.ProviderToggleSeq,
+			}
 			return nil
 		})
 		if errors.Is(err, errRuntimeOnlyProviderSlice) {
-			return 0, "", false, nil
+			return 0, false, nil
 		}
 		if err == nil {
 			h.providerKeyMasks.invalidate()
 		}
-		return version, domain, true, err
+		return version, true, err
 	}
 
 	if req.Family == openAICompatibilityFamily {
-		version, err := h.stateCoord.Mutate(ctx, stateDomainOpenAICompat, func(state *projectedConfigState) error {
+		version, err := h.mutateCoordinatorWithAudit(request, stateDomainOpenAICompat, "provider.toggle_status", "provider", targetID, details, func(state *projectedConfigState) error {
 			if state.OpenAIRuntime {
 				return errRuntimeOnlyProviderSlice
 			}
@@ -249,16 +257,25 @@ func (h *Handler) mutateProviderStatusOptimistic(ctx context.Context, req patchP
 				return err
 			}
 			state.OpenAICompat[req.Index].Disabled = req.Disabled
+			if state.PendingOpenAIToggles == nil {
+				state.PendingOpenAIToggles = make(map[string]pendingProviderToggle)
+			}
+			state.ProviderToggleSeq++
+			selector := openAIToggleSelector(req.Index, state.OpenAICompat[req.Index].Name)
+			state.PendingOpenAIToggles[selector] = pendingProviderToggle{
+				Disabled: req.Disabled,
+				Seq:      state.ProviderToggleSeq,
+			}
 			return nil
 		})
 		if errors.Is(err, errRuntimeOnlyProviderSlice) {
-			return 0, "", false, nil
+			return 0, false, nil
 		}
 		if err == nil {
 			h.providerKeyMasks.invalidate()
 		}
-		return version, stateDomainOpenAICompat, true, err
+		return version, true, err
 	}
 
-	return 0, "", true, newProviderWriteError(http.StatusBadRequest, "provider family does not support status toggle")
+	return 0, true, newProviderWriteError(http.StatusBadRequest, "provider family does not support status toggle")
 }

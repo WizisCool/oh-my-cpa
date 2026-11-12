@@ -49,9 +49,19 @@ interface EditorState {
   index: number | null;
   /** The value the dialog opened with, so a changed secret can be called out. */
   originalKey: string;
+  /** Pinned identity of the opened key so updates fail safely if another session removes/reorders it. */
+  originalFingerprint: string;
+  /** Last server-confirmed alias when the editor opened (or after a successful save). */
+  confirmedAlias: string;
 }
 
-const CLOSED_EDITOR: EditorState = { isOpen: false, index: null, originalKey: '' };
+const CLOSED_EDITOR: EditorState = {
+  isOpen: false,
+  index: null,
+  originalKey: '',
+  originalFingerprint: '',
+  confirmedAlias: '',
+};
 
 const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: MessageKey; hintKey?: MessageKey }[] = [
   { key: 'all', tone: 'neutral', labelKey: 'keys.stat_all' },
@@ -145,7 +155,13 @@ export const ApiKeysPage: React.FC = () => {
   // A new key starts from a generated value, shown, because generating is what almost every
   // operator does next - and a value they typed themselves can still replace it.
   const openAddEditor = React.useCallback(() => {
-    setEditor({ isOpen: true, index: null, originalKey: '' });
+    setEditor({
+      isOpen: true,
+      index: null,
+      originalKey: '',
+      originalFingerprint: '',
+      confirmedAlias: '',
+    });
     setKeyInput(generateGatewayKey());
     setAliasInput('');
     setIsKeyVisible(true);
@@ -155,9 +171,16 @@ export const ApiKeysPage: React.FC = () => {
     (index: number) => {
       const key = currentApiKeys[index] ?? '';
       const stored = keysQuery.data?.keys?.find((item) => item.key === key);
-      setEditor({ isOpen: true, index, originalKey: key });
+      const alias = stored?.alias ?? '';
+      setEditor({
+        isOpen: true,
+        index,
+        originalKey: key,
+        originalFingerprint: stored?.fingerprint ?? '',
+        confirmedAlias: alias,
+      });
       setKeyInput(key);
-      setAliasInput(stored?.alias ?? '');
+      setAliasInput(alias);
       setIsKeyVisible(false);
     },
     [currentApiKeys, keysQuery.data],
@@ -177,6 +200,7 @@ export const ApiKeysPage: React.FC = () => {
         toast.error(t('keys.alias_save_failed'));
         return false;
       }
+      const previousAlias = stored.alias;
       try {
         // Optimistically update the alias in cache on the click frame.
         queryClient.setQueryData<{ keys: ClientAPIKeyItem[]; total: number }>(
@@ -192,10 +216,24 @@ export const ApiKeysPage: React.FC = () => {
               : current,
         );
         await api.setClientKeyAlias(stored.usage_fingerprint, alias, stored.alias_version ?? 0);
+        setEditor((prev) => ({ ...prev, confirmedAlias: alias }));
         toast.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
         await invalidateKeyReaders();
         return true;
       } catch (error) {
+        // Restore prior alias immediately so a retry still sees the unconfirmed draft difference.
+        queryClient.setQueryData<{ keys: ClientAPIKeyItem[]; total: number }>(
+          QUERY_KEYS.clientKeys('with-keys'),
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  keys: current.keys.map((item) =>
+                    item.key === key ? { ...item, alias: previousAlias } : item,
+                  ),
+                }
+              : current,
+        );
         if (
           error instanceof ApiError &&
           (error.status === 409 || (error.data as Record<string, unknown>)?.code === 'alias_version_conflict')
@@ -233,24 +271,35 @@ export const ApiKeysPage: React.FC = () => {
       if (editor.index !== null && editor.originalKey === trimmedKey) {
         // The name is the only thing that can have changed. Nothing about the key's value
         // moves, so CPA's configuration document is not touched at all.
-        const stored = keysQuery.data?.keys?.find((item) => item.key === trimmedKey);
-        if (trimmedAlias !== (stored?.alias ?? '')) {
+        if (trimmedAlias !== editor.confirmedAlias) {
           if (!(await saveKeyAlias(trimmedKey, trimmedAlias))) return;
         }
         closeEditor();
         return;
       }
 
-      let res: { index: number; usage_fingerprint?: string };
+      let res: { index: number; fingerprint?: string; usage_fingerprint?: string };
       try {
         if (editor.index !== null) {
-          const originalMeta = keysQuery.data?.keys?.find((item) => item.key === editor.originalKey);
+          const liveItems = keysQuery.data?.keys ?? [];
+          const currentIndex = liveItems.findIndex(
+            (item) =>
+              (editor.originalFingerprint && item.fingerprint === editor.originalFingerprint) ||
+              (!editor.originalFingerprint && item.key === editor.originalKey),
+          );
+          const pinnedFingerprint =
+            editor.originalFingerprint || (currentIndex >= 0 ? liveItems[currentIndex]?.fingerprint : '');
+          if (currentIndex < 0 || !pinnedFingerprint) {
+            toast.warning(t('keys.rename_conflict'));
+            await invalidateQueriesSilently(queryClient, { queryKey: QUERY_KEYS.clientKeysPrefix });
+            return;
+          }
           res = await keyMutation.mutateAsync({
             kind: 'update',
-            index: editor.index,
+            index: currentIndex,
             key: trimmedKey,
             alias: trimmedAlias,
-            expectedFingerprint: originalMeta?.fingerprint || undefined,
+            expectedFingerprint: pinnedFingerprint,
           });
         } else {
           res = await keyMutation.mutateAsync({
@@ -275,7 +324,13 @@ export const ApiKeysPage: React.FC = () => {
         if (shouldSaveAlias) {
           if (!fingerprint) {
             toast.error(t('keys.alias_save_failed'));
-            setEditor({ isOpen: true, index: res.index, originalKey: trimmedKey });
+            setEditor({
+              isOpen: true,
+              index: res.index,
+              originalKey: trimmedKey,
+              originalFingerprint: res.fingerprint ?? '',
+              confirmedAlias: existingAlias?.alias ?? '',
+            });
             return;
           }
           try {
@@ -287,7 +342,13 @@ export const ApiKeysPage: React.FC = () => {
             await invalidateKeyReaders();
           } catch (err: unknown) {
             toast.error(describeError(err) || t('keys.alias_save_failed'));
-            setEditor({ isOpen: true, index: res.index, originalKey: trimmedKey });
+            setEditor({
+              isOpen: true,
+              index: res.index,
+              originalKey: trimmedKey,
+              originalFingerprint: res.fingerprint ?? '',
+              confirmedAlias: existingAlias?.alias ?? '',
+            });
             return;
           }
         }
@@ -301,6 +362,10 @@ export const ApiKeysPage: React.FC = () => {
 
   const handleDeleteRecord = React.useCallback(
     async (record: ApiKeyRecord) => {
+      if (!record.fingerprint) {
+        await invalidateQueriesSilently(queryClient, { queryKey: QUERY_KEYS.clientKeysPrefix });
+        return;
+      }
       try {
         await keyMutation.mutateAsync({
           kind: 'delete',
@@ -312,7 +377,7 @@ export const ApiKeysPage: React.FC = () => {
         // Error toast and cache rollback are handled by useOptimisticClientKeyMutation.
       }
     },
-    [keyMutation, toast, t],
+    [keyMutation, queryClient, toast, t],
   );
 
   const viewRequestsFor = React.useCallback(

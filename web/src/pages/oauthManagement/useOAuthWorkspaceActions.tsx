@@ -22,6 +22,7 @@ import {
   quotaRefreshOutcomeKind,
 } from '../../utils/quotaRefreshOutcome';
 import { useOptimisticAuthFileStatusMutation } from '../../hooks/useConfigMutations';
+import { MUTATION_KEYS } from '../../api/queryKeys';
 import { invalidateQueriesSilently } from '../../utils/progressSources';
 import type { ManagementAuthFilesResponse } from '../../types/managementAuthFile';
 
@@ -89,9 +90,50 @@ export function useOAuthWorkspaceActions(
   const [busyFileKeys, setBusyFileKeys] = React.useState<Set<string>>(new Set());
   const [busyQuotaIndexes, setBusyQuotaIndexes] = React.useState<Set<string>>(new Set());
   const [togglingStatusKeys, setTogglingStatusKeys] = React.useState<Set<string>>(new Set());
+  const toggleCountsRef = React.useRef<Map<string, number>>(new Map());
+  const credentialToggleChainRef = React.useRef<Map<string, Promise<void>>>(new Map());
 
   const statusToggleMutation = useOptimisticAuthFileStatusMutation({
     formatError: (error) => errorMessage(error, t),
+  });
+
+  const enqueueCredentialStatusWrite = React.useCallback(
+    <T,>(fileName: string, authIndex: string | undefined, fn: () => Promise<T>): Promise<T> => {
+      const selector = `${fileName.length}:${fileName}|${authIndex ?? ''}`;
+      const previous = credentialToggleChainRef.current.get(selector) ?? Promise.resolve();
+      const next = previous.catch(() => undefined).then(fn);
+      const tracked = next.then(
+        () => undefined,
+        () => undefined,
+      ).finally(() => {
+        if (credentialToggleChainRef.current.get(selector) === tracked) {
+          credentialToggleChainRef.current.delete(selector);
+        }
+      });
+      credentialToggleChainRef.current.set(selector, tracked);
+      return next;
+    },
+    [],
+  );
+
+  const batchStatusMutation = useMutation({
+    mutationKey: MUTATION_KEYS.authFileStatus,
+    mutationFn: async ({
+      disabled,
+      eligible,
+    }: {
+      disabled: boolean;
+      eligible: OAuthWorkspaceRecord[];
+    }) =>
+      executeBatchStatus(
+        eligible.map((record) => record.file),
+        disabled,
+        (name, nextDisabled, authIndex) =>
+          enqueueCredentialStatusWrite(name, authIndex, () =>
+            api.setManagementAuthFileStatus(name, nextDisabled, authIndex),
+          ),
+        10,
+      ),
   });
 
   React.useEffect(() => {
@@ -277,23 +319,50 @@ export function useOAuthWorkspaceActions(
         (!latest.authIndex || !candidate.auth_index || candidate.auth_index === latest.authIndex),
     ) ?? latest.file;
     const nextDisabled = !isAuthFileDisabled(cachedFile);
+
+    // Apply synchronous click-frame cache update immediately before awaiting per-credential wire queue.
+    queryClient.setQueryData<ManagementAuthFilesResponse>(['management-auth-files'], (current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        files: current.files.map((file) => {
+          if (file.name !== latest.fileName) return file;
+          if (latest.authIndex && file.auth_index && file.auth_index !== latest.authIndex) return file;
+          return {
+            ...file,
+            disabled: nextDisabled,
+            status: nextDisabled ? 'disabled' : file.status === 'disabled' ? 'ready' : file.status,
+          };
+        }),
+      };
+    });
+
+    toggleCountsRef.current.set(latest.key, (toggleCountsRef.current.get(latest.key) ?? 0) + 1);
     setTogglingStatusKeys((previous) => new Set(previous).add(latest.key));
     try {
-      await statusToggleMutation.mutateAsync({
-        fileName: latest.fileName,
-        disabled: nextDisabled,
-        authIndex: latest.authIndex,
-      });
+      await enqueueCredentialStatusWrite(latest.fileName, latest.authIndex, () =>
+        statusToggleMutation.mutateAsync({
+          fileName: latest.fileName,
+          disabled: nextDisabled,
+          authIndex: latest.authIndex,
+        }),
+      );
     } catch {
       // Snapshot rollback and error toast are handled uniformly by useOptimisticAuthFileStatusMutation.
     } finally {
-      setTogglingStatusKeys((previous) => {
-        const next = new Set(previous);
-        next.delete(latest.key);
-        return next;
-      });
+      const rem = (toggleCountsRef.current.get(latest.key) ?? 1) - 1;
+      if (rem <= 0) {
+        toggleCountsRef.current.delete(latest.key);
+        setTogglingStatusKeys((previous) => {
+          const next = new Set(previous);
+          next.delete(latest.key);
+          return next;
+        });
+      } else {
+        toggleCountsRef.current.set(latest.key, rem);
+      }
     }
-  }, [queryClient, statusToggleMutation]);
+  }, [enqueueCredentialStatusWrite, queryClient, statusToggleMutation]);
 
   const batchStatus = React.useCallback(async (disabled: boolean, selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canToggleFile);
@@ -316,18 +385,16 @@ export function useOAuthWorkspaceActions(
         ),
       };
     });
+    for (const record of eligible) {
+      toggleCountsRef.current.set(record.key, (toggleCountsRef.current.get(record.key) ?? 0) + 1);
+    }
     setTogglingStatusKeys((previous) => {
       const next = new Set(previous);
       eligible.forEach((record) => next.add(record.key));
       return next;
     });
     try {
-      const outcome = await executeBatchStatus(
-        eligible.map((record) => record.file),
-        disabled,
-        (name, nextDisabled, authIndex) => api.setManagementAuthFileStatus(name, nextDisabled, authIndex),
-        10,
-      );
+      const outcome = await batchStatusMutation.mutateAsync({ disabled, eligible });
       const succeededNames = new Set(outcome.succeeded);
       const succeededKeys = new Set(
         eligible.filter((record) => succeededNames.has(record.fileName)).map((record) => record.key),
@@ -336,16 +403,23 @@ export function useOAuthWorkspaceActions(
       if (outcome.failed.length > 0) {
         if (previousCache) {
           const failedNames = new Set(outcome.failed.map((item) => item.name));
-          const prevByName = new Map(previousCache.files.map((file) => [file.name, file.disabled]));
+          const prevByName = new Map(
+            previousCache.files.map((file) => [
+              file.name,
+              { disabled: file.disabled, status: file.status },
+            ]),
+          );
           queryClient.setQueryData<ManagementAuthFilesResponse>(['management-auth-files'], (current) => {
             if (!current) return current;
             return {
               ...current,
-              files: current.files.map((file) =>
-                failedNames.has(file.name)
-                  ? { ...file, disabled: prevByName.get(file.name) ?? file.disabled }
-                  : file,
-              ),
+              files: current.files.map((file) => {
+                if (!failedNames.has(file.name)) return file;
+                const prior = prevByName.get(file.name);
+                return prior
+                  ? { ...file, disabled: prior.disabled, status: prior.status }
+                  : file;
+              }),
             };
           });
         }
@@ -370,13 +444,25 @@ export function useOAuthWorkspaceActions(
       }
       toast.error(errorMessage(error, t));
     } finally {
-      setTogglingStatusKeys((previous) => {
-        const next = new Set(previous);
-        eligible.forEach((record) => next.delete(record.key));
-        return next;
-      });
+      const released: string[] = [];
+      for (const record of eligible) {
+        const rem = (toggleCountsRef.current.get(record.key) ?? 1) - 1;
+        if (rem <= 0) {
+          toggleCountsRef.current.delete(record.key);
+          released.push(record.key);
+        } else {
+          toggleCountsRef.current.set(record.key, rem);
+        }
+      }
+      if (released.length > 0) {
+        setTogglingStatusKeys((previous) => {
+          const next = new Set(previous);
+          released.forEach((key) => next.delete(key));
+          return next;
+        });
+      }
     }
-  }, [queryClient, setSelectedKeys, t, toast]);
+  }, [batchStatusMutation, queryClient, setSelectedKeys, t, toast]);
 
   const batchRefresh = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canToggleFile);

@@ -76,8 +76,12 @@ func (h *Handler) applyManagementOAuthExcludedModels(ctx context.Context, client
 		}
 	}
 	if err := client.PatchOAuthExcludedModels(ctx, provider, rules); err != nil {
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.invalidateCoordinator("management-oauth-excluded-models", "management-config")
+		}
 		return nil, err
 	}
+	h.invalidateCoordinator("management-oauth-excluded-models", "management-config")
 	stored, err := client.OAuthExcludedModels(ctx)
 	if err != nil {
 		return nil, err
@@ -97,7 +101,6 @@ func (h *Handler) applyManagementOAuthExcludedModels(ctx context.Context, client
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
-	h.invalidateCoordinator("management-oauth-excluded-models", "management-config")
 	return current, nil
 }
 
@@ -134,29 +137,33 @@ func (h *Handler) patchManagementOAuthExcludedModels(writer http.ResponseWriter,
 	if h.stateCoord != nil {
 		domain := statecoord.DomainKey(stateDomainOAuthExclusionsPrefix + provider)
 		var useFallback bool
-		version, mutErr := h.stateCoord.Mutate(request.Context(), domain, func(state *projectedConfigState) error {
-			if state.OAuthExcludedUnavailable {
-				useFallback = true
-				return errStateSliceUnavailable
-			}
-			if state.OAuthExcluded == nil {
-				state.OAuthExcluded = make(map[string][]string)
-			}
-			if len(rules) == 0 {
-				delete(state.OAuthExcluded, provider)
-			} else {
-				state.OAuthExcluded[provider] = slices.Clone(rules)
-			}
-			return nil
-		})
+		version, mutErr := h.mutateCoordinatorWithAudit(
+			request,
+			domain,
+			"oauth_excluded_models.update",
+			"oauth_provider",
+			provider,
+			map[string]any{"count": len(rules), "verified": true},
+			func(state *projectedConfigState) error {
+				if state.OAuthExcludedUnavailable {
+					useFallback = true
+					return errStateSliceUnavailable
+				}
+				if state.OAuthExcluded == nil {
+					state.OAuthExcluded = make(map[string][]string)
+				}
+				if len(rules) == 0 {
+					delete(state.OAuthExcluded, provider)
+				} else {
+					state.OAuthExcluded[provider] = slices.Clone(rules)
+				}
+				return nil
+			},
+		)
 		if !useFallback {
 			if mutErr != nil {
 				_ = h.recordAudit(request, "oauth_excluded_models.update", "oauth_provider", provider, "failure", map[string]any{"error": mutErr.Error()})
-				writeCPAFacadeError(writer, mutErr)
-				return
-			}
-			if flushErr := h.queueOrFlushDomainAudit(request, domain, "oauth_excluded_models.update", "oauth_provider", provider, map[string]any{"count": len(rules), "verified": true}); flushErr != nil {
-				writeCPAFacadeError(writer, flushErr)
+				writeProviderWriteError(writer, mutErr)
 				return
 			}
 			setStateVersionHeader(writer, version)

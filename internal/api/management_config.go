@@ -243,6 +243,7 @@ func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *h
 	}
 	currentRev := configyaml.ComputeRevision(currentYAML)
 	if !strings.EqualFold(expectedRev, currentRev) {
+		h.invalidateCoordinator("management-config")
 		writeJSON(writer, http.StatusConflict, map[string]any{
 			"error":            "configuration has been modified by another session",
 			"code":             "config_conflict",
@@ -310,7 +311,7 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 	}
 
 	if h.stateCoord != nil {
-		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainScalars, func(state *projectedConfigState) error {
+		version, mutErr := h.mutateCoordinatorWithAudit(request, stateDomainScalars, "config.save_scalar", "config", key, map[string]any{"key": key}, func(state *projectedConfigState) error {
 			if _, changeErr := management.ScalarConfigChange(key, validatedVal); changeErr != nil {
 				return changeErr
 			}
@@ -324,11 +325,7 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		})
 		if mutErr != nil {
 			_ = h.recordAudit(request, "config.save_scalar", "config", key, "failure", map[string]any{"error": mutErr.Error()})
-			writeCPAFacadeError(writer, mutErr)
-			return
-		}
-		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainScalars, "config.save_scalar", "config", key, map[string]any{"key": key}); flushErr != nil {
-			writeCPAFacadeError(writer, flushErr)
+			writeProviderWriteError(writer, mutErr)
 			return
 		}
 		setStateVersionHeader(writer, version)

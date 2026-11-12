@@ -121,11 +121,11 @@ func (h *Handler) inferenceClient(ctx context.Context, fingerprint string) (*gat
 func (h *Handler) operationsService() *operations.Service {
 	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: func(ctx context.Context) error {
 		if err := h.providerWrites.acquire(ctx); err != nil {
-			return err
+			return errors.New("write_busy")
 		}
 		if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
 			h.providerWrites.release()
-			return err
+			return mapAgentProviderError(err)
 		}
 		return nil
 	}, Release: h.providerWrites.release, Notify: func() {

@@ -87,8 +87,12 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 		}
 	}
 	if err := client.PatchOAuthModelAliases(ctx, provider, managementOAuthModelAliasesToCPA(aliases)); err != nil {
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.invalidateCoordinator("management-oauth-model-aliases", "management-config")
+		}
 		return nil, err
 	}
+	h.invalidateCoordinator("management-oauth-model-aliases", "management-config")
 	serverAliases, err := client.OAuthModelAliases(ctx)
 	if err != nil {
 		return nil, err
@@ -109,7 +113,6 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
-	h.invalidateCoordinator("management-oauth-model-aliases", "management-config")
 	return current, nil
 }
 
@@ -150,29 +153,33 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 	if h.stateCoord != nil {
 		domain := statecoord.DomainKey(stateDomainOAuthAliasesPrefix + provider)
 		var useFallback bool
-		version, mutErr := h.stateCoord.Mutate(request.Context(), domain, func(state *projectedConfigState) error {
-			if state.OAuthAliasesUnavailable {
-				useFallback = true
-				return errStateSliceUnavailable
-			}
-			if state.OAuthAliases == nil {
-				state.OAuthAliases = make(map[string][]managementOAuthModelAlias)
-			}
-			if len(aliases) == 0 {
-				delete(state.OAuthAliases, provider)
-			} else {
-				state.OAuthAliases[provider] = slices.Clone(aliases)
-			}
-			return nil
-		})
+		version, mutErr := h.mutateCoordinatorWithAudit(
+			request,
+			domain,
+			"oauth_model_alias.update",
+			"oauth_provider",
+			provider,
+			map[string]any{"count": len(aliases), "verified": true},
+			func(state *projectedConfigState) error {
+				if state.OAuthAliasesUnavailable {
+					useFallback = true
+					return errStateSliceUnavailable
+				}
+				if state.OAuthAliases == nil {
+					state.OAuthAliases = make(map[string][]managementOAuthModelAlias)
+				}
+				if len(aliases) == 0 {
+					delete(state.OAuthAliases, provider)
+				} else {
+					state.OAuthAliases[provider] = slices.Clone(aliases)
+				}
+				return nil
+			},
+		)
 		if !useFallback {
 			if mutErr != nil {
 				_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": mutErr.Error()})
-				writeCPAFacadeError(writer, mutErr)
-				return
-			}
-			if flushErr := h.queueOrFlushDomainAudit(request, domain, "oauth_model_alias.update", "oauth_provider", provider, map[string]any{"count": len(aliases), "verified": true}); flushErr != nil {
-				writeCPAFacadeError(writer, flushErr)
+				writeProviderWriteError(writer, mutErr)
 				return
 			}
 			setStateVersionHeader(writer, version)

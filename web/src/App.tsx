@@ -95,7 +95,7 @@ const FontSync: React.FC = () => {
 
 /** Renders nothing; maintains the authenticated tab-wide '/api/events' SSE reconciliation stream. */
 const StateEventsSync: React.FC = () => {
-  useEventSource('/api/events');
+  useEventSource('/api/events', { isEnabled: !getAppConfig().demo });
   return null;
 };
 
