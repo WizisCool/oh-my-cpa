@@ -42,6 +42,8 @@ interface OAuthModelRulesDrawerProps {
   providerOptions: string[];
   pluginLogos?: PluginOAuthLogos;
   pluginTitles?: ReadonlyMap<string, string>;
+  /** The provider to open on, when the drawer is reached from a scoped view or one credential. */
+  initialProvider?: string;
 }
 
 const ALIASES_QUERY_KEY = ['management-oauth-model-aliases'] as const;
@@ -90,13 +92,14 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   providerOptions,
   pluginLogos,
   pluginTitles,
+  initialProvider,
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
   const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [section, setSection] = useState<OAuthModelRulesSection>('aliases');
+  const [section, setSection] = useState<OAuthModelRulesSection>('excluded');
   const [selectedProvider, setSelectedProvider] = useState('');
   const [providerSearch, setProviderSearch] = useState('');
   const [aliasDrafts, setAliasDrafts] = useState<ManagementOAuthModelAliasDraft[]>([]);
@@ -177,17 +180,19 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   const isSettled = !aliasesQuery.isLoading && !excludedQuery.isLoading;
   useEffect(() => {
     if (!open || !isSettled || selectedProvider) return;
-    // Open on a provider that already carries rules, so the drawer shows the
-    // configuration that exists rather than an empty editor for the first name.
-    const first = knownProviders.find((value) => savedAliases?.[value]?.length || savedRules?.[value]?.length)
+    // Open on the provider asked for, else one that already carries rules, so the drawer
+    // shows the configuration that exists rather than an empty editor for the first name.
+    const requested = normalizeOAuthModelAliasProvider(initialProvider ?? '');
+    const first = (requested && isValidOAuthModelAliasProvider(requested) ? requested : undefined)
+      ?? knownProviders.find((value) => savedAliases?.[value]?.length || savedRules?.[value]?.length)
       ?? knownProviders[0]
       ?? '';
     if (first) loadProvider(first);
-  }, [isSettled, knownProviders, loadProvider, open, savedAliases, savedRules, selectedProvider]);
+  }, [initialProvider, isSettled, knownProviders, loadProvider, open, savedAliases, savedRules, selectedProvider]);
 
   useEffect(() => {
     if (!open) {
-      setSection('aliases');
+      setSection('excluded');
       setSelectedProvider('');
       setProviderSearch('');
       setAliasDrafts([]);
@@ -472,8 +477,9 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
               value={section}
               onChange={(value) => setSection(value as OAuthModelRulesSection)}
               options={[
-                { value: 'aliases', label: sectionLabel('aliases', aliasDrafts.length, isAliasDirty) },
+                // Disabling models is what operators come here for most, so it leads.
                 { value: 'excluded', label: sectionLabel('excluded', ruleDrafts.length, isRuleDirty) },
+                { value: 'aliases', label: sectionLabel('aliases', aliasDrafts.length, isAliasDirty) },
               ]}
             />
             {renderSection()}

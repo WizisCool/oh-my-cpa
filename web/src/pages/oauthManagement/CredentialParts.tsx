@@ -79,6 +79,8 @@ export interface CredentialActions {
   onRedeemCredit: (record: OAuthWorkspaceRecord) => void;
   onReauthenticate: (record: OAuthWorkspaceRecord) => void;
   onOpenSIWC: (record: OAuthWorkspaceRecord) => void;
+  /** Opens the provider's model rules on the disabled-models tab, at this credential's provider. */
+  onOpenModelRules: (record: OAuthWorkspaceRecord) => void;
 }
 
 /**
@@ -402,7 +404,7 @@ export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWo
 }
 
 type ActionKey =
-  | 'details' | 'select' | 'edit' | 'models' | 'rename' | 'reauth' | 'clear-cooldown' | 'redeem' | 'siwc' | 'download' | 'delete';
+  | 'details' | 'select' | 'edit' | 'models' | 'model-rules' | 'rename' | 'reauth' | 'clear-cooldown' | 'redeem' | 'siwc' | 'download' | 'delete';
 
 /**
  * Every action one credential can take, in one order, behind a row's or card's ellipsis. What
@@ -418,6 +420,7 @@ function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFu
     { key: 'select' as const, icon: <CheckSquareOutlined />, label: t('omc.fleet_action_select'), disabled: facts.isBusy || !canFile },
     { key: 'edit' as const, icon: <EditOutlined />, label: t('omc.fleet_action_configure'), disabled: facts.isBusy || !canFile },
     { key: 'models' as const, icon: <AppstoreOutlined />, label: t('af.models_btn'), disabled: facts.isBusy || file.runtime_only },
+    { key: 'model-rules' as const, icon: <StopOutlined />, label: t('af.rules_disable_models'), disabled: facts.isBusy },
     { key: 'rename' as const, icon: <RenameOutlined />, label: t('af.rename'), disabled: facts.isBusy || !facts.canRename },
     { key: 'reauth' as const, icon: <LoginOutlined />, label: t('omc.reauthenticate'), disabled: facts.isBusy || !record.canEditFile, hidden: !record.authorizationProviderId },
     { key: 'clear-cooldown' as const, icon: <TimerResetOutlined />, label: t('quota.clear_cooldown'), disabled: facts.isBusy || isDemo || !record.canClearCooldown, hidden: !record.canClearCooldown },
@@ -437,6 +440,7 @@ function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, 
       case 'select': actions.onSelect([record], true); break;
       case 'edit': actions.onOpen(record, 'configuration'); break;
       case 'models': actions.onOpen(record, 'models'); break;
+      case 'model-rules': actions.onOpenModelRules(record); break;
       case 'rename': onRename(); break;
       case 'reauth': actions.onReauthenticate(record); break;
       case 'clear-cooldown': actions.onClearCooldown(record); break;
