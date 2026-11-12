@@ -35,6 +35,11 @@ interface OAuthExcludedModelsPanelProps {
   catalogError?: unknown;
   onRetryCatalog: () => void;
   isDisabled: boolean;
+  /**
+   * Whose list this is: a provider's defaults, inherited by credentials without a list of their
+   * own, or one credential's own list, which replaces those defaults.
+   */
+  scope?: 'provider' | 'credential';
 }
 
 function ruleErrorMessage(error: ExcludedModelRuleError, t: TFunc): string {
@@ -75,7 +80,9 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
   catalogError,
   onRetryCatalog,
   isDisabled,
+  scope = 'provider',
 }) => {
+  const summaryKey = scope === 'credential' ? 'af.excluded_summary_models_credential' : 'af.excluded_summary_models';
   const t = useT();
   const [ruleInput, setRuleInput] = useState('');
   const [ruleError, setRuleError] = useState<ExcludedModelRuleError>();
@@ -120,21 +127,21 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
       <div className={styles['summary']}>
         <span className={styles['summary-count']} data-testid="oauth-excluded-models-summary">
           {hasCatalog
-            ? t('af.excluded_summary_models', { excluded: view.excludedCount, total: view.totalCount })
+            ? t(summaryKey, { excluded: view.excludedCount, total: view.totalCount })
             : t('af.excluded_summary_rules', { n: rules.length })}
         </span>
         {hasCatalog && (
           <Meter
             value={view.excludedCount}
             max={view.totalCount}
-            label={t('af.excluded_summary_models', { excluded: view.excludedCount, total: view.totalCount })}
+            label={t(summaryKey, { excluded: view.excludedCount, total: view.totalCount })}
           />
         )}
       </div>
 
-      {view.isEverythingExcluded && (
-        <Notice tone="warning" title={t('af.excluded_all_title')} description={t('af.excluded_all_desc')} />
-      )}
+      {view.isEverythingExcluded && (scope === 'credential'
+        ? <Notice tone="warning" title={t('af.excluded_all_title_credential')} />
+        : <Notice tone="warning" title={t('af.excluded_all_title')} description={t('af.excluded_all_desc')} />)}
 
       <section className={styles['section']} aria-labelledby="oauth-excluded-rules-heading">
         <SectionHeading level="label" id="oauth-excluded-rules-heading" title={t('af.excluded_rules_title')} />

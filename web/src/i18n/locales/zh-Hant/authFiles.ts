@@ -133,6 +133,8 @@ export default {
   "af.alias_catalog_unavailable": "該供應商沒有可用的模型目錄，請直接輸入上游模型名。",
   "af.alias_source_excluded": "供應商規則 {rule} 已隱藏此來源模型；若憑證設定了自訂清單則以憑證為準。",
   "af.excluded_summary_models": "供應商預設規則排除 {excluded} / {total} 個目錄模型",
+  "af.excluded_summary_models_credential": "此憑證排除 {excluded} / {total} 個目錄模型",
+  "af.excluded_all_title_credential": "此憑證排除所有模型",
   "af.excluded_summary_rules": "{n} 條停用規則",
   "af.excluded_all_title": "供應商預設規則排除所有模型",
   "af.excluded_all_desc": "規則 * 停用所有繼承預設規則的模型；設定了自訂清單的憑證不受影響。",

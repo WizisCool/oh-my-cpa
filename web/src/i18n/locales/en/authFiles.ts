@@ -133,6 +133,8 @@ export default {
   'af.alias_catalog_unavailable': 'No model catalog is available for this provider; type the upstream model name.',
   'af.alias_source_excluded': 'Provider rule {rule} hides this source model; credentials with custom lists use their own configuration.',
   'af.excluded_summary_models': 'Provider defaults exclude {excluded} of {total} catalog models',
+  'af.excluded_summary_models_credential': 'This credential excludes {excluded} of {total} catalog models',
+  'af.excluded_all_title_credential': 'This credential excludes every model',
   'af.excluded_summary_rules': '{n} exclusion rules',
   'af.excluded_all_title': 'Provider defaults exclude every model',
   'af.excluded_all_desc': 'Rule * excludes all models inheriting defaults; credentials with custom lists are not affected.',

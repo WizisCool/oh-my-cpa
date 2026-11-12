@@ -20,6 +20,7 @@ import {
 } from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { OAuthExcludedModelsPanel, type OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
+import { normalizeExcludedModelRules } from './oauthExcludedModelLogic';
 import { normalizeOAuthModelAliasProvider } from './oauthModelAliasLogic';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -1061,7 +1062,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           extra={t('af.field_excluded_models_hint')}
                         >
                           <OAuthExcludedModelsPanel
-                            rules={normalizeExcludedModelsText(draft.excluded_models)}
+                            rules={normalizeExcludedModelRules(normalizeExcludedModelsText(draft.excluded_models))}
+                            scope="credential"
                             onChange={(rules) => updateDraft({ excluded_models: rules.join('\n') })}
                             catalog={excludedCatalogQuery.data?.models ?? []}
                             catalogState={excludedCatalogState}

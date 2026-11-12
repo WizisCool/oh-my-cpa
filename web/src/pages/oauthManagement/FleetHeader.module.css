@@ -74,6 +74,10 @@
   align-items: center;
   gap: 2px;
   min-width: 0;
+  /* Four translated verdicts can outgrow their track at any width; they scroll rather than run under
+     the tools beside them. */
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .lens {
@@ -178,12 +182,8 @@
       'health view';
   }
 
-  /* The verdicts share their line with the view tools here; a translation too long for it scrolls
-     rather than running under them. */
   .health {
     margin-inline-start: -7px;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
 
   .lens {
@@ -200,11 +200,6 @@
       'search query'
       'health health'
       'view   view';
-  }
-
-  .health {
-    overflow-x: auto;
-    scrollbar-width: none;
   }
 
   .view-tools {

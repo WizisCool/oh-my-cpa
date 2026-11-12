@@ -125,6 +125,8 @@ function CredentialCard({ record, providerName, isSelected, hasSelection, nowMS,
       </header>
 
       <div className={styles.traits}>
+        {/* Named as well as drawn: a mark that falls back to a neutral glyph says nothing of whose it is. */}
+        <span className={styles.provider}>{providerName}</span>
         <CredentialTraits record={record} facts={facts} actions={actions} />
       </div>
 

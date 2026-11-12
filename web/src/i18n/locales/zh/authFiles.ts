@@ -130,6 +130,8 @@ export default {
   'af.alias_catalog_unavailable': '该提供商没有可用的模型目录，请直接输入上游模型名。',
   'af.alias_source_excluded': '提供商规则 {rule} 已隐藏此源模型；若凭据配置了自定义列表则以凭据为准。',
   'af.excluded_summary_models': '提供商默认规则排除 {excluded} / {total} 个目录模型',
+  'af.excluded_summary_models_credential': '此凭据排除 {excluded} / {total} 个目录模型',
+  'af.excluded_all_title_credential': '此凭据排除所有模型',
   'af.excluded_summary_rules': '{n} 条禁用规则',
   'af.excluded_all_title': '提供商默认规则排除所有模型',
   'af.excluded_all_desc': '规则 * 禁用所有继承默认规则的模型；配置了自定义列表的凭据不受影响。',
