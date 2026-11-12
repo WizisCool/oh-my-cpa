@@ -21,9 +21,16 @@
   margin-left: auto;
 }
 
+/* Icon-only items: square, with no gap reserved for the visually hidden label, so each glyph sits
+   centred in its thumb and the group matches the 32px tool buttons beside it. */
 .layout :global([data-slot='segmented-item']) {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  padding-inline: 0;
+  gap: 0;
 }
 
 .caret {

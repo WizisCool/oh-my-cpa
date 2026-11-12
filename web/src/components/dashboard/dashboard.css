@@ -375,7 +375,10 @@
 .model-view-toggle { flex: none; }
 .model-empty { margin: 16px 0 0; }
 .model-chart-skeleton { height: 220px; }
-.model-alert, .model-stale-alert { margin-top: 12px; }
+.model-alert { margin-top: 12px; }
+/* The stale warning opens the body above the legend or the usage bar, so its space is below it. */
+.model-stale-alert { margin-bottom: 12px; }
+.model-stale-alert + .model-trend-legend { margin-top: 0; }
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
    A contribution graph: seven weekday rows by a year of week columns. The panel shows as many of
    the newest weeks as fit at `--heatmap-cell-target` and stretches them to reach its edge, so the

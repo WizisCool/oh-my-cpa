@@ -290,6 +290,7 @@ export const RoutingPanel = React.memo(function RoutingPanel() {
 
       {routing.isError && (
         <LoadFailure
+          className={styles['alert']}
           tone={model ? 'warning' : 'error'}
           title={t('routing.load_error')}
           error={routing.error}

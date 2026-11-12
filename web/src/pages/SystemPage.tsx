@@ -1,12 +1,9 @@
 import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
-import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import {
   DownloadOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   CloudServerOutlined,
   SafetyCertificateOutlined,
   DashboardOutlined,
@@ -16,8 +13,6 @@ import {
   CloudDownloadOutlined,
   CompressOutlined,
   ClearOutlined,
-  WarningOutlined,
-  CloseOutlined,
   BellOutlined,
   BellOffOutlined,
 } from '../components/icons';
@@ -50,6 +45,7 @@ import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
 import { DATA_RETENTION_QUERY_KEY } from './SystemPage/DataRetention';
 import { StorageFootprint } from './SystemPage/StorageFootprint';
+import { INCOMPLETE_REASON_KEYS, MaintenanceOutcome, MaintenanceRunning } from './SystemPage/MaintenanceOutcome';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
 import styles from './SystemPage.module.css';
@@ -489,11 +485,9 @@ export const SystemPage: React.FC = () => {
     } else if (job.incomplete) {
       // The statement ran but did not fully do its job, which is a different claim from
       // success and from failure.
-      toast.warning(
-        t('sys.maintenance_incomplete_warning', {
-          detail: job.detail || t('sys.maintenance_incomplete_default'),
-        }),
-      );
+      toast.warning(t('sys.maintenance_incomplete_title', { action: label }), {
+        detail: job.incomplete_reason ? t(INCOMPLETE_REASON_KEYS[job.incomplete_reason]) : undefined,
+      });
     } else {
       toast.success(t('sys.maintenance_success', { action: label }));
     }
@@ -889,89 +883,24 @@ export const SystemPage: React.FC = () => {
           {/* The running job, from the live server status. It is always shown, including one
               that was already running when the page was opened, and it is never dismissible:
               the page must not let a reader hide a job that is still holding the write gate. */}
-          {effectiveMaintenance?.running && (
-            <Notice
-              tone="info"
-              icon={<Spinner size="small" />}
-              className={styles['maintenance-running']}
-              title={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
-            />
-          )}
+          {/* The live region stays mounted so a job adopted from another tab - which disables the
+              actions without a toast - is announced when it appears, not only when it is clicked. */}
+          <div role="status" aria-live="polite">
+            {effectiveMaintenance?.running && (
+              <MaintenanceRunning actionLabel={actionLabel(effectiveMaintenance.action)} />
+            )}
+          </div>
 
           {/* The completed outcome, rendered from this page's own snapshot rather than from the
               server's retained last job. The server keeps that record for the life of the process,
               so rendering it directly would resurrect a result the reader has already cleared on
               every reload. */}
           {!effectiveMaintenance?.running && displayedOutcome && displayedOutcome.job_id !== dismissedOutcomeJobID && (
-            <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
-              <div className={styles['maintenance-box-title']}>
-                {displayedOutcome.error ? (
-                  <CloseCircleOutlined className={styles['outcome-danger']} />
-                ) : displayedOutcome.incomplete ? (
-                  // A partial result is its own outcome, not a qualified success. SQLite reports
-                  // a blocked checkpoint in the statement's result row rather than as an error,
-                  // so a green checkmark here would claim the log was truncated when it was not.
-                  <WarningOutlined className={styles['outcome-warn']} />
-                ) : (
-                  <CheckCircleOutlined className={styles['outcome-success']} />
-                )}
-                <span>
-                  {displayedOutcome.error
-                    ? t('sys.maintenance_failed', {
-                        action: actionLabel(displayedOutcome.action),
-                        msg: displayedOutcome.error,
-                      })
-                    : displayedOutcome.incomplete
-                      ? t('sys.maintenance_incomplete_title', {
-                          action: actionLabel(displayedOutcome.action),
-                        })
-                      : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
-                </span>
-                <Button
-                  variant="ghost"
-                  // The console's square row-action size, not `small`: a 28px control gains only 36px
-                  // from the coarse-pointer 4px hit inset, and the floor this console measures is
-                  // ~40px. The drawn box is what a finger has to hit here.
-                  className={styles['maintenance-box-close']}
-                  icon={<CloseOutlined />}
-                  aria-label={t('common.close')}
-                  data-tip={t('common.close')}
-                  onClick={() => setDismissedOutcomeJobID(displayedOutcome.job_id)}
-                />
-              </div>
-
-              <div className={styles['maintenance-box-meta']}>
-                {t('sys.maintenance_reclaimed', {
-                  before: formatBytes(displayedOutcome.size_before_bytes),
-                  after: formatBytes(displayedOutcome.size_after_bytes),
-                  reclaimed: formatBytes(displayedOutcome.reclaimed_bytes),
-                })}
-              </div>
-
-              {displayedOutcome.detail && (
-                <span className={`text-muted-foreground ${styles['maintenance-detail']}`}>
-                  {displayedOutcome.detail}
-                </span>
-              )}
-
-              {displayedOutcome.incomplete && (
-                <Notice
-                  tone="warning"
-                  className={styles['maintenance-outcome-alert']}
-                  title={t('sys.maintenance_incomplete_warning', {
-                    detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
-                  })}
-                />
-              )}
-
-              {displayedOutcome.error && (
-                <Notice
-                  tone="error"
-                  className={styles['maintenance-outcome-alert']}
-                  title={displayedOutcome.error}
-                />
-              )}
-            </div>
+            <MaintenanceOutcome
+              job={displayedOutcome}
+              actionLabel={actionLabel(displayedOutcome.action)}
+              onDismiss={() => setDismissedOutcomeJobID(displayedOutcome.job_id)}
+            />
           )}
         </Panel>
       </div>

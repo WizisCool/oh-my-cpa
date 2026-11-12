@@ -370,8 +370,8 @@ func TestMaintenanceEndpointRebuildsAndReportsMeasuredResult(t *testing.T) {
 		t.Fatalf("vacuum failed: %s", finished.Error)
 	}
 	if finished.ReclaimedBytes <= 0 {
-		t.Fatalf("vacuum reclaimed %d bytes after deleting 1.2MB (before=%d after=%d, detail=%s)",
-			finished.ReclaimedBytes, finished.SizeBeforeBytes, finished.SizeAfterBytes, finished.Detail)
+		t.Fatalf("vacuum reclaimed %d bytes after deleting 1.2MB (before=%d after=%d, incomplete=%q)",
+			finished.ReclaimedBytes, finished.SizeBeforeBytes, finished.SizeAfterBytes, finished.IncompleteReason)
 	}
 	if finished.SizeAfterBytes >= finished.SizeBeforeBytes {
 		t.Fatalf("the reported size did not shrink: before=%d after=%d", finished.SizeBeforeBytes, finished.SizeAfterBytes)
@@ -520,7 +520,7 @@ func TestMaintenanceCheckpointReadsSQLiteCounters(t *testing.T) {
 		if !status.Maintenance.Running && status.Maintenance.FinishedAtMS != 0 {
 			// The counters come from SQLite's own row, so a checkpoint that ran always
 			// has something to report - including "blocked", which is not an error.
-			if status.Maintenance.Detail == "" {
+			if status.Maintenance.Checkpoint == nil {
 				t.Fatal("the checkpoint reported no counters")
 			}
 			if status.Maintenance.Error != "" {

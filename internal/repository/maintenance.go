@@ -51,13 +51,33 @@ type MaintenanceStatus struct {
 	ReclaimedBytes int64
 	// Incomplete is true when the statement ran but did not fully do its job: a
 	// checkpoint blocked by a reader reports SQLite's own busy flag here rather
-	// than a success.
-	Incomplete bool
-	// Detail carries SQLite's own counters for the last job, so the page can show
-	// what actually happened instead of asserting it worked.
-	Detail string
+	// than a success. IncompleteReason names why, as one of the Incomplete* codes.
+	Incomplete       bool
+	IncompleteReason string
+	// Checkpoint carries SQLite's own counters for the job's checkpoint, so the page
+	// can show what actually happened instead of asserting it worked. Nil when the
+	// counters were never read.
+	Checkpoint *CheckpointCounts
 	// Error is a redacted failure sentence, empty on success.
 	Error string
+}
+
+// Reasons a maintenance job ran but did not fully do its job. They are codes rather than
+// sentences so the console can word them in the reader's language.
+const (
+	// IncompleteReaderBlocked: a concurrent reader held the write-ahead log, so the
+	// truncating checkpoint could not complete.
+	IncompleteReaderBlocked = "reader_blocked"
+	// IncompleteLogNotTruncated: VACUUM rebuilt the database, but the checkpoint after
+	// it failed, so the write-ahead log keeps its size.
+	IncompleteLogNotTruncated = "log_not_truncated"
+)
+
+// CheckpointCounts is the result row of `PRAGMA wal_checkpoint(TRUNCATE)`: the frames
+// in the write-ahead log and how many of them were written back to the database.
+type CheckpointCounts struct {
+	LogFrames          int64
+	CheckpointedFrames int64
 }
 
 // MaintenanceReservation identifies one claim of the single-flight slot.
@@ -379,28 +399,29 @@ func (s *MaintenanceService) execute(action string, jobCtx context.Context, befo
 		}, false
 	}
 
-	var detail string
-	var incomplete bool
+	var counts *CheckpointCounts
+	var reason string
 	var jobErr error
 	switch action {
 	case MaintenanceCheckpoint:
-		detail, incomplete, jobErr = s.runCheckpoint(jobCtx)
+		counts, reason, jobErr = s.runCheckpoint(jobCtx)
 	case MaintenanceVacuum:
-		detail, incomplete, jobErr = s.runVacuum(jobCtx)
+		counts, reason, jobErr = s.runVacuum(jobCtx)
 	default:
 		jobErr = fmt.Errorf("unknown maintenance action %q", action)
 	}
 
 	after := s.db.FootprintBytes()
 	result := MaintenanceStatus{
-		Action:          action,
-		JobID:           jobID,
-		StartedAtMS:     startedAt,
-		FinishedAtMS:    time.Now().UnixMilli(),
-		SizeBeforeBytes: before,
-		SizeAfterBytes:  after,
-		Incomplete:      incomplete,
-		Detail:          detail,
+		Action:           action,
+		JobID:            jobID,
+		StartedAtMS:      startedAt,
+		FinishedAtMS:     time.Now().UnixMilli(),
+		SizeBeforeBytes:  before,
+		SizeAfterBytes:   after,
+		Incomplete:       reason != "",
+		IncompleteReason: reason,
+		Checkpoint:       counts,
 	}
 	if after < before {
 		result.ReclaimedBytes = before - after
@@ -447,12 +468,13 @@ func (s *MaintenanceService) finish(result MaintenanceStatus) {
 // checkpoint could not complete because another reader held the database. A nil
 // error therefore proves only that the statement ran, so the counters are read and
 // the outcome is reported from them.
-func (s *MaintenanceService) runCheckpoint(ctx context.Context) (string, bool, error) {
+func (s *MaintenanceService) runCheckpoint(ctx context.Context) (*CheckpointCounts, string, error) {
 	var busy, logFrames, checkpointed int64
 	if err := s.work.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
-		return "", false, fmt.Errorf("truncate the write-ahead log: %w", err)
+		return nil, "", fmt.Errorf("truncate the write-ahead log: %w", err)
 	}
-	return interpretCheckpointResult(busy, logFrames, checkpointed)
+	counts, reason := interpretCheckpointResult(busy, logFrames, checkpointed)
+	return counts, reason, nil
 }
 
 // interpretCheckpointResult turns SQLite's three-column result into an outcome.
@@ -462,14 +484,14 @@ func (s *MaintenanceService) runCheckpoint(ctx context.Context) (string, bool, e
 // when a concurrent reader blocks it, so "did this succeed" is answered by the first column rather
 // than by the absence of an error. The first column is 1 exactly when a FULL, RESTART or TRUNCATE
 // checkpoint could not complete, which is the case that must not be reported as success.
-func interpretCheckpointResult(busy, logFrames, checkpointed int64) (string, bool, error) {
-	detail := fmt.Sprintf("write-ahead log frames %d, checkpointed %d", logFrames, checkpointed)
+func interpretCheckpointResult(busy, logFrames, checkpointed int64) (*CheckpointCounts, string) {
+	counts := &CheckpointCounts{LogFrames: logFrames, CheckpointedFrames: checkpointed}
 	if busy != 0 {
 		// A blocked checkpoint is a real answer, not an error: the log stays as it is until the
 		// readers that blocked it are gone.
-		return detail + "; blocked by a concurrent reader", true, nil
+		return counts, IncompleteReaderBlocked
 	}
-	return detail, false, nil
+	return counts, ""
 }
 
 // runVacuum runs a plain VACUUM and then checkpoints the WAL.
@@ -492,21 +514,19 @@ func interpretCheckpointResult(busy, logFrames, checkpointed int64) (string, boo
 // The rebuild is also what moves a database created before incremental auto-vacuum
 // into that mode: the connection asks for it (gatedDSN), and SQLite applies the
 // request while it rewrites the file. From then on retention shrinks the file itself.
-func (s *MaintenanceService) runVacuum(ctx context.Context) (string, bool, error) {
+func (s *MaintenanceService) runVacuum(ctx context.Context) (*CheckpointCounts, string, error) {
 	if _, err := s.work.ExecContext(ctx, `VACUUM`); err != nil {
-		return "", false, fmt.Errorf("rebuild the database: %w", err)
+		return nil, "", fmt.Errorf("rebuild the database: %w", err)
 	}
 	var busy, logFrames, checkpointed int64
 	if err := s.work.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
 		// The rebuild itself succeeded, so this is reported as a partial result
 		// rather than a failed VACUUM: the file is rebuilt and the log simply could
 		// not be truncated.
-		return "database rebuilt; the write-ahead log could not be truncated", true, nil
+		return nil, IncompleteLogNotTruncated, nil
 	}
-	if busy != 0 {
-		return "database rebuilt; the write-ahead log was blocked by a concurrent reader", true, nil
-	}
-	return fmt.Sprintf("database rebuilt and free pages released (log frames %d, checkpointed %d)", logFrames, checkpointed), false, nil
+	counts, reason := interpretCheckpointResult(busy, logFrames, checkpointed)
+	return counts, reason, nil
 }
 
 // MaintenanceAdmission states what a VACUUM would need before it is started.
