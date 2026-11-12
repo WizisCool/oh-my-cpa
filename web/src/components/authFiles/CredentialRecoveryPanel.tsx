@@ -5,7 +5,6 @@ import clsx from 'clsx';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
-import { isDemoMode } from '../../types/demoMode';
 import { formatGatewayTimestamp } from '../../utils/time';
 import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel } from '../common/StatusLabel';
@@ -50,7 +49,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
     onError: (error) => toast.error(t('recovery.verify_failed', { msg: describeError(error) })),
     onSettled: onChanged,
   });
-  const isBlocked = !canEdit || isDemoMode() || !file.recovery_supported;
+  const isBlocked = !canEdit || !file.recovery_supported;
   const timestamp = (value: string | undefined) => value ? formatGatewayTimestamp(value) : t('recovery.unknown');
   const verify = () => modal.confirm({
     title: t('recovery.verify'),

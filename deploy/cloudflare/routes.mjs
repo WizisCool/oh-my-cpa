@@ -143,6 +143,8 @@ const FIXED_ROUTES = new Map([
  * from `dashboard-24h`, not the same response relabelled.
  */
 const PRESET_ROUTES = new Map([
+  ['/api/v1/management/providers', (url) => (url.searchParams.get('include_keys') === 'true' ? 'providers-with-keys' : 'providers')],
+  ['/api/v1/management/api-keys', (url) => (url.searchParams.get('include_keys') === 'true' ? 'api-keys-with-keys' : 'api-keys')],
   ['/api/v1/management/dashboard', (url) => `dashboard-${dashboardPresetOf(url)}`],
   ['/api/v1/management/dashboard/tail', (url) => `dashboard-tail-${dashboardPresetOf(url)}`],
   ['/api/v1/management/dashboard/providers', (url) => `dashboard-providers-${dashboardPresetOf(url)}`],

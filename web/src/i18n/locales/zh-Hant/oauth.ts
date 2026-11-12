@@ -150,6 +150,7 @@ export default {
   "oauth.plugin_tag": "外掛",
   "oauth.copy_link": "複製連結",
   "oauth.open_link": "開啟連結",
+  "oauth.sandbox_complete": "完成本地示範授權",
   "oauth.link_copied": "連結已複製到剪貼簿",
   "oauth.copy_failed": "複製失敗",
   "oauth.callback_label": "重定向回撥連結 / Callback URL",

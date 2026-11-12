@@ -46,7 +46,6 @@ import {
   WarningOutlined,
 } from '../../components/icons';
 import { useT, type TFunc } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { maskAccount } from '../../utils/maskAccount';
 import { formatGatewayTimestamp } from '../../utils/time';
 import { formatObservedAgo } from '../quota/quotaFormat';
@@ -415,7 +414,6 @@ export function EditCredentialButton({ record, facts, actions }: { record: OAuth
 /** The refresh glyph: the action an operator takes most, marked when a refresh is the fix. */
 export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWorkspaceRecord; facts: CredentialFacts; actions: CredentialActions }) {
   const t = useT();
-  const isDemo = isDemoMode();
   if (!record.canRefreshQuota) return <span className={styles['action-space']} aria-hidden="true" />;
   const label = facts.needsRefresh
     ? `${t('quota.btn_refresh_quota')}: ${record.file.name} (${t('omc.refresh_needed')})`
@@ -427,7 +425,7 @@ export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWo
         size="sm"
         className={clsx(styles['icon-action'], facts.needsRefresh && styles['refresh-needed'])}
         icon={<SyncOutlined spin={facts.isRefreshing} />}
-        disabled={facts.isBusy || facts.isRefreshing || isDemo}
+        disabled={facts.isBusy || facts.isRefreshing}
         onClick={(event) => {
           event.stopPropagation();
           actions.onRefreshQuota(record);
@@ -449,7 +447,6 @@ type ActionKey =
  * between credentials.
  */
 function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFunc) {
-  const isDemo = isDemoMode();
   const { file } = record;
   const canFile = record.canSelectForFileBatch;
   return [
@@ -460,11 +457,11 @@ function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFu
     { key: 'model-rules' as const, icon: <StopOutlined />, label: t('af.rules_disable_models'), disabled: facts.isBusy },
     { key: 'rename' as const, icon: <RenameOutlined />, label: t('af.rename'), disabled: facts.isBusy || !facts.canRename },
     { key: 'reauth' as const, icon: <LoginOutlined />, label: t('omc.reauthenticate'), disabled: facts.isBusy || !record.canEditFile, hidden: !record.authorizationProviderId },
-    { key: 'clear-cooldown' as const, icon: <TimerResetOutlined />, label: t('quota.clear_cooldown'), disabled: facts.isBusy || isDemo || !record.canClearCooldown, hidden: !record.canClearCooldown },
-    { key: 'redeem' as const, icon: <RollbackOutlined />, label: t('omc.fleet_action_redeem'), disabled: facts.isBusy || isDemo || !record.canRedeemCredit, hidden: !record.canRedeemCredit },
+    { key: 'clear-cooldown' as const, icon: <TimerResetOutlined />, label: t('quota.clear_cooldown'), disabled: facts.isBusy || !record.canClearCooldown, hidden: !record.canClearCooldown },
+    { key: 'redeem' as const, icon: <RollbackOutlined />, label: t('omc.fleet_action_redeem'), disabled: facts.isBusy || !record.canRedeemCredit, hidden: !record.canRedeemCredit },
     { key: 'siwc' as const, icon: <LinkOutlined />, label: t('siwc.menu'), disabled: facts.isBusy, hidden: !facts.siwc },
-    { key: 'download' as const, icon: <DownloadOutlined />, label: t('af.download_credential'), disabled: facts.isBusy || file.runtime_only || isDemo || !canFile },
-    { key: 'delete' as const, icon: <DeleteOutlined />, label: t('af.delete_credential'), disabled: facts.isBusy || file.runtime_only || isDemo || !canFile, danger: true },
+    { key: 'download' as const, icon: <DownloadOutlined />, label: t('af.download_credential'), disabled: facts.isBusy || file.runtime_only || !canFile },
+    { key: 'delete' as const, icon: <DeleteOutlined />, label: t('af.delete_credential'), disabled: facts.isBusy || file.runtime_only || !canFile, danger: true },
   ].filter((action) => !action.hidden);
 }
 

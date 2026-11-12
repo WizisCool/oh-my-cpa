@@ -2808,7 +2808,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .app-header-actions { gap: 8px; }
   .app-header-actions > [data-slot="button"] { min-width: 40px; min-height: 40px; }
   .app-header-left { flex: 1; }
-  .app-header .demo-chip { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-header .demo-chip { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dashboard-tile [data-slot="panel-body"] { padding: 12px; }
   .toolbar.is-ruled { gap: 8px; margin-bottom: 12px; }
   .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }

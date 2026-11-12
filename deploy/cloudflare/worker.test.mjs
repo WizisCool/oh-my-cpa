@@ -310,7 +310,7 @@ describe('routing', () => {
 
   it('answers a price editor read only for a model the dataset holds', () => {
     // Another model's price history would be the wrong history shown under this name.
-    assert.equal(responseNameFor(request('/api/v1/pricing/models/gpt-5.4-mini-high')), 'pricing-model-gpt-5.4-mini-high');
+    assert.equal(responseNameFor(request('/api/v1/pricing/models/gpt-6.1-terra-high')), 'pricing-model-gpt-6.1-terra-high');
     assert.equal(responseNameFor(request('/api/v1/pricing/models/not-a-served-model')), undefined);
   });
 
@@ -395,6 +395,28 @@ describe('routing', () => {
         `${path} does not match its captured response`,
       );
     }
+  });
+
+  it('filters usage events by model, result, and search query', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const failedRes = await worker.fetch(request('/api/v1/usage/events?result=failed'), env);
+    assert.equal(failedRes.status, 200);
+    const failedBody = await failedRes.json();
+    assert.ok(failedBody.items.length > 0);
+    assert.ok(failedBody.items.every((item) => item.failed === true));
+
+    const hydrogenRes = await worker.fetch(request('/api/v1/usage/events?model=gemini-4-hydrogen'), env);
+    assert.equal(hydrogenRes.status, 200);
+    const hydrogenBody = await hydrogenRes.json();
+    assert.ok(hydrogenBody.items.length > 0);
+    assert.ok(hydrogenBody.items.every((item) => item.model === 'gemini-4-hydrogen'));
+
+    const facetsRes = await worker.fetch(request('/api/v1/usage/facets?preset=15m&q=gemini-4-hydrogen'), env);
+    assert.equal(facetsRes.status, 200);
+    const facetsBody = await facetsRes.json();
+    assert.ok(Array.isArray(facetsBody.facets?.models));
+    assert.equal(facetsBody.models, undefined);
   });
 
   it('refuses routing plan writes', async () => {

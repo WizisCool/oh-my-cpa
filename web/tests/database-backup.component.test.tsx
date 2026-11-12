@@ -21,7 +21,7 @@ const archiveKey = 'omc-11223344-5566-4788-99aa-bbccddeeff00-1800000000000-11223
 function open(server: ReturnType<typeof installOmcApi>, value: BackupAutomation, jobs: () => DatabaseBackupJob[] = () => []) {
   server.on('GET', '/management/system/database-backup-automation', () => value);
   server.on('GET', '/management/system/database-backups', () => ({ items: jobs() }));
-  renderWithOmc(<DatabaseBackups isDemo={false} />);
+  renderWithOmc(<DatabaseBackups />);
   fireEvent.click(screen.getByRole('button', { name: 'Manage backups' }));
 }
 const puts = (server: ReturnType<typeof installOmcApi>) =>
@@ -65,7 +65,7 @@ it('gates automatic backups behind an initial passphrase and saves cloud destina
   });
   server.on('GET', '/management/system/database-backup-automation', () => saved);
   server.on('GET', '/management/system/database-backups', () => ({ items: [] }));
-  renderWithOmc(<DatabaseBackups isDemo={false} />);
+  renderWithOmc(<DatabaseBackups />);
   fireEvent.click(screen.getByRole('button', { name: 'Manage backups' }));
   const save = (await screen.findByRole('button', { name: 'Save and turn on' })) as HTMLButtonElement;
   fireEvent.change(screen.getByLabelText('Backup passphrase'), { target: { value: 'scheduled independent passphrase' } });

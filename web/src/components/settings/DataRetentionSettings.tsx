@@ -3,7 +3,6 @@ import { Select } from '@/components/ui/select';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { DATA_RETENTION_QUERY_KEY, formatRetentionDays, useDataRetention } from '../../hooks/useDataRetention';
 import { SettingsGroup } from './SettingsGroup';
 import { SettingRow } from '../common/SettingRow';
@@ -83,7 +82,7 @@ export const DataRetentionSettings: React.FC = () => {
         control={(
           <Select<number>
             value={data ? current : undefined}
-            disabled={isDemoMode() || !data || save.isPending}
+            disabled={!data || save.isPending}
             options={withCurrent(current).map((days) => ({ value: days, label: formatRetentionDays(days, t) }))}
             onChange={apply}
             aria-label={t('omc.retention_records')}

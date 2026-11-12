@@ -37,17 +37,17 @@ func newReleaseFixture(now time.Time) *releaseFixture {
 			// comparison is claimed and the newest release is shown on its own.
 			release.ProductOMC: {
 				{
-					Tag:         "v0.2.0",
-					Name:        "v0.2.0",
-					PublishedAt: now.Add(-20 * 24 * time.Hour).UTC().Format(time.RFC3339),
-					Body: "## Highlights\n\n- The console reports both products' versions and the changes between them.\n" +
-						"- The database's own facts are read rather than assumed.\n",
+					Tag:         "v0.3.26",
+					Name:        "v0.3.26",
+					PublishedAt: now.Add(-3 * 24 * time.Hour).UTC().Format(time.RFC3339),
+					Body: "## Highlights\n\n- Calibrated mixed-model quota capacity estimates and added model projections.\n" +
+						"- Added drag reordering for OAuth model rules and simplified excluded models management.\n",
 				},
 				{
-					Tag:         "v0.1.0",
-					Name:        "v0.1.0",
-					PublishedAt: now.Add(-60 * 24 * time.Hour).UTC().Format(time.RFC3339),
-					Body:        "## Highlights\n\n- Request records gained a streaming indicator.\n",
+					Tag:         "v0.3.25",
+					Name:        "v0.3.25",
+					PublishedAt: now.Add(-14 * 24 * time.Hour).UTC().Format(time.RFC3339),
+					Body:        "## Highlights\n\n- Added pace-matched baseline comparisons across Dashboard and Insights.\n",
 				},
 			},
 			// The gateway's releases include two versions above the one the fixture

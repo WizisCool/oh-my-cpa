@@ -17,7 +17,6 @@ import { BoxOutlined, DeleteOutlined, EditOutlined, ExternalLinkOutlined, KeyOut
 import type { ColumnsType } from '@/components/ui/table';
 
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { LobeIcon, ProviderMark } from '../LobeIcon';
 import { safeExternalURL } from '../../utils/externalUrl';
 import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
@@ -147,9 +146,6 @@ export function ProviderTable({
   // field is a full save that also rewrites CPA's entry; the glyph is the only overlay-only rename,
   // so it stays painted on touch screens and phones.
   const [renamingID, setRenamingID] = React.useState<string | null>(null);
-  // Provider definitions live in the gateway's configuration, so creating, editing,
-  // enabling and deleting one are all refused by the demonstration.
-  const isDemo = isDemoMode();
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   /**
@@ -391,9 +387,6 @@ export function ProviderTable({
             checked={resolveEnabled(record)}
             aria-busy={busyProviderIds.has(record.id)}
             aria-label={`${t('pro.col_switch')}: ${record.name}`}
-            // Enabling or disabling a provider writes the gateway's own configuration,
-            // which the demonstration refuses.
-            disabled={isDemo}
             onChange={(checked) => toggleProviderStatus(record.id, checked)}
           />
         );
@@ -421,15 +414,13 @@ export function ProviderTable({
             title={t('pro.delete_provider_confirm')}
             onConfirm={() => deleteProviderMutation.mutate(record.id)}
             isDanger
-            disabled={isDemo}
-            tooltip={isDemo ? t('demo.blocked') : t('common.delete')}
+            tooltip={t('common.delete')}
           >
             <Button
               size="sm"
               danger
               className="row-action-btn"
               icon={<DeleteOutlined />}
-              disabled={isDemo}
               loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
               aria-label={`${t('common.delete')}: ${record.name}`}
             />
@@ -558,7 +549,7 @@ export function ProviderTable({
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem icon={<DeleteOutlined />} danger disabled={isDemo} onClick={confirmDelete}>
+              <DropdownMenuItem icon={<DeleteOutlined />} danger onClick={confirmDelete}>
                 {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>

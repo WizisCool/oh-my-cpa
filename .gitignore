@@ -9,6 +9,10 @@ node_modules
 web/public/lobe-icons/
 web/public/lobe-icons.tmp-*/
 
+# Generated Cloudflare demo dataset (built in CI / Cloudflare Workers Builds, never committed).
+deploy/cloudflare/data/responses.json
+deploy/cloudflare/data/responses.stamp
+
 # Production builds
 web/dist/
 dist/

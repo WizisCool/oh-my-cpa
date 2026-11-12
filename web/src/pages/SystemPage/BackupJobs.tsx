@@ -6,11 +6,13 @@ import { ConfirmAction } from '../../components/common/ConfirmAction';
 import { SectionHeading } from '../../components/common/SectionHeading';
 import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
 import { CloudUploadOutlined, DeleteOutlined, DownloadOutlined, UploadOutlined } from '../../components/icons';
-import { LoadFailure, Notice } from '../../components/feedback';
+import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import type { DatabaseBackupJob } from '../../types/databaseBackup';
+import { isDemoMode } from '../../types/demoMode';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
+import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
 import dayjs from '../../utils/time';
 import { PassphraseFields, isPassphrasePairValid } from './BackupPassphrase';
@@ -140,10 +142,24 @@ function JobCard({
   onAct?: (job: DatabaseBackupJob, action: 'restore' | 'delete') => Promise<void>;
 }) {
   const t = useT();
+  const toast = useToast();
+  const [isDownloading, setIsDownloading] = useState(false);
   const canDownload = job.kind === 'export' && job.state === 'ready';
   const canRestore = !!onAct && job.kind === 'import' && job.state === 'ready';
   const canRemove = !!onAct && !RUNNING_STATES.has(job.state);
   const isScheduled = job.state === 'scheduled';
+  const handleDemoDownload = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const blob = await api.downloadDatabaseBackup(job.id);
+      saveBlob(blob, `omc-backup-${job.id}.omcbak`);
+    } catch (error) {
+      toast.error(t(databaseBackupErrorKey(apiErrorCode(error), 'sys.backup_error_failed')));
+    } finally {
+      setIsDownloading(false);
+    }
+  };
   return (
     <li className={styles['job']} data-tone={tone(job.state)}>
       <div className={styles['job-head']}>
@@ -164,15 +180,27 @@ function JobCard({
         </div>
         <div className={styles['location-actions']}>
           {canDownload && (
-            <Button
-              size="sm"
-              icon={<DownloadOutlined />}
-              href={api.databaseBackupDownloadUrl(job.id)}
-              target="_blank"
-              rel="noopener"
-            >
-              {t('sys.backup_download')}
-            </Button>
+            isDemoMode() ? (
+              <Button
+                size="sm"
+                icon={<DownloadOutlined />}
+                loading={isDownloading}
+                disabled={isDownloading}
+                onClick={() => void handleDemoDownload()}
+              >
+                {t('sys.backup_download')}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                icon={<DownloadOutlined />}
+                href={api.databaseBackupDownloadUrl(job.id)}
+                target="_blank"
+                rel="noopener"
+              >
+                {t('sys.backup_download')}
+              </Button>
+            )
           )}
           {canRemove && !isScheduled && (
             <ConfirmAction

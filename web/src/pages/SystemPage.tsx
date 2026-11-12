@@ -21,7 +21,6 @@ import dayjs from '../utils/time';
 import { api, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import type { MessageKey } from '../i18n/catalog';
-import { isDemoMode } from '../types/demoMode';
 import type {
   SystemInfoResponse,
   SystemProductVersion,
@@ -213,7 +212,6 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
 export const SystemPage: React.FC = () => {
   useTimeZone();
   const t = useT();
-  const isDemo = isDemoMode();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { dismissals, isLoaded: areDismissalsLoaded, dismiss, restore } = useUpdateDismissals();
@@ -543,19 +541,12 @@ export const SystemPage: React.FC = () => {
   // server refuses the route: the fixture already supplies the index, so checking there
   // would spend a request to receive a refusal.
   useEffect(() => {
-    // Waiting for the page's own response, because whether this deployment allows an automatic
-    // check is a server decision: the switch exists so that opening a page cannot spend requests
-    // from a budget shared per address, and a page that checked regardless would defeat it.
-    //
-    // The decision is marked as taken only once there is a response to decide on. Setting the ref
-    // on a failed first load would consume it while `sysInfo` was undefined, so a later successful
-    // refresh could never perform the check this deployment had authorised.
     if (!sysInfo || hasMountedCheckRef.current) return;
     hasMountedCheckRef.current = true;
-    if (!isDemo && sysInfo.update_check_on_page_load) {
+    if (sysInfo.update_check_on_page_load) {
       void handleCheckUpdates(false);
     }
-  }, [isDemo, sysInfo]);
+  }, [sysInfo]);
 
   const handleRunCheckpoint = async () => {
     setSubmittingAction('checkpoint');
@@ -662,11 +653,8 @@ export const SystemPage: React.FC = () => {
                 className={styles['check-updates-action']}
                 icon={<CloudDownloadOutlined />}
                 loading={isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
-                // The demonstration refuses this route on the server, so the control is
-                // disabled rather than offered: a button whose only outcome is a refusal
-                // teaches the reader something untrue about the product.
-                disabled={isDemo || isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
-                data-tip={isDemo ? t('demo.blocked') : checkUpdatesLabel}
+                disabled={isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
+                data-tip={checkUpdatesLabel}
                 aria-label={checkUpdatesLabel}
                 onClick={() => void handleCheckUpdates()}
               >
@@ -799,7 +787,7 @@ export const SystemPage: React.FC = () => {
             {sysInfo && (
               <>
                 <StorageFootprint database={sysInfo.database} />
-                <DatabaseBackups isDemo={isDemo} />
+                <DatabaseBackups />
               </>
             )}
           </Panel>
@@ -830,7 +818,7 @@ export const SystemPage: React.FC = () => {
                     (effectiveMaintenance?.running &&
                       (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
                   }
-                  disabled={isDemo || isMaintenanceActive}
+                  disabled={isMaintenanceActive}
                   onClick={() => void handleRunCheckpoint()}
                 >
                   {t('sys.action_run')}
@@ -849,7 +837,7 @@ export const SystemPage: React.FC = () => {
                     submittingAction === 'vacuum' ||
                     (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
                   }
-                  disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
+                  disabled={isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
                   onClick={() => setIsVacuumModalOpen(true)}
                 >
                   {t('sys.action_run')}
@@ -869,8 +857,6 @@ export const SystemPage: React.FC = () => {
                   icon={<DownloadOutlined />}
                   aria-label={t('sys.download_diag')}
                   loading={downloadingDiag}
-                  disabled={isDemo}
-                  data-tip={isDemo ? t('demo.blocked') : undefined}
                   onClick={() => void handleDownloadDiagnostics()}
                 >
                   {t('sys.action_download')}

@@ -57,6 +57,8 @@ const CREDENTIALS = {
   'auth-claude-01': { provider: 'claude', auth_type: 'oauth' },
   'auth-codex-01': { provider: 'codex', auth_type: 'oauth' },
   'auth-codex-02': { provider: 'codex', auth_type: 'oauth' },
+  'auth-antigravity-01': { provider: 'antigravity', auth_type: 'oauth' },
+  'auth-gemini-01': { provider: 'gemini', auth_type: 'oauth' },
 };
 
 /**
@@ -67,8 +69,30 @@ const CREDENTIALS = {
  */
 const MODELS = [
   {
+    model: 'gemini-4-hydrogen',
+    weight: 0.25,
+    pool: ['auth-antigravity-01', 'auth-gemini-01'],
+    latency: [900, 3200],
+    ttftShare: [0.16, 0.28],
+    input: [10000, 38000],
+    output: [500, 2200],
+    reasoningEffort: 'high',
+    price: { input: 1.5, output: 7.5, cacheRead: 0.075, cacheWrite: 1.5, versionId: 22 },
+  },
+  {
+    model: 'gemini-4-carbon',
+    weight: 0.13,
+    pool: ['auth-antigravity-01', 'auth-gemini-01'],
+    latency: [3200, 9600],
+    ttftShare: [0.24, 0.42],
+    input: [14000, 48000],
+    output: [1200, 4200],
+    reasoningEffort: 'high',
+    price: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2, versionId: 21 },
+  },
+  {
     model: 'claude-opus-5.5',
-    weight: 0.36,
+    weight: 0.22,
     pool: ['auth-claude-01'],
     latency: [1400, 5200],
     ttftShare: [0.25, 0.45],
@@ -79,7 +103,7 @@ const MODELS = [
   },
   {
     model: 'gpt-6-astra',
-    weight: 0.38,
+    weight: 0.20,
     pool: ['auth-codex-01', 'auth-codex-02'],
     latency: [900, 4200],
     ttftShare: [0.2, 0.4],
@@ -89,13 +113,14 @@ const MODELS = [
     price: { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5, versionId: 28 },
   },
   {
-    model: 'deepseek-v4.1-flash',
-    weight: 0.26,
+    model: 'deepseek-v4.1-flash-1017',
+    weight: 0.20,
     pool: ['auth-ds-01', 'auth-ds-02'],
     latency: [450, 1900],
     ttftShare: [0.15, 0.3],
     input: [3000, 24000],
     output: [200, 1800],
+    price: { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0.15, versionId: 12 },
   },
 ];
 
@@ -103,7 +128,7 @@ const MODELS = [
  * The credentials that rest after a rate limit, in turn. Each has a sibling to take its
  * traffic, so a rest shows as a lane going quiet rather than as errors.
  */
-const RESTING_IN_TURN = ['auth-codex-02', 'auth-ds-01', 'auth-codex-01', 'auth-ds-02'];
+const RESTING_IN_TURN = ['auth-codex-02', 'auth-ds-01', 'auth-antigravity-01', 'auth-codex-01', 'auth-ds-02'];
 
 /** Upstream errors an attempt can end with, other than a rate limit. */
 const TRANSIENT_STATUSES = [500, 502, 503];

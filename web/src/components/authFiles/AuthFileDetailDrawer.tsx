@@ -25,7 +25,6 @@ import { normalizeExcludedModelRules } from './oauthExcludedModelLogic';
 import { normalizeOAuthModelAliasProvider } from './oauthModelAliasLogic';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import type {
   ManagementAuthFile,
   ManagementAuthFileModel,
@@ -207,7 +206,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   pluginLogos,
 }) => {
   const t = useT();
-  const isDemo = isDemoMode();
   const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -679,20 +677,15 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           <Button
             icon={<SyncOutlined />}
             loading={refreshMutation.isPending}
-            // A refresh spends the credential's refresh token with its provider, which the
-            // demonstration never contacts.
-            disabled={file.runtime_only || !canEdit || isDemo}
-            data-tip={isDemo ? t('demo.blocked') : t('af.refresh_desc')}
+            disabled={file.runtime_only || !canEdit}
+            data-tip={t('af.refresh_desc')}
             onClick={() => refreshMutation.mutate({ fileName: file.name, authIndex: file.auth_index })}
           >
             {t('af.refresh')}
           </Button>
           <Button
             icon={<DownloadOutlined />}
-            // Downloading credential material is refused by the demonstration, here as
-            // well as on the card behind this drawer.
-            disabled={file.runtime_only || isDemo}
-            data-tip={isDemo ? t('demo.blocked') : undefined}
+            disabled={file.runtime_only}
             onClick={() => onDownload(file)}
           >
             {t('af.download_credential')}

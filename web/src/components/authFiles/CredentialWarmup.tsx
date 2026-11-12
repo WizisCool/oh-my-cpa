@@ -9,7 +9,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
 import { languageLocale } from '../../i18n/language';
-import { isDemoMode } from '../../types/demoMode';
 import { formatEventDuration } from '../../types/usageEventMetrics';
 import { credentialBrandIdentity } from '../../types/credentialIdentity';
 import { usePluginMultiPortalKeys, usePluginOAuthLogos, usePluginOAuthTitles } from '../../hooks/usePluginOAuthLogos';
@@ -194,7 +193,7 @@ function TaskEditorModal({
   const multiPortalKeys = usePluginMultiPortalKeys();
   const draft = editing?.draft;
   const account = draft ? findAccount(catalog, draft) : undefined;
-  const isDisabled = isSaving || isDemoMode();
+  const isDisabled = isSaving;
 
   if (!draft) return <AppModal open={false} title="" onCancel={onCancel} />;
 
@@ -242,7 +241,7 @@ function TaskEditorModal({
       destroyOnHidden
       footer={[
         <Button key="cancel" onClick={onCancel} disabled={isSaving}>{t('common.cancel')}</Button>,
-        <Button key="save" variant="primary" onClick={onSave} loading={isSaving} disabled={!canSaveWarmupTask(draft) || isDemoMode()}>
+        <Button key="save" variant="primary" onClick={onSave} loading={isSaving} disabled={!canSaveWarmupTask(draft)}>
           {t('common.save')}
         </Button>,
       ]}
@@ -407,7 +406,6 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   const locale = languageLocale(useI18n().lang);
   const toast = useToast();
   const queryClient = useQueryClient();
-  const isDemo = isDemoMode();
 
   const catalog = state.catalog;
   const timezone = catalog?.timezone || 'UTC';
@@ -519,7 +517,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   const runTitle = (run: WarmupRun): string => views.get(run.task_id)?.title ?? (run.account || run.auth_index);
 
   const shownRuns = isShowingAllRuns ? runs : runs.slice(0, RUNS_PREVIEW);
-  const canClearRuns = runs.length > 0 && !isDemo;
+  const canClearRuns = runs.length > 0;
 
   return (
     <div className={styles['workspace']}>
@@ -530,7 +528,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
           title={t('warmup.tasks')}
           count={tasks.length || undefined}
           extra={(
-            <Button size="sm" variant="primary" icon={<PlusOutlined />} onClick={startCreate} disabled={isDemo} data-testid="warmup-add-task">
+            <Button size="sm" variant="primary" icon={<PlusOutlined />} onClick={startCreate} data-testid="warmup-add-task">
               {t('warmup.add_task')}
             </Button>
           )}
@@ -558,7 +556,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       icon={<PlayCircleOutlined />}
                       label={t('warmup.run')}
                       loading={isRunning}
-                      disabled={isDemo || (runMutation.isPending && !isRunning)}
+                      disabled={runMutation.isPending && !isRunning}
                       onClick={() => runMutation.mutate(task.id)}
                     />
                     <ToolButton
@@ -566,7 +564,6 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       variant="ghost"
                       icon={<EditOutlined />}
                       label={t('warmup.edit_task')}
-                      disabled={isDemo}
                       onClick={() => setEditing({ id: task.id, draft: taskToInput(task, timezone) })}
                     />
                     <ConfirmAction
@@ -576,9 +573,9 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       isConfirming={deleteMutation.isPending && deleteMutation.variables === task.id}
                       tooltip={t('warmup.delete_task')}
                       onConfirm={() => deleteMutation.mutateAsync(task.id)}
-                      disabled={isDemo || isRunning}
+                      disabled={isRunning}
                     >
-                      <Button size="sm" variant="ghost" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isDemo || isRunning} />
+                      <Button size="sm" variant="ghost" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isRunning} />
                     </ConfirmAction>
                     <Switch
                       size="small"
@@ -586,7 +583,6 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       aria-label={view.title}
                       loading={toggleMutation.isPending && toggleMutation.variables?.task.id === task.id}
                       checked={task.enabled}
-                      disabled={isDemo}
                       onChange={(enabled) => toggleMutation.mutate({ task, enabled })}
                     />
                   </div>

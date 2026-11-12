@@ -6,7 +6,6 @@ import { UPDATE_STATUS_QUERY_KEY } from '../hooks/useUpdateNotice';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
-import { isDemoMode } from '../types/demoMode';
 import type { PluginItem } from '../types/plugin';
 import { PageHeader } from '../components/common/PageHeader';
 import { InstalledPluginsPanel } from '../components/plugins/InstalledPluginsPanel';
@@ -55,7 +54,6 @@ export const PluginsPage: React.FC = () => {
   const t = useT();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const isDemo = isDemoMode();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -241,7 +239,7 @@ export const PluginsPage: React.FC = () => {
             isLoading={pluginsQuery.isLoading}
             isPluginSystemEnabled={isSystemEnabled}
             catalog={catalog}
-            isDemo={isDemo}
+            isDemo={false}
             onConfigure={setConfiguring}
             onBrowseStore={() => selectTab('store')}
             onOpenSettings={() => selectTab('settings')}
@@ -254,20 +252,20 @@ export const PluginsPage: React.FC = () => {
         <PluginStorePanel
           store={storeQuery.data}
           isLoading={storeQuery.isPending}
-          isDemo={isDemo}
+          isDemo={false}
           onRefresh={() => void refreshStore(false)}
           isRefreshing={isRefreshingStore}
           onManage={manage}
           onOpenSettings={() => selectTab('settings')}
         />
       )}
-      {tab === 'settings' && <PluginSettingsPanel isDemo={isDemo} />}
+      {tab === 'settings' && <PluginSettingsPanel isDemo={false} />}
 
       <PluginConfigDrawer
         plugin={configuring}
         listing={configuring ? catalog.get(configuring.id) : undefined}
         isPluginSystemEnabled={isSystemEnabled}
-        isDemo={isDemo}
+        isDemo={false}
         onClose={() => setConfiguring(null)}
       />
     </div>

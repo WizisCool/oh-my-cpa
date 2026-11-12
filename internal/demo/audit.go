@@ -27,22 +27,22 @@ type demoAuditEntry struct {
 
 var demoAuditTrail = []demoAuditEntry{
 	{4 * time.Minute, "auth.login", "auth", "operator", []string{"success"}, map[string]any{"ip": "203.0.113.0/24"}},
-	{38 * time.Minute, "provider.update", "provider", "openai-compat-0", []string{"attempt", "success"}, map[string]any{"name": "Groq"}},
-	{52 * time.Minute, "api_key.reveal", "client_api_key", "list", []string{"success"}, map[string]any{"key_count": 3}},
+	{38 * time.Minute, "provider.update", "provider", "openai-compat-1", []string{"attempt", "success"}, map[string]any{"name": "DeepSeek"}},
+	{52 * time.Minute, "api_key.reveal", "client_api_key", "list", []string{"success"}, map[string]any{"key_count": 4}},
 	{75 * time.Minute, "client_key.alias_set", "client_key", "client_key_alias", []string{"attempt", "success"}, map[string]any{"cleared": false}},
 	{2 * time.Hour, "quota.refresh", "quota", "auth-codex-01", []string{"success"}, map[string]any{"status": "healthy"}},
 	{3*time.Hour + 10*time.Minute, "auth.login", "auth", "operator", []string{"failure"}, map[string]any{"ip": "198.51.100.0/24"}},
 	{5 * time.Hour, "config.save_source", "config", "config_source_yaml", []string{"attempt", "success"}, map[string]any{"bytes": 8574}},
-	{8 * time.Hour, "oauth.start", "oauth_provider", "anthropic", []string{"success"}, nil},
-	{8*time.Hour - 2*time.Minute, "oauth.callback", "oauth_callback", "anthropic", []string{"attempt", "success"}, nil},
+	{8 * time.Hour, "oauth.start", "oauth_provider", "claude", []string{"success"}, nil},
+	{8*time.Hour - 2*time.Minute, "oauth.callback", "oauth_callback", "claude", []string{"attempt", "success"}, nil},
 	{26 * time.Hour, "pricing.sync.start", "pricing", "openrouter", []string{"success"}, nil},
-	{27 * time.Hour, "plugin.disable", "plugin", "request-logger", []string{"attempt", "failure"}, map[string]any{"error": "CPA returned HTTP 409"}},
+	{27 * time.Hour, "plugin.disable", "plugin", "quota-notifier", []string{"attempt", "success"}, nil},
 	{29 * time.Hour, "capability.usage_aggregate", "capability_operation", "agent-usage-01", []string{"attempt", "success"}, map[string]any{"adapter": "agent"}},
 	{30 * time.Hour, "capability.providers_delete", "capability_operation", "agent-provider-02", []string{"prepared", "rejected"}, map[string]any{"adapter": "agent"}},
 	{49 * time.Hour, "system.maintenance.checkpoint", "database", "checkpoint", []string{"admitted"}, nil},
 	{49*time.Hour - time.Minute, "system.maintenance.wal_checkpoint.completed", "database", "wal_checkpoint", []string{"success"}, map[string]any{"reclaimed_bytes": 2518288}},
-	{51 * time.Hour, "provider.delete", "provider", "openai-compat-2", []string{"attempt", "success"}, nil},
-	{54 * time.Hour, "auth_file.fields_update", "auth_file", "codex-demo-01.json", []string{"attempt", "success"}, map[string]any{"fields": []string{"proxy_url"}, "verified": true}},
+	{51 * time.Hour, "provider.update", "provider", "openai-compat-0", []string{"attempt", "success"}, map[string]any{"name": "Z.ai"}},
+	{54 * time.Hour, "auth_file.fields_update", "auth_file", "codex-team-primary.json", []string{"attempt", "success"}, map[string]any{"fields": []string{"priority"}, "verified": true}},
 	{70 * time.Hour, "audit.export", "audit_events", "export", []string{"success"}, map[string]any{"count": 118}},
 	{71 * time.Hour, "system.check_updates", "system", "release_feed", []string{"checked"}, nil},
 }
@@ -88,14 +88,14 @@ func SeedServiceLog(buffer *applog.Buffer, now time.Time) {
 		message string
 		attrs   []applog.Attr
 	}{
-		{95 * time.Minute, "info", "HTTP server listening", []applog.Attr{{Key: "addr", Value: ":8080"}, {Key: "base_path", Value: "/omc"}}},
-		{95 * time.Minute, "info", "usage ingestion started", []applog.Attr{{Key: "mode", Value: "auto"}, {Key: "instance", Value: "default"}}},
+		{95 * time.Minute, "info", "HTTP server listening", []applog.Attr{{Key: "addr", Value: ":8080"}, {Key: "base_path", Value: "/"}}},
+		{95 * time.Minute, "info", "usage ingestion started", []applog.Attr{{Key: "mode", Value: "subscribe"}, {Key: "instance", Value: "default"}}},
 		{94 * time.Minute, "info", "release check sweep started", []applog.Attr{{Key: "interval", Value: "6h0m0s"}}},
-		{93 * time.Minute, "info", "pricing sync completed", []applog.Attr{{Key: "models", Value: "412"}, {Key: "changed", Value: "3"}}},
+		{93 * time.Minute, "info", "pricing sync completed", []applog.Attr{{Key: "models", Value: "36"}, {Key: "changed", Value: "2"}}},
 		{61 * time.Minute, "warn", "usage queue read timed out; retrying", []applog.Attr{{Key: "attempt", Value: "1"}, {Key: "delay", Value: "2s"}}},
 		{60 * time.Minute, "info", "usage ingestion resumed", []applog.Attr{{Key: "backlog", Value: "37"}}},
-		{27 * time.Minute, "error", "plugin status update failed", []applog.Attr{{Key: "plugin", Value: "request-logger"}, {Key: "error", Value: "CPA returned HTTP 409"}}},
-		{12 * time.Minute, "info", "quota refresh completed", []applog.Attr{{Key: "credentials", Value: "6"}, {Key: "duration", Value: "1.84s"}}},
+		{27 * time.Minute, "info", "plugin config updated", []applog.Attr{{Key: "plugin", Value: "quota-notifier"}, {Key: "enabled", Value: "false"}}},
+		{12 * time.Minute, "info", "quota refresh completed", []applog.Attr{{Key: "credentials", Value: "7"}, {Key: "duration", Value: "1.42s"}}},
 		{3 * time.Minute, "info", "usage batch stored", []applog.Attr{{Key: "events", Value: "24"}, {Key: "duplicates", Value: "0"}}},
 	}
 	for _, record := range records {

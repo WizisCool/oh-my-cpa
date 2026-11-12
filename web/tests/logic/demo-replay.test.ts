@@ -17,6 +17,11 @@ import { chunkText, recordingLanguage } from '../../src/demo/pacing.ts';
 import { replayPlaygroundChat } from '../../src/demo/playgroundReplay.ts';
 import playgroundRecording from '../../src/demo/playgroundRecording.json' with { type: 'json' };
 import { resolveRecording } from '../../src/demo/recordingTemplate.ts';
+import {
+  countDemoSandboxChanges,
+  interceptDemoRequest,
+  resetDemoSandbox,
+} from '../../src/demo/sandbox.ts';
 import { readDemoConversation, resetDemoConversation, writeDemoQuestion } from '../../src/demo/session.ts';
 import { applyEvent } from '../../src/pages/playground/state.ts';
 import type { ChatRequest, StreamEvent, Turn } from '../../src/pages/playground/state.ts';
@@ -182,5 +187,269 @@ test('a replayed Playground answer folds into a finished turn', async () => {
     assert.equal(events[0].type, 'meta');
     assert.equal(events[0].model, 'demo-model');
     assert.equal(events.at(-1)?.type, 'done');
+  }
+});
+
+test('demo sandbox isolates provider, api key, routing, and reset state', async () => {
+  resetDemoSandbox();
+  try {
+    assert.equal(countDemoSandboxChanges(), 0);
+
+  const baselineFixtures: Record<string, unknown> = {
+    '/management/api-keys?include_keys=true': {
+      keys: [{ key: 'sk-omc-baseline-1234', fingerprint: 'fp-1', usage_fingerprint: 'ufp-1' }],
+      total: 1,
+    },
+    '/management/providers?include_keys=true': {
+      providers: [
+        {
+          id: 'openai-compatibility-0',
+          family: 'openai-compatibility',
+          name: 'DeepSeek Direct',
+          upstream_name: 'DeepSeek Direct',
+          base_url: 'https://api.deepseek.com/v1',
+          disabled: false,
+          priority: 1,
+          models: ['deepseek-v4.1-flash-1017'],
+          model_entries: [{ name: 'deepseek-v4.1-flash-1017', alias: 'deepseek-flash' }],
+          api_key_entries: [{ id: 'k-0', api_key: 'sk-ds-demo', mask: 'sk-ds•••demo' }],
+        },
+      ],
+      total: 1,
+    },
+    '/management/auth-files': {
+      files: [
+        {
+          name: 'antigravity-studio.json',
+          auth_index: 'auth-antigravity-01',
+          type: 'antigravity',
+          provider: 'antigravity',
+          disabled: false,
+          unavailable: false,
+          runtime_only: false,
+          success: 120,
+          failed: 1,
+          priority: 10,
+          weight: 5,
+          models: [{ id: 'gemini-4-hydrogen', display_name: 'Gemini 4 Hydrogen' }],
+        },
+      ],
+    },
+    '/management/routing': {
+      revision: 'rev-1',
+      settings: {
+        strategy: 'priority',
+        session_affinity: true,
+        session_affinity_ttl: 300,
+        request_retry: 2,
+        max_retry_credentials: 2,
+        max_retry_interval: 10,
+        disable_cooling: false,
+        transient_error_cooldown_seconds: 60,
+      },
+      tiers: [
+        {
+          priority: 10,
+          members: [{ key: 'credential:antigravity-studio.json', kind: 'credential', label: 'Antigravity Ultra', priority: 10, weights: [] }],
+        },
+      ],
+    },
+    '/management/model-square': {
+      models: [{ id: 'deepseek-flash', call_point: 'deepseek-flash', vision: 'unknown' }],
+      routes: [{ provider_id: 'openai-compatibility-0', upstream_model: 'deepseek-v4.1-flash-1017', call_point: 'deepseek-flash' }],
+    },
+    '/management/audit/events': { events: [], next_cursor: '' },
+  };
+
+  const fetchBaseline = async (path: string) => {
+    const body = baselineFixtures[path] ?? baselineFixtures[path.split('?')[0]];
+    if (!body) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  // Create API key & verify readback excludes raw secret
+  const submittedSecretKey = 'demo-test-caller-key-123';
+  const createKeyRes = await interceptDemoRequest(
+    '/management/api-keys',
+    { method: 'POST', body: JSON.stringify({ key: submittedSecretKey }) },
+    fetchBaseline,
+  );
+  assert.ok(createKeyRes && createKeyRes.status === 200);
+  const keysAfterRes = await interceptDemoRequest('/management/api-keys?include_keys=true', { method: 'GET' }, fetchBaseline);
+  const keysAfter = (await keysAfterRes!.json()) as { keys: Array<{ key: string }> };
+  assert.equal(keysAfter.keys.length, 2);
+  assert.ok(!keysAfter.keys.some((k) => k.key === submittedSecretKey), 'sandbox must never retain submitted raw caller keys');
+
+  // Create provider and verify Model Square automatically picks up its model
+  const createProvRes = await interceptDemoRequest(
+    '/management/providers',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        family: 'openai-compatibility',
+        name: 'Antigravity Edge Mirror',
+        base_url: 'https://antigravity.example/v1',
+        priority: 3,
+        disabled: false,
+        keys: [{ api_key: 'demo-test-provider-key-1' }],
+        model_entries: [{ name: 'gemini-4-hydrogen', alias: 'g4-hydrogen-edge' }],
+      }),
+    },
+    fetchBaseline,
+  );
+  assert.ok(createProvRes && createProvRes.status === 200);
+  const createdProvPayload = (await createProvRes!.json()) as { id: string };
+
+  // Deleting the highest-numbered provider and creating another must not reuse the deleted ID
+  const deleteProvRes = await interceptDemoRequest(
+    `/management/providers/${encodeURIComponent(createdProvPayload.id)}`,
+    { method: 'DELETE' },
+    fetchBaseline,
+  );
+  assert.ok(deleteProvRes && deleteProvRes.status === 200);
+  const recreateProvRes = await interceptDemoRequest(
+    '/management/providers',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        family: 'openai-compatibility',
+        name: 'Antigravity Edge Mirror 2',
+        base_url: 'https://antigravity.example/v1',
+        priority: 3,
+        disabled: false,
+        keys: [{ api_key: 'demo-test-provider-key-2' }],
+        model_entries: [{ name: 'gemini-4-hydrogen', alias: 'g4-hydrogen-edge' }],
+      }),
+    },
+    fetchBaseline,
+  );
+  assert.ok(recreateProvRes && recreateProvRes.status === 200);
+  const recreatedProvPayload = (await recreateProvRes!.json()) as { id: string };
+  assert.notEqual(recreatedProvPayload.id, createdProvPayload.id);
+
+  // Verify submitted provider secrets (including active recreated provider) are masked and never retained verbatim
+  const providersAfterRes = await interceptDemoRequest('/management/providers?include_keys=true', { method: 'GET' }, fetchBaseline);
+  const providersAfterText = await providersAfterRes!.text();
+  assert.ok(!providersAfterText.includes('demo-test-provider-key-1') && !providersAfterText.includes('demo-test-provider-key-2'));
+
+  // Proxy URL userinfo is redacted
+  const proxyRes = await interceptDemoRequest(
+    '/management/outbound-proxy',
+    { method: 'PUT', body: JSON.stringify({ mode: 'proxy', url: 'http://demo-user:demo-pass@proxy.local:7890', no_proxy: '' }) },
+    fetchBaseline,
+  );
+  assert.ok(proxyRes && proxyRes.status === 200);
+  const proxyJson = (await proxyRes!.json()) as { address: string; has_credentials: boolean };
+  assert.equal(proxyJson.address, 'http://••••@proxy.local:7890');
+  assert.equal(proxyJson.has_credentials, true);
+
+  // Custom icons accept bare base64 PNG and reject spoofed RIFF non-WebP
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+  const iconOk = await interceptDemoRequest(
+    '/custom-icons',
+    { method: 'POST', body: JSON.stringify({ name: 'test-png', data: pngBase64 }) },
+    fetchBaseline,
+  );
+  assert.ok(iconOk && iconOk.status === 200);
+  const riffWavBase64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const iconBad = await interceptDemoRequest(
+    '/custom-icons',
+    { method: 'POST', body: JSON.stringify({ name: 'bad-riff', data: riffWavBase64 }) },
+    fetchBaseline,
+  );
+  assert.ok(iconBad && iconBad.status === 400);
+
+  // OAuth callback accepts matching waiting state once and rejects duplicate/stale callbacks
+  const oauthStart = await interceptDemoRequest(
+    '/management/oauth/start',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex' }) },
+    fetchBaseline,
+  );
+  const started = (await oauthStart!.json()) as { state: string };
+  const cbUrl = `http://localhost:1455/auth/callback?code=ok&state=${encodeURIComponent(started.state)}`;
+  const cbFirst = await interceptDemoRequest(
+    '/management/oauth/callback',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex', redirect_url: cbUrl }) },
+    fetchBaseline,
+  );
+  assert.ok(cbFirst && cbFirst.status === 200);
+  const cbDuplicate = await interceptDemoRequest(
+    '/management/oauth/callback',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex', redirect_url: cbUrl }) },
+    fetchBaseline,
+  );
+  assert.ok(cbDuplicate && cbDuplicate.status === 409);
+
+  // Auth JSON upload & Vertex import are intercepted locally with zero secret retention
+  const authUploadRes = await interceptDemoRequest(
+    '/management/auth-files?name=custom-oauth.json',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex', access_token: 'demo-test-tok', refresh_token: 'demo-test-ref' }) },
+    fetchBaseline,
+  );
+  assert.ok(authUploadRes && authUploadRes.status === 200);
+  const vertexImportRes = await interceptDemoRequest(
+    '/management/auth-files/vertex-import?location=us-central1',
+    { method: 'POST', body: JSON.stringify({ project_id: 'demo-proj', client_email: 'sa@demo-proj.iam.gserviceaccount.com', private_key: 'demo-test-pk-body' }) },
+    fetchBaseline,
+  );
+  assert.ok(vertexImportRes && vertexImportRes.status === 200);
+  const authListRes = await interceptDemoRequest('/management/auth-files', { method: 'GET' }, fetchBaseline);
+  const authListText = await authListRes!.text();
+  assert.ok(!authListText.includes('demo-test-tok') && !authListText.includes('demo-test-pk-body'));
+
+  // Database backup automation strips passphrases/options and export job has kind=export & state=ready
+  const autoSaveRes = await interceptDemoRequest(
+    '/management/system/database-backup-automation',
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled: true,
+        daily_at_minute: 120,
+        keep_local: 7,
+        keep_remote: 14,
+        passphrase: 'demo-test-passphrase',
+        destinations: [{ id: 'd1', name: 'S3', provider: 's3', root: 'bucket', options: { secret_key: 'demo-test-s3-opt' } }],
+      }),
+    },
+    fetchBaseline,
+  );
+  assert.ok(autoSaveRes && autoSaveRes.status === 200);
+  const autoSavedText = await autoSaveRes!.text();
+  assert.ok(!autoSavedText.includes('demo-test-passphrase') && !autoSavedText.includes('demo-test-s3-opt'));
+
+  const exportRes = await interceptDemoRequest(
+    '/management/system/database-backups',
+    { method: 'POST', body: JSON.stringify({ passphrase: 'export-passphrase' }) },
+    fetchBaseline,
+  );
+  assert.ok(exportRes && exportRes.status === 200);
+  const exportJob = (await exportRes!.json()) as { id: string; kind: string; state: string };
+  assert.equal(exportJob.kind, 'export');
+  assert.equal(exportJob.state, 'ready');
+  const exportDownloadRes = await interceptDemoRequest(
+    `/management/system/database-backups/${encodeURIComponent(exportJob.id)}/download`,
+    { method: 'GET' },
+    fetchBaseline,
+  );
+  assert.ok(exportDownloadRes && exportDownloadRes.status === 200);
+
+  const squareRes = await interceptDemoRequest('/management/model-square', { method: 'GET' }, fetchBaseline);
+  const square = (await squareRes!.json()) as { models: Array<{ call_point: string }> };
+  assert.ok(square.models.some((m) => m.call_point === 'g4-hydrogen-edge'));
+
+  // Audit trail captures sandbox actions
+  const auditRes = await interceptDemoRequest('/management/audit/events', { method: 'GET' }, fetchBaseline);
+  const audit = (await auditRes!.json()) as { events: Array<{ action: string }> };
+  assert.ok(audit.events.some((e) => e.action === 'provider.create'));
+  assert.ok(countDemoSandboxChanges() >= 2);
+
+    // Reset restores baseline cleanly
+    resetDemoSandbox();
+    assert.equal(countDemoSandboxChanges(), 0);
+    const keysResetRes = await interceptDemoRequest('/management/api-keys?include_keys=true', { method: 'GET' }, fetchBaseline);
+    const keysReset = (await keysResetRes!.json()) as { keys: Array<{ key: string }> };
+    assert.equal(keysReset.keys.length, 1);
+  } finally {
+    resetDemoSandbox();
   }
 });

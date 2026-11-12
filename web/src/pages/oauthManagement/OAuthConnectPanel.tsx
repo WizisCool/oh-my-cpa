@@ -16,9 +16,10 @@ import {
   ReloadOutlined,
   StopOutlined,
 } from '../../components/icons';
+import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { copyText } from '../../utils/clipboard';
 import { isDemoMode } from '../../types/demoMode';
+import { copyText } from '../../utils/clipboard';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { oauthProviderGroups, type OAuthProviderChoice, type OAuthProviderGroup } from '../oauthProviderLogic';
 import type { OAuthSessionsController } from './useOAuthSessions';
@@ -93,7 +94,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     setShouldVerify((session?.status === 'starting' || session?.status === 'waiting') && target?.verify === true);
   }, [open, selectedProviderId, target?.name, target?.auth_index, target?.verify, session?.status]);
   const [proxyUrl, setProxyUrl] = React.useState('');
-  React.useEffect(() => { setProxyUrl(''); }, [open, selectedProviderId]);
+  const [completingSandbox, setCompletingSandbox] = React.useState(false);
+  React.useEffect(() => {
+    setProxyUrl('');
+    setCompletingSandbox(false);
+  }, [open, selectedProviderId, session?.state]);
 
   // This boolean records route intent across drawer remounts, never the secret itself.
   const requiresProxyReentry = Boolean(session?.requiresProxyReentry);
@@ -262,7 +267,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
             {target && <>
               <Notice tone="info" title={t('recovery.target', { name: target.name })} description={t('recovery.target_hint')} />
               {!isRecoverySupported && <Notice tone="warning" title={t('recovery.upgrade_required')} />}
-              <Checkbox checked={shouldVerify} disabled={isWaiting || session?.starting || isDemo || !isRecoverySupported} onCheckedChange={(checked) => setShouldVerify(checked)}>
+              <Checkbox checked={shouldVerify} disabled={isWaiting || session?.starting || !isRecoverySupported} onCheckedChange={(checked) => setShouldVerify(checked)}>
                 {t('recovery.verify_opt_in')}
               </Checkbox>
             </>}
@@ -274,7 +279,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                   id="oauth-connect-proxy"
                   maxLength={4096}
                   value={proxyUrl}
-                  disabled={isDemo}
                   aria-describedby="oauth-connect-proxy-hint"
                   onChange={(event) => setProxyUrl(event.target.value)}
                 />
@@ -295,7 +299,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <Button
                 variant="primary"
                 loading={session?.starting}
-                disabled={isWaiting || isStartBlocked || (Boolean(target) && !isRecoverySupported) || isDemo}
+                disabled={isWaiting || isStartBlocked || (Boolean(target) && !isRecoverySupported)}
                 onClick={startAuthorization}
                 data-oauth-start={choice.id}
               >
@@ -327,13 +331,36 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                     </div>
                     <div className={styles['step-body']}>
                       <div className={styles['auth-url-actions']}>
-                        <Button
-                          variant="primary"
-                          icon={<LinkOutlined />}
-                          onClick={() => window.open(session.url, '_blank', 'noopener,noreferrer')}
-                        >
-                          {t('oauth.open_link')}
-                        </Button>
+                        {!isDemo && (
+                          <Button
+                            variant="primary"
+                            icon={<LinkOutlined />}
+                            onClick={() => window.open(session.url, '_blank', 'noopener,noreferrer')}
+                          >
+                            {t('oauth.open_link')}
+                          </Button>
+                        )}
+                        {isDemo && (
+                          <Button
+                            variant="primary"
+                            data-testid="oauth-sandbox-complete"
+                            loading={completingSandbox}
+                            disabled={completingSandbox || !isWaiting}
+                            onClick={() => {
+                              if (completingSandbox || !isWaiting) return;
+                              setCompletingSandbox(true);
+                              const stateToken = session.state ?? '';
+                              const callbackUrl = `http://localhost:1455/auth/callback?code=sandbox-code&state=${encodeURIComponent(stateToken)}`;
+                              sessions.setCallbackUrl(choice.id, callbackUrl);
+                              void api.handleOAuthCallback({ provider: choice.id, redirect_url: callbackUrl })
+                                .then(() => sessions.check(choice.id))
+                                .catch((err: unknown) => toast.error(describeError(err)))
+                                .finally(() => setCompletingSandbox(false));
+                            }}
+                          >
+                            {t('oauth.sandbox_complete')}
+                          </Button>
+                        )}
                         <Button icon={<CopyOutlined />} onClick={() => void copyValue(session.url)}>
                           {t('oauth.copy_link')}
                         </Button>

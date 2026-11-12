@@ -51,56 +51,56 @@ func credentialCatalog() []credential {
 		{
 			name: "codex-team-primary.json", authIndex: "auth-codex-01", kind: "codex", provider: "codex",
 			label: "Codex · team primary", email: "ops@acme-labs.example", accountType: "oauth", plan: "pro",
-			models:  []string{"gpt-5-codex", "gpt-5.1-codex", "gpt-5"},
-			success: 4821, failed: 63, priority: 10, weight: 5, note: "primary ChatGPT workspace seat", displayName: "Team primary",
+			models:  []string{"gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"},
+			success: 5420, failed: 68, priority: 10, weight: 5, note: "Primary ChatGPT Pro workspace seat", displayName: "Team primary",
 		},
 		{
 			name: "codex-team-secondary.json", authIndex: "auth-codex-02", kind: "codex", provider: "codex",
 			label: "Codex · overflow seat", email: "eng@acme-labs.example", accountType: "oauth", plan: "plus",
-			models:  []string{"gpt-5-codex", "gpt-5"},
-			success: 1733, failed: 28, priority: 5, weight: 3, note: "used when the primary seat cools down", displayName: "Overflow seat",
+			models:  []string{"gpt-6-luna", "gpt-6.1-terra"},
+			success: 1940, failed: 24, priority: 5, weight: 3, note: "Absorbs burst and cooldown overflow", displayName: "Overflow seat",
 		},
 		{
 			name: "claude-work.json", authIndex: "auth-claude-01", kind: "claude", provider: "claude",
 			label: "Claude · work", email: "ops@acme-labs.example", accountType: "oauth", plan: "pro",
-			models:  []string{"claude-sonnet-4-5-20250929", "claude-opus-4-1", "claude-haiku-4-5"},
-			success: 2960, failed: 41,
+			models:  []string{"claude-fable-5.2", "claude-opus-5.5", "claude-sonnet-5.5", "claude-haiku-5.5"},
+			success: 3180, failed: 44, priority: 10, weight: 4, note: "Primary Claude Pro seat", displayName: "Claude Pro main",
 		},
 		{
 			name: "gemini-personal.json", authIndex: "auth-gemini-01", kind: "gemini", provider: "gemini",
-			label: "Gemini · long context", email: "vision@acme-labs.example", accountType: "oauth", plan: "pro",
-			models:  []string{"gemini-2.5-pro", "gemini-2.5-flash"},
-			success: 1284, failed: 12, priority: 8, weight: 4, note: "repository-wide context, million-token windows", displayName: "Long-context reader",
+			label: "Gemini · AI Studio", email: "vision@acme-labs.example", accountType: "oauth", plan: "pro",
+			models:  []string{"gemini-4-hydrogen", "gemini-4-carbon", "gemini-4-argon", "gemini-3.8-flash"},
+			success: 1840, failed: 14, priority: 8, weight: 4, note: "Paid Gemini API tier for Carbon, Hydrogen & million-token windows", displayName: "Gemini 4 Studio",
 		},
 		{
 			name: "kimi-coding.json", authIndex: "auth-kimi-01", kind: "kimi", provider: "kimi",
 			label: "Kimi · coding plan", email: "ops@acme-labs.example", accountType: "oauth",
-			models:  []string{"kimi-k2-0905"},
-			success: 640, failed: 9, priority: 6, weight: 2,
+			models:  []string{"kimi-k3.1-pro", "kimi-k3"},
+			success: 890, failed: 10, priority: 6, weight: 2,
 		},
 		{
 			name: "xai-grok.json", authIndex: "auth-xai-01", kind: "xai", provider: "xai",
 			label: "xAI · Grok", email: "research@acme-labs.example", accountType: "oauth",
-			models:  []string{"grok-4"},
-			success: 415, failed: 7, priority: 4, weight: 2,
+			models:  []string{"grok-4.7"},
+			success: 520, failed: 8, priority: 4, weight: 2,
 		},
 		{
 			name: "antigravity-studio.json", authIndex: "auth-antigravity-01", kind: "antigravity", provider: "antigravity",
-			label: "Antigravity · studio", accountType: "oauth", projectID: "acme-labs-studio",
-			models:  []string{"gemini-3-pro-preview"},
-			success: 288, failed: 4, priority: 4, weight: 2,
+			label: "Antigravity · Ultra", accountType: "oauth", projectID: "acme-labs-studio",
+			models:  []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.8-flash-high"},
+			success: 2150, failed: 16, priority: 10, weight: 5, note: "Google AI Ultra · Orchestrator (Carbon + Hydrogen) & /swarm", displayName: "Antigravity Ultra",
 		},
 		{
 			name: "codex-billing-target.json", authIndex: "auth-codex-04", kind: "codex", provider: "codex",
-			label: "Codex · billing target", email: "billing@acme-labs.example", accountType: "oauth", plan: "pro",
-			models:  []string{"gpt-5-codex", "gpt-5"},
-			success: 611, failed: 9, priority: 3, weight: 2, isUnavailable: true, note: "seat the team is migrating onto",
+			label: "Codex · billing migration", email: "billing@acme-labs.example", accountType: "oauth", plan: "pro",
+			models:  []string{"gpt-6-luna", "gpt-6.1-sol"},
+			success: 611, failed: 9, priority: 3, weight: 2, isUnavailable: true, note: "Seat pending billing migration",
 		},
 		{
 			name: "codex-standby.json", authIndex: "auth-codex-03", kind: "codex", provider: "codex",
 			label: "Codex · standby", email: "backup@acme-labs.example", accountType: "oauth", plan: "free",
-			models:  []string{"gpt-5"},
-			success: 96, failed: 2, priority: 1, weight: 1, note: "kept for failover drills", isDisabled: true,
+			models:  []string{"gpt-6-luna"},
+			success: 96, failed: 2, priority: 1, weight: 1, note: "Kept disabled for failover drills", isDisabled: true,
 		},
 	}
 }
@@ -131,35 +131,44 @@ func compatibilityCatalog() []compatibilityProvider {
 	// list is empty would render as an unattributed request.
 	return []compatibilityProvider{
 		{
-			name: "DeepSeek", baseURL: "https://api.deepseek.com/v1", prefix: "ds", priority: 3,
+			name: "Z.ai", baseURL: "https://api.z.ai/api/paas/v4", prefix: "zai", priority: 8,
 			models: []modelRoute{
-				{name: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash"},
-				{name: "deepseek-pro-latest", displayName: "DeepSeek Pro Latest"},
+				{name: "glm-5.3-flash", displayName: "GLM 5.3 Flash"},
+				{name: "glm-5.3", displayName: "GLM 5.3"},
+			},
+			keys: []string{"relay-zai-primary"},
+		},
+		{
+			name: "DeepSeek", baseURL: "https://api.deepseek.com/v1", prefix: "ds", priority: 6,
+			models: []modelRoute{
+				{name: "deepseek-v4.1-flash-1017", alias: "deepseek-flash", displayName: "DeepSeek V4.1 Flash 1017"},
+				{name: "deepseek-v4.1-flash", displayName: "DeepSeek V4.1 Flash"},
 			},
 			keys: []string{"relay-deepseek-primary", "relay-deepseek-secondary"},
 		},
 		{
-			name: "DashScope (Qwen)", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", prefix: "qwen", priority: 2,
+			name: "Xiaomi MiMo", baseURL: "https://api.mimo.xiaomi.com/v1", prefix: "mimo", priority: 5,
+			models: []modelRoute{
+				{name: "mimo-v2.6-flash", displayName: "MiMo V2.6 Flash"},
+				{name: "mimo-v2.6-pro", displayName: "MiMo V2.6 Pro"},
+			},
+			keys: []string{"relay-mimo-primary"},
+		},
+		{
+			name: "DashScope (Qwen)", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", prefix: "qwen", priority: 4,
 			models: []modelRoute{
 				{name: "qwen3.8-omni-flash", displayName: "Qwen3.8 Omni Flash"},
-				{name: "qwen3.8-max", displayName: "Qwen3.8 Max"},
+				{name: "qwen3.8-max-0902", displayName: "Qwen3.8 Max"},
 			},
 			keys: []string{"relay-dashscope-primary"},
 		},
 		{
 			name: "MiniMax", baseURL: "https://api.minimax.io/v1", prefix: "minimax", priority: 4,
 			models: []modelRoute{
+				{name: "minimax-m3.1-flash", displayName: "MiniMax M3.1 Flash"},
 				{name: "minimax-m3", displayName: "MiniMax M3"},
 			},
 			keys: []string{"relay-minimax-primary"},
-		},
-		{
-			name: "Xiaomi MiMo", baseURL: "https://api.mimo.xiaomi.com/v1", prefix: "mimo", priority: 5,
-			models: []modelRoute{
-				{name: "mimo-v2.5", displayName: "MiMo V2.5"},
-				{name: "mimo-v2.5-pro", displayName: "MiMo V2.5 Pro"},
-			},
-			keys: []string{"relay-mimo-primary"},
 		},
 	}
 }
@@ -208,7 +217,7 @@ func familyCatalog() []apiKeyFamily {
 			family: "claude",
 			keys: []familyKey{{
 				apiKey: "demo-claude-upstream-0001", authIndex: "key-claude-01",
-				models:   []modelRoute{{name: "claude-sonnet-4-5-20250929", alias: "sonnet"}, {name: "claude-haiku-4-5", alias: "haiku"}},
+				models:   []modelRoute{{name: "claude-sonnet-5.5", alias: "sonnet"}, {name: "claude-haiku-5.5", alias: "haiku"}},
 				priority: 5, weight: 3,
 			}},
 		},
@@ -216,15 +225,15 @@ func familyCatalog() []apiKeyFamily {
 			family: "gemini",
 			keys: []familyKey{{
 				apiKey: "demo-gemini-upstream-0001", authIndex: "key-gemini-01",
-				models:   []modelRoute{{name: "gemini-2.5-pro"}, {name: "gemini-2.5-flash"}},
-				priority: 5, weight: 3,
+				models:   []modelRoute{{name: "gemini-4-hydrogen", alias: "hydrogen"}, {name: "gemini-4-carbon", alias: "carbon"}, {name: "gemini-4-argon"}},
+				priority: 6, weight: 3,
 			}},
 		},
 		{
 			family: "codex",
 			keys: []familyKey{{
 				apiKey: "demo-codex-upstream-0001", authIndex: "key-codex-01", baseURL: "https://api.openai.com/v1",
-				models:   []modelRoute{{name: "gpt-5", alias: "gpt-5"}, {name: "gpt-5-mini", alias: "gpt-5-mini"}},
+				models:   []modelRoute{{name: "gpt-6-luna", alias: "luna"}, {name: "gpt-6.1-terra-high", alias: "terra-high"}},
 				priority: 5, weight: 2,
 			}},
 		},
@@ -301,51 +310,61 @@ func modelCatalog() []modelProfile {
 		//
 		// The weights are the ranking's order of magnitude, so the busiest line is the
 		// busiest model rather than whichever name happens to sit first.
-		{name: "glm-5.3-flash", provider: "zai", weight: 22, authType: "oauth", endpoint: "/v1/chat/completions",
+		{name: "deepseek-v4.1-flash-1017", provider: compatibilityRecordLabel("DeepSeek"), weight: 22, authType: "api_key", endpoint: "/v1/chat/completions",
+			inputMean: 11200, outputMean: 1380, reasonShare: 0.3, cacheRead: 0.62, cacheCreate: 0.02,
+			latencyMS: 2400, ttftRatio: 0.27, failureRate: 0.007},
+		{name: "glm-5.3-flash", provider: compatibilityRecordLabel("Z.ai"), weight: 20, authType: "api_key", endpoint: "/v1/chat/completions",
 			inputMean: 15900, outputMean: 2140, reasonShare: 0.5, cacheRead: 0.6, cacheCreate: 0.07,
 			latencyMS: 3200, ttftRatio: 0.18, failureRate: 0.011},
-		{name: "gpt-5.6-luna", provider: "codex", weight: 20, authType: "oauth", endpoint: "/v1/responses",
+		{name: "gpt-6-luna", provider: "codex", weight: 18, authType: "oauth", endpoint: "/v1/responses",
 			inputMean: 14600, outputMean: 1820, reasonShare: 0.45, cacheRead: 0.63, cacheCreate: 0.08,
-			latencyMS: 7800, ttftRatio: 0.17, failureRate: 0.012},
-		{name: "deepseek-v4-flash", provider: compatibilityRecordLabel("DeepSeek"), weight: 17, authType: "api_key", endpoint: "/v1/chat/completions",
-			inputMean: 9400, outputMean: 1260, reasonShare: 0.25, cacheRead: 0.58, cacheCreate: 0.02,
-			latencyMS: 2900, ttftRatio: 0.31, failureRate: 0.008},
-		{name: "mimo-v2.5", provider: compatibilityRecordLabel("Xiaomi MiMo"), weight: 12, authType: "api_key", endpoint: "/v1/chat/completions",
+			latencyMS: 6400, ttftRatio: 0.17, failureRate: 0.012},
+		{name: "mimo-v2.6-flash", provider: compatibilityRecordLabel("Xiaomi MiMo"), weight: 12, authType: "api_key", endpoint: "/v1/chat/completions",
 			inputMean: 11800, outputMean: 1540, reasonShare: 0.35, cacheRead: 0.52, cacheCreate: 0.02,
-			latencyMS: 3600, ttftRatio: 0.28, failureRate: 0.01},
-		{name: "kimi-k3", provider: "kimi", weight: 9, authType: "oauth", endpoint: "/v1/chat/completions",
-			inputMean: 12600, outputMean: 1780, reasonShare: 0.4, cacheRead: 0.44, cacheCreate: 0.03,
-			latencyMS: 5200, ttftRatio: 0.26, failureRate: 0.011},
-		{name: "claude-opus-5.5", provider: "claude", weight: 7, authType: "oauth", endpoint: "/v1/messages",
+			latencyMS: 3100, ttftRatio: 0.25, failureRate: 0.009},
+		{name: "claude-opus-5.5", provider: "claude", weight: 9, authType: "oauth", endpoint: "/v1/messages",
 			inputMean: 18600, outputMean: 3120, reasonShare: 0.4, cacheRead: 0.54, cacheCreate: 0.15,
 			latencyMS: 11800, ttftRatio: 0.23, failureRate: 0.018},
-		{name: "claude-sonnet-5", provider: "claude", weight: 6, authType: "oauth", endpoint: "/v1/messages",
+		{name: "kimi-k3.1-pro", provider: "kimi", weight: 8, authType: "oauth", endpoint: "/v1/chat/completions",
+			inputMean: 13400, outputMean: 1920, reasonShare: 0.45, cacheRead: 0.48, cacheCreate: 0.03,
+			latencyMS: 4900, ttftRatio: 0.24, failureRate: 0.01},
+		{name: "claude-sonnet-5.5", provider: "claude", weight: 7, authType: "oauth", endpoint: "/v1/messages",
 			inputMean: 13100, outputMean: 2380, reasonShare: 0.3, cacheRead: 0.59, cacheCreate: 0.13,
-			latencyMS: 6900, ttftRatio: 0.21, failureRate: 0.014},
-		{name: "gpt-6-sol", provider: "codex", weight: 5, authType: "oauth", endpoint: "/v1/responses",
+			latencyMS: 6200, ttftRatio: 0.21, failureRate: 0.013},
+		{name: "gpt-6.1-sol", provider: "codex", weight: 6, authType: "oauth", endpoint: "/v1/responses",
 			inputMean: 16200, outputMean: 2060, reasonShare: 0.55, cacheRead: 0.61, cacheCreate: 0.09,
-			latencyMS: 8900, ttftRatio: 0.16, failureRate: 0.013},
+			latencyMS: 8200, ttftRatio: 0.16, failureRate: 0.012},
+		{name: "minimax-m3.1-flash", provider: compatibilityRecordLabel("MiniMax"), weight: 5, authType: "api_key", endpoint: "/v1/chat/completions",
+			inputMean: 10800, outputMean: 1490, reasonShare: 0.35, cacheRead: 0.48, cacheCreate: 0.02,
+			latencyMS: 3600, ttftRatio: 0.26, failureRate: 0.008},
 		{name: "grok-4.7", provider: "xai", weight: 4, authType: "oauth", endpoint: "/v1/chat/completions",
 			inputMean: 12400, outputMean: 1690, reasonShare: 0.45, cacheRead: 0.38, cacheCreate: 0.02,
 			latencyMS: 6400, ttftRatio: 0.27, failureRate: 0.015},
-		{name: "minimax-m3", provider: compatibilityRecordLabel("MiniMax"), weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
-			inputMean: 10200, outputMean: 1430, reasonShare: 0.3, cacheRead: 0.46, cacheCreate: 0.02,
-			latencyMS: 4100, ttftRatio: 0.29, failureRate: 0.009},
 		{name: "qwen3.8-omni-flash", provider: compatibilityRecordLabel("DashScope (Qwen)"), weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
 			inputMean: 8100, outputMean: 1120, reasonShare: 0.25, cacheRead: 0.4, cacheCreate: 0.02,
 			latencyMS: 2600, ttftRatio: 0.32, failureRate: 0.008},
-		// The two Gemini rows keep a credential-based provider because the OAuth surfaces -
-		// the quota panel and the sign-in list - need credentials of their own to render,
-		// and a catalogue of API keys alone would leave those pages empty.
-		{name: "gemini-3.8-flash-high", servedAs: "gemini-3.8-flash-n", provider: "antigravity", weight: 3, authType: "oauth", endpoint: "/v1beta/models",
+		// Antigravity Orchestrator pairs Gemini 4 Carbon (deep architecture, security
+		// audits, and complex planning with high thinking-token depth) with Gemini 4
+		// Hydrogen (2.5x faster agentic execution, parallel codebase reads, and surgical
+		// edits). Including both captures the contrast in latency, reasoning share, and cost.
+		{name: "gemini-4-hydrogen", provider: "antigravity", weight: 14, authType: "oauth", endpoint: "/v1beta/models",
+			inputMean: 18400, outputMean: 1620, reasonShare: 0.38, cacheRead: 0.62, cacheCreate: 0.04,
+			latencyMS: 2800, ttftRatio: 0.21, failureRate: 0.006},
+		{name: "gemini-4-carbon", provider: "antigravity", weight: 6, authType: "oauth", endpoint: "/v1beta/interactions",
+			inputMean: 24800, outputMean: 3640, reasonShare: 0.66, cacheRead: 0.58, cacheCreate: 0.05,
+			latencyMS: 12400, ttftRatio: 0.32, failureRate: 0.009},
+		{name: "gemini-3.8-flash-high", servedAs: "gemini-3.8-flash-n", provider: "antigravity", weight: 2, authType: "oauth", endpoint: "/v1beta/models",
 			inputMean: 14200, outputMean: 1380, reasonShare: 0.3, cacheRead: 0.49, cacheCreate: 0.04,
 			latencyMS: 2700, ttftRatio: 0.28, failureRate: 0.009},
-		{name: "gemini-3.7-flash", provider: "gemini", weight: 2, authType: "oauth", endpoint: "/v1beta/models",
-			inputMean: 6800, outputMean: 840, reasonShare: 0.15, cacheRead: 0.45, cacheCreate: 0.03,
-			latencyMS: 1800, ttftRatio: 0.33, failureRate: 0.007},
+		{name: "gemini-4-argon", provider: "gemini", weight: 3, authType: "oauth", endpoint: "/v1beta/models",
+			inputMean: 12800, outputMean: 1640, reasonShare: 0.45, cacheRead: 0.55, cacheCreate: 0.04,
+			latencyMS: 4200, ttftRatio: 0.24, failureRate: 0.008},
+		{name: "claude-fable-5.2", provider: "claude", weight: 2, authType: "oauth", endpoint: "/v1/messages",
+			inputMean: 22400, outputMean: 3920, reasonShare: 0.65, cacheRead: 0.58, cacheCreate: 0.14,
+			latencyMS: 14800, ttftRatio: 0.22, failureRate: 0.015},
 		// A reasoning model on a subscription, so the request list shows a long-thinking
 		// row beside the fast ones and the cost column has a high-priced entry to report.
-		{name: "gpt-6-astra", servedAs: "gpt-6-luna", provider: "codex", weight: 1, authType: "oauth", endpoint: "/v1/responses",
+		{name: "gpt-6-astra", servedAs: "gpt-6.1-sol", provider: "codex", weight: 1, authType: "oauth", endpoint: "/v1/responses",
 			inputMean: 21400, outputMean: 3860, reasonShare: 0.7, cacheRead: 0.57, cacheCreate: 0.11,
 			latencyMS: 16400, ttftRatio: 0.2, failureRate: 0.016},
 	}
@@ -365,7 +384,6 @@ var openRouterSnapshot []byte
 // pick over the undated id, so the price follows the pin. Antigravity names a
 // reasoning tier in the model id, which no OpenRouter entry carries.
 var linkedModels = map[string]string{
-	"deepseek-v4-flash":     "deepseek/deepseek-v4-flash-0731",
 	"gemini-3.8-flash-high": "google/gemini-3.8-flash",
 }
 
@@ -373,7 +391,7 @@ var linkedModels = map[string]string{
 // carry no traffic, which is the case the attention inbox exists for: a model an
 // operator just configured, whose name only resembles an OpenRouter entry, so it is
 // offered as a suggestion rather than matched.
-var unpricedCatalogModels = []string{"gpt-5.4-mini-high"}
+var unpricedCatalogModels = []string{"gpt-6.1-terra-high"}
 
 // priceRow is one hand-set price, in USD per million tokens.
 type priceRow struct {
@@ -390,12 +408,12 @@ type priceRow struct {
 // model is priced from the OpenRouter snapshot.
 func customPriceCatalog() []priceRow {
 	return []priceRow{
-		{model: "mimo-v2.5", prompt: 0.14, completion: 0.28, cacheRead: 0.0028, cacheWrite: 0.14},
+		{model: "mimo-v2.6-flash", prompt: 0.14, completion: 0.28, cacheRead: 0.0028, cacheWrite: 0.14},
 		// A priority lane, so the demo shows a request billed on the upstream's fast
 		// lane at its own rates beside the same model's standard requests.
-		{model: "minimax-m3", prompt: 0.3, completion: 1.2, cacheRead: 0.06, cacheWrite: 0.3, tiers: []pricing.PriceTier{{
-			ServiceTiers: []string{"priority"}, PromptPricePer1M: demoRate(0.6), CompletionPer1M: demoRate(2.4),
-			CacheReadPer1M: demoRate(0.12), CacheWritePer1M: demoRate(0.6),
+		{model: "minimax-m3.1-flash", prompt: 0.15, completion: 0.60, cacheRead: 0.015, cacheWrite: 0.15, tiers: []pricing.PriceTier{{
+			ServiceTiers: []string{"priority"}, PromptPricePer1M: demoRate(0.225), CompletionPer1M: demoRate(0.90),
+			CacheReadPer1M: demoRate(0.0225), CacheWritePer1M: demoRate(0.225),
 		}}},
 		{model: "qwen3.8-omni-flash", prompt: 0.15, completion: 0.47, cacheRead: 0.016, cacheWrite: 0.15},
 	}
@@ -690,16 +708,17 @@ func logTail(now time.Time) []string {
 		ago     time.Duration
 		message string
 	}{
-		{90 * time.Second, `level=info msg="request completed" model=gpt-5-codex provider=codex auth_index=auth-codex-01 status=200 latency_ms=8127 stream=true`},
-		{3 * time.Minute, `level=info msg="request completed" model=claude-sonnet-4-5-20250929 provider=claude auth_index=auth-claude-01 status=200 latency_ms=6904 stream=true`},
-		{5 * time.Minute, `level=warn msg="credential cooling down" auth_index=auth-codex-02 reason=rate_limited cooldown_seconds=52`},
-		{6 * time.Minute, `level=error msg="upstream returned an error" model=gpt-5 provider=codex auth_index=auth-codex-02 status=429 body="rate limit reached"`},
-		{6 * time.Minute, `level=info msg="retrying with the next credential" model=gpt-5 auth_index=auth-codex-01 attempt=2`},
-		{8 * time.Minute, `level=info msg="request completed" model=gemini-2.5-pro provider=gemini auth_index=auth-gemini-01 status=200 latency_ms=9043 stream=true`},
-		{11 * time.Minute, `level=info msg="routing decision" strategy=round-robin model=deepseek-chat candidates=2 selected=auth-key-deepseek-01`},
-		{14 * time.Minute, `level=info msg="request completed" model=claude-haiku-4-5 provider=claude auth_index=auth-claude-01 status=200 latency_ms=1983 stream=true`},
+		{90 * time.Second, `level=info msg="request completed" model=gpt-6-luna provider=codex auth_index=auth-codex-01 status=200 latency_ms=5420 stream=true`},
+		{3 * time.Minute, `level=info msg="request completed" model=claude-sonnet-5.5 provider=claude auth_index=auth-claude-01 status=200 latency_ms=6120 stream=true`},
+		{5 * time.Minute, `level=warn msg="credential cooling down" auth_index=auth-codex-02 reason=rate_limited cooldown_seconds=28`},
+		{6 * time.Minute, `level=error msg="upstream returned an error" model=gpt-6.1-sol provider=codex auth_index=auth-codex-02 status=429 body="rate limit reached"`},
+		{6 * time.Minute, `level=info msg="retrying with the next credential" model=gpt-6.1-sol auth_index=auth-codex-01 attempt=2`},
+		{8 * time.Minute, `level=info msg="request completed" model=gemini-4-hydrogen provider=antigravity auth_index=auth-antigravity-01 status=200 latency_ms=2640 stream=true`},
+		{10 * time.Minute, `level=info msg="request completed" model=gemini-4-carbon provider=antigravity auth_index=auth-antigravity-01 status=200 latency_ms=11820 stream=true`},
+		{11 * time.Minute, `level=info msg="routing decision" strategy=round-robin model=deepseek-v4.1-flash-1017 candidates=2 selected=auth-ds-01`},
+		{14 * time.Minute, `level=info msg="request completed" model=glm-5.3-flash provider=openai-compatibility:z.ai auth_index=auth-zai-01 status=200 latency_ms=2980 stream=true`},
 		{19 * time.Minute, `level=info msg="usage record queued" channel=usage records=1`},
-		{24 * time.Minute, `level=info msg="request completed" model=gpt-5.1-codex provider=codex auth_index=auth-codex-01 status=200 latency_ms=11240 stream=true`},
+		{24 * time.Minute, `level=info msg="request completed" model=claude-opus-5.5 provider=claude auth_index=auth-claude-01 status=200 latency_ms=10840 stream=true`},
 	}
 	// The request lines are in the gin access-log shape CPA writes, which is what
 	// the log page reads a method, a path and a status from.
@@ -707,14 +726,15 @@ func logTail(now time.Time) []string {
 		ago                                     time.Duration
 		requestID, status, latency, method, url string
 	}{
-		{90 * time.Second, "9f2c41aa", "200", "8.127s", "POST", "/v1/responses"},
-		{3 * time.Minute, "5b7e0c13", "200", "6.904s", "POST", "/v1/messages"},
-		{6 * time.Minute, "c81d77f0", "429", "412ms", "POST", "/v1/responses"},
-		{8 * time.Minute, "2a6b93de", "200", "9.043s", "POST", "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse"},
+		{90 * time.Second, "9f2c41aa", "200", "5.420s", "POST", "/v1/responses"},
+		{3 * time.Minute, "5b7e0c13", "200", "6.120s", "POST", "/v1/messages"},
+		{6 * time.Minute, "c81d77f0", "429", "380ms", "POST", "/v1/responses"},
+		{8 * time.Minute, "2a6b93de", "200", "2.640s", "POST", "/v1beta/models/gemini-4-hydrogen:streamGenerateContent?alt=sse"},
+		{10 * time.Minute, "4e91c0ab", "200", "11.82s", "POST", "/v1beta/interactions"},
 		{12 * time.Minute, "e04f5a67", "200", "3ms", "GET", "/v1/models"},
-		{14 * time.Minute, "71c3d2b8", "200", "1.983s", "POST", "/v1/messages"},
+		{14 * time.Minute, "71c3d2b8", "200", "2.980s", "POST", "/v1/chat/completions"},
 		{21 * time.Minute, "0d9a6e42", "401", "1ms", "GET", "/v1/models"},
-		{24 * time.Minute, "b3f81c55", "200", "11.24s", "POST", "/v1/responses"},
+		{24 * time.Minute, "b3f81c55", "200", "10.84s", "POST", "/v1/messages"},
 	}
 	type datedLine struct {
 		ago  time.Duration
@@ -821,20 +841,20 @@ func gatewayKeyValues() []string {
 func oauthModelAliases() map[string]any {
 	return map[string]any{
 		"codex": []map[string]any{
-			{"name": "gpt-5-codex", "alias": "gpt-5-codex-high", "display-name": "GPT-5 Codex (high effort)", "fork": false},
-			{"name": "gpt-5.1-codex", "alias": "codex-latest", "display-name": "GPT-5.1 Codex"},
+			{"name": "gpt-6.1-sol", "alias": "sol-high", "display-name": "GPT-6.1 Sol (high effort)", "fork": false},
+			{"name": "gpt-6-luna", "alias": "luna-fast", "display-name": "GPT-6 Luna"},
 		},
 		"claude": []map[string]any{
-			{"name": "claude-sonnet-4-5-20250929", "alias": "sonnet", "display-name": "Claude Sonnet 4.5"},
-			{"name": "claude-haiku-4-5", "alias": "haiku"},
+			{"name": "claude-sonnet-5.5", "alias": "sonnet", "display-name": "Claude Sonnet 5.5"},
+			{"name": "claude-haiku-5.5", "alias": "haiku", "display-name": "Claude Haiku 5.5"},
 		},
 	}
 }
 
 func oauthExcludedModels() map[string]any {
 	return map[string]any{
-		"codex":  []string{"gpt-5-mini"},
-		"claude": []string{"claude-3-5-sonnet-20240620"},
+		"codex":  []string{"gpt-6.1-terra"},
+		"claude": []string{"claude-fable-5.1"},
 	}
 }
 
@@ -948,7 +968,7 @@ func quotaPayloads(now time.Time) map[string]any {
 		},
 		xaiSubscriptionURL:         map[string]any{"subscriptionTier": "SUPERGROK"},
 		xaiSettingsURL:             map[string]any{"subscription_tier_display": "SuperGrok"},
-		antigravitySubscriptionURL: map[string]any{"currentTier": map[string]any{"id": "free-tier"}, "paidTier": map[string]any{"id": "g1-pro-tier"}},
+		antigravitySubscriptionURL: map[string]any{"currentTier": map[string]any{"id": "g1-pro-tier"}, "paidTier": map[string]any{"id": "g1-ultra-tier"}},
 		metaUsageURL:               map[string]any{"subs_tier_name": "Muse Pro", "is_subs_active": true, "subs_usage": map[string]any{"window": map[string]any{"used_percent": 28, "window_duration_mins": 300, "resets_at": now.Add(3 * time.Hour).Unix()}, "weekly": map[string]any{"used_percent": 46, "resets_at": now.Add(4 * 24 * time.Hour).Unix()}}},
 		antigravityUsageURL: map[string]any{
 			// The three families a subscription reports, in the provider's own order: two that publish
@@ -1153,46 +1173,61 @@ func channelModelDefinitions(channel string) []map[string]any {
 // displayNameForModel is the presentation name the credential page shows beside
 // each model id.
 func displayNameForModel(model string) string {
-	for _, profile := range modelCatalog() {
-		if profile.name == model {
-			if profile.provider == "" {
-				return model
-			}
-		}
-	}
 	switch model {
-	case "gpt-5-codex":
-		return "GPT-5 Codex"
-	case "gpt-5.1-codex":
-		return "GPT-5.1 Codex"
-	case "gpt-5":
-		return "GPT-5"
-	case "gpt-5-mini":
-		return "GPT-5 mini"
-	case "claude-sonnet-4-5-20250929":
-		return "Claude Sonnet 4.5"
-	case "claude-opus-4-1":
-		return "Claude Opus 4.1"
-	case "claude-haiku-4-5":
-		return "Claude Haiku 4.5"
-	case "gemini-2.5-pro":
-		return "Gemini 2.5 Pro"
-	case "gemini-2.5-flash":
-		return "Gemini 2.5 Flash"
-	case "gemini-3-pro-preview":
-		return "Gemini 3 Pro (preview)"
-	case "kimi-k2-0905":
-		return "Kimi K2"
-	case "grok-4":
-		return "Grok 4"
-	case "deepseek-chat":
-		return "DeepSeek Chat"
-	case "deepseek-reasoner":
-		return "DeepSeek Reasoner"
-	case "qwen3-max":
-		return "Qwen3 Max"
-	case "qwen3-coder-plus":
-		return "Qwen3 Coder Plus"
+	case "gpt-6-luna":
+		return "GPT-6 Luna"
+	case "gpt-6.1-sol":
+		return "GPT-6.1 Sol"
+	case "gpt-6.1-terra", "gpt-6.1-terra-high":
+		return "GPT-6.1 Terra"
+	case "gpt-6-astra":
+		return "GPT-6 Astra"
+	case "claude-fable-5.2":
+		return "Claude Fable 5.2"
+	case "claude-fable-5.1":
+		return "Claude Fable 5.1"
+	case "claude-opus-5.5":
+		return "Claude Opus 5.5"
+	case "claude-sonnet-5.5":
+		return "Claude Sonnet 5.5"
+	case "claude-haiku-5.5":
+		return "Claude Haiku 5.5"
+	case "gemini-4-carbon":
+		return "Gemini 4 Carbon"
+	case "gemini-4-hydrogen":
+		return "Gemini 4 Hydrogen"
+	case "gemini-4-argon":
+		return "Gemini 4 Argon"
+	case "gemini-3.8-flash":
+		return "Gemini 3.8 Flash"
+	case "gemini-3.8-flash-high":
+		return "Gemini 3.8 Flash"
+	case "kimi-k3.1-pro":
+		return "Kimi K3.1 Pro"
+	case "kimi-k3":
+		return "Kimi K3"
+	case "grok-4.7":
+		return "Grok 4.7"
+	case "glm-5.3-flash":
+		return "GLM 5.3 Flash"
+	case "glm-5.3":
+		return "GLM 5.3"
+	case "deepseek-v4.1-flash-1017":
+		return "DeepSeek V4.1 Flash 1017"
+	case "deepseek-v4.1-flash":
+		return "DeepSeek V4.1 Flash"
+	case "mimo-v2.6-flash":
+		return "MiMo V2.6 Flash"
+	case "mimo-v2.6-pro":
+		return "MiMo V2.6 Pro"
+	case "qwen3.8-omni-flash":
+		return "Qwen3.8 Omni Flash"
+	case "qwen3.8-max-0902":
+		return "Qwen3.8 Max"
+	case "minimax-m3.1-flash":
+		return "MiniMax M3.1 Flash"
+	case "minimax-m3":
+		return "MiniMax M3"
 	default:
 		return model
 	}

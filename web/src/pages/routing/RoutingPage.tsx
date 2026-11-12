@@ -17,7 +17,6 @@ import { renderFacetOption } from '../../components/usage/RequestFacetMark';
 import { LoadFailure, Notice, useConfirmModal, useToast } from '../../components/feedback';
 import { useProviderBranding } from '../../hooks/useProviderBranding';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { isDemoMode } from '../../types/demoMode';
 import type { RoutingBoard, RoutingOutcome, RoutingPlanRequest, RoutingSettingKey } from '../../types/routing';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import {
@@ -91,7 +90,6 @@ export function RoutingPage() {
   const modal = useConfirmModal();
   const queryClient = useQueryClient();
   const isPhone = useIsPhoneViewport();
-  const isDemo = isDemoMode();
 
   const boardQuery = useQuery({ queryKey: ROUTING_QUERY_KEY, queryFn: () => api.getRouting(), staleTime: 0, refetchOnMount: 'always' });
   const [baseline, setBaseline] = React.useState<RoutingBoard | null>(null);
@@ -377,7 +375,7 @@ export function RoutingPage() {
       <ConfigDirtyBar
         isDirty={isDirty}
         isSaving={applyMutation.isPending}
-        disabled={isDemo || isAwaitingReadback}
+        disabled={isAwaitingReadback}
         disabledReason={isAwaitingReadback ? t('orch.readback_pending') : undefined}
         isDiscardDisabled={isAwaitingReadback}
         onHeightChange={updateDirtyHeight}

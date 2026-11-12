@@ -5,7 +5,6 @@ import { useI18n, useT, LANGUAGES } from '../../i18n';
 import { useExchangeRates } from '../../hooks/useExchangeRates';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { DISPLAY_CURRENCIES, EXCHANGE_RATES_QUERY_KEY, currencySymbol, formatCurrency, type DisplayCurrencyCode } from '../../types/currencyDisplay';
-import { isDemoMode } from '../../types/demoMode';
 import { CountryFlag } from '../common/CountryFlag';
 import { RefreshButton } from '../common/RefreshButton';
 import { SearchSelect } from '../common/SearchSelect';
@@ -78,7 +77,7 @@ export const CurrencySettings: React.FC = () => {
         <RefreshButton
           label={t('omc.exchange_refresh')}
           isRefreshing={refresh.isPending}
-          disabled={isDemoMode() || refresh.isPending}
+          disabled={refresh.isPending}
           onRefresh={() => refresh.mutate()}
         />
       </div>}

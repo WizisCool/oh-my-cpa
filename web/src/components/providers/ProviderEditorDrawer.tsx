@@ -14,7 +14,6 @@ import type { MessageKey } from '../../i18n/catalog';
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
 import { customIconID } from '../../types/customIcons';
-import { isDemoMode } from '../../types/demoMode';
 import { ProviderMark } from '../LobeIcon';
 import { getProviderDefaultIcon } from '../../types/providerIconIds';
 import { maskKeyText } from '../../utils/maskKey';
@@ -146,9 +145,6 @@ export function ProviderEditorDrawer({
   ...editor
 }: ProviderEditorDrawerProps & { familyDisplayNames: Record<string, string> }) {
   const t = useT();
-  // Pulling models calls the provider's own endpoint with the credential. The
-  // demonstration refuses it, so the control says so rather than failing on click.
-  const isDemo = isDemoMode();
   const {
     createProviderMutation,
     updateProviderMutation,
@@ -272,8 +268,6 @@ export function ProviderEditorDrawer({
             <Button
               variant="primary"
               loading={createProviderMutation.isPending || updateProviderMutation.isPending}
-              disabled={isDemo}
-              data-tip={isDemo ? t('demo.blocked') : undefined}
               onClick={handleSaveProvider}
             >
               {t('common.save')}
@@ -525,7 +519,7 @@ export function ProviderEditorDrawer({
                   </Button>
                   <Button
                     loading={isTestingAllKeys}
-                    disabled={isDemo || isTestingAllKeys}
+                    disabled={isTestingAllKeys}
                     onClick={handleTestAllKeys}
                   >
                     {t('pro.test_all')}
@@ -566,7 +560,7 @@ export function ProviderEditorDrawer({
                               variant="link"
                               size="sm"
                               loading={testingKeyIds.has(k.id)}
-                              disabled={isDemo || testingKeyIds.has(k.id)}
+                              disabled={testingKeyIds.has(k.id)}
                               onClick={() => handleTestKey(k, idx)}
                             >
                               {t('pro.test_single')}
@@ -771,8 +765,6 @@ export function ProviderEditorDrawer({
                     <Button
                       icon={<SyncOutlined spin={isPullingModels} />}
                       loading={isPullingModels}
-                      disabled={isDemo}
-                      data-tip={isDemo ? t('demo.blocked') : undefined}
                       onClick={handlePullModels}
                     >
                       {endpointModels.length > 0

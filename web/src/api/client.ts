@@ -278,12 +278,33 @@ export function isRetryableWriteFailure(err: unknown): boolean {
 async function downloadBlob(url: string): Promise<Blob> {
   let response: Response;
   try {
+    if (isDemoMode()) {
+      const { interceptDemoRequest } = await import('../demo/sandbox');
+      const urlObj = new URL(url, window.location.origin);
+      const { apiBaseUrl } = getAppConfig();
+      const relativePath = urlObj.pathname.startsWith(apiBaseUrl)
+        ? urlObj.pathname.slice(apiBaseUrl.length) || '/'
+        : urlObj.pathname;
+      const intercepted = await interceptDemoRequest(
+        `${relativePath.startsWith('/') ? relativePath : `/${relativePath}`}${urlObj.search}`,
+        { method: 'GET' },
+        (p, o) => fetch(p.startsWith('/api') ? p : `${apiBaseUrl}${p}`, { ...o, credentials: 'same-origin' }),
+      );
+      if (intercepted) {
+        if (!intercepted.ok) {
+          const error = await readError(intercepted);
+          throw new ApiError(error.message, intercepted.status, error.data, error.demoBlocked);
+        }
+        return intercepted.blob();
+      }
+    }
     response = await fetch(url, {
       method: 'GET',
       credentials: 'same-origin',
       headers: { Accept: 'application/json, text/plain, application/octet-stream' },
     });
   } catch (err: unknown) {
+    if (err instanceof ApiError) throw err;
     const errorMsg = err instanceof Error ? err.message : String(err);
     throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
@@ -302,20 +323,53 @@ export async function requestResponse(path: string, options: RequestInit = {}): 
   const { apiBaseUrl } = getAppConfig();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const authBaseUrl = `${apiRoot()}/api/auth`;
-  const url = cleanPath.startsWith(apiBaseUrl) || cleanPath.startsWith(authBaseUrl)
-    ? cleanPath
-    : `${apiBaseUrl}${cleanPath}`;
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(options.headers as Record<string, string> || {}),
+  const resolveUrl = (candidatePath: string) =>
+    candidatePath.startsWith(apiBaseUrl) || candidatePath.startsWith(authBaseUrl)
+      ? candidatePath
+      : `${apiBaseUrl}${candidatePath}`;
+  const url = resolveUrl(cleanPath);
+
+  const rawFetch = async (targetPath: string, targetOptions: RequestInit = {}): Promise<Response> => {
+    const normalized = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
+    const targetUrl = resolveUrl(normalized);
+    const targetHeaders: Record<string, string> = {
+      Accept: 'application/json',
+      ...(targetOptions.headers as Record<string, string> || {}),
+    };
+    if (targetOptions.body && typeof targetOptions.body === 'string' && !targetHeaders['Content-Type']) {
+      targetHeaders['Content-Type'] = 'application/json';
+    }
+    return fetch(targetUrl, { ...targetOptions, credentials: 'same-origin', headers: targetHeaders });
   };
-  if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json';
-  }
 
   let response: Response;
+  const method = (options.method ?? 'GET').toUpperCase();
   try {
-    response = await fetch(url, { ...options, credentials: 'same-origin', headers });
+    if (isDemoMode() && !url.startsWith(authBaseUrl)) {
+      const { interceptDemoRequest } = await import('../demo/sandbox');
+      const intercepted = await interceptDemoRequest(cleanPath, options, rawFetch);
+      if (intercepted) {
+        response = intercepted;
+      } else if (method === 'GET' || method === 'HEAD') {
+        response = await rawFetch(cleanPath, options);
+      } else {
+        response = new Response(
+          JSON.stringify({
+            code: 'demo_operation_refused',
+            error: 'this operation is disabled in the demonstration',
+          }),
+          {
+            status: 403,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'X-OMCPA-Demo': 'active',
+            },
+          },
+        );
+      }
+    } else {
+      response = await rawFetch(cleanPath, options);
+    }
   } catch (err: unknown) {
     // A deliberate cancellation is rethrown as itself: wrapping it in the
     // transport-failure message would hide why the request ended.
@@ -323,17 +377,17 @@ export async function requestResponse(path: string, options: RequestInit = {}): 
     const errorMsg = err instanceof Error ? err.message : String(err);
     throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
-  const method = (options.method ?? 'GET').toUpperCase();
   if (!response.ok) {
     const error = await readError(response);
     if (response.status === 401) unauthorizedHandler?.();
     throw new ApiError(error.message, response.status, error.data, error.demoBlocked);
   }
-  // A write that succeeded on a demo is not durable. Reporting it here rather than in
-  // each form means no write can be added later that forgets to - and the auth endpoints
-  // are excluded, because signing in is not a write: a notice beside "Signed in" would
-  // say the sign-in had not been kept, which is the opposite of what happened.
-  if (isDemoMode() && method !== 'GET' && method !== 'HEAD' && !url.startsWith(authBaseUrl)) demoNoticeHandler?.();
+  // Sandbox-handled mutations persist in the visitor's browser session; only server-side
+  // non-persisted demo writes trigger the ephemeral warning.
+  const isSandboxHandled = response.headers.get('X-OMCPA-Demo-Sandbox') === 'browser';
+  if (isDemoMode() && !isSandboxHandled && method !== 'GET' && method !== 'HEAD' && !url.startsWith(authBaseUrl)) {
+    demoNoticeHandler?.();
+  }
   return response;
 }
 
@@ -402,6 +456,10 @@ export const api = {
     return request(`/fonts/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   customIconURL(id: string, revision: number): string {
+    if (isDemoMode() && typeof window !== 'undefined') {
+      const lookup = (window as unknown as { __OMCPA_DEMO_ICON_URLS__?: Record<string, string> }).__OMCPA_DEMO_ICON_URLS__;
+      if (lookup?.[id]) return lookup[id];
+    }
     return `${getAppConfig().apiBaseUrl}/custom-icons/${encodeURIComponent(id)}/content?revision=${revision}`;
   },
   async login(password: string, remember = false): Promise<AuthSession> {
@@ -1305,6 +1363,10 @@ export const api = {
 
   databaseBackupDownloadUrl(id: string): string {
     return `${getAppConfig().apiBaseUrl}/management/system/database-backups/${encodeURIComponent(id)}/download`;
+  },
+
+  async downloadDatabaseBackup(id: string): Promise<Blob> {
+    return downloadBlob(this.databaseBackupDownloadUrl(id));
   },
 
   async inspectDatabaseBackup(file: File, passphrase: string): Promise<DatabaseBackupJob> {

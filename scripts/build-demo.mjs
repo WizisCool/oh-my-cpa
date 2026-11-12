@@ -29,6 +29,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureDemoDataset } from './generate-demo-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -110,6 +111,7 @@ export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STA
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    await ensureDemoDataset(root);
     const { stageDirectory } = await stageDemo();
     console.log(`staged the demonstration console at ${stageDirectory}`);
   } catch (error) {

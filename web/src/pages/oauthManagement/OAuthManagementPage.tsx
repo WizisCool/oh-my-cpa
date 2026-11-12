@@ -27,7 +27,6 @@ import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
 import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { isDemoMode } from '../../types/demoMode';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
 import { storeListingsByPluginId } from '../../components/plugins/pluginStoreLogic';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
@@ -114,7 +113,6 @@ export const OAuthManagementPage: React.FC = () => {
   const { searchParams, setSearchParams, queryState, setSearch, isViewLoaded } = useOAuthManagementViewState();
   const visibleNow = useVisibleNow();
   const [isConnectOpen, setIsConnectOpen] = React.useState(false);
-  const isDemo = isDemoMode();
   const isPhone = useIsPhoneViewport();
 
   const filesQuery = useQuery({
@@ -565,7 +563,7 @@ export const OAuthManagementPage: React.FC = () => {
           credentialLabel={maskedCredentialLabel(record)}
           credentialMark={<CredentialMark credential={{ provider: record.displayProvider, hint: record.file.name }} pluginLogos={pluginLogos} size={22} />}
           nowMS={visibleNow}
-          isDemo={isDemo}
+          isDemo={false}
           isRefreshing={isRefreshing}
           onRefresh={() => void actions.refreshQuotaForRecord(record)}
           onClearCooldown={() => void actions.clearCooldown(record)}
@@ -704,14 +702,14 @@ export const OAuthManagementPage: React.FC = () => {
         <DropdownMenuContent placement="bottomRight">
           <DropdownMenuItem
             icon={<UploadOutlined />}
-            disabled={isDemo || actions.isOperating}
+            disabled={actions.isOperating}
             onClick={() => { if (!hasActiveOverlay) setIsUploadOpen(true); }}
           >
             {t('af.upload')}
           </DropdownMenuItem>
           <DropdownMenuItem
             icon={<CloudUploadOutlined />}
-            disabled={isDemo || actions.isOperating}
+            disabled={actions.isOperating}
             onClick={() => { if (!hasActiveOverlay) setIsVertexImportOpen(true); }}
           >
             {t('af.vertex_open')}
@@ -886,8 +884,7 @@ export const OAuthManagementPage: React.FC = () => {
             onEnable={() => void actions.batchStatus(false, selectedRecords)}
             onDisable={() => void actions.batchStatus(true, selectedRecords)}
             onRefresh={() => void actions.batchRefresh(selectedRecords)}
-            // The demonstration never contacts a provider, so it refuses a refresh.
-            canRefresh={!isDemo}
+            canRefresh
             onDelete={() => void actions.batchDelete(selectedRecords)}
           />
         </div>

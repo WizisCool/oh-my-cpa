@@ -480,7 +480,7 @@ func seedReroutes(ctx context.Context, repo *repository.Repository, now time.Tim
 	events := make([]usage.Event, 0, len(demoReroutes)*2)
 	for _, reroute := range demoReroutes {
 		started := now.Add(-reroute.ago)
-		for attempt, authIndex := range []string{"auth-codex-01", "auth-codex-02"} {
+		for attempt, authIndex := range []string{"auth-codex-02", "auth-codex-01"} {
 			event := buildEventAt(random, profile, map[string]string{profile.provider: authIndex}, started.Add(time.Duration(attempt)*1200*time.Millisecond))
 			event.EventKey = fmt.Sprintf("%s-%d", reroute.requestID, attempt)
 			event.RequestID = reroute.requestID
@@ -505,8 +505,8 @@ func seedReroutes(ctx context.Context, repo *repository.Repository, now time.Tim
 	}
 	retryAfter := now.Add(demoRestingFor).UnixMilli()
 	return len(events), repo.InsertErrorEvent(ctx, usage.ErrorEvent{
-		InstanceID: instanceID, EventKey: "demo-rate-limit-codex-01", RequestID: demoReroutes[len(demoReroutes)-1].requestID,
-		Provider: "codex", Model: profile.name, AuthIndex: "auth-codex-01", StatusCode: 429, Code: "rate_limit_error",
+		InstanceID: instanceID, EventKey: "demo-rate-limit-codex-02", RequestID: demoReroutes[len(demoReroutes)-1].requestID,
+		Provider: "codex", Model: profile.name, AuthIndex: "auth-codex-02", StatusCode: 429, Code: "rate_limit_error",
 		Retryable: true, NextRetryAfterMS: &retryAfter, BackoffLevel: 1,
 		TimestampMS: now.Add(-demoReroutes[len(demoReroutes)-1].ago).UnixMilli(),
 	})
@@ -519,15 +519,18 @@ var demoLiveMinute = []struct {
 	model string
 	ago   time.Duration
 }{
-	{"gpt-5.6-luna", 52 * time.Second},
+	{"gpt-6-luna", 52 * time.Second},
+	{"gemini-4-hydrogen", 47 * time.Second},
 	{"claude-opus-5.5", 44 * time.Second},
 	{"glm-5.3-flash", 37 * time.Second},
-	{"deepseek-v4-flash", 31 * time.Second},
-	{"gpt-5.6-luna", 26 * time.Second},
-	{"kimi-k3", 21 * time.Second},
-	{"claude-sonnet-5", 14 * time.Second},
-	{"deepseek-v4-flash", 9 * time.Second},
-	{"gpt-5.6-luna", 5 * time.Second},
+	{"deepseek-v4.1-flash-1017", 31 * time.Second},
+	{"gemini-4-carbon", 27 * time.Second},
+	{"gpt-6-luna", 24 * time.Second},
+	{"kimi-k3.1-pro", 21 * time.Second},
+	{"gemini-4-hydrogen", 16 * time.Second},
+	{"claude-sonnet-5.5", 14 * time.Second},
+	{"deepseek-v4.1-flash-1017", 9 * time.Second},
+	{"gpt-6.1-sol", 5 * time.Second},
 	{"claude-opus-5.5", 2 * time.Second},
 }
 
@@ -1006,13 +1009,13 @@ type focusEra struct {
 func focusEras() []focusEra {
 	return []focusEra{
 		{untilDaysAgo: 45, choices: []focusChoice{
-			{"glm-5.3-flash", 55}, {"claude-opus-5.5", 22}, {"gpt-5.6-luna", 15}, {"deepseek-v4-flash", 8},
+			{"deepseek-v4.1-flash-1017", 28}, {"gemini-4-hydrogen", 22}, {"glm-5.3-flash", 20}, {"gpt-6-luna", 15}, {"claude-opus-5.5", 9}, {"gemini-4-carbon", 6},
 		}},
 		{untilDaysAgo: 160, choices: []focusChoice{
-			{"gpt-5.6-luna", 50}, {"claude-sonnet-5", 25}, {"glm-5.3-flash", 15}, {"kimi-k3", 10},
+			{"gpt-6-luna", 45}, {"claude-sonnet-5.5", 25}, {"glm-5.3-flash", 15}, {"kimi-k3.1-pro", 15},
 		}},
 		{untilDaysAgo: math.MaxFloat64, choices: []focusChoice{
-			{"claude-sonnet-5", 45}, {"gpt-5.6-luna", 30}, {"deepseek-v4-flash", 15}, {"gemini-3.7-flash", 10},
+			{"claude-sonnet-5.5", 45}, {"gpt-6.1-sol", 30}, {"mimo-v2.6-flash", 15}, {"gemini-4-argon", 10},
 		}},
 	}
 }

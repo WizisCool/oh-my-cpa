@@ -40,7 +40,7 @@ and shipped-artifact checks strict.
 ## Golden data and demo dataset
 
 - **Go golden files**: Regenerate only the owning package with `UPDATE_GOLDEN=1 go test ./<package>`.
-- **Cloudflare demo dataset**: Generated from real Go handlers over the deterministic demo fixture. When console read DTOs change, run `pnpm demo:generate && pnpm check:demo`. `TestExportDemoDataset` (`internal/api/demo_export_test.go`) verifies both byte-for-byte dataset freshness and dashboard health parity in a single pass.
+- **Cloudflare demo dataset**: Generated on demand (and in CI / Workers Builds) from real Go handlers over the deterministic demo fixture rather than committed to Git. Run `pnpm check:demo` to verify route coverage and privacy, and `TestExportDemoDataset` (`internal/api/demo_export_test.go`) to validate in-memory export invariants and dashboard health parity.
 
 ## Browser acceptance diagnostics
 
