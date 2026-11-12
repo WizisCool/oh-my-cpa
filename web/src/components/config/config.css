@@ -522,6 +522,8 @@
 .payload-collapse > [data-slot="accordion-item"] > [data-slot="accordion-panel"] {
   background: var(--bg);
   border-top: 1px solid var(--border-soft);
+}
+.payload-collapse > [data-slot="accordion-item"] > [data-slot="accordion-panel"] > div {
   padding: 16px;
 }
 .payload-panel-header {

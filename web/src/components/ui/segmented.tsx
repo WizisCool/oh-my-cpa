@@ -2,6 +2,7 @@ import * as React from 'react';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { cn } from '@/lib/utils';
+import { useSelectionThumb } from './selection-thumb';
 
 export interface SegmentedOptionObject<T extends string | number = string> {
   value: T;
@@ -58,9 +59,11 @@ export function Segmented<T extends string | number = string>({
   );
 
   const isSmall = size === 'sm' || size === 'small';
+  const thumbRef = useSelectionThumb<HTMLDivElement>('[data-slot="segmented-item"][data-checked]', 'data-checked');
 
   return (
     <RadioGroupPrimitive<T>
+      ref={thumbRef}
       id={id}
       data-slot="segmented"
       aria-orientation={vertical ? 'vertical' : 'horizontal'}
@@ -70,7 +73,7 @@ export function Segmented<T extends string | number = string>({
       onValueChange={(next) => onChange?.(next)}
       style={style}
       className={cn(
-        'inline-flex rounded-md bg-field p-0.5 shadow-well select-none',
+        'omc-thumb-host inline-flex rounded-md bg-field p-0.5 shadow-well select-none',
         vertical ? 'flex-col items-stretch' : 'items-center',
         block && 'flex w-full',
         className,
@@ -90,6 +93,7 @@ export function Segmented<T extends string | number = string>({
             'justify-center',
             'hover:not-data-disabled:not-data-checked:text-foreground',
             'data-checked:bg-thumb data-checked:font-medium data-checked:text-foreground data-checked:shadow-control',
+            'in-data-thumb:data-checked:bg-transparent in-data-thumb:data-checked:shadow-none',
             'focus-visible:outline-none focus-visible:shadow-focus',
             'data-disabled:pointer-events-none data-disabled:opacity-50',
             isSmall ? 'min-h-6 px-2.5 py-0.5 text-md' : 'min-h-7 px-3 py-1 text-md',

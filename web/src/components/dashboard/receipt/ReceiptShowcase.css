@@ -122,10 +122,14 @@
   max-width: 100%;
   filter: drop-shadow(0 22px 36px rgb(20 16 10 / 0.22)) drop-shadow(0 2px 4px rgb(20 16 10 / 0.08));
   transition: opacity var(--motion-base) var(--ease-standard);
-  /* The release only fills forwards, so the feed holds the paper until it begins. */
-  animation:
-    receipt-feed var(--motion-receipt-feed) var(--ease-receipt-feed) both,
-    receipt-release var(--motion-slow) var(--ease-out) var(--motion-receipt-release) forwards;
+  animation: receipt-feed var(--motion-receipt-feed) var(--ease-receipt-feed) both;
+}
+/* The release moves the slip inside the fed paper rather than the paper itself: two transform
+   animations on one element cannot run on the compositor, so both fell back to the main thread,
+   and on a first open - the data decoded, the paper laid out, its marks and glyphs loaded - the
+   busy thread swallowed the whole feed and the slip appeared already out. */
+.receipt-showcase-slip {
+  animation: receipt-release var(--motion-slow) var(--ease-out) var(--motion-receipt-release) forwards;
 }
 .receipt-showcase-paper.is-loading { opacity: 0.72; }
 
@@ -182,6 +186,7 @@
   .receipt-showcase-printer-mouth { left: 4px; right: 4px; }
   .receipt-showcase-printer-led { right: 8px; }
   .receipt-showcase-paper,
+  .receipt-showcase-slip,
   .receipt-showcase-paper .omc-receipt { width: 100%; }
   .receipt-showcase-actions { border: 0; bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; }
   .receipt-showcase .receipt-showcase-close { border: 0; top: 12px; right: 12px; }
@@ -194,6 +199,7 @@
 :root[data-reduced-motion='true'] .receipt-showcase-printer,
 :root[data-reduced-motion='true'] .receipt-showcase-printer-led,
 :root[data-reduced-motion='true'] .receipt-showcase-paper,
+:root[data-reduced-motion='true'] .receipt-showcase-slip,
 :root[data-reduced-motion='true'] .receipt-showcase-actions,
 :root[data-reduced-motion='true'] .receipt-showcase-feed::before { animation: none !important; }
 :root[data-reduced-motion='true'] .receipt-showcase-printer.is-printing,

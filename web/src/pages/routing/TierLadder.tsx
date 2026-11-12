@@ -226,11 +226,18 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
   };
 
   const move = useLocalMove(drawn);
-  const arranging: TierLadderProps = {
-    ...props,
-    onStep: (key, direction) => move.during(() => props.onStep(key, direction)),
-    onSplit: (key, side) => move.during(() => props.onSplit(key, side)),
-  };
+  // A drag re-renders every sortable card on every pointer move. The cards' actions are read through
+  // one stable object, so a card's face and controls skip those renders and only its frame follows.
+  const latest = React.useRef({ props, move, shift });
+  React.useLayoutEffect(() => {
+    latest.current = { props, move, shift };
+  });
+  const actions = React.useMemo<CardActions>(() => ({
+    step: (key, direction) => latest.current.move.during(() => latest.current.props.onStep(key, direction)),
+    split: (key, side) => latest.current.move.during(() => latest.current.props.onSplit(key, side)),
+    weights: (key, weights) => latest.current.props.onWeights(key, weights),
+    shift: (key, direction) => latest.current.shift(key, direction),
+  }), []);
   const dragged = drag ? members.get(drag.key) : undefined;
   const isDragging = Boolean(drag);
   const dropTier = drag ? tierOf(drag.tiers, drag.key) : undefined;
@@ -271,7 +278,8 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
                       return member ? (
                         <RoutingCard
                           key={key}
-                          {...arranging}
+                          {...props}
+                          actions={actions}
                           member={member}
                           tierIndex={index}
                           tierCount={tiers.length}
@@ -279,7 +287,6 @@ export const TierLadder: React.FC<TierLadderProps> = (props) => {
                           isFirstInTier={position === 0}
                           isLastInTier={position === tier.memberKeys.length - 1}
                           isServingTier={steps.get(tier.id)?.isPrimary ?? false}
-                          onShift={(direction) => shift(key, direction)}
                         />
                       ) : null;
                     })}
@@ -505,7 +512,17 @@ const CardFace: React.FC<{ branding: ProviderBrandSources; member: RoutingMember
   );
 };
 
+/** What a card's controls do, stable across renders so a card's body can skip a drag's renders. */
+interface CardActions {
+  step: (key: string, direction: 'up' | 'down') => void;
+  split: (key: string, side: 'above' | 'below') => void;
+  weights: (key: string, weights: (number | null)[]) => void;
+  /** Moves the card a place along its tier: where it is drawn, not how it is routed. */
+  shift: (key: string, direction: -1 | 1) => void;
+}
+
 interface RoutingCardProps extends TierLadderProps {
+  actions: CardActions;
   member: RoutingMember;
   tierIndex: number;
   tierCount: number;
@@ -514,14 +531,18 @@ interface RoutingCardProps extends TierLadderProps {
   isLastInTier: boolean;
   /** The tier requests reach first; only its shares are drawn as live traffic. */
   isServingTier: boolean;
-  /** Moves the card a place along its tier: where it is drawn, not how it is routed. */
-  onShift: (direction: -1 | 1) => void;
 }
 
+const NO_WEIGHTS: (number | null)[] = [];
+
+/**
+ * The sortable frame of a card. It is the part a drag re-renders on every pointer move, so it holds
+ * only what follows the hand - the frame's place and travel - and hands everything else to
+ * `CardBody`, whose props stay the same while the card is carried.
+ */
 const RoutingCard: React.FC<RoutingCardProps> = ({
-  member, branding, labels, tierIndex, tierCount, isAlone, isFirstInTier, isLastInTier, isServingTier, canDrag, disabled = false, strategy, weights, preview, isLens, landedKey, onStep, onSplit, onWeights, onShift,
+  actions, member, branding, labels, tierIndex, tierCount, isAlone, isFirstInTier, isLastInTier, isServingTier, canDrag, disabled = false, strategy, weights, preview, isLens, landedKey,
 }) => {
-  const t = useT();
   const label = labels.get(member.key);
   const shownName = label?.masked ?? member.name;
   const state = preview.states.get(member.key);
@@ -534,8 +555,10 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
   const travel: React.CSSProperties | undefined = transform || transition
     ? { transform: transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined, transition }
     : undefined;
-  const share = preview.steps.flatMap((step) => step.members).find((entry) => entry.key === member.key)?.share;
-  const memberWeights = weights[member.key] ?? [];
+  const share = React.useMemo(
+    () => preview.steps.flatMap((step) => step.members).find((entry) => entry.key === member.key)?.share,
+    [preview, member.key],
+  );
   const canMoveUp = !disabled && !isHidden && (tierIndex > 0 || !isAlone);
   const canMoveDown = !disabled && !isHidden && (tierIndex < tierCount - 1 || !isAlone);
   const canShiftBefore = !isHidden && !isFirstInTier;
@@ -545,21 +568,21 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
     if (!event.altKey || event.target !== event.currentTarget) return;
     if (event.key === 'ArrowLeft' && canShiftBefore) {
       event.preventDefault();
-      onShift(-1);
+      actions.shift(member.key, -1);
       return;
     }
     if (event.key === 'ArrowRight' && canShiftAfter) {
       event.preventDefault();
-      onShift(1);
+      actions.shift(member.key, 1);
       return;
     }
     if (isLocked) return;
     if (event.key === 'ArrowUp' && canMoveUp) {
       event.preventDefault();
-      onStep(member.key, 'up');
+      actions.step(member.key, 'up');
     } else if (event.key === 'ArrowDown' && canMoveDown) {
       event.preventDefault();
-      onStep(member.key, 'down');
+      actions.step(member.key, 'down');
     }
   };
   const liRef = React.useRef<HTMLLIElement | null>(null);
@@ -603,38 +626,82 @@ const RoutingCard: React.FC<RoutingCardProps> = ({
       style={travel}
       {...(canDrag && !isLocked ? listeners : {})}
     >
-      <CardFace branding={branding} member={member} label={label}>
-        {isLens && isServingTier && typeof share === 'number' && (
-          <span className={styles['card-share-bar']} style={{ '--share': share } as React.CSSProperties} aria-hidden="true" />
-        )}
-        {/* The card's own controls take their pointer for themselves rather than starting a drag. */}
-        <span className={styles['card-end']} onPointerDown={(event) => event.stopPropagation()}>
-          {member.is_disabled && <StatusLabel tone="neutral">{t('orch.state_disabled')}</StatusLabel>}
-          {member.is_runtime_only && <StatusLabel tone="neutral" title={t('orch.state_runtime_hint')}>{t('orch.state_runtime')}</StatusLabel>}
-          {state && STATE_KEYS[state] && <StatusLabel tone={state === 'blocked' ? 'warn' : 'neutral'}>{t(STATE_KEYS[state]!)}</StatusLabel>}
-          {isLens && (state === 'serving' || state === 'standby') && (
-            <span className={clsx(styles['card-share'], !isServingTier && styles['card-share-idle'])}>
-              {share === null || share === undefined ? t('orch.state_fill') : `${Math.round(share * 100)}%`}
-            </span>
-          )}
-          {strategy === 'weighted-round-robin' && memberWeights.length > 0 && (
-            <WeightControl member={member} name={shownName} weights={memberWeights} isLocked={isLocked} onChange={(next) => onWeights(member.key, next)} />
-          )}
-          {!member.is_runtime_only && (
-            <ActionMenu label={t('orch.card_actions')}>
-              <ToolButton icon={<ArrowUpOutlined />} label={t('orch.move_up')} disabled={!canMoveUp} onClick={() => onStep(member.key, 'up')} />
-              <ToolButton icon={<ArrowDownOutlined />} label={t('orch.move_down')} disabled={!canMoveDown} onClick={() => onStep(member.key, 'down')} />
-              <ToolButton icon={<ArrowLeftOutlined />} label={t('orch.move_before')} disabled={!canShiftBefore} onClick={() => onShift(-1)} />
-              <ToolButton icon={<ArrowRightOutlined />} label={t('orch.move_after')} disabled={!canShiftAfter} onClick={() => onShift(1)} />
-              <ToolButton icon={<VerticalAlignTopOutlined />} label={t('orch.split_above')} disabled={disabled || isAlone} onClick={() => onSplit(member.key, 'above')} />
-              <ToolButton icon={<VerticalAlignTopOutlined rotate={180} />} label={t('orch.split_below')} disabled={disabled || isAlone} onClick={() => onSplit(member.key, 'below')} />
-            </ActionMenu>
-          )}
-        </span>
-      </CardFace>
+      <CardBody
+        actions={actions}
+        branding={branding}
+        member={member}
+        label={label}
+        state={state}
+        share={share}
+        strategy={strategy}
+        weights={weights[member.key] ?? NO_WEIGHTS}
+        isLens={isLens}
+        isServingTier={isServingTier}
+        isLocked={isLocked}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+        canShiftBefore={canShiftBefore}
+        canShiftAfter={canShiftAfter}
+        canSplit={!disabled && !isAlone}
+      />
     </li>
   );
 };
+
+const CardBody = React.memo(function CardBody({
+  actions, branding, member, label, state, share, strategy, weights, isLens, isServingTier, isLocked, canMoveUp, canMoveDown, canShiftBefore, canShiftAfter, canSplit,
+}: {
+  actions: CardActions;
+  branding: ProviderBrandSources;
+  member: RoutingMember;
+  label?: MemberLabel;
+  state?: RouteMemberState;
+  share?: number | null;
+  strategy: RoutingStrategy;
+  weights: (number | null)[];
+  isLens: boolean;
+  isServingTier: boolean;
+  isLocked: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  canShiftBefore: boolean;
+  canShiftAfter: boolean;
+  canSplit: boolean;
+}) {
+  const t = useT();
+  const shownName = label?.masked ?? member.name;
+  return (
+    <CardFace branding={branding} member={member} label={label}>
+      {isLens && isServingTier && typeof share === 'number' && (
+        <span className={styles['card-share-bar']} style={{ '--share': share } as React.CSSProperties} aria-hidden="true" />
+      )}
+      {/* The card's own controls take their pointer for themselves rather than starting a drag. */}
+      <span className={styles['card-end']} onPointerDown={(event) => event.stopPropagation()}>
+        {member.is_disabled && <StatusLabel tone="neutral">{t('orch.state_disabled')}</StatusLabel>}
+        {member.is_runtime_only && <StatusLabel tone="neutral" title={t('orch.state_runtime_hint')}>{t('orch.state_runtime')}</StatusLabel>}
+        {state && STATE_KEYS[state] && <StatusLabel tone={state === 'blocked' ? 'warn' : 'neutral'}>{t(STATE_KEYS[state]!)}</StatusLabel>}
+        {isLens && (state === 'serving' || state === 'standby') && (
+          <span className={clsx(styles['card-share'], !isServingTier && styles['card-share-idle'])}>
+            {share === null || share === undefined ? t('orch.state_fill') : `${Math.round(share * 100)}%`}
+          </span>
+        )}
+        {strategy === 'weighted-round-robin' && weights.length > 0 && (
+          <WeightControl member={member} name={shownName} weights={weights} isLocked={isLocked} onChange={(next) => actions.weights(member.key, next)} />
+        )}
+        {!member.is_runtime_only && (
+          <ActionMenu label={t('orch.card_actions')}>
+            <ToolButton icon={<ArrowUpOutlined />} label={t('orch.move_up')} disabled={!canMoveUp} onClick={() => actions.step(member.key, 'up')} />
+            <ToolButton icon={<ArrowDownOutlined />} label={t('orch.move_down')} disabled={!canMoveDown} onClick={() => actions.step(member.key, 'down')} />
+            <ToolButton icon={<ArrowLeftOutlined />} label={t('orch.move_before')} disabled={!canShiftBefore} onClick={() => actions.shift(member.key, -1)} />
+            <ToolButton icon={<ArrowRightOutlined />} label={t('orch.move_after')} disabled={!canShiftAfter} onClick={() => actions.shift(member.key, 1)} />
+            <ToolButton icon={<VerticalAlignTopOutlined />} label={t('orch.split_above')} disabled={!canSplit} onClick={() => actions.split(member.key, 'above')} />
+            <ToolButton icon={<VerticalAlignTopOutlined rotate={180} />} label={t('orch.split_below')} disabled={!canSplit} onClick={() => actions.split(member.key, 'below')} />
+          </ActionMenu>
+        )}
+      </span>
+    </CardFace>
+  );
+});
 
 const MAX_WEIGHT = 1_000_000;
 

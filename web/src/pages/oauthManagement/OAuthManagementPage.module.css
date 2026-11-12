@@ -14,9 +14,10 @@
   min-width: 0;
 }
 
+/* Sits over the rows' own checkboxes, so the column of boxes reads straight down. */
 .select-all {
   flex: none;
-  padding: 0 4px 0 15px;
+  margin-inline: 12px 4px;
 }
 
 .empty {
@@ -61,7 +62,7 @@
 
 @media (max-width: 640px) {
   .select-all {
-    padding-left: 12px;
+    margin-inline-start: 12px;
   }
 
   .pagination {

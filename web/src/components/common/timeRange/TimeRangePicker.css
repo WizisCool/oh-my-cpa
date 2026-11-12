@@ -1,7 +1,7 @@
 /* ── time range picker: one field, one surface ─────────────────────────────── */
 /* Drawn as a filled select: the same well, the same 11px inset and the same chevron, so in a
-   toolbar of selects it reads as one more of them. It does not give under a press the way a
-   button does, because a field never does. */
+   toolbar of selects it reads as one more of them (the `filled` variant does not give under a
+   press, because a field never does). */
 .time-range-trigger[data-slot='button'] {
   max-width: 260px;
   justify-content: flex-start;
@@ -11,7 +11,6 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.time-range-trigger[data-slot='button']:not(:disabled):active { transform: none; }
 .time-range-trigger [data-slot='button-icon'] { color: var(--muted); }
 .time-range-trigger-text {
   flex: 1 1 auto;
@@ -127,6 +126,8 @@
 .time-range-day,
 .time-range-day-gap { height: var(--time-range-cell); }
 .time-range-day {
+  position: relative;
+  isolation: isolate;
   padding: 0;
   border: 0;
   border-radius: var(--radius-md);
@@ -139,20 +140,73 @@
 }
 .time-range-day:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg); }
 .time-range-day:disabled { color: var(--meta); cursor: not-allowed; opacity: 0.45; }
-/* Today is named by its ink alone: a ring would be one more outline in a grid of soft cells. */
-.time-range-day.is-today { color: var(--accent); font-weight: 600; }
+/* Today is a dot under its number, the mark a calendar reader already knows; it stays legible
+   on a picked day because it takes the cell's ink. */
+.time-range-day.is-today { color: var(--fg); font-weight: 600; }
+.time-range-day.is-today::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  translate: -50% 0;
+}
+.time-range-day.is-today.is-picked::after { background: currentColor; }
+
+/* The range is a band that runs along each week and rounds wherever it stops - at the week's
+   edges and the month's - so it never ends in a square block. */
 .time-range-day.is-in-range,
 .time-range-day.is-in-range:hover:not(:disabled) { border-radius: 0; background: var(--time-range-band); color: var(--fg); }
-.time-range-day.is-range-start { border-top-left-radius: var(--radius-md); border-bottom-left-radius: var(--radius-md); }
-.time-range-day.is-range-end { border-top-right-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); }
+.time-range-day.is-in-range:is(:nth-child(7n + 1), .time-range-day-gap + *, :first-child, .is-range-start) {
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+}
+.time-range-day.is-in-range:is(:nth-child(7n), :has(+ .time-range-day-gap), :last-child, .is-range-end) {
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+}
+/* A picked end is a solid tile of its own, sitting in the band: the band carries on under its
+   inner half, so start and end read as the two caps of one bar. */
 .time-range-day.is-picked,
 .time-range-day.is-picked:hover:not(:disabled) {
-  background: var(--accent);
   color: var(--accent-on);
   font-weight: 600;
   box-shadow: none;
 }
+.time-range-day.is-picked::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+}
+.time-range-day.is-picked:not(.is-in-range) { background: transparent; }
+.time-range-day.is-picked.is-in-range.is-range-start:not(.is-range-end),
+.time-range-day.is-picked.is-in-range.is-range-start:not(.is-range-end):hover:not(:disabled) {
+  background: linear-gradient(to right, transparent 50%, var(--time-range-band) 50%);
+}
+.time-range-day.is-picked.is-in-range.is-range-end:not(.is-range-start),
+.time-range-day.is-picked.is-in-range.is-range-end:not(.is-range-start):hover:not(:disabled) {
+  background: linear-gradient(to left, transparent 50%, var(--time-range-band) 50%);
+}
+.time-range-day.is-picked.is-range-start.is-range-end { background: transparent; }
 .time-range-day.is-picked:focus-visible { box-shadow: 0 0 0 1px var(--elevated), 0 0 0 3px var(--accent); }
+
+/* The calendar unfolds out of the preset list: the panel eases to its new size in
+   TimeRangePicker and the calendar settles in as it does. */
+:root:not([data-reduced-motion='true']) .time-range-popover .time-range-custom {
+  transition: opacity var(--motion-slow) var(--ease-out), translate var(--motion-slow) var(--ease-out);
+}
+@starting-style {
+  :root:not([data-reduced-motion='true']) .time-range-popover .time-range-custom {
+    opacity: 0;
+    translate: 8px 0;
+  }
+}
 
 /* ── the two ends, as picked ── */
 .time-range-fields { display: flex; align-items: stretch; gap: 8px; }

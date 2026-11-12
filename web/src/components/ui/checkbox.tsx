@@ -54,7 +54,7 @@ export function Checkbox({
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="inline-flex items-center justify-center text-current"
+        className="omc-mark-pop inline-flex items-center justify-center text-current"
       >
         {indeterminate ? (
           <Minus className="size-3 stroke-[2.5]" aria-hidden="true" />

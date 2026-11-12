@@ -1,15 +1,18 @@
 import * as React from 'react';
 import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
 import { cn } from '@/lib/utils';
+import { useSelectionThumb } from './selection-thumb';
 
 const TabsRoot = TabsPrimitive.Root;
 
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
+  const thumbRef = useSelectionThumb<HTMLDivElement>('[data-slot="tabs-trigger"][data-active]', 'data-active');
   return (
     <TabsPrimitive.List
+      ref={thumbRef}
       data-slot="tabs-list"
       className={cn(
-        'relative flex w-full items-center gap-1 overflow-x-auto border-b-[length:var(--hairline)] border-b-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+        'omc-thumb-host omc-thumb-underline relative flex w-full items-center gap-1 overflow-x-auto border-b-[length:var(--hairline)] border-b-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
         className,
       )}
       {...props}
@@ -25,6 +28,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         'relative inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-t-md border-0 bg-transparent px-3 py-2 text-md font-medium whitespace-nowrap text-fg-2 outline-none transition-colors select-none [@media(pointer:coarse)]:min-h-10',
         'hover:not-data-[active]:bg-surface hover:text-foreground focus-visible:rounded-sm focus-visible:shadow-focus',
         'data-[active]:font-semibold data-[active]:text-foreground data-[active]:after:absolute data-[active]:after:inset-x-0 data-[active]:after:bottom-0 data-[active]:after:h-0.5 data-[active]:after:bg-foreground',
+        'in-data-thumb:data-[active]:after:hidden',
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
         className,
       )}
