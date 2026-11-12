@@ -338,7 +338,6 @@ export default {
   'events.load_error': 'Failed to load request events',
   'events.ingest_healthy': 'Ingest healthy',
   'events.delivery_semantics_hint': 'Gateway uses at-most-once consumption; ingestion errors are recorded in Ingest Gaps.',
-  'events.auto_refresh': 'Auto Refresh',
   'events.live_pushed': 'Records appear as soon as they are stored',
   'events.live_polling': 'Live updates unavailable; refreshing every 10 s',
   'routing.title': 'Live routing',

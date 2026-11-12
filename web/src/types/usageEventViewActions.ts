@@ -152,14 +152,13 @@ export function mergeFilters(
  */
 export function viewPreferenceFromUrl(
   nextParams: URLSearchParams,
-  current: { grouping: UsageEventsViewPreference['grouping']; autoRefresh: boolean },
+  current: { grouping: UsageEventsViewPreference['grouping'] },
 ): UsageEventsViewPreference {
   const nextQuery = readEventQuery(nextParams);
   const nextPref: UsageEventsViewPreference = {
     result: nextQuery.result,
     limit: nextQuery.limit,
     grouping: current.grouping,
-    autoRefresh: current.autoRefresh,
   };
   if (nextQuery.cost === 'priced' || nextQuery.cost === 'unpriced') nextPref.cost = nextQuery.cost;
   if (nextQuery.from !== undefined) {

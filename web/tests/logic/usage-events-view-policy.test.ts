@@ -177,7 +177,7 @@ test('setting, widening and clearing one dimension all express themselves as abs
 // ---------------------------------------------------------------------------
 
 test('the saved view is derived from the navigated URL, not merged from the previous query', () => {
-  const current = { grouping: 'time' as const, autoRefresh: false };
+  const current = { grouping: 'time' as const };
   // `model` is absent from the URL because the operator just cleared it. Deriving
   // every field from this state is what stops the cleared value being read back
   // out of the previous query and resurrected on the next visit.
@@ -196,7 +196,6 @@ test('the saved view is derived from the navigated URL, not merged from the prev
 test('a cleared filter is absent from the saved view rather than stored empty', () => {
   const pref = viewPreferenceFromUrl(new URLSearchParams('preset=1h'), {
     grouping: 'time',
-    autoRefresh: false,
   });
   // No `filterValues` key at all: an empty map and an absent one would both be
   // read back as "not filtering", but only absence keeps the stored document
@@ -207,7 +206,6 @@ test('a cleared filter is absent from the saved view rather than stored empty', 
 test('cost is stored once, as its own field, and never inside the filter map', () => {
   const pref = viewPreferenceFromUrl(new URLSearchParams('preset=1h&cost=unpriced'), {
     grouping: 'time',
-    autoRefresh: false,
   });
   assert.equal(pref.cost, 'unpriced');
   // Keeping it in both was a second source of truth that hydration wrote back
@@ -218,16 +216,13 @@ test('cost is stored once, as its own field, and never inside the filter map', (
 test('the saved view carries the layout choices it was given, not the URL defaults', () => {
   const pref = viewPreferenceFromUrl(new URLSearchParams('preset=1h'), {
     grouping: 'source',
-    autoRefresh: true,
   });
   assert.equal(pref.grouping, 'source');
-  assert.equal(pref.autoRefresh, true);
 });
 
 test('an absolute window is saved as bounds, and an open-ended one keeps only its start', () => {
   const closed = viewPreferenceFromUrl(new URLSearchParams('from=100&to=200'), {
     grouping: 'time',
-    autoRefresh: false,
   });
   assert.equal(closed.from, 100);
   assert.equal(closed.to, 200);
@@ -235,7 +230,6 @@ test('an absolute window is saved as bounds, and an open-ended one keeps only it
 
   const openEnded = viewPreferenceFromUrl(new URLSearchParams('from=100'), {
     grouping: 'time',
-    autoRefresh: false,
   });
   assert.equal(openEnded.from, 100);
   assert.equal(openEnded.to, undefined);
@@ -246,7 +240,6 @@ test('an absolute window is saved as bounds, and an open-ended one keeps only it
 test('an absent window falls back to the default preset rather than to bounds', () => {
   const pref = viewPreferenceFromUrl(new URLSearchParams('model=o3'), {
     grouping: 'time',
-    autoRefresh: false,
   });
   assert.equal(pref.preset, '1h');
   assert.equal(pref.from, undefined);

@@ -335,7 +335,6 @@ export default {
   'events.load_error': '读取请求记录失败',
   'events.ingest_healthy': '用量采集正常',
   'events.delivery_semantics_hint': '网关采用单次出队机制，遇到写入异常将记录在 Ingest Gaps 中。',
-  'events.auto_refresh': '自动刷新',
   'events.live_pushed': '记录入库即推送到此列表',
   'events.live_polling': '实时推送不可用，每 10 秒刷新一次',
   'routing.title': '实时路由',

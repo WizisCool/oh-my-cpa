@@ -1,8 +1,5 @@
 /**
- * The auto-refresh cadence is fixed, not configurable. The console used to offer
- * 5/10/30-second intervals, which is a setting nobody can evaluate without
- * watching the clock, and the operator only ever wants one of two answers: "keep
- * this current" or "stop moving".
+ * Fallback polling cadence when the live SSE stream is unavailable.
  */
 export const EVENT_AUTO_REFRESH_MS = 10_000;
 

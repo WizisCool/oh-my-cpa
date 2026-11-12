@@ -26,36 +26,6 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-/* The toggle is a labelled control rather than a bare switch: "Auto Refresh" on
-   its own does not say what interval it will poll at, and the cadence is the
-   only number that makes the setting decidable. */
-.req-auto-refresh-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px;
-  cursor: pointer;
-  user-select: none;
-}
-.req-auto-refresh-label {
-  font-size: var(--text-sm);
-  color: var(--fg-2);
-}
-.req-live-pulse-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--success);
-  display: inline-block;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 30%, transparent);
-}
-
-/* Records are polled rather than pushed: the list still moves, on the fallback cadence. */
-.req-live-pulse-dot.is-polling {
-  background: var(--muted);
-  box-shadow: none;
-}
 .request-stream-slot {
   flex: 1;
   min-height: 310px;
@@ -252,9 +222,8 @@
   .request-events-page .request-window {
     display: none;
   }
-  .req-auto-refresh-control {
-    flex: none;
-    white-space: nowrap;
+  .request-events-page .terminal-page-heading {
+    position: absolute;
   }
   .request-events-page .terminal-page-head > .request-actions {
     flex: 1;
