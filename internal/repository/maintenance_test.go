@@ -44,8 +44,11 @@ func TestCheckpointReadsItsOwnResultCounters(t *testing.T) {
 	}
 	// A checkpoint with no readers present should complete, and the counters must
 	// be present so the page can show them.
-	if status.Detail == "" {
+	if status.Checkpoint == nil {
 		t.Fatal("checkpoint reported no counters: the three-column result was not read")
+	}
+	if status.Incomplete || status.IncompleteReason != "" {
+		t.Fatalf("an unblocked checkpoint reported incomplete (%q)", status.IncompleteReason)
 	}
 	if status.Running {
 		t.Fatal("status still reports running after the job finished")
@@ -158,8 +161,8 @@ func TestVacuumReclaimsSpaceAndKeepsData(t *testing.T) {
 		t.Fatalf("vacuum failed: %s", status.Error)
 	}
 	if status.ReclaimedBytes <= 0 {
-		t.Fatalf("vacuum reclaimed %d bytes, want a positive amount after deleting 1.6MB (before=%d after=%d, detail=%s)",
-			status.ReclaimedBytes, status.SizeBeforeBytes, status.SizeAfterBytes, status.Detail)
+		t.Fatalf("vacuum reclaimed %d bytes, want a positive amount after deleting 1.6MB (before=%d after=%d, checkpoint=%+v)",
+			status.ReclaimedBytes, status.SizeBeforeBytes, status.SizeAfterBytes, status.Checkpoint)
 	}
 	if status.SizeAfterBytes >= status.SizeBeforeBytes {
 		t.Fatalf("size did not shrink: before=%d after=%d", status.SizeBeforeBytes, status.SizeAfterBytes)
@@ -677,44 +680,28 @@ func TestInterpretCheckpointResultDerivesTheOutcomeFromTheCounters(t *testing.T)
 		busy         int64
 		logFrames    int64
 		checkpointed int64
-		wantDetail   string
-		incomplete   bool
+		wantReason   string
 	}{
-		{
-			name:         "a completed checkpoint reports its counters and is not incomplete",
-			busy:         0,
-			logFrames:    12,
-			checkpointed: 12,
-			wantDetail:   "write-ahead log frames 12, checkpointed 12",
-		},
+		{name: "a completed checkpoint reports its counters and is not incomplete", busy: 0, logFrames: 12, checkpointed: 12},
 		{
 			// A blocked TRUNCATE moves none of the log, which is why the checkpointed count is
 			// zero while frames remain - the state the page must not present as success.
-			name:         "a blocked checkpoint is incomplete and says so",
+			name:         "a blocked checkpoint is incomplete and names the reader",
 			busy:         1,
 			logFrames:    7,
 			checkpointed: 0,
-			wantDetail:   "write-ahead log frames 7, checkpointed 0; blocked by a concurrent reader",
-			incomplete:   true,
+			wantReason:   IncompleteReaderBlocked,
 		},
-		{
-			name:         "an empty log is a completed checkpoint, not a blocked one",
-			busy:         0,
-			logFrames:    0,
-			checkpointed: 0,
-			wantDetail:   "write-ahead log frames 0, checkpointed 0",
-		},
+		{name: "an empty log is a completed checkpoint, not a blocked one", busy: 0, logFrames: 0, checkpointed: 0},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			detail, incomplete, err := interpretCheckpointResult(testCase.busy, testCase.logFrames, testCase.checkpointed)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			counts, reason := interpretCheckpointResult(testCase.busy, testCase.logFrames, testCase.checkpointed)
+			if reason != testCase.wantReason {
+				t.Errorf("reason = %q, want %q", reason, testCase.wantReason)
 			}
-			if incomplete != testCase.incomplete {
-				t.Errorf("incomplete = %v, want %v", incomplete, testCase.incomplete)
-			}
-			if detail != testCase.wantDetail {
-				t.Errorf("detail = %q, want %q", detail, testCase.wantDetail)
+			want := CheckpointCounts{LogFrames: testCase.logFrames, CheckpointedFrames: testCase.checkpointed}
+			if counts == nil || *counts != want {
+				t.Errorf("counts = %+v, want %+v", counts, want)
 			}
 		})
 	}

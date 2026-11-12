@@ -152,8 +152,18 @@ export interface SystemMaintenanceStatus {
   size_after_bytes: number;
   reclaimed_bytes: number;
   incomplete: boolean;
-  detail: string;
+  /** Why the job did not fully do its job; empty unless `incomplete`. */
+  incomplete_reason: MaintenanceIncompleteReason | '';
+  /** SQLite's own checkpoint result row; null when it was never read. */
+  checkpoint: SystemCheckpointCounts | null;
   error: string;
+}
+
+export type MaintenanceIncompleteReason = 'reader_blocked' | 'log_not_truncated';
+
+export interface SystemCheckpointCounts {
+  log_frames: number;
+  checkpointed_frames: number;
 }
 
 /** What VACUUM would need, so the confirmation can state it before it is run. */

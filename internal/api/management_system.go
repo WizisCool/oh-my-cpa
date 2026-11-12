@@ -177,10 +177,18 @@ type SystemMaintenanceStatusDTO struct {
 	SizeAfterBytes  int64 `json:"size_after_bytes"`
 	ReclaimedBytes  int64 `json:"reclaimed_bytes"`
 	// Incomplete distinguishes "the statement ran" from "it did its job": SQLite does
-	// not error when a checkpoint is blocked.
-	Incomplete bool   `json:"incomplete"`
-	Detail     string `json:"detail"`
-	Error      string `json:"error"`
+	// not error when a checkpoint is blocked. IncompleteReason is a code the console
+	// words: "reader_blocked" or "log_not_truncated".
+	Incomplete       bool   `json:"incomplete"`
+	IncompleteReason string `json:"incomplete_reason"`
+	// Checkpoint is SQLite's own result row, null when it was never read.
+	Checkpoint *SystemCheckpointCountsDTO `json:"checkpoint"`
+	Error      string                     `json:"error"`
+}
+
+type SystemCheckpointCountsDTO struct {
+	LogFrames          int64 `json:"log_frames"`
+	CheckpointedFrames int64 `json:"checkpointed_frames"`
 }
 
 type SystemMaintenanceAdmissionDTO struct {
@@ -851,18 +859,26 @@ func (h *Handler) maintenanceStatusDTO() SystemMaintenanceStatusDTO {
 
 func maintenanceStatusToDTO(status repository.MaintenanceStatus) SystemMaintenanceStatusDTO {
 	return SystemMaintenanceStatusDTO{
-		Action:          status.Action,
-		JobID:           status.JobID,
-		Running:         status.Running,
-		StartedAtMS:     status.StartedAtMS,
-		FinishedAtMS:    status.FinishedAtMS,
-		SizeBeforeBytes: status.SizeBeforeBytes,
-		SizeAfterBytes:  status.SizeAfterBytes,
-		ReclaimedBytes:  status.ReclaimedBytes,
-		Incomplete:      status.Incomplete,
-		Detail:          status.Detail,
-		Error:           status.Error,
+		Action:           status.Action,
+		JobID:            status.JobID,
+		Running:          status.Running,
+		StartedAtMS:      status.StartedAtMS,
+		FinishedAtMS:     status.FinishedAtMS,
+		SizeBeforeBytes:  status.SizeBeforeBytes,
+		SizeAfterBytes:   status.SizeAfterBytes,
+		ReclaimedBytes:   status.ReclaimedBytes,
+		Incomplete:       status.Incomplete,
+		IncompleteReason: status.IncompleteReason,
+		Checkpoint:       checkpointCountsToDTO(status.Checkpoint),
+		Error:            status.Error,
 	}
+}
+
+func checkpointCountsToDTO(counts *repository.CheckpointCounts) *SystemCheckpointCountsDTO {
+	if counts == nil {
+		return nil
+	}
+	return &SystemCheckpointCountsDTO{LogFrames: counts.LogFrames, CheckpointedFrames: counts.CheckpointedFrames}
 }
 
 // maintenanceAdmissionDTO states what VACUUM would need before it is started.

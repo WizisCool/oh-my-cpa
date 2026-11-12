@@ -71,6 +71,9 @@ func (h *Handler) recordMaintenanceCompletion(status repository.MaintenanceStatu
 	if status.Error != "" {
 		details["error"] = status.Error
 	}
+	if status.IncompleteReason != "" {
+		details["incomplete_reason"] = status.IncompleteReason
+	}
 	h.recordAuditWithoutRequest("system.maintenance."+status.Action+".completed", "database", status.Action, result, details)
 }
 

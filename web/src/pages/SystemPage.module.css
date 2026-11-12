@@ -748,37 +748,76 @@
   flex: 0 0 auto;
 }
 
-.maintenance-box {
-  padding-top: 16px;
-  margin-top: 16px;
-  border-top: 1px solid var(--border-soft);
+/* A job's result is a reading of the card, set under the actions behind a hairline: a verdict line
+   whose glyph carries the tone, the reason a partial or failed job gives, and the measurements as
+   label/value pairs. No callout box: the card already frames it. */
+.maintenance-outcome {
+  --outcome-tone: var(--success);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
 }
+.maintenance-outcome[data-tone='warn'] { --outcome-tone: var(--warn); }
+.maintenance-outcome[data-tone='danger'] { --outcome-tone: var(--danger); }
+.maintenance-outcome[data-tone='running'] { --outcome-tone: var(--muted); }
 
-.maintenance-box-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--fg);
+.maintenance-outcome-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 32px;
 }
 
-/* The outcome's own close control sits on the trailing edge of its title row, so dismissing the
-   result reads as belonging to the result rather than to the card. */
-.maintenance-box-close {
+.maintenance-outcome-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--outcome-tone);
+  font-size: var(--text-base);
+}
+
+.maintenance-outcome-title {
+  min-width: 0;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* The close control sits on the trailing edge of the verdict line, so dismissing the result reads
+   as belonging to the result rather than to the card. */
+.maintenance-outcome-close {
   margin-left: auto;
   flex: 0 0 auto;
   color: var(--meta);
 }
 
-.maintenance-box-meta {
+.maintenance-outcome-reason {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--outcome-tone);
   font-size: var(--text-sm);
-  color: var(--meta);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-outcome-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 0;
+  padding-left: 22px;
+}
+.maintenance-outcome-facts > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.maintenance-outcome-facts dt { color: var(--muted); font-size: var(--text-sm); }
+.maintenance-outcome-facts dd {
+  margin: 0;
+  color: var(--fg);
   font-family: var(--font-mono, monospace);
-  word-break: break-word;
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
 }
 
 .vacuum-modal-content {
@@ -984,21 +1023,9 @@
   text-align: start;
 }
 
-.outcome-success { color: var(--success); }
-.outcome-warn { color: var(--warn); }
-.outcome-danger { color: var(--danger); }
 
-.maintenance-running {
-  margin-bottom: 16px;
-}
 
-.maintenance-detail {
-  font-size: var(--text-sm);
-}
 
-.maintenance-outcome-alert {
-  margin-top: 6px;
-}
 
 .vacuum-desc {
   margin: 0 !important;

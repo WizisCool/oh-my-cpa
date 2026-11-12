@@ -18,6 +18,11 @@
   gap: 8px 16px;
 }
 
+/* Between the head and the map, clear of both. */
+.alert {
+  margin-block: 12px 8px;
+}
+
 .title {
   display: inline-flex;
   flex-wrap: wrap;
