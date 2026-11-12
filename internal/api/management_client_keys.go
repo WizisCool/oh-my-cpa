@@ -1,14 +1,17 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 type ClientAPIKeyItemDTO struct {
@@ -37,32 +40,13 @@ type ClientAPIKeyItemDTO struct {
 	AliasVersion int64 `json:"alias_version"`
 }
 
-func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	client, ok := h.managementClientOrError(writer, request)
-	if !ok {
-		return
-	}
-	// The raw caller keys leave the process only for the page whose contract
-	// includes editing them, which is the same opt-in the provider list uses. A
-	// response that merely reports the keys - the dashboard's picker, a future
-	// panel - needs the mask and must not be able to read a credential out of a
-	// response body.
-	includeKeys := h.revealKeysAllowed(request)
+var (
+	errClientKeyDuplicate   = errors.New("api key already exists")
+	errClientKeyOutOfBounds = errors.New("key index out of bounds")
+	errClientKeyStaleIndex  = errors.New("the key at this position changed; reload and try again")
+)
 
-	keys, err := client.ClientAPIKeys(request.Context())
-	if err != nil {
-		writeCPAFacadeError(writer, err)
-		return
-	}
-
-	aliases, aliasErr := h.repo.ListClientKeyAliases(request.Context(), defaultInstanceID())
-	if aliasErr != nil {
-		// The alias overlay is metadata. Failing the whole key list over it would
-		// hide the keys themselves, so the list is served unnamed instead.
-		aliases = map[string]repository.ClientKeyAlias{}
-	}
-
+func (h *Handler) projectClientAPIKeyItems(keys []string, aliases map[string]repository.ClientKeyAlias, includeKeys bool) []ClientAPIKeyItemDTO {
 	items := make([]ClientAPIKeyItemDTO, 0, len(keys))
 	for i, key := range keys {
 		trimmed := strings.TrimSpace(key)
@@ -93,6 +77,53 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 		}
 		items = append(items, item)
 	}
+	return items
+}
+
+func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+	// The raw caller keys leave the process only for the page whose contract
+	// includes editing them, which is the same opt-in the provider list uses. A
+	// response that merely reports the keys - the dashboard's picker, a future
+	// panel - needs the mask and must not be able to read a credential out of a
+	// response body.
+	includeKeys := h.revealKeysAllowed(request)
+
+	var (
+		keys    []string
+		version uint64
+		err     error
+	)
+	if h.stateCoord != nil {
+		env, coordErr := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) ([]string, error) {
+			return slices.Clone(state.ClientKeys), nil
+		})
+		if coordErr == nil {
+			keys = env.Data
+			version = env.Version
+		} else {
+			err = coordErr
+		}
+	} else {
+		keys, err = client.ClientAPIKeys(request.Context())
+	}
+	if err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
+
+	aliases, aliasErr := h.repo.ListClientKeyAliases(request.Context(), defaultInstanceID())
+	if aliasErr != nil {
+		// The alias overlay is metadata. Failing the whole key list over it would
+		// hide the keys themselves, so the list is served unnamed instead.
+		aliases = map[string]repository.ClientKeyAlias{}
+	}
+
+	items := h.projectClientAPIKeyItems(keys, aliases, includeKeys)
 
 	if includeKeys {
 		// The reveal is the audit boundary: a masked response carries no credential,
@@ -105,14 +136,20 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 		}
 	}
 
-	writeJSON(writer, http.StatusOK, map[string]any{
+	setStateVersionHeader(writer, version)
+	body := map[string]any{
 		"keys":  items,
 		"total": len(items),
-	})
+	}
+	if version > 0 {
+		body["version"] = version
+	}
+	writeJSON(writer, http.StatusOK, body)
 }
 
 type createClientKeyRequest struct {
-	Key string `json:"key"`
+	Key                 string `json:"key"`
+	ExpectedFingerprint string `json:"expected_fingerprint,omitempty"`
 }
 
 func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.Request) {
@@ -126,9 +163,70 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 		writeError(writer, http.StatusBadRequest, "api key cannot be empty")
 		return
 	}
+	if len(newKey) > 8192 {
+		writeError(writer, http.StatusBadRequest, "api key exceeds maximum length")
+		return
+	}
 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
+		return
+	}
+
+	fingerprint := security.FingerprintOrRedacted(h.cipher, "client-key", newKey)
+	usageFingerprint, _ := h.repo.UsageClientKeyFingerprint(newKey)
+
+	if h.stateCoord != nil {
+		env, loadErr := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (int, error) {
+			return len(state.ClientKeys), nil
+		})
+		if loadErr != nil {
+			writeCPAFacadeError(writer, loadErr)
+			return
+		}
+		targetLabel := fmt.Sprintf("index:%d", env.Data)
+		if auditErr := h.recordAudit(request, "api_key.create", "client_api_key", targetLabel, "attempt", nil); auditErr != nil {
+			writeError(writer, http.StatusInternalServerError, "audit failure; key creation aborted")
+			return
+		}
+
+		createdIndex := 0
+		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainClientKeys, func(state *projectedConfigState) error {
+			for _, existing := range state.ClientKeys {
+				if strings.TrimSpace(existing) == newKey {
+					return errClientKeyDuplicate
+				}
+			}
+			createdIndex = len(state.ClientKeys)
+			state.ClientKeys = append(state.ClientKeys, newKey)
+			return nil
+		})
+		if mutErr != nil {
+			_ = h.recordAudit(request, "api_key.create", "client_api_key", targetLabel, "failure", map[string]any{"error": mutErr.Error()})
+			if errors.Is(mutErr, errClientKeyDuplicate) {
+				writeJSON(writer, http.StatusConflict, map[string]string{"error": mutErr.Error(), "code": "resource_conflict"})
+				return
+			}
+			writeCPAFacadeError(writer, mutErr)
+			return
+		}
+		h.invalidateClientKeyCatalog()
+		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainClientKeys, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", createdIndex), nil); flushErr != nil {
+			writeCPAFacadeError(writer, flushErr)
+			return
+		}
+		setStateVersionHeader(writer, version)
+		resp := map[string]any{
+			"status":      "ok",
+			"index":       createdIndex,
+			"key":         security.MaskSecret(newKey),
+			"fingerprint": fingerprint,
+			"version":     version,
+		}
+		if usageFingerprint != "" {
+			resp["usage_fingerprint"] = usageFingerprint
+		}
+		writeJSON(writer, http.StatusOK, resp)
 		return
 	}
 
@@ -146,19 +244,190 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 	createdIndex, err := h.operationsService().CreateKey(request.Context(), newKey, "")
 	if err != nil {
 		_ = h.recordAudit(request, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", len(currentKeys)), "failure", map[string]any{"error": err.Error()})
+		if err.Error() == "resource_conflict" {
+			writeJSON(writer, http.StatusConflict, map[string]string{"error": "api key already exists", "code": "resource_conflict"})
+			return
+		}
 		writeCPAFacadeError(writer, err)
 		return
 	}
 
 	_ = h.recordAudit(request, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", len(currentKeys)), "success", nil)
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status": "ok",
-		"index":  createdIndex,
-		// The requester just sent this value, so the response identifies the row it
-		// added rather than echoing a secret back through a body.
-		"key": security.MaskSecret(newKey),
-	})
+	resp := map[string]any{
+		"status":      "ok",
+		"index":       createdIndex,
+		"key":         security.MaskSecret(newKey),
+		"fingerprint": fingerprint,
+	}
+	if usageFingerprint != "" {
+		resp["usage_fingerprint"] = usageFingerprint
+	}
+	writeJSON(writer, http.StatusOK, resp)
+}
+
+func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	rawIndex := chi.URLParam(request, "index")
+	index, err := strconv.Atoi(rawIndex)
+	if err != nil || index < 0 {
+		writeError(writer, http.StatusBadRequest, "invalid key index")
+		return
+	}
+
+	var req createClientKeyRequest
+	if err := decodeManagementJSON(writer, request, 8*1024, &req); err != nil {
+		return
+	}
+	updatedKey := strings.TrimSpace(req.Key)
+	if updatedKey == "" {
+		writeError(writer, http.StatusBadRequest, "api key cannot be empty")
+		return
+	}
+	if len(updatedKey) > 8192 {
+		writeError(writer, http.StatusBadRequest, "api key exceeds maximum length")
+		return
+	}
+
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+
+	fingerprint := security.FingerprintOrRedacted(h.cipher, "client-key", updatedKey)
+	usageFingerprint, _ := h.repo.UsageClientKeyFingerprint(updatedKey)
+	expectedFingerprint := strings.TrimSpace(req.ExpectedFingerprint)
+	targetLabel := fmt.Sprintf("index:%d", index)
+
+	if h.stateCoord != nil {
+		observed, loadErr := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (string, error) {
+			if index >= len(state.ClientKeys) {
+				return "", errClientKeyOutOfBounds
+			}
+			actual := strings.TrimSpace(state.ClientKeys[index])
+			if expectedFingerprint != "" && security.FingerprintOrRedacted(h.cipher, "client-key", actual) != expectedFingerprint {
+				return "", errClientKeyStaleIndex
+			}
+			return state.ClientKeys[index], nil
+		})
+		if loadErr != nil {
+			if errors.Is(loadErr, errClientKeyOutOfBounds) {
+				writeError(writer, http.StatusNotFound, "key index out of bounds")
+				return
+			}
+			if errors.Is(loadErr, errClientKeyStaleIndex) {
+				writeJSON(writer, http.StatusConflict, map[string]string{"error": loadErr.Error(), "code": "resource_conflict"})
+				return
+			}
+			writeCPAFacadeError(writer, loadErr)
+			return
+		}
+		expectedKey := observed.Data
+
+		if auditErr := h.recordAudit(request, "api_key.update", "client_api_key", targetLabel, "attempt", nil); auditErr != nil {
+			writeError(writer, http.StatusInternalServerError, "audit failure; key update aborted")
+			return
+		}
+
+		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainClientKeys, func(state *projectedConfigState) error {
+			if index >= len(state.ClientKeys) {
+				return errClientKeyOutOfBounds
+			}
+			if state.ClientKeys[index] != expectedKey {
+				return errClientKeyStaleIndex
+			}
+			if expectedFingerprint != "" && security.FingerprintOrRedacted(h.cipher, "client-key", strings.TrimSpace(state.ClientKeys[index])) != expectedFingerprint {
+				return errClientKeyStaleIndex
+			}
+			for pos, existing := range state.ClientKeys {
+				if pos != index && strings.TrimSpace(existing) == updatedKey {
+					return errClientKeyDuplicate
+				}
+			}
+			state.ClientKeys[index] = updatedKey
+			return nil
+		})
+		if mutErr != nil {
+			_ = h.recordAudit(request, "api_key.update", "client_api_key", targetLabel, "failure", map[string]any{"error": mutErr.Error()})
+			if errors.Is(mutErr, errClientKeyOutOfBounds) {
+				writeError(writer, http.StatusNotFound, "key index out of bounds")
+				return
+			}
+			if errors.Is(mutErr, errClientKeyDuplicate) || errors.Is(mutErr, errClientKeyStaleIndex) {
+				writeJSON(writer, http.StatusConflict, map[string]string{"error": mutErr.Error(), "code": "resource_conflict"})
+				return
+			}
+			writeCPAFacadeError(writer, mutErr)
+			return
+		}
+		h.invalidateClientKeyCatalog()
+		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainClientKeys, "api_key.update", "client_api_key", targetLabel, nil); flushErr != nil {
+			writeCPAFacadeError(writer, flushErr)
+			return
+		}
+		setStateVersionHeader(writer, version)
+		resp := map[string]any{
+			"status":      "ok",
+			"index":       index,
+			"key":         security.MaskSecret(updatedKey),
+			"fingerprint": fingerprint,
+			"version":     version,
+		}
+		if usageFingerprint != "" {
+			resp["usage_fingerprint"] = usageFingerprint
+		}
+		writeJSON(writer, http.StatusOK, resp)
+		return
+	}
+
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	defer h.providerWrites.release()
+
+	currentKeys, err := client.ClientAPIKeys(request.Context())
+	if err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	if index >= len(currentKeys) {
+		writeError(writer, http.StatusNotFound, "key index out of bounds")
+		return
+	}
+	if expectedFingerprint != "" && security.FingerprintOrRedacted(h.cipher, "client-key", strings.TrimSpace(currentKeys[index])) != expectedFingerprint {
+		writeJSON(writer, http.StatusConflict, map[string]string{"error": errClientKeyStaleIndex.Error(), "code": "resource_conflict"})
+		return
+	}
+	for pos, existing := range currentKeys {
+		if pos != index && strings.TrimSpace(existing) == updatedKey {
+			writeJSON(writer, http.StatusConflict, map[string]string{"error": "api key already exists", "code": "resource_conflict"})
+			return
+		}
+	}
+	if auditErr := h.recordAudit(request, "api_key.update", "client_api_key", targetLabel, "attempt", nil); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit failure; key update aborted")
+		return
+	}
+	nextKeys := slices.Clone(currentKeys)
+	nextKeys[index] = updatedKey
+	if err := client.UpdateClientAPIKeys(request.Context(), nextKeys); err != nil {
+		_ = h.recordAudit(request, "api_key.update", "client_api_key", targetLabel, "failure", map[string]any{"error": err.Error()})
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	h.invalidateClientKeyCatalog()
+	_ = h.recordAudit(request, "api_key.update", "client_api_key", targetLabel, "success", nil)
+	resp := map[string]any{
+		"status":      "ok",
+		"index":       index,
+		"key":         security.MaskSecret(updatedKey),
+		"fingerprint": fingerprint,
+	}
+	if usageFingerprint != "" {
+		resp["usage_fingerprint"] = usageFingerprint
+	}
+	writeJSON(writer, http.StatusOK, resp)
 }
 
 func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.Request) {
@@ -174,6 +443,78 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 	if !ok {
 		return
 	}
+	expectedFingerprint := strings.TrimSpace(request.URL.Query().Get("expected_fingerprint"))
+
+	if h.stateCoord != nil {
+		observed, loadErr := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (string, error) {
+			if index >= len(state.ClientKeys) {
+				return "", errClientKeyOutOfBounds
+			}
+			actual := strings.TrimSpace(state.ClientKeys[index])
+			if expectedFingerprint != "" && security.FingerprintOrRedacted(h.cipher, "client-key", actual) != expectedFingerprint {
+				return "", errClientKeyStaleIndex
+			}
+			return state.ClientKeys[index], nil
+		})
+		if loadErr != nil {
+			if errors.Is(loadErr, errClientKeyOutOfBounds) {
+				writeError(writer, http.StatusNotFound, "key index out of bounds")
+				return
+			}
+			if errors.Is(loadErr, errClientKeyStaleIndex) {
+				writeJSON(writer, http.StatusConflict, map[string]string{"error": loadErr.Error(), "code": "resource_conflict"})
+				return
+			}
+			writeCPAFacadeError(writer, loadErr)
+			return
+		}
+		expectedKey := observed.Data
+
+		targetLabel := fmt.Sprintf("index:%d", index)
+		if auditErr := h.recordAudit(request, "api_key.delete", "client_api_key", targetLabel, "attempt", nil); auditErr != nil {
+			writeError(writer, http.StatusInternalServerError, "audit failure; key deletion aborted")
+			return
+		}
+
+		version, mutErr := h.stateCoord.Mutate(request.Context(), stateDomainClientKeys, func(state *projectedConfigState) error {
+			if index >= len(state.ClientKeys) {
+				return errClientKeyOutOfBounds
+			}
+			if state.ClientKeys[index] != expectedKey {
+				return errClientKeyStaleIndex
+			}
+			if expectedFingerprint != "" && security.FingerprintOrRedacted(h.cipher, "client-key", strings.TrimSpace(state.ClientKeys[index])) != expectedFingerprint {
+				return errClientKeyStaleIndex
+			}
+			state.ClientKeys = append(state.ClientKeys[:index:index], state.ClientKeys[index+1:]...)
+			return nil
+		})
+		if mutErr != nil {
+			_ = h.recordAudit(request, "api_key.delete", "client_api_key", targetLabel, "failure", map[string]any{"error": mutErr.Error()})
+			if errors.Is(mutErr, errClientKeyOutOfBounds) {
+				writeError(writer, http.StatusNotFound, "key index out of bounds")
+				return
+			}
+			if errors.Is(mutErr, errClientKeyStaleIndex) {
+				writeJSON(writer, http.StatusConflict, map[string]string{"error": mutErr.Error(), "code": "resource_conflict"})
+				return
+			}
+			writeCPAFacadeError(writer, mutErr)
+			return
+		}
+		h.invalidateClientKeyCatalog()
+		if flushErr := h.queueOrFlushDomainAudit(request, stateDomainClientKeys, "api_key.delete", "client_api_key", targetLabel, nil); flushErr != nil {
+			writeCPAFacadeError(writer, flushErr)
+			return
+		}
+		setStateVersionHeader(writer, version)
+		writeJSON(writer, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"deleted": index,
+			"version": version,
+		})
+		return
+	}
 
 	currentKeys, err := client.ClientAPIKeys(request.Context())
 	if err != nil {
@@ -183,6 +524,10 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 
 	if index >= len(currentKeys) {
 		writeError(writer, http.StatusNotFound, "key index out of bounds")
+		return
+	}
+	if expectedFingerprint != "" && security.FingerprintOrRedacted(h.cipher, "client-key", strings.TrimSpace(currentKeys[index])) != expectedFingerprint {
+		writeJSON(writer, http.StatusConflict, map[string]string{"error": errClientKeyStaleIndex.Error(), "code": "resource_conflict"})
 		return
 	}
 

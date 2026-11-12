@@ -2,11 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 type patchProviderStatusRequest struct {
@@ -90,6 +92,30 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 	if auditErr := h.recordAudit(request, "provider.toggle_status", "provider", targetID, "attempt", map[string]any{"disabled": req.Disabled}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; status update aborted")
 		return
+	}
+
+	if h.stateCoord != nil && req.beforeWrite == nil {
+		version, domain, handled, mutErr := h.mutateProviderStatusOptimistic(ctx, req)
+		if handled {
+			if mutErr != nil {
+				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": mutErr.Error()})
+				writeProviderWriteError(writer, mutErr)
+				return
+			}
+			if flushErr := h.queueOrFlushDomainAudit(request, domain, "provider.toggle_status", "provider", targetID, map[string]any{"disabled": req.Disabled}); flushErr != nil {
+				writeProviderWriteError(writer, flushErr)
+				return
+			}
+			setStateVersionHeader(writer, version)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"status":   "ok",
+				"family":   req.Family,
+				"index":    req.Index,
+				"disabled": req.Disabled,
+				"version":  version,
+			})
+			return
+		}
 	}
 
 	if err := h.writeProviderStatus(ctx, client, req); err != nil {
@@ -178,4 +204,61 @@ func (h *Handler) writeConfigKeyProviderStatus(ctx context.Context, client *mana
 			return nil
 		},
 		nil)
+}
+
+// mutateProviderStatusOptimistic applies a provider enable/disable toggle directly
+// onto the in-memory StateCoordinator projection in <1ms and schedules a 250ms
+// debounced flush. Returns handled=false only when the cached family slice came
+// from a runtime-only fallback lacking stored group ownership.
+func (h *Handler) mutateProviderStatusOptimistic(ctx context.Context, req patchProviderStatusRequest) (uint64, statecoord.DomainKey, bool, error) {
+	if spec, ok := lookupProviderConfigFamily(req.Family); ok {
+		domain := statecoord.DomainKey(stateDomainProviderFamilyPrefix + string(spec.Family))
+		version, err := h.stateCoord.Mutate(ctx, domain, func(state *projectedConfigState) error {
+			if state.RuntimeOnlyFam[spec.Family] {
+				return errRuntimeOnlyProviderSlice
+			}
+			entries := state.ConfigFamilies[spec.Family]
+			if req.Index >= len(entries) {
+				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+			}
+			if err := req.verifyAuthIndex(entries[req.Index].AuthIndex); err != nil {
+				return err
+			}
+			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
+			state.ConfigFamilies[spec.Family] = entries
+			return nil
+		})
+		if errors.Is(err, errRuntimeOnlyProviderSlice) {
+			return 0, "", false, nil
+		}
+		if err == nil {
+			h.providerKeyMasks.invalidate()
+		}
+		return version, domain, true, err
+	}
+
+	if req.Family == openAICompatibilityFamily {
+		version, err := h.stateCoord.Mutate(ctx, stateDomainOpenAICompat, func(state *projectedConfigState) error {
+			if state.OpenAIRuntime {
+				return errRuntimeOnlyProviderSlice
+			}
+			if req.Index >= len(state.OpenAICompat) {
+				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+			}
+			if err := req.verifyName(state.OpenAICompat[req.Index].Name); err != nil {
+				return err
+			}
+			state.OpenAICompat[req.Index].Disabled = req.Disabled
+			return nil
+		})
+		if errors.Is(err, errRuntimeOnlyProviderSlice) {
+			return 0, "", false, nil
+		}
+		if err == nil {
+			h.providerKeyMasks.invalidate()
+		}
+		return version, stateDomainOpenAICompat, true, err
+	}
+
+	return 0, "", true, newProviderWriteError(http.StatusBadRequest, "provider family does not support status toggle")
 }

@@ -5,15 +5,14 @@ import { DeleteOutlined, SaveOutlined } from '../icons';
 import { CredentialMark } from '../LobeIcon';
 import { providerDisplayName } from '../../types/providerMetadata';
 import { type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import {
+  useOptimisticOAuthAliasesMutation,
+  useOptimisticOAuthExcludedModelsMutation,
+} from '../../hooks/useConfigMutations';
 import { api, ApiError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
-import type {
-  ManagementOAuthExcludedModelsResponse,
-  ManagementOAuthModelAlias,
-  ManagementOAuthModelAliasesResponse,
-} from '../../types/managementOAuthModelAlias';
 import {
   createOAuthModelAliasDrafts,
   isValidOAuthModelAliasProvider,
@@ -98,7 +97,6 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   const isDemo = isDemoMode();
   const modal = useConfirmModal();
   const toast = useToast();
-  const queryClient = useQueryClient();
   const [section, setSection] = useState<OAuthModelRulesSection>('excluded');
   const [selectedProvider, setSelectedProvider] = useState('');
   const [providerSearch, setProviderSearch] = useState('');
@@ -202,34 +200,20 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     }
   }, [open]);
 
-  const aliasMutation = useMutation({
-    mutationFn: ({ target, aliases }: { target: string; aliases: ManagementOAuthModelAlias[] }) =>
-      api.patchManagementOAuthModelAliases(target, aliases),
-    onSuccess: (response, variables) => {
-      queryClient.setQueryData(ALIASES_QUERY_KEY, (current: ManagementOAuthModelAliasesResponse | undefined) => {
-        const aliases = { ...(current?.aliases ?? {}) };
-        if (response.aliases.length > 0) aliases[variables.target] = response.aliases;
-        else delete aliases[variables.target];
-        return { aliases };
-      });
-      const next = createOAuthModelAliasDrafts(response.aliases);
+  const aliasMutation = useOptimisticOAuthAliasesMutation({
+    formatError: (error) => safeError(error, t),
+    onSuccess: (_provider, aliases) => {
+      const next = createOAuthModelAliasDrafts(aliases);
       setAliasDrafts(next);
       setAliasBaseline(next);
       onSaved();
     },
   });
-  const ruleMutation = useMutation({
-    mutationFn: ({ target, models }: { target: string; models: string[] }) =>
-      api.patchManagementOAuthExcludedModels(target, models),
-    onSuccess: (response, variables) => {
-      queryClient.setQueryData(EXCLUDED_QUERY_KEY, (current: ManagementOAuthExcludedModelsResponse | undefined) => {
-        const excluded = { ...(current?.excluded_models ?? {}) };
-        if (response.models.length > 0) excluded[variables.target] = response.models;
-        else delete excluded[variables.target];
-        return { excluded_models: excluded };
-      });
-      setRuleDrafts(response.models);
-      setRuleBaseline(response.models);
+  const ruleMutation = useOptimisticOAuthExcludedModelsMutation({
+    formatError: (error) => safeError(error, t),
+    onSuccess: (_provider, models) => {
+      setRuleDrafts(models);
+      setRuleBaseline(models);
       onSaved();
     },
   });
@@ -242,10 +226,10 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       return;
     }
     try {
-      await aliasMutation.mutateAsync({ target: validation.provider, aliases: validation.aliases });
+      await aliasMutation.mutateAsync({ provider: validation.provider, aliases: validation.aliases });
       toast.success(t('af.alias_saved'));
-    } catch (error) {
-      toast.error(safeError(error, t));
+    } catch {
+      // Error toast & cache rollback handled by useOptimisticOAuthAliasesMutation.
     }
   };
 
@@ -255,10 +239,10 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       return;
     }
     try {
-      await ruleMutation.mutateAsync({ target: provider, models: normalizeExcludedModelRules(ruleDrafts) });
+      await ruleMutation.mutateAsync({ provider, models: normalizeExcludedModelRules(ruleDrafts) });
       toast.success(t('af.excluded_saved'));
-    } catch (error) {
-      toast.error(safeError(error, t));
+    } catch {
+      // Error toast & cache rollback handled by useOptimisticOAuthExcludedModelsMutation.
     }
   };
 
@@ -274,17 +258,12 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
       onOk: async () => {
-        try {
-          if (isAliases) {
-            await aliasMutation.mutateAsync({ target: provider, aliases: [] });
-            toast.success(t('af.alias_delete_success', { provider }));
-          } else {
-            await ruleMutation.mutateAsync({ target: provider, models: [] });
-            toast.success(t('af.excluded_delete_success', { provider }));
-          }
-        } catch (error) {
-          toast.error(safeError(error, t));
-          throw error;
+        if (isAliases) {
+          await aliasMutation.mutateAsync({ provider, aliases: [] });
+          toast.success(t('af.alias_delete_success', { provider }));
+        } else {
+          await ruleMutation.mutateAsync({ provider, models: [] });
+          toast.success(t('af.excluded_delete_success', { provider }));
         }
       },
     });

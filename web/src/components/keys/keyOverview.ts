@@ -12,6 +12,7 @@ export interface ApiKeyRecord {
   /** Position in the client-key array; an edit writes back to this index. */
   index: number;
   key: string;
+  fingerprint?: string;
   usageFingerprint?: string;
   alias?: string;
   aliasVersion: number;
@@ -38,6 +39,7 @@ export function buildKeyRecords(
       id: usageFingerprint ? `key-${usageFingerprint}` : `key-${index}`,
       index,
       key,
+      fingerprint: entry?.fingerprint || undefined,
       usageFingerprint,
       alias: entry?.alias || undefined,
       aliasVersion: entry?.alias_version ?? 0,

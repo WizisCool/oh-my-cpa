@@ -82,7 +82,10 @@ export const ProvidersPage: React.FC = () => {
     createProviderMutation,
     deleteProviderMutation,
     updateProviderMutation,
-    statusQueue,
+    toggleProviderStatus,
+    busyProviderIds,
+    testingKeyIds,
+    isTestingAllKeys,
     providerDrawerOpen,
     editingProvider,
     formFamily,
@@ -230,13 +233,13 @@ export const ProvidersPage: React.FC = () => {
   const overview = summarizeProviders(
     providerOrder.ordered,
     filters,
-    (provider) => statusQueue.targetFor(provider.id) ?? !provider.disabled,
+    (provider) => !provider.disabled,
     traffic,
   );
   const hasList = !providersLoading && !(providersError && providers.length === 0);
 
   const totalProviders = providers.length;
-  const isProviderEnabled = (p: typeof providers[number]) => statusQueue.targetFor(p.id) ?? !p.disabled;
+  const isProviderEnabled = (p: typeof providers[number]) => !p.disabled;
   const activeCount = providers.filter((p) => isProviderEnabled(p)).length;
   const attentionCount = providers.filter((p) => {
     const enabled = isProviderEnabled(p);
@@ -384,7 +387,8 @@ export const ProvidersPage: React.FC = () => {
         traffic={traffic}
         providerIcons={providerIcons}
         pluginLogos={pluginLogos}
-        statusQueue={statusQueue}
+        toggleProviderStatus={toggleProviderStatus}
+        busyProviderIds={busyProviderIds}
         deleteProviderMutation={deleteProviderMutation}
         handleOpenEdit={handleOpenEdit}
         setIconPickerOpen={setIconPickerOpen}
@@ -465,6 +469,8 @@ export const ProvidersPage: React.FC = () => {
           setThinkingLevels={setThinkingLevels}
           toggleKeyExpanded={toggleKeyExpanded}
           handleKeyAdd={handleKeyAdd}
+          testingKeyIds={testingKeyIds}
+          isTestingAllKeys={isTestingAllKeys}
           handleTestKey={handleTestKey}
           handleTestAllKeys={handleTestAllKeys}
           handleCloseProviderDrawer={handleCloseProviderDrawer}

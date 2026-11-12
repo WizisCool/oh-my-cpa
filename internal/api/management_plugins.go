@@ -125,6 +125,12 @@ func (h *Handler) enterConfigWrite(writer http.ResponseWriter, request *http.Req
 		return false
 	}
 	h.configMu.Lock()
+	if err := h.flushCoordinatorWithinGate(request.Context()); err != nil {
+		h.configMu.Unlock()
+		h.providerWrites.release()
+		writeCPAFacadeError(writer, err)
+		return false
+	}
 	return true
 }
 

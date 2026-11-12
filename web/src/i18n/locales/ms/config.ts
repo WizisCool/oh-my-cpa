@@ -174,7 +174,6 @@ export default {
   "keys.saved": "Kekunci disimpan",
   "keys.summary_active": "{n} digunakan dalam 24 jam lalu",
   "keys.applying": "Sedang dikenakan pada CPA…",
-  "keys.conflict_reloaded": "Konfigurasi telah diubah di tempat lain; senarai kunci terkini telah dimuatkan, sila ulang perubahan",
   "keys.created": "Kunci dicipta dan aktif",
   "keys.deleted": "Kunci dipadam",
   "keys.modal_title_add": "Tambah kunci API",

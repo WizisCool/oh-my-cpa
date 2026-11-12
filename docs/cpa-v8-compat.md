@@ -78,6 +78,11 @@ changed. Serialize writers, validate the change set, keep the encrypted stored f
 then perform the upstream write and read back the result. Refuse a stale revision as
 `config_conflict` and a rejected value as `config_rejected`; do not overwrite unrelated
 settings to make the operation succeed. Restore also backs up the file it replaces.
+High-frequency scalar, caller-key, provider-enablement, auth-file status and global OAuth
+rule toggles apply optimistically to `StateCoordinator` and coalesce within a 250ms
+write-behind batch under the same serialized backup-and-write gate (callers requiring
+synchronous persistence pass `X-OMC-Sync: 1`); structural saves and Agent writes flush
+pending batches first so revisions and readbacks never observe unpersisted drift.
 
 The visual editor exposes shared Claude header settings through the
 [configuration schema](../web/src/types/configSchema.ts) and the existing change-set

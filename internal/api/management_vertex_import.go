@@ -99,6 +99,7 @@ func (h *Handler) importVertexServiceAccount(writer http.ResponseWriter, request
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	writeJSON(writer, http.StatusOK, VertexImportDTO{
 		Status:    "ok",
 		Name:      name,

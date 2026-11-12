@@ -72,6 +72,7 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "uploaded": 1, "files": []string{name}})
 }
 
@@ -110,8 +111,11 @@ func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Co
 		}
 		uploaded = append(uploaded, name)
 	}
-	if len(uploaded) > 0 && h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
+	if len(uploaded) > 0 {
+		if h.pricing != nil {
+			h.pricing.NotifyModelsChanged()
+		}
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	}
 	if len(failed) > 0 {
 		status := http.StatusMultiStatus

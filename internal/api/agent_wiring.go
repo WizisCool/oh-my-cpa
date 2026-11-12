@@ -119,11 +119,30 @@ func (h *Handler) inferenceClient(ctx context.Context, fingerprint string) (*gat
 	return gateway.NewClient(client.BaseURL(), key, h.cfg.TLSSkipVerify)
 }
 func (h *Handler) operationsService() *operations.Service {
-	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: h.providerWrites.acquire, Release: h.providerWrites.release, Notify: func() {
+	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: func(ctx context.Context) error {
+		if err := h.providerWrites.acquire(ctx); err != nil {
+			return err
+		}
+		if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+			h.providerWrites.release()
+			return err
+		}
+		return nil
+	}, Release: h.providerWrites.release, Notify: func() {
 		h.requestModelSquareProvenanceRefresh()
 		if h.pricing != nil {
 			h.pricing.NotifyModelsChanged()
 		}
+		h.invalidateCoordinator(
+			"management-config",
+			"management-providers",
+			"management-providers-sanitized",
+			"management-auth-files",
+			"management-client-keys",
+			"management-routing",
+			"management-oauth-model-aliases",
+			"management-oauth-excluded-models",
+		)
 	}}
 	service.ModelSquareProvenance = h.cachedModelSquareProvenance
 	service.ListProviders = func(ctx context.Context) ([]operations.Provider, error) {
@@ -233,6 +252,7 @@ func (h *Handler) operationsService() *operations.Service {
 					return operations.Quota{}, err
 				}
 				h.attachWindowCapacity(ctx, value, h.now().UnixMilli())
+				h.invalidateCoordinator("management-auth-files", "management-quota")
 				return operations.SafeQuota(value), nil
 			}
 		}
@@ -243,6 +263,9 @@ func (h *Handler) operationsService() *operations.Service {
 			return errors.New("write_busy")
 		}
 		defer h.providerWrites.release()
+		if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+			return mapAgentProviderError(err)
+		}
 		if err := service.CheckCredential(ctx, target, revision); err != nil {
 			return err
 		}
@@ -255,6 +278,9 @@ func (h *Handler) operationsService() *operations.Service {
 			_, err = h.redeemQuotaCredit(ctx, client, target.AuthIndex, audited)
 		} else {
 			_, err = h.clearQuotaCooldown(ctx, client, target.AuthIndex, "quota.clear_cooldown", audited)
+		}
+		if err == nil {
+			h.invalidateCoordinator("management-auth-files", "management-quota")
 		}
 		return mapAgentProviderError(err)
 	}
@@ -407,12 +433,18 @@ func (h *Handler) operationsService() *operations.Service {
 			return errors.New("write_busy")
 		}
 		defer h.providerWrites.release()
+		if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+			return mapAgentProviderError(err)
+		}
 		if err := service.CheckCredential(ctx, target, revision); err != nil {
 			return err
 		}
 		_, err = h.applyManagementAuthFileFields(ctx, client, target.Name, target.AuthIndex, fields)
 		if errors.Is(err, errAuthFileFieldNotApplicable) {
 			return errors.New("invalid_parameters")
+		}
+		if err == nil {
+			h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 		}
 		return mapAgentProviderError(err)
 	}

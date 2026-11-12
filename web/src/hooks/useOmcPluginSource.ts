@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { invalidateQueriesSilently } from '../utils/progressSources';
 import { usePreference } from './usePreference';
 
 const PLUGIN_SOURCE_PREFERENCE = 'omc_plugin_source_enabled';
@@ -18,8 +19,8 @@ export function useOmcPluginSource() {
   const setEnabled = async (enabled: boolean) => {
     const outcome = await preference.set(enabled);
     if (outcome.ok) {
-      void queryClient.invalidateQueries({ queryKey: ['management-plugin-store'] });
-      void queryClient.invalidateQueries({ queryKey: ['management-plugin-settings'] });
+      void invalidateQueriesSilently(queryClient, { queryKey: ['management-plugin-store'] });
+      void invalidateQueriesSilently(queryClient, { queryKey: ['management-plugin-settings'] });
     }
     return outcome;
   };

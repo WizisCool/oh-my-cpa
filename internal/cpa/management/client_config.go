@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
@@ -103,13 +104,59 @@ func KnownScalarKeys() []string {
 	return keys
 }
 
-// UpdateConfigScalar writes one scalar setting at its v8 path.
-func (c *Client) UpdateConfigScalar(ctx context.Context, key string, value any) error {
+// ScalarConfigChange maps one allowlisted scalar key and validated value onto its
+// canonical v8 configuration path so multiple scalar writes can merge into one request.
+func ScalarConfigChange(key string, value any) (ConfigChange, error) {
 	def, ok := knownScalars[key]
 	if !ok {
-		return fmt.Errorf("unknown scalar key: %s", key)
+		return ConfigChange{}, fmt.Errorf("unknown scalar key: %s", key)
 	}
-	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: def.Path, Value: value}})
+	return ConfigChange{Path: slices.Clone(def.Path), Value: value}, nil
+}
+
+// ApplyScalarToDTO updates one projected scalar field in-memory using the same
+// sanitization rules as ConfigScalars.
+func ApplyScalarToDTO(dto *ConfigScalarsDTO, key string, value any) {
+	if dto == nil {
+		return
+	}
+	switch key {
+	case "proxy_url":
+		dto.ProxyURL = configyaml.SanitizeProxyURL(stringValue(value))
+	case "ws_auth":
+		dto.WSAuth = boolValue(value)
+	case "force_model_prefix":
+		dto.ForceModelPrefix = boolValue(value)
+	case "debug":
+		dto.Debug = boolValue(value)
+	case "request_log":
+		dto.RequestLog = boolValue(value)
+	case "logging_to_file":
+		dto.LoggingToFile = boolValue(value)
+	case "logs_max_total_size_mb":
+		dto.LogsMaxTotalSizeMB = int64Value(value)
+	case "error_logs_max_files":
+		dto.ErrorLogsMaxFiles = int64Value(value)
+	case "routing_strategy":
+		dto.RoutingStrategy = stringValue(value)
+	case "request_retry":
+		dto.RequestRetry = int64Value(value)
+	case "max_retry_interval":
+		dto.MaxRetryInterval = int64Value(value)
+	case "max_retry_credentials":
+		dto.MaxRetryCredentials = int64Value(value)
+	case "usage_statistics_enabled":
+		dto.UsageStatisticsEnabled = boolValue(value)
+	}
+}
+
+// UpdateConfigScalar writes one scalar setting at its v8 path.
+func (c *Client) UpdateConfigScalar(ctx context.Context, key string, value any) error {
+	change, err := ScalarConfigChange(key, value)
+	if err != nil {
+		return err
+	}
+	return c.ApplyConfigChanges(ctx, []ConfigChange{change})
 }
 
 // ValueAt walks a decoded JSON object along a v8 path.

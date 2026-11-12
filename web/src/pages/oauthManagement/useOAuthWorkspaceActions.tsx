@@ -21,6 +21,9 @@ import {
   QUOTA_REFRESH_TOAST_KEY,
   quotaRefreshOutcomeKind,
 } from '../../utils/quotaRefreshOutcome';
+import { useOptimisticAuthFileStatusMutation } from '../../hooks/useConfigMutations';
+import { invalidateQueriesSilently } from '../../utils/progressSources';
+import type { ManagementAuthFilesResponse } from '../../types/managementAuthFile';
 
 export interface OAuthWorkspaceActions {
   busyFileKeys: Set<string>;
@@ -32,6 +35,7 @@ export interface OAuthWorkspaceActions {
   download: (record: OAuthWorkspaceRecord) => void;
   deleteOne: (record: OAuthWorkspaceRecord) => Promise<void>;
   toggleOne: (record: OAuthWorkspaceRecord) => Promise<void>;
+  isTogglingStatus: (record: OAuthWorkspaceRecord) => boolean;
   batchStatus: (disabled: boolean, records: OAuthWorkspaceRecord[]) => Promise<void>;
   batchRefresh: (records: OAuthWorkspaceRecord[]) => Promise<void>;
   batchDelete: (records: OAuthWorkspaceRecord[]) => Promise<void>;
@@ -84,6 +88,11 @@ export function useOAuthWorkspaceActions(
   const [isOperating, setIsOperating] = React.useState(false);
   const [busyFileKeys, setBusyFileKeys] = React.useState<Set<string>>(new Set());
   const [busyQuotaIndexes, setBusyQuotaIndexes] = React.useState<Set<string>>(new Set());
+  const [togglingStatusKeys, setTogglingStatusKeys] = React.useState<Set<string>>(new Set());
+
+  const statusToggleMutation = useOptimisticAuthFileStatusMutation({
+    formatError: (error) => errorMessage(error, t),
+  });
 
   React.useEffect(() => {
     recordsRef.current = records;
@@ -256,60 +265,92 @@ export function useOAuthWorkspaceActions(
   ]);
 
   const toggleOne = React.useCallback(async (record: OAuthWorkspaceRecord) => {
-    if (!record.canToggleFile || !acquireFileLock()) return;
-    const reservation = reserveRecordSet([record]);
-    if (reservation.reservedRecords.length === 0) {
-      toast.warning(t('omc.operation_conflict'));
-      releaseFileLock();
-      return;
-    }
-    const targets = reservation.reservedKeys;
-    markFileBusy([record.key], true);
+    const latest = recordsRef.current.find((candidate) => candidate.key === record.key) ?? record;
+    if (!latest.canToggleFile) return;
+    // Read newest optimistic state directly from the Query cache so rapid reversals
+    // (on -> off -> on) always invert the latest displayed state on the exact click frame
+    // without acquiring workspace-wide operationLockRef or disabling the switch.
+    const cachedFiles = queryClient.getQueryData<ManagementAuthFilesResponse>(['management-auth-files'])?.files;
+    const cachedFile = cachedFiles?.find(
+      (candidate) =>
+        candidate.name === latest.fileName &&
+        (!latest.authIndex || !candidate.auth_index || candidate.auth_index === latest.authIndex),
+    ) ?? latest.file;
+    const nextDisabled = !isAuthFileDisabled(cachedFile);
+    setTogglingStatusKeys((previous) => new Set(previous).add(latest.key));
     try {
-      const latest = recordsRef.current.find((candidate) => candidate.key === record.key);
-      if (!latest || !latest.canToggleFile) return;
-      await api.setManagementAuthFileStatus(latest.fileName, !isAuthFileDisabled(latest.file), latest.authIndex);
-      await invalidateWorkspace();
-    } catch (error) {
-      toast.error(errorMessage(error, t));
+      await statusToggleMutation.mutateAsync({
+        fileName: latest.fileName,
+        disabled: nextDisabled,
+        authIndex: latest.authIndex,
+      });
+    } catch {
+      // Snapshot rollback and error toast are handled uniformly by useOptimisticAuthFileStatusMutation.
     } finally {
-      markFileBusy([record.key], false);
-      releaseTargets(targets);
-      releaseFileLock();
+      setTogglingStatusKeys((previous) => {
+        const next = new Set(previous);
+        next.delete(latest.key);
+        return next;
+      });
     }
-  }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, t]);
+  }, [queryClient, statusToggleMutation]);
 
   const batchStatus = React.useCallback(async (disabled: boolean, selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canToggleFile);
-    if (eligible.length === 0 || !acquireFileLock()) return;
-    const reservation = reserveRecordSet(eligible);
-    const targetRecords = reservation.reservedRecords;
-    if (targetRecords.length === 0) {
-      toast.warning(t('omc.operation_conflict'));
-      releaseFileLock();
-      return;
-    }
-    const targets = reservation.reservedKeys;
-    markFileBusy(targetRecords.map((record) => record.key), true);
+    if (eligible.length === 0) return;
+    const previousCache = queryClient.getQueryData<ManagementAuthFilesResponse>(['management-auth-files']);
+    const eligibleNames = new Set(eligible.map((record) => record.fileName));
+    // Optimistically flip all selected rows immediately without locking the workspace.
+    queryClient.setQueryData<ManagementAuthFilesResponse>(['management-auth-files'], (current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        files: current.files.map((file) =>
+          eligibleNames.has(file.name)
+            ? {
+                ...file,
+                disabled,
+                status: disabled ? 'disabled' : file.status === 'disabled' ? 'ready' : file.status,
+              }
+            : file,
+        ),
+      };
+    });
+    setTogglingStatusKeys((previous) => {
+      const next = new Set(previous);
+      eligible.forEach((record) => next.add(record.key));
+      return next;
+    });
     try {
       const outcome = await executeBatchStatus(
-        targetRecords.map((record) => record.file),
+        eligible.map((record) => record.file),
         disabled,
         (name, nextDisabled, authIndex) => api.setManagementAuthFileStatus(name, nextDisabled, authIndex),
-        5,
+        10,
       );
       const succeededNames = new Set(outcome.succeeded);
       const succeededKeys = new Set(
-        targetRecords.filter((record) => succeededNames.has(record.fileName)).map((record) => record.key),
+        eligible.filter((record) => succeededNames.has(record.fileName)).map((record) => record.key),
       );
-      const failures = [
-        ...outcome.failed,
-        ...reservation.conflicts.map((record) => ({ name: record.fileName, error: t('omc.operation_conflict') })),
-      ];
       setSelectedKeys((previous) => previous.filter((key) => !succeededKeys.has(key)));
-      if (failures.length > 0) {
+      if (outcome.failed.length > 0) {
+        if (previousCache) {
+          const failedNames = new Set(outcome.failed.map((item) => item.name));
+          const prevByName = new Map(previousCache.files.map((file) => [file.name, file.disabled]));
+          queryClient.setQueryData<ManagementAuthFilesResponse>(['management-auth-files'], (current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              files: current.files.map((file) =>
+                failedNames.has(file.name)
+                  ? { ...file, disabled: prevByName.get(file.name) ?? file.disabled }
+                  : file,
+              ),
+            };
+          });
+        }
         toast.warning(t('af.failure_details_title'), {
-          items: failures.map((item) => ({ name: item.name, reason: item.error })),
+          items: outcome.failed.map((item) => ({ name: item.name, reason: item.error })),
         });
       } else {
         toast.success(
@@ -318,15 +359,24 @@ export function useOAuthWorkspaceActions(
             : t('af.batch_enable_success', { n: outcome.succeeded.length }),
         );
       }
-      await invalidateWorkspace();
+      await Promise.all([
+        invalidateQueriesSilently(queryClient, { queryKey: ['management-auth-files'] }),
+        invalidateQueriesSilently(queryClient, { queryKey: ['management-quota'] }),
+        invalidateQueriesSilently(queryClient, { queryKey: ['management-overview'] }),
+      ]);
     } catch (error) {
+      if (previousCache) {
+        queryClient.setQueryData(['management-auth-files'], previousCache);
+      }
       toast.error(errorMessage(error, t));
     } finally {
-      markFileBusy(targetRecords.map((record) => record.key), false);
-      releaseTargets(targets);
-      releaseFileLock();
+      setTogglingStatusKeys((previous) => {
+        const next = new Set(previous);
+        eligible.forEach((record) => next.delete(record.key));
+        return next;
+      });
     }
-  }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, setSelectedKeys, t]);
+  }, [queryClient, setSelectedKeys, t, toast]);
 
   const batchRefresh = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canToggleFile);
@@ -611,5 +661,6 @@ export function useOAuthWorkspaceActions(
     clearCooldown,
     redeemCredit,
     isRecordBusy,
+    isTogglingStatus: (record: OAuthWorkspaceRecord) => togglingStatusKeys.has(record.key),
   };
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/fontasset"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/web"
 )
 
@@ -125,6 +126,10 @@ type Handler struct {
 	// providerKeyMasks caches the auth index to provider key mask mapping the
 	// request list needs; see usage_provider_key_masks.go.
 	providerKeyMasks *providerKeyMaskCache
+	// stateCoord projects high-frequency CPA configuration state in memory with
+	// 250ms debounced write-behind persistence and SSE reconciliation; nil until
+	// EnableStateCoordinator is called.
+	stateCoord *statecoord.Coordinator[projectedConfigState]
 }
 
 // now is the handler's view of the clock.
@@ -227,8 +232,11 @@ func (h *Handler) routes() chi.Router {
 			apiRouter.Post("/mcp", h.serveMCP)
 			apiRouter.Get("/mcp", h.serveMCP)
 			apiRouter.Delete("/mcp", h.serveMCP)
+			apiRouter.With(h.requireConsoleOrCapability).Get("/events", h.stateEventsLive)
 			apiRouter.Route("/v1", func(v1 chi.Router) {
 				v1.Use(h.requireConsoleOrCapability)
+				v1.Get("/events", h.stateEventsLive)
+				v1.Get("/management/state", h.getProjectedState)
 				v1.Get("/capabilities", h.listCapabilities)
 				v1.Post("/capabilities/invoke", h.invokeCapability)
 				v1.Get("/capabilities/operations/{id}", h.getCapabilityOperation)
@@ -338,6 +346,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Put("/management/config/{key}", h.managementConfigPutScalar)
 				v1.Get("/management/api-keys", h.listClientAPIKeys)
 				v1.Post("/management/api-keys", h.createClientAPIKey)
+				v1.Put("/management/api-keys/{index}", h.updateClientAPIKey)
 				v1.Delete("/management/api-keys/{index}", h.deleteClientAPIKey)
 				// Key aliases are Oh My CPA's own metadata keyed by the usage
 				// fingerprint, so they are separate from the CPA config writes above.

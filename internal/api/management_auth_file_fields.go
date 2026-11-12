@@ -87,6 +87,10 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		return
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	var raw map[string]json.RawMessage
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &raw); err != nil {
 		return
@@ -159,6 +163,7 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		writeCPAFacadeError(writer, err)
 		return
 	}
+	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	if auditErr := h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "success", map[string]any{"fields": sortedMapKeys(fields), "verified": true}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after field update")
 		return

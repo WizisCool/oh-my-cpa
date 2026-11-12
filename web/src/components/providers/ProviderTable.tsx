@@ -58,7 +58,8 @@ interface ProviderTableProps {
   providerIcons: Record<string, string>;
   /** Logos published by installed plugins, keyed by the OAuth provider they register. */
   pluginLogos?: PluginOAuthLogos;
-  statusQueue: ProviderManagement['statusQueue'];
+  toggleProviderStatus: ProviderManagement['toggleProviderStatus'];
+  busyProviderIds: ProviderManagement['busyProviderIds'];
   deleteProviderMutation: ProviderManagement['deleteProviderMutation'];
   /** Opens the editor on the row the operator clicked. */
   handleOpenEdit: (provider: ProviderItem) => void;
@@ -125,7 +126,8 @@ export function ProviderTable({
   traffic,
   providerIcons,
   pluginLogos,
-  statusQueue,
+  toggleProviderStatus,
+  busyProviderIds,
   deleteProviderMutation,
   handleOpenEdit,
   setIconPickerOpen,
@@ -156,10 +158,7 @@ export function ProviderTable({
    * one saying on and the other off: the intent wins while the queue is working,
    * and the gateway's own value is the answer at rest.
    */
-  const resolveEnabled = (record: ProviderItem): boolean => {
-    const target = statusQueue.targetFor(record.id);
-    return target === undefined ? !record.disabled : target;
-  };
+  const resolveEnabled = (record: ProviderItem): boolean => !record.disabled;
 
   const openIconPicker = (record: ProviderItem) => {
     setTargetProviderForIcon(record);
@@ -392,12 +391,12 @@ export function ProviderTable({
           <Switch
             size="small"
             checked={resolveEnabled(record)}
-            aria-busy={statusQueue.isBusy(record.id)}
+            aria-busy={busyProviderIds.has(record.id)}
             aria-label={`${t('pro.col_switch')}: ${record.name}`}
             // Enabling or disabling a provider writes the gateway's own configuration,
             // which the demonstration refuses.
             disabled={isDemo}
-            onChange={(checked) => statusQueue.request(record.id, checked)}
+            onChange={(checked) => toggleProviderStatus(record.id, checked)}
           />
         );
       },

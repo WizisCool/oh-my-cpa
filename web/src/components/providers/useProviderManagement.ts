@@ -3,13 +3,12 @@ import React, { useState, useRef } from 'react';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api, apiErrorCode, isRetryableWriteFailure, describeError } from '../../api/client';
+import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { Toast } from '../feedback';
-import { useLastIntentQueue, LastIntentTimeoutError } from '../../hooks/useLastIntentQueue';
+import { useOptimisticProviderStatusMutation } from '../../hooks/useConfigMutations';
 import { resolveProviderPickerIcon } from '../../types/brandMark';
 import { isSafeExternalURL } from '../../utils/externalUrl';
-import { providerStatusPayload } from '../../types/providerId';
 import { lookupProviderFamily } from '../../types/providerFamilies';
 import { modelsToAdd } from '../../utils/modelOptions';
 import { isMotionReduced } from '../../utils/motionPreference';
@@ -113,9 +112,11 @@ export function useProviderManagement({
   const [formIcon, setFormIcon] = useState<string>('OpenAI');
   const [iconManuallySelected, setIconManuallySelected] = useState<boolean>(false);
 
-  // Endpoint models pull state & custom models expand state
+  // Endpoint models pull state, per-key connectivity probe state & custom models expand state
   const modelFetchSeqRef = useRef<number>(0);
   const [isPullingModels, setIsPullingModels] = useState(false);
+  const [testingKeyIds, setTestingKeyIds] = useState<Set<string>>(new Set());
+  const [isTestingAllKeys, setIsTestingAllKeys] = useState(false);
   const [endpointModels, setEndpointModels] = useState<string[]>([]);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(new Set());
@@ -358,15 +359,24 @@ export function useProviderManagement({
   };
 
   const handleTestKey = async (k: FormKeyItem, idx: number) => {
+    setTestingKeyIds((prev) => new Set(prev).add(k.id));
     const hide = toast.pending(t('pro.testing_key', { n: idx + 1 }));
-    const result = await testProviderKey(k);
-    hide();
-    if (result.ok) {
-      toast.success(t('pro.test_key_ok', { n: idx + 1 }));
-      return;
-    }
-    if (result.error) {
-      toast.error(t('pro.test_key_failed'), { detail: describeError(result.error), isPersistent: true });
+    try {
+      const result = await testProviderKey(k);
+      if (result.ok) {
+        toast.success(t('pro.test_key_ok', { n: idx + 1 }));
+        return;
+      }
+      if (result.error) {
+        toast.error(t('pro.test_key_failed'), { detail: describeError(result.error), isPersistent: true });
+      }
+    } finally {
+      hide();
+      setTestingKeyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(k.id);
+        return next;
+      });
     }
   };
 
@@ -389,24 +399,41 @@ export function useProviderManagement({
       toast.warning(t('pro.test_model_required'));
       return;
     }
+    setIsTestingAllKeys(true);
+    setTestingKeyIds((prev) => {
+      const next = new Set(prev);
+      for (const key of keys) next.add(key.id);
+      return next;
+    });
     const hide = toast.pending(t('pro.testing_all'));
-    const results = await Promise.all(keys.map((key) => testProviderKey(key)));
-    hide();
-    // Every unsuccessful probe counts, including ones that warned instead of
-    // erroring: the success toast must mean every key answered.
-    const failed = results.filter((result) => !result.ok);
-    if (failed.length === 0) {
-      toast.success(t('pro.test_all_ok', { count: keys.length }));
-      return;
+    try {
+      const results = await Promise.all(keys.map((key) => testProviderKey(key)));
+      // Every unsuccessful probe counts, including ones that warned instead of
+      // erroring: the success toast must mean every key answered.
+      const failed = results.filter((result) => !result.ok);
+      if (failed.length === 0) {
+        toast.success(t('pro.test_all_ok', { count: keys.length }));
+        return;
+      }
+      const firstError = failed[0]?.error;
+      toast.error(t('pro.test_key_failed'), { detail: describeError(firstError), isPersistent: true });
+    } finally {
+      hide();
+      setIsTestingAllKeys(false);
+      setTestingKeyIds((prev) => {
+        const next = new Set(prev);
+        for (const key of keys) next.delete(key.id);
+        return next;
+      });
     }
-    const firstError = failed[0]?.error;
-    toast.error(t('pro.test_key_failed'), { detail: describeError(firstError), isPersistent: true });
   };
 
   const handleCloseProviderDrawer = () => {
     modelFetchSeqRef.current += 1;
     setEndpointModels([]);
     setIsPullingModels(false);
+    setTestingKeyIds(new Set());
+    setIsTestingAllKeys(false);
     setProviderDrawerOpen(false);
   };
 
@@ -427,22 +454,11 @@ export function useProviderManagement({
   }, [formWebsite, t]);
 
   /**
-   * The enable/disable toggle runs through a per-provider last-intent queue.
-   *
-   * Clicking a switch twice in quick succession used to lose the second click:
-   * the write and the list re-read are separated by a round trip, so the second
-   * click either raced the first request or was ignored while it was pending,
-   * and the row could settle showing the opposite of what was last asked for.
-   * Serialising per provider keeps the fast path fast - one provider's update
-   * never blocks another - while guaranteeing the gateway ends up on the value
-   * of the last click.
-   *
-   * A confirmed write is settled from the write's own response rather than by
-   * re-reading the list. The response already names the provider and its new
-   * state, so re-reading spends a second round trip to learn what the first one
-   * said, and that second read can resolve after a newer write and put the older
-   * value back on screen. The list is still re-read when a write fails, because
-   * then the console does need to know what the gateway actually holds.
+   * Provider enable/disable toggles mutate the shared TanStack Query caches on the
+   * exact click frame via useOptimisticProviderStatusMutation and coalesce inside
+   * the Go StateCoordinator's 250ms write-behind window. Per-provider sequence and
+   * in-flight counters ensure overlapping multi-row or rapid single-row clicks
+   * always clear busy indicators and never overwrite a newer click's state.
    */
 
   // Provider write refusals carry stable codes, so the toast names the problem
@@ -461,54 +477,54 @@ export function useProviderManagement({
     }
   };
 
-  const statusQueue = useLastIntentQueue<boolean>({
-    // The queued value is the enabled state the switch shows, not the field the
-    // endpoint takes. Inverting it once here, through the named helper, is what
-    // keeps the two from being confused for each other; the confusion inverts
-    // every toggle, so switching a provider off would ask for it on.
-    apply: async (id, isEnabled, signal) => {
-      const payload = providerStatusPayload(id, isEnabled);
-      if (!payload) throw new Error(`unaddressable provider id: ${id}`);
-      // The row's identity is read from the cache at write time rather than from a
-      // captured render: a retry runs after the first attempt and must describe
-      // the row as it is now, or its identity precondition would be checked
-      // against values the console has already replaced.
-      const row = queryClient
-        .getQueryData<ManagementProvidersData>(['management-providers', true])
-        ?.providers.find((provider) => provider.id === id);
-      await api.patchManagementProviderStatus(payload.family, payload.index, payload.disabled, {
-        signal,
+  const [busyProviderIds, setBusyProviderIds] = useState<Set<string>>(new Set());
+  const inFlightCountRef = useRef<Map<string, number>>(new Map());
+  const latestToggleSeqRef = useRef<Map<string, number>>(new Map());
+
+  const statusMutation = useOptimisticProviderStatusMutation({
+    formatError: (err) => t('pro.status_update_failed', { msg: providerWriteMessage(err) }),
+  });
+
+  const toggleProviderStatus = (id: string, isEnabled: boolean) => {
+    const row = queryClient
+      .getQueryData<ManagementProvidersData>(['management-providers', true])
+      ?.providers.find((provider) => provider.id === id);
+    const seq = (latestToggleSeqRef.current.get(id) ?? 0) + 1;
+    latestToggleSeqRef.current.set(id, seq);
+    const nextInFlight = (inFlightCountRef.current.get(id) ?? 0) + 1;
+    inFlightCountRef.current.set(id, nextInFlight);
+    setBusyProviderIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+
+    void statusMutation
+      .mutateAsync({
+        id,
+        isEnabled,
         expectedAuthIndex: row?.auth_index,
         expectedName: row?.upstream_name || row?.name,
+      })
+      .then(() => {
+        if (latestToggleSeqRef.current.get(id) === seq) {
+          settleProviderRow(id, isEnabled);
+        }
+      })
+      .catch(() => {
+        // Snapshot rollback and localized toast are handled by useOptimisticProviderStatusMutation.
+      })
+      .finally(() => {
+        const remaining = (inFlightCountRef.current.get(id) ?? 1) - 1;
+        if (remaining <= 0) {
+          inFlightCountRef.current.delete(id);
+          setBusyProviderIds((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        } else {
+          inFlightCountRef.current.set(id, remaining);
+        }
       });
-    },
-    // Only failures the operator cannot fix by waiting are worth repeating. The
-    // classification lives beside the HTTP client, which is where the facade's
-    // error codes are known.
-    isRetryable: isRetryableWriteFailure,
-    onConfirmed: (id, isEnabled) => {
-      // The confirmed intent is exactly what the gateway now holds: the write is
-      // only reported as confirmed once CPA accepted it, and the value sent is
-      // the one the switch displays. Settled here, before the key is released, so
-      // the row never renders a released key against a pre-write server value.
-      settleProviderRow(id, isEnabled);
-      void queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] });
-    },
-    onError: (_id, err) => {
-      // A timeout is reported differently from a refusal on purpose: abandoning a
-      // request proves only that this console stopped waiting, not that the
-      // gateway did not commit, so claiming the update failed would be as
-      // misleading as claiming it succeeded.
-      const msg = err instanceof LastIntentTimeoutError
-        ? t('pro.status_update_timeout')
-        : providerWriteMessage(err);
-      toast.error(t('pro.status_update_failed', { msg }));
-      // The write did not confirm, so the row's displayed state is unknown rather
-      // than merely stale: the list is re-read so the switch shows what the
-      // gateway actually holds instead of the value that was attempted.
-      void invalidateProviderCatalogs();
-    },
-  });
+  };
 
 
   const createProviderMutation = useMutation({
@@ -850,7 +866,10 @@ export function useProviderManagement({
     deleteProviderMutation,
     updateProviderMutation,
     renameProvider,
-    statusQueue,
+    toggleProviderStatus,
+    busyProviderIds,
+    testingKeyIds,
+    isTestingAllKeys,
     providerDrawerOpen,
     editingProvider,
     formFamily,

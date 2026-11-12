@@ -218,6 +218,10 @@ func gatedProviderListWrite[T any](
 	// restarted.
 	defer h.providerWrites.release()
 
+	if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+		return err
+	}
+
 	if check, ok := ctx.Value(providerPreconditionKey{}).(func(context.Context) error); ok {
 		if err := check(ctx); err != nil {
 			return err
@@ -242,9 +246,11 @@ func gatedProviderListWrite[T any](
 		err := afterUpdate(overlayCtx, list)
 		cancel()
 		if err != nil {
+			h.invalidateCoordinator("management-providers", "management-providers-sanitized", "management-routing", "management-config")
 			return &providerPartialCommitError{err: err}
 		}
 	}
+	h.invalidateCoordinator("management-providers", "management-providers-sanitized", "management-routing", "management-config")
 	return nil
 }
 

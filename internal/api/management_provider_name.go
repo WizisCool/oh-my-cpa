@@ -77,6 +77,9 @@ func (h *Handler) writeProviderName(ctx context.Context, client *management.Clie
 		return err
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+		return err
+	}
 
 	if spec, ok := lookupProviderConfigFamily(family); ok {
 		entries, err := client.ConfigAPIKeys(ctx, spec.Family)

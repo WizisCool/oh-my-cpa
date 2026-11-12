@@ -47,6 +47,8 @@ import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
 import { MotionPreferenceSync, MotionProvider } from './hooks/useReducedMotionPreference';
 import { useConsoleFonts } from './hooks/useFonts';
+import { DEFAULT_SWR_STALE_TIME_MS } from './api/queryKeys';
+import { useEventSource } from './hooks/useEventSource';
 
 /**
  * The frame a route draws while its module downloads: the shape of its loaded body, so the page that
@@ -59,7 +61,10 @@ function loadingAs(loading: RouteLoadingBody): RouteLoadingHandle {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5000,
+      // 30s SWR window delivers 0ms cached route/tab switches while background SSE
+      // events (/api/events) push immediate invalidations on server-side mutations.
+      staleTime: DEFAULT_SWR_STALE_TIME_MS,
+      gcTime: 5 * 60_000,
       retry: 1,
       refetchOnWindowFocus: false,
     },
@@ -85,6 +90,12 @@ const ScrollSmoothingSync: React.FC = () => {
 /** Renders nothing; it keeps the document painted in the chosen typefaces (`useConsoleFonts`). */
 const FontSync: React.FC = () => {
   useConsoleFonts();
+  return null;
+};
+
+/** Renders nothing; maintains the authenticated tab-wide '/api/events' SSE reconciliation stream. */
+const StateEventsSync: React.FC = () => {
+  useEventSource('/api/events');
   return null;
 };
 
@@ -162,6 +173,7 @@ const AppRoutes: React.FC = () => {
           out, a theme change stays in this browser marked dirty, and this pushes it on sign-in;
           mounted outside the gate it sent the write anyway and reported the refusal in a toast. */}
       <ThemeServerSync />
+      <StateEventsSync />
       <TimeZoneProvider fallback={<ShellLoading />}><RouterProvider router={router} /></TimeZoneProvider>
     </AuthGate>
   );

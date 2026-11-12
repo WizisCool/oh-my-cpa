@@ -305,6 +305,10 @@ func (h *Handler) applyRoutingPlan(ctx context.Context, client *management.Clien
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
 
+	if err := h.flushCoordinatorWithinGate(ctx); err != nil {
+		return operations.RoutingOutcome{}, err
+	}
+
 	board, err := h.readRoutingBoard(ctx, client)
 	if err != nil {
 		return operations.RoutingOutcome{}, err

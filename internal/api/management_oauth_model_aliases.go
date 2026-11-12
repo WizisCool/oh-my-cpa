@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 const (
@@ -28,9 +30,30 @@ type managementOAuthModelAlias struct {
 }
 
 func (h *Handler) listManagementOAuthModelAliases(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
+	}
+	if h.stateCoord != nil {
+		env, err := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (map[string][]managementOAuthModelAlias, error) {
+			if state.OAuthAliasesUnavailable {
+				return nil, errStateSliceUnavailable
+			}
+			copied := make(map[string][]managementOAuthModelAlias, len(state.OAuthAliases))
+			for provider, list := range state.OAuthAliases {
+				copied[provider] = slices.Clone(list)
+			}
+			return copied, nil
+		})
+		if err == nil {
+			setStateVersionHeader(writer, env.Version)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"version": env.Version,
+				"aliases": env.Data,
+			})
+			return
+		}
 	}
 	aliases, err := client.OAuthModelAliases(request.Context())
 	if err != nil {
@@ -55,6 +78,9 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 		return nil, errors.New("write_busy")
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+		return nil, err
+	}
 	if beforeWrite != nil {
 		if err := beforeWrite(ctx); err != nil {
 			return nil, err
@@ -83,6 +109,7 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	h.invalidateCoordinator("management-oauth-model-aliases", "management-config")
 	return current, nil
 }
 
@@ -119,6 +146,44 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 	if auditErr := h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "attempt", map[string]any{"count": len(aliases)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; model alias update aborted")
 		return
+	}
+	if h.stateCoord != nil {
+		domain := statecoord.DomainKey(stateDomainOAuthAliasesPrefix + provider)
+		var useFallback bool
+		version, mutErr := h.stateCoord.Mutate(request.Context(), domain, func(state *projectedConfigState) error {
+			if state.OAuthAliasesUnavailable {
+				useFallback = true
+				return errStateSliceUnavailable
+			}
+			if state.OAuthAliases == nil {
+				state.OAuthAliases = make(map[string][]managementOAuthModelAlias)
+			}
+			if len(aliases) == 0 {
+				delete(state.OAuthAliases, provider)
+			} else {
+				state.OAuthAliases[provider] = slices.Clone(aliases)
+			}
+			return nil
+		})
+		if !useFallback {
+			if mutErr != nil {
+				_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": mutErr.Error()})
+				writeCPAFacadeError(writer, mutErr)
+				return
+			}
+			if flushErr := h.queueOrFlushDomainAudit(request, domain, "oauth_model_alias.update", "oauth_provider", provider, map[string]any{"count": len(aliases), "verified": true}); flushErr != nil {
+				writeCPAFacadeError(writer, flushErr)
+				return
+			}
+			setStateVersionHeader(writer, version)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"status":   "ok",
+				"provider": provider,
+				"aliases":  aliases,
+				"version":  version,
+			})
+			return
+		}
 	}
 	current, err := h.applyManagementOAuthModelAliases(request.Context(), client, provider, aliases, nil)
 	if err != nil {

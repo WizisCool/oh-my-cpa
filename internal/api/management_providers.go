@@ -9,6 +9,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 type ProviderKeyEntryDTO struct {
@@ -250,7 +251,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	// responses those pages receive.
 	includeKeys := h.revealKeysAllowed(request)
 
-	items := h.readProviderItems(request.Context(), client)
+	items, version := h.readProviderItemsWithVersion(request.Context(), client)
 
 	if !includeKeys {
 		// The sanitized projection keeps the configured/absent signal but
@@ -270,13 +271,40 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			return
 		}
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
+	setStateVersionHeader(writer, version)
+	body := map[string]any{
 		"providers": items,
 		"total":     len(items),
-	})
+	}
+	if version > 0 {
+		body["version"] = version
+	}
+	writeJSON(writer, http.StatusOK, body)
 }
 
 func (h *Handler) readProviderItems(ctx context.Context, client *management.Client) []ProviderItemDTO {
+	items, _ := h.readProviderItemsWithVersion(ctx, client)
+	return items
+}
+
+func (h *Handler) readProviderItemsWithVersion(ctx context.Context, client *management.Client) ([]ProviderItemDTO, uint64) {
+	if h.stateCoord != nil {
+		// Load local SQLite metadata overlays BEFORE acquiring stateCoord.RLock so
+		// the coordinator lock stays strictly I/O-free.
+		customNames := h.loadProviderNames(ctx)
+		customWebsites := h.loadProviderWebsites(ctx)
+		testModels, _ := h.loadStringPreference(ctx, repository.PreferenceProviderTestModels)
+		env, err := statecoord.ProjectTyped(ctx, h.stateCoord, func(state projectedConfigState, _ uint64) ([]ProviderItemDTO, error) {
+			return projectProviderItemsFromRaw(state.ConfigFamilies, state.OpenAICompat, customNames, customWebsites, testModels), nil
+		})
+		if err == nil {
+			return env.Data, env.Version
+		}
+	}
+	return h.readProviderItemsUpstream(ctx, client), 0
+}
+
+func (h *Handler) readProviderItemsUpstream(ctx context.Context, client *management.Client) []ProviderItemDTO {
 	items := make([]ProviderItemDTO, 0)
 	customNames := h.loadProviderNames(ctx)
 	customWebsites := h.loadProviderWebsites(ctx)

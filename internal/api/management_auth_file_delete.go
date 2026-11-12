@@ -14,6 +14,10 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		return
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileRequestLimit)
 	names := make([]string, 0)
 	if queryNames := request.URL.Query()["name"]; len(queryNames) > 0 {
@@ -81,8 +85,11 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		return
 	}
 
-	if len(confirmedDeleted) > 0 && h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
+	if len(confirmedDeleted) > 0 {
+		if h.pricing != nil {
+			h.pricing.NotifyModelsChanged()
+		}
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	}
 
 	if outcomeStatus != "ok" {

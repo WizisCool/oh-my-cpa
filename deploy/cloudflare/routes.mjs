@@ -87,6 +87,8 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/system/repository', 'system-repository'],
   ['/api/v1/management/system/updates', 'system-updates'],
   ['/api/v1/management/system/live', 'system-live'],
+  ['/api/v1/events', 'v1-events-live'],
+  ['/api/v1/management/state', 'management-state'],
   ['/api/v1/management/system/updater', 'system-updater'],
   ['/api/v1/management/system/maintenance', 'system-maintenance'],
   ['/api/v1/management/system/data-retention', 'system-data-retention'],
@@ -130,6 +132,7 @@ const FIXED_ROUTES = new Map([
   // the fact that this table had no entry for it, and the header then read a body without
   // the field it needed.
   ['/api/healthz', 'healthz'],
+  ['/api/events', 'events-live'],
 ]);
 
 /**

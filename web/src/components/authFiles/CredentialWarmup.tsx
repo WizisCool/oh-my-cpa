@@ -425,8 +425,21 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   const toggleMutation = useMutation({
     mutationFn: ({ task, enabled }: { task: WarmupTask; enabled: boolean }) =>
       api.updateWarmupTask(task.id, toPayload({ ...taskToInput(task, timezone), name: task.name, enabled }, timezone)),
+    onMutate: ({ task, enabled }) => {
+      const previous = queryClient.getQueryData<WarmupStateView>(WARMUP_QUERY_KEY);
+      if (previous) {
+        applyState({
+          ...previous,
+          tasks: previous.tasks.map((item) => (item.id === task.id ? { ...item, enabled } : item)),
+        });
+      }
+      return { previous };
+    },
     onSuccess: applyState,
-    onError: reportFailure('warmup.update_failed'),
+    onError: (err, _variables, context) => {
+      if (context?.previous) applyState(context.previous);
+      reportFailure('warmup.update_failed')(err);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -542,8 +555,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       size="small"
                       className={styles['task-switch']}
                       aria-label={view.title}
+                      aria-busy={(toggleMutation.isPending && toggleMutation.variables?.task.id === task.id) || undefined}
                       checked={task.enabled}
-                      loading={toggleMutation.isPending && toggleMutation.variables?.task.id === task.id}
                       disabled={isDemo}
                       onChange={(enabled) => toggleMutation.mutate({ task, enabled })}
                     />

@@ -113,6 +113,8 @@ interface ProviderEditorDrawerProps extends Pick<
   | 'setThinkingLevels'
   | 'toggleKeyExpanded'
   | 'handleKeyAdd'
+  | 'testingKeyIds'
+  | 'isTestingAllKeys'
   | 'handleTestKey'
   | 'handleTestAllKeys'
   | 'handleCloseProviderDrawer'
@@ -216,6 +218,8 @@ export function ProviderEditorDrawer({
     setThinkingLevels,
     toggleKeyExpanded,
     handleKeyAdd,
+    testingKeyIds,
+    isTestingAllKeys,
     handleTestKey,
     handleTestAllKeys,
     handleCloseProviderDrawer,
@@ -532,7 +536,11 @@ export function ProviderEditorDrawer({
                   >
                     {t('pro.add_key_entry')}
                   </Button>
-                  <Button onClick={handleTestAllKeys}>
+                  <Button
+                    loading={isTestingAllKeys}
+                    disabled={isDemo || isTestingAllKeys}
+                    onClick={handleTestAllKeys}
+                  >
                     {t('pro.test_all')}
                   </Button>
                 </div>
@@ -567,7 +575,13 @@ export function ProviderEditorDrawer({
                           </button>
 
                           <div className={styles['item-actions']}>
-                            <Button variant="link" size="sm" onClick={() => handleTestKey(k, idx)}>
+                            <Button
+                              variant="link"
+                              size="sm"
+                              loading={testingKeyIds.has(k.id)}
+                              disabled={isDemo || testingKeyIds.has(k.id)}
+                              onClick={() => handleTestKey(k, idx)}
+                            >
                               {t('pro.test_single')}
                             </Button>
                             {/* A pointer affordance only: the header button is the toggle a

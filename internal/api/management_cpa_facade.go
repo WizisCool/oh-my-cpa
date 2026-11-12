@@ -31,13 +31,10 @@ func (h *Handler) managementClientOrError(writer http.ResponseWriter, request *h
 	return client, true
 }
 
-func writeCPAFacadeError(writer http.ResponseWriter, err error) {
-	status := http.StatusBadGateway
-	code := "cpa_unavailable"
-	message := "CPA management request failed"
-	// reason is CPA's own sentence for a rejected configuration, carried apart
-	// from the message so the console can frame it in the reader's language.
-	reason := ""
+func classifyCPAFacadeError(err error) (status int, code string, message string, reason string) {
+	status = http.StatusBadGateway
+	code = "cpa_unavailable"
+	message = "CPA management request failed"
 	var httpErr *management.HTTPError
 	if errors.Is(err, management.ErrInvalidOAuthProxy) {
 		status = http.StatusBadRequest
@@ -114,6 +111,11 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 			}
 		}
 	}
+	return status, code, message, reason
+}
+
+func writeCPAFacadeError(writer http.ResponseWriter, err error) {
+	status, code, message, reason := classifyCPAFacadeError(err)
 	body := map[string]string{"error": message, "code": code}
 	if reason != "" {
 		body["reason"] = reason

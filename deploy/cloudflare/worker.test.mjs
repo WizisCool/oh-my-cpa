@@ -51,7 +51,7 @@ describe('the dataset the demonstration is served from', () => {
     // Two deliberate exceptions are captured as the gateway's demonstration mode answers them:
     // the live usage stream, which the Worker streams itself, and the update stream, which the
     // demonstration console never opens because it polls the captured answers.
-    const capturedAsNoContent = new Set(['usage-live', 'system-live']);
+    const capturedAsNoContent = new Set(['usage-live', 'system-live', 'events-live', 'v1-events-live']);
     for (const [name, response] of Object.entries(DATASET.responses)) {
       const expected = capturedAsNoContent.has(name) ? 204 : 200;
       assert.equal(response.status, expected, `${name} was captured as ${response.status}`);

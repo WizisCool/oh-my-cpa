@@ -97,6 +97,9 @@ func (h *Handler) reconcileOMCPluginSource(ctx context.Context, request *http.Re
 	defer h.providerWrites.release()
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
+	if err := h.flushCoordinatorWithinGate(ctx); err != nil {
+		return false, err
+	}
 	return h.reconcileOMCPluginSourceLocked(ctx, request, client)
 }
 

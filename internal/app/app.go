@@ -210,6 +210,9 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 	handler := api.NewHandler(cfg, repo, cipher, logger, authManager)
 	outboundTransport := outbound.NewTransport(repository.OutboundProxyStore{Repo: repo, Cipher: cipher})
 	handler.SetOutboundTransport(outboundTransport)
+	if !cfg.IsDemoMode {
+		_ = handler.EnableStateCoordinator(ctx, api.StateCoordinatorOptions{})
+	}
 
 	// Zero-config pricing: the service syncs from OpenRouter once at startup and
 	// then daily, and custom rows and operator pins always win. Failures degrade
@@ -669,6 +672,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.handler.CloseUpdateWatchers()
 	// Event streams never go idle, so they are ended before Shutdown waits on connections.
 	a.handler.CloseUpdateStreams()
+	a.handler.CloseStateCoordinator(shutdownContext)
 	select {
 	case <-dataRefreshDone:
 	case <-shutdownContext.Done():
@@ -711,6 +715,9 @@ func (a *App) Close() error {
 	a.handler.CloseBrowserRuns()
 	a.handler.CloseUpdateWatchers()
 	a.handler.CloseUpdateStreams()
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	a.handler.CloseStateCoordinator(closeCtx)
+	closeCancel()
 	// The fixture listens on a loopback socket, so it has to be closed with the
 	// database it describes.
 	if a.upstream != nil {
