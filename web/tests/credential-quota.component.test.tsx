@@ -238,7 +238,7 @@ function renderCredentialRow(
   const actions: CredentialActions = {
     isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
     onSelect: vi.fn(), onPick: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen, onRename,
-    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onRedeemCredit: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
+    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onRedeemCredit: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(), onOpenModelRules: vi.fn(),
   };
   if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
   return render(

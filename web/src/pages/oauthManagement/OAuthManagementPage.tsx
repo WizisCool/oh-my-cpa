@@ -428,7 +428,9 @@ export const OAuthManagementPage: React.FC = () => {
   }, [selectedIdentity, selectedRecord]);
 
   const [isWarmupSettingsOpen, setIsWarmupSettingsOpen] = React.useState(false);
- const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
+  const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
+  // Reached from a provider tab or one credential, the rules open at that provider.
+  const [modelRulesProvider, setModelRulesProvider] = React.useState<string>();
   const [isVertexImportOpen, setIsVertexImportOpen] = React.useState(false);
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
   const fileNames = React.useMemo(() => new Set(records.map((record) => record.fileName)), [records]);
@@ -608,6 +610,10 @@ export const OAuthManagementPage: React.FC = () => {
     onRedeemCredit: (record) => void actions.redeemCredit(record),
     onReauthenticate: openConnectForRecord,
     onOpenSIWC: (record) => setSIWCRecordKey(record.key),
+    onOpenModelRules: (record) => {
+      setModelRulesProvider(record.displayProvider);
+      setIsModelRulesOpen(true);
+    },
   };
 
   const selectablePage = pagedRecords.filter((record) => record.canSelectForFileBatch);
@@ -640,7 +646,18 @@ export const OAuthManagementPage: React.FC = () => {
         title={t('nav.auth_files')}
         actions={(
           <>
-            <ToolButton icon={<BranchesOutlined />} label={t('af.rules_open')} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-model-rules" />
+            {/* Disabling a model is a routine task, so its entry carries words rather than a glyph alone. */}
+            <Button
+              icon={<BranchesOutlined />}
+              disabled={actions.isOperating}
+              onClick={() => {
+                setModelRulesProvider(scopeProvider === 'all' ? undefined : scopeProvider);
+                setIsModelRulesOpen(true);
+              }}
+              data-testid="oauth-model-rules"
+            >
+              {t('af.rules_open')}
+            </Button>
             <ToolButton icon={<TimerResetOutlined />} label={t('warmup.settings')} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings" />
             {/* Signing in is how a credential usually arrives, so it is the button; a file or a
                 Vertex key are the other ways in, under its caret. */}
@@ -900,6 +917,7 @@ export const OAuthManagementPage: React.FC = () => {
         <OAuthModelRulesDrawer
           open={isModelRulesOpen}
           onClose={() => setIsModelRulesOpen(false)}
+          initialProvider={modelRulesProvider}
           onSaved={() => {
             void Promise.all([
               queryClient.invalidateQueries({ queryKey: ['management-oauth-model-aliases'] }),
