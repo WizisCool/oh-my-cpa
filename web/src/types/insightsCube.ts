@@ -66,7 +66,11 @@ function addInto(target: Measures, source: Measures): void {
 }
 
 export interface CubeRow {
-  /** Index into `bucketStarts`; -1 on a comparison row, which has no bucket. */
+  /**
+   * For current `rows`, index into `bucketStarts`. For bucketed comparison `previous` rows,
+   * index into the comparison period's sub-bucket grid (never `bucketStarts`); legacy bucketless
+   * comparison rows use `-1`.
+   */
   bucket: number;
   /** Dictionary indices, in `INSIGHTS_DIMENSIONS` order. */
   dims: readonly number[];
@@ -135,6 +139,7 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
       costedRequests: cells[cCosted - offset] ?? 0,
     },
   });
+  const hasPreviousBucket = response.previous_rows.length > 0 && response.previous_rows[0].length >= response.columns.length;
   return {
     window: response.window,
     compare: response.compare_window,
@@ -149,8 +154,9 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
     },
     credentialTypes: response.dims.credentials.map((credential) => credential.auth_type),
     rows: response.rows.map((cells) => decode(cells, 0, cells[bucketColumn] ?? 0)),
-    // A comparison row carries the same cells without the leading bucket column.
-    previous: response.previous_rows.map((cells) => decode(cells, 1, -1)),
+    // Bucketed comparison rows carry the full column schema; legacy fixtures without a bucket column decode one column left.
+    previous: response.previous_rows.map((cells) =>
+      hasPreviousBucket ? decode(cells, 0, cells[bucketColumn] ?? 0) : decode(cells, 1, -1)),
   };
 }
 
@@ -273,6 +279,141 @@ export function sumMeasures(rows: readonly CubeRow[]): Measures {
   return total;
 }
 
+function sortedQuantile(sorted: readonly number[], p: number): number {
+  const n = sorted.length;
+  if (n === 0) return 0;
+  if (n === 1) return sorted[0];
+  const pos = p * (n - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  const frac = pos - lo;
+  return sorted[lo] + frac * (sorted[hi] - sorted[lo]);
+}
+
+function robustUpperFence(sortedPositive: readonly number[]): number {
+  const med = sortedQuantile(sortedPositive, 0.50);
+  let fence = 2.5 * med;
+  // For k >= 5, Q3 is independent of the maximum element; at k === 4, linear Q3
+  // blends in sortedPositive[3], so Tukey 3*IQR would never clip a single spike.
+  if (sortedPositive.length >= 5) {
+    const q1 = sortedQuantile(sortedPositive, 0.25);
+    const q3 = sortedQuantile(sortedPositive, 0.75);
+    const iqr = q3 - q1;
+    fence = Math.max(q3 + 3.0 * iqr, fence);
+  }
+
+  const logs = sortedPositive.map((v) => Math.log(v));
+  const medLog = sortedQuantile(logs, 0.50);
+  const devs = logs.map((lv) => Math.abs(lv - medLog)).sort((a, b) => a - b);
+  const madLog = sortedQuantile(devs, 0.50);
+  const sigmaLog = 1.4826 * madLog;
+  const fenceLog = Math.exp(medLog + 3.0 * sigmaLog);
+  if (Number.isFinite(fenceLog) && fenceLog > fence) {
+    fence = fenceLog;
+  }
+  return fence;
+}
+
+/**
+ * Outlier-resistant sum over equal-width sub-buckets of the previous period.
+ * Idle (zero) buckets remain zero so the active duty cycle is preserved, while
+ * extreme upper-tail spikes above both the Tukey 3*IQR fence and log-space 3*MAD
+ * fence (with a 2.5*median floor) are Winsorized when >= 4 active buckets exist.
+ */
+export function robustBucketSum(values: readonly number[]): number {
+  const active: number[] = [];
+  let rawSum = 0;
+  for (const v of values) {
+    if (v > 0) {
+      active.push(v);
+      rawSum += v;
+    }
+  }
+  if (active.length === 0) return 0;
+  if (active.length < 4) return rawSum;
+  active.sort((a, b) => a - b);
+  const fence = robustUpperFence(active);
+  let sum = 0;
+  for (const v of active) sum += Math.min(v, fence);
+  return sum;
+}
+
+export function comparisonScale(cube: InsightsCube): number {
+  if (!cube.compare) return 1;
+  const currentSpan = Math.max(1, cube.window.to - cube.window.from + 1);
+  const previousSpan = Math.max(1, cube.compare.to - cube.compare.from + 1);
+  return currentSpan / previousSpan;
+}
+
+function baselineFromBucketMeasures(
+  buckets: readonly Measures[],
+  raw: Measures,
+  scale: number,
+): { baseline: Measures; raw: Measures } {
+  if (buckets.length === 0) return { baseline: emptyMeasures(), raw };
+  const baseline = emptyMeasures();
+  const reqs = buckets.map((b) => b.requests);
+  baseline.requests = robustBucketSum(reqs) * scale;
+  baseline.failures = robustBucketSum(buckets.map((b) => b.failures)) * scale;
+  baseline.inputTokens = robustBucketSum(buckets.map((b) => b.inputTokens)) * scale;
+  baseline.outputTokens = robustBucketSum(buckets.map((b) => b.outputTokens)) * scale;
+  baseline.reasoningTokens = robustBucketSum(buckets.map((b) => b.reasoningTokens)) * scale;
+  baseline.totalTokens = robustBucketSum(buckets.map((b) => b.totalTokens)) * scale;
+  baseline.costNanos = robustBucketSum(buckets.map((b) => b.costNanos)) * scale;
+  baseline.pricedRequests = robustBucketSum(buckets.map((b) => b.pricedRequests)) * scale;
+  baseline.costedRequests = robustBucketSum(buckets.map((b) => b.costedRequests)) * scale;
+
+  // Latency is intensive: compute request-weighted average over buckets with extreme
+  // single-bucket request bursts and single-bucket latency spikes Winsorized.
+  const activeLatBuckets = buckets.filter((b) => b.requests > 0);
+  if (activeLatBuckets.length > 0 && baseline.requests > 0) {
+    let meanLatency: number;
+    if (activeLatBuckets.length < 4) {
+      meanLatency = raw.requests > 0 ? raw.latencySumMs / raw.requests : 0;
+    } else {
+      const sortedReqs = activeLatBuckets.map((b) => b.requests).sort((a, b) => a - b);
+      const reqFence = robustUpperFence(sortedReqs);
+      const sortedLats = activeLatBuckets.map((b) => b.latencySumMs / b.requests).filter((v) => v > 0).sort((a, b) => a - b);
+      const latFence = sortedLats.length >= 4 ? robustUpperFence(sortedLats) : Infinity;
+      let weightedSum = 0;
+      let weightTotal = 0;
+      for (const b of activeLatBuckets) {
+        const w = Math.min(b.requests, reqFence);
+        const lat = Math.min(b.latencySumMs / b.requests, latFence);
+        weightedSum += w * lat;
+        weightTotal += w;
+      }
+      meanLatency = weightTotal > 0 ? weightedSum / weightTotal : 0;
+    }
+    baseline.latencySumMs = baseline.requests * meanLatency;
+  }
+  return { baseline, raw };
+}
+
+/**
+ * Computes the outlier-robust previous-period baseline scaled to the current window's
+ * duration alongside the raw previous totals (which preserve true request sample counts
+ * for statistical noise testing).
+ */
+export function baselineMeasures(
+  rows: readonly CubeRow[],
+  scale: number,
+): { baseline: Measures; raw: Measures } {
+  const raw = emptyMeasures();
+  if (rows.length === 0) return { baseline: emptyMeasures(), raw };
+  const byBucket = new Map<number, Measures>();
+  for (const row of rows) {
+    addInto(raw, row.measures);
+    let acc = byBucket.get(row.bucket);
+    if (!acc) {
+      acc = emptyMeasures();
+      byBucket.set(row.bucket, acc);
+    }
+    addInto(acc, row.measures);
+  }
+  return baselineFromBucketMeasures([...byBucket.values()], raw, scale);
+}
+
 /**
  * One metric of a set of measures, or null where it has no value: a spend with nothing priced, an
  * average over no requests. Null is not zero - "unpriced" and "free" are different readings.
@@ -320,18 +461,23 @@ export const NO_COMPARISON: MetricComparison = { kind: 'none' };
  *   for counts; for tokens and spend it is a lower bound (per-request size adds variance), and for a
  *   mean latency it assumes a spread about as wide as the mean.
  */
-export function compareMetric(current: Measures, previous: Measures, metric: InsightsMetric): MetricComparison {
+export function compareMetric(
+  current: Measures,
+  previous: Measures,
+  metric: InsightsMetric,
+  evidencePrevious: Measures = previous,
+): MetricComparison {
   const now = metricValue(current, metric);
   const before = metricValue(previous, metric);
   if (now === null) return NO_COMPARISON;
   // Only a group absent before is new; an unpriced spend is unknown, not zero.
-  if (before === null) return previous.requests === 0 && now > 0 ? { kind: 'new' } : NO_COMPARISON;
+  if (before === null) return evidencePrevious.requests === 0 && now > 0 ? { kind: 'new' } : NO_COMPARISON;
   if (before <= 0) return now > 0 ? { kind: 'new' } : NO_COMPARISON;
   // Only priced requests say anything about spend. A reading that fell to zero is still measured by
   // every request that ran: a thousand that cost nothing are a firm fall, one that did is not.
   const evidence = (measures: Measures) => (metric === 'cost' ? measures.costedRequests : measures.requests);
   const n = evidence(current);
-  const m = evidence(previous);
+  const m = evidence(evidencePrevious);
   const logRatio = now > 0 ? Math.log(now / before) : Math.log(0.5 / (m + 0.5));
   const standardError = Math.sqrt(1 / (n + 0.5) + 1 / (m + 0.5));
   const isNoise = Math.abs(logRatio) < CONFIDENCE_Z * standardError;
@@ -383,6 +529,52 @@ export function groupTotals(cube: InsightsCube, rows: readonly CubeRow[], dimens
   return groups;
 }
 
+export interface GroupBaselineMap {
+  baseline: Map<string, Measures>;
+  raw: Map<string, Measures>;
+}
+
+export function groupBaselines(
+  cube: InsightsCube,
+  rows: readonly CubeRow[],
+  dimension: InsightsDimension,
+  scale: number,
+): GroupBaselineMap {
+  const dimPos = DIMENSION_POSITION[dimension];
+  const dict = cube.values[dimension];
+  const bucketsByGroup = new Map<string, Map<number, Measures>>();
+  const rawByGroup = new Map<string, Measures>();
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const idx = row.dims[dimPos];
+    const id = idx >= 0 && idx < dict.length ? (dict[idx] ?? '') : '';
+    let raw = rawByGroup.get(id);
+    if (!raw) {
+      raw = emptyMeasures();
+      rawByGroup.set(id, raw);
+    }
+    addInto(raw, row.measures);
+
+    let bucketMap = bucketsByGroup.get(id);
+    if (!bucketMap) {
+      bucketMap = new Map();
+      bucketsByGroup.set(id, bucketMap);
+    }
+    let acc = bucketMap.get(row.bucket);
+    if (!acc) {
+      acc = emptyMeasures();
+      bucketMap.set(row.bucket, acc);
+    }
+    addInto(acc, row.measures);
+  }
+  const baseline = new Map<string, Measures>();
+  for (const [id, bucketMap] of bucketsByGroup.entries()) {
+    const res = baselineFromBucketMeasures([...bucketMap.values()], rawByGroup.get(id)!, scale);
+    baseline.set(id, res.baseline);
+  }
+  return { baseline, raw: rawByGroup };
+}
+
 /**
  * The value a ranking orders by. A non-additive measure is ordered by the requests behind it rather
  * than by its own value, so only additive metrics rank by themselves.
@@ -395,6 +587,8 @@ export interface RankedGroup {
   id: string;
   measures: Measures;
   previous: Measures | null;
+  /** Raw unscaled totals from the previous period for sample-size evidence. */
+  previousRaw: Measures | null;
   /** The group's value of the ranking metric, null when it has none. */
   value: number | null;
   /** The group's part of the whole, for an additive metric; null otherwise. */
@@ -405,6 +599,7 @@ export function rankGroups(
   totals: Map<string, Measures>,
   metric: InsightsMetric,
   previous?: Map<string, Measures>,
+  previousRaw?: Map<string, Measures>,
 ): RankedGroup[] {
   const ranking = rankingMetric(metric);
   let whole = 0;
@@ -415,6 +610,7 @@ export function rankGroups(
       id,
       measures,
       previous: previous?.get(id) ?? (previous ? emptyMeasures() : null),
+      previousRaw: previousRaw?.get(id) ?? (previousRaw ? emptyMeasures() : (previous?.get(id) ?? (previous ? emptyMeasures() : null))),
       value,
       share: whole > 0 && value !== null ? value / whole : null,
     };

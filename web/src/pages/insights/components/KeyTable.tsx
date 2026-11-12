@@ -107,7 +107,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       title: t('insights.col.change'),
       align: 'right',
       render: (_, group) => (
-        <ComparisonText comparison={group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON} compare={compare} className={styles['change-text']} />
+        <ComparisonText comparison={group.previous ? compareMetric(group.measures, group.previous, ranking, group.previousRaw ?? undefined) : NO_COMPARISON} compare={compare} className={styles['change-text']} />
       ),
     },
     {

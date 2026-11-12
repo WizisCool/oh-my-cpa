@@ -121,17 +121,21 @@ type dashboardMetrics struct {
 	AvgTTFTMS      *float64 `json:"avg_ttft_ms"`
 }
 
-// dashboardComparison summarises the preceding window a dashboard read is
-// measured against. Open calendar units compare against the same elapsed
-// wall-clock stretch of the previous unit rather than the whole closed unit.
+// dashboardComparison summarises the preceding full window a dashboard read is
+// measured against, carrying both raw totals (for sample-size confidence) and the
+// outlier-robust average baseline scaled to the current window's elapsed duration.
 type dashboardComparison struct {
-	FromMS         int64 `json:"from"`
-	ToMS           int64 `json:"to"`
-	SameStretch    bool  `json:"same_stretch"`
-	Requests       int64 `json:"requests"`
-	Tokens         int64 `json:"tokens"`
-	CostNanos      int64 `json:"cost_nanos"`
-	CostedRequests int64 `json:"costed_requests"`
+	FromMS                 int64   `json:"from"`
+	ToMS                   int64   `json:"to"`
+	SameStretch            bool    `json:"same_stretch"`
+	Requests               int64   `json:"requests"`
+	Tokens                 int64   `json:"tokens"`
+	CostNanos              int64   `json:"cost_nanos"`
+	CostedRequests         int64   `json:"costed_requests"`
+	BaselineRequests       float64 `json:"baseline_requests"`
+	BaselineTokens         float64 `json:"baseline_tokens"`
+	BaselineCostNanos      float64 `json:"baseline_cost_nanos"`
+	BaselineCostedRequests float64 `json:"baseline_costed_requests"`
 }
 
 type dashboardCoverage struct {
@@ -511,26 +515,33 @@ func (h *Handler) queryDashboardComparison(ctx context.Context, window dashboard
 	if !hasComparison {
 		return nil, nil
 	}
+	bucketMS, calendar, _ := compareBucketSpec(fromMS, toMS, h.insightsZone())
 	facts, err := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
 		InstanceID: defaultInstanceID(),
 		FromMS:     fromMS,
 		ToMS:       toMS,
-		BucketMS:   0,
+		BucketMS:   bucketMS,
+		Calendar:   calendar,
 		Filters:    repository.ClientKeyFilter(apiKey),
 	})
 	if err != nil {
 		return nil, err
 	}
+	currentSpanMS := max(1, window.ToMS-window.FromMS+1)
+	prevSpanMS := max(1, facts.ToMS-facts.FromMS+1)
+	baseline := computeDashboardBaseline(facts.Rows, currentSpanMS, prevSpanMS)
 	comparison := &dashboardComparison{
-		FromMS:      facts.FromMS,
-		ToMS:        facts.ToMS,
-		SameStretch: isSameStretch,
-	}
-	for _, row := range facts.Rows {
-		comparison.Requests += row.Requests
-		comparison.Tokens += row.TotalTokens
-		comparison.CostNanos += row.CostNanos
-		comparison.CostedRequests += row.CostedRequests
+		FromMS:                 facts.FromMS,
+		ToMS:                   facts.ToMS,
+		SameStretch:            isSameStretch,
+		Requests:               baseline.rawRequests,
+		Tokens:                 baseline.rawTokens,
+		CostNanos:              baseline.rawCostNanos,
+		CostedRequests:         baseline.rawCostedRequests,
+		BaselineRequests:       baseline.baselineRequests,
+		BaselineTokens:         baseline.baselineTokens,
+		BaselineCostNanos:      baseline.baselineCostNanos,
+		BaselineCostedRequests: baseline.baselineCostedRequests,
 	}
 	return comparison, nil
 }
@@ -546,8 +557,8 @@ func dashboardComparisonBounds(window dashboardWindow, zone *time.Location) (fro
 		if calendar.previous == 0 {
 			anchor := time.UnixMilli(window.ToMS).In(zone)
 			fromMS = civilStart(anchor, zone, calendar.unit, 1).UnixMilli()
-			toMS = max(civilShift(anchor, zone, calendar.unit).UnixMilli(), fromMS+1)
-			return fromMS, toMS, true, true
+			toMS = civilStart(anchor, zone, calendar.unit, 0).UnixMilli() - 1
+			return fromMS, toMS, false, toMS > fromMS
 		}
 		mid := time.UnixMilli(window.FromMS + (window.ToMS-window.FromMS)/2).In(zone)
 		fromMS = civilStart(mid, zone, calendar.unit, 1).UnixMilli()

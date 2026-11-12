@@ -7,9 +7,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { AppstoreOutlined, ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
+import { AppstoreOutlined, ArrowDownOutlined, ArrowUpOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined, SwapOutlined } from '../components/icons';
 import { calendarPresetLabel } from '../components/common/timeRange/presetGroups';
-import { changeTrend, formatChange } from '../types/insightsFormat';
+import { changeTrend, formatChange, formatCountBaseline } from '../types/insightsFormat';
 import { useCompareWindowLabel } from '../hooks/useCompareWindowLabel';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -61,7 +61,9 @@ import { invalidateSwrScopes, useSwrQuery } from '../performance/swrContract';
 import { preloadRegisteredRoute, useTransitionNavigate } from '../performance/routeContract';
 import {
   applyTail,
+  DASHBOARD_COMPARISON_PREFERENCE,
   DASHBOARD_RANGE_PREFERENCE,
+  DEFAULT_DASHBOARD_COMPARISON,
   dashboardMetricComparison,
   dashboardRangeParams,
   DEFAULT_DASHBOARD_RANGE,
@@ -70,6 +72,7 @@ import {
   previousCalendarPreset,
   requestListWindowParams,
   livePollInterval,
+  parseDashboardComparisonPreference,
   parseDashboardRange,
   costNoteKey,
   type DashboardMetricDelta,
@@ -141,22 +144,23 @@ const KpiDelta: React.FC<{
   const t = useT();
   const formatCompareWindow = useCompareWindowLabel();
   if (!delta) return null;
-  const { comparison, previousValue, window: compareWindow, isSameStretch } = delta;
+  const { comparison, previousValue, window: compareWindow } = delta;
   const changeText = comparison.kind === 'change' ? formatChange(comparison.change) : null;
   const hasChange = comparison.kind === 'new' || changeText !== null;
+  if (!hasChange) return null;
   const wasText = previousValue !== null
-    ? t(isSameStretch ? 'insights.change_was_same_stretch' : 'insights.change_was', { value: formatPrevious(previousValue) })
+    ? t('insights.change_was', { value: formatPrevious(previousValue) })
     : null;
-  if (!hasChange && !wasText) return null;
   const compareWindowText = formatCompareWindow(compareWindow);
   const tip = [
     comparison.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : null,
     compareWindowText,
+    t('insights.compare_baseline_note'),
     wasText,
   ].filter(Boolean).join(' · ');
   return (
     <span
-      className={hasChange ? 'tile-delta tile-delta-has-change' : 'tile-delta'}
+      className="tile-delta tile-delta-has-change"
       data-trend={changeTrend(comparison)}
       data-tip={tip || undefined}
       tabIndex={tip ? 0 : undefined}
@@ -179,8 +183,7 @@ const KpiDelta: React.FC<{
           {comparison.isNoise && <span className="sr-only"> {t('insights.change_noise')}</span>}
         </>
       ) : null}
-      {wasText && <span className="tile-delta-was">{wasText}</span>}
-      <span className="sr-only"> ({compareWindowText})</span>
+      <span className="sr-only"> ({[compareWindowText, wasText].filter(Boolean).join(' · ')})</span>
     </span>
   );
 };
@@ -207,6 +210,11 @@ export const DashboardPage: React.FC = () => {
     DASHBOARD_RANGE_PREFERENCE,
     DEFAULT_DASHBOARD_RANGE,
     parseDashboardRange,
+  );
+  const { value: showComparisonBadge, loaded: isComparisonStored, set: setShowComparisonBadge } = usePreference<boolean>(
+    DASHBOARD_COMPARISON_PREFERENCE,
+    DEFAULT_DASHBOARD_COMPARISON,
+    parseDashboardComparisonPreference,
   );
 
   const toast = useToast();
@@ -365,6 +373,18 @@ export const DashboardPage: React.FC = () => {
     </>
   );
 
+  const compareButton = (
+    <ToolButton
+      icon={<SwapOutlined />}
+      label={t(showComparisonBadge ? 'insights.compare_off' : 'insights.compare_on')}
+      variant={showComparisonBadge ? 'active' : 'secondary'}
+      aria-pressed={showComparisonBadge}
+      disabled={!isComparisonStored || range.preset === 'all'}
+      onClick={() => void setShowComparisonBadge(!showComparisonBadge)}
+      data-testid="dashboard-compare"
+    />
+  );
+
   const header = (
     <PageHeader
       title={t('nav.dashboard')}
@@ -388,6 +408,7 @@ export const DashboardPage: React.FC = () => {
             />
           )}
           <ActionMenu>
+            {compareButton}
             {hasCostHidden && (
               <ToolButton
                 icon={<ReceiptOutlined />}
@@ -430,6 +451,7 @@ export const DashboardPage: React.FC = () => {
               prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
             />
           )}
+          {compareButton}
           {/* With the cost tile hidden, its receipt link moves to the toolbar. */}
           {hasCostHidden && (
             <ToolButton
@@ -518,7 +540,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="tile-value">
               <RollingNumber readout={resolveCountFlowReadout(data.requests.total)} />
-              <KpiDelta delta={requestsDelta} formatPrevious={formatCount} testId="dashboard-requests-delta" />
+              <KpiDelta delta={showComparisonBadge ? requestsDelta : null} formatPrevious={formatCountBaseline} testId="dashboard-requests-delta" />
             </div>
             <div className="tile-caption">
               <span className="tile-rate">
@@ -550,7 +572,7 @@ export const DashboardPage: React.FC = () => {
             <div className="tile-label">{t('dash.total_tokens')}</div>
             <div className="tile-value" data-tip={formatTokensFull(data.tokens.total)}>
               <RollingNumber readout={resolveTokenFlowReadout(data.tokens.total, tokenStyle)} />
-              <KpiDelta delta={tokensDelta} formatPrevious={formatPreviousTokens} testId="dashboard-tokens-delta" />
+              <KpiDelta delta={showComparisonBadge ? tokensDelta : null} formatPrevious={formatPreviousTokens} testId="dashboard-tokens-delta" />
             </div>
             <div className="tile-caption">
               <span>{t('dash.tokens_input')} <b data-tip={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
@@ -670,7 +692,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="tile-value">
               <RollingNumber readout={currencyReadout(data.metrics.cost, currency)} />
-              <KpiDelta delta={costDelta} formatPrevious={formatTrendCost} testId="dashboard-cost-delta" />
+              <KpiDelta delta={showComparisonBadge ? costDelta : null} formatPrevious={formatTrendCost} testId="dashboard-cost-delta" />
             </div>
             <div className="tile-caption">
               <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>

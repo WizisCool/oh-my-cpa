@@ -52,8 +52,9 @@ type insightsCubeResponse struct {
 	Dims         insightsDims           `json:"dims"`
 	Columns      []string               `json:"columns"`
 	Rows         [][]int64              `json:"rows"`
-	// PreviousRows are the comparison period's totals per dimension tuple, in the
-	// same columns without the leading bucket.
+	// PreviousRows are the comparison period's per-bucket totals per dimension tuple,
+	// carrying the same columns as Rows so the client can compute outlier-robust baselines
+	// under arbitrary dimension filters.
 	PreviousRows [][]int64        `json:"previous_rows"`
 	Coverage     insightsCoverage `json:"coverage"`
 }
@@ -162,21 +163,53 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 		Coverage: insightsCoverage{FactRequests: current.FactRequests, DetailRequests: current.DetailRequests},
 	}
 	if resolved.compare != nil {
+		prevBucketMS, prevCalendar, prevBucket := compareBucketSpec(resolved.compare.FromMS, resolved.compare.ToMS, zone)
 		previous, errPrevious := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
 			InstanceID: defaultInstanceID(), FromMS: resolved.compare.FromMS, ToMS: resolved.compare.ToMS,
-			Dimensions: insightsCubeDimensions,
+			BucketMS: prevBucketMS, Calendar: prevCalendar, Dimensions: insightsCubeDimensions,
 		})
 		if errPrevious != nil {
 			writeInternalError(writer, fmt.Errorf("query insights comparison: %w", errPrevious))
 			return
 		}
 		response.Compare = &insightsCompareWindow{FromMS: previous.FromMS, ToMS: previous.ToMS}
-		for _, row := range previous.Rows {
-			response.PreviousRows = append(response.PreviousRows, builder.row(-1, row)[1:])
+		if prevCalendar != nil {
+			prevStarts := prevBucket.bucketStarts(previous.FromMS, previous.ToMS, zone)
+			response.PreviousRows = builder.bucketedRows(previous.Rows, prevStarts, prevBucket, zone)
+			for len(response.PreviousRows) > maxInsightsCubeRows && (prevBucket == insightsBucketHour || prevBucket == insightsBucketDay) {
+				if prevBucket == insightsBucketHour {
+					prevBucket = insightsBucketDay
+					prevCalendar.Unit = repository.UsageCalendarDay
+				} else {
+					prevBucket = insightsBucketWeek
+					prevCalendar.Unit = repository.UsageCalendarWeek
+				}
+				previousCoarse, errCoarse := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
+					InstanceID: defaultInstanceID(), FromMS: resolved.compare.FromMS, ToMS: resolved.compare.ToMS,
+					Calendar: prevCalendar, Dimensions: insightsCubeDimensions,
+				})
+				if errCoarse != nil {
+					writeInternalError(writer, fmt.Errorf("query insights comparison: %w", errCoarse))
+					return
+				}
+				response.Compare = &insightsCompareWindow{FromMS: previousCoarse.FromMS, ToMS: previousCoarse.ToMS}
+				prevStarts = prevBucket.bucketStarts(previousCoarse.FromMS, previousCoarse.ToMS, zone)
+				response.PreviousRows = builder.bucketedRows(previousCoarse.Rows, prevStarts, prevBucket, zone)
+			}
+		} else {
+			firstStart := (previous.FromMS / prevBucketMS) * prevBucketMS
+			for _, row := range previous.Rows {
+				bucketIdx := (row.StartMS - firstStart) / prevBucketMS
+				response.PreviousRows = append(response.PreviousRows, builder.row(bucketIdx, row))
+			}
+		}
+		if len(response.PreviousRows) > maxInsightsCubeRows {
+			writeError(writer, http.StatusBadRequest, "the comparison window holds too many combinations; choose a narrower range")
+			return
 		}
 	}
 	response.Rows = builder.remap(response.Rows, 1)
-	response.PreviousRows = builder.remap(response.PreviousRows, 0)
+	response.PreviousRows = builder.remap(response.PreviousRows, 1)
 	dims, err := builder.dimensions(ctx, h.repo)
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("name insights keys: %w", err))

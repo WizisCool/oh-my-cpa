@@ -68,13 +68,14 @@ const (
 	// authored, and whether console animation is reduced. They
 	// are preferences rather than configuration because they describe how the operator reads
 	// the console, not how anything is served.
-	PreferenceDisplayCurrency    = "omc_display_currency"
-	PreferenceTokenStyle         = "omc_token_style"
-	PreferenceTpsCalculationMode = "omc_tps_calculation_mode"
-	PreferenceModelView          = "omc_models_view"
-	PreferenceRequestModelIcons  = "omc_request_model_icons"
-	PreferenceTheme              = "omc_theme"
-	PreferenceReducedMotion      = "omc_reduced_motion"
+	PreferenceDisplayCurrency     = "omc_display_currency"
+	PreferenceTokenStyle          = "omc_token_style"
+	PreferenceTpsCalculationMode  = "omc_tps_calculation_mode"
+	PreferenceModelView           = "omc_models_view"
+	PreferenceRequestModelIcons   = "omc_request_model_icons"
+	PreferenceDashboardComparison = "omc_dashboard_comparison"
+	PreferenceTheme               = "omc_theme"
+	PreferenceReducedMotion       = "omc_reduced_motion"
 
 	// PreferenceNavHidden is the console rail entries the operator has hidden, as an
 	// array of route keys. Storing the hidden set rather than the visible one is what

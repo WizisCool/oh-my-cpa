@@ -7,7 +7,9 @@
  * figures stay the dashboard's own, so the receipt's total is the number on the cost tile.
  */
 import {
+  baselineMeasures,
   compareMetric,
+  comparisonScale,
   emptyMeasures,
   rowValue,
   sumMeasures,
@@ -114,13 +116,15 @@ export function buildReceiptLedger(
   keys.sort(byAmount);
 
   const current = sumMeasures(rows);
-  const previous = previousRows.length > 0 ? sumMeasures(previousRows) : emptyMeasures();
+  const { baseline: previous, raw: previousRaw } = previousRows.length > 0
+    ? baselineMeasures(previousRows, comparisonScale(cube))
+    : { baseline: emptyMeasures(), raw: emptyMeasures() };
   return {
     keys: keys.slice(0, limits.keys),
     otherKeys: fold(keys.slice(limits.keys)),
     current,
     previous,
-    costChange: cube.compare ? compareMetric(current, previous, 'cost') : { kind: 'none' },
+    costChange: cube.compare ? compareMetric(current, previous, 'cost', previousRaw) : { kind: 'none' },
   };
 }
 

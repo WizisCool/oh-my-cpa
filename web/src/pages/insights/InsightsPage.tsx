@@ -17,7 +17,6 @@ import {
   DEFAULT_INSIGHTS_RANGE,
   INSIGHTS_BUCKETS,
   INSIGHTS_RANGE_PREFERENCE,
-  comparesSameStretch,
   insightsPollInterval,
   insightsRangeParams,
   parseInsightsRange,
@@ -36,9 +35,12 @@ import { LoadFailure } from '../../components/feedback';
 import {
   FOLDED_ID,
   attributeServingProviders,
+  baselineMeasures,
   buildFlow,
+  comparisonScale,
   decodeInsightsCube,
   filterRows,
+  groupBaselines,
   groupSparklines,
   groupTotals,
   isAdditiveMetric,
@@ -213,19 +215,20 @@ export const InsightsPage: React.FC = () => {
   const previousRows = React.useMemo(() => (cube ? filterRows(cube, cube.previous, view.filters) : []), [cube, view.filters]);
   const isComparing = view.isComparing && Boolean(cube?.compare);
   const current = React.useMemo(() => sumMeasures(rows), [rows]);
-  // The window and the sums travel together: a tile's label depends on which stretch was compared,
-  // not only on the figures.
-  const baseline = React.useMemo(
-    () => (isComparing && cube?.compare
-      ? { measures: sumMeasures(previousRows), window: cube.compare, isSameStretch: comparesSameStretch(cube.window) }
-      : null),
-    [cube, isComparing, previousRows],
-  );
+  const scale = React.useMemo(() => (cube ? comparisonScale(cube) : 1), [cube]);
+  // The comparison baseline is derived from the full previous period's sub-buckets using an
+  // outlier-robust mean scaled to the current window's elapsed duration.
+  const baseline = React.useMemo(() => {
+    if (!isComparing || !cube?.compare) return null;
+    const result = baselineMeasures(previousRows, scale);
+    return { measures: result.baseline, raw: result.raw, window: cube.compare };
+  }, [cube, isComparing, previousRows, scale]);
 
   const rank = React.useCallback((dimension: InsightsDimension) => {
     if (!cube) return [];
-    return rankGroups(groupTotals(cube, rows, dimension), metric, isComparing ? groupTotals(cube, previousRows, dimension) : undefined);
-  }, [cube, isComparing, metric, previousRows, rows]);
+    const prevGroup = isComparing ? groupBaselines(cube, previousRows, dimension, scale) : undefined;
+    return rankGroups(groupTotals(cube, rows, dimension), metric, prevGroup?.baseline, prevGroup?.raw);
+  }, [cube, isComparing, metric, previousRows, rows, scale]);
   // A ranking panel reads every filter but its own, the way the filter picker counts: choosing a model
   // keeps the other models listed, stepped back, so the narrowing is visible where it was made. The
   // dashboard's split applies on top - a request served through an OAuth sign-in is credited to that
@@ -236,8 +239,9 @@ export const InsightsPage: React.FC = () => {
       const narrowed = filterRows(cube, source, view.filters, dimension);
       return admits ? narrowed.filter(admits) : narrowed;
     };
-    return rankGroups(groupTotals(cube, pick(cube.rows), dimension), metric, isComparing ? groupTotals(cube, pick(cube.previous), dimension) : undefined);
-  }, [cube, isComparing, metric, view.filters]);
+    const prevGroup = isComparing ? groupBaselines(cube, pick(cube.previous), dimension, scale) : undefined;
+    return rankGroups(groupTotals(cube, pick(cube.rows), dimension), metric, prevGroup?.baseline, prevGroup?.raw);
+  }, [cube, isComparing, metric, scale, view.filters]);
   const rankings = React.useMemo(() => ({
     key: rank('key'),
     model: rank(modelDimension),
@@ -672,7 +676,7 @@ export const InsightsPage: React.FC = () => {
       </DeferredPanel>
       <div className={styles['footnote']}>
         {cube.window.widened && <span>{t('insights.widened')}</span>}
-        {baseline && <span>{formatCompareWindow(baseline.window)}</span>}
+        {baseline && <span>{formatCompareWindow(baseline.window)} · {t('insights.compare_baseline_note')}</span>}
         {current.requests > 0 && current.costedRequests < current.requests && (
           <span>{t('insights.cost_partial', { n: Math.round((current.costedRequests / current.requests) * 100) })}</span>
         )}

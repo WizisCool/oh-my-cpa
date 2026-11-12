@@ -23,6 +23,7 @@ export const ComparisonText: React.FC<ComparisonTextProps> = ({ comparison, comp
   const title = [
     isNoise ? t('insights.change_noise') : null,
     compare ? formatCompareWindow(compare) : null,
+    compare ? t('insights.compare_baseline_note') : null,
   ].filter(Boolean).join(' · ') || t('insights.col.change');
   return (
     <span className={className} data-trend={changeTrend(comparison)} data-tip={title}>

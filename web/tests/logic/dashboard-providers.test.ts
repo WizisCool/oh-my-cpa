@@ -14,6 +14,7 @@ import {
   applyTail,
   dashboardMetricComparison,
   isOpenCalendarPreset,
+  parseDashboardComparisonPreference,
   previousCalendarPreset,
   type DashboardResponse,
   type DashboardTailResponse,
@@ -845,12 +846,39 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
   const healedComparison = applyTail(degradedMerged.data!, sameGridTail);
   assert.deepEqual(healedComparison.data?.partial_errors, ['pipeline stats unavailable']);
 
-  // Pace-matched comparisons evaluate requests, tokens and cost.
+  // Robust full-period baseline comparisons evaluate requests, tokens and cost using baseline_* values
+  // while preserving raw previous sample counts for statistical evidence.
   const reqDelta = dashboardMetricComparison(base, 'requests');
   assert.ok(reqDelta);
-  assert.equal(reqDelta.isSameStretch, true);
+  assert.equal(reqDelta.isSameStretch, false);
   assert.equal(reqDelta.previousValue, 5);
   assert.equal(reqDelta.comparison.kind, 'change');
+
+  const withScaledBaseline: DashboardResponse = {
+    ...base,
+    comparison: {
+      ...base.comparison!,
+      same_stretch: false,
+      requests: 100,
+      tokens: 1_000_000,
+      cost_nanos: 1_000_000_000,
+      costed_requests: 100,
+      baseline_requests: 11,
+      baseline_tokens: 1_000_000,
+      baseline_cost_nanos: 320_000_000,
+      baseline_costed_requests: 11,
+    },
+  };
+  const scaledReq = dashboardMetricComparison(withScaledBaseline, 'requests');
+  assert.ok(scaledReq);
+  assert.equal(scaledReq.previousValue, 11);
+  assert.equal(scaledReq.comparison.kind, 'change');
+  if (scaledReq.comparison.kind === 'change') {
+    assert.equal(scaledReq.comparison.change, 0);
+  }
+  const scaledCost = dashboardMetricComparison(withScaledBaseline, 'cost');
+  assert.ok(scaledCost);
+  assert.equal(scaledCost.previousValue, 0.32);
 
   // Quiet midnight start (0 requests today, active yesterday same stretch) preserves yesterday's spend readout.
   const quietMidnight: DashboardResponse = {
@@ -883,6 +911,10 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
   assert.equal(previousCalendarPreset('this_week'), 'last_week');
   assert.equal(previousCalendarPreset('this_month'), 'last_month');
   assert.equal(previousCalendarPreset('24h'), undefined);
+
+  assert.equal(parseDashboardComparisonPreference(true), true);
+  assert.equal(parseDashboardComparisonPreference(false), false);
+  assert.equal(parseDashboardComparisonPreference('yes'), undefined);
 
   // Compare-window formatting omits the year only when both endpoints fall inside the active year.
   const sameYearBounds = formatCompareWindowBounds(

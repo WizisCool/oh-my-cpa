@@ -75,6 +75,10 @@ export interface DashboardComparison {
   tokens: number;
   cost_nanos: number;
   costed_requests: number;
+  baseline_requests?: number;
+  baseline_tokens?: number;
+  baseline_cost_nanos?: number;
+  baseline_costed_requests?: number;
 }
 
 /**
@@ -147,10 +151,19 @@ function previousMeasuresOf(comparison: DashboardComparison): Measures {
   return measures;
 }
 
+function baselineMeasuresOf(comparison: DashboardComparison): Measures {
+  const measures = emptyMeasures();
+  measures.requests = comparison.baseline_requests ?? comparison.requests;
+  measures.totalTokens = comparison.baseline_tokens ?? comparison.tokens;
+  measures.costNanos = comparison.baseline_cost_nanos ?? comparison.cost_nanos;
+  measures.costedRequests = comparison.baseline_costed_requests ?? comparison.costed_requests;
+  return measures;
+}
+
 /**
- * Evaluates a KPI tile's change against the server's comparison window using the same
- * Poisson noise-floor rules as Insights. Returns null when neither window carried
- * traffic so an idle deployment is not littered with empty deltas.
+ * Evaluates a KPI tile's change against the server's robust previous-period baseline
+ * using the same Poisson noise-floor rules as Insights. Returns null when neither window
+ * carried traffic so an idle deployment is not littered with empty deltas.
  */
 export function dashboardMetricComparison(
   data: DashboardResponse,
@@ -160,16 +173,17 @@ export function dashboardMetricComparison(
   if (!previousBlock) return null;
   if (data.requests.total === 0 && previousBlock.requests === 0) return null;
   const current = currentMeasuresOf(data);
-  const previous = previousMeasuresOf(previousBlock);
-  if (metric === 'cost' && current.costedRequests === 0 && previous.costedRequests === 0) return null;
+  const previousRaw = previousMeasuresOf(previousBlock);
+  const baseline = baselineMeasuresOf(previousBlock);
+  if (metric === 'cost' && current.costedRequests === 0 && previousRaw.costedRequests === 0) return null;
   // Before the first request of an open calendar unit arrives, '-100%' only restates that
-  // the period just started; keep the previous stretch's figure without a percentage alarm.
+  // the period just started; keep the previous baseline figure without a percentage alarm.
   const isUnstartedOpenUnit = data.requests.total === 0 && isOpenCalendarPreset(data.window.preset);
   return {
-    comparison: isUnstartedOpenUnit ? { kind: 'none' } : compareMetric(current, previous, metric),
-    previousValue: metricValue(previous, metric),
+    comparison: isUnstartedOpenUnit ? { kind: 'none' } : compareMetric(current, baseline, metric, previousRaw),
+    previousValue: metricValue(baseline, metric),
     window: { from: previousBlock.from, to: previousBlock.to },
-    isSameStretch: previousBlock.same_stretch,
+    isSameStretch: false,
   };
 }
 
@@ -256,6 +270,12 @@ export interface DashboardRange {
 
 /** The stored preference key holding the dashboard's current range. */
 export const DASHBOARD_RANGE_PREFERENCE = 'dashboard_range';
+export const DASHBOARD_COMPARISON_PREFERENCE = 'omc_dashboard_comparison';
+export const DEFAULT_DASHBOARD_COMPARISON = true;
+
+export function parseDashboardComparisonPreference(raw: unknown): boolean | undefined {
+  return typeof raw === 'boolean' ? raw : undefined;
+}
 
 export const DEFAULT_DASHBOARD_RANGE: DashboardRange = { preset: 'today' };
 

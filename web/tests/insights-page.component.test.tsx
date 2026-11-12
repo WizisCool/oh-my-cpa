@@ -36,7 +36,7 @@ const CUBE: InsightsCubeResponse = {
   },
   columns: COLUMNS,
   rows: [row(0, 0, 0, 30, 3000), row(1, 0, 1, 10, 1000), row(1, 1, 0, 5, 500)],
-  previous_rows: [row(0, 0, 0, 20, 2000).slice(1)],
+  previous_rows: [row(0, 0, 0, 20, 2000)],
   coverage: { fact_requests: 45, detail_requests: 0 },
 };
 
