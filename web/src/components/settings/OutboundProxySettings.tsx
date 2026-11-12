@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import type { OutboundProxyInput, OutboundProxyMode, OutboundProxySettings as Settings } from '../../types/outboundProxy';
 import { SettingsGroup } from './SettingsGroup';
 import { SecretInput } from '../common/SecretInput';
@@ -34,7 +33,7 @@ function ProxyForm({ settings }: { settings: Settings }) {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
-  const isDisabled = isDemoMode() || save.isPending || !settings.cpa_revision;
+  const isDisabled = save.isPending || !settings.cpa_revision;
   const submit = () => {
     const input: OutboundProxyInput = {
       mode,

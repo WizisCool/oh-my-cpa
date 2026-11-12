@@ -12,7 +12,6 @@ import {
 } from '../../hooks/useConfigMutations';
 import { api, ApiError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import {
   createOAuthModelAliasDrafts,
   isValidOAuthModelAliasProvider,
@@ -94,7 +93,6 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   initialProvider,
 }) => {
   const t = useT();
-  const isDemo = isDemoMode();
   const modal = useConfirmModal();
   const toast = useToast();
   const [section, setSection] = useState<OAuthModelRulesSection>('excluded');
@@ -380,8 +378,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       variant="ghost"
       icon={<DeleteOutlined />}
       data-testid="oauth-model-rules-clear"
-      disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving || isDemo}
-      data-tip={isDemo ? t('demo.blocked') : undefined}
+      disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving}
       onClick={confirmClear}
     >
       {t(section === 'aliases' ? 'af.alias_delete_provider' : 'af.excluded_delete_provider')}
@@ -401,8 +398,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         icon={<SaveOutlined />}
         data-testid="oauth-model-rules-save"
         loading={isSaving}
-        disabled={!isSectionReady || !isSectionDirty || isDemo}
-        data-tip={isDemo ? t('demo.blocked') : undefined}
+        disabled={!isSectionReady || !isSectionDirty}
         onClick={() => void (section === 'aliases' ? saveAliases() : saveRules())}
       >
         {t(section === 'aliases' ? 'af.alias_save' : 'af.excluded_save')}

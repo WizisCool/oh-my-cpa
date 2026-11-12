@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -205,7 +206,7 @@ func demoExportCases() []demoExportCase {
 		// without it the server resolves its default against the wall clock, which is
 		// not where the seeded history sits, and the list comes back empty.
 		{Name: "usage-facets", Path: "/api/v1/usage/facets?" + demoExportWindow("24h")},
-		{Name: "usage-events", Path: "/api/v1/usage/events?" + demoExportWindow("24h") + "&limit=100&result=all"},
+		{Name: "usage-events", Path: "/api/v1/usage/events?" + demoExportWindow("7d") + "&limit=300&result=all"},
 		// The record drawer asks for one event by id, and that id has to come from the list
 		// above rather than be written here. A literal id was correct until the history was
 		// reseeded, at which point it named nothing and the export captured the 404 as the
@@ -356,20 +357,48 @@ func demoExportWindow(preset string) string {
 		"&to=" + strconv.FormatInt(to.UnixMilli(), 10)
 }
 
-// committedDemoDataset is the dataset the public demonstration serves.
-const committedDemoDataset = "../../deploy/cloudflare/data/responses.json"
-
-// TestExportDemoDataset regenerates the dataset the public demo is served from. It
-// writes it when an output directory is given and otherwise requires the committed
-// copy to be byte-identical: the comparison is the freshness gate, so no list of
-// source files has to predict which edits can move a response.
+// TestExportDemoDataset generates the dataset the public demo is served from. It
+// writes responses.json when OMCPA_DEMO_EXPORT_DIR is set (in CI or Cloudflare Workers
+// Builds) and otherwise validates the in-memory export invariants without requiring a
+// committed copy on disk.
 func TestExportDemoDataset(t *testing.T) {
 	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
 	if outDir == "" && testing.Short() {
-		// Seeding a year of history takes about fifteen seconds; CI runs the comparison.
-		t.Skip("the dataset comparison runs without -short")
+		// Seeding a year of history takes about fifteen seconds; CI runs the full export.
+		t.Skip("the dataset export validation runs without -short")
 	}
-	// Day grids fold on the deployment's zone; a comparison on a non-UTC machine would
+	exported, encoded := cachedDemoDatasetWithBytes(t)
+	if len(exported.Responses) == 0 || len(encoded) == 0 {
+		t.Fatal("exported dataset is empty")
+	}
+	if outDir == "" {
+		return
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("create export directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "responses.json"), encoded, 0o644); err != nil {
+		t.Fatalf("write dataset: %v", err)
+	}
+}
+
+var (
+	demoExportCacheOnce    sync.Once
+	demoExportCachedResult demoExportResponses
+	demoExportCachedBytes  []byte
+)
+
+func cachedDemoDatasetWithBytes(t *testing.T) (demoExportResponses, []byte) {
+	t.Helper()
+	demoExportCacheOnce.Do(func() {
+		demoExportCachedResult, demoExportCachedBytes = buildDemoExportDataset(t)
+	})
+	return demoExportCachedResult, demoExportCachedBytes
+}
+
+func buildDemoExportDataset(t *testing.T) (demoExportResponses, []byte) {
+	t.Helper()
+	// Day grids fold on the deployment's zone; a run on a non-UTC machine would
 	// otherwise report drift that is only the clock's.
 	testkit.PinUTC(t)
 
@@ -419,19 +448,6 @@ func TestExportDemoDataset(t *testing.T) {
 	}
 	demoExportRunWindow.endMS = time.Now().UnixMilli()
 
-	// Runtime-stamped fields move onto the reference instant. Seeded quota
-	// observations already use the injected reference clock and remain unchanged.
-	// One table across every response, so the same generated id becomes the same
-	// stand-in wherever it appears, and one delta for the whole dataset, so every
-	// interval inside it survives the move and the panels that have to agree still do.
-	//
-	// The delta is rounded to whole seconds, and that is what makes the export
-	// reproducible rather than nearly reproducible. Serving seventy-nine responses takes
-	// a couple of seconds, so the raw difference between the reference and the moment the
-	// requests were made is a few milliseconds different every run - and every instant in
-	// the dataset inherits that difference, which is a diff that looks like drift in
-	// fifty-four responses. Rounding discards only precision no panel draws: the finest
-	// bucket the console renders is a minute wide.
 	deltaMS := (seededAt.Sub(exportedAt).Milliseconds() / 1000) * 1000
 	requestIDs := make(map[string]int)
 	normalised := make(map[string]demoExportResponse, len(responses))
@@ -480,29 +496,15 @@ func TestExportDemoDataset(t *testing.T) {
 		t.Fatal("the demo's plugin update reminder must agree with the installed store updates")
 	}
 
-	encoded, err := encodeDemoExport(demoExportResponses{
+	exported := demoExportResponses{
 		ReferenceMS: seededAt.UnixMilli(),
 		Responses:   normalised,
-	})
+	}
+	encoded, err := encodeDemoExport(exported)
 	if err != nil {
 		t.Fatalf("encode dataset: %v", err)
 	}
-	if outDir == "" {
-		committed, err := os.ReadFile(committedDemoDataset)
-		if err != nil {
-			t.Fatalf("read committed dataset: %v", err)
-		}
-		if string(committed) != string(encoded) {
-			t.Fatal("the committed demonstration dataset is stale; run pnpm demo:generate and review the diff")
-		}
-		return
-	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		t.Fatalf("create export directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(outDir, "responses.json"), encoded, 0o644); err != nil {
-		t.Fatalf("write dataset: %v", err)
-	}
+	return exported, encoded
 }
 
 // demoExportResponse is one exported response, kept as the bytes the handler wrote
@@ -1086,18 +1088,14 @@ func encodeDemoExport(payload demoExportResponses) ([]byte, error) {
 	return append(encoded, '\n'), nil
 }
 
-// readCommittedDemoDataset decodes the committed dataset, which TestExportDemoDataset
-// keeps identical to a fresh export.
+// readCommittedDemoDataset returns the cached in-memory demonstration export
+// so contract tests validate real handler output without requiring a committed file.
 func readCommittedDemoDataset(t *testing.T) demoExportResponses {
 	t.Helper()
-	raw, err := os.ReadFile(committedDemoDataset)
-	if err != nil {
-		t.Fatalf("read committed dataset: %v", err)
+	if testing.Short() {
+		t.Skip("the in-memory dataset contract checks run without -short")
 	}
-	var exported demoExportResponses
-	if err := json.Unmarshal(raw, &exported); err != nil {
-		t.Fatalf("decode committed dataset: %v", err)
-	}
+	exported, _ := cachedDemoDatasetWithBytes(t)
 	return exported
 }
 

@@ -13,7 +13,6 @@ import { QUERY_KEYS } from '../api/queryKeys';
 import { useOptimisticClientKeyMutation } from '../hooks/useConfigMutations';
 import { invalidateQueriesSilently } from '../utils/progressSources';
 import { useT } from '../i18n';
-import { isDemoMode } from '../types/demoMode';
 import { ApiKeysList } from '../components/keys/ApiKeysList';
 import { buildKeyRecords, summarizeKeys, type ApiKeyRecord, type KeyUseFilter } from '../components/keys/keyOverview';
 import type { ClientAPIKeyItem, ClientKeyUsageItem } from '../types/providers';
@@ -92,9 +91,6 @@ const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: Messa
 export const ApiKeysPage: React.FC = () => {
   const timeZone = useTimeZone();
   const t = useT();
-  // Gateway keys live in CPA's own configuration document, so adding, editing and
-  // removing a key are refused by the demonstration.
-  const isDemo = isDemoMode();
   const toast = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -412,7 +408,7 @@ export const ApiKeysPage: React.FC = () => {
   const isBlocked = keysQuery.isError && !keysQuery.data;
   const isEditing = editor.index !== null;
   const isValueChanged = isEditing && keyInput.trim() !== '' && keyInput.trim() !== editor.originalKey;
-  const canWrite = !isDemo && Boolean(keysQuery.data);
+  const canWrite = Boolean(keysQuery.data);
 
   const summary = keyCount > 0 ? (
     <SummaryStrip>
@@ -436,7 +432,6 @@ export const ApiKeysPage: React.FC = () => {
       variant="primary"
       icon={<PlusOutlined />}
       disabled={!canWrite}
-      data-tip={isDemo ? t('demo.blocked') : undefined}
       onClick={openAddEditor}
     >
       {t('cfg.api_keys_add')}
@@ -528,7 +523,7 @@ export const ApiKeysPage: React.FC = () => {
         emptyText={keyCount > 0 ? t('keys.search_empty') : t('keys.empty_title')}
         formatTime={formatUsageTime}
         isBusy={false}
-        isReadOnly={isDemo}
+        isReadOnly={false}
         onEdit={openKeyEditor}
         onDelete={(record) => void handleDeleteRecord(record)}
         onViewRequests={viewRequestsFor}

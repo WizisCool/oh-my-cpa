@@ -150,6 +150,7 @@ export default {
   'oauth.plugin_tag': 'Plugin',
   'oauth.copy_link': 'Copy Link',
   'oauth.open_link': 'Open Link',
+  'oauth.sandbox_complete': 'Complete sandbox sign-in',
   'oauth.link_copied': 'Link copied to clipboard',
   'oauth.copy_failed': 'Copy failed',
   'oauth.callback_label': 'Redirect Callback URL',

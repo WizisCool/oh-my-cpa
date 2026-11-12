@@ -150,6 +150,7 @@ export default {
   "oauth.plugin_tag": "Pemalam",
   "oauth.copy_link": "Salin Pautan",
   "oauth.open_link": "Buka Pautan",
+  "oauth.sandbox_complete": "Lengkapkan log masuk kotak pasir",
   "oauth.link_copied": "Pautan disalin ke papan keratan",
   "oauth.copy_failed": "Salinan gagal",
   "oauth.callback_label": "Ubah hala URL Panggilan Balik",

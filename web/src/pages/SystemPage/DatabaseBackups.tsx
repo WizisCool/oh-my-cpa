@@ -32,7 +32,7 @@ const JOBS_KEY = ['database-backups'];
  * account's connection is a dialog over it, and the tasks that are not settings (restore, export,
  * history) are pages inside the drawer, each with the way back in its title.
  */
-export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
+export function DatabaseBackups() {
   const t = useT();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -46,13 +46,12 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
   const automation = useQuery({
     queryKey: AUTOMATION_KEY,
     queryFn: () => api.getDatabaseBackupAutomation(),
-    enabled: !isDemo,
     refetchInterval: isOpen ? 5000 : false,
   });
   const jobsQuery = useQuery({
     queryKey: JOBS_KEY,
     queryFn: () => api.getDatabaseBackups(),
-    enabled: isOpen && !isDemo,
+    enabled: isOpen,
     refetchInterval: (current) =>
       current.state.data?.items.some((job) => RUNNING_STATES.has(job.state)) ? 1000 : false,
   });
@@ -133,9 +132,9 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
       <div className={styles['entry']}>
         <div className={styles['entry-text']}>
           <span>{t('sys.backup_title')}</span>
-          {!isDemo && value && <span className={styles['hint']}>{entrySummary(value, t)}</span>}
+          {value && <span className={styles['hint']}>{entrySummary(value, t)}</span>}
         </div>
-        <Button disabled={isDemo} onClick={() => setIsOpen(true)}>
+        <Button onClick={() => setIsOpen(true)}>
           {t('sys.backup_manage')}
         </Button>
       </div>

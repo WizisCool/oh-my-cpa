@@ -78,6 +78,41 @@
    }
   },
   {
+   "id": "openai/gpt-6.1-sol",
+   "canonical_slug": "openai/gpt-6.1-sol-20260929",
+   "name": "OpenAI: GPT-6.1 Sol",
+   "context_length": 1050000,
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.00001",
+    "web_search": "0.01",
+    "input_cache_read": "0.0000001",
+    "input_cache_write": "0.0000025",
+    "overrides": [
+     {
+      "min_prompt_tokens": 272000,
+      "prompt": "0.000004",
+      "completion": "0.000015",
+      "input_cache_read": "0.0000002",
+      "input_cache_write": "0.000005"
+     }
+    ]
+   }
+  },
+  {
+   "id": "openai/gpt-6.1-terra",
+   "canonical_slug": "openai/gpt-6.1-terra-20261026",
+   "name": "OpenAI: GPT-6.1 Terra",
+   "context_length": 1050000,
+   "pricing": {
+    "prompt": "0.000001",
+    "completion": "0.000005",
+    "web_search": "0.01",
+    "input_cache_read": "0.00000005",
+    "input_cache_write": "0.00000125"
+   }
+  },
+  {
    "id": "openai/gpt-6-luna",
    "canonical_slug": "openai/gpt-6-luna-20260922",
    "name": "OpenAI: GPT-6 Luna",
@@ -265,6 +300,17 @@
    }
   },
   {
+   "id": "deepseek/deepseek-v4.1-flash-1017",
+   "canonical_slug": "deepseek/deepseek-v4.1-flash-1017-20261017",
+   "name": "DeepSeek: DeepSeek V4.1 Flash 1017",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0.00000015",
+    "completion": "0.0000006",
+    "input_cache_read": "0.000000003"
+   }
+  },
+  {
    "id": "xiaomi/mimo-v2.5",
    "canonical_slug": "xiaomi/mimo-v2.5-20260422",
    "name": "Xiaomi: MiMo-V2.5",
@@ -298,6 +344,17 @@
    }
   },
   {
+   "id": "moonshotai/kimi-k3.1-pro",
+   "canonical_slug": "moonshotai/kimi-k3.1-pro-20261024",
+   "name": "MoonshotAI: Kimi K3.1 Pro",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.00001",
+    "input_cache_read": "0.0000002"
+   }
+  },
+  {
    "id": "moonshotai/kimi-k3",
    "canonical_slug": "moonshotai/kimi-k3-20260715",
    "name": "MoonshotAI: Kimi K3",
@@ -306,6 +363,20 @@
     "prompt": "0.000003",
     "completion": "0.000015",
     "input_cache_read": "0.0000003"
+   }
+  },
+  {
+   "id": "anthropic/claude-fable-5.2",
+   "canonical_slug": "anthropic/claude-fable-5.2-20261109",
+   "name": "Anthropic: Claude Fable 5.2",
+   "context_length": 1000000,
+   "pricing": {
+    "prompt": "0.000008",
+    "completion": "0.00004",
+    "web_search": "0.01",
+    "input_cache_read": "0.0000002",
+    "input_cache_write": "0.00001",
+    "input_cache_write_1h": "0.000016"
    }
   },
   {
@@ -334,6 +405,34 @@
     "input_cache_read": "0.0000005",
     "input_cache_write": "0.00000625",
     "input_cache_write_1h": "0.00001"
+   }
+  },
+  {
+   "id": "anthropic/claude-sonnet-5.5",
+   "canonical_slug": "anthropic/claude-sonnet-5.5-20260928",
+   "name": "Anthropic: Claude Sonnet 5.5",
+   "context_length": 1000000,
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.00001",
+    "web_search": "0.01",
+    "input_cache_read": "0.0000001",
+    "input_cache_write": "0.0000025",
+    "input_cache_write_1h": "0.000004"
+   }
+  },
+  {
+   "id": "anthropic/claude-haiku-5.5",
+   "canonical_slug": "anthropic/claude-haiku-5.5-20261007",
+   "name": "Anthropic: Claude Haiku 5.5",
+   "context_length": 1000000,
+   "pricing": {
+    "prompt": "0.0000001",
+    "completion": "0.0000005",
+    "web_search": "0.01",
+    "input_cache_read": "0.00000001",
+    "input_cache_write": "0.000000125",
+    "input_cache_write_1h": "0.0000002"
    }
   },
   {
@@ -409,6 +508,17 @@
    }
   },
   {
+   "id": "minimax/minimax-m3.1-flash",
+   "canonical_slug": "minimax/minimax-m3.1-flash-20261019",
+   "name": "MiniMax: MiniMax M3.1 Flash",
+   "context_length": 1000000,
+   "pricing": {
+    "prompt": "0.00000015",
+    "completion": "0.0000006",
+    "input_cache_read": "0.000000015"
+   }
+  },
+  {
    "id": "minimax/minimax-m3",
    "canonical_slug": "minimax/minimax-m3-20260531",
    "name": "MiniMax: MiniMax M3",
@@ -451,6 +561,49 @@
     "prompt": "0.000004",
     "completion": "0.000012",
     "input_cache_read": "0.0000005"
+   }
+  },
+  {
+   "id": "google/gemini-4-hydrogen",
+   "canonical_slug": "google/gemini-4-hydrogen-20261112",
+   "name": "Google: Gemini 4 Hydrogen",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0.0000015",
+    "completion": "0.0000075",
+    "image": "0.0000015",
+    "audio": "0.0000015",
+    "input_cache_read": "0.000000075"
+   }
+  },
+  {
+   "id": "google/gemini-4-carbon",
+   "canonical_slug": "google/gemini-4-carbon-20261028",
+   "name": "Google: Gemini 4 Carbon",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.00001",
+    "image": "0.000002",
+    "audio": "0.000002",
+    "input_cache_read": "0.0000001"
+   }
+  },
+  {
+   "id": "google/gemini-4-argon",
+   "canonical_slug": "google/gemini-4-argon-20261013",
+   "name": "Google: Gemini 4 Argon",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.00001",
+    "image": "0.000002",
+    "audio": "0.000002",
+    "input_audio_cache": "0.0000001",
+    "web_search": "0.014",
+    "internal_reasoning": "0.00001",
+    "input_cache_read": "0.0000001",
+    "input_cache_write": "0.0000001875"
    }
   },
   {

@@ -23,35 +23,17 @@ model-directory forwarding and credential warmup execution remain disabled. UI a
 can explain a refusal but cannot be the security boundary. Local theme changes and
 curated conversation replay do not write to the shared Worker.
 
-## Keep the dataset current
+## Generated dataset in CI and builds
 
-When a console read or response shape changes:
+`deploy/cloudflare/data/responses.json` is gitignored and generated on demand rather than committed to git history. Running any demo check, test, or build script (`pnpm demo:generate`, `pnpm check:demo`, `pnpm build:demo`, `pnpm test:self`, `pnpm dev:demo`) exports the dataset from the real Go handlers (`TestExportDemoDataset` in `internal/api/demo_export_test.go`) whenever it is missing (bootstrapping the pinned Go SDK from `scripts/tools-versions.json` automatically in Node-only environments such as Cloudflare Workers Builds).
 
-```bash
-pnpm demo:generate
-pnpm check:demo
-```
+A new supported read needs an export case in `internal/api/demo_export_test.go` and Worker routing in `deploy/cloudflare/`, not a special frontend that only works in the demo.
 
-Review and commit the generated diff with the code change. The owning Go export test
-compares handler output with that dataset; use [Testing](../testing.md) for the
-appropriate validation scope. A new supported read needs an export case and Worker
-routing, not a special frontend that only works in the demo.
+Exports use closed, fixed windows and pinned synthetic runtime facts. Repeated export of unchanged code should be byte-identical. Do not emit changing wall-clock values, heap sizes, ephemeral ports or host toolchain facts. A timestamp-only difference is usually a determinism defect.
 
-Exports use closed, fixed windows and pinned synthetic runtime facts. Repeated export
-of unchanged code should be byte-identical. Do not commit changing wall-clock values,
-heap sizes, ephemeral ports or host toolchain facts. A timestamp-only difference is
-usually a determinism defect, not a reason to regenerate until CI passes.
+The Worker moves real instants relative to the export reference while keeping zero (`never`) unset and retaining durations. Local-day boundaries follow the dataset's reported time zone; epoch-aligned buckets retain their meaning. Simulated live traffic and the annual activity grid remain synthetic rather than evidence of a running CPA.
 
-The Worker moves real instants relative to the export reference while keeping zero
-(`never`) unset and retaining durations. Local-day boundaries follow the dataset's
-reported time zone; epoch-aligned buckets retain their meaning. Simulated live traffic
-and the annual activity grid remain synthetic rather than evidence of a running CPA.
-
-Agent and Playground examples are local recordings under `web/src/demo`, rendered
-through the normal stream/reducer contracts. Only the offered example is replayable;
-no model call is sent. Agent snapshots exclude private model history, queued calls and
-raw database-query results. Reload/reset clears browser-local conversation replay.
-Keep recordings covered by the demo privacy check when changing them.
+Agent and Playground examples are local recordings under `web/src/demo`, rendered through the normal stream/reducer contracts. Only the offered example is replayable; no model call is sent. Agent snapshots exclude private model history, queued calls and raw database-query results. Browser-local sandbox mutations (`omc-demo-sandbox:v1`) persist across reloads in `localStorage` without writing to the shared Worker, and can be reset from the header badge. Keep recordings covered by the demo privacy check when changing them.
 
 ## Build and verify
 
@@ -62,14 +44,9 @@ pnpm build:demo
 pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run
 ```
 
-`build:demo` stages an already-built SPA; it does not build one. A fresh checkout has
-no embedded production assets. Cloudflare needs Node and the committed dataset, not
-Go, a browser or a database. Toolchain pins and build memory settings belong to the
-repository configuration rather than duplicated Cloudflare variables.
+`build:demo` stages an already-built SPA and ensures `deploy/cloudflare/data/responses.json` is generated; it does not build the SPA itself. A fresh checkout has no embedded production assets. If `go` is absent from `PATH` (for example on Cloudflare Workers Builds), `scripts/generate-demo-data.mjs` downloads and verifies the Go toolchain pinned in `scripts/tools-versions.json`.
 
-`pnpm check:demo` and `pnpm test:demo:worker` verify dataset privacy, schema freshness,
-refusal rules, and Worker route matching. Local built-artifact browser acceptance and its
-setup are described in [Testing](../testing.md).
+`pnpm check:demo` and `pnpm test:self` verify dataset privacy, schema coverage, refusal rules, and Worker route matching. Local built-artifact browser acceptance and its setup are described in [Testing](../testing.md).
 
 ## Deploy
 

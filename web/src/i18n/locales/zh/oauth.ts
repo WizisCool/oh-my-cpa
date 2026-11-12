@@ -147,6 +147,7 @@ export default {
   'oauth.plugin_tag': '插件',
   'oauth.copy_link': '复制链接',
   'oauth.open_link': '打开链接',
+  'oauth.sandbox_complete': '完成本地演示授权',
   'oauth.link_copied': '链接已复制到剪贴板',
   'oauth.copy_failed': '复制失败',
   'oauth.callback_label': '重定向回调链接 / Callback URL',

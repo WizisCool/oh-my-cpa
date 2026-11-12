@@ -20,7 +20,6 @@ import { useToast } from '../feedback';
 export const DemoNotice: React.FC = () => {
   const toast = useToast();
   const t = useT();
-  useDemoArrivalToast(t('demo.badge_tooltip'));
 
   React.useEffect(() => {
     if (!isDemoMode()) return undefined;

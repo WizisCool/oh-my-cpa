@@ -13,7 +13,6 @@ import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { isSIWCPending, siwcTargetKey, type SIWCBindings, type SIWCSession } from '../../hooks/useSIWCBindings';
 import { Notice, useConfirmModal, useToast } from '../feedback';
 import { invalidateQueriesSilently } from '../../utils/progressSources';
-import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import styles from './SIWCBindingPanel.module.css';
 import { Tooltip } from '../common/Tooltip';
@@ -90,7 +89,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
         </Tooltip>
       </span>
       <Switch aria-label={t('siwc.use')} checked={Boolean(summary.use_siwc)} loading={useMutationResult.isPending}
-        disabled={!canEdit || file.runtime_only || isPending || isDemoMode() || summary.siwc_status === undefined || (!summary.use_siwc && summary.siwc_bound !== true)}
+        disabled={!canEdit || file.runtime_only || isPending || summary.siwc_status === undefined || (!summary.use_siwc && summary.siwc_bound !== true)}
         onChange={(isEnabled) => useMutationResult.mutate({ source: file, bindingSummary, useSIWC: isEnabled })} />
     </div>
     {/* Progress is a line, not a box: the boxes are kept for what the operator has to act on. */}
@@ -146,7 +145,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
     )}
     {!isPending && (
       <div className={styles['footer']}>
-        <Button variant={summary.siwc_status === 'invalid' || !summary.siwc_bound ? 'primary' : 'secondary'} disabled={!isSupported || !canEdit || useMutationResult.isPending || isDemoMode()} onClick={start}>{t(summary.siwc_bound ? 'siwc.rebind' : 'siwc.bind')}</Button>
+        <Button variant={summary.siwc_status === 'invalid' || !summary.siwc_bound ? 'primary' : 'secondary'} disabled={!isSupported || !canEdit || useMutationResult.isPending} onClick={start}>{t(summary.siwc_bound ? 'siwc.rebind' : 'siwc.bind')}</Button>
       </div>
     )}
   </section>;

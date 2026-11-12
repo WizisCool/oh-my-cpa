@@ -1,18 +1,25 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { api } from '../../api/client';
-import { GithubOutlined, LogoutOutlined, ReloadOutlined, Star } from '../icons';
+import { GithubOutlined, LogoutOutlined, ReloadOutlined, RollbackOutlined, Star } from '../icons';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useI18n, LANGUAGES } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
 import { ActionMenu } from './ActionMenu';
+import { ConfirmAction } from './ConfirmAction';
 import { HeaderAction } from './HeaderAction';
 import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { formatStarCount } from '../../utils/format';
 import { Tooltip } from './Tooltip';
+import { useToast } from '../feedback';
+import {
+  getDemoSandboxSnapshot,
+  resetDemoSandbox,
+  subscribeDemoSandbox,
+} from '../../demo/sandbox';
 
 const REPOSITORY_URL = 'https://github.com/WizisCool/oh-my-cpa';
 /** The server reads the count at most hourly, so asking more often learns nothing. */
@@ -66,10 +73,25 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   isLoggingOut = false,
 }) => {
   const t = useT();
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const isPhone = useIsPhoneViewport();
   const { lang, setLang } = useI18n();
   const { modePreference, setModePreference } = useTheme();
+  const demoChangeCount = React.useSyncExternalStore(
+    (listener) => (isDemo ? subscribeDemoSandbox(listener) : () => {}),
+    () => (isDemo ? getDemoSandboxSnapshot().changeCount : 0),
+    () => 0,
+  );
+  const handleResetDemoSandbox = React.useCallback(async () => {
+    resetDemoSandbox();
+    await queryClient.resetQueries();
+    toast.success(t('demo.reset_sandbox_done'));
+  }, [queryClient, t, toast]);
+  const demoBadgeLabel = demoChangeCount > 0
+    ? t('demo.badge_dirty', { count: demoChangeCount })
+    : t('demo.badge');
   // A failed read is not retried or reported: the count is decoration on a link that
   // works without it.
   const { data: repository } = useQuery({
@@ -89,9 +111,18 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   if (isPhone) {
     return (
       <div className="app-header-actions">
-        {isDemo && <Tooltip title={t('demo.badge_tooltip')}><span className="demo-chip" role="note">{t('demo.badge')}</span></Tooltip>}
+        {isDemo && (
+          <Tooltip title={t('demo.badge_tooltip')}>
+            <span className="demo-chip" role="note" data-testid="demo-sandbox-badge">{demoBadgeLabel}</span>
+          </Tooltip>
+        )}
         <Button variant="ghost" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
         <ActionMenu label={t('header.tools')}>
+          {isDemo && demoChangeCount > 0 && (
+            <Button variant="ghost" icon={<RollbackOutlined />} onClick={handleResetDemoSandbox}>
+              {t('demo.reset_sandbox')}
+            </Button>
+          )}
           <span className="action-menu-label">{t('header.theme')}</span>
           {(['light', 'dark', 'system'] as const).map((mode) => (
             <Button key={mode} variant="ghost" aria-pressed={modePreference === mode} onClick={() => setModePreference(mode)}>
@@ -117,11 +148,29 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   return (
     <div className="app-header-actions">
       {isDemo && (
-        <Tooltip title={t('demo.badge_tooltip')}>
-          <span className="demo-chip" role="note">
-            {t('demo.badge')}
-          </span>
-        </Tooltip>
+        <>
+          <Tooltip title={t('demo.badge_tooltip')}>
+            <span className="demo-chip" role="note" data-testid="demo-sandbox-badge">
+              {demoBadgeLabel}
+            </span>
+          </Tooltip>
+          {demoChangeCount > 0 && (
+            <ConfirmAction
+              title={t('demo.reset_sandbox')}
+              description={t('demo.reset_sandbox_confirm')}
+              confirmLabel={t('demo.reset_sandbox')}
+              tooltip={t('demo.reset_sandbox')}
+              onConfirm={handleResetDemoSandbox}
+            >
+              <HeaderAction
+                label={t('demo.reset_sandbox')}
+                tooltip={false}
+                icon={<RollbackOutlined />}
+                data-testid="demo-sandbox-reset"
+              />
+            </ConfirmAction>
+          )}
+        </>
       )}
       <HeaderAction
         label={t('header.open_repository')}

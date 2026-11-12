@@ -485,9 +485,9 @@ The `/model-square` page reads CPA's live `/v1/models` using the first configure
 key (or returns `client_key_required` when none exists) and enriches models from the
 bundled models.dev snapshot in `internal/modelcatalog/snapshot.json`.
 
-When preparing a release, refresh the bundled snapshot with `pnpm models:sync`, then run
-`pnpm demo:generate` and update Model Square API goldens (`UPDATE_GOLDEN=1`). The release
-workflow rejects tags whose snapshot is more than 30 days older than the tagged commit.
+When preparing a release, refresh the bundled snapshot with `pnpm models:sync` and
+update Model Square API goldens (`UPDATE_GOLDEN=1`). The release workflow rejects tags
+whose snapshot is more than 30 days older than the tagged commit.
 
 ## OAuth model rules and routing
 

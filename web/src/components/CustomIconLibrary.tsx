@@ -9,7 +9,6 @@ import { LoadingRegion, Placeholder } from './common/Placeholder';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
-import { isDemoMode } from '../types/demoMode';
 import {
   CUSTOM_ICONS_QUERY_KEY,
   MAX_CUSTOM_ICON_BYTES,
@@ -76,7 +75,6 @@ export const CustomIconLibrary: React.FC<Props> = ({
   const addButton = useRef<HTMLButtonElement>(null);
   const cancelDeleteButton = useRef<HTMLButtonElement>(null);
   const shouldRestoreFocus = useRef(false);
-  const isDemo = isDemoMode();
   const visibleIcons = filterCustomIcons(icons.data ?? [], search);
   const isNew = editor === 'new';
   const hasReplacement = Boolean(source.trim() || fileName);
@@ -492,7 +490,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
           variant="primary"
           icon={<PlusOutlined />}
           disabled={
-            isDemo || isSelecting || isBusy || (icons.data?.length ?? 0) >= 100
+            isSelecting || isBusy || (icons.data?.length ?? 0) >= 100
           }
           onClick={() => openEditor('new')}
         >
@@ -505,7 +503,6 @@ export const CustomIconLibrary: React.FC<Props> = ({
         value={search}
         onChange={setSearch}
       />
-      {isDemo && <Notice tone="info" title={t('icons.demo')} />}
       {icons.isError ? (
         <LoadFailure
           title={t('icons.load_failed')}
@@ -538,7 +535,6 @@ export const CustomIconLibrary: React.FC<Props> = ({
           ) : (
             <Button
               icon={<PlusOutlined />}
-              disabled={isDemo}
               onClick={() => openEditor('new')}
             >
               {t('icons.add_first')}
@@ -603,7 +599,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
                       size="sm"
                       variant="ghost"
                       icon={<EditOutlined />}
-                      disabled={isDemo || isBusy || isSelecting}
+                      disabled={isBusy || isSelecting}
                       onClick={() => openEditor(icon)}
                     >
                       {t('common.edit')}
@@ -615,7 +611,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
                       icon={<DeleteOutlined />}
                       aria-label={t('common.delete')}
                       data-tip={t('icons.delete_action')}
-                      disabled={isDemo || isBusy || isSelecting}
+                      disabled={isBusy || isSelecting}
                       onClick={() => {
                         setError('');
                         setDeletingIcon(icon);

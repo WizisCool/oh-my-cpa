@@ -24,7 +24,6 @@ import dayjs from '../../utils/time';
 import type { ColumnsType } from '@/components/ui/table';
 import { api, apiErrorCode, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { useLogTail } from '../../hooks/useLogTail';
 import { usePreference } from '../../hooks/usePreference';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -134,7 +133,6 @@ const CpaLogLine: React.FC<{
 const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onView }) => {
   useTimeZone();
   const t = useT();
-  const isDemo = isDemoMode();
   const toast = useToast();
   const query = useQuery({
     queryKey: ['request-error-logs'],
@@ -183,8 +181,7 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
             variant="ghost"
             icon={<EyeOutlined />}
             aria-label={`${t('logs.view_file')} ${file.name}`}
-            disabled={isDemo}
-            data-tip={isDemo ? t('demo.blocked') : t('logs.view_file')}
+            data-tip={t('logs.view_file')}
             onClick={() => onView(file)}
           />
           <Button
@@ -192,10 +189,6 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
             variant="ghost"
             icon={<DownloadOutlined />}
             aria-label={`${t('logs.download')} ${file.name}`}
-            // An error log quotes request content, so the demonstration does not hand
-            // one back at all; the server refuses the download too.
-            disabled={isDemo}
-            data-tip={isDemo ? t('demo.blocked') : undefined}
             onClick={async () => {
               try {
                 saveBlob(await api.downloadRequestErrorLog(file.name), file.name);
@@ -228,7 +221,6 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
 export const CpaLogPanel: React.FC = () => {
   useTimeZone();
   const t = useT();
-  const isDemo = isDemoMode();
   const toast = useToast();
   const { value: filters, ready: filtersReady, set: setFilters } = usePreference<LogFilters>(
     LOG_FILTERS_PREFERENCE,
@@ -238,11 +230,9 @@ export const CpaLogPanel: React.FC = () => {
   const [search, setSearch] = React.useState('');
   const [tab, setTab] = React.useState<'tail' | 'errors'>('tail');
   const [viewerTarget, setViewerTarget] = React.useState<LogViewerTarget | null>(null);
-  // A request log quotes request content, so the demonstration offers no way to open one;
-  // the server refuses the read too.
-  const viewRequest = React.useMemo(
-    () => (isDemo ? undefined : (requestId: string) => setViewerTarget({ kind: 'request', requestId })),
-    [isDemo],
+  const viewRequest = React.useCallback(
+    (requestId: string) => setViewerTarget({ kind: 'request', requestId }),
+    [],
   );
 
   const status = useQuery({
@@ -460,10 +450,9 @@ export const CpaLogPanel: React.FC = () => {
                   isDanger
                   isConfirming={truncate.isPending}
                   onConfirm={() => truncate.mutate()}
-                  disabled={isDemo}
-                  tooltip={isDemo ? t('demo.blocked') : t('logs.clear')}
+                  tooltip={t('logs.clear')}
                 >
-                  <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
+                  <Button icon={<ClearOutlined />} aria-label={t('logs.clear')} />
                 </ConfirmAction>
               </div>
             </div>

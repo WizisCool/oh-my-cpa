@@ -10,7 +10,9 @@ import { LoadFailure, Notice } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import type { DatabaseBackupJob } from '../../types/databaseBackup';
+import { isDemoMode } from '../../types/demoMode';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
+import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
 import dayjs from '../../utils/time';
 import { PassphraseFields, isPassphrasePairValid } from './BackupPassphrase';
@@ -164,15 +166,28 @@ function JobCard({
         </div>
         <div className={styles['location-actions']}>
           {canDownload && (
-            <Button
-              size="sm"
-              icon={<DownloadOutlined />}
-              href={api.databaseBackupDownloadUrl(job.id)}
-              target="_blank"
-              rel="noopener"
-            >
-              {t('sys.backup_download')}
-            </Button>
+            isDemoMode() ? (
+              <Button
+                size="sm"
+                icon={<DownloadOutlined />}
+                onClick={async () => {
+                  const blob = await api.downloadDatabaseBackup(job.id);
+                  saveBlob(blob, `omc-backup-${job.id}.omcbak`);
+                }}
+              >
+                {t('sys.backup_download')}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                icon={<DownloadOutlined />}
+                href={api.databaseBackupDownloadUrl(job.id)}
+                target="_blank"
+                rel="noopener"
+              >
+                {t('sys.backup_download')}
+              </Button>
+            )
           )}
           {canRemove && !isScheduled && (
             <ConfirmAction

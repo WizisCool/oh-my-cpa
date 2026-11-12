@@ -24,7 +24,6 @@ import { api, ApiError } from '../../api/client';
 import { displayEffortName } from '../../theme/effortScale';
 import { durationScaleMix } from '../../theme/durationScale';
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { maskKeyText } from '../../utils/maskKey';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { ModelMark } from '../ModelMark';
@@ -93,7 +92,6 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   useTimeZone();
   const { currency } = useDisplayCurrency();
   const t = useT();
-  const isDemo = isDemoMode();
   // The drawer's token cards follow the console's unit style; the values are
   // exact counts, so the full form is what this surface prints.
   const { style: tokenStyle, modelView, tpsMode } = useTokenDisplayStyle();
@@ -525,10 +523,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         <Button
                           aria-label={t('events.download_log')}
                           icon={<DownloadOutlined />}
-                          // A request log quotes the request itself, so the demonstration
-                          // keeps it out of reach; the server refuses the download as well.
-                          disabled={!event.has_request_log || !event.request_id || isDemo}
-                          data-tip={isDemo ? t('demo.blocked') : undefined}
+                          disabled={!event.has_request_log || !event.request_id}
                           onClick={() => setDownloadModalOpen(true)}
                         >
                           {t('events.download_log')}

@@ -11,7 +11,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { formatTimeAgo } from '../../utils/format';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useViewSearchParams } from '../../hooks/useViewSearchParams';
@@ -138,7 +137,6 @@ const CandidateLine: React.FC<{
 export const PricingPage: React.FC = () => {
   useTimeZone();
   const t = useT();
-  const isDemo = isDemoMode();
   const toast = useToast();
   const queryClient = useQueryClient();
   const openEditor = useOpenPriceEditor();
@@ -457,10 +455,7 @@ export const PricingPage: React.FC = () => {
         block
         icon={<SyncOutlined spin={Boolean(data?.sync.running)} />}
         loading={syncMutation.isPending}
-        // The sync reaches OpenRouter. The demonstration prices its own fixture instead, so the
-        // server refuses this and the button says so.
-        disabled={isDemo || Boolean(data?.sync.running)}
-        data-tip={isDemo ? t('demo.blocked') : undefined}
+        disabled={Boolean(data?.sync.running)}
         onClick={() => syncMutation.mutate()}
       >
         {t('pricing.sync_now')}

@@ -17,7 +17,6 @@ import {
   UndoOutlined,
 } from '../components/icons';
 import { useT } from '../i18n';
-import { isDemoMode } from '../types/demoMode';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { useConfigDraft } from '../components/config/useConfigDraft';
@@ -58,10 +57,6 @@ import { AppModal } from '../components/common/AppModal';
 
 export const ConfigPage: React.FC = () => {
   const t = useT();
-  // The demonstration refuses the gateway configuration write, because it writes to
-  // CPA's own file. The editor stays usable so the page can be read and explored; only
-  // the save is withheld.
-  const isDemo = isDemoMode();
   const toast = useToast();
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -370,8 +365,7 @@ export const ConfigPage: React.FC = () => {
                 variant="primary"
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
-                disabled={!isDirty || isDemo}
-                data-tip={isDemo ? t('demo.blocked') : undefined}
+                disabled={!isDirty}
                 onClick={saveConfig}
               >
                 {t('cfg.source_save')}
@@ -381,14 +375,13 @@ export const ConfigPage: React.FC = () => {
                 title={t('cfg.source_save_confirm')}
                 description={t('cfg.source_save_confirm_desc')}
                 onConfirm={saveConfig}
-                disabled={!isDirty || saveMutation.isPending || isDemo}
+                disabled={!isDirty || saveMutation.isPending}
               >
                 <Button
                   variant="primary"
                   icon={<SaveOutlined />}
                   loading={saveMutation.isPending}
-                  disabled={!isDirty || isDemo}
-                  data-tip={isDemo ? t('demo.blocked') : undefined}
+                  disabled={!isDirty}
                 >
                   {t('cfg.source_save')}
                 </Button>
@@ -588,7 +581,6 @@ export const ConfigPage: React.FC = () => {
         showErrorFeedback={showErrorFeedback}
         onSave={saveConfig}
         onDiscard={handleDiscardChanges}
-        disabled={isDemo}
       />
 
       {/* ── Conflict Modal ────────────────────────────────────────────── */}

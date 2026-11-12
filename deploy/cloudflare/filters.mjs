@@ -127,7 +127,232 @@ const FILTERS = new Map([
   ['/api/v1/management/audit/events', filterAuditEvents],
   ['/api/v1/management/audit/summary', summarizeAuditEvents],
   ['/api/v1/management/service-logs', filterServiceLogs],
+  ['/api/v1/usage/events', filterUsageEvents],
+  ['/api/v1/usage/facets', filterUsageFacets],
 ]);
+
+/**
+ * Filters captured usage events against query parameters (`q`, `result`, `model`,
+ * `provider`, `auth_index`, `api_key`, `source`, `preset`, `from`/`to`, `limit`, `cursor`)
+ * so filtering, searching, and pagination on Request Events work accurately in the Worker.
+ */
+export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
+  if (!decoded || !Array.isArray(decoded.items)) return decoded;
+  const params = url.searchParams;
+  const filtered = matchUsageItems(decoded.items, params, deltaMs);
+
+  const cursor = params.get('cursor') ?? '';
+  const limitRaw = Number(params.get('limit') ?? decoded.limit ?? 50);
+  const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
+
+  // When no query filter is active, keep the captured page bounds, cursor, and limit intact
+  // so default unfiltered reads remain identical to the backend's capture.
+  const hasFilter = Boolean(
+    params.get('q') ||
+    (params.get('result') && params.get('result') !== 'all') ||
+    params.get('model') ||
+    params.get('model_alias') ||
+    params.get('provider') ||
+    params.get('auth_index') ||
+    params.get('auth_type') ||
+    params.get('api_key') ||
+    params.get('source') ||
+    params.get('executor') ||
+    params.get('reasoning') ||
+    params.get('service_tier') ||
+    params.get('resolved_service_tier') ||
+    (params.get('cost') && params.get('cost') !== 'all') ||
+    (params.get('transport') && params.get('transport') !== 'all') ||
+    params.has('min_latency_ms') ||
+    params.has('max_latency_ms') ||
+    params.has('from') ||
+    params.has('to') ||
+    params.has('preset') ||
+    params.has('cursor') ||
+    params.has('limit'),
+  );
+  if (!hasFilter) return decoded;
+
+  let startIndex = 0;
+  if (cursor) {
+    const idx = filtered.findIndex((item) => String(item.id) === cursor);
+    startIndex = idx >= 0 ? idx + 1 : 0;
+  }
+  const items = filtered.slice(startIndex, startIndex + limit);
+  const hasMore = startIndex + limit < filtered.length;
+  const nextCursor = hasMore && items.length > 0 ? String(items[items.length - 1].id) : '';
+
+  const win = presetWindowBounds(decoded.window, params, deltaMs);
+  return {
+    ...decoded,
+    window: win,
+    items,
+    next_cursor: nextCursor,
+    has_more: hasMore,
+    limit,
+  };
+}
+
+/**
+ * Recomputes usage facets from the captured `usage-events` items for the same window/search
+ * so facet counts agree with the filtered list.
+ */
+export function filterUsageFacets(decoded, url, { deltaMs = 0, dataset } = {}) {
+  let rawItems;
+  try {
+    rawItems = JSON.parse(dataset?.responses?.['usage-events']?.body ?? 'null')?.items;
+  } catch {
+    rawItems = undefined;
+  }
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return decoded;
+  const params = url.searchParams;
+  // Facet counts ignore self-selecting result/multi facets? Match window & search at minimum.
+  const winItems = matchUsageItems(rawItems, new URLSearchParams({
+    ...(params.has('preset') ? { preset: params.get('preset') } : {}),
+    ...(params.has('from') ? { from: params.get('from') } : {}),
+    ...(params.has('to') ? { to: params.get('to') } : {}),
+    ...(params.has('q') ? { q: params.get('q') } : {}),
+  }), deltaMs);
+  if (winItems.length === 0 && !params.has('q')) return decoded;
+
+  const countBy = (getter) => {
+    const map = new Map();
+    for (const item of winItems) {
+      const value = getter(item);
+      if (!value) continue;
+      map.set(value, (map.get(value) ?? 0) + 1);
+    }
+    return [...map.entries()]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  };
+
+  return {
+    ...decoded,
+    models: countBy((i) => i.model),
+    model_aliases: countBy((i) => i.model_alias),
+    providers: countBy((i) => i.provider),
+    auth_indexes: countBy((i) => i.auth_index),
+    auth_types: countBy((i) => i.auth_type),
+    executors: countBy((i) => i.executor_type),
+    sources: countBy((i) => i.source),
+    api_group_keys: countBy((i) => i.api_group_key),
+    reasoning_efforts: countBy((i) => i.reasoning_effort),
+    service_tiers: countBy((i) => i.service_tier),
+    resolved_service_tiers: countBy((i) => i.resolved_service_tier),
+  };
+}
+
+const USAGE_PRESET_MS = {
+  '15m': 15 * 60_000,
+  '1h': 60 * 60_000,
+  '6h': 6 * 60 * 60_000,
+  '24h': 24 * 60 * 60_000,
+  '7d': 7 * 24 * 60 * 60_000,
+  '30d': 30 * 24 * 60 * 60_000,
+  '90d': 90 * 24 * 60 * 60_000,
+};
+
+function presetWindowBounds(baseWindow, params, deltaMs) {
+  const fromParam = Number(params.get('from'));
+  const toParam = Number(params.get('to'));
+  if (Number.isFinite(fromParam) && Number.isFinite(toParam) && toParam > fromParam) {
+    return {
+      from: fromParam - deltaMs,
+      to: toParam - deltaMs,
+      preset: params.get('preset') ?? 'custom',
+    };
+  }
+  const preset = (params.get('preset') ?? baseWindow?.preset ?? '24h').toLowerCase();
+  const duration = USAGE_PRESET_MS[preset];
+  if (duration && baseWindow && typeof baseWindow.to === 'number') {
+    return {
+      from: baseWindow.to - duration,
+      to: baseWindow.to,
+      preset,
+    };
+  }
+  return baseWindow;
+}
+
+function matchUsageItems(items, params, deltaMs) {
+  const q = (params.get('q') ?? '').trim().toLowerCase();
+  const result = (params.get('result') ?? 'all').toLowerCase();
+  const models = new Set(params.getAll('model').filter(Boolean));
+  const modelAliases = new Set(params.getAll('model_alias').filter(Boolean));
+  const providers = new Set(params.getAll('provider').filter(Boolean));
+  const authIndexes = new Set(params.getAll('auth_index').filter(Boolean));
+  const authTypes = new Set(params.getAll('auth_type').filter(Boolean));
+  const apiKeys = new Set(params.getAll('api_key').filter(Boolean));
+  const sources = new Set(params.getAll('source').filter(Boolean));
+  const executors = new Set(params.getAll('executor').filter(Boolean));
+  const reasoning = new Set(params.getAll('reasoning').filter(Boolean));
+  const serviceTiers = new Set(params.getAll('service_tier').filter(Boolean));
+  const resolvedTiers = new Set(params.getAll('resolved_service_tier').filter(Boolean));
+  const cost = (params.get('cost') ?? 'all').toLowerCase();
+  const transport = (params.get('transport') ?? 'all').toLowerCase();
+  const minLatency = params.has('min_latency_ms') ? Number(params.get('min_latency_ms')) : null;
+  const maxLatency = params.has('max_latency_ms') ? Number(params.get('max_latency_ms')) : null;
+
+  let fromCaptured = null;
+  let toCaptured = null;
+  const fromParam = Number(params.get('from'));
+  const toParam = Number(params.get('to'));
+  if (Number.isFinite(fromParam) && Number.isFinite(toParam) && toParam > fromParam) {
+    fromCaptured = fromParam - deltaMs;
+    toCaptured = toParam - deltaMs;
+  } else {
+    const preset = (params.get('preset') ?? '').toLowerCase();
+    const duration = USAGE_PRESET_MS[preset];
+    if (duration && items.length > 0) {
+      let newest = items[0].timestamp_ms ?? 0;
+      for (const item of items) {
+        if ((item.timestamp_ms ?? 0) > newest) newest = item.timestamp_ms;
+      }
+      toCaptured = newest + 60_000;
+      fromCaptured = newest - duration;
+    }
+  }
+
+  return items.filter((item) => {
+    if (fromCaptured !== null && (item.timestamp_ms ?? 0) < fromCaptured) return false;
+    if (toCaptured !== null && (item.timestamp_ms ?? 0) > toCaptured) return false;
+    if (result === 'success' && item.failed) return false;
+    if (result === 'failed' && !item.failed) return false;
+    if (models.size > 0 && !models.has(item.model)) return false;
+    if (modelAliases.size > 0 && !modelAliases.has(item.model_alias ?? '')) return false;
+    if (providers.size > 0 && !providers.has(item.provider)) return false;
+    if (authIndexes.size > 0 && !authIndexes.has(item.auth_index ?? '')) return false;
+    if (authTypes.size > 0 && !authTypes.has(item.auth_type ?? '')) return false;
+    if (apiKeys.size > 0 && !apiKeys.has(item.api_group_key ?? '')) return false;
+    if (sources.size > 0 && !sources.has(item.source ?? '')) return false;
+    if (executors.size > 0 && !executors.has(item.executor_type ?? '')) return false;
+    if (reasoning.size > 0 && !reasoning.has(item.reasoning_effort ?? '')) return false;
+    if (serviceTiers.size > 0 && !serviceTiers.has(item.service_tier ?? '')) return false;
+    if (resolvedTiers.size > 0 && !resolvedTiers.has(item.resolved_service_tier ?? '')) return false;
+    if (cost === 'priced' && item.pricing_status !== 'priced') return false;
+    if (cost === 'unpriced' && item.pricing_status === 'priced') return false;
+    if (transport === 'stream' && item.stream !== true) return false;
+    if (transport === 'non_stream' && item.stream !== false) return false;
+    if (minLatency !== null && Number.isFinite(minLatency) && (item.latency_ms ?? 0) < minLatency) return false;
+    if (maxLatency !== null && Number.isFinite(maxLatency) && (item.latency_ms ?? 0) > maxLatency) return false;
+    if (q) {
+      const hay = [
+        item.model,
+        item.model_alias,
+        item.response_model,
+        item.provider,
+        item.request_id,
+        item.api_key_alias,
+        item.api_key_mask,
+        item.source,
+        item.auth_index,
+      ].map((v) => String(v ?? '').toLowerCase()).join(' ');
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
 
 /**
  * `context.deltaMs` is the re-basing delta the response will be served with, and

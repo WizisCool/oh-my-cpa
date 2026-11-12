@@ -9,7 +9,6 @@ import dayjs from '../../utils/time';
 
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
-import { isDemoMode } from '../../types/demoMode';
 import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
 import type { ConfigBackup } from '../../types/configManagement';
@@ -46,7 +45,6 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
   const t = useT();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const isDemo = isDemoMode();
   const [isOpen, setIsOpen] = React.useState(false);
   const [downloadingID, setDownloadingID] = React.useState<number | null>(null);
   const [retentionDraft, setRetentionDraft] = React.useState<number | null>(null);
@@ -117,7 +115,6 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
   const describeReason = (reason: string) => t(prefixedKey('cfg.backups_reason_', reason) ?? 'cfg.backups_reason_other');
 
   const restoreBlockedReason = (backup: ConfigBackup): string | undefined => {
-    if (isDemo) return t('demo.blocked');
     if (backup.layout !== 'v8') return t('cfg.backups_restore_legacy');
     if (isDirty) return t('cfg.backups_restore_dirty');
     return undefined;
@@ -148,7 +145,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
               max={settings?.retention_max ?? 100}
               precision={0}
               value={retentionValue}
-              disabled={!settings || isDemo}
+              disabled={!settings}
               aria-label={t('cfg.backups_retention')}
               onChange={(value) => setRetentionDraft(typeof value === 'number' ? value : null)}
             />
@@ -164,17 +161,14 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
               </Button>
             )}
           </div>
-          <Tooltip title={isDemo ? t('demo.blocked') : undefined}>
-            <Button
-              size="sm"
-              icon={<PlusOutlined />}
-              loading={createMutation.isPending}
-              disabled={isDemo}
-              onClick={() => createMutation.mutate()}
-            >
-              {t('cfg.backups_create')}
-            </Button>
-          </Tooltip>
+          <Button
+            size="sm"
+            icon={<PlusOutlined />}
+            loading={createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+          >
+            {t('cfg.backups_create')}
+          </Button>
         </div>
         <Table<ConfigBackup>
           className={styles['backups-table']}
@@ -243,15 +237,13 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
                       title={t('cfg.backups_delete_confirm')}
                       confirmLabel={t('common.delete')}
                       isDanger
-                      disabled={isDemo}
-                      tooltip={isDemo ? t('demo.blocked') : t('common.delete')}
+                      tooltip={t('common.delete')}
                       onConfirm={() => deleteMutation.mutateAsync(backup).catch(() => undefined)}
                     >
                       <Button
                         size="sm"
                         danger
                         icon={<DeleteOutlined />}
-                        disabled={isDemo}
                         loading={deleteMutation.isPending && deleteMutation.variables?.id === backup.id}
                         aria-label={t('common.delete')}
                       />

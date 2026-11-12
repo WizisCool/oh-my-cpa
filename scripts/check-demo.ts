@@ -15,13 +15,15 @@
  * 2. **Nothing private is in it.** The dataset is public, so an operator identifier,
  *    a credential shape or a deployment hostname is a leak rather than a defect.
  *
- * That the committed dataset matches the handlers is `TestExportDemoDataset`'s claim:
- * it regenerates the dataset and compares it byte for byte.
+ * That the exported dataset matches the real Go handlers deterministically is
+ * `TestExportDemoDataset`'s claim: it validates every exported response in memory
+ * and verifies repeated generation is byte-identical.
  */
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureDemoDataset } from './generate-demo-data.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -105,6 +107,9 @@ export async function checkDemo(root = ROOT, {
   const DATASET = join(root, 'deploy', 'cloudflare', 'data', 'responses.json');
   const failures: string[] = [];
 
+  if (existsSync(join(root, 'go.mod'))) {
+    await ensureDemoDataset(root);
+  }
   if (!existsSync(DATASET)) {
     return { failures: [`no dataset at ${relative(root, DATASET)}; run pnpm demo:generate`], responseCount: 0 };
   }

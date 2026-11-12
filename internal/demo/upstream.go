@@ -51,7 +51,7 @@ var subscriptionUnavailable = map[string]bool{
 // branch reachable: an end-of-term seat is otherwise only observable by waiting for
 // a real subscription to lapse.
 var subscriptionNotRenewing = map[string]bool{
-	"auth-codex-01": true,
+	"auth-codex-04": true,
 }
 
 // Upstream is an in-process stand-in for a CLIProxyAPI management endpoint.
@@ -180,16 +180,22 @@ func newUpstreamState(now time.Time) *upstreamState {
 		}
 
 		if item.authIndex == "auth-codex-01" {
-			file["requires_sign_in"], file["renewal_state"], file["recovery_stage"] = true, "sign_in_required", "sign_in_required"
-			file["access_token_expires_at"] = now.Add(4 * time.Hour).UTC().Format(time.RFC3339)
-			file["adopted"], file["inference_verified"], file["renewal_verified"] = true, true, false
-			file["refresh_error"], file["next_action"] = map[string]any{"code": "invalid_grant", "http_status": 401}, "sign_in"
+			file["requires_sign_in"], file["renewal_state"], file["recovery_stage"] = false, "healthy", "renewal_verified"
+			file["access_token_expires_at"] = now.Add(18 * time.Hour).UTC().Format(time.RFC3339)
+			file["next_refresh_after"] = now.Add(25 * time.Minute).UTC().Format(time.RFC3339)
+			file["adopted"], file["inference_verified"], file["renewal_verified"] = true, true, true
 		}
 		if item.authIndex == "auth-codex-02" {
 			file["requires_sign_in"], file["renewal_state"], file["recovery_stage"] = false, "awaiting_first_renewal", "inference_verified"
 			file["access_token_expires_at"] = now.Add(12 * time.Hour).UTC().Format(time.RFC3339)
 			file["next_refresh_after"] = now.Add(5 * time.Minute).UTC().Format(time.RFC3339)
 			file["adopted"], file["inference_verified"], file["renewal_verified"] = true, true, false
+		}
+		if item.authIndex == "auth-codex-04" {
+			file["requires_sign_in"], file["renewal_state"], file["recovery_stage"] = true, "sign_in_required", "sign_in_required"
+			file["access_token_expires_at"] = now.Add(4 * time.Hour).UTC().Format(time.RFC3339)
+			file["adopted"], file["inference_verified"], file["renewal_verified"] = true, true, false
+			file["refresh_error"], file["next_action"] = map[string]any{"code": "invalid_grant", "http_status": 401}, "sign_in"
 		}
 
 		if item.email != "" {
