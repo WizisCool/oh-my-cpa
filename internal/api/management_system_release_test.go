@@ -693,3 +693,59 @@ func auditEventsFor(t *testing.T, repo *repository.Repository, ctx context.Conte
 	}
 	return events
 }
+
+// TestMaintenanceStatusWireFields pins the maintenance status as the console reads it: the literal
+// JSON keys, the counters in their own fields rather than swapped, the reason as a code, and a
+// checkpoint that was never read as null rather than as zero counters.
+func TestMaintenanceStatusWireFields(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		status repository.MaintenanceStatus
+		want   map[string]any
+	}{
+		{
+			name: "a blocked checkpoint carries its reason code and counters",
+			status: repository.MaintenanceStatus{
+				Action: repository.MaintenanceCheckpoint, Incomplete: true,
+				IncompleteReason: repository.IncompleteReaderBlocked,
+				Checkpoint:       &repository.CheckpointCounts{LogFrames: 7, CheckpointedFrames: 3},
+			},
+			want: map[string]any{
+				"incomplete": true, "incomplete_reason": "reader_blocked",
+				"checkpoint": map[string]any{"log_frames": float64(7), "checkpointed_frames": float64(3)},
+			},
+		},
+		{
+			name: "a rebuild whose log was not truncated has no counters",
+			status: repository.MaintenanceStatus{
+				Action: repository.MaintenanceVacuum, Incomplete: true,
+				IncompleteReason: repository.IncompleteLogNotTruncated,
+			},
+			want: map[string]any{"incomplete": true, "incomplete_reason": "log_not_truncated", "checkpoint": nil},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			body, err := json.Marshal(maintenanceStatusToDTO(testCase.status))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wire map[string]any
+			if err := json.Unmarshal(body, &wire); err != nil {
+				t.Fatal(err)
+			}
+			if _, has := wire["detail"]; has {
+				t.Errorf("the retired free-text detail is still on the wire: %s", body)
+			}
+			for key, want := range testCase.want {
+				got, has := wire[key]
+				if !has {
+					t.Errorf("key %q missing from %s", key, body)
+					continue
+				}
+				if fmt.Sprint(got) != fmt.Sprint(want) {
+					t.Errorf("%s = %v, want %v", key, got, want)
+				}
+			}
+		})
+	}
+}
