@@ -208,7 +208,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
       value: entry.value,
       label:
         spec.key === 'auth_index'
-          ? `${credentialName(entry.value)} · ${usageFacetLabel(entry)}`
+          ? usageFacetLabel({ ...entry, alias: credentialName(entry.value) })
           : spec.key === 'provider'
             ? providerFacetLabel(providerName(entry.value), entry.requests)
             : spec.key === 'reasoning'
@@ -223,7 +223,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         value,
         label:
           spec.key === 'auth_index'
-            ? `${credentialName(value)} · ${value}`
+            ? (credentialName(value) === value ? value : `${credentialName(value)} (${value})`)
             : spec.key === 'provider'
               ? providerName(value)
               : spec.key === 'reasoning'
@@ -377,7 +377,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           <Input
             id={`req-range-${key}-min`}
             className={styles['range-input']}
-            aria-label={`${t(labelKey)} · ${t('events.range_min')}`}
+            aria-label={t('common.action_on', { action: t(labelKey), target: t('events.range_min') })}
             placeholder={t('events.range_min')}
             value={bound('min')}
             status={errors[`${key}_min`] ? 'error' : undefined}
@@ -387,7 +387,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           <NumberInput
             id={`req-range-${key}-min`}
             className={styles['range-input']}
-            aria-label={`${t(labelKey)} · ${t('events.range_min')}`}
+            aria-label={t('common.action_on', { action: t(labelKey), target: t('events.range_min') })}
             placeholder={t('events.range_min')}
             min={0}
             precision={0}
@@ -403,7 +403,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           <Input
             id={`req-range-${key}-max`}
             className={styles['range-input']}
-            aria-label={`${t(labelKey)} · ${t('events.range_max')}`}
+            aria-label={t('common.action_on', { action: t(labelKey), target: t('events.range_max') })}
             placeholder={t('events.range_max')}
             value={bound('max')}
             status={errors[`${key}_max`] ? 'error' : undefined}
@@ -413,7 +413,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           <NumberInput
             id={`req-range-${key}-max`}
             className={styles['range-input']}
-            aria-label={`${t(labelKey)} · ${t('events.range_max')}`}
+            aria-label={t('common.action_on', { action: t(labelKey), target: t('events.range_max') })}
             placeholder={t('events.range_max')}
             min={0}
             precision={0}

@@ -1,4 +1,5 @@
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
+import { formatErrorCode } from '../../utils/format';
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState } from '@assistant-ui/react';
@@ -158,7 +159,7 @@ const AssistantContent = React.memo(function AssistantContent({ turn, isLast, ca
       {turn.error && (
         <div className={styles['turn-error']} role="alert">
           <span>{t(playgroundErrorKey(turn.error.code ?? ''))}</span>
-          <code>{[turn.error.code, turn.error.upstream_status, turn.error.parameter].filter(Boolean).join(' · ')}</code>
+          <code>{formatErrorCode({ code: turn.error.code, status: turn.error.upstream_status, parameter: turn.error.parameter })}</code>
         </div>
       )}
       {!isRunning && (

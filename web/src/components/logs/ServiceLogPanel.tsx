@@ -1,4 +1,5 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
+import { MetaLine } from '../common/MetaLine';
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import dayjs from '../../utils/time';
@@ -109,12 +110,12 @@ export const ServiceLogPanel: React.FC = () => {
           ))}
         </div>
         <div className={styles['toolbar-summary']}>
-          <span className="logs-counts text-foreground">
-            {t('logs.service_counts', { shown: rows.length, total: tail.records.length })}
+          <MetaLine className="logs-counts">
+            <b>{t('logs.service_counts', { shown: rows.length, total: tail.records.length })}</b>
             {tail.capacity && tail.startedAtMS
-              ? ` · ${t('logs.service_retention', { capacity: tail.capacity, since: dayjs(tail.startedAtMS).format('MM-DD HH:mm') })}`
+              ? t('logs.service_retention', { capacity: tail.capacity, since: dayjs(tail.startedAtMS).format('MM-DD HH:mm') })
               : ''}
-          </span>
+          </MetaLine>
           <div className={styles['toolbar-actions']}>
             <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
               <Button

@@ -1,4 +1,5 @@
 import { translateOr } from '../i18n/catalog';
+import { joinPhrases } from '../utils/format';
 import React from 'react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui/button';
@@ -150,7 +151,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
   const upstream = entry.profiles[0].identity;
   let caption = '';
   // Several routes to one model repeat its name; the caption names each distinct model once.
-  if (entry.profiles.length > 1) caption = [...new Set(entry.profiles.map(profile => profile.metadata?.name || profile.identity))].join(' · ');
+  if (entry.profiles.length > 1) caption = joinPhrases(t, [...new Set(entry.profiles.map(profile => profile.metadata?.name || profile.identity))]);
   else if (reference) caption = reference.name;
   else if (upstream !== entry.identity) caption = upstream;
   const { price } = ledger;
@@ -200,7 +201,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
   const unknown = <span className={styles['is-absent']}>{t('models.unknown')}</span>;
   const text = (value?: string) => value || unknown;
   const limit = (value?: number) => value ? value.toLocaleString() : unknown;
-  const modalities = (values?: string[]) => values?.length ? values.map(value => (KNOWN_MODALITIES.includes(value) ? translateOr(t, `models.modality.${value}`, value) : value)).join(' · ') : unknown;
+  const modalities = (values?: string[]) => values?.length ? values.map(value => (KNOWN_MODALITIES.includes(value) ? translateOr(t, `models.modality.${value}`, value) : value)).join(' / ') : unknown;
   const flag = (value?: boolean) => {
     if (value === undefined) return unknown;
     return value
@@ -284,7 +285,12 @@ const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) =
     </dl>
     <div className={styles['cost-actions']}>
       {onSetPrice && ledger.pricingTargets.map(target => <Button key={JSON.stringify([target.channel, target.model])} variant={target.price ? 'secondary' : 'primary'} onClick={() => onSetPrice(target)}>
-        {t(target.price ? 'pricing.edit' : 'pricing.set_price')}{ledger.pricingTargets.length > 1 ? ` · ${target.channelLabel || target.channel || target.model} · ${target.model}` : ''}
+        {t(target.price ? 'pricing.edit' : 'pricing.set_price')}
+        {ledger.pricingTargets.length > 1 && (
+          <span className={styles['target-scope']}>
+            {target.channelLabel || target.channel ? `${target.channelLabel || target.channel} / ${target.model}` : target.model}
+          </span>
+        )}
       </Button>)}
       <Link className={styles['reference-link']} to={modelRequestsLink(identity)}>{t('models.view_requests')}<RightOutlined /></Link>
     </div>
@@ -335,7 +341,7 @@ const CatalogRefreshButton: React.FC<{ onReread: () => Promise<unknown> }> = ({ 
       return;
     }
     if (skipped.length > 0) {
-      const catalogs = skipped.map(outcome => catalogName(outcome.catalog)).join(' · ');
+      const catalogs = joinPhrases(t, skipped.map(outcome => catalogName(outcome.catalog)));
       toast.info(t('models.catalogs_refreshed_with_skips'), { detail: t('models.catalogs_skipped_by_config', { catalogs }) });
       return;
     }

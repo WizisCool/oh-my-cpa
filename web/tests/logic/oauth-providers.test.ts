@@ -281,7 +281,7 @@ test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
   // A portal that publishes no text of its own keeps v0.3.19's reading: the identifier
   // in the title, the plugin's mark in the card.
   assert.equal(plain.id, 'zcode-legacy');
-  assert.equal(plain.title, 'OMC ZCode OAuth · zcode-legacy');
+  assert.equal(plain.title, 'OMC ZCode OAuth (zcode-legacy)');
   assert.equal(plain.logo, 'data:image/svg+xml,%3Csvg%20id%3D%22plugin%22/%3E');
   // The portal verdict does not change ownership: the card still belongs to the plugin.
   assert.deepEqual([zai.pluginId, bigmodel.pluginId, plain.pluginId], ['omc-zcode-oauth', 'omc-zcode-oauth', 'omc-zcode-oauth']);
@@ -299,7 +299,7 @@ test('a plugin\'s login cards carry each portal\'s own name and mark', () => {
     ],
   }], t);
   assert.equal(named.title, 'Z.ai');
-  assert.equal(filled.title, 'OMC ZCode OAuth · zcode-bigmodel');
+  assert.equal(filled.title, 'OMC ZCode OAuth (zcode-bigmodel)');
 
   // A portal logo that cannot be rendered falls back to the plugin's, then to the catalog.
   const [unusable] = pluginOAuthProviderChoices([{

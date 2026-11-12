@@ -9,7 +9,7 @@ export default {
   "cfg.source_return": "Kembali",
   "cfg.search_placeholder": "Tetapan carian (label atau kunci YAML)",
   "cfg.search_results": "{n} tetapan sepadan ditemui",
-  "cfg.items_count": "{n} item · {status}",
+  "cfg.items_count": "{n} tetapan",
   "cfg.mode_visual": "Visual",
   "cfg.mode_source": "Sumber",
   "cfg.source_load_failed": "Gagal membaca sumber konfigurasi: {msg}",

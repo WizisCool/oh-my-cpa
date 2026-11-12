@@ -1,4 +1,5 @@
 import React from 'react';
+import { MetaLine } from '../../components/common/MetaLine';
 import { useQuery } from '@tanstack/react-query';
 import { Segmented } from '@/components/ui/segmented';
 import { Select } from '@/components/ui/select';
@@ -114,7 +115,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
           </span>
         </span>
       )}
-      description={group ? `${owner.credentialName} · ${group}` : owner.credentialName}
+      description={group ? <MetaLine>{owner.credentialName}{group}</MetaLine> : owner.credentialName}
     >
       {siblingWindows.length > 1 && (
         <div className={styles['cycle-bar']} data-quota-capacity-toolbar="">

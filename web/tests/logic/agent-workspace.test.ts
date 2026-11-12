@@ -357,8 +357,8 @@ test('agent workspace', async () => {
   // ── call rows ──────────────────────────────────────────────────────────────────
 
   check('a call row states its arguments in brief', () => {
-    assert.equal(argumentSummary('{"window":"24h","group_by":"model"}'), 'window=24h · group_by=model');
-    assert.equal(argumentSummary('{"a":1,"b":2,"c":3,"d":4,"e":""}'), 'a=1 · b=2 · c=3 · +1');
+    assert.equal(argumentSummary('{"window":"24h","group_by":"model"}'), 'window=24h, group_by=model');
+    assert.equal(argumentSummary('{"a":1,"b":2,"c":3,"d":4,"e":""}'), 'a=1, b=2, c=3, +1');
     assert.equal(argumentSummary(`{"sql":"${'x'.repeat(50)}"}`), `sql=${'x'.repeat(32)}…`);
     assert.equal(argumentSummary('{}'), '');
     assert.equal(argumentSummary('not json'), '');

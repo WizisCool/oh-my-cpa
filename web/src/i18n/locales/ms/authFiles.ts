@@ -116,7 +116,7 @@ export default {
   "af.rules_intro": "Pengecualian penyedia berfungsi sebagai peraturan lalai untuk kelayakan. Senarai tersuai pada kelayakan menggantikan peraturan lalai ini. Pengecualian digunakan sebelum alias.",
   "af.rules_provider_label": "Penyedia",
   "af.rules_provider_placeholder": "Pilih penyedia atau taip kunci penyedia",
-  "af.rules_provider_counts": "{aliases} alias · {excluded} pengecualian",
+  "af.rules_provider_counts": "{aliases} alias, {excluded} pengecualian",
   "af.rules_provider_use": "Guna kunci penyedia {provider}",
   "af.rules_tab_aliases": "Alias model {n}",
   "af.rules_tab_excluded": "Model dilumpuhkan {n}",

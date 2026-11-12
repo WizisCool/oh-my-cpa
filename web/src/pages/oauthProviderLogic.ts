@@ -392,7 +392,7 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
  * the plugin - is what a card names and draws. Each card prefers the name and logo that
  * portal published for itself, which is why two portals of one plugin read as `Z.ai` and
  * `BigModel` instead of two identical cards. A portal that publishes neither keeps the
- * `${name} · ${id}` label and the plugin's mark, which is what makes the extra identifier
+ * `${name} (${id})` label and the plugin's mark, which is what makes the extra identifier
  * in the title necessary at all.
  *
  * `catalog` is the store's listing by plugin id. It is what tells an operator's own plugin

@@ -56,7 +56,7 @@ export function readableReason(reason: string): string {
     const body = JSON.parse(match[2]) as Record<string, unknown>;
     const nested = body.error && typeof body.error === 'object' ? (body.error as Record<string, unknown>).message : undefined;
     const sentence = [body.message, nested, body.error].find((value) => typeof value === 'string' && value.trim());
-    return typeof sentence === 'string' ? `${match[1]} · ${sentence}` : match[1];
+    return typeof sentence === 'string' ? `${match[1]}: ${sentence}` : match[1];
   } catch {
     return reason;
   }

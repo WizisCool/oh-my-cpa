@@ -94,7 +94,7 @@ export default {
   'quota.reset_credit_expires': 'First expires {when}',
   'quota.reset_grant_untitled': 'Reset grant',
   'quota.reset_grant_until': 'Valid until {when}',
-  'quota.capacity_dialog_title': '{window} · Capacity',
+  'quota.capacity_dialog_title': '{window} capacity',
   'quota.capacity_open_details': 'Capacity details',
   'quota.capacity_error_hint': 'Uncertainty from upstream rounding the used share to whole percent',
   'quota.capacity_resets': 'Reset: {when}',
@@ -115,5 +115,6 @@ export default {
   'quota.in_hours_min': '{h}h {m}m left',
   'quota.in_days': '{n}d left',
   'quota.in_days_min': '{d}d {h}h left',
+  'quota.time_with_countdown': '{time} ({countdown})',
   'quota.days_ago': '{n}d ago',
 } satisfies Translation<typeof source>;

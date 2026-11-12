@@ -5,6 +5,7 @@ import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { compactQuotaCapacity } from './quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from './QuotaCapacityButton';
 import { quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
+import { quotaWindowFullName } from './quotaWindowSelection';
 import { quotaRemainingStroke } from './quotaThresholds';
 import { quotaWindowGroupName, quotaWindowName } from './quotaWindowSelection';
 import styles from './QuotaWindowCards.module.css';
@@ -66,7 +67,7 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
   const content = (
     <>
       <span className={styles.head}>
-        <span className={styles.name} data-tip={window.label} data-tip-overflow="">{name}</span>
+        <span className={styles.name} data-tip={quotaWindowFullName(window)} data-tip-overflow="">{name}</span>
         <span className={styles.value}>
           <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
           <b style={remaining != null && remaining < 70 ? { color: stroke } : undefined}>{remaining == null ? '--' : `${remaining}%`}</b>

@@ -63,7 +63,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
   const modelOptions = useMemo(() => catalog.map((model) => ({
     value: model.id,
     label: model.display_name && model.display_name !== model.id
-      ? `${model.id} · ${model.display_name}`
+      ? `${model.id} (${model.display_name})`
       : model.id,
   })), [catalog]);
 

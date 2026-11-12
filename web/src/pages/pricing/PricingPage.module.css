@@ -12,7 +12,13 @@
 
 /* The sync state sits in the header as one quiet control that opens the details. */
 .sync-button {
+  gap: 8px;
   padding-inline: 10px;
+}
+
+/* The price source names the status beside it; it is the label, the status is the reading. */
+.sync-source {
+  color: var(--muted);
 }
 
 .sync-popover {

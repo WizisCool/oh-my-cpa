@@ -1,4 +1,5 @@
 import React from 'react';
+import { MetaLine } from '../common/MetaLine';
 import clsx from 'clsx';
 import {
   DropdownMenu,
@@ -184,8 +185,7 @@ export function ProviderTable({
         // in a column of its own because most rows have none, and a column of "none" was the
         // widest empty space on the page.
         const upstreamName = record.upstream_name && record.upstream_name !== record.name ? record.upstream_name : '';
-        const meta = [upstreamName].filter(Boolean);
-        const hasMeta = Boolean(record.prefix) || meta.length > 0;
+        const hasMeta = Boolean(record.prefix) || Boolean(upstreamName);
         return (
           <div className={styles['provider-identity']}>
             {!isPhone && <RowContextHandle name={record.name} />}
@@ -246,7 +246,7 @@ export function ProviderTable({
                       </span>
                     </Tooltip>
                   )}
-                  {meta.length > 0 && <span className={styles['provider-meta-text']}>{meta.join(' · ')}</span>}
+                  {upstreamName && <span className={styles['provider-meta-text']}>{upstreamName}</span>}
                 </div>
               )}
             </div>
@@ -308,9 +308,7 @@ export function ProviderTable({
       render: (_, record) => {
         if (!record.base_url) return <span className={styles['muted']}>{t('pro.none_text')}</span>;
         return (
-          <Tooltip title={record.base_url}>
-            <div className={styles['endpoint']}>{record.base_url}</div>
-          </Tooltip>
+          <div className={styles['endpoint']} data-tip={record.base_url} data-tip-overflow="">{record.base_url}</div>
         );
       },
     },
@@ -482,8 +480,10 @@ export function ProviderTable({
           {record.prefix && <span className={styles['prefix-chip']}>{record.prefix}</span>}
         </span>
         <span className={styles['phone-card-route']}>
-          {family && <LobeIcon iconId={family.iconId} size={12} variant="mono" />}
-          <span>{family ? t(family.labelKey) : record.protocol || record.family || t('pro.none_text')}</span>
+          <span className={styles['phone-card-family']}>
+            {family && <LobeIcon iconId={family.iconId} size={12} variant="mono" />}
+            <span>{family ? t(family.labelKey) : record.protocol || record.family || t('pro.none_text')}</span>
+          </span>
           {host && <span className={styles['phone-card-host']}>{host}</span>}
           {record.behavior?.websockets && <span>{t('pro.websockets_tag')}</span>}
         </span>
@@ -491,13 +491,11 @@ export function ProviderTable({
           {health}
           {row && (
             <span className={styles['phone-card-traffic']}>
-              {t('pro.window_24h')} {row.total === 0
-                ? t('pro.traffic_none')
-                : <>
-                    {t('pro.traffic_requests', { n: row.total.toLocaleString() })}
-                    {' · '}
-                    <span className={clsx(isLowRate && styles[`tone-${tone}`])}>{`${(row.successRate ?? 0).toFixed(1)}%`}</span>
-                  </>}
+              <MetaLine>
+                {t('pro.window_24h')}
+                {row.total === 0 ? t('pro.traffic_none') : t('pro.traffic_requests', { n: row.total.toLocaleString() })}
+                {row.total > 0 && <span className={clsx(isLowRate && styles[`tone-${tone}`])}>{`${(row.successRate ?? 0).toFixed(1)}%`}</span>}
+              </MetaLine>
             </span>
           )}
         </span>

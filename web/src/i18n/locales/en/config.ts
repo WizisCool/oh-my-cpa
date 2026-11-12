@@ -9,7 +9,7 @@ export default {
   'cfg.source_return': 'Return',
   'cfg.search_placeholder': 'Search settings (label or YAML key)',
   'cfg.search_results': '{n} matching settings found',
-  'cfg.items_count': '{n} items · {status}',
+  'cfg.items_count': '{n} settings',
   'cfg.mode_visual': 'Visual',
   'cfg.mode_source': 'Source',
   'cfg.source_load_failed': 'Failed to read the configuration source: {msg}',

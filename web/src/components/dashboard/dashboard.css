@@ -1,8 +1,5 @@
-.dashboard-page {
-  --trend-up: color-mix(in oklch, var(--danger) 64%, var(--fg-2));
-  --trend-down: color-mix(in oklch, var(--success) 64%, var(--fg-2));
-}
 .dashboard-alert { margin-bottom: 16px; }
+.dashboard-alert-list { margin: 0; padding-inline-start: 1.2em; }
 .dashboard-section { margin-bottom: 32px; }
 .section-heading { margin-bottom: 12px; }
 .status-pip { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
@@ -155,12 +152,8 @@
 .provider-activity-block.tone-warn { background: var(--warn); }
 .provider-activity-block.tone-danger { background: var(--danger); }
 /* One reading per line: wrapped readings doubled the hint's height past the viewport. */
-.provider-activity-history-tooltip { max-width: none; }
-.provider-activity-history {
-  display: grid;
-  gap: 2px;
-  white-space: nowrap;
-}
+.provider-activity-history-tooltip [data-slot='tooltip'] { max-width: none; }
+.provider-activity-history { white-space: nowrap; }
 @media (max-width: 768px) {
   .provider-row-enhanced {
     grid-template-columns: minmax(130px, 1fr) auto auto;

@@ -290,7 +290,7 @@ func TestWarmupHandlerCertifiesWireCorpus(t *testing.T) {
 
 	task := warmup.Task{
 		ID:        "t_wire_test",
-		Name:      "claude.json · 窗口重置后 (5h)",
+		Name:      "claude.json 窗口重置后 (5h)",
 		Enabled:   true,
 		Provider:  "claude",
 		AuthIndex: "exact-claude",
@@ -374,7 +374,7 @@ func TestWarmupTaskLifecycleAndManualExecution(t *testing.T) {
 		t.Fatalf("create status=%d tasks=%+v", resp.StatusCode, state.Tasks)
 	}
 	task := state.Tasks[0]
-	if task.Name != "claude.json · 08:55" || state.Next[task.ID] == nil || *state.Next[task.ID] != "2026-10-13T08:55:00.000Z" {
+	if task.Name != "claude.json (08:55)" || state.Next[task.ID] == nil || *state.Next[task.ID] != "2026-10-13T08:55:00.000Z" {
 		t.Fatalf("unexpected created task or next schedule: task=%+v next=%v", task, state.Next[task.ID])
 	}
 

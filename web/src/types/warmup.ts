@@ -167,21 +167,33 @@ export function canSaveWarmupTask(task: WarmupTaskInput): boolean {
  */
 export function generatedTaskName(task: Pick<WarmupTaskInput, 'account' | 'auth_index' | 'provider' | 'trigger'>): string {
   const target = task.account.trim() || task.auth_index.trim() || task.provider.trim();
-  switch (task.trigger.kind) {
+  const trigger = triggerToken(task.trigger);
+  return trigger === null ? target : `${target} (${trigger})`;
+}
+
+function triggerToken(trigger: WarmupTaskInput['trigger']): string | null {
+  switch (trigger.kind) {
     case 'window':
-      return `${target} · ${task.trigger.window ?? ''}`;
+      return trigger.window ?? '';
     case 'daily':
-      return `${target} · ${task.trigger.time ?? ''}`;
+      return trigger.time ?? '';
     case 'every':
-      return `${target} · ${task.trigger.hours ?? 0}h`;
+      return `${trigger.hours ?? 0}h`;
     default:
-      return target;
+      return null;
   }
+}
+
+/** Names stored before the server wrote the trigger in parentheses still read as generated. */
+function legacyGeneratedTaskName(task: Pick<WarmupTaskInput, 'account' | 'auth_index' | 'provider' | 'trigger'>): string {
+  const target = task.account.trim() || task.auth_index.trim() || task.provider.trim();
+  const trigger = triggerToken(task.trigger);
+  return trigger === null ? target : `${target} \u00b7 ${trigger}`; // separator-ok: recognises names stored before
 }
 
 export function hasCustomTaskName(task: Pick<WarmupTaskInput, 'name' | 'account' | 'auth_index' | 'provider' | 'trigger'>): boolean {
   const name = task.name.trim();
-  return name !== '' && name !== generatedTaskName(task);
+  return name !== '' && name !== generatedTaskName(task) && name !== legacyGeneratedTaskName(task);
 }
 
 /** A new task's draft, on the first credential the picker lets the operator choose. */

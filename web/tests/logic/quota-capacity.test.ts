@@ -81,8 +81,8 @@ test('a plugin reading lists what it was built from; a built-in reading lists no
     { id: 'b', label: 'Harbor · 5h', scope: 'group' as const, remaining_percent: 40, reset_at_ms: Date.UTC(2026, 10, 7, 12) },
   ];
   assert.deepEqual(quotaPayloadSummary({ windows, plan: { plan_type: 'unknown', plan_label: '', tier: 'unknown', metrics: [{ key: 'credits', label: 'Credits', value: 100, unit: 'credits' }] } }), [
-    ['Harbor · Credits', '100% · 100 / 100 credits left'],
-    ['Harbor · 5h', '40% · 2026-11-07T12:00:00.000Z'],
+    ['Harbor Credits', '100%\n100 / 100 credits left'],
+    ['Harbor 5h', '40%\n2026-11-07T12:00:00.000Z'],
     ['summary.credits', '100 credits'],
   ]);
   assert.deepEqual(quotaPayloadSummary({ windows: [{ id: 'c', label: '5h', scope: 'standard', remaining_percent: 70 }] }), []);

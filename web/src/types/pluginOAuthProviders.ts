@@ -196,7 +196,7 @@ export function pluginPortalTitles(plugin: PluginItem, providerIds: readonly str
     const entryName = entries[providerId]?.name;
     return entryName && entryName !== name
       ? entryName
-      : providerIds.length > 1 ? `${name} · ${providerId}` : name;
+      : providerIds.length > 1 ? `${name} (${providerId})` : name;
   };
 }
 

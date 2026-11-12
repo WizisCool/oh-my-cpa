@@ -20,6 +20,7 @@ import {
 // The formatter under test only needs the countdown keys; the stub keeps the
 // suite independent of the dictionary contents.
 const t = ((key: string, params?: Record<string, unknown>) => {
+  if (key === 'quota.time_with_countdown') return `${params?.time} (${params?.countdown})`;
   const n = params?.n ?? params?.d ?? params?.h ?? '';
   return `${key}:${n}`;
 }) as TFunc;

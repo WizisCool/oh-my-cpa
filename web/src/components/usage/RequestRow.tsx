@@ -1,4 +1,6 @@
 import { formatCurrency } from '../../types/currencyDisplay';
+import type { TipRow } from '../common/tipCard';
+import { requestTipCard } from './RequestTooltip';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { tokenAccountingMessage } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -98,18 +100,21 @@ export const RequestRow = React.memo<RequestRowProps>(
     const hasRoutedModel = isCallView && callModel !== requestModel && Boolean(requestModel);
     const displayModel = (isCallView ? callModel : requestModel) || t('events.not_captured');
 
-    const modelTooltip = React.useMemo(() => {
-      const parts: string[] = [];
-      if (event.model_alias && event.model_alias !== event.model) {
-        parts.push(`${t('events.call_model')}: ${event.model_alias}`);
-        parts.push(`${t('events.request_model')}: ${event.model}`);
-      } else if (event.model) {
-        parts.push(isCallView ? `${t('events.call_model')}: ${event.model}` : `${t('events.request_model')}: ${event.model}`);
+    // The hint earns its place only when the request named more than one model: the call alias, the
+    // model it was sent as and the one that answered, one row each. A single model is the cell's own
+    // text, so it is offered only when the cell cuts it off.
+    const modelTip = React.useMemo(() => {
+      const rows: TipRow[] = [];
+      const isAliased = Boolean(event.model_alias && event.model_alias !== event.model);
+      if (isAliased) {
+        rows.push({ label: t('events.call_model'), value: event.model_alias! });
+        rows.push({ label: t('events.request_model'), value: event.model });
       }
       if (event.response_model && event.model_substituted) {
-        parts.push(`${t('events.served_model')}: ${event.response_model}`);
+        if (!isAliased && event.model) rows.push({ label: t(isCallView ? 'events.call_model' : 'events.request_model'), value: event.model });
+        rows.push({ label: t('events.served_model'), value: event.response_model });
       }
-      return parts.join(' · ');
+      return rows.length > 0 ? requestTipCard({ rows }) : null;
     }, [event.model, event.model_alias, event.response_model, event.model_substituted, isCallView, t]);
 
     const providerInfo = resolveProviderInfo(
@@ -340,8 +345,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             )}
             <strong
               className="req-model-name"
-              data-request-tooltip={modelTooltip || displayModel}
-              data-request-tooltip-overflow={modelTooltip ? undefined : ''}
+              {...(modelTip ?? { 'data-request-tooltip': displayModel, 'data-request-tooltip-overflow': '' })}
             >
               {displayModel}
             </strong>
@@ -473,11 +477,13 @@ export const RequestRow = React.memo<RequestRowProps>(
               carries every exact count; a visible count still answers with its own. */}
           <div
             className="req-tokens-breakdown"
-            data-request-tooltip={[
-              `${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`,
-              `${t('events.output_tokens')}: ${formatTokensFull(event.tokens.output)}`,
-              ...(event.tokens.reasoning > 0 ? [`${t('events.reasoning_tokens')}: ${formatTokensFull(event.tokens.reasoning)}`] : []),
-            ].join(' · ')}
+            {...requestTipCard({
+              rows: [
+                { label: t('events.input_tokens'), value: formatTokensFull(event.tokens.input) },
+                { label: t('events.output_tokens'), value: formatTokensFull(event.tokens.output) },
+                ...(event.tokens.reasoning > 0 ? [{ label: t('events.reasoning_tokens'), value: formatTokensFull(event.tokens.reasoning) }] : []),
+              ],
+            })}
           >
             <span data-request-tooltip={`${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`}>
               ↑ {formatTokens(event.tokens.input, tokenStyle)}

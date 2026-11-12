@@ -272,7 +272,7 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                         size="sm"
                         variant="ghost"
                         icon={<LeftOutlined />}
-                        aria-label={`${t('dash.layout.move_earlier')} · ${label}`}
+                        aria-label={t('common.action_on', { action: t('dash.layout.move_earlier'), target: label })}
                         disabled={index === 0}
                         onClick={() => onChange(stepDashboardWidget(layout, item.id, -1, isShown))}
                       />
@@ -282,7 +282,7 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                         size="sm"
                         variant="ghost"
                         icon={<RightOutlined />}
-                        aria-label={`${t('dash.layout.move_later')} · ${label}`}
+                        aria-label={t('common.action_on', { action: t('dash.layout.move_later'), target: label })}
                         disabled={index === ordered.length - 1}
                         onClick={() => onChange(stepDashboardWidget(layout, item.id, 1, isShown))}
                       />
@@ -292,7 +292,7 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                         size="sm"
                         variant="ghost"
                         icon={<EyeInvisibleOutlined />}
-                        aria-label={`${t('dash.layout.hide')} · ${label}`}
+                        aria-label={t('common.action_on', { action: t('dash.layout.hide'), target: label })}
                         data-widget-hide={item.id}
                         onClick={() => onChange(setDashboardWidgetHidden(layout, item.id, true))}
                       />
@@ -309,7 +309,7 @@ export const DashboardBoardEditor: React.FC<DashboardBoardProps> = ({
                       type="button"
                       className={clsx(styles['grip'], styles['grip-xy'])}
                       data-resize="xy"
-                      aria-label={`${t('dash.layout.resize')} · ${label}`}
+                      aria-label={t('common.action_on', { action: t('dash.layout.resize'), target: label })}
                       aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
                       onPointerDown={(event) => startResize(event, item, 'xy')}
                       onKeyDown={(event) => {

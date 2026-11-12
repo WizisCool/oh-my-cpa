@@ -49,7 +49,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       key: 'name',
       title: t('insights.col.key'),
       render: (_, group) => (
-        <button type="button" className={styles['key-name']} onClick={() => onOpen(group.id)} data-tip={group.id}>
+        <button type="button" className={styles['key-name']} onClick={() => onOpen(group.id)}>
           <InsightsValue dimension="key" id={group.id} labels={labels} />
           {labels.detail('key', group.id) && <span className={styles['key-mask']}>{labels.detail('key', group.id)}</span>}
         </button>

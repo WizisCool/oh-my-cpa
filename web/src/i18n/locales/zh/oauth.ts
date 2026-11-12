@@ -44,7 +44,6 @@ export default {
   "recovery.adopted": "运行时载入",
   "recovery.inference": "推理验证",
   "recovery.refresh_error": "上次续期失败",
-  "recovery.expires_at": "访问令牌于 {time} 到期",
   "oauth.use_default_route": "使用 CPA 默认路由",
   "oauth.session_proxy": "会话代理（可选）",
   "oauth.session_proxy_hint": "支持 HTTP(S) 与 SOCKS5(H)；授权完成后保存为此账号专属代理",

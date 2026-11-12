@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatErrorCode } from '../../utils/format';
 import clsx from 'clsx';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -296,17 +297,18 @@ export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true 
   return (
     <div className={styles.state} data-testid="oauth-credential-status" data-credential-renewal>
       <div className={styles['state-main']}>
-        <Tooltip title={<>
-          {status.needsReauth && <div>{t('omc.reauthenticate')}</div>}
-          {explanation && <div>{explanation}</div>}
-          <div>{t('recovery.renewal')}: {t(renewalLabel(file))}</div>
-          {file.access_token_expires_at && <div>{t('recovery.expires_at', { time: formatGatewayTimestamp(file.access_token_expires_at) })}</div>}
-          {file.next_refresh_after && <div>{t('recovery.next_refresh')}: {formatGatewayTimestamp(file.next_refresh_after)}</div>}
-          {file.refresh_error && (
-            <div>{t('recovery.refresh_error')}: {[file.refresh_error.code, file.refresh_error.http_status].filter(Boolean).join(' · ')}</div>
-          )}
-          {quota?.observed_at_ms ? <div>{formatObservedAgo(quota.observed_at_ms, nowMS, t)}</div> : null}
-        </>}>
+        <Tooltip card={{
+          heading: status.needsReauth ? t('omc.reauthenticate') : undefined,
+          rows: [
+            { label: t('recovery.renewal'), value: t(renewalLabel(file)) },
+            file.access_token_expires_at ? { label: t('recovery.access_expires'), value: formatGatewayTimestamp(file.access_token_expires_at) } : null,
+            file.next_refresh_after ? { label: t('recovery.next_refresh'), value: formatGatewayTimestamp(file.next_refresh_after) } : null,
+            file.refresh_error
+              ? { label: t('recovery.refresh_error'), value: formatErrorCode({ code: file.refresh_error.code, status: file.refresh_error.http_status }), tone: 'danger' as const }
+              : null,
+          ].filter((row) => row !== null),
+          notes: [explanation, quota?.observed_at_ms ? formatObservedAgo(quota.observed_at_ms, nowMS, t) : null],
+        }}>
           {status.needsReauth ? (
             <button
               type="button"
@@ -419,7 +421,7 @@ export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWo
     ? `${t('quota.btn_refresh_quota')}: ${record.file.name} (${t('omc.refresh_needed')})`
     : `${t('quota.btn_refresh_quota')}: ${record.file.name}`;
   return (
-    <Tooltip title={facts.needsRefresh ? `${t('quota.btn_refresh_quota')} · ${t('omc.refresh_needed')}` : t('quota.btn_refresh_quota')}>
+    <Tooltip title={t('quota.btn_refresh_quota')} card={facts.needsRefresh ? { heading: t('quota.btn_refresh_quota'), notes: [t('omc.refresh_needed')] } : null}>
       <Button
         variant="ghost"
         size="sm"

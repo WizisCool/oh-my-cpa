@@ -2,6 +2,7 @@ import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
 import type { QuotaItem, QuotaMetric } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
+import { quotaWindowFullName } from './quotaWindowSelection';
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -41,13 +42,13 @@ export function formatCountdown(targetMS: number, nowMS: number, t: TFunc): stri
 }
 
 /**
- * Combined "09/30 01:05 · in 24 days" cell; falls back to the plain date when
- * no countdown applies (already expired / unknown target).
+ * An instant with its countdown in parentheses, "09/30 01:05 (24d left)"; the plain date when no
+ * countdown applies (already expired / unknown target).
  */
 export function formatTimeWithCountdown(targetMS: number, nowMS: number, t: TFunc): string {
   const date = formatShortDateTime(targetMS);
   const countdown = formatCountdown(targetMS, nowMS, t);
-  return countdown ? `${date} · ${countdown}` : date;
+  return countdown ? t('quota.time_with_countdown', { time: date, countdown }) : date;
 }
 
 /**
@@ -145,7 +146,7 @@ export function quotaWindowLabel(kind: string | undefined, label: string | undef
 }
 
 /**
- * When a window resets, as "09/24 20:11 · 4 hours left". A derived or approximate instant
+ * When a window resets, as "09/24 20:11 (4h left)". A derived or approximate instant
  * keeps its `~`, so a compact row cannot read as a verified deadline.
  */
 export function quotaResetText(
@@ -181,12 +182,12 @@ export function quotaPayloadSummary(item: Pick<QuotaItem, 'windows' | 'plan'>): 
   if (!windows.some((window) => window.description) && metrics.length === 0) return [];
   return [
     ...windows.map((window): [string, string] => [
-      window.label,
+      quotaWindowFullName(window),
       [
         quotaRemainingText(window),
         window.description,
         window.reset_at_ms ? new Date(window.reset_at_ms).toISOString() : '',
-      ].filter(Boolean).join(' · '),
+      ].filter(Boolean).join('\n'),
     ]),
     ...metrics.map((metric): [string, string] => [`summary.${metric.key || metric.label}`, formatQuotaMetric(metric)]),
   ];

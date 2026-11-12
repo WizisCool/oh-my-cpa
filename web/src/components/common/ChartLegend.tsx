@@ -1,6 +1,5 @@
 import React from 'react';
 import clsx from 'clsx';
-import { useT } from '../../i18n';
 import selectionStyles from './selection.module.css';
 import styles from './ChartLegend.module.css';
 
@@ -32,7 +31,6 @@ interface ChartLegendProps {
  * rest - a remainder, a reference line - are plain keys.
  */
 export const ChartLegend: React.FC<ChartLegendProps> = ({ items, label, className, testId }) => {
-  const t = useT();
   return (
     <ul className={clsx(styles['legend'], className)} aria-label={label} data-testid={testId}>
       {items.map((item) => {
@@ -47,7 +45,7 @@ export const ChartLegend: React.FC<ChartLegendProps> = ({ items, label, classNam
                 className={clsx(styles['button'], selectionStyles['selection-control'])}
                 aria-pressed={Boolean(item.isPressed)}
                 data-dimmed={Boolean(item.isDimmed)}
-                data-tip={item.title ?? t(item.isPressed ? 'insights.click_to_unfilter' : 'insights.click_to_filter')}
+                data-tip={item.title}
                 onClick={item.onToggle}
               >
                 {mark}

@@ -59,12 +59,6 @@
 
 /* ── fields ──────────────────────────────────────────────────────────────── */
 
-.label-hint {
-  color: var(--meta);
-  font-size: var(--text-sm);
-  font-weight: 400;
-}
-
 .full-width {
   width: 100%;
 }

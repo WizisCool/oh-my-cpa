@@ -614,7 +614,7 @@ const PaletteTokenRow: React.FC<{
             : t('omc.contrast_floor', { floor: String(floor), role: t(ROLE_LABEL_KEYS[role]) })
         }
       >
-        {status === 'ok' ? '✓' : status === 'low' ? '⚠' : '·'} {ratio.toFixed(1)}:1
+        {status === 'ok' ? '✓ ' : status === 'low' ? '⚠ ' : ''}{ratio.toFixed(1)}:1
       </span>
     </div>
   );

@@ -9,7 +9,7 @@ export default {
   "cfg.source_return": "返回",
   "cfg.search_placeholder": "搜尋設定項（標籤或 YAML 鍵名）",
   "cfg.search_results": "搜尋到 {n} 項匹配設定",
-  "cfg.items_count": "{n} 項設定 · {status}",
+  "cfg.items_count": "{n} 項設定",
   "cfg.mode_visual": "視覺化",
   "cfg.mode_source": "原始碼",
   "cfg.source_load_failed": "讀取設定原始碼失敗：{msg}",

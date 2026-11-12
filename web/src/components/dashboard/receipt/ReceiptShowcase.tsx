@@ -372,7 +372,7 @@ function buildSheet({ data, range, ledger, labels, isCubeError, issuedAt, zone, 
   const placeholder = isCubeError
     ? t('dash.receipt.items_unavailable')
     : !ledger
-      ? '· · ·'
+      ? '…'
       : groups.length === 0 ? t('dash.receipt.items_empty') : undefined;
 
   const tokenRows: ReceiptRow[] = [

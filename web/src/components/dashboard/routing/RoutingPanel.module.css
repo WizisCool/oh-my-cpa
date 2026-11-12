@@ -560,6 +560,7 @@
 }
 
 .row-failures {
+  margin-inline-start: 10px;
   color: var(--danger);
 }
 

@@ -253,13 +253,8 @@
 }
 
 .chain-failed {
+  margin-inline-start: 6px;
   color: var(--danger);
-}
-
-.chain-failed::before {
-  content: '·';
-  margin-right: 8px;
-  color: var(--meta);
 }
 
 .chain-caret,

@@ -47,7 +47,6 @@ export default {
   "recovery.adopted": "執行階段載入",
   "recovery.inference": "推理驗證",
   "recovery.refresh_error": "上次續期失敗",
-  "recovery.expires_at": "存取權杖於 {time} 到期",
   "oauth.use_default_route": "使用 CPA 預設路由",
   "oauth.session_proxy": "工作階段代理（選填）",
   "oauth.session_proxy_hint": "支援 HTTP(S) 與 SOCKS5(H)；授權完成後儲存為此帳戶專屬代理",

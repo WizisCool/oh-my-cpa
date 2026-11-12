@@ -116,7 +116,7 @@ export default {
   "af.rules_intro": "供應商停用規則為憑證繼承的預設規則，憑證的自訂清單會取代預設規則。先套用停用規則，再套用別名。",
   "af.rules_provider_label": "供應商",
   "af.rules_provider_placeholder": "選擇供應商，或輸入供應商鍵",
-  "af.rules_provider_counts": "{aliases} 個別名 · {excluded} 條停用規則",
+  "af.rules_provider_counts": "{aliases} 個別名，{excluded} 條停用規則",
   "af.rules_provider_use": "使用供應商鍵 {provider}",
   "af.rules_tab_aliases": "模型別名 {n}",
   "af.rules_tab_excluded": "模型停用 {n}",

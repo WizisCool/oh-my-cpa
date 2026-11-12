@@ -6,7 +6,7 @@ export default {
   'cfg.source_return': '返回',
   'cfg.search_placeholder': '搜索配置项（标签或 YAML 键名）',
   'cfg.search_results': '搜索到 {n} 项匹配配置',
-  'cfg.items_count': '{n} 项配置 · {status}',
+  'cfg.items_count': '{n} 项配置',
   'cfg.mode_visual': '可视化',
   'cfg.mode_source': '源码',
   'cfg.source_load_failed': '读取配置源码失败：{msg}',

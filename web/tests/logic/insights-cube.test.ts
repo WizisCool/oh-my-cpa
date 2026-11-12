@@ -455,3 +455,13 @@ test('dashboard receipt ledger and calendar windows', () => {
   const col0Bottom = Math.max(...col0.map((item) => item.y + item.h));
   assert.ok(col0Bottom <= chartHeight - 10 + 1e-6, `skewed column fits inside innerHeight (bottom=${col0Bottom})`);
 });
+
+test('a tooltip card travels as one fact per line plus its structure, and an empty card adds no hint', async () => {
+  const { readTipCard, tipCard } = await import('../../src/components/common/tipCard.ts');
+  const card = { heading: 'Versus the previous period', rows: [{ label: 'Change', value: '+230%', tone: 'up' as const }, { label: 'Previous average', value: '867' }], notes: [false, 'Scaled from the previous period'] };
+  const attributes = tipCard(card);
+  assert.equal(attributes['data-tip'], 'Versus the previous period\nChange: +230%\nPrevious average: 867\nScaled from the previous period');
+  assert.deepEqual(readTipCard(attributes['data-tip-card']), card);
+  assert.deepEqual(tipCard({ rows: [], notes: [null] }), {});
+  assert.equal(readTipCard('{not json'), null);
+});

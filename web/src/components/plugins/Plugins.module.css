@@ -80,9 +80,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 8px;
+  gap: 2px 14px;
   color: var(--meta);
   font-size: var(--text-sm);
+}
+
+.meta-item {
+  min-width: 0;
 }
 
 .meta-strong {
@@ -90,11 +94,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.meta-item + .meta-item::before {
-  margin-right: 8px;
-  color: var(--meta);
-  content: '·';
-}
 
 .plugin-id {
   color: var(--meta);

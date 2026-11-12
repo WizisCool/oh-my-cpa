@@ -101,6 +101,8 @@ export default {
   "common.hide_secret": "隱藏金鑰",
   "common.all": "全部",
   "common.copy": "複製",
+  "common.action_on": "{action}：{target}",
+  "common.list_pair": "{first}，{rest}",
   "common.copied": "已複製",
   "common.copy_failed": "複製失敗",
   "nav.group.operate": "執行",

@@ -86,7 +86,7 @@ export default {
   "pro.weight_label": "Berat",
   "pro.weight_desc": "Berat pusingan bergilir berwajaran (1–1,000,000)",
   "pro.field_test_model": "Model Ujian",
-  "pro.test_auto": "Auto · {model}",
+  "pro.test_auto": "Auto ({model})",
   "pro.test_auto_default": "Auto (Lalai)",
   "pro.testing_key": "Kunci ujian #{n}...",
   "pro.test_key_ok": "Kesambungan #{n} kunci disahkan",

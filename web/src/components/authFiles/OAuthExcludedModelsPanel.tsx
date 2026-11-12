@@ -1,4 +1,5 @@
 import React, { useId, useMemo, useState } from 'react';
+import { MetaLine } from '../common/MetaLine';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -303,9 +304,10 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
                           <span className={styles['row-copy']}>
                             <span className={styles['row-id']}>{model.id}</span>
                             {(model.displayName || meta) && (
-                              <span className={styles['row-meta']}>
-                                {[model.displayName, meta].filter(Boolean).join(' · ')}
-                              </span>
+                              <MetaLine className={styles['row-meta']}>
+                                {model.displayName}
+                                {meta}
+                              </MetaLine>
                             )}
                           </span>
                         </Checkbox>

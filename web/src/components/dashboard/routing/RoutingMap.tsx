@@ -554,7 +554,7 @@ function ModelNode({ row, phase, delayMs, containerRef, onMotion, tileRef, washR
         <span className={styles['row-name']} data-tip={row.name} data-tip-overflow="">{row.name}</span>
         <span className={styles['row-meta']}>
           {t('routing.requests_count', { count: row.requests.toLocaleString() })}
-          {row.failures > 0 && <span className={styles['row-failures']}> · {t('routing.failed_count', { count: row.failures })}</span>}
+          {row.failures > 0 && <span className={styles['row-failures']}>{t('routing.failed_count', { count: row.failures })}</span>}
         </span>
       </span>
       <span ref={tileRef} className={styles['tile']} data-route-model={row.id}>
@@ -602,7 +602,7 @@ function TargetNode({ target, phase, delayMs, containerRef, onMotion, tileRef, n
         <span className={styles['row-meta']} data-tip={identity.credential || undefined} data-tip-overflow="">
           {identity.credential || target.sample.model || '—'}
           {target.failures > 0 && (
-            <span className={styles['row-failures']}> · {t('routing.failed_count', { count: target.failures })}</span>
+            <span className={styles['row-failures']}>{t('routing.failed_count', { count: target.failures })}</span>
           )}
         </span>
       </span>

@@ -40,11 +40,9 @@ svg{flex-shrink:0}
 .transcript{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .transcript-column{display:flex;flex-direction:column;gap:28px;max-width:808px;margin:0 auto;padding:20px 24px 24px}
 
-.masthead{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 0;padding-bottom:12px;border-bottom:1px solid var(--border-soft,var(--border));font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.masthead span+span::before{content:"·";margin:0 8px;color:var(--meta,var(--muted))}
+.masthead{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;padding-bottom:12px;border-bottom:1px solid var(--border-soft,var(--border));font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .masthead .masthead-model{color:var(--fg-2)}
 .masthead .masthead-date{margin-left:auto}
-.masthead .masthead-date::before{content:none}
 
 .turn{display:flex;flex-direction:column;gap:16px;min-width:0;scroll-margin-top:16px}
 .user-row{display:flex;flex-direction:column;align-items:flex-end}
@@ -99,8 +97,7 @@ details[open]>summary>.caret{transform:rotate(90deg)}
 .chain-toggle{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;min-height:24px;padding:2px 0;color:var(--muted);border-radius:var(--radius-sm)}
 .chain-toggle:hover{color:var(--fg-2)}
 .chain-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;flex-shrink:0}
-.chain-failed{color:var(--danger)}
-.chain-failed::before{content:"·";margin-right:8px;color:var(--meta,var(--muted))}
+.chain-failed{margin-left:6px;color:var(--danger)}
 .chain-body{position:relative;display:flex;flex-direction:column;gap:4px;min-width:0;padding:6px 0 4px}
 .chain-body::before{content:"";position:absolute;top:0;bottom:10px;left:6.5px;width:1px;background:var(--thread-hairline)}
 .chain-body [data-step-mark]{position:relative;z-index:1;width:14px;height:14px;flex-shrink:0;border-radius:50%;background:var(--bg);outline:3px solid var(--bg)}

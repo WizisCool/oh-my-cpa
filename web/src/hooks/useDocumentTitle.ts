@@ -3,10 +3,14 @@ import React from 'react';
 /** The product name every tab title starts with; it is a brand, so it is not translated. */
 export const DOCUMENT_TITLE_PRODUCT = 'Oh My CPA';
 
-/** The tab title for a page: the product, then the page in the reader's language. */
+/**
+ * The tab title for a page: the page in the reader's language, then the product after an en dash.
+ * The page leads because a narrow tab keeps only its first words, and those are what tell two
+ * console tabs apart.
+ */
 export function formatDocumentTitle(pageTitle: string): string {
   const page = pageTitle.trim();
-  return page ? `${DOCUMENT_TITLE_PRODUCT} · ${page}` : DOCUMENT_TITLE_PRODUCT;
+  return page ? `${page} – ${DOCUMENT_TITLE_PRODUCT}` : DOCUMENT_TITLE_PRODUCT;
 }
 
 /**

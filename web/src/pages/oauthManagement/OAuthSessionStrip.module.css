@@ -32,8 +32,8 @@
    pushing the actions past the strip's trailing edge. */
 .pill-text {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
   flex-wrap: wrap;
   overflow-wrap: anywhere;
@@ -55,4 +55,13 @@
     border: 0;
     align-items: flex-start;
   }
+}
+
+.pill-title {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.pill-status {
+  color: var(--muted);
 }

@@ -33,13 +33,15 @@ it('validates task drafts and recognises server-made names', () => {
   expect(canSaveWarmupTask({ ...draft, provider: '' })).toBe(false);
   expect(canSaveWarmupTask({ ...draft, trigger: { kind: 'daily', time: '24:00', time_zone: 'UTC' } })).toBe(false);
   // A server-made name is frozen at save time, so it reads as unnamed and follows later edits.
-  expect(hasCustomTaskName({ ...draft, name: 'claude.json · five_hour' })).toBe(false);
+  expect(hasCustomTaskName({ ...draft, name: 'claude.json (five_hour)' })).toBe(false);
+  // Names saved before the parenthesised form still read as generated.
+  expect(hasCustomTaskName({ ...draft, name: 'claude.json \u00b7 five_hour' })).toBe(false);
   expect(hasCustomTaskName({ ...draft, name: 'Morning' })).toBe(true);
 });
 
 it('runs a task manually and clears its history', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
-  await screen.findByText('claude.json · 窗口重置后 (5h)');
+  await screen.findByText('claude.json 窗口重置后 (5h)');
 
   fireEvent.click(await screen.findByRole('button', { name: 'Send once now' }));
   const history = await screen.findByTestId('warmup-last-result');
@@ -58,11 +60,11 @@ it('runs a task manually and clears its history', async () => {
 
 it('creates a new warmup task from the settings drawer', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
-  await screen.findByText('claude.json · 窗口重置后 (5h)');
+  await screen.findByText('claude.json 窗口重置后 (5h)');
 
   fireEvent.click(screen.getByTestId('warmup-add-task'));
   const dialog = await screen.findByTestId('warmup-task-editor');
-  // A window's label is the provider's own ("Gemini Models · 5小时限制"), which does not fit one row
+  // A grouped window names its model group as well as its period, which does not fit one row
   // of options: laid out as a row, each label was truncated to its middle and two providers'
   // five-hour windows read alike.
   expect(within(dialog).getByRole('radiogroup', { name: 'Target window' }).getAttribute('aria-orientation')).toBe('vertical');
@@ -84,7 +86,7 @@ it('creates a new warmup task from the settings drawer', async () => {
 
 it('keeps an open draft when a background refresh fails', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
-  await screen.findByText('claude.json · 窗口重置后 (5h)');
+  await screen.findByText('claude.json 窗口重置后 (5h)');
 
   fireEvent.click(screen.getByTestId('warmup-add-task'));
   const dialog = await screen.findByTestId('warmup-task-editor');

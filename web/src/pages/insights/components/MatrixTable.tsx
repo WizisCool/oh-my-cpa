@@ -1,4 +1,5 @@
 import { useInsightsFormat } from '../useInsightsFormat';
+import { tipCard } from '../../../components/common/tipCard';
 import React from 'react';
 import clsx from 'clsx';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -85,7 +86,13 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
                             type="button"
                             className={clsx(styles['matrix-cell'], isDense && styles['matrix-cell-dense'])}
                             style={{ '--heatmap-quiet-share': shade.fromShare } as React.CSSProperties}
-                            data-tip={`${labels.label(rowDimension, rowId)} / ${labels.label(columnDimension, columnId)}: ${formatMetricExact(metric, cell.value) ?? formatMetric(metric, cell.value, style)}`}
+                            {...tipCard({
+                              rows: [
+                                { label: t(`insights.dim.${rowDimension}`), value: labels.label(rowDimension, rowId) },
+                                { label: t(`insights.dim.${columnDimension}`), value: labels.label(columnDimension, columnId) },
+                                { label: t(`insights.metric.${metric}`), value: formatMetricExact(metric, cell.value) ?? formatMetric(metric, cell.value, style) },
+                              ],
+                            })}
                             onClick={() => onSelectCell(rowId, columnId)}
                           >
                             {formatMetric(metric, cell.value, style)}

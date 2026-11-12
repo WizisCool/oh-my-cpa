@@ -86,7 +86,7 @@ export default {
   "pro.weight_label": "排程權重",
   "pro.weight_desc": "加權輪詢權重（1–1,000,000）",
   "pro.field_test_model": "測試模型",
-  "pro.test_auto": "自動 · {model}",
+  "pro.test_auto": "自動（{model}）",
   "pro.test_auto_default": "自動 (預設)",
   "pro.testing_key": "正在測試金鑰 #{n}...",
   "pro.test_key_ok": "金鑰 #{n} 連通性測試透過",

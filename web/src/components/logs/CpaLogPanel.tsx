@@ -1,4 +1,5 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
+import { MetaLine } from '../common/MetaLine';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -409,16 +410,16 @@ export const CpaLogPanel: React.FC = () => {
                   variant={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'secondary'}
                   onClick={() => setIsFiltersOpen((isOpen) => !isOpen)}
                 >
-                  {activeFilterCount > 0 ? t('logs.filters_active', { n: activeFilterCount }) : t('events.more_filters')}
+                  {activeFilterCount > 0 ? <>{t('logs.filters_active')}<Count size="small">{activeFilterCount}</Count></> : t('events.more_filters')}
                 </Button>
               </>
             )}
             <div className={styles['toolbar-summary']}>
               {isTail && (
-                <span className="logs-counts text-foreground">
-                  {t('logs.counts', { shown: rows.length, total: parsed.length })}
-                  {tail.dropped > 0 ? ` · ${t('logs.dropped', { n: tail.dropped })}` : ''}
-                </span>
+                <MetaLine className="logs-counts">
+                  <b>{t('logs.counts', { shown: rows.length, total: parsed.length })}</b>
+                  {tail.dropped > 0 ? <span className="text-warn">{t('logs.dropped', { n: tail.dropped })}</span> : ''}
+                </MetaLine>
               )}
               <div className={styles['toolbar-actions']}>
                 {isTail && (

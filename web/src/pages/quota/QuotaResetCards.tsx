@@ -3,7 +3,7 @@ import { useT } from '../../i18n';
 import { ThunderboltOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
 import type { ClaudeResetGrant, CodexResetCreditsInfo } from '../../types/quota';
-import { formatCountdown, formatShortDateTime } from './quotaFormat';
+import { formatTimeWithCountdown } from './quotaFormat';
 import styles from './QuotaWindowCards.module.css';
 
 export interface QuotaResetCardsProps {
@@ -29,10 +29,7 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
     .sort((left, right) => left - right);
   const hasCredits = (credits?.available_count ?? 0) > 0;
   if (!hasCredits && liveGrants.length === 0) return null;
-  const until = (atMS: number) => {
-    const countdown = formatCountdown(atMS, nowMS, t);
-    return countdown ? `${formatShortDateTime(atMS)} · ${countdown}` : formatShortDateTime(atMS);
-  };
+  const until = (atMS: number) => formatTimeWithCountdown(atMS, nowMS, t);
   return (
     <section className={styles.group} aria-label={t('quota.resets_title')}>
       <div className={styles['group-name']}>{t('quota.resets_title')}</div>

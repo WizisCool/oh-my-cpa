@@ -139,8 +139,8 @@ function dayHeading(key: string, t: ReturnType<typeof useT>): string {
   const today = dayKey(Date.now());
   const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
   const date = dayjs(key).format('YYYY-MM-DD');
-  if (key === today) return `${t('audit.today')} · ${date}`;
-  if (key === yesterday) return `${t('audit.yesterday')} · ${date}`;
+  if (key === today) return t('audit.day_relative', { day: t('audit.today'), date });
+  if (key === yesterday) return t('audit.day_relative', { day: t('audit.yesterday'), date });
   return date;
 }
 
@@ -371,7 +371,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
         <FilterDisclosure activeLabel={[
           category ? translateOr(t, `audit.cat.${category}`, category) : '',
           filters.range !== 'all' ? t(`audit.range_${filters.range}`) : '',
-        ].filter(Boolean).join(' · ')}>
+        ]}>
           <Select
             className={styles['audit-category']}
             value={category ?? 'all'}

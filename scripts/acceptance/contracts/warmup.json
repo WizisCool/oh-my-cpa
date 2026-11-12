@@ -4,7 +4,7 @@
     "tasks": [
       {
         "id": "t_wire_test",
-        "name": "claude.json · 窗口重置后 (5h)",
+        "name": "claude.json 窗口重置后 (5h)",
         "enabled": true,
         "provider": "claude",
         "auth_index": "exact-claude",
@@ -63,7 +63,7 @@
   "run": {
     "id": "r_wire_test",
     "task_id": "t_wire_test",
-    "task_name": "claude.json · 窗口重置后 (5h)",
+    "task_name": "claude.json 窗口重置后 (5h)",
     "at": "2026-10-13T06:00:00.000Z",
     "outcome": "ok",
     "source": "manual",

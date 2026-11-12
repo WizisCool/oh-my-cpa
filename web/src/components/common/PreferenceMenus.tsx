@@ -44,7 +44,7 @@ export const PreferenceMenus: React.FC = () => {
           render={
             <HeaderAction
               label={t('header.language')}
-              tooltip={`${t('header.language')} · ${activeLanguage ? activeLanguage.name : lang}`}
+              tooltip={t('common.action_on', { action: t('header.language'), target: activeLanguage ? activeLanguage.name : lang })}
               icon={activeLanguage ? <CountryFlag markup={LANGUAGE_FLAGS[activeLanguage.country]} /> : undefined}
             >
               <span className="language-trigger-code">{activeLanguage?.code ?? lang}</span>

@@ -10,7 +10,11 @@
  * - confirmation dialogs go through `ConfirmAction` or `components/feedback`, never raw `alert-dialog`;
  * - drawers and sheets go through `AppDrawer` or the designated mobile/navigation sheets;
  * - modal dialogs go through `AppModal` (plus the Agent full-screen canvas lightbox);
- * - tooltips go through `Tooltip`, `DelegatedTooltipLayer`, or the dedicated chart/list/heatmap layers.
+ * - tooltips go through `Tooltip`, `DelegatedTooltipLayer`, or the dedicated chart/list/heatmap layers;
+ * - no middle dot (`\u00b7`) separates information in web source, styles or catalogs
+ *   (docs/design.md, Information expression). Facts take a layout (`MetaLine`, label/value rows,
+ *   a tooltip card), a sentence or parentheses. Escaped spellings count too. A line that parses
+ *   data an upstream stored joined on the dot says why with `separator-ok:`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,6 +53,24 @@ const MODULE_OWNERS = {
     UI_LAYER,
   ],
 };
+
+// The literal glyph, or its JS / CSS escape spellings, which render the same separator.
+const MIDDLE_DOT = /\u00b7|\\u00b7|\\u\{b7\}|\\0*b7\b/i;
+const SEPARATOR_EXEMPTION = 'separator-ok:';
+
+/** Every line of a web source, stylesheet or catalog that strings information on a middle dot. */
+export function findSeparatorViolations(source) {
+  const violations = [];
+  source.split('\n').forEach((text, index) => {
+    if (!MIDDLE_DOT.test(text) || text.includes(SEPARATOR_EXEMPTION)) return;
+    violations.push({
+      line: index + 1,
+      rule: 'middle-dot-separator',
+      message: 'a middle dot strings facts together; use MetaLine, label/value rows, a tooltip card, a sentence or parentheses',
+    });
+  });
+  return violations;
+}
 
 function lineOf(source, index) {
   return source.slice(0, index).split('\n').length;
@@ -104,7 +126,7 @@ function walkSourceFiles(directory, found = []) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) walkSourceFiles(absolute, found);
-    else if (/\.(?:ts|tsx)$/.test(entry.name)) found.push(absolute);
+    else if (/\.(?:ts|tsx|css)$/.test(entry.name)) found.push(absolute);
   }
   return found;
 }
@@ -114,7 +136,12 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console, files }
   const failures = [];
   for (const file of files ? files.map((item) => path.join(projectRoot, item)).filter((item) => fs.existsSync(item)) : walkSourceFiles(sourceRoot)) {
     const relative = path.relative(projectRoot, file).split(path.sep).join('/');
-    for (const violation of findViolations(fs.readFileSync(file, 'utf8'), relative)) {
+    if (!relative.startsWith('web/src/')) continue;
+    const source = fs.readFileSync(file, 'utf8');
+    const violations = relative.endsWith('.css')
+      ? findSeparatorViolations(source)
+      : [...findViolations(source, relative), ...findSeparatorViolations(source)];
+    for (const violation of violations) {
       failures.push({ file: relative, ...violation });
     }
   }
@@ -127,7 +154,7 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console, files }
     output.log(
       files
         ? `Feedback surfaces: ${files.length} changed source(s) checked.`
-        : 'Feedback surfaces: zero retired UI imports, @base-ui/react isolated to components/ui, and all toast/dialog/sheet/tooltip surfaces routed through shared primitives.',
+        : 'Feedback surfaces: zero retired UI imports, @base-ui/react isolated to components/ui, all toast/dialog/sheet/tooltip surfaces routed through shared primitives, and no middle-dot separators.',
     );
   }
   return failures;

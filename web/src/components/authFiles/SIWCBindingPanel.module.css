@@ -52,16 +52,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 0;
+  gap: 2px 14px;
   padding-left: 15px;
   color: var(--muted);
   font-size: var(--text-sm);
-}
-
-.status-meta > * + *::before {
-  margin: 0 8px;
-  color: var(--meta);
-  content: "·";
 }
 
 .status-meta:empty {
