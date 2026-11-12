@@ -97,6 +97,9 @@ func (h *Handler) reconcileOMCPluginSource(ctx context.Context, request *http.Re
 	defer h.providerWrites.release()
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
+	if err := h.flushCoordinatorWithinGate(ctx); err != nil {
+		return false, err
+	}
 	return h.reconcileOMCPluginSourceLocked(ctx, request, client)
 }
 
@@ -135,9 +138,13 @@ func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *h
 		change = management.ConfigChange{Path: []string{"plugins", "store-sources"}, Remove: true}
 	}
 	if err := client.ApplyConfigChanges(management.WithBackupReason(ctx, management.BackupReasonPluginSettings), []management.ConfigChange{change}); err != nil {
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.afterConfigWrite()
+		}
 		_ = h.recordAudit(request, "plugin.source", "config", "plugins.store-sources", "failure", map[string]any{"error": publicCPAErrorMessage(err)})
 		return false, err
 	}
+	h.afterConfigWrite()
 	_ = h.recordAudit(request, "plugin.source", "config", "plugins.store-sources", "success", details)
 	return enabled, nil
 }

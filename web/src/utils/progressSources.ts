@@ -18,6 +18,67 @@ export function mergeProgressSources(...sources: ProgressSource[]): ProgressSour
 
 type RefetchInterval = number | false | undefined | ((query: never) => number | false | undefined);
 
+const silentBackgroundQueries = new Set<string>();
+
+/**
+ * Invalidates a query for background SWR reconciliation without lighting the app-wide top-edge
+ * DataProgress bar while cached data is already rendered on screen. If no fetch starts (for
+ * example, no active observer), the marker is skipped cleanly; once a fetch begins, the marker
+ * clears automatically as soon as fetchStatus returns to idle.
+ */
+export async function invalidateQueriesSilently(
+  queryClient: {
+    getQueryCache(): {
+      findAll(filters?: { queryKey?: readonly unknown[]; exact?: boolean }): Array<{
+        queryHash: string;
+        state: { data: unknown; fetchStatus: string };
+      }>;
+      subscribe(listener: (event: { type?: string; query?: { queryHash: string; state: { fetchStatus: string } } }) => void): () => void;
+    };
+    invalidateQueries(filters?: { queryKey?: readonly unknown[]; exact?: boolean }): Promise<void>;
+  },
+  filters: { queryKey: readonly unknown[]; exact?: boolean },
+): Promise<void> {
+  const cache = queryClient.getQueryCache();
+  const candidates = cache
+    .findAll(filters)
+    .filter((query) => query.state.data !== undefined)
+    .map((query) => query.queryHash);
+
+  if (candidates.length === 0) {
+    await queryClient.invalidateQueries(filters);
+    return;
+  }
+
+  const candidateSet = new Set(candidates);
+  const startedFetching = new Set<string>();
+  for (const hash of candidateSet) {
+    silentBackgroundQueries.add(hash);
+  }
+
+  const unsubscribe = cache.subscribe((event) => {
+    const query = event.query;
+    if (!query || !candidateSet.has(query.queryHash) || !silentBackgroundQueries.has(query.queryHash)) return;
+    if (query.state.fetchStatus === 'fetching') {
+      startedFetching.add(query.queryHash);
+    } else if (startedFetching.has(query.queryHash)) {
+      // Only clear once this specific query's background fetch ran and returned to idle.
+      silentBackgroundQueries.delete(query.queryHash);
+    }
+  });
+
+  try {
+    await queryClient.invalidateQueries(filters);
+  } finally {
+    unsubscribe();
+    for (const query of cache.findAll(filters)) {
+      if (query.state.fetchStatus !== 'fetching') {
+        silentBackgroundQueries.delete(query.queryHash);
+      }
+    }
+  }
+}
+
 /** The slice of a query the bar reads; structural so the policy is tested without a client. */
 export interface ProgressQuery {
   queryHash: string;
@@ -52,7 +113,13 @@ function isPolled(query: ProgressQuery): boolean {
  * key on every signal, and background reads that are silent even on their first load.
  */
 export function isQueryProgressWork(query: ProgressQuery): boolean {
-  if (query.state.fetchStatus !== 'fetching' || query.meta?.silent === true) return false;
+  if (query.state.fetchStatus !== 'fetching') {
+    return false;
+  }
+  if (query.meta?.silent === true) return false;
+  if (silentBackgroundQueries.has(query.queryHash) && query.state.data !== undefined) {
+    return false;
+  }
   const { data, isInvalidated, status } = query.state;
   return data === undefined || (isInvalidated && status === 'success') || !isPolled(query);
 }

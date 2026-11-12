@@ -216,6 +216,11 @@ func (h *Handler) restoreConfigBackup(writer http.ResponseWriter, request *http.
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
 
+	if err := h.flushCoordinatorWithinGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
+
 	// The current document is read only to scrub its secrets from a refusal; a
 	// failed read does not block the restore.
 	currentYAML, _ := client.ConfigYAML(request.Context())

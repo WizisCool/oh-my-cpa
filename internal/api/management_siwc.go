@@ -213,6 +213,7 @@ func (h *Handler) getSIWCBindingStatus(writer http.ResponseWriter, request *http
 			writeJSON(writer, http.StatusOK, map[string]any{"status": "error", "completed": true})
 			return
 		}
+		h.invalidateCoordinator("management-auth-files", "management-quota")
 		writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "completed": true, "file": projectManagementAuthFile(file)})
 	})
 }

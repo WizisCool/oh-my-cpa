@@ -58,5 +58,6 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 	// The inference has already run; an outcome-audit failure must not invite
 	// a retry that consumes tokens again.
 	_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "success", map[string]any{"verified": verified})
+	h.invalidateCoordinator("management-auth-files")
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "verified": verified})
 }

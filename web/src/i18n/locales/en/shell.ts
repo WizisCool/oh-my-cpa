@@ -92,6 +92,7 @@ export default {
   'toast.group_unknown': 'No outcome',
   'toast.group_skipped': 'Skipped',
   'common.save_failed': 'Save failed: {msg}',
+  'common.sync_reverted': 'Configuration sync failed; reverted to gateway state: {msg}',
   'common.save': 'Save',
   'common.loading': 'Loading…',
   'common.actions': 'Actions',

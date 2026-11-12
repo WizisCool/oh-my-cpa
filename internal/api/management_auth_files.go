@@ -15,6 +15,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 const (
@@ -165,16 +166,52 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 	if !ok {
 		return
 	}
-	files, err := client.AuthFiles(request.Context())
-	if err != nil {
+	var (
+		rawFiles     []management.AuthFile
+		stateVersion uint64
+	)
+	if files, err := client.AuthFiles(request.Context()); err == nil {
+		rawFiles = files.Files
+		if h.stateCoord != nil {
+			if envelope, coordErr := h.stateCoord.Read(request.Context()); coordErr == nil {
+				stateVersion = envelope.Version
+				if len(envelope.Data.PendingAuthStatus) > 0 {
+					for idx := range rawFiles {
+						for _, pending := range envelope.Data.PendingAuthStatus {
+							if rawFiles[idx].Name != pending.Name && rawFiles[idx].ID != pending.Name {
+								continue
+							}
+							if pending.AuthIndex != "" && rawFiles[idx].AuthIndex != pending.AuthIndex {
+								continue
+							}
+							rawFiles[idx].Disabled = pending.Disabled
+							if pending.Disabled {
+								rawFiles[idx].Status = "disabled"
+							} else if rawFiles[idx].Status == "disabled" {
+								rawFiles[idx].Status = "ready"
+							}
+						}
+					}
+				}
+			}
+		}
+	} else if h.stateCoord != nil {
+		if envelope, coordErr := h.stateCoord.Read(request.Context()); coordErr == nil && !envelope.Data.AuthFilesUnavailable {
+			rawFiles = envelope.Data.AuthFiles
+			stateVersion = envelope.Version
+		} else {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	} else {
 		writeCPAFacadeError(writer, err)
 		return
 	}
 
 	nameFilter := strings.TrimSpace(request.URL.Query().Get("name"))
 	authIndexFilter := strings.TrimSpace(request.URL.Query().Get("auth_index"))
-	projected := make([]managementAuthFileResponse, 0, len(files.Files))
-	for _, file := range files.Files {
+	projected := make([]managementAuthFileResponse, 0, len(rawFiles))
+	for _, file := range rawFiles {
 		if nameFilter != "" && file.Name != nameFilter && file.ID != nameFilter {
 			continue
 		}
@@ -202,6 +239,7 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 	sort.Slice(projected, func(i, j int) bool {
 		return strings.ToLower(projected[i].Name) < strings.ToLower(projected[j].Name)
 	})
+	setStateVersionHeader(writer, stateVersion)
 	writeJSON(writer, http.StatusOK, managementAuthFilesResponse{Files: projected, Total: len(projected)})
 }
 
@@ -234,10 +272,112 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 		writeInternalError(writer, err)
 		return
 	}
-	if err := h.operationsService().SetCredentialStatus(request.Context(), operations.CredentialTarget{Name: name, AuthIndex: strings.TrimSpace(payload.AuthIndex)}, *payload.Disabled, ""); err != nil {
+	trimmedAuthIndex := strings.TrimSpace(payload.AuthIndex)
+	if h.stateCoord != nil {
+		var useFallback bool
+		var canonicalSelector string
+		if env, readErr := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (string, error) {
+			if state.AuthFilesUnavailable {
+				return "", errStateSliceUnavailable
+			}
+			matches := 0
+			var matched management.AuthFile
+			for idx := range state.AuthFiles {
+				file := state.AuthFiles[idx]
+				if file.Name != name && file.ID != name {
+					continue
+				}
+				if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
+					continue
+				}
+				matched = file
+				matches++
+			}
+			if matches != 1 {
+				return "", errStateSliceUnavailable
+			}
+			canonicalName := firstNonEmpty(matched.Name, matched.ID)
+			return encodeAuthFileSelector(canonicalName, strings.TrimSpace(matched.AuthIndex)), nil
+		}); readErr == nil {
+			canonicalSelector = env.Data
+		} else {
+			useFallback = true
+		}
+
+		if !useFallback {
+			domain := statecoord.DomainKey(stateDomainAuthFileStatusPrefix + canonicalSelector)
+			version, mutErr := h.mutateCoordinatorWithAudit(
+				request,
+				domain,
+				"auth_file.status_update",
+				"auth_file",
+				name,
+				map[string]any{"disabled": *payload.Disabled},
+				func(state *projectedConfigState) error {
+					if state.AuthFilesUnavailable {
+						useFallback = true
+						return errStateSliceUnavailable
+					}
+					matches := 0
+					var matchedIdx int
+					for idx := range state.AuthFiles {
+						file := &state.AuthFiles[idx]
+						if file.Name != name && file.ID != name {
+							continue
+						}
+						if trimmedAuthIndex != "" && file.AuthIndex != trimmedAuthIndex {
+							continue
+						}
+						matchedIdx = idx
+						matches++
+					}
+					if matches != 1 {
+						useFallback = true
+						return errStateSliceUnavailable
+					}
+					matched := &state.AuthFiles[matchedIdx]
+					canonicalName := firstNonEmpty(matched.Name, matched.ID)
+					canonicalAuthIndex := strings.TrimSpace(matched.AuthIndex)
+					if encodeAuthFileSelector(canonicalName, canonicalAuthIndex) != canonicalSelector {
+						useFallback = true
+						return errStateSliceUnavailable
+					}
+					matched.Disabled = *payload.Disabled
+					if state.PendingAuthStatus == nil {
+						state.PendingAuthStatus = make(map[string]pendingAuthFileStatus)
+					}
+					state.AuthStatusSeq++
+					state.PendingAuthStatus[canonicalSelector] = pendingAuthFileStatus{
+						Name:      canonicalName,
+						AuthIndex: canonicalAuthIndex,
+						Disabled:  *payload.Disabled,
+						Seq:       state.AuthStatusSeq,
+					}
+					return nil
+				},
+			)
+			if !useFallback {
+				if mutErr != nil {
+					_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "failure", map[string]any{"error": mutErr.Error()})
+					writeProviderWriteError(writer, mutErr)
+					return
+				}
+				setStateVersionHeader(writer, version)
+				writeJSON(writer, http.StatusOK, map[string]any{
+					"status":   "ok",
+					"disabled": *payload.Disabled,
+					"version":  version,
+				})
+				return
+			}
+		}
+	}
+	if err := h.operationsService().SetCredentialStatus(request.Context(), operations.CredentialTarget{Name: name, AuthIndex: trimmedAuthIndex}, *payload.Disabled, ""); err != nil {
+		_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "failure", map[string]any{"error": publicCPAErrorMessage(err)})
 		writeCPAFacadeError(writer, err)
 		return
 	}
+	_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "success", map[string]any{"disabled": *payload.Disabled})
 
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "disabled": *payload.Disabled})
 }
@@ -288,6 +428,7 @@ func (h *Handler) refreshManagementAuthFile(writer http.ResponseWriter, request 
 	// The upstream mutation has landed; an outcome-audit failure must not invite
 	// a retry that renews or replaces the credential again.
 	_ = h.recordAudit(request, "auth_file.refresh", "auth_file", name, "success", nil)
+	h.invalidateCoordinator("management-auth-files", "management-quota")
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
 }
 

@@ -567,6 +567,10 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 		return
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	result, err := h.clearQuotaCooldown(request.Context(), client, authIndex, action, func(action, targetType, targetID, result string, details map[string]any) error {
 		return h.recordAudit(request, action, targetType, targetID, result, details)
 	})
@@ -574,6 +578,7 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 		writeProviderWriteError(writer, err)
 		return
 	}
+	h.invalidateCoordinator("management-auth-files", "management-quota")
 	writeJSON(writer, 200, result)
 }
 
@@ -608,6 +613,10 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 		return
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	result, err := h.redeemQuotaCredit(request.Context(), client, authIndex, func(action, targetType, targetID, result string, details map[string]any) error {
 		return h.recordAudit(request, action, targetType, targetID, result, details)
 	})
@@ -615,6 +624,7 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 		writeProviderWriteError(writer, err)
 		return
 	}
+	h.invalidateCoordinator("management-auth-files", "management-quota")
 	writeJSON(writer, 200, result)
 }
 

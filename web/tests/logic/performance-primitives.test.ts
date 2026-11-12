@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
-import { QueryClient } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { test } from 'vitest';
+
+import { MUTATION_KEYS, QUERY_KEYS } from '../../src/api/queryKeys.ts';
+import {
+  createStateLiveChannel,
+  resolveStateEventsURL,
+  type MinimalEventSource,
+  type StateSyncEvent,
+} from '../../src/api/stateLive.ts';
+import { buildOptimisticMutationOptions, defineOptimisticTarget } from '../../src/hooks/optimisticMutation.ts';
+import { reconcileStateSyncEvent, type StateVersionTracker } from '../../src/hooks/useEventSource.ts';
+import { invalidateQueriesSilently, queryProgressSource } from '../../src/utils/progressSources.ts';
 
 import {
   createCoalescedSignalGate,
@@ -504,4 +515,312 @@ test('pageDistance and keyScrollFor step by the unoccluded scroller height when 
   // PageDown steps 460px (500 - 40) rather than 660px (700 - 40), so no rows are skipped.
   assert.equal(pageDistance(700, 200), 460);
   assert.deepEqual(keyScrollFor('PageDown', false, 700 - 200), { by: 460 });
+});
+
+test('optimistic mutation updates cache synchronously, rolls back on error, and invalidates only when final concurrent mutation settles', async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const cacheKey = ['test-optimistic-toggle'] as const;
+  const mutationKey = ['mutation', 'test-optimistic-toggle'] as const;
+  queryClient.setQueryData(cacheKey, { enabled: false });
+
+  const resolvers: Array<() => void> = [];
+  let finalSettledCount = 0;
+
+  const makeObserver = () =>
+    new MutationObserver(
+      queryClient,
+      buildOptimisticMutationOptions<void, Error, boolean>(queryClient, {
+        mutationKey,
+        mutationFn: () =>
+          new Promise<void>((resolve) => {
+            resolvers.push(resolve);
+          }),
+        targets: [
+          defineOptimisticTarget<boolean, { enabled: boolean }>(cacheKey, (_prev, enabled) => ({
+            enabled,
+          })),
+        ],
+        onFinalSettled: () => {
+          finalSettledCount += 1;
+        },
+      }),
+    );
+
+  // Fire two rapid consecutive clicks (true -> false) before either network request resolves.
+  const firstClick = makeObserver().mutate(true);
+  // Optimistic setQueryData runs synchronously in 0 ticks (before any await)!
+  assert.deepEqual(queryClient.getQueryData(cacheKey), { enabled: true });
+
+  const secondClick = makeObserver().mutate(false);
+  assert.deepEqual(queryClient.getQueryData(cacheKey), { enabled: false });
+
+  // Flush microtasks so cancelQueries().then(...) advances into mutationFn and populates resolvers[].
+  for (let tick = 0; tick < 6 && resolvers.length < 2; tick += 1) {
+    await Promise.resolve();
+  }
+  assert.equal(resolvers.length, 2, 'both concurrent mutations entered mutationFn');
+
+  // Reset invalidation flag before resolving the first mutation while the second is still active.
+  await queryClient.invalidateQueries({ queryKey: cacheKey, refetchType: 'none' });
+  queryClient.setQueryData(cacheKey, { enabled: false });
+
+  // Resolve click 1 first: click 2 is still in flight (isMutating === 2), so invalidation MUST NOT fire.
+  resolvers[0]!();
+  await firstClick;
+  assert.equal(finalSettledCount, 0, 'intermediate mutation settlement must not trigger final invalidation');
+  assert.deepEqual(queryClient.getQueryData(cacheKey), { enabled: false }, 'second click state remains intact without flicker');
+
+  // Resolve click 2 (last in queue, isMutating === 1): invalidation now fires once.
+  resolvers[1]!();
+  await secondClick;
+  assert.equal(finalSettledCount, 1, 'final concurrent mutation triggers exactly one settle invalidation');
+  assert.equal(queryClient.getQueryState(cacheKey)?.isInvalidated, true);
+
+  // Verify atomic rollback on error.
+  queryClient.setQueryData(cacheKey, { enabled: false });
+  let capturedErrorMessage = '';
+  const failingObserver = new MutationObserver(
+    queryClient,
+    buildOptimisticMutationOptions<void, Error, boolean>(queryClient, {
+      mutationKey,
+      mutationFn: async () => {
+        assert.deepEqual(queryClient.getQueryData(cacheKey), { enabled: true }, 'optimistic state is visible while pending');
+        throw new Error('upstream rejected toggle');
+      },
+      targets: [
+        defineOptimisticTarget<boolean, { enabled: boolean }>(cacheKey, (_prev, enabled) => ({
+          enabled,
+        })),
+      ],
+      onError: (err) => {
+        capturedErrorMessage = err.message;
+      },
+    }),
+  );
+
+  await assert.rejects(() => failingObserver.mutate(true));
+  assert.deepEqual(queryClient.getQueryData(cacheKey), { enabled: false }, 'failed mutation rolls back to previous snapshot');
+  assert.equal(capturedErrorMessage, 'upstream rejected toggle');
+  queryClient.clear();
+});
+
+test('state SSE channel suspends when hidden and reconcileStateSyncEvent applies sync_error rollback while guarding active mutations', async () => {
+  const queryClient = new QueryClient();
+  let isVisible = true;
+  let visibilityHandler: (() => void) | null = null;
+  const listenersByType = new Map<string, Array<(evt: MessageEvent<string> | Event) => void>>();
+  let closedCount = 0;
+
+  const fakeSource: MinimalEventSource = {
+    readyState: 1,
+    addEventListener: (type, fn) => {
+      const list = listenersByType.get(type) ?? [];
+      list.push(fn);
+      listenersByType.set(type, list);
+    },
+    close: () => {
+      closedCount += 1;
+    },
+  };
+
+  const channel = createStateLiveChannel({
+    createSource: () => fakeSource,
+    url: () => '/api/events',
+    isVisible: () => isVisible,
+    onVisibilityChange: (handler) => {
+      visibilityHandler = handler;
+      return () => {
+        visibilityHandler = null;
+      };
+    },
+    setTimer: () => 1,
+    clearTimer: () => undefined,
+  });
+
+  const received: StateSyncEvent[] = [];
+  const tracker: StateVersionTracker = { lastVersion: 0 };
+  const syncErrors: string[] = [];
+
+  const unsub = channel.subscribe({
+    onEvent: (evt) => {
+      received.push(evt);
+    },
+  });
+
+  const emitFrame = (type: string, data: unknown) => {
+    for (const handler of listenersByType.get(type) ?? []) {
+      handler({ data: JSON.stringify(data) } as MessageEvent<string>);
+    }
+  };
+
+  emitFrame('ready', { type: 'ready', version: 1 });
+  assert.equal(channel.getState(), 'live');
+  assert.equal(received.length, 1);
+  await reconcileStateSyncEvent(queryClient, received[0]!, tracker);
+  assert.equal(tracker.lastVersion, 1);
+
+  // Seed optimistic provider state (disabled: false) that upstream will reject via sync_error.
+  queryClient.setQueryData(QUERY_KEYS.providers(false), {
+    providers: [{ id: 'codex-0', family: 'codex', name: 'Codex', protocol: 'OpenAI Responses', disabled: false, disable_cooling: false, key_configured: true, proxy_configured: false }],
+    total: 1,
+  });
+
+  // Start an in-flight providerStatus mutation and verify state_sync skips invalidation while active.
+  let resolveActiveMutation!: () => void;
+  const activeObserver = new MutationObserver(queryClient, {
+    mutationKey: MUTATION_KEYS.providerStatus,
+    mutationFn: () => new Promise<void>((resolve) => { resolveActiveMutation = resolve; }),
+  });
+  const activePromise = activeObserver.mutate();
+  await reconcileStateSyncEvent(
+    queryClient,
+    { type: 'state_sync', version: 2, scopes: ['management-providers'] },
+    tracker,
+  );
+  assert.equal(
+    queryClient.getQueryState(QUERY_KEYS.providers(false))?.isInvalidated ?? false,
+    false,
+    'state_sync defers invalidating a scope while a newer optimistic mutation is in flight',
+  );
+  resolveActiveMutation();
+  await activePromise;
+
+  // Emit sync_error carrying authoritative disabled: true snapshot; verify immediate rollback + error notification.
+  const syncErrorEvent: StateSyncEvent = {
+    type: 'sync_error',
+    version: 3,
+    scopes: ['management-providers'],
+    code: 'config_rejected',
+    error: 'CPA rejected codex update',
+    data: {
+      revision: 'rev-3',
+      stored_layout: 'v8',
+      scalars: {
+        proxy_url: '',
+        ws_auth: true,
+        force_model_prefix: false,
+        debug: false,
+        request_log: false,
+        logging_to_file: false,
+        logs_max_total_size_mb: 0,
+        error_logs_max_files: 10,
+        routing_strategy: 'round-robin',
+        request_retry: 0,
+        max_retry_interval: 0,
+        max_retry_credentials: 0,
+        usage_statistics_enabled: true,
+      },
+      supported_keys: ['debug'],
+      client_keys_total: 1,
+      provider_statuses: [{ id: 'codex-0', family: 'codex', disabled: true }],
+      auth_file_statuses: [{ name: 'codex-a.json', auth_index: 'idx-a', disabled: true }],
+      oauth_model_aliases: {},
+      oauth_excluded_models: {},
+    },
+  };
+  await reconcileStateSyncEvent(queryClient, syncErrorEvent, tracker, (err) => {
+    syncErrors.push(err.error ?? '');
+  });
+
+  const rolledBack = queryClient.getQueryData<{ providers: Array<{ id: string; disabled: boolean }> }>(
+    QUERY_KEYS.providers(false),
+  );
+  assert.equal(rolledBack?.providers[0]?.disabled, true, 'sync_error snapshot rolls back optimistic provider status');
+  assert.deepEqual(syncErrors, ['CPA rejected codex update']);
+  assert.equal(queryClient.getQueryState(QUERY_KEYS.providers(false))?.isInvalidated, true);
+
+  // Simulate an OMC process restart: tracker held version 3, reconnected stream emits ready at version 1.
+  // The lower ready version must start a fresh epoch, invalidate cached state, and allow version 2 through!
+  await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.providers(false), refetchType: 'none' });
+  queryClient.setQueryData(QUERY_KEYS.providers(false), {
+    providers: [{ id: 'codex-0', family: 'codex', name: 'Codex', protocol: 'OpenAI Responses', disabled: true, disable_cooling: false, key_configured: true, proxy_configured: false }],
+    total: 1,
+  });
+  await reconcileStateSyncEvent(queryClient, { type: 'ready', version: 1 }, tracker);
+  assert.equal(tracker.lastVersion, 1, 'ready with lower version resets tracker to new server epoch');
+  assert.equal(queryClient.getQueryState(QUERY_KEYS.providers(false))?.isInvalidated, true);
+
+  // Reset invalidation and verify version 2 in the new epoch is NOT dropped.
+  queryClient.setQueryData(QUERY_KEYS.providers(false), {
+    providers: [{ id: 'codex-0', family: 'codex', name: 'Codex', protocol: 'OpenAI Responses', disabled: true, disable_cooling: false, key_configured: true, proxy_configured: false }],
+    total: 1,
+  });
+  await reconcileStateSyncEvent(
+    queryClient,
+    { type: 'state_sync', version: 2, scopes: ['management-providers'] },
+    tracker,
+  );
+  assert.equal(tracker.lastVersion, 2);
+  assert.equal(queryClient.getQueryState(QUERY_KEYS.providers(false))?.isInvalidated, true);
+
+  // Verify resolveStateEventsURL honors root and custom OMCPA_BASE_PATH via window.__OMCPA_CONFIG__.
+  const g = globalThis as { window?: { __OMCPA_CONFIG__?: { basePath?: string; apiBaseUrl?: string } } };
+  const prevWindow = g.window;
+  try {
+    g.window = { __OMCPA_CONFIG__: { basePath: '/', apiBaseUrl: '/api/v1' } };
+    assert.equal(resolveStateEventsURL('/api/events'), '/api/events');
+    g.window = { __OMCPA_CONFIG__: { basePath: '/omc', apiBaseUrl: '/omc/api/v1' } };
+    assert.equal(resolveStateEventsURL('/api/events'), '/omc/api/events');
+    assert.equal(resolveStateEventsURL('/events'), '/omc/api/v1/events');
+  } finally {
+    g.window = prevWindow;
+  }
+
+  // Hiding the tab closes the EventSource slot immediately.
+  isVisible = false;
+  visibilityHandler?.();
+  assert.equal(closedCount, 1);
+
+  unsub();
+  queryClient.clear();
+});
+
+test('invalidateQueriesSilently keeps DataProgress bar idle when cached data reconciles in the background', async () => {
+  let resolveFetch!: (val: { ok: boolean }) => void;
+  const queryClient = new QueryClient();
+  const progress = queryProgressSource(queryClient.getQueryCache() as never);
+  const key = ['management-auth-files'] as const;
+
+  // 1. Seed initial cached data and attach an observer (simulating an open OAuthManagementPage).
+  queryClient.setQueryData(key, { ok: true });
+  const observer = new QueryObserver(queryClient, {
+    queryKey: key,
+    queryFn: () => new Promise<{ ok: boolean }>((resolve) => { resolveFetch = resolve; }),
+    staleTime: 30_000,
+  });
+  const observerUnsub = observer.subscribe(() => undefined);
+  // Attach a synchronous cache subscriber calling progress.read() on every cache event
+  // (including the synchronous 'invalidated' event where fetchStatus is still 'idle'),
+  // mirroring DataProgress's useSyncExternalStore subscription.
+  let sawNonEmptyDuringSilent = false;
+  let checkingSilent = false;
+  const cacheSubUnsub = queryClient.getQueryCache().subscribe(() => {
+    const active = progress.read();
+    if (checkingSilent && active.size > 0) {
+      sawNonEmptyDuringSilent = true;
+    }
+  });
+
+  // 2. Silent invalidation after an optimistic switch toggle starts a background fetch,
+  //    but DataProgress reports 0 blocking tasks across every cache event!
+  checkingSilent = true;
+  const silentPromise = invalidateQueriesSilently(queryClient, { queryKey: key });
+  assert.equal(progress.read().size, 0, 'silent background reconciliation must not trigger top progress bar');
+  assert.equal(sawNonEmptyDuringSilent, false, 'useSyncExternalStore snapshot read on invalidate event must not strip silent marker');
+
+  resolveFetch({ ok: true });
+  await silentPromise;
+  checkingSilent = false;
+
+  // 3. Subsequent explicit manual invalidation on the same query DOES trigger the progress bar.
+  const manualPromise = queryClient.invalidateQueries({ queryKey: key });
+  assert.equal(progress.read().size, 1, 'explicit manual invalidation still reports progress');
+  resolveFetch({ ok: true });
+  await manualPromise;
+
+  cacheSubUnsub();
+  observerUnsub();
+  queryClient.clear();
 });

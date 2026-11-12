@@ -21,6 +21,7 @@ External MCP clients → MCP adapter → the same capability executor
 | --- | --- |
 | Composition | [`internal/app`](../internal/app): startup, services and background lifetimes |
 | HTTP boundary | [`internal/api`](../internal/api): authentication, DTOs, routes and audit admission |
+| Projected state & SSE | [`internal/statecoord`](../internal/statecoord): in-memory hot projection, 250ms write-behind coalescing and `/api/events` reconciliation |
 | Business operations | [`internal/operations`](../internal/operations): shared console/Agent behavior |
 | CPA integration | [`internal/cpa`](../internal/cpa): discovery, management and inference clients |
 | Persistence | [`internal/repository`](../internal/repository), [`migrations`](../migrations): transactions, retention and schema |
@@ -172,7 +173,13 @@ audit events and price versions are append-only. See the [SQLite runbook](ops/sq
 Discovery binds resources by stable, family-scoped evidence, not list positions or
 key masks. Missing or rotated credentials must not rewrite historical attribution.
 CPA writes use loaded revisions, explicit changed paths and an encrypted copy of the
-stored file taken immediately before mutation. A failed copy blocks the write.
+stored file taken immediately before mutation. A failed copy blocks the write. High-frequency
+idempotent settings and enablement switches project into `StateCoordinator` memory with
+monotonic versions and coalesce under the same write gate across a 250ms write-behind window;
+structural writes drain pending domains before reading or replacing `config.yaml`, and a
+failed background flush attempts to reload CPA's authoritative state (marking the projection
+unready for lazy re-fetch if CPA is unreachable) and broadcasts a secret-scrubbed
+`sync_error` frame on `/api/events` while recording the deferred audit outcome.
 [CPA integration](cpa-v8-compat.md) explains adoption and legacy-layout handling.
 
 Probe availability with AUTH, never with a pop. Persist and sanitize input before

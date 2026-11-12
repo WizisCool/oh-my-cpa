@@ -92,6 +92,7 @@ export default {
   "toast.group_unknown": "Tiada hasil",
   "toast.group_skipped": "Dilangkau",
   "common.save_failed": "Gagal menyimpan: {msg}",
+  "common.sync_reverted": "Penyegerakan konfigurasi gagal; dikembalikan kepada keadaan gerbang: {msg}",
   "common.save": "Simpan",
   "common.loading": "Memuatkan…",
   "common.actions": "Tindakan",

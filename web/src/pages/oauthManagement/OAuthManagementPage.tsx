@@ -71,6 +71,7 @@ import { Pager } from '../../components/common/Pager';
 import { DeferredMount } from '../../components/common/DeferredMount';
 import { createRouteLoader } from '../../utils/routeLoader';
 import { pickRows, type SelectionAnchor } from '../../types/rowSelection';
+import { invalidateQueriesSilently } from '../../utils/progressSources';
 
 const AuthFileDetailDrawer = React.lazy(createRouteLoader(() =>
   import('../../components/authFiles/AuthFileDetailDrawer').then(module => ({ default: module.AuthFileDetailDrawer }))));
@@ -583,6 +584,7 @@ export const OAuthManagementPage: React.FC = () => {
     .map((section) => ({ ...section, title: providerDisplayName(section.provider, pluginTitles) }));
   const credentialActions: CredentialActions = {
     isBusy: (record) => actions.isRecordBusy(record),
+    isTogglingStatus: (record) => actions.isTogglingStatus(record),
     isRefreshingQuota: (record) => Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex)),
     siwcBadge: (record) => siwcBadgeState(record.file, siwcBindings.sessions[siwcTargetKey(record.file)]),
     onSelect: (targets, isSelected) => {
@@ -920,11 +922,9 @@ export const OAuthManagementPage: React.FC = () => {
           initialProvider={modelRulesProvider}
           onSaved={() => {
             void Promise.all([
-              queryClient.invalidateQueries({ queryKey: ['management-oauth-model-aliases'] }),
-              queryClient.invalidateQueries({ queryKey: ['management-oauth-excluded-models'] }),
-              queryClient.invalidateQueries({ queryKey: ['auth-file-models'] }),
-              queryClient.invalidateQueries({ queryKey: ['model-square'] }),
-              queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
+              invalidateQueriesSilently(queryClient, { queryKey: ['auth-file-models'] }),
+              invalidateQueriesSilently(queryClient, { queryKey: ['model-square'] }),
+              invalidateQueriesSilently(queryClient, { queryKey: ['management-overview'] }),
             ]);
           }}
           providerOptions={providerOptions.filter((provider) => provider !== 'all')}

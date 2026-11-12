@@ -200,8 +200,11 @@ func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Reque
 	}
 
 	status := normalizeOAuthStatus(resp.Status)
-	if status == "ok" && h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
+	if status == "ok" {
+		if h.pricing != nil {
+			h.pricing.NotifyModelsChanged()
+		}
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	}
 	payload := map[string]any{"status": status}
 	if status == "error" {
@@ -268,6 +271,7 @@ func (h *Handler) handleOAuthCallback(writer http.ResponseWriter, request *http.
 
 	if result.Completed {
 		_ = h.recordAudit(request, "oauth.callback", "oauth_callback", security.RedactText(auditIdentifier), "success", map[string]any{"already_completed": true})
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 
 		writeJSON(writer, http.StatusOK, map[string]any{
 			"status":    "ok",
@@ -277,6 +281,7 @@ func (h *Handler) handleOAuthCallback(writer http.ResponseWriter, request *http.
 	}
 
 	_ = h.recordAudit(request, "oauth.callback", "oauth_callback", security.RedactText(auditIdentifier), "success", nil)
+	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",

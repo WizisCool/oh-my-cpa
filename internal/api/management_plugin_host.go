@@ -210,6 +210,10 @@ func (h *Handler) servePluginRoute(writer http.ResponseWriter, request *http.Req
 			return
 		}
 		defer h.providerWrites.release()
+		if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+			writeProviderWriteError(writer, err)
+			return
+		}
 	}
 	h.serveAuditedPluginCall(writer, request, routePath, func() (management.PluginHostResponse, error) {
 		response, err := client.PluginRoute(request.Context(), request.Method, routePath, request.URL.RawQuery, forwardedPluginHeaders(request), body)

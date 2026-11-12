@@ -10,6 +10,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 type configPutScalarRequest struct {
@@ -27,6 +28,32 @@ type configSourcePutRequest struct {
 // converts it, after a backup).
 func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
+	if h.stateCoord != nil {
+		if _, ok := h.managementClientOrError(writer, request); !ok {
+			return
+		}
+		envelope, err := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, version uint64) (map[string]any, error) {
+			return map[string]any{
+				"version":        version,
+				"scalars":        state.Scalars,
+				"supported_keys": management.KnownScalarKeys(),
+				"revision":       state.Revision,
+				"safe_yaml":      state.SafeYAML,
+				"stored_layout":  state.StoredLayout,
+			}, nil
+		})
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if rev, _ := envelope.Data["revision"].(string); rev != "" {
+			writer.Header().Set("ETag", fmt.Sprintf("%q", rev))
+		}
+		setStateVersionHeader(writer, envelope.Version)
+		writeJSON(writer, http.StatusOK, envelope.Data)
+		return
+	}
+
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
@@ -205,6 +232,10 @@ func writeMissingRevision(writer http.ResponseWriter) {
 // currentConfigAtRevision reads the v8 view a save is based on and refuses the
 // save when it is no longer the revision the operator edited.
 func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *http.Request, client *management.Client, expectedRev string) (string, bool) {
+	if err := h.flushCoordinatorWithinGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return "", false
+	}
 	currentYAML, err := client.ConfigYAML(request.Context())
 	if err != nil {
 		writeCPAFacadeError(writer, err)
@@ -212,6 +243,7 @@ func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *h
 	}
 	currentRev := configyaml.ComputeRevision(currentYAML)
 	if !strings.EqualFold(expectedRev, currentRev) {
+		h.invalidateCoordinator("management-config")
 		writeJSON(writer, http.StatusConflict, map[string]any{
 			"error":            "configuration has been modified by another session",
 			"code":             "config_conflict",
@@ -222,8 +254,7 @@ func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *h
 	return currentYAML, true
 }
 
-// afterConfigWrite drops what a configuration write may have made stale.
-func (h *Handler) afterConfigWrite() {
+func (h *Handler) afterConfigWriteSideEffects() {
 	h.releaseToken.invalidate()
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
@@ -231,6 +262,22 @@ func (h *Handler) afterConfigWrite() {
 	// The saved document may have re-keyed a provider, so the masks resolved from
 	// the credential lists it contains are no longer known to be current.
 	h.providerKeyMasks.invalidate()
+	h.invalidateClientKeyCatalog()
+}
+
+// afterConfigWrite drops what a configuration write may have made stale.
+func (h *Handler) afterConfigWrite() {
+	h.afterConfigWriteSideEffects()
+	h.invalidateCoordinator(
+		"management-config",
+		"management-providers",
+		"management-providers-sanitized",
+		"management-auth-files",
+		"management-client-keys",
+		"management-routing",
+		"management-oauth-model-aliases",
+		"management-oauth-excluded-models",
+	)
 }
 
 func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request *http.Request) {
@@ -262,6 +309,35 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
 		return
 	}
+
+	if h.stateCoord != nil {
+		version, mutErr := h.mutateCoordinatorWithAudit(request, stateDomainScalars, "config.save_scalar", "config", key, map[string]any{"key": key}, func(state *projectedConfigState) error {
+			if _, changeErr := management.ScalarConfigChange(key, validatedVal); changeErr != nil {
+				return changeErr
+			}
+			management.ApplyScalarToDTO(&state.Scalars, key, validatedVal)
+			if state.PendingScalars == nil {
+				state.PendingScalars = make(map[string]pendingScalarEntry)
+			}
+			state.ScalarSeq++
+			state.PendingScalars[key] = pendingScalarEntry{Value: validatedVal, Seq: state.ScalarSeq}
+			return nil
+		})
+		if mutErr != nil {
+			_ = h.recordAudit(request, "config.save_scalar", "config", key, "failure", map[string]any{"error": mutErr.Error()})
+			writeProviderWriteError(writer, mutErr)
+			return
+		}
+		setStateVersionHeader(writer, version)
+		writeJSON(writer, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"key":     key,
+			"value":   validatedVal,
+			"version": version,
+		})
+		return
+	}
+
 	if err := h.operationsService().SetScalar(request.Context(), key, validatedVal, ""); err != nil {
 		_ = h.recordAudit(request, "config.save_scalar", "config", key, "failure", map[string]any{"error": err.Error()})
 		if err.Error() == "write_busy" {
@@ -313,6 +389,12 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
+	}
+	if h.stateCoord != nil && h.stateCoord.IsDirty() {
+		if flushErr := h.stateCoord.FlushNow(request.Context()); flushErr != nil {
+			writeCPAFacadeError(writer, flushErr)
+			return
+		}
 	}
 
 	yamlStr, err := client.ConfigYAML(request.Context())

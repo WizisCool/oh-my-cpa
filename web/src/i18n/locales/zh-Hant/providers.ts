@@ -28,7 +28,6 @@ export default {
   "pro.delete_key_confirm": "確定刪除該客戶端 API 金鑰？刪除後使用此金鑰的客戶端將無法存取。",
   "pro.providers_empty": "暫無已設定的供應商",
   "pro.status_update_failed": "供應商狀態更新失敗：{msg}",
-  "pro.status_update_timeout": "更新供應商狀態超時，結果未知，請重新整理確認",
   "pro.status_update_busy": "其他供應商設定正在儲存中，請稍後重試",
   "pro.error_key_required": "至少需要一個 API 金鑰",
   "pro.error_duplicate_key": "同一個 API 金鑰不能重複提交",

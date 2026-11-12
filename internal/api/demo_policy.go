@@ -132,6 +132,10 @@ var demoPolicy = []demoPolicyRule{
 	// sign-in card uses. They are verdicts on API paths, so they resolve before the
 	// `/api/*` fallback refuses an unclassified one.
 	{http.MethodGet, "/api/healthz", demoAllow, ""},
+	// State coordination SSE streams answer 204 in demo mode rather than holding a stream open.
+	{http.MethodGet, "/api/events", demoAllow, ""},
+	{http.MethodGet, "/api/v1/events", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/state", demoAllow, ""},
 	{http.MethodPost, "/api/auth/login", demoAllow, ""},
 	{http.MethodGet, "/api/auth/session", demoAllow, ""},
 	{http.MethodPost, "/api/auth/logout", demoAllow, ""},
@@ -360,6 +364,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPut, "/api/v1/management/config/source", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPut, "/api/v1/management/config/{key}", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPost, "/api/v1/management/api-keys", demoRefuse, "changing gateway key material is disabled"},
+	{http.MethodPut, "/api/v1/management/api-keys/{index}", demoRefuse, "changing gateway key material is disabled"},
 	{http.MethodDelete, "/api/v1/management/api-keys/{index}", demoRefuse, "changing gateway key material is disabled"},
 	{http.MethodPost, "/api/v1/management/providers", demoRefuse, "changing provider configuration is disabled"},
 	{http.MethodPut, "/api/v1/management/providers/{id}", demoRefuse, "changing provider configuration is disabled"},

@@ -11,6 +11,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 func (h *Handler) managementClientOrError(writer http.ResponseWriter, request *http.Request) (*management.Client, bool) {
@@ -31,15 +32,16 @@ func (h *Handler) managementClientOrError(writer http.ResponseWriter, request *h
 	return client, true
 }
 
-func writeCPAFacadeError(writer http.ResponseWriter, err error) {
-	status := http.StatusBadGateway
-	code := "cpa_unavailable"
-	message := "CPA management request failed"
-	// reason is CPA's own sentence for a rejected configuration, carried apart
-	// from the message so the console can frame it in the reader's language.
-	reason := ""
+func classifyCPAFacadeError(err error) (status int, code string, message string, reason string) {
+	status = http.StatusBadGateway
+	code = "cpa_unavailable"
+	message = "CPA management request failed"
 	var httpErr *management.HTTPError
-	if errors.Is(err, management.ErrInvalidOAuthProxy) {
+	if errors.Is(err, statecoord.ErrCoordinatorUnready) || errors.Is(err, statecoord.ErrCoordinatorClosed) {
+		status = http.StatusServiceUnavailable
+		code = "write_busy"
+		message = "configuration state is refreshing; retry shortly"
+	} else if errors.Is(err, management.ErrInvalidOAuthProxy) {
 		status = http.StatusBadRequest
 		code = "invalid_oauth_proxy"
 		message = "invalid OAuth proxy URL"
@@ -114,6 +116,11 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 			}
 		}
 	}
+	return status, code, message, reason
+}
+
+func writeCPAFacadeError(writer http.ResponseWriter, err error) {
+	status, code, message, reason := classifyCPAFacadeError(err)
 	body := map[string]string{"error": message, "code": code}
 	if reason != "" {
 		body["reason"] = reason

@@ -7,6 +7,7 @@ import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../typ
 import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
 import type { InstalledFont } from '../types/fonts';
+import type { SafeProjectedStateSnapshot, StateEnvelope } from './stateLive';
 import { getAppConfig } from '../types/config';
 import { isDemoMode } from '../types/demoMode';
 import {
@@ -540,12 +541,16 @@ export const api = {
     return request<LogsResponse>(`/management/logs?${search.toString()}`, { method: 'GET' });
   },
 
+  async getProjectedState(): Promise<StateEnvelope<SafeProjectedStateSnapshot>> {
+    return request<StateEnvelope<SafeProjectedStateSnapshot>>('/management/state', { method: 'GET' });
+  },
+
   async getConfigScalars(): Promise<ConfigScalarsResponse> {
     return request<ConfigScalarsResponse>('/management/config', { method: 'GET' });
   },
 
-  async updateConfigScalar(key: string, value: unknown): Promise<{ status: string; key: string; value: unknown }> {
-    return request<{ status: string; key: string; value: unknown }>(`/management/config/${encodeURIComponent(key)}`, {
+  async updateConfigScalar(key: string, value: unknown): Promise<{ status: string; key: string; value: unknown; version?: number }> {
+    return request<{ status: string; key: string; value: unknown; version?: number }>(`/management/config/${encodeURIComponent(key)}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
     });
@@ -659,15 +664,38 @@ export const api = {
     );
   },
 
-  async createClientAPIKey(key: string): Promise<{ status: string; index: number; key: string }> {
-    return request<{ status: string; index: number; key: string }>('/management/api-keys', {
+  async createClientAPIKey(key: string): Promise<{ status: string; index: number; key: string; fingerprint?: string; usage_fingerprint?: string; version?: number }> {
+    return request<{ status: string; index: number; key: string; fingerprint?: string; usage_fingerprint?: string; version?: number }>('/management/api-keys', {
       method: 'POST',
       body: JSON.stringify({ key }),
     });
   },
 
-  async deleteClientAPIKey(index: number): Promise<{ status: string; deleted: number }> {
-    return request<{ status: string; deleted: number }>(`/management/api-keys/${index}`, { method: 'DELETE' });
+  async updateClientAPIKey(
+    index: number,
+    key: string,
+    expectedFingerprint?: string,
+  ): Promise<{ status: string; index: number; key: string; fingerprint?: string; usage_fingerprint?: string; version?: number }> {
+    return request<{ status: string; index: number; key: string; fingerprint?: string; usage_fingerprint?: string; version?: number }>(`/management/api-keys/${index}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        key,
+        ...(expectedFingerprint ? { expected_fingerprint: expectedFingerprint } : {}),
+      }),
+    });
+  },
+
+  async deleteClientAPIKey(
+    index: number,
+    expectedFingerprint?: string,
+  ): Promise<{ status: string; deleted: number; version?: number }> {
+    const query = expectedFingerprint
+      ? `?expected_fingerprint=${encodeURIComponent(expectedFingerprint)}`
+      : '';
+    return request<{ status: string; deleted: number; version?: number }>(
+      `/management/api-keys/${index}${query}`,
+      { method: 'DELETE' },
+    );
   },
 
   /**
@@ -711,10 +739,13 @@ export const api = {
     );
   },
 
-  async getManagementProviders(includeKeys = false): Promise<{ providers: ProviderItem[]; total: number }> {
+  async getManagementProviders(
+    includeKeys = false,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ providers: ProviderItem[]; total: number }> {
     return request<{ providers: ProviderItem[]; total: number }>(
       `/management/providers${includeKeys ? '?include_keys=true' : ''}`,
-      { method: 'GET' },
+      { method: 'GET', signal: options?.signal },
     );
   },
 

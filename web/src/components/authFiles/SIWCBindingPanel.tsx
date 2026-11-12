@@ -12,6 +12,7 @@ import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { isSIWCPending, siwcTargetKey, type SIWCBindings, type SIWCSession } from '../../hooks/useSIWCBindings';
 import { Notice, useConfirmModal, useToast } from '../feedback';
+import { invalidateQueriesSilently } from '../../utils/progressSources';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import styles from './SIWCBindingPanel.module.css';
@@ -45,7 +46,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
       toast.success(t('af.save_fields_success'));
     },
     onError: () => { toast.error(t('siwc.use_failed')); },
-    onSettled: () => { void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }); },
+    onSettled: () => { void invalidateQueriesSilently(queryClient, { queryKey: ['management-auth-files'] }); },
   });
   if ((file.provider || file.type)?.toLowerCase() !== 'codex') return null;
   const summary = saved?.source === file && saved.bindingSummary === bindingSummary ? saved.file : bindingSummary;

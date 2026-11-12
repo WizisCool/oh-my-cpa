@@ -174,7 +174,6 @@ export default {
   'keys.saved': 'Keys saved',
   'keys.summary_active': '{n} used in the last 24 hours',
   'keys.applying': 'Applying to CPA…',
-  'keys.conflict_reloaded': 'The configuration was changed elsewhere; the latest key list is loaded, so apply the change again',
   'keys.created': 'Key created and active',
   'keys.deleted': 'Key removed',
   'keys.modal_title_add': 'Add API key',

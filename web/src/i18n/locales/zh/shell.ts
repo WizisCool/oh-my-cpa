@@ -89,6 +89,7 @@ export default {
   'toast.group_unknown': '结果未知',
   'toast.group_skipped': '已跳过',
   'common.save_failed': '保存失败：{msg}',
+  'common.sync_reverted': '后台配置同步失败，已恢复为网关当前状态：{msg}',
   'common.save': '保存',
   'common.loading': '加载中…',
   'common.actions': '操作',

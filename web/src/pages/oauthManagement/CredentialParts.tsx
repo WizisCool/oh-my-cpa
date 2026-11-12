@@ -63,6 +63,7 @@ export type DetailSection = 'overview' | 'renewal' | 'configuration' | 'models';
 /** Everything the workspace can do to one credential, wired once by the page for both views. */
 export interface CredentialActions {
   isBusy: (record: OAuthWorkspaceRecord) => boolean;
+  isTogglingStatus?: (record: OAuthWorkspaceRecord) => boolean;
   isRefreshingQuota: (record: OAuthWorkspaceRecord) => boolean;
   siwcBadge: (record: OAuthWorkspaceRecord) => SIWCBadgeState | undefined;
   onSelect: (records: OAuthWorkspaceRecord[], isSelected: boolean) => void;
@@ -104,6 +105,7 @@ export interface CredentialFacts {
   credits: number;
   canRename: boolean;
   isBusy: boolean;
+  isTogglingStatus: boolean;
   isRefreshing: boolean;
   /** The reading is out of date or failed, and a refresh is the operator's fix. */
   needsRefresh: boolean;
@@ -138,6 +140,7 @@ export function credentialFacts(record: OAuthWorkspaceRecord, actions: Credentia
     credits: quota?.reset_credits?.available_count ?? 0,
     canRename: !file.runtime_only && record.hasUniqueFileName,
     isBusy: actions.isBusy(record),
+    isTogglingStatus: actions.isTogglingStatus?.(record) ?? false,
     isRefreshing: actions.isRefreshingQuota(record),
     needsRefresh: (status.canRefreshFix || Boolean(failure)) && record.canRefreshQuota,
     isQuotaMuted: isDisabled || record.quotaCondition === 'stale' || record.quotaCondition === 'error',
@@ -346,6 +349,7 @@ export function CredentialSwitch({ record, facts, actions }: { record: OAuthWork
     <Switch
       size="small"
       checked={!facts.isDisabled}
+      aria-busy={facts.isTogglingStatus || undefined}
       disabled={facts.isBusy || file.runtime_only || !record.canSelectForFileBatch}
       onChange={() => actions.onToggle(record)}
       aria-label={t('af.status_toggle_label', { name: file.name })}

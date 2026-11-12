@@ -28,7 +28,6 @@ export default {
   "pro.delete_key_confirm": "Padamkan kunci API pelanggan ini? Pelanggan yang menggunakan kunci ini akan dinafikan akses.",
   "pro.providers_empty": "Tiada penyedia dikonfigurasikan",
   "pro.status_update_failed": "Tidak dapat mengemas kini status penyedia: {msg}",
-  "pro.status_update_timeout": "Tamat masa mengemas kini status penyedia; keputusan tidak diketahui, muat semula untuk mengesahkan",
   "pro.status_update_busy": "Tetapan penyedia lain masih disimpan; cuba lagi sebentar lagi",
   "pro.error_key_required": "Sekurang-kurangnya satu kunci API diperlukan",
   "pro.error_duplicate_key": "Kunci API yang sama tidak boleh dihantar dua kali",

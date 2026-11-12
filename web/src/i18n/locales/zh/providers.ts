@@ -25,7 +25,6 @@ export default {
   'pro.delete_key_confirm': '确定删除该客户端 API 密钥？删除后使用此密钥的客户端将无法访问。',
   'pro.providers_empty': '暂无已配置的提供商',
   'pro.status_update_failed': '提供商状态更新失败：{msg}',
-  'pro.status_update_timeout': '更新提供商状态超时，结果未知，请刷新确认',
   'pro.status_update_busy': '其他提供商设置正在保存中，请稍后重试',
   'pro.error_key_required': '至少需要一个 API 密钥',
   'pro.error_duplicate_key': '同一个 API 密钥不能重复提交',

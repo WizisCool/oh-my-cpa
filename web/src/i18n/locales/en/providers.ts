@@ -28,7 +28,6 @@ export default {
   'pro.delete_key_confirm': 'Delete this client API key? Clients using this key will be denied access.',
   'pro.providers_empty': 'No providers configured',
   'pro.status_update_failed': 'Could not update the provider status: {msg}',
-  'pro.status_update_timeout': 'Timed out updating the provider status; the result is unknown, refresh to confirm',
   'pro.status_update_busy': 'Another provider setting is still being saved; try again shortly',
   'pro.error_key_required': 'At least one API key is required',
   'pro.error_duplicate_key': 'The same API key cannot be submitted twice',

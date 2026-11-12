@@ -174,7 +174,6 @@ export default {
   "keys.saved": "金鑰已儲存",
   "keys.summary_active": "24 小時內 {n} 個在用",
   "keys.applying": "正在寫入 CPA…",
-  "keys.conflict_reloaded": "設定已被其他工作階段修改，已載入最新金鑰清單，請重新操作",
   "keys.created": "金鑰已建立並生效",
   "keys.deleted": "金鑰已刪除",
   "keys.modal_title_add": "新增 API 金鑰",

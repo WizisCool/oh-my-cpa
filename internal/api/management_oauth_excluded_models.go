@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 const (
@@ -17,9 +19,30 @@ const (
 )
 
 func (h *Handler) listManagementOAuthExcludedModels(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
+	}
+	if h.stateCoord != nil {
+		env, err := statecoord.ProjectTyped(request.Context(), h.stateCoord, func(state projectedConfigState, _ uint64) (map[string][]string, error) {
+			if state.OAuthExcludedUnavailable {
+				return nil, errStateSliceUnavailable
+			}
+			copied := make(map[string][]string, len(state.OAuthExcluded))
+			for provider, list := range state.OAuthExcluded {
+				copied[provider] = slices.Clone(list)
+			}
+			return copied, nil
+		})
+		if err == nil {
+			setStateVersionHeader(writer, env.Version)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"version":         env.Version,
+				"excluded_models": env.Data,
+			})
+			return
+		}
 	}
 	stored, err := client.OAuthExcludedModels(request.Context())
 	if err != nil {
@@ -44,14 +67,21 @@ func (h *Handler) applyManagementOAuthExcludedModels(ctx context.Context, client
 		return nil, errors.New("write_busy")
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
+		return nil, err
+	}
 	if beforeWrite != nil {
 		if err := beforeWrite(ctx); err != nil {
 			return nil, err
 		}
 	}
 	if err := client.PatchOAuthExcludedModels(ctx, provider, rules); err != nil {
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.invalidateCoordinator("management-oauth-excluded-models", "management-config")
+		}
 		return nil, err
 	}
+	h.invalidateCoordinator("management-oauth-excluded-models", "management-config")
 	stored, err := client.OAuthExcludedModels(ctx)
 	if err != nil {
 		return nil, err
@@ -103,6 +133,48 @@ func (h *Handler) patchManagementOAuthExcludedModels(writer http.ResponseWriter,
 	if auditErr := h.recordAudit(request, "oauth_excluded_models.update", "oauth_provider", provider, "attempt", map[string]any{"count": len(rules)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; excluded models update aborted")
 		return
+	}
+	if h.stateCoord != nil {
+		domain := statecoord.DomainKey(stateDomainOAuthExclusionsPrefix + provider)
+		var useFallback bool
+		version, mutErr := h.mutateCoordinatorWithAudit(
+			request,
+			domain,
+			"oauth_excluded_models.update",
+			"oauth_provider",
+			provider,
+			map[string]any{"count": len(rules), "verified": true},
+			func(state *projectedConfigState) error {
+				if state.OAuthExcludedUnavailable {
+					useFallback = true
+					return errStateSliceUnavailable
+				}
+				if state.OAuthExcluded == nil {
+					state.OAuthExcluded = make(map[string][]string)
+				}
+				if len(rules) == 0 {
+					delete(state.OAuthExcluded, provider)
+				} else {
+					state.OAuthExcluded[provider] = slices.Clone(rules)
+				}
+				return nil
+			},
+		)
+		if !useFallback {
+			if mutErr != nil {
+				_ = h.recordAudit(request, "oauth_excluded_models.update", "oauth_provider", provider, "failure", map[string]any{"error": mutErr.Error()})
+				writeProviderWriteError(writer, mutErr)
+				return
+			}
+			setStateVersionHeader(writer, version)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"status":   "ok",
+				"provider": provider,
+				"models":   rules,
+				"version":  version,
+			})
+			return
+		}
 	}
 	current, err := h.applyManagementOAuthExcludedModels(request.Context(), client, provider, rules, nil)
 	if err != nil {

@@ -243,6 +243,11 @@ func demoExportCases() []demoExportCase {
 	// Same for the update stream: the demonstration answers 204 rather than opening a stream, and
 	// its console keeps the polling interval.
 	cases = append(cases, demoExportCase{Name: "system-live", Path: "/api/v1/management/system/live"})
+	cases = append(cases,
+		demoExportCase{Name: "events-live", Path: "/api/events"},
+		demoExportCase{Name: "v1-events-live", Path: "/api/v1/events"},
+		demoExportCase{Name: "management-state", Path: "/api/v1/management/state"},
+	)
 	// The all-time window has no span to turn into bounds: the server starts it at the
 	// first usage record. It is still reproducible, because the export pins the
 	// handler's clock to the reference instant. The key table does not offer it.

@@ -425,8 +425,32 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   const toggleMutation = useMutation({
     mutationFn: ({ task, enabled }: { task: WarmupTask; enabled: boolean }) =>
       api.updateWarmupTask(task.id, toPayload({ ...taskToInput(task, timezone), name: task.name, enabled }, timezone)),
+    onMutate: ({ task, enabled }) => {
+      const current = queryClient.getQueryData<WarmupStateView>(WARMUP_QUERY_KEY);
+      const priorEnabled = current?.tasks.find((item) => item.id === task.id)?.enabled ?? task.enabled;
+      if (current) {
+        applyState({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, enabled } : item)),
+        });
+      }
+      return { taskId: task.id, priorEnabled };
+    },
     onSuccess: applyState,
-    onError: reportFailure('warmup.update_failed'),
+    onError: (err, _variables, context) => {
+      if (context) {
+        const latest = queryClient.getQueryData<WarmupStateView>(WARMUP_QUERY_KEY);
+        if (latest) {
+          applyState({
+            ...latest,
+            tasks: latest.tasks.map((item) =>
+              item.id === context.taskId ? { ...item, enabled: context.priorEnabled } : item,
+            ),
+          });
+        }
+      }
+      reportFailure('warmup.update_failed')(err);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -542,8 +566,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       size="small"
                       className={styles['task-switch']}
                       aria-label={view.title}
-                      checked={task.enabled}
                       loading={toggleMutation.isPending && toggleMutation.variables?.task.id === task.id}
+                      checked={task.enabled}
                       disabled={isDemo}
                       onChange={(enabled) => toggleMutation.mutate({ task, enabled })}
                     />

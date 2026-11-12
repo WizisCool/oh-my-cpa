@@ -52,6 +52,7 @@ func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *man
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	safeFields := managementAuthFileSafeFields{Name: name}
 	hasSafeReadback := managementAuthFileNeedsSafeReadback(fields)
 	if hasSafeReadback {
@@ -87,6 +88,10 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		return
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	var raw map[string]json.RawMessage
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &raw); err != nil {
 		return

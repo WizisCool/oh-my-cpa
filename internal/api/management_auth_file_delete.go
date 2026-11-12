@@ -14,6 +14,10 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		return
 	}
 	defer h.providerWrites.release()
+	if err := h.flushCoordinatorUnderProviderGate(request.Context()); err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileRequestLimit)
 	names := make([]string, 0)
 	if queryNames := request.URL.Query()["name"]; len(queryNames) > 0 {
@@ -69,6 +73,13 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 
 	confirmedDeleted, normalizedFailures, outcomeStatus := normalizeDeleteResponse(unique, cpaResp)
 
+	if len(confirmedDeleted) > 0 {
+		if h.pricing != nil {
+			h.pricing.NotifyModelsChanged()
+		}
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
+	}
+
 	auditOutcome := "success"
 	if outcomeStatus == "partial" {
 		auditOutcome = "partial"
@@ -79,10 +90,6 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), auditOutcome, map[string]any{"deleted": len(confirmedDeleted), "failed_count": len(normalizedFailures)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after deletion")
 		return
-	}
-
-	if len(confirmedDeleted) > 0 && h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
 	}
 
 	if outcomeStatus != "ok" {

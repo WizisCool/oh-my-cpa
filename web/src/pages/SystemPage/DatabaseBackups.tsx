@@ -7,6 +7,7 @@ import { AppModal } from '../../components/common/AppModal';
 import { ToolButton } from '../../components/common/ToolButton';
 import { DownloadOutlined, HistoryOutlined, LeftOutlined } from '../../components/icons';
 import { useToast } from '../../components/feedback';
+import { invalidateQueriesSilently } from '../../utils/progressSources';
 import { useT } from '../../i18n';
 import type { BackupAutomation, BackupAutomationInput, DatabaseBackupJob } from '../../types/databaseBackup';
 import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
@@ -80,7 +81,7 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
     try {
       const saved = await api.saveDatabaseBackupAutomation({ ...automationInput(current), ...patch });
       queryClient.setQueryData(AUTOMATION_KEY, saved);
-      await queryClient.invalidateQueries({ queryKey: AUTOMATION_KEY });
+      await invalidateQueriesSilently(queryClient, { queryKey: AUTOMATION_KEY });
       return true;
     } catch (error) {
       queryClient.setQueryData(AUTOMATION_KEY, previous);

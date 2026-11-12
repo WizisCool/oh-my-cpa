@@ -171,7 +171,6 @@ export default {
   'keys.saved': '密钥已保存',
   'keys.summary_active': '24 小时内 {n} 个在用',
   'keys.applying': '正在写入 CPA…',
-  'keys.conflict_reloaded': '配置已被其他会话修改，已载入最新密钥列表，请重新操作',
   'keys.created': '密钥已创建并生效',
   'keys.deleted': '密钥已删除',
   'keys.modal_title_add': '添加 API 密钥',
