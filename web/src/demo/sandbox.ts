@@ -1191,21 +1191,80 @@ function mergeCustomIcons(baseline: { icons: CustomIcon[] }, state: DemoSandboxS
   return { icons };
 }
 
+function decodeBase64Bytes(encoded: string): Uint8Array | null {
+  try {
+    if (typeof atob !== 'function') return null;
+    const bin = atob(encoded);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function sniffIconMimeFromBytes(bytes: Uint8Array): string | null {
+  if (bytes.length === 0) return null;
+  // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  // JPEG signature: FF D8 FF
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  // WebP signature: RIFF....WEBP
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  // SVG text check
+  try {
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim();
+    if (text.startsWith('<svg') || (text.startsWith('<') && /<svg[\s>]/i.test(text))) {
+      if (/<\s*script|<\s*foreignObject|\bon[a-z]+\s*=|javascript:/i.test(text)) return null;
+      return 'image/svg+xml';
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function validateCustomIconData(raw: string): { mime_type: string; data_url: string } | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith('data:image/')) {
-    const match = /^data:(image\/(?:png|jpeg|webp|svg\+xml));base64,[A-Za-z0-9+/=]+$/.exec(trimmed);
-    if (!match) return null;
-    return { mime_type: match[1], data_url: trimmed };
-  }
   if (trimmed.startsWith('<svg')) {
-    if (/<\s*script|on[a-z]+\s*=|javascript:/i.test(trimmed)) return null;
+    if (/<\s*script|<\s*foreignObject|\bon[a-z]+\s*=|javascript:/i.test(trimmed)) return null;
     const encoded = typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(trimmed))) : '';
     if (!encoded) return null;
     return { mime_type: 'image/svg+xml', data_url: `data:image/svg+xml;base64,${encoded}` };
   }
-  return null;
+  let declaredMime = '';
+  let base64Payload = trimmed;
+  if (trimmed.toLowerCase().startsWith('data:')) {
+    const match = /^data:(image\/(?:png|jpeg|webp|svg\+xml));base64,([A-Za-z0-9+/=\s]+)$/i.exec(trimmed);
+    if (!match) return null;
+    declaredMime = match[1].toLowerCase();
+    base64Payload = match[2].replace(/\s+/g, '');
+  } else if (!/^[A-Za-z0-9+/=\s]+$/.test(trimmed)) {
+    return null;
+  } else {
+    base64Payload = trimmed.replace(/\s+/g, '');
+  }
+  const bytes = decodeBase64Bytes(base64Payload);
+  if (!bytes || bytes.length > 512 * 1024) return null;
+  const detectedMime = sniffIconMimeFromBytes(bytes);
+  if (!detectedMime) return null;
+  if (declaredMime && declaredMime !== detectedMime) return null;
+  return { mime_type: detectedMime, data_url: `data:${detectedMime};base64,${base64Payload}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -2693,12 +2752,20 @@ export async function interceptDemoRequest(
   if (pathname === '/management/oauth/callback' && method === 'POST') {
     const body = parseJsonBody<{ provider?: string; redirect_url?: string }>(options);
     const provider = body?.provider || 'codex';
-    let matchedSession: DemoOAuthSessionState | undefined;
-    for (const s of oauthSessions.values()) {
-      if (s.provider === provider && s.status === 'waiting') matchedSession = s;
+    let callbackState = '';
+    if (body?.redirect_url) {
+      try {
+        callbackState = new URL(body.redirect_url).searchParams.get('state') ?? '';
+      } catch {
+        return errorResponse('Invalid OAuth callback URL', 'invalid_request', 400);
+      }
     }
-    if (matchedSession) matchedSession.status = 'success';
-    if (matchedSession?.recoveryTarget) {
+    const matchedSession = callbackState ? oauthSessions.get(callbackState) : undefined;
+    if (!matchedSession || matchedSession.provider !== provider || matchedSession.status !== 'waiting') {
+      return errorResponse('OAuth session is no longer waiting for callback', 'oauth_session_not_waiting', 409);
+    }
+    matchedSession.status = 'success';
+    if (matchedSession.recoveryTarget) {
       const targetName = matchedSession.recoveryTarget.name;
       state.authFiles.recoveredNames[targetName] = {
         refreshedAt: new Date().toISOString(),
@@ -3275,10 +3342,14 @@ export async function interceptDemoRequest(
   if (pathname === '/management/outbound-proxy' && method === 'PUT') {
     const input = parseJsonBody<OutboundProxyInput>(options);
     const base = await ensureBaseline<OutboundProxySettings>('outbound-proxy', '/management/outbound-proxy', fetchBaseline);
+    const rawUrl = (input?.url ?? '').trim();
+    const redactedAddress = rawUrl
+      ? rawUrl.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#@]*@/i, '$1••••@')
+      : (base?.address ?? '');
     const next: OutboundProxySettings = {
       mode: input?.mode ?? base?.mode ?? 'environment',
-      address: input?.url ?? base?.address ?? '',
-      has_credentials: Boolean(input?.url) || base?.has_credentials || false,
+      address: redactedAddress,
+      has_credentials: Boolean(rawUrl && /^([a-z][a-z0-9+.-]*:\/\/)[^/?#@]+@/i.test(rawUrl)) || base?.has_credentials || false,
       no_proxy: input?.no_proxy ?? base?.no_proxy ?? '',
       revision: (base?.revision ?? 0) + state.revisionSeq,
       cpa_revision: state.config.revision ?? base?.cpa_revision ?? 'demo-cpa-rev',
@@ -3288,6 +3359,15 @@ export async function interceptDemoRequest(
     recordSandboxAudit(state, 'outbound_proxy.update', 'outbound_proxy', 'default');
     saveState(state);
     return jsonResponse(next);
+  }
+
+  if (pathname === '/exchange-rates/refresh' && method === 'POST') {
+    const base = await ensureBaseline<Record<string, unknown>>('exchange-rates', '/exchange-rates', fetchBaseline);
+    return jsonResponse({
+      ...(base ?? { base: 'USD', rates: [] }),
+      updated_at_ms: Date.now(),
+      last_error: '',
+    });
   }
 
   if (pathname === '/management/system/data-retention' && method === 'PUT') {

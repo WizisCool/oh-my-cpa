@@ -139,7 +139,8 @@ const FILTERS = new Map([
 export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
   if (!decoded || !Array.isArray(decoded.items)) return decoded;
   const params = url.searchParams;
-  const filtered = matchUsageItems(decoded.items, params, deltaMs);
+  const win = presetWindowBounds(decoded.window, params, deltaMs, decoded.items);
+  const filtered = matchUsageItems(decoded.items, params, deltaMs, win);
 
   const cursor = params.get('cursor') ?? '';
   const limitRaw = Number(params.get('limit') ?? decoded.limit ?? 50);
@@ -182,7 +183,6 @@ export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
   const hasMore = startIndex + limit < filtered.length;
   const nextCursor = hasMore && items.length > 0 ? String(items[items.length - 1].id) : '';
 
-  const win = presetWindowBounds(decoded.window, params, deltaMs);
   return {
     ...decoded,
     window: win,
@@ -198,22 +198,23 @@ export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
  * so facet counts agree with the filtered list.
  */
 export function filterUsageFacets(decoded, url, { deltaMs = 0, dataset } = {}) {
-  let rawItems;
+  let rawPayload;
   try {
-    rawItems = JSON.parse(dataset?.responses?.['usage-events']?.body ?? 'null')?.items;
+    rawPayload = JSON.parse(dataset?.responses?.['usage-events']?.body ?? 'null');
   } catch {
-    rawItems = undefined;
+    rawPayload = undefined;
   }
+  const rawItems = rawPayload?.items;
   if (!Array.isArray(rawItems) || rawItems.length === 0) return decoded;
   const params = url.searchParams;
-  // Facet counts ignore self-selecting result/multi facets? Match window & search at minimum.
+  const win = presetWindowBounds(decoded.window ?? rawPayload?.window, params, deltaMs, rawItems);
   const winItems = matchUsageItems(rawItems, new URLSearchParams({
     ...(params.has('preset') ? { preset: params.get('preset') } : {}),
     ...(params.has('from') ? { from: params.get('from') } : {}),
     ...(params.has('to') ? { to: params.get('to') } : {}),
     ...(params.has('q') ? { q: params.get('q') } : {}),
-  }), deltaMs);
-  if (winItems.length === 0 && !params.has('q')) return decoded;
+  }), deltaMs, win);
+  if (winItems.length === 0 && !params.has('q') && !params.has('preset') && !params.has('from')) return decoded;
 
   const countBy = (getter) => {
     const map = new Map();
@@ -229,17 +230,21 @@ export function filterUsageFacets(decoded, url, { deltaMs = 0, dataset } = {}) {
 
   return {
     ...decoded,
-    models: countBy((i) => i.model),
-    model_aliases: countBy((i) => i.model_alias),
-    providers: countBy((i) => i.provider),
-    auth_indexes: countBy((i) => i.auth_index),
-    auth_types: countBy((i) => i.auth_type),
-    executors: countBy((i) => i.executor_type),
-    sources: countBy((i) => i.source),
-    api_group_keys: countBy((i) => i.api_group_key),
-    reasoning_efforts: countBy((i) => i.reasoning_effort),
-    service_tiers: countBy((i) => i.service_tier),
-    resolved_service_tiers: countBy((i) => i.resolved_service_tier),
+    window: win ?? decoded.window,
+    facets: {
+      ...(decoded.facets ?? {}),
+      models: countBy((i) => i.model),
+      model_aliases: countBy((i) => i.model_alias),
+      providers: countBy((i) => i.provider),
+      auth_indexes: countBy((i) => i.auth_index),
+      auth_types: countBy((i) => i.auth_type),
+      executors: countBy((i) => i.executor_type),
+      sources: countBy((i) => i.source),
+      api_group_keys: countBy((i) => i.api_group_key),
+      reasoning_efforts: countBy((i) => i.reasoning_effort),
+      service_tiers: countBy((i) => i.service_tier),
+      resolved_service_tiers: countBy((i) => i.resolved_service_tier),
+    },
   };
 }
 
@@ -253,29 +258,37 @@ const USAGE_PRESET_MS = {
   '90d': 90 * 24 * 60 * 60_000,
 };
 
-function presetWindowBounds(baseWindow, params, deltaMs) {
+function presetWindowBounds(baseWindow, params, deltaMs, items = []) {
   const fromParam = Number(params.get('from'));
   const toParam = Number(params.get('to'));
   if (Number.isFinite(fromParam) && Number.isFinite(toParam) && toParam > fromParam) {
     return {
+      ...(baseWindow ?? {}),
       from: fromParam - deltaMs,
       to: toParam - deltaMs,
       preset: params.get('preset') ?? 'custom',
     };
   }
-  const preset = (params.get('preset') ?? baseWindow?.preset ?? '24h').toLowerCase();
+  const preset = (params.get('preset') ?? baseWindow?.preset ?? '').toLowerCase();
   const duration = USAGE_PRESET_MS[preset];
-  if (duration && baseWindow && typeof baseWindow.to === 'number') {
-    return {
-      from: baseWindow.to - duration,
-      to: baseWindow.to,
-      preset,
-    };
+  if (duration) {
+    let anchorTo = typeof baseWindow?.to === 'number' ? baseWindow.to : null;
+    if (anchorTo === null && items.length > 0) {
+      anchorTo = items.reduce((max, item) => Math.max(max, item.timestamp_ms ?? 0), 0);
+    }
+    if (anchorTo !== null) {
+      return {
+        ...(baseWindow ?? {}),
+        from: anchorTo - duration,
+        to: anchorTo,
+        preset,
+      };
+    }
   }
   return baseWindow;
 }
 
-function matchUsageItems(items, params, deltaMs) {
+function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const q = (params.get('q') ?? '').trim().toLowerCase();
   const result = (params.get('result') ?? 'all').toLowerCase();
   const models = new Set(params.getAll('model').filter(Boolean));
@@ -301,17 +314,9 @@ function matchUsageItems(items, params, deltaMs) {
   if (Number.isFinite(fromParam) && Number.isFinite(toParam) && toParam > fromParam) {
     fromCaptured = fromParam - deltaMs;
     toCaptured = toParam - deltaMs;
-  } else {
-    const preset = (params.get('preset') ?? '').toLowerCase();
-    const duration = USAGE_PRESET_MS[preset];
-    if (duration && items.length > 0) {
-      let newest = items[0].timestamp_ms ?? 0;
-      for (const item of items) {
-        if ((item.timestamp_ms ?? 0) > newest) newest = item.timestamp_ms;
-      }
-      toCaptured = newest + 60_000;
-      fromCaptured = newest - duration;
-    }
+  } else if ((params.has('preset') || resolvedWindow) && resolvedWindow && typeof resolvedWindow.from === 'number' && typeof resolvedWindow.to === 'number') {
+    fromCaptured = resolvedWindow.from;
+    toCaptured = resolvedWindow.to;
   }
 
   return items.filter((item) => {

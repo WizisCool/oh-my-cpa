@@ -4,13 +4,26 @@ const CONVERSATION_STORAGE_KEY = 'omc-demo-agent-conversation:v1';
 
 let stored: Conversation | undefined;
 
+function isValidStoredConversation(value: unknown): value is Conversation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== 'string' || typeof record.revision !== 'number') return false;
+  if (!Array.isArray(record.turns)) return false;
+  return record.turns.every(
+    (turn) => typeof turn === 'object' && turn !== null && !Array.isArray(turn)
+      && typeof (turn as Record<string, unknown>).id === 'string'
+      && typeof (turn as Record<string, unknown>).user === 'string',
+  );
+}
+
 function readPersistedConversation(): Conversation | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
     if (typeof window.localStorage === 'undefined') return undefined;
     const raw = window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
     if (!raw) return undefined;
-    return JSON.parse(raw) as Conversation;
+    const parsed: unknown = JSON.parse(raw);
+    return isValidStoredConversation(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }

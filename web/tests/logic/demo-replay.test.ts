@@ -192,7 +192,8 @@ test('a replayed Playground answer folds into a finished turn', async () => {
 
 test('demo sandbox isolates provider, api key, routing, and reset state', async () => {
   resetDemoSandbox();
-  assert.equal(countDemoSandboxChanges(), 0);
+  try {
+    assert.equal(countDemoSandboxChanges(), 0);
 
   const baselineFixtures: Record<string, unknown> = {
     '/management/api-keys?include_keys=true': {
@@ -326,10 +327,58 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
   const recreatedProvPayload = (await recreateProvRes!.json()) as { id: string };
   assert.notEqual(recreatedProvPayload.id, createdProvPayload.id);
 
-  // Verify submitted provider secrets are masked and never retained verbatim
+  // Verify submitted provider secrets (including active recreated provider) are masked and never retained verbatim
   const providersAfterRes = await interceptDemoRequest('/management/providers?include_keys=true', { method: 'GET' }, fetchBaseline);
-  const providersAfter = (await providersAfterRes!.json()) as { providers: Array<{ api_key?: string }> };
-  assert.ok(!JSON.stringify(providersAfter).includes('demo-test-provider-key-1'));
+  const providersAfterText = await providersAfterRes!.text();
+  assert.ok(!providersAfterText.includes('demo-test-provider-key-1') && !providersAfterText.includes('demo-test-provider-key-2'));
+
+  // Proxy URL userinfo is redacted
+  const proxyRes = await interceptDemoRequest(
+    '/management/outbound-proxy',
+    { method: 'PUT', body: JSON.stringify({ mode: 'proxy', url: 'http://demo-user:demo-pass@proxy.local:7890', no_proxy: '' }) },
+    fetchBaseline,
+  );
+  assert.ok(proxyRes && proxyRes.status === 200);
+  const proxyJson = (await proxyRes!.json()) as { address: string; has_credentials: boolean };
+  assert.equal(proxyJson.address, 'http://••••@proxy.local:7890');
+  assert.equal(proxyJson.has_credentials, true);
+
+  // Custom icons accept bare base64 PNG and reject spoofed RIFF non-WebP
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+  const iconOk = await interceptDemoRequest(
+    '/custom-icons',
+    { method: 'POST', body: JSON.stringify({ name: 'test-png', data: pngBase64 }) },
+    fetchBaseline,
+  );
+  assert.ok(iconOk && iconOk.status === 200);
+  const riffWavBase64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const iconBad = await interceptDemoRequest(
+    '/custom-icons',
+    { method: 'POST', body: JSON.stringify({ name: 'bad-riff', data: riffWavBase64 }) },
+    fetchBaseline,
+  );
+  assert.ok(iconBad && iconBad.status === 400);
+
+  // OAuth callback accepts matching waiting state once and rejects duplicate/stale callbacks
+  const oauthStart = await interceptDemoRequest(
+    '/management/oauth/start',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex' }) },
+    fetchBaseline,
+  );
+  const started = (await oauthStart!.json()) as { state: string };
+  const cbUrl = `http://localhost:1455/auth/callback?code=ok&state=${encodeURIComponent(started.state)}`;
+  const cbFirst = await interceptDemoRequest(
+    '/management/oauth/callback',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex', redirect_url: cbUrl }) },
+    fetchBaseline,
+  );
+  assert.ok(cbFirst && cbFirst.status === 200);
+  const cbDuplicate = await interceptDemoRequest(
+    '/management/oauth/callback',
+    { method: 'POST', body: JSON.stringify({ provider: 'codex', redirect_url: cbUrl }) },
+    fetchBaseline,
+  );
+  assert.ok(cbDuplicate && cbDuplicate.status === 409);
 
   // Auth JSON upload & Vertex import are intercepted locally with zero secret retention
   const authUploadRes = await interceptDemoRequest(
@@ -394,10 +443,13 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
   assert.ok(audit.events.some((e) => e.action === 'provider.create'));
   assert.ok(countDemoSandboxChanges() >= 2);
 
-  // Reset restores baseline cleanly
-  resetDemoSandbox();
-  assert.equal(countDemoSandboxChanges(), 0);
-  const keysResetRes = await interceptDemoRequest('/management/api-keys?include_keys=true', { method: 'GET' }, fetchBaseline);
-  const keysReset = (await keysResetRes!.json()) as { keys: Array<{ key: string }> };
-  assert.equal(keysReset.keys.length, 1);
+    // Reset restores baseline cleanly
+    resetDemoSandbox();
+    assert.equal(countDemoSandboxChanges(), 0);
+    const keysResetRes = await interceptDemoRequest('/management/api-keys?include_keys=true', { method: 'GET' }, fetchBaseline);
+    const keysReset = (await keysResetRes!.json()) as { keys: Array<{ key: string }> };
+    assert.equal(keysReset.keys.length, 1);
+  } finally {
+    resetDemoSandbox();
+  }
 });

@@ -343,11 +343,30 @@ export async function requestResponse(path: string, options: RequestInit = {}): 
   };
 
   let response: Response;
+  const method = (options.method ?? 'GET').toUpperCase();
   try {
     if (isDemoMode() && !url.startsWith(authBaseUrl)) {
       const { interceptDemoRequest } = await import('../demo/sandbox');
       const intercepted = await interceptDemoRequest(cleanPath, options, rawFetch);
-      response = intercepted ?? await rawFetch(cleanPath, options);
+      if (intercepted) {
+        response = intercepted;
+      } else if (method === 'GET' || method === 'HEAD') {
+        response = await rawFetch(cleanPath, options);
+      } else {
+        response = new Response(
+          JSON.stringify({
+            code: 'demo_operation_refused',
+            error: 'this operation is disabled in the demonstration',
+          }),
+          {
+            status: 403,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'X-OMCPA-Demo': 'active',
+            },
+          },
+        );
+      }
     } else {
       response = await rawFetch(cleanPath, options);
     }
@@ -358,7 +377,6 @@ export async function requestResponse(path: string, options: RequestInit = {}): 
     const errorMsg = err instanceof Error ? err.message : String(err);
     throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
-  const method = (options.method ?? 'GET').toUpperCase();
   if (!response.ok) {
     const error = await readError(response);
     if (response.status === 401) unauthorizedHandler?.();

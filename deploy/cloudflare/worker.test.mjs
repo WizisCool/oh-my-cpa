@@ -411,6 +411,12 @@ describe('routing', () => {
     const hydrogenBody = await hydrogenRes.json();
     assert.ok(hydrogenBody.items.length > 0);
     assert.ok(hydrogenBody.items.every((item) => item.model === 'gemini-4-hydrogen'));
+
+    const facetsRes = await worker.fetch(request('/api/v1/usage/facets?preset=15m&q=gemini-4-hydrogen'), env);
+    assert.equal(facetsRes.status, 200);
+    const facetsBody = await facetsRes.json();
+    assert.ok(Array.isArray(facetsBody.facets?.models));
+    assert.equal(facetsBody.models, undefined);
   });
 
   it('refuses routing plan writes', async () => {

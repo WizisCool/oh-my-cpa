@@ -55,6 +55,7 @@ async function computeExportFingerprint(root = DEFAULT_ROOT) {
     if (existsSync(full)) files.push(full);
   }
   await collectInputFiles(join(root, 'internal'), files);
+  await collectInputFiles(join(root, 'migrations'), files);
   files.sort();
   for (const file of files) {
     hash.update(relative(root, file));

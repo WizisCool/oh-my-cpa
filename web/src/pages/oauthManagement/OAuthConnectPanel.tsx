@@ -16,7 +16,7 @@ import {
   ReloadOutlined,
   StopOutlined,
 } from '../../components/icons';
-import { api } from '../../api/client';
+import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
@@ -94,7 +94,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     setShouldVerify((session?.status === 'starting' || session?.status === 'waiting') && target?.verify === true);
   }, [open, selectedProviderId, target?.name, target?.auth_index, target?.verify, session?.status]);
   const [proxyUrl, setProxyUrl] = React.useState('');
-  React.useEffect(() => { setProxyUrl(''); }, [open, selectedProviderId]);
+  const [completingSandbox, setCompletingSandbox] = React.useState(false);
+  React.useEffect(() => {
+    setProxyUrl('');
+    setCompletingSandbox(false);
+  }, [open, selectedProviderId, session?.state]);
 
   // This boolean records route intent across drawer remounts, never the secret itself.
   const requiresProxyReentry = Boolean(session?.requiresProxyReentry);
@@ -340,13 +344,18 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                           <Button
                             variant="primary"
                             data-testid="oauth-sandbox-complete"
+                            loading={completingSandbox}
+                            disabled={completingSandbox || !isWaiting}
                             onClick={() => {
+                              if (completingSandbox || !isWaiting) return;
+                              setCompletingSandbox(true);
                               const stateToken = session.state ?? '';
                               const callbackUrl = `http://localhost:1455/auth/callback?code=sandbox-code&state=${encodeURIComponent(stateToken)}`;
                               sessions.setCallbackUrl(choice.id, callbackUrl);
-                              void api.handleOAuthCallback({ provider: choice.id, redirect_url: callbackUrl }).then(() => {
-                                void sessions.check(choice.id);
-                              });
+                              void api.handleOAuthCallback({ provider: choice.id, redirect_url: callbackUrl })
+                                .then(() => sessions.check(choice.id))
+                                .catch((err: unknown) => toast.error(describeError(err)))
+                                .finally(() => setCompletingSandbox(false));
                             }}
                           >
                             {t('oauth.sandbox_complete')}

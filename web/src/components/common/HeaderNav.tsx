@@ -14,7 +14,7 @@ import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { formatStarCount } from '../../utils/format';
 import { Tooltip } from './Tooltip';
-import { useToast } from '../feedback';
+import { useConfirmModal, useToast } from '../feedback';
 import {
   getDemoSandboxSnapshot,
   resetDemoSandbox,
@@ -74,6 +74,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
 }) => {
   const t = useT();
   const toast = useToast();
+  const { confirm } = useConfirmModal();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const isPhone = useIsPhoneViewport();
@@ -89,6 +90,15 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
     await queryClient.resetQueries();
     toast.success(t('demo.reset_sandbox_done'));
   }, [queryClient, t, toast]);
+  const handlePhoneResetDemoSandbox = React.useCallback(() => {
+    confirm({
+      title: t('demo.reset_sandbox'),
+      content: t('demo.reset_sandbox_confirm'),
+      okText: t('demo.reset_sandbox'),
+      danger: true,
+      onOk: handleResetDemoSandbox,
+    });
+  }, [confirm, handleResetDemoSandbox, t]);
   const demoBadgeLabel = demoChangeCount > 0
     ? t('demo.badge_dirty', { count: demoChangeCount })
     : t('demo.badge');
@@ -119,7 +129,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
         <Button variant="ghost" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
         <ActionMenu label={t('header.tools')}>
           {isDemo && demoChangeCount > 0 && (
-            <Button variant="ghost" icon={<RollbackOutlined />} onClick={handleResetDemoSandbox}>
+            <Button variant="ghost" icon={<RollbackOutlined />} onClick={handlePhoneResetDemoSandbox}>
               {t('demo.reset_sandbox')}
             </Button>
           )}
