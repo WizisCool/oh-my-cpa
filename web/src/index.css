@@ -1490,6 +1490,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   overflow: hidden;
   padding-left: env(safe-area-inset-left);
   background: var(--canvas);
+  transition: width var(--motion-base) var(--ease-standard);
 }
 /* The wordmark is left-aligned with the navigation's own text axis rather than centred.
    Every other row in this rail starts on that axis, so a centred mark is the only element
@@ -1526,6 +1527,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-weight: 500;
   line-height: 1.4;
   padding: 16px 10px 4px;
+  /* One line while the rail's width animates, so the list below never reflows mid-transition. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
 }
 .app-menu-group:first-child .app-menu-group-title { padding-top: 4px; }

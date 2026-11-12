@@ -109,12 +109,14 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
   {
     // Rigid like every other figure: its counts have a known width, and a share
     // of the spare room here would be taken from the provider and model names,
-    // which are the two cells that actually truncate.
+    // which are the two cells that actually truncate. The breakdown never wraps,
+    // so the track holds its widest ordinary line at the 12px detail size
+    // (`↑ 999.9K ↓ 99.9K` plus reasoning is 140px).
     id: 'tokens',
     labelKey: 'events.col_tokens',
     align: 'right',
-    defaultWidth: 132,
-    minWidth: 116,
+    defaultWidth: 140,
+    minWidth: 128,
     maxWidth: 280,
     flexGrow: 0,
     resizable: true,

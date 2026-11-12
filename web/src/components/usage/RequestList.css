@@ -533,7 +533,12 @@
   /* The counts are one line by construction: they never wrap, so the row
      keeps its height whatever the numbers are. */
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 6px;
+  /* An outsized count is clipped at the track's edge instead of painting over the TTFT
+     in the neighbouring column; every figure keeps its exact value in the tooltip. */
+  max-width: 100%;
+  overflow: hidden;
+  justify-content: flex-end;
   font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
