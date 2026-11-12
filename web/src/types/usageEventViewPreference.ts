@@ -68,7 +68,6 @@ export interface UsageEventsViewPreference {
    *  hold every selected value; a key with no values is omitted entirely. */
   filterValues?: Partial<Record<EventFilterKey, string[]>>;
   grouping?: EventGrouping;
-  autoRefresh?: boolean;
 }
 
 export const DEFAULT_USAGE_EVENTS_VIEW: UsageEventsViewPreference = {
@@ -76,7 +75,6 @@ export const DEFAULT_USAGE_EVENTS_VIEW: UsageEventsViewPreference = {
   result: 'all',
   limit: 100,
   grouping: 'time',
-  autoRefresh: false,
 };
 
 /**
@@ -94,8 +92,6 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
 
   const grouping = parseEventGrouping(val.grouping);
 
-  const autoRefresh = val.autoRefresh === true;
-
   const resultVal = String(val.result ?? '');
   const result: UsageResultFilter = resultVal === 'success' || resultVal === 'failed' ? resultVal : 'all';
 
@@ -108,7 +104,6 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
     result,
     limit,
     grouping,
-    autoRefresh,
   };
 
   const from = Number(val.from);

@@ -68,8 +68,6 @@ export function useUsageEventViewState() {
   const hasExplicit = React.useMemo(() => hasExplicitEventQuery(initialParamsRef.current), []);
   const [hydrated, setHydrated] = React.useState(hasExplicit);
 
-  const isAutoRefresh = viewPref.autoRefresh ?? false;
-
   // Bumped whenever filters are discarded on the operator's behalf, so a text
   // filter with a queued keystroke cannot commit after the discard.
   const [searchResetToken, setSearchResetToken] = React.useState(0);
@@ -162,7 +160,7 @@ export function useUsageEventViewState() {
    */
 
   const persistView = React.useCallback(
-    (nextParams: URLSearchParams, overrides?: { grouping?: EventGrouping; autoRefresh?: boolean }) => {
+    (nextParams: URLSearchParams, overrides?: { grouping?: EventGrouping }) => {
       // The saved view is derived from the URL that is actually being navigated to.
       // Deriving every field from one normalised state - rather than merging the
       // changed fields into the previous query - is what stops a cleared filter from
@@ -171,11 +169,10 @@ export function useUsageEventViewState() {
       setViewPref(
         viewPreferenceFromUrl(nextParams, {
           grouping: overrides?.grouping ?? grouping,
-          autoRefresh: overrides?.autoRefresh ?? isAutoRefresh,
         }),
       );
     },
-    [grouping, isAutoRefresh, setViewPref],
+    [grouping, setViewPref],
   );
 
   /**
@@ -304,12 +301,6 @@ export function useUsageEventViewState() {
   const resetSearchQueue = React.useCallback(() => {
     setSearchResetToken((value) => value + 1);
   }, []);
-  const toggleAutoRefresh = React.useCallback(
-    (next: boolean) => {
-      persistView(latestParamsRef.current, { grouping, autoRefresh: next });
-    },
-    [grouping, persistView],
-  );
 
   return {
     signature,
@@ -323,8 +314,6 @@ export function useUsageEventViewState() {
     setSearch,
     grouping,
     changeGrouping,
-    isAutoRefresh,
-    toggleAutoRefresh,
     commit,
     setFilter,
     removeFilterValue,

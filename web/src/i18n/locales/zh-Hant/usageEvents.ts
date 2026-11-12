@@ -338,7 +338,6 @@ export default {
   "events.load_error": "讀取請求記錄失敗",
   "events.ingest_healthy": "用量採集正常",
   "events.delivery_semantics_hint": "閘道採用單次出列機制，遇到寫入異常將記錄在 Ingest Gaps 中。",
-  "events.auto_refresh": "自動重新整理",
   "events.live_pushed": "記錄入庫即推送到此列表",
   "events.live_polling": "即時推送不可用，每 10 秒重新整理一次",
   "routing.title": "即時路由",

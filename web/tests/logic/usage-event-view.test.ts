@@ -578,10 +578,10 @@ test('usage event view', () => {
     result: 'all',
     limit: 100,
     grouping: 'time',
-    autoRefresh: false,
   });
 
-  // Full valid document in the current shape.
+  // Full valid document in the current shape (plus retired fields like autoRefresh
+  // which are safely ignored on parse).
   const fullDoc = {
     preset: '24h',
     result: 'failed',
@@ -625,7 +625,6 @@ test('usage event view', () => {
     // pins the migration: a saved view keeps its shape instead of reverting to
     // chronological order.
     grouping: 'source',
-    autoRefresh: true,
     filterValues: {
       model: ['gpt-4o', 'o3'],
       provider: ['openai'],
@@ -691,7 +690,7 @@ test('usage event view', () => {
   });
   // An unwritable preference document is still rejected outright.
   assert.equal(parseUsageEventsView({ cost: 'nonsense' })?.cost, undefined);
-  assert.equal(parseUsageEventsView({ autoRefresh: 'yes' })?.autoRefresh, false);
+  assert.equal((parseUsageEventsView({ autoRefresh: true }) as Record<string, unknown>)?.autoRefresh, undefined);
 
   // A nested cost value is adopted when no top-level one exists. An earlier revision
   // persisted it that way, and discarding it would silently drop a filter the

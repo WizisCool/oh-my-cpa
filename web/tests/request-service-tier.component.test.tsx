@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -144,15 +144,21 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
 
   function StreamHarness({
     items,
+    arrivedCount,
     onParentRender,
   }: {
     items: UsageEvent[];
+    arrivedCount?: number;
     onParentRender?: () => void;
   }) {
     onParentRender?.();
     const scroll = useRequestListScroll({ viewScope: 'preset=1h', cursor: undefined });
     scroll.observeLatest(items);
+    if (arrivedCount !== undefined) {
+      scroll.noteFetchedBoundaryID(scroll.getHeldBoundaryID());
+    }
     const displayed = scroll.resolveDisplayedItems(items);
+    const pendingCount = scroll.pendingArrivals(arrivedCount);
     return (
       <div ref={scroll.pageRef} className="request-events-page">
         <RequestCollapsibleHeader collapse={scroll.collapse} pageRef={scroll.pageRef}>
@@ -178,7 +184,7 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
               <RequestRestoreButton collapse={scroll.collapse} onRestore={scroll.handleToggleExpand} />
             </footer>
           </section>
-          <RequestBackToTop scrolledDown={scroll.scrolledDown} pendingCount={0} onBackToTop={scroll.handleBackToTop} />
+          <RequestBackToTop scrolledDown={scroll.scrolledDown} pendingCount={pendingCount} onBackToTop={scroll.handleBackToTop} />
         </div>
       </div>
     );
@@ -354,5 +360,44 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
 
     // Default row height is 72px; measuring 100px above viewportTop (100) adds +28px to scrollTop.
     expect(list.scrollTop).toBe(328);
+  });
+
+  it('holds scrolled rows steady when live updates arrive and reveals them on back-to-top', () => {
+    installTouchMatchMedia(false);
+    const initial = makeSyntheticEvents(40);
+    let pushItems: ((next: UsageEvent[], arrived: number) => void) | undefined;
+    function LiveHarness() {
+      const [state, setState] = useState<{ items: UsageEvent[]; arrivedCount?: number }>({
+        items: initial,
+      });
+      pushItems = (next, arrived) => setState({ items: next, arrivedCount: arrived });
+      return <StreamHarness items={state.items} arrivedCount={state.arrivedCount} />;
+    }
+    const { container } = renderWithOmc(<LiveHarness />);
+    const list = container.querySelector<HTMLElement>('.request-list')!;
+
+    list.scrollTop = 240;
+    fireEvent.scroll(list);
+    const snapshotBeforeArrival = screen.getAllByTestId('virtual-req-row').map((el) => el.textContent);
+
+    const newer: UsageEvent[] = [
+      { ...initial[0], id: 42, event_key: 'evt-new-2' },
+      { ...initial[0], id: 41, event_key: 'evt-new-1' },
+      ...initial,
+    ];
+    act(() => {
+      pushItems!(newer, 2);
+    });
+
+    // Held rows and scroll offset remain frozen while reading down the list.
+    expect(list.scrollTop).toBe(240);
+    expect(screen.getAllByTestId('virtual-req-row').map((el) => el.textContent)).toEqual(snapshotBeforeArrival);
+    expect(screen.queryByText('row-42')).toBeNull();
+    const backBtn = container.querySelector<HTMLButtonElement>('.req-back-to-top-btn.is-live');
+    expect(backBtn).not.toBeNull();
+    expect(backBtn?.textContent).toContain('2 new records');
+
+    fireEvent.click(backBtn!);
+    expect(screen.getAllByTestId('virtual-req-row')[0].textContent).toBe('row-42');
   });
 });

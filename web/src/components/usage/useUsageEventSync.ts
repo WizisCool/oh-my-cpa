@@ -26,22 +26,17 @@ interface IngestStatus {
 
 /**
  * The pipeline behind the request list: its status, its manual refresh, and the
- * poll that re-reads the list.
+ * live SSE stream (with fallback polling) that re-reads the list.
  *
  * They are one hook because they share their writers. A manual sync re-reads the
- * list, the facets and the pipeline status, and the poll advances the same
- * counters - so splitting them would mean two owners of one revision.
- *
- * The reader's own layout choices are not here: `isAutoRefresh` is stored view
- * state, passed in, and the hook only acts on it.
+ * list, the facets and the pipeline status, and the live channel advances the
+ * same counters - so splitting them would mean two owners of one revision.
  */
 export function useUsageEventSync({
   query,
-  isAutoRefresh,
   isFetchingRef,
 }: {
   query: UsageEventQuery;
-  isAutoRefresh: boolean;
   /**
    * The list query's in-flight state, read through a ref rather than closing over
    * it. Naming `isFetching` in the interval's dependency list rebuilt the timer on
@@ -134,8 +129,8 @@ export function useUsageEventSync({
     () => ({ get current() { return isFetchingRef.current || isSyncingRef.current; } }),
     [isFetchingRef],
   );
-  const { revision: liveRevision, liveState, notifySettled } = useLiveRevision({
-    isEnabled: isAutoRefresh,
+  const { revision: liveRevision, notifySettled } = useLiveRevision({
+    isEnabled: true,
     fallbackPollMs: EVENT_AUTO_REFRESH_MS,
     isBusyRef,
   });
@@ -181,7 +176,6 @@ export function useUsageEventSync({
     facetRevision,
     refresh: refresh + liveRevision,
     liveRevision,
-    liveState,
     notifySettled,
     handleManualRefresh,
   };
