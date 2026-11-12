@@ -62,6 +62,8 @@ export interface TooltipReadoutRow {
   note?: React.ReactNode;
   isTotal?: boolean;
   tone?: TipTone;
+  /** A name rather than a figure (a model alias, a time range): it may wrap instead of overflowing. */
+  isText?: boolean;
 }
 
 export interface TooltipReadoutProps {
@@ -114,13 +116,14 @@ function TooltipReadout({ heading, rows = [], notes, footer, className }: Toolti
             <div
               key={row.key ?? index}
               className={cn(
-                'flex items-center gap-3 tabular-nums text-sm leading-snug',
+                'flex gap-3 tabular-nums text-sm leading-snug',
+                row.isText ? 'items-baseline' : 'items-center',
                 hasNames ? 'justify-between' : 'justify-start gap-2',
                 row.isTotal && index > 0 && 'mt-0.5 pt-1 border-t-[length:var(--hairline)] border-t-float-rule',
               )}
             >
               {(hasNames || row.color) && (
-                <span className="inline-flex items-center gap-1.5 min-w-0">
+                <span className={cn('inline-flex items-center gap-1.5', row.isText ? 'shrink-0' : 'min-w-0')}>
                   {row.color ? (
                     indicator === 'dashed' ? (
                       <span
@@ -156,8 +159,16 @@ function TooltipReadout({ heading, rows = [], notes, footer, className }: Toolti
                   )}
                 </span>
               )}
-              <span className={cn('inline-flex items-baseline gap-1.5 shrink-0', hasNames && 'ml-auto')}>
-                <span className={cn('font-medium text-foreground whitespace-nowrap', row.tone && VALUE_TONES[row.tone])}>{row.value}</span>
+              <span className={cn('inline-flex items-baseline gap-1.5', row.isText ? 'min-w-0 shrink' : 'shrink-0', hasNames && 'ml-auto')}>
+                <span
+                  className={cn(
+                    'font-medium text-foreground',
+                    row.isText ? 'text-right [overflow-wrap:anywhere]' : 'whitespace-nowrap',
+                    row.tone && VALUE_TONES[row.tone],
+                  )}
+                >
+                  {row.value}
+                </span>
                 {hasMeta && (row.share !== undefined || row.note !== undefined) && (
                   <span className="min-w-[4ch] text-right text-fg-2 whitespace-nowrap">
                     {row.share ?? row.note}
@@ -192,7 +203,9 @@ function TipCardView({ card }: { card: TipCard }) {
   return (
     <TooltipReadout
       heading={card.heading}
-      rows={(card.rows ?? []).map((row) => ({ name: row.label, value: row.value, tone: row.tone }))}
+      // A card's values are whatever a caller wrote, model names included, so they may wrap rather
+      // than run past the popup; a figure is short enough never to.
+      rows={(card.rows ?? []).map((row) => ({ name: row.label, value: row.value, tone: row.tone, isText: true }))}
       notes={(card.notes ?? []).filter((note): note is string => typeof note === 'string' && note !== '')}
     />
   );
@@ -255,7 +268,11 @@ function DelegatedTooltipLayer() {
     const show = (element: HTMLElement) => {
       cancel();
       const text = canShow(element);
-      if (!text) return;
+      // A target with nothing to add closes whatever hint the pointer came from.
+      if (!text) {
+        hide();
+        return;
+      }
       isShowing = true;
       setTarget({ element, text, card: readTipCard(element.dataset.tipCard), side: resolveSide(element), isOpen: true });
     };

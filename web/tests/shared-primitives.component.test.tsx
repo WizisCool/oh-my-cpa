@@ -397,6 +397,35 @@ describe('Tooltip', () => {
   });
 });
 
+describe('Delegated tooltip cards', () => {
+  it('draws a card as rows, keeps an echo silent, and closes the open hint when the pointer reaches it', async () => {
+    const { DelegatedTooltipLayer } = await import('../src/components/ui/tooltip');
+    const { tipCard } = await import('../src/components/common/tipCard');
+    render(
+      <div>
+        <DelegatedTooltipLayer />
+        <span data-testid="card" {...tipCard({ heading: 'Versus the previous period', rows: [{ label: 'Change', value: '+40.2%', tone: 'up' }], notes: ['Scaled from the robust average'] })}>40.2%</span>
+        <span data-testid="echo" data-tip="1,234">1,234</span>
+      </div>,
+    );
+    const card = screen.getByTestId('card');
+    fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(card, { pointerType: 'touch', clientX: 10, clientY: 10 });
+    await waitFor(() => expect(document.querySelector('[data-slot="tooltip-readout"]')).not.toBeNull());
+    const popup = document.querySelector('[data-slot="tooltip"]')!;
+    expect(popup.textContent).toContain('Change');
+    expect(popup.textContent).toContain('+40.2%');
+    expect(popup.textContent).toContain('Scaled from the robust average');
+
+    // The exact count equals what the element already prints, so the tap closes the card and opens nothing.
+    const echo = screen.getByTestId('echo');
+    fireEvent.pointerDown(echo, { pointerType: 'touch', clientX: 40, clientY: 10 });
+    fireEvent.pointerUp(echo, { pointerType: 'touch', clientX: 40, clientY: 10 });
+    await waitFor(() => expect(screen.queryByText('Scaled from the robust average')).toBeNull());
+    expect(screen.queryByText('1,234', { selector: '[data-slot="tooltip"] *, [data-slot="tooltip"]' })).toBeNull();
+  });
+});
+
 describe('DeferredMount', () => {
   it('counts an optional editor download on first use and keeps its draft while it closes and reopens', async () => {
     const initialize = vi.fn();

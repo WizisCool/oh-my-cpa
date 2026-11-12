@@ -59,15 +59,18 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     const activate = (element: HTMLElement) => {
       cancelPending();
       const title = element.dataset.requestTooltip;
-      if (!title || !host.contains(element)) return;
-      if (
-        element.hasAttribute('data-request-tooltip-overflow') &&
-        element.scrollWidth <= element.clientWidth + 1 &&
-        element.scrollHeight <= element.clientHeight + 1
-      ) {
+      const isHintless = !title || !host.contains(element)
+        || (
+          element.hasAttribute('data-request-tooltip-overflow') &&
+          element.scrollWidth <= element.clientWidth + 1 &&
+          element.scrollHeight <= element.clientHeight + 1
+        )
+        || (!element.dataset.requestFailure && !element.dataset.requestTooltipCard && repeatsVisibleText(element, title));
+      // A target with nothing to add closes whatever hint the pointer came from.
+      if (isHintless) {
+        dismiss();
         return;
       }
-      if (!element.dataset.requestFailure && !element.dataset.requestTooltipCard && repeatsVisibleText(element, title)) return;
       isShowing = true;
       setTarget({ element, title, isOpen: true });
     };

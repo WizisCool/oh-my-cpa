@@ -1,5 +1,5 @@
 import type { MessageKey } from '../../i18n/catalog';
-import { quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
+import { quotaWindowFullName, quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
 import { MetaLine } from '../common/MetaLine';
 import React from 'react';
 import { Button } from '@/components/ui/button';
@@ -101,11 +101,14 @@ function accountLabel(account: WarmupCatalogAccount | undefined, task: Pick<Warm
   return account?.email || account?.name || task.account || task.auth_index;
 }
 
-function windowLabel(id: string | undefined, account: WarmupCatalogAccount | undefined, t: TFunc): string {
+/** A window's name; `isGrouped` keeps the model group in front where nothing else names it. */
+function windowLabel(id: string | undefined, account: WarmupCatalogAccount | undefined, t: TFunc, isGrouped = false): string {
   const key = id ? WINDOW_KEYS[id] : undefined;
   if (key) return t(key);
   const label = account?.windows.find((w) => w.id === id)?.label;
-  return label ? quotaWindowParts({ label, scope: id?.startsWith('ag_') ? 'group' : 'standard' }).name : id || '';
+  if (!label) return id || '';
+  const window = { label, scope: id?.startsWith('ag_') ? 'group' as const : 'standard' as const };
+  return isGrouped ? quotaWindowFullName(window) : quotaWindowParts(window).name;
 }
 
 /** A window option: its own name, with the model group it belongs to as a quiet line beneath. */
@@ -123,7 +126,7 @@ function WindowOption({ id, account, t }: { id: string; account: WarmupCatalogAc
 function describeTrigger(trigger: WarmupTrigger, account: WarmupCatalogAccount | undefined, fallbackZone: string, t: TFunc): string {
   switch (trigger.kind) {
     case 'window':
-      return t('warmup.summary_window', { window: windowLabel(trigger.window, account, t) });
+      return t('warmup.summary_window', { window: windowLabel(trigger.window, account, t, true) });
     case 'daily':
       return t('warmup.summary_daily', { time: trigger.time ?? '08:55', zone: trigger.time_zone || fallbackZone || 'UTC' });
     case 'every':
