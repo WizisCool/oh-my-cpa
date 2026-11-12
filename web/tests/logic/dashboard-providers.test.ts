@@ -19,6 +19,7 @@ import {
   type DashboardTailResponse,
 } from '../../src/types/dashboard';
 import { formatCompareWindowBounds } from '../../src/types/insightsFormat';
+import { buildModelTrendTooltipRows } from '../../src/charts/modelTrendData';
 import { test } from 'vitest';
 
 test('dashboard providers', () => {
@@ -898,4 +899,76 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
     (ms) => new Date(ms).getUTCFullYear(),
   );
   assert.equal(crossYearBounds.from, 'YYYY-MM-DD HH:mm:2025-12-31T00:00');
+});
+
+test('model trend tooltip honors the console token unit style', () => {
+  const row = {
+    t: '1762972800000',
+    total: 5_694_578,
+    'model:gemini-4-carbon': 4_701_976,
+    'model:gemini-3.8-flash': 974_396,
+    'model:retain': 17_360,
+    folded: 846,
+    'model:unused': 0,
+  };
+  const domain = ['model:gemini-4-carbon', 'model:gemini-3.8-flash', 'model:retain', 'folded', 'model:unused'];
+  const range = ['#111', '#222', '#333', '#444', '#555'];
+  const labelOf = (key: string) => (key === 'folded' ? 'Other models' : key.replace(/^model:/, ''));
+
+  const compact = buildModelTrendTooltipRows({
+    row,
+    domain,
+    range,
+    labelOf,
+    totalLabel: 'Total',
+    tokenUnitLabel: 'tokens',
+    tokenStyle: 'en-compact',
+  });
+  assert.deepEqual(compact, [
+    { key: 'model:gemini-4-carbon', name: 'gemini-4-carbon', color: '#111', value: '4.7M', share: '83%' },
+    { key: 'model:gemini-3.8-flash', name: 'gemini-3.8-flash', color: '#222', value: '974.4K', share: '17%' },
+    { key: 'model:retain', name: 'retain', color: '#333', value: '17.4K', share: '0.3%' },
+    { key: 'folded', name: 'Other models', color: '#444', value: '846', share: '<0.1%' },
+    { key: 'total', name: 'Total', value: '5.7M tokens', isTotal: true },
+  ]);
+
+  const chinese = buildModelTrendTooltipRows({
+    row,
+    domain,
+    range,
+    labelOf,
+    totalLabel: '合计',
+    tokenUnitLabel: 'tokens',
+    tokenStyle: 'zh',
+  });
+  assert.deepEqual(
+    chinese.map((entry) => [entry.key, entry.value]),
+    [
+      ['model:gemini-4-carbon', '470.2万'],
+      ['model:gemini-3.8-flash', '97.4万'],
+      ['model:retain', '1.7万'],
+      ['folded', '846'],
+      ['total', '569.5万 tokens'],
+    ],
+  );
+
+  const full = buildModelTrendTooltipRows({
+    row,
+    domain,
+    range,
+    labelOf,
+    totalLabel: 'Total',
+    tokenUnitLabel: 'tokens',
+    tokenStyle: 'full',
+  });
+  assert.deepEqual(
+    full.map((entry) => [entry.key, entry.value]),
+    [
+      ['model:gemini-4-carbon', '4,701,976'],
+      ['model:gemini-3.8-flash', '974,396'],
+      ['model:retain', '17,360'],
+      ['folded', '846'],
+      ['total', '5,694,578 tokens'],
+    ],
+  );
 });
