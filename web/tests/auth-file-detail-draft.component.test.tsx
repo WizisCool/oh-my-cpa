@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { AuthFileDetailDrawer } from '../src/components/authFiles/AuthFileDetailDrawer';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
-import { installOmcApi, type OmcApi } from './support/omcApi';
+import { installOmcApi, json, type OmcApi } from './support/omcApi';
 
 // The configuration section lists the provider's model catalogue for its excluded-models picker.
 function serveProviderCatalog(api: OmcApi) {
@@ -125,5 +125,54 @@ it('reorders credential model aliases via the row handle and saves the new order
     });
   } finally {
     view.unmount();
+  }
+});
+
+it('disables credential model alias reordering when read-only or while saving', async () => {
+  const fields = {
+    ...FIELDS,
+    model_aliases: [
+      { name: 'claude-3-5-sonnet-20240620', alias: 'sonnet', fork: true },
+      { name: 'claude-opus-4-1', alias: 'opus', fork: true },
+    ],
+  };
+  const api = installOmcApi({ authFiles: [{ file: FILE, fields }] });
+  serveProviderCatalog(api);
+
+  // 1. Read-only (canEdit = false)
+  const readOnlyView = renderWithOmc(
+    <AuthFileDetailDrawer file={FILE} open canEdit={false} initialSection="configuration" onClose={vi.fn()} onSaved={vi.fn()} onDownload={vi.fn()} />,
+  );
+  try {
+    const list = await screen.findByTestId('credential-model-aliases-list');
+    await waitFor(() => expect(list.querySelectorAll('li[data-alias-row]')).toHaveLength(2));
+    expect(list.querySelectorAll('[data-reorder-handle]')).toHaveLength(0);
+    expect((screen.getByRole('button', { name: 'Add mapping' }) as HTMLButtonElement).disabled).toBe(true);
+  } finally {
+    readOnlyView.unmount();
+  }
+
+  // 2. Saving in progress
+  let releaseSave!: () => void;
+  api.on('PATCH', '/management/auth-files/fields', () => new Promise((resolve) => {
+    releaseSave = () => resolve(json({ status: 'ok', file: FILE, fields }));
+  }));
+  const savingView = renderWithOmc(
+    <AuthFileDetailDrawer file={FILE} open canEdit initialSection="configuration" onClose={vi.fn()} onSaved={vi.fn()} onDownload={vi.fn()} />,
+  );
+  try {
+    const list = await screen.findByTestId('credential-model-aliases-list');
+    await waitFor(() => expect(list.querySelectorAll('[data-reorder-handle]')).toHaveLength(2));
+    const note = await screen.findByLabelText('Note');
+    fireEvent.change(note, { target: { value: 'Saving note' } });
+    const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(list.querySelectorAll('[data-reorder-handle]')).toHaveLength(0));
+    expect((screen.getByRole('button', { name: 'Add mapping' }) as HTMLButtonElement).disabled).toBe(true);
+    releaseSave();
+    await waitFor(() => expect(list.querySelectorAll('[data-reorder-handle]')).toHaveLength(2));
+  } finally {
+    savingView.unmount();
   }
 });

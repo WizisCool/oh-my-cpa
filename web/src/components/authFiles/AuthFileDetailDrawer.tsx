@@ -989,6 +989,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               <CredentialModelAliasesEditor
                                 isVertex={isVertex}
                                 aliases={policy.modelAliases}
+                                isDisabled={!safeFieldsReady || saveMutation.isPending || file.runtime_only || !canEdit}
                                 onChange={(modelAliases) => handlePolicyChange({ ...policy, modelAliases })}
                               />
                             )}
