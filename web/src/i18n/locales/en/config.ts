@@ -358,6 +358,8 @@ export default {
   'cfg.f_github_token_desc': 'Personal token for GitHub API limits and downloads',
   'cfg.unit_bytes': 'bytes',
   'cfg.f_max_request_body': 'Request body limit',
+  'cfg.f_shutdown_timeout': 'Shutdown drain timeout',
+  'cfg.f_shutdown_timeout_desc': 'Maximum wait to drain in-flight HTTP requests on shutdown',
   'cfg.f_tls_handshake_timeout': 'TLS handshake timeout',
   'cfg.f_affinity_rebind_on': 'Rebind session on',
   'cfg.f_affinity_rebind_on_desc': 'Error types that trigger credential rebind during failover',

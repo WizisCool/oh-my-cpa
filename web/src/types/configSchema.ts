@@ -91,7 +91,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_service',
     descKey: 'cfg.grp_service_desc',
     variant: 'form-grid',
-    fieldIds: ['host', 'port', 'authDir', 'kvStoreDisabled', 'kvStorePath', 'trustedProxies', 'maxRequestBodyBytes', 'githubToken'],
+    fieldIds: ['host', 'port', 'authDir', 'kvStoreDisabled', 'kvStorePath', 'trustedProxies', 'maxRequestBodyBytes', 'shutdownTimeout', 'githubToken'],
   },
   {
     id: 'grp_apikeys',
@@ -478,6 +478,18 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     unitKey: 'cfg.unit_bytes',
     defaultValue: 0,
     keywords: ['body', 'size', 'limit', '413', 'request'],
+  },
+  {
+    id: 'shutdownTimeout',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_shutdown_timeout',
+    descKey: 'cfg.f_shutdown_timeout_desc',
+    yamlPath: ['server', 'shutdown-timeout'],
+    type: 'number',
+    min: 0,
+    unitKey: 'cfg.unit_seconds',
+    defaultValue: 0,
+    keywords: ['shutdown', 'drain', 'graceful', 'timeout', 'stop', 'server', 'sse'],
   },
   {
     id: 'githubToken',

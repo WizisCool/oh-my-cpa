@@ -358,6 +358,8 @@ export default {
   "cfg.f_github_token_desc": "用於提高 GitHub API 速率限制與下載資源",
   "cfg.unit_bytes": "位元組",
   "cfg.f_max_request_body": "請求內容上限",
+  "cfg.f_shutdown_timeout": "停機排空逾時",
+  "cfg.f_shutdown_timeout_desc": "停機時等待在途 HTTP 請求排空的最長時間",
   "cfg.f_tls_handshake_timeout": "TLS 握手逾時",
   "cfg.f_affinity_rebind_on": "會話改綁條件",
   "cfg.f_affinity_rebind_on_desc": "憑證出錯時觸發會話改綁的錯誤類型",
