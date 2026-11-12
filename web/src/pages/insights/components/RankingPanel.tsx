@@ -1,7 +1,7 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -114,7 +114,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                     className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'], isSelected && styles['ranking-row-selected'])}
                   >
                     <InsightsValue dimension={dimension} id={group.id} labels={labels} hasDetail />
-                    <span className={styles['ranking-value']} title={formatMetricExact(ranking, group.value)}>
+                    <span className={styles['ranking-value']} data-tip={formatMetricExact(ranking, group.value)}>
                       {formatMetric(ranking, group.value, style)}
                     </span>
                     <span className={styles['ranking-share']}>
@@ -133,7 +133,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                       className={styles['ranking-open']}
                       onClick={() => onOpen(group.id)}
                       aria-label={t('insights.open_detail')}
-                      title={t('insights.open_detail')}
+                      data-tip={t('insights.open_detail')}
                     >
                       <RightOutlined />
                     </button>
@@ -146,8 +146,8 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
       )}
       {groups.length > limit && (
         <Button
-          type="text"
-          size="small"
+          variant="ghost"
+          size="sm"
           className={styles['ranking-more']}
           onClick={() => { setExpanded((value) => !value); setSearch(''); }}
           aria-expanded={isExpanded}

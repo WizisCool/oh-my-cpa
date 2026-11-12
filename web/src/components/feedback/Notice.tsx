@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { CloseOutlined, ReloadOutlined } from '../icons';
 import { describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -100,7 +100,7 @@ export const LoadFailure: React.FC<LoadFailureProps> = ({ title, error, detail, 
       className={['omc-load-failure', className].filter(Boolean).join(' ')}
       data-testid={testId}
       action={onRetry ? (
-        <Button size="small" icon={<ReloadOutlined />} onClick={onRetry}>
+        <Button size="sm" icon={<ReloadOutlined />} onClick={onRetry}>
           {t('common.retry')}
         </Button>
       ) : undefined}

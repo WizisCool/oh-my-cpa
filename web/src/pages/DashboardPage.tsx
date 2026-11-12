@@ -5,7 +5,8 @@ import { DeferredPanel } from '../components/common/DeferredPanel';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReceiptOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -298,7 +299,7 @@ export const DashboardPage: React.FC = () => {
         {t('dash.layout.reset')}
       </Button>
       <Button onClick={() => setLayoutDraft(null)}>{t('common.cancel')}</Button>
-      <Button type="primary" onClick={() => void saveLayout()} data-testid="dashboard-layout-done">
+      <Button variant="primary" onClick={() => void saveLayout()} data-testid="dashboard-layout-done">
         {t('dash.layout.done')}
       </Button>
     </>
@@ -424,8 +425,8 @@ export const DashboardPage: React.FC = () => {
             <div className="tile-head">
               <div className="tile-label">{t('dash.total_requests')}</div>
               <Button
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 className="tile-link"
                 icon={<RightOutlined />}
                 onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
@@ -466,15 +467,15 @@ export const DashboardPage: React.FC = () => {
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.total_tokens')}</div>
-            <div className="tile-value" title={formatTokensFull(data.tokens.total)}>
+            <div className="tile-value" data-tip={formatTokensFull(data.tokens.total)}>
               <RollingNumber readout={resolveTokenFlowReadout(data.tokens.total, tokenStyle)} />
             </div>
             <div className="tile-caption">
-              <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
-              <span>{t('dash.tokens_output')} <b title={formatTokensFull(data.tokens.output)}>{formatTokensStyled(data.tokens.output, tokenStyle)}</b></span>
-              <span>{t('dash.tokens_cache_read')} <b title={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_input')} <b data-tip={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_output')} <b data-tip={formatTokensFull(data.tokens.output)}>{formatTokensStyled(data.tokens.output, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_cache_read')} <b data-tip={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
               {data.tokens.reasoning > 0 && (
-                <span>{t('dash.tokens_reasoning')} <b title={formatTokensFull(data.tokens.reasoning)}>{formatTokensStyled(data.tokens.reasoning, tokenStyle)}</b></span>
+                <span>{t('dash.tokens_reasoning')} <b data-tip={formatTokensFull(data.tokens.reasoning)}>{formatTokensStyled(data.tokens.reasoning, tokenStyle)}</b></span>
               )}
             </div>
             <DashboardTrendChart
@@ -516,11 +517,11 @@ export const DashboardPage: React.FC = () => {
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-label">{t('dash.tpm')}</div>
-            <div className="tile-value" title={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
+            <div className="tile-value" data-tip={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
               <RollingNumber readout={resolveTokenRateFlowReadout(data.metrics.tpm)} />
             </div>
             <div className="tile-caption">
-              <span>{t('dash.total_tokens')} <b title={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
+              <span>{t('dash.total_tokens')} <b data-tip={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
             </div>
             <DashboardTrendChart
               ariaLabel={t('dash.tpm')}
@@ -548,8 +549,8 @@ export const DashboardPage: React.FC = () => {
               <RollingNumber readout={resolveCacheRateReadout(data.metrics.cache_rate)} />
             </div>
             <div className="tile-caption">
-              <span>{t('dash.tokens_cache_read')} <b title={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
-              <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_cache_read')} <b data-tip={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
+              <span>{t('dash.tokens_input')} <b data-tip={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
             </div>
             <DashboardTrendChart
               ariaLabel={t('dash.cache_rate')}
@@ -576,8 +577,8 @@ export const DashboardPage: React.FC = () => {
               </div>
               {/* The receipt is offered where the spend is read, with the same weight as the requests tile's link. */}
               <Button
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 className="tile-link"
                 icon={<ReceiptOutlined />}
                 onMouseEnter={preloadReceiptShowcase}
@@ -595,8 +596,8 @@ export const DashboardPage: React.FC = () => {
               <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
               {unpricedModels > 0 && data.metrics.cost_source !== 'estimated' && (
                 <Button
-                  type="link"
-                  size="small"
+                  variant="link"
+                  size="sm"
                   className="tile-caption-link"
                   onMouseEnter={() => preloadRegisteredRoute('/pricing')}
                   onClick={() => navigateTo('/pricing')}

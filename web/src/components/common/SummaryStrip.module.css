@@ -14,20 +14,24 @@
 
 .summary-total {
   color: var(--fg);
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 550;
 }
 
 .summary-divider {
-  color: var(--meta);
+  display: inline-block;
+  width: var(--hairline);
+  height: 11px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 .summary-item {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
   color: var(--fg-2);
 }
 

@@ -1,7 +1,10 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Popover, Segmented, Select } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import dayjs from '../../utils/time';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
@@ -94,13 +97,13 @@ const CandidateLine: React.FC<{
   const rates = `${formatRatePer1M(candidate.model.prompt_price_per_1m)} / ${formatRatePer1M(candidate.model.completion_price_per_1m)}`;
   return (
     <div className={styles.candidate} data-testid="pricing-row-candidate" data-kind={candidate.kind}>
-      <span className={styles['candidate-text']} title={candidate.model.id}>
+      <span className={styles['candidate-text']} data-tip={candidate.model.id}>
         {t(isAutomatic ? 'pricing.candidate.automatic' : 'pricing.candidate.suggested', { id: candidate.model.id, rates })}
       </span>
       <span className={styles['candidate-actions']}>
         <Button
-          size="small"
-          type="link"
+          size="sm"
+          variant="link"
           icon={isAutomatic ? <SyncOutlined /> : <LinkOutlined />}
           loading={pendingAction === 'adopt'}
           disabled={pendingAction === 'dismiss'}
@@ -111,8 +114,8 @@ const CandidateLine: React.FC<{
           {t(isAutomatic ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}
         </Button>
         <Button
-          size="small"
-          type="link"
+          size="sm"
+          variant="link"
           loading={pendingAction === 'dismiss'}
           disabled={pendingAction === 'adopt'}
           onClick={() => onAct('dismiss')}
@@ -282,7 +285,7 @@ export const PricingPage: React.FC = () => {
           <div className={styles['model-text']}>
             {row.channel && <span className={styles['model-sub']}>{t('pricing.scope.channel')} · {row.channelLabel || row.channel}</span>}
             {row.targetChannel && row.rowKind === 'priced' && <span className={styles['model-sub']}>{t('pricing.scope.inherited')}</span>}
-            <span className={styles['model-name']} title={row.model}>{pricingModelIdentity(row.model).label}</span>
+            <span className={styles['model-name']} data-tip={row.model} data-tip-overflow="">{pricingModelIdentity(row.model).label}</span>
             {row.rowKind === 'priced' ? (
               <span className={styles['model-sub']}>
                 {row.upstream_id || (row.source === 'modelsdev' ? t('pricing.source.modelsdev') : t('pricing.source.manual'))}
@@ -299,12 +302,12 @@ export const PricingPage: React.FC = () => {
             )}
             {row.rowKind === 'unpriced' && row.suggestions[0] && (
               <div className={styles['suggestion']}>
-                <span className={styles['model-sub']} title={row.suggestions[0].id}>
+                <span className={styles['model-sub']} data-tip={row.suggestions[0].id}>
                   {t('pricing.attention.suggestion', { id: row.suggestions[0].id })}
                 </span>
                 <Button
-                  size="small"
-                  type="link"
+                  size="sm"
+                  variant="link"
                   icon={<LinkOutlined />}
                   loading={adoptMutation.isPending && adoptMutation.variables?.model === row.model}
                   onClick={() => adoptMutation.mutate({ model: row.model, upstream: row.suggestions[0] })}
@@ -390,7 +393,7 @@ export const PricingPage: React.FC = () => {
         <div className="row-actions">
           <Tooltip title={row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}>
             <Button
-              size="small"
+              size="sm"
               className="row-action-btn"
               icon={<EditOutlined />}
               onClick={() => openEditor?.(row.model, { channel: row.channel, channelLabel: row.channelLabel })}
@@ -398,10 +401,10 @@ export const PricingPage: React.FC = () => {
               data-testid="pricing-row-edit"
             />
           </Tooltip>
-          {row.targetChannel && <Button size="small" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
+          {row.targetChannel && <Button size="sm" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
             {t('pricing.scope.channel')}
           </Button>}
-          {row.channel && <Button size="small" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
+          {row.channel && <Button size="sm" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
             {t('pricing.scope.shared')}
           </Button>}
         </div>
@@ -458,7 +461,7 @@ export const PricingPage: React.FC = () => {
         // The sync reaches OpenRouter. The demonstration prices its own fixture instead, so the
         // server refuses this and the button says so.
         disabled={isDemo || Boolean(data?.sync.running)}
-        title={isDemo ? t('demo.blocked') : undefined}
+        data-tip={isDemo ? t('demo.blocked') : undefined}
         onClick={() => syncMutation.mutate()}
       >
         {t('pricing.sync_now')}
@@ -492,10 +495,20 @@ export const PricingPage: React.FC = () => {
                 { value: 'channels', label: t('pricing.tab.channels') },
               ]}
             />
-            <Popover content={syncPopover} trigger="click" placement="bottomRight" title={t('pricing.sync.title')}>
-              <Button className={styles['sync-button']} data-testid="pricing-sync-status">
-                <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
-              </Button>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button className={styles['sync-button']} data-testid="pricing-sync-status">
+                    <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
+                  </Button>
+                }
+              />
+              <PopoverContent placement="bottomRight">
+                <PopoverTitle className="m-0 mb-2 text-base font-semibold text-foreground">
+                  {t('pricing.sync.title')}
+                </PopoverTitle>
+                {syncPopover}
+              </PopoverContent>
             </Popover>
           </>
         )}

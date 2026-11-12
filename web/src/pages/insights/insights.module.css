@@ -44,14 +44,15 @@
   border-bottom: 1px solid var(--border-soft);
 }
 .filter-chip {
+  border: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 320px;
   height: 26px;
   padding: 0 4px 0 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: var(--surface);
   font-size: var(--text-sm);
   animation: insights-chip-in var(--motion-base) var(--ease-standard);
@@ -89,7 +90,7 @@
   gap: 12px;
   padding: 7px 10px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -109,7 +110,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 4px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   cursor: pointer;
 }
@@ -119,10 +120,11 @@
 
 /* ── Metric tiles: four readouts that double as the trend's metric switch ─── */
 .tiles {
+  border: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   /* The panels' own ground (antd's container colour), so the strip reads as one more panel. */
   background: var(--bg);
   overflow: hidden;
@@ -182,7 +184,7 @@
 .tile-change-was { margin-left: 6px; color: var(--meta); }
 
 /* ── Trend ──────────────────────────────────────────────────────────────── */
-.trend-panel :global(.ant-card-body) { display: flex; flex-direction: column; gap: 8px; }
+.trend-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .grouping-select { min-width: 120px; }
 .bucket-control { min-width: 128px; }
 
@@ -242,7 +244,7 @@
 .ranking-more { margin: 8px 0 -4px; color: var(--muted); }
 
 /* ── Key table ──────────────────────────────────────────────────────────── */
-.table-panel :global(.ant-card-body) { display: flex; flex-direction: column; gap: 8px; }
+.table-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .key-table :global(td) { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .key-name {
   display: inline-flex;
@@ -311,14 +313,14 @@
   background: color-mix(in oklch, var(--heatmap-quiet) var(--heatmap-quiet-share, 0%), var(--heatmap-busy));
 }
 .rhythm-cell[data-empty] { background: var(--heatmap-zero-unrecorded); }
-.rhythm-skeleton { height: 180px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); }
+.rhythm-skeleton { border: 0; height: 180px; box-shadow: var(--shadow-edge); border-radius: var(--radius-md); }
 
 .drawer-body { display: flex; flex-direction: column; gap: 16px; }
 
 .footnote { display: flex; flex-wrap: wrap; gap: 16px; color: var(--meta); font-size: var(--text-2xs); letter-spacing: .04em; }
 
 @media (max-width: 1100px) {
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles { border: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile:nth-child(2n) { border-right: 0; }
   .tile:nth-child(-n + 2) { border-bottom: 1px solid var(--border-soft); }
   .rankings[data-layout='single-key'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -340,7 +342,7 @@
   .head :global(.terminal-page-heading) { flex: 1 1 auto; }
   .head :global(.terminal-subtitle) { margin-top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
   .head :global(.terminal-page-actions) { flex: none; }
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles { border: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile { padding: 12px; border-bottom: 1px solid var(--border-soft); }
   .tile:nth-child(2n) { border-right: 0; }
   .tile:nth-last-child(-n + 2) { border-bottom: 0; }
@@ -357,5 +359,5 @@
 }
 :global(:root[data-reduced-motion='true']) {
   .ranking-bar > span, .ranking-list > li { transition: none; }
-  .filter-chip { animation: none; }
+  .filter-chip { border: 0; animation: none; }
 }

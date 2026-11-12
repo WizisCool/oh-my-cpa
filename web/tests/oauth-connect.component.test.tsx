@@ -136,9 +136,12 @@ it('keeps targeted recovery pinned across failure/minimizing and verifies creden
   const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start]')!;
   const verification = () => screen.getByRole('checkbox', { name: /Verify inference after sign-in/ });
   try {
-    expect((verification() as HTMLInputElement).checked).toBe(false);
+    expect(verification().getAttribute('aria-checked')).toBe('false');
     fireEvent.click(start());
-    await waitFor(() => expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'codex', ...recovery, verify: false }]));
+    await waitFor(() => {
+      expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'codex', ...recovery, verify: false }]);
+      expect(verification().getAttribute('aria-disabled')).not.toBe('true');
+    });
     shouldSucceed = true;
     fireEvent.click(verification());
     fireEvent.click(start());

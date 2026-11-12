@@ -1,5 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
-import { Checkbox, Input } from 'antd';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { NumberInput } from '../common/NumberInput';
 
 import { VertexModelOpenAPI } from '../authFiles/VertexModelOpenAPI';
@@ -167,7 +168,7 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
         <div className={styles['flag']}>
           <Checkbox
             checked={options.thinkingZeroAllowed}
-            onChange={(event) => onChange({ thinkingZeroAllowed: event.target.checked })}
+            onCheckedChange={(checked) => onChange({ thinkingZeroAllowed: checked })}
           >
             <span className={styles['flag-label']}>{t('pro.model_thinking_zero')}</span>
           </Checkbox>
@@ -176,7 +177,7 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
         <div className={styles['flag']}>
           <Checkbox
             checked={options.thinkingDynamicAllowed}
-            onChange={(event) => onChange({ thinkingDynamicAllowed: event.target.checked })}
+            onCheckedChange={(checked) => onChange({ thinkingDynamicAllowed: checked })}
           >
             <span className={styles['flag-label']}>{t('pro.model_thinking_dynamic')}</span>
           </Checkbox>
@@ -186,7 +187,7 @@ export function ModelOptionsFields({ idPrefix, options, onChange, fields, proble
           <div key={flag.name} className={styles['flag']}>
             <Checkbox
               checked={options[flag.name]}
-              onChange={(event) => onChange({ [flag.name]: event.target.checked })}
+              onCheckedChange={(checked) => onChange({ [flag.name]: checked })}
             >
               <span className={styles['flag-label']}>{t(flag.labelKey)}</span>
             </Checkbox>

@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../../api/client';
@@ -12,6 +12,7 @@ import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../com
 import { collectPluginPages } from '../plugins/pluginPages';
 import { buildNavGroups } from '../common/navigation';
 import { SectionHeading } from '../common/SectionHeading';
+import { SettingsGroup } from './SettingsGroup';
 import { SettingRow } from '../common/SettingRow';
 import { Switch } from '../common/Switch';
 import styles from './SidebarNavSettings.module.css';
@@ -83,8 +84,7 @@ export const SidebarNavSettings: React.FC = () => {
   const hasCustomOrder = Object.keys(order).length > 0;
 
   return (
-    <div className="settings-group omc-settings-group" data-testid="sidebar-nav-settings">
-      <SectionHeading className="settings-group-head" title={t('omc.section_sidebar')} />
+    <SettingsGroup title={t('omc.section_sidebar')} testId="sidebar-nav-settings">
       <SettingRow
         label={t('omc.sidebar_entries')}
         description={hiddenCount > 0 ? t('omc.sidebar_hidden_count', { n: hiddenCount }) : t('omc.sidebar_all_shown')}
@@ -104,7 +104,7 @@ export const SidebarNavSettings: React.FC = () => {
         step={step}
         onClose={() => setIsPanelOpen(false)}
       />
-    </div>
+    </SettingsGroup>
   );
 };
 
@@ -143,10 +143,10 @@ const SidebarNavPanel: React.FC<{
           title={t('omc.sidebar_entries')}
           extra={
             <>
-              <Button size="small" onClick={resetOrder} disabled={!canWrite || !hasCustomOrder}>
+              <Button size="sm" onClick={resetOrder} disabled={!canWrite || !hasCustomOrder}>
                 {t('omc.sidebar_reset_order')}
               </Button>
-              <Button size="small" onClick={showAll} disabled={!canWrite || !hasHidden}>
+              <Button size="sm" onClick={showAll} disabled={!canWrite || !hasHidden}>
                 {t('omc.sidebar_show_all')}
               </Button>
             </>
@@ -227,8 +227,8 @@ const NavEntryRow: React.FC<{
             <span className={styles.steps}>
               <Tooltip title={t('omc.sidebar_move_earlier')}>
                 <Button
-                  size="small"
-                  type="text"
+                  size="sm"
+                  variant="ghost"
                   icon={<UpOutlined />}
                   aria-label={`${t('omc.sidebar_move_earlier')} · ${label}`}
                   disabled={!canWrite || index === 0}
@@ -237,8 +237,8 @@ const NavEntryRow: React.FC<{
               </Tooltip>
               <Tooltip title={t('omc.sidebar_move_later')}>
                 <Button
-                  size="small"
-                  type="text"
+                  size="sm"
+                  variant="ghost"
                   icon={<DownOutlined />}
                   aria-label={`${t('omc.sidebar_move_later')} · ${label}`}
                   disabled={!canWrite || index === count - 1}

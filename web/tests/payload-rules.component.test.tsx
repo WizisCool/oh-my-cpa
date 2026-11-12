@@ -2,7 +2,6 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseDocument } from 'yaml';
-import { App as AntdApp } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useConfigDraft } from '../src/components/config/useConfigDraft';
 import { renderGroupPanel } from '../src/components/config/configSectionRenderers';
@@ -35,7 +34,7 @@ describe('payload rule disclosures', () => {
     const doc = parseDocument(POPULATED_YAML.replace('model-one', '""'));
     const onDocChange = vi.fn();
     const { container, rerender } = render(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={0} />);
-    const headers = Array.from(container.querySelectorAll('.payload-collapse .ant-collapse-header'));
+    const headers = Array.from(container.querySelectorAll('.payload-collapse [data-slot="accordion-trigger"]'));
     expect(headers).toHaveLength(5);
     expect(headers.map(header => header.getAttribute('aria-expanded'))).toEqual(Array(5).fill('false'));
 
@@ -61,12 +60,12 @@ it('adding a raw rule updates the actual configuration draft and exposes its sav
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r1', safe_yaml: 'requests: {}\n' });
   try {
-    const { container } = render(<React.StrictMode><I18nProvider><QueryClientProvider client={client}><AntdApp><ConfigPayloadDraft /></AntdApp></QueryClientProvider></I18nProvider></React.StrictMode>);
+    const { container } = render(<React.StrictMode><I18nProvider><QueryClientProvider client={client}><ConfigPayloadDraft /></QueryClientProvider></I18nProvider></React.StrictMode>);
     await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toBe('requests: {}\n'));
     const header = screen.getByRole('button', { name: /^Override Raw Rules/ });
     fireEvent.click(header);
-    const panel = header.closest('.ant-collapse-item')!;
-    fireEvent.click(panel.querySelector('button')!);
+    const panel = header.closest('[data-slot="accordion-item"]')!;
+    fireEvent.click(panel.querySelector('[data-slot="accordion-panel"] button')!);
     await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toContain('override-raw'));
     expect(container.querySelectorAll('.payload-rule-card')).toHaveLength(1);
     const save = document.querySelector<HTMLButtonElement>('.config-dirty-btn-save');

@@ -46,6 +46,16 @@ export function rgbToHex(rgb: Rgb): string {
     .join('')}`;
 }
 
+/**
+ * mixSrgb blends `from` toward `to` channel by channel in gamma-encoded sRGB, which is what
+ * `color-mix(in srgb, to N%, transparent)` composited over `from` draws on screen.
+ */
+export function mixSrgb(from: string, to: string, amount: number): string {
+  const start = hexToRgb(from);
+  const end = hexToRgb(to);
+  return rgbToHex(start.map((channel, index) => channel + (end[index] - channel) * amount) as unknown as Rgb);
+}
+
 const srgbToLinear = (channel: number): number =>
   channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 

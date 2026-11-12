@@ -107,7 +107,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window }: Qu
           foot={(
             <>
               {capacity
-                ? <span className={styles['foot-text']} title={t('quota.capacity_error_hint')}>{t('quota.capacity_margin', { n: Math.max(1, Math.round(capacity.error_percent)) })}</span>
+                ? <span className={styles['foot-text']} data-tip={t('quota.capacity_error_hint')}>{t('quota.capacity_margin', { n: Math.max(1, Math.round(capacity.error_percent)) })}</span>
                 : <span className={styles['foot-text']}>{pendingNote ?? t('quota.capacity_reason_low_usage')}</span>}
               <Tag tone="accent" size="small" className={styles['foot-tag']}>{t('quota.capacity_forecast_tag')}</Tag>
             </>
@@ -156,7 +156,7 @@ function Card({ tone, icon, title, caption, figures, isEmpty, isPending = false,
     <section className={styles.card} data-tone={tone} data-empty={isEmpty || undefined} aria-label={title} aria-busy={isPending || undefined}>
       <header className={styles.head}>
         <PanelTitle icon={icon}>{title}</PanelTitle>
-        <span className={styles.caption} title={caption}>{isPending ? '…' : caption}</span>
+        <span className={styles.caption} data-tip={caption} data-tip-overflow="">{isPending ? '…' : caption}</span>
       </header>
       <div className={styles.lead}>
         <span className={styles.label}>{t('quota.capacity_spent')}</span>

@@ -1,5 +1,13 @@
 import React from 'react';
-import { Button, Dropdown, Segmented } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -163,7 +171,7 @@ export function InstalledPluginsPanel({
   if (plugins.length === 0) {
     return (
       <EmptyState className={styles.empty} title={t('plugin.installed_empty')}>
-        <Button type="primary" icon={<ShopOutlined />} onClick={onBrowseStore}>
+        <Button variant="primary" icon={<ShopOutlined />} onClick={onBrowseStore}>
           {t('plugin.browse_store')}
         </Button>
       </EmptyState>
@@ -248,7 +256,7 @@ export function InstalledPluginsPanel({
                 const hasHomepage = homepageURL !== undefined && homepageURL !== repositoryURL;
                 const moreButton = (
                   <Button
-                    size="small"
+                    size="sm"
                     className="row-action-btn"
                     ref={(button) => {
                       if (button) moreButtonRefs.current.set(plugin.id, button);
@@ -294,8 +302,8 @@ export function InstalledPluginsPanel({
                         {listing?.update_available && (
                           <Tooltip title={isDemo ? t('demo.blocked') : isStoreInstallBlocked(listing) === 'auth' ? t('plugin.auth_required_hint') : undefined}>
                             <Button
-                              type="text"
-                              size="small"
+                              variant="ghost"
+                              size="sm"
                               className={styles['update-button']}
                               icon={<UpgradeOutlined />}
                               disabled={isDemo || isDeleting || isStoreInstallBlocked(listing) !== undefined}
@@ -309,7 +317,7 @@ export function InstalledPluginsPanel({
                         )}
                         <Tooltip title={t('plugin.configure')}>
                           <Button
-                            size="small"
+                            size="sm"
                             className="row-action-btn"
                             icon={<SettingOutlined />}
                             disabled={isDeleting}
@@ -336,35 +344,36 @@ export function InstalledPluginsPanel({
                             {moreButton}
                           </ConfirmAction>
                         ) : (
-                          <Dropdown
-                            trigger={['click']}
-                            placement="bottomRight"
-                            menu={{
-                              items: [
-                                ...(repositoryURL ? [{
-                                  key: 'repository',
-                                  icon: <GithubOutlined />,
-                                  label: <a href={repositoryURL} target="_blank" rel="noreferrer noopener">{t('plugin.open_repository')}</a>,
-                                }] : []),
-                                ...(hasHomepage ? [{
-                                  key: 'homepage',
-                                  icon: <ExternalLinkOutlined />,
-                                  label: <a href={homepageURL} target="_blank" rel="noreferrer noopener">{t('plugin.open_homepage')}</a>,
-                                }] : []),
-                                ...(repositoryURL || hasHomepage ? [{ type: 'divider' as const }] : []),
-                                {
-                                  key: 'delete',
-                                  icon: <DeleteOutlined />,
-                                  label: isDemo ? <Tooltip title={t('demo.blocked')}>{t('plugin.delete')}</Tooltip> : t('plugin.delete'),
-                                  danger: true,
-                                  disabled: isDemo || isUpdating,
-                                  onClick: () => setPendingDeleteId(plugin.id),
-                                },
-                              ],
-                            }}
-                          >
-                            {moreButton}
-                          </Dropdown>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger render={moreButton} />
+                            <DropdownMenuContent placement="bottomRight">
+                              {repositoryURL && (
+                                <DropdownMenuItem
+                                  icon={<GithubOutlined />}
+                                  render={<a href={repositoryURL} target="_blank" rel="noreferrer noopener" />}
+                                >
+                                  {t('plugin.open_repository')}
+                                </DropdownMenuItem>
+                              )}
+                              {hasHomepage && (
+                                <DropdownMenuItem
+                                  icon={<ExternalLinkOutlined />}
+                                  render={<a href={homepageURL} target="_blank" rel="noreferrer noopener" />}
+                                >
+                                  {t('plugin.open_homepage')}
+                                </DropdownMenuItem>
+                              )}
+                              {(repositoryURL || hasHomepage) && <DropdownMenuSeparator />}
+                              <DropdownMenuItem
+                                icon={<DeleteOutlined />}
+                                danger
+                                disabled={isDemo || isUpdating}
+                                onClick={() => setPendingDeleteId(plugin.id)}
+                              >
+                                {isDemo ? <Tooltip title={t('demo.blocked')}>{t('plugin.delete')}</Tooltip> : t('plugin.delete')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                       <span className={styles['switch-cell']}>
@@ -373,7 +382,7 @@ export function InstalledPluginsPanel({
                           checked={plugin.enabled}
                           loading={isUpdating}
                           disabled={isDemo || isDeleting}
-                          title={isDemo ? t('demo.blocked') : undefined}
+                          data-tip={isDemo ? t('demo.blocked') : undefined}
                           onChange={(checked) => enabledMutation.mutate({ id: plugin.id, enabled: checked })}
                           aria-label={t('plugin.toggle_label', { name })}
                         />

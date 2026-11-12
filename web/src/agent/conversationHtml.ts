@@ -207,7 +207,7 @@ export function conversationHTML({ snapshot, labels, appearance, exportedAt, lan
   // Resolved token values are data too: constrain them before putting them in the stylesheet.
   const safeVariables = Object.fromEntries(Object.entries(appearance.variables).filter(([key, value]) => /^--[a-z0-9-]+$/.test(key) && /^[#a-z0-9.,()%\s-]+$/i.test(value)));
   const variables = Object.entries(safeVariables).map(([key, value]) => `${key}:${value}`).join(';');
-  const brand = `<svg class="brand" xmlns="http://www.w3.org/2000/svg" viewBox="${brandDrawing('wordmark').viewBox}" role="img" aria-label="Oh My CPA">${brandMarkup('wordmark', { ink: safeVariables['--fg'] ?? '#f4f4f6', accent: safeVariables['--accent'] ?? '#00b8db' })}</svg>`;
+  const brand = `<svg class="brand" xmlns="http://www.w3.org/2000/svg" viewBox="${brandDrawing('wordmark').viewBox}" role="img" aria-label="Oh My CPA">${brandMarkup('wordmark', { ink: safeVariables['--fg'] ?? '#f4f4f6', accent: safeVariables['--accent'] ?? '#00a2fb' })}</svg>`;
   const iconButton = (attribute: string, label: string, name: IconName) => `<button type="button" class="icon-button" ${attribute} aria-label="${escapeHTML(label)}" title="${escapeHTML(label)}">${icon(name)}</button>`;
   const heading = `<header class="workspace-head">${brand}<span class="head-rule"></span><h1>${escapeHTML(labels.title)}</h1><div class="actions">${iconButton('data-toggle-search', labels.search, 'search')}${iconButton('data-toggle-panel aria-expanded="false"', labels.panel, 'panel')}${iconButton('data-print', labels.print, 'print')}</div></header>`;
   const model = snapshot.turns.at(-1)?.model;

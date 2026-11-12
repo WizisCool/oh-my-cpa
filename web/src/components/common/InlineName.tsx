@@ -1,29 +1,20 @@
 import React from 'react';
-import { Input } from 'antd';
+import { Input } from '@/components/ui/input';
 import { RenameOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { Tooltip } from './Tooltip';
 import styles from './InlineName.module.css';
 
-/** The class a row's identity block takes so its rename glyph can sit beside the name. */
 export const inlineNameEditableClass = styles.editable;
-
-/** Added beside the editable class where no row menu offers the same rename, so touch can reach it. */
 export const inlineNamePersistentClass = styles.persistent;
 
 interface RenameButtonProps {
-  /** What the glyph renames, for assistive tech. */
   label: string;
   disabled?: boolean;
   onClick: () => void;
   'data-testid'?: string;
 }
 
-/**
- * The glyph that opens a row's name editor. It appears while the pointer is over the name's cell
- * or the block has focus. On a touch screen it is hidden where a row menu offers the same rename,
- * and stays painted where nothing else does (`inlineNamePersistentClass`).
- */
 export function RenameButton({ label, disabled, onClick, 'data-testid': testId }: RenameButtonProps) {
   const t = useT();
   return (
@@ -46,22 +37,14 @@ interface InlineNameEditorProps {
   initial: string;
   label: string;
   placeholder?: string;
-  /** Saves the draft; resolves whether it was saved, so a refused name keeps the field open. */
   onCommit: (next: string) => Promise<boolean>;
   onCancel: () => void;
   'data-testid'?: string;
 }
 
-/**
- * A row's name, edited where it stands. Enter or leaving the field saves, Escape abandons; an
- * unchanged or failed save leaves the name as it was, and a failure keeps the field open with what
- * the operator typed.
- */
 export function InlineNameEditor({ initial, label, placeholder, onCommit, onCancel, 'data-testid': testId }: InlineNameEditorProps) {
   const [draft, setDraft] = React.useState(initial);
   const [isSaving, setIsSaving] = React.useState(false);
-  // Enter saves and then the field unmounts, which blurs it; Escape unmounts it too. Either way the
-  // blur that follows must not save a second time, and neither may a blur during the save.
   const isSettledRef = React.useRef(false);
   const isSavingRef = React.useRef(false);
   const commit = async () => {
@@ -80,7 +63,7 @@ export function InlineNameEditor({ initial, label, placeholder, onCommit, onCanc
   };
   return (
     <Input
-      size="small"
+      size="sm"
       autoFocus
       className={styles.input}
       value={draft}

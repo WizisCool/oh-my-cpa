@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
@@ -218,7 +218,7 @@ function ComposerSurface({
   const addAttachment = attachments && (
     <Tooltip title={attachments.addLabel}>
       <ComposerPrimitive.AddAttachment asChild>
-        <Button type="text" shape="circle" className={styles['attach-button']} aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
+        <Button variant="ghost" className={styles['attach-button']} aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
       </ComposerPrimitive.AddAttachment>
     </Tooltip>
   );
@@ -270,7 +270,7 @@ function ComposerSurface({
                 <QueueItemPrimitive.Text className={styles['queue-text']} />
                 <Tooltip title={queue.removeLabel}>
                   <QueueItemPrimitive.Remove asChild>
-                    <Button type="text" size="small" aria-label={queue.removeLabel} icon={<CloseOutlined />} />
+                    <Button variant="ghost" size="sm" aria-label={queue.removeLabel} icon={<CloseOutlined />} />
                   </QueueItemPrimitive.Remove>
                 </Tooltip>
               </div>
@@ -300,7 +300,7 @@ function ComposerSurface({
                     ? <AttachmentThumb file={attachment.file} name={attachment.name} />
                     : <span className={styles['attachment-name']}><AttachmentPrimitive.Name /></span>}
                   <AttachmentPrimitive.Remove asChild>
-                    <Button type="text" size="small" className={styles['attachment-remove']} aria-label={attachments.removeLabel} icon={<CloseOutlined />} />
+                    <Button variant="ghost" size="sm" className={styles['attachment-remove']} aria-label={attachments.removeLabel} icon={<CloseOutlined />} />
                   </AttachmentPrimitive.Remove>
                 </AttachmentPrimitive.Root>
               )}

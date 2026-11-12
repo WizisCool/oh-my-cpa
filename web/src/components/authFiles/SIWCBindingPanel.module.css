@@ -25,12 +25,13 @@
 
 /* The verdict and the facts behind it, set into the dialog as one well. */
 .status-card {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 

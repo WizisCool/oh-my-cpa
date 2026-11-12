@@ -29,7 +29,7 @@
   flex-direction: column;
 }
 
-.system-card :global(.ant-card-body) {
+.system-card :global([data-slot="panel-body"]) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -253,12 +253,13 @@
 }
 
 .updater-command {
+  border: 0;
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -350,7 +351,7 @@
   font-weight: 600;
 }
 
-.changelog-versions :global(.anticon) {
+.changelog-versions svg {
   color: var(--meta);
   font-size: var(--text-sm);
 }
@@ -500,21 +501,22 @@
 }
 
 .markdown-body code {
+  border: 0;
   font-family: var(--font-mono, monospace);
   font-size: var(--text-sm);
   padding: 2px 5px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--fg);
 }
 
 .markdown-body pre {
+  border: 0;
   margin: 8px 0;
   padding: 10px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   overflow-x: auto;
 }
 
@@ -571,7 +573,6 @@
 .image-link {
   color: var(--accent);
   font-size: var(--text-sm);
-  font-style: italic;
   display: inline-block;
 }
 
@@ -694,7 +695,7 @@
   width: 8px;
   height: 8px;
   flex: none;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .maintenance-actions {
@@ -743,7 +744,7 @@
   overflow-wrap: anywhere;
 }
 
-.maintenance-action-head > :global(.ant-btn) {
+.maintenance-action-head > :global([data-slot='button']) {
   flex: 0 0 auto;
 }
 
@@ -788,9 +789,10 @@
 }
 
 .vacuum-space-table {
+  border: 0;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -877,12 +879,12 @@
    Malay compounds a noun phrase into one long word - "Penyelenggaraan" - so a title that fits
    one locale overflows a 390px phone in another. Allowing the wrap is what makes the same
    layout work in every registered language rather than in the language it was designed in. */
-.system-page :global(.ant-card-head-title) {
+.system-page :global([data-slot="panel-head-title"]) {
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.system-page :global(.ant-card-head) {
+.system-page :global([data-slot="panel-head"]) {
   align-items: flex-start;
 }
 

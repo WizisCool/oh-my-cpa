@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Segmented } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { UPDATE_STATUS_QUERY_KEY } from '../hooks/useUpdateNotice';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -131,7 +132,7 @@ export const PluginsPage: React.FC = () => {
         if (store.source_errors.length > 0) {
           toast.warning(t(isUpdateCheck && count > 0 ? 'plugin.check_updates_found' : 'plugin.store_refresh_partial', { n: count }), {
             items: store.source_errors.map((source) => ({ name: source.source_name, reason: source.message })),
-            actions: <Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>,
+            actions: <Button size="sm" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>,
           });
         } else if (isUpdateCheck) {
           // CPA can retain a previous version after a failed release lookup; zero is not proof of freshness.
@@ -148,7 +149,7 @@ export const PluginsPage: React.FC = () => {
           ? t('plugin.retry_after_seconds', { n: Math.ceil(retryAfter) }) : ''].filter(Boolean).join(' ');
         toast.error(t(isRateLimited ? 'plugin.rate_limited' : isUpdateCheck ? 'plugin.check_updates_failed' : 'plugin.store_refresh_failed'), {
           detail,
-          actions: isRateLimited ? <Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button> : undefined,
+          actions: isRateLimited ? <Button size="sm" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button> : undefined,
         });
       } finally {
         setIsRefreshingStore(false);
@@ -221,7 +222,7 @@ export const PluginsPage: React.FC = () => {
           tone="warning"
           title={t('plugin.system_disabled_title')}
           description={t('plugin.system_disabled_desc')}
-          action={<Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>}
+          action={<Button size="sm" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>}
         />
       )}
 

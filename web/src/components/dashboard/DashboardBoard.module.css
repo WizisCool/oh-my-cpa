@@ -13,7 +13,7 @@
   margin-bottom: 16px;
   padding: 10px 14px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   color: var(--muted);
   font-size: var(--text-sm);
 }
@@ -37,7 +37,7 @@
   inset: -4px;
   z-index: 1;
   border: 1px dashed var(--border);
-  border-radius: calc(var(--radius-lg) + 4px);
+  border-radius: calc(var(--radius-xl) + 4px);
   pointer-events: none;
   transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
 }
@@ -63,7 +63,7 @@
 .grip::after {
   content: '';
   position: absolute;
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: var(--fg-2);
   opacity: 0;
   transition: opacity var(--motion-fast) ease, background-color var(--motion-fast) ease;
@@ -76,7 +76,7 @@
 .grip-xy { right: -10px; bottom: -10px; width: 18px; height: 18px; cursor: nwse-resize; }
 .grip-xy::after {
   inset: 3px;
-  border-radius: 0 0 var(--radius-sm) 0;
+  border-radius: 0 0 var(--radius-md) 0;
   background: transparent;
   border-right: 3px solid var(--fg-2);
   border-bottom: 3px solid var(--fg-2);
@@ -115,6 +115,7 @@
 /* What follows the pointer: the widget itself on the floating surface, at its own size, so the
    operator sees what is being moved rather than its name standing in for it. */
 .lifted {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -122,8 +123,7 @@
   height: 100%;
   padding: 8px;
   overflow: hidden;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--elevated);
   box-shadow: var(--shadow-overlay);
   color: var(--fg);
@@ -139,7 +139,7 @@
   padding-left: 4px;
 }
 
-.lifted-head :global(.anticon) { color: var(--muted); }
+.lifted-head :global(.omc-icon) { color: var(--muted); }
 
 .toolbar {
   position: absolute;
@@ -155,7 +155,7 @@
   min-width: 0;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   background: color-mix(in srgb, var(--elevated) 94%, transparent);
   backdrop-filter: blur(6px);
 }
@@ -211,7 +211,7 @@
   display: grid;
   place-items: center;
   min-height: 96px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--meta);
   font-size: var(--text-sm);
@@ -221,7 +221,7 @@
   grid-column: 1 / -1;
   padding: 40px 16px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   color: var(--muted);
   text-align: center;
 }

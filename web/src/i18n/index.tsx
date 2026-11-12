@@ -2,7 +2,7 @@ import React from 'react';
 import type { Catalog, TFunc } from './catalog';
 import { formatMessage } from './format';
 import { DEFAULT_LANG, languageLocale, resolveInitialLang, type Lang } from './language';
-import { ANTD_LOCALES, CATALOGS } from './resources';
+import { CATALOGS } from './resources';
 import { getAppConfig } from '../types/config';
 
 export { LANGUAGES, languageLocale, isChineseLanguage } from './language';
@@ -61,11 +61,6 @@ export function makeT(lang: Lang): TFunc {
     vars,
     locale,
   );
-}
-
-/** Ant Design's locale for a reading language; `ConfigProvider` follows the console's choice. */
-export function antdLocale(lang: Lang) {
-  return ANTD_LOCALES[lang];
 }
 
 function isDeferredLanguage(lang: Lang): boolean {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Popover } from 'antd';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { NumberInput } from '../../components/common/NumberInput';
 import clsx from 'clsx';
 import {
@@ -679,16 +679,17 @@ const WeightControl: React.FC<{
     </div>
   );
   return (
-    <Popover
-      open={isEditorOpen}
-      onOpenChange={setIsEditorOpen}
-      trigger="click"
-      placement="bottomRight"
-      content={content}
-    >
-      <button type="button" ref={setChip} className={styles['weight-chip']} aria-label={t('orch.weight_named', { name })}>
-        ×{total}
-      </button>
+    <Popover open={isEditorOpen} onOpenChange={(next) => setIsEditorOpen(next)}>
+      <PopoverTrigger
+        render={
+          <button type="button" ref={setChip} className={styles['weight-chip']} aria-label={t('orch.weight_named', { name })}>
+            ×{total}
+          </button>
+        }
+      />
+      <PopoverContent placement="bottomRight">
+        {content}
+      </PopoverContent>
     </Popover>
   );
 };

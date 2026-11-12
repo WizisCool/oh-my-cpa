@@ -1,11 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Button,
-  Segmented,
-  Space,
-  Typography,
-} from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
 import { SuspenseFallback } from '../components/common/PageLoading';
 import {
@@ -58,7 +54,6 @@ import { ToolButton } from '../components/common/ToolButton';
 import '../components/config/config.css';
 import { AppModal } from '../components/common/AppModal';
 
-const { Text } = Typography;
 
 export const ConfigPage: React.FC = () => {
   const t = useT();
@@ -252,7 +247,7 @@ export const ConfigPage: React.FC = () => {
   const sourceTools = (
     <>
       <Button
-        size="small"
+        size="sm"
         icon={<FormatPainterOutlined />}
         disabled={!rawYaml}
         onClick={() => {
@@ -281,7 +276,7 @@ export const ConfigPage: React.FC = () => {
               {configQuery.isError ? t('cfg.status_error') : configQuery.isPending && !rawYaml ? t('cfg.status_loading') : isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
             </span>
             <Segmented
-              size="small"
+              size="sm"
               value={viewMode}
               onChange={(value) => void handleViewModeChange(value as 'visual' | 'source')}
               options={[
@@ -365,11 +360,11 @@ export const ConfigPage: React.FC = () => {
                 global modal the keyboard path uses. */}
             {hasConfigErrors ? (
               <Button
-                type="primary"
+                variant="primary"
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
                 disabled={!isDirty || isDemo}
-                title={isDemo ? t('demo.blocked') : undefined}
+                data-tip={isDemo ? t('demo.blocked') : undefined}
                 onClick={saveConfig}
               >
                 {t('cfg.source_save')}
@@ -382,11 +377,11 @@ export const ConfigPage: React.FC = () => {
                 disabled={!isDirty || saveMutation.isPending || isDemo}
               >
                 <Button
-                  type="primary"
+                  variant="primary"
                   icon={<SaveOutlined />}
                   loading={saveMutation.isPending}
                   disabled={!isDirty || isDemo}
-                  title={isDemo ? t('demo.blocked') : undefined}
+                  data-tip={isDemo ? t('demo.blocked') : undefined}
                 >
                   {t('cfg.source_save')}
                 </Button>
@@ -494,30 +489,30 @@ export const ConfigPage: React.FC = () => {
           style={isSourceFocused ? { top: visibleViewport.top, height: visibleViewport.height } : undefined}
         >
           <div className="config-source-toolbar">
-            {!isPhone && !isSourceFocused && <Space size={12}>
+            {!isPhone && !isSourceFocused && <div className="inline-flex items-center gap-3">
               <Tag tone={isDirty ? 'warn' : 'success'}>
                 {isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
               </Tag>
               {rawYaml && (
-                <Text type="secondary" className="mono-num">
+                <span className="mono-num text-xs text-muted-foreground">
                   {(new Blob([rawYaml]).size / 1024).toFixed(1)} KB · {t('cfg.lines_count', { n: rawYaml.split('\n').length })}
-                </Text>
+                </span>
               )}
-            </Space>}
+            </div>}
             <div className="config-source-actions">
-              {isSourceFocused && <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setIsSourceFocused(false)}>{t('cfg.source_return')}</Button>}
+              {isSourceFocused && <Button size="sm" icon={<ArrowLeftOutlined />} onClick={() => setIsSourceFocused(false)}>{t('cfg.source_return')}</Button>}
               <Button
-                size="small"
+                size="sm"
                 icon={<SearchOutlined />}
                 disabled={!rawYaml}
                 onClick={() => editorRef.current?.find()}
               >
                 {t('cfg.source_find')}
               </Button>
-              <Button size="small" aria-pressed={wordWrap === 'on'} onClick={() => setWordWrapOverride(wordWrap === 'on' ? 'off' : 'on')}>
+              <Button size="sm" aria-pressed={wordWrap === 'on'} onClick={() => setWordWrapOverride(wordWrap === 'on' ? 'off' : 'on')}>
                 {t('cfg.source_wrap')}
               </Button>
-              {!isSourceFocused && <Button ref={sourceFocusTriggerRef} size="small" icon={<FullscreenOutlined />} onClick={() => setIsSourceFocused(true)}>
+              {!isSourceFocused && <Button ref={sourceFocusTriggerRef} size="sm" icon={<FullscreenOutlined />} onClick={() => setIsSourceFocused(true)}>
                 {t('cfg.source_focus')}
               </Button>}
               {isPhone || isSourceFocused ? (
@@ -557,9 +552,9 @@ export const ConfigPage: React.FC = () => {
           </div>
 
           <div className="config-source-hint">
-            <Text type="secondary" style={{ fontSize: 11 }}>
+            <span className="text-xs text-muted-foreground">
               <kbd>Ctrl+S</kbd> / <kbd>Cmd+S</kbd> {t('cfg.save_shortcut', { key: '' })}
-            </Text>
+            </span>
           </div>
         </div>
       )}
@@ -591,7 +586,7 @@ export const ConfigPage: React.FC = () => {
           <CopyButton key="copy" showLabel size="middle" text={rawYaml} label={t('cfg.conflict_copy')} />,
           <Button
             key="reload"
-            type="primary"
+            variant="primary"
             icon={<ReloadOutlined />}
             onClick={() => void reloadAfterConflict()}
           >

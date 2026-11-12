@@ -1,6 +1,8 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Button, Input, Segmented } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
@@ -222,7 +224,7 @@ function TaskEditorModal({
       destroyOnHidden
       footer={[
         <Button key="cancel" onClick={onCancel} disabled={isSaving}>{t('common.cancel')}</Button>,
-        <Button key="save" type="primary" onClick={onSave} loading={isSaving} disabled={!canSaveWarmupTask(draft) || isDemoMode()}>
+        <Button key="save" variant="primary" onClick={onSave} loading={isSaving} disabled={!canSaveWarmupTask(draft) || isDemoMode()}>
           {t('common.save')}
         </Button>,
       ]}
@@ -486,7 +488,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
           title={t('warmup.tasks')}
           count={tasks.length || undefined}
           extra={(
-            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={startCreate} disabled={isDemo} data-testid="warmup-add-task">
+            <Button size="sm" variant="primary" icon={<PlusOutlined />} onClick={startCreate} disabled={isDemo} data-testid="warmup-add-task">
               {t('warmup.add_task')}
             </Button>
           )}
@@ -503,14 +505,14 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                 <li key={task.id} className={styles['task-row']} data-enabled={task.enabled} data-testid={`warmup-task-${task.id}`}>
                   <CredentialMark className={styles['task-mark']} credential={{ provider: task.provider, hint: task.account }} size={20} />
                   <div className={styles['task-copy']}>
-                    <span className={styles['task-title']} title={view.title}>{view.title}</span>
+                    <span className={styles['task-title']} data-tip={view.title} data-tip-overflow="">{view.title}</span>
                     <span className={styles['task-meta']}>{view.meta.join(' · ')}</span>
                     {next && <span className={styles['task-next']}>{next}</span>}
                   </div>
                   <div className={styles['task-actions']}>
                     <ToolButton
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       icon={<PlayCircleOutlined />}
                       label={t('warmup.run')}
                       loading={isRunning}
@@ -518,8 +520,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       onClick={() => runMutation.mutate(task.id)}
                     />
                     <ToolButton
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       icon={<EditOutlined />}
                       label={t('warmup.edit_task')}
                       disabled={isDemo}
@@ -534,7 +536,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                       onConfirm={() => deleteMutation.mutateAsync(task.id)}
                       disabled={isDemo || isRunning}
                     >
-                      <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isDemo || isRunning} />
+                      <Button size="sm" variant="ghost" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isDemo || isRunning} />
                     </ConfirmAction>
                     <Switch
                       size="small"
@@ -568,7 +570,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
               tooltip={t('warmup.clear_history')}
               onConfirm={() => clearMutation.mutateAsync()}
             >
-              <Button size="small" type="text" icon={<ClearOutlined />} aria-label={t('warmup.clear_history')} data-testid="warmup-clear-runs" />
+              <Button size="sm" variant="ghost" icon={<ClearOutlined />} aria-label={t('warmup.clear_history')} data-testid="warmup-clear-runs" />
             </ConfirmAction>
           )}
         />
@@ -599,7 +601,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
               })}
             </ul>
             {runs.length > RUNS_PREVIEW && !isShowingAllRuns && (
-              <Button type="link" size="small" className={styles['more']} onClick={() => setIsShowingAllRuns(true)}>
+              <Button variant="link" size="sm" className={styles['more']} onClick={() => setIsShowingAllRuns(true)}>
                 {t('warmup.show_all_runs', { count: runs.length })}
               </Button>
             )}

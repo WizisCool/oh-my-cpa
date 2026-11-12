@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Input } from 'antd';
-import type { TextAreaRef } from 'antd/es/input/TextArea';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { clsx } from 'clsx';
 import { CheckOutlined, EditOutlined, QuestionCircleOutlined } from '../../../components/icons';
 import { useI18n } from '../../../i18n';
@@ -45,7 +45,7 @@ export function QuestionPanel({ operation, onDecided }: QuestionPanelProps) {
   const [step, setStep] = React.useState(0);
   const [pendingAction, setPendingAction] = React.useState<'answer' | 'skip' | ''>('');
   const [error, setError] = React.useState('');
-  const textRef = React.useRef<TextAreaRef>(null);
+  const textRef = React.useRef<HTMLTextAreaElement>(null);
   const panelRef = React.useRef<HTMLElement>(null);
 
   const replies = questions.map((item, index) => draftReply(drafts[index], item));
@@ -225,7 +225,7 @@ export function QuestionPanel({ operation, onDecided }: QuestionPanelProps) {
                       <span className={styles['question-check']} aria-hidden="true">{draft.isOther ? <CheckOutlined /> : <EditOutlined />}</span>
                     </button>
                     {draft.isOther && (
-                      <Input.TextArea
+                      <Textarea
                         ref={textRef}
                         className={styles['question-other-input']}
                         aria-label={t('agent.question.answer')}
@@ -240,7 +240,7 @@ export function QuestionPanel({ operation, onDecided }: QuestionPanelProps) {
                 </div>
               </>
             ) : (
-              <Input.TextArea
+              <Textarea
                 aria-label={t('agent.question.answer')}
                 placeholder={t('agent.question.answer')}
                 autoSize={{ minRows: 2, maxRows: 6 }}
@@ -277,14 +277,14 @@ export function QuestionPanel({ operation, onDecided }: QuestionPanelProps) {
       <footer className={styles['question-foot']}>
         {options.length > 0 && <span className={styles['question-keys']}>{t('agent.question.keys')}</span>}
         <span className={styles['question-foot-spacer']} />
-        <Button type="text" disabled={!!pendingAction} loading={pendingAction === 'skip'} onClick={() => void decide(false)}>{t('agent.question.skip')}</Button>
+        <Button variant="ghost" disabled={!!pendingAction} loading={pendingAction === 'skip'} onClick={() => void decide(false)}>{t('agent.question.skip')}</Button>
         {hasReview && step > 0 && <Button disabled={!!pendingAction} onClick={() => setStep(step - 1)}>{t('agent.question.back')}</Button>}
         {step === lastStep ? (
-          <Button key="submit" type="primary" disabled={!isAllAnswered || !!pendingAction} loading={pendingAction === 'answer'} onClick={() => void decide(true)}>
+          <Button key="submit" variant="primary" disabled={!isAllAnswered || !!pendingAction} loading={pendingAction === 'answer'} onClick={() => void decide(true)}>
             {t('agent.question.submit')}
           </Button>
         ) : (
-          <Button key="next" type="primary" disabled={!isAnswered(step)} onClick={() => setStep(step + 1)}>{t('agent.question.next')}</Button>
+          <Button key="next" variant="primary" disabled={!isAnswered(step)} onClick={() => setStep(step + 1)}>{t('agent.question.next')}</Button>
         )}
       </footer>
     </section>

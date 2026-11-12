@@ -1,6 +1,6 @@
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { BugOutlined, ClockCircleOutlined, DatabaseOutlined, EditOutlined, FieldTimeOutlined, HistoryOutlined, ReloadOutlined, ThunderboltOutlined } from '../../components/icons';
@@ -59,8 +59,8 @@ export function UserMessage({ canEdit }: { canEdit: boolean }) {
           </div>
           <div className={workspace['composer-foot']}>
             <span className={workspace['composer-foot-start']} />
-            <ComposerPrimitive.Cancel asChild><Button size="small">{t('common.cancel')}</Button></ComposerPrimitive.Cancel>
-            <ComposerPrimitive.Send asChild><Button size="small" type="primary">{t('pg.edit_send')}</Button></ComposerPrimitive.Send>
+            <ComposerPrimitive.Cancel asChild><Button size="sm">{t('common.cancel')}</Button></ComposerPrimitive.Cancel>
+            <ComposerPrimitive.Send asChild><Button size="sm" variant="primary">{t('pg.edit_send')}</Button></ComposerPrimitive.Send>
           </div>
         </ComposerPrimitive.Root>
       </MessagePrimitive.Root>
@@ -75,7 +75,7 @@ export function UserMessage({ canEdit }: { canEdit: boolean }) {
         <ActionBarPrimitive.Root className={workspace['foot-actions']}>
           <Tooltip title={t('pg.edit_message')}>
             <ActionBarPrimitive.Edit asChild>
-              <Button type="text" size="small" aria-label={t('pg.edit_message')} icon={<EditOutlined />} />
+              <Button variant="ghost" size="sm" aria-label={t('pg.edit_message')} icon={<EditOutlined />} />
             </ActionBarPrimitive.Edit>
           </Tooltip>
         </ActionBarPrimitive.Root>
@@ -222,19 +222,19 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
       <span className={workspace['foot-actions']}>
         <CopyButton text={turn.reply} label={t('conversation.copy_answer')} disabled={!turn.reply} />
         <Tooltip title={t(turn.requestID ? 'pg.view_requests' : 'pg.request_id_missing')}>
-          <Button type="text" size="small" aria-label={t('pg.view_requests')} disabled={!turn.requestID} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
+          <Button variant="ghost" size="sm" aria-label={t('pg.view_requests')} disabled={!turn.requestID} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
         </Tooltip>
         {isLast && (
           <Tooltip title={t('pg.regenerate')}>
             {/* The framework's reload routes to the same replay the retry always was. A turn whose
                 image was dropped from storage cannot be replayed, and says so instead. */}
             <ActionBarPrimitive.Reload asChild disabled={!canRetry}>
-              <Button type="text" size="small" aria-label={t('pg.regenerate')} icon={<ReloadOutlined />} onClick={event => { if (!isReplayable(turn)) event.preventDefault(); }} />
+              <Button variant="ghost" size="sm" aria-label={t('pg.regenerate')} icon={<ReloadOutlined />} onClick={event => { if (!isReplayable(turn)) event.preventDefault(); }} />
             </ActionBarPrimitive.Reload>
           </Tooltip>
         )}
         <Tooltip title={t('pg.inspect')}>
-          <Button type="text" size="small" aria-label={t('pg.inspect')} icon={<BugOutlined />} onClick={() => onInspect(turn)} />
+          <Button variant="ghost" size="sm" aria-label={t('pg.inspect')} icon={<BugOutlined />} onClick={() => onInspect(turn)} />
         </Tooltip>
       </span>
     </div>

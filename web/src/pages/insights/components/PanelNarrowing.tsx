@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useT } from '../../../i18n';
 import styles from '../insights.module.css';
 
@@ -18,7 +18,7 @@ interface PanelNarrowingProps {
 export const PanelNarrowing: React.FC<PanelNarrowingProps> = ({ count, unit, onClear }) => {
   const t = useT();
   return count > 0 ? (
-    <Button type="link" size="small" className={styles['ranking-clear']} onClick={onClear}>
+    <Button variant="link" size="sm" className={styles['ranking-clear']} onClick={onClear}>
       {t('insights.filter_clear_one', { n: count })}
     </Button>
   ) : (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { Tooltip } from '../../common/Tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../../api/client';
@@ -272,7 +272,7 @@ export default function ReceiptShowcase({ range, keyFilter, onClose }: ReceiptSh
               </Tooltip>
               <Button
                 block
-                type="primary"
+                variant="primary"
                 icon={<DownloadOutlined />}
                 loading={pendingAction === 'download'}
                 disabled={!isReady || pendingAction === 'copy'}

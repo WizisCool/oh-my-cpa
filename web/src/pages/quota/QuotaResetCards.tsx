@@ -1,4 +1,4 @@
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { ThunderboltOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
@@ -47,7 +47,7 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
               </span>
             </span>
             {expiries.length > 0 && (
-              <span className={styles.detail} title={expiries.map(until).join('\n')}>
+              <span className={styles.detail} data-tip={expiries.map(until).join('\n')}>
                 {t('quota.reset_credit_expires', { when: until(expiries[0]) })}
               </span>
             )}
@@ -63,7 +63,7 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
                   onConfirm={onRedeem}
                   isDanger
                 >
-                  <Button size="small" icon={<ThunderboltOutlined />} disabled={isDemo} title={isDemo ? t('demo.blocked') : undefined}>
+                  <Button size="sm" icon={<ThunderboltOutlined />} disabled={isDemo} data-tip={isDemo ? t('demo.blocked') : undefined}>
                     {t('quota.btn_reset_quota')}
                   </Button>
                 </ConfirmAction>
@@ -76,7 +76,7 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
         {liveGrants.map((grant) => (
           <div className={styles.card} key={grant.id} data-quota-reset="grant">
             <span className={styles.head}>
-              <span className={styles['grant-name']} title={grant.label}>{grant.label || t('quota.reset_grant_untitled')}</span>
+              <span className={styles['grant-name']} data-tip={grant.label} data-tip-overflow="">{grant.label || t('quota.reset_grant_untitled')}</span>
               <span className={styles.value}>
                 <span className={styles['value-prefix']}>{t('quota.reset_available')}</span>
                 <b>{grant.resets_left}</b>

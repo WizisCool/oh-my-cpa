@@ -16,7 +16,7 @@
 /* Its corner is the small tier, kept short of a circle on the glyph-sized marks the rail and the
    request rows draw. */
 .frame .skeleton {
-  border-radius: min(var(--radius-sm), 22%);
+  border-radius: min(var(--radius-md), 22%);
 }
 
 /* The artwork arrives over the block it was waited for. */

@@ -1,9 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tooltip } from 'antd';
-import type { TooltipRef } from 'antd/es/tooltip';
-import { createPortal } from 'react-dom';
+import { TooltipContent, TooltipReadout, TooltipRoot } from '@/components/ui/tooltip';
 import { RightOutlined } from '../icons';
 import { ApiError } from '../../api/client';
 import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';
@@ -131,33 +129,36 @@ export const HeatmapTooltipContent: React.FC<{
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const date = formatDay(day.day, lang, { year: 'numeric', month: 'long', day: 'numeric' });
-  // A day with nothing recorded says so in place of the two counts. Reporting "Requests 0 / Tokens 0"
-  // would be a measurement the panel cannot make - nothing is stored for that day, which is not the
-  // same claim as a day that carried no traffic - and the distinction is the one thing a reader
-  // comparing days needs to be able to see.
   const isRecorded = day.requests > 0 || day.tokens > 0;
+  const compactTokens = formatTokens(day.tokens, tokenStyle);
+  const exactTokens = formatTokensFull(day.tokens);
   return (
-    <dl className="heatmap-tip">
-      <div className="heatmap-tip-day">{date}</div>
-      {isRecorded ? (
-        <>
-          <div className="heatmap-tip-row">
-            <dt>{t('dash.heatmap.tip_requests')}</dt>
-            <dd>{full(day.requests)}</dd>
-          </div>
-          <div className="heatmap-tip-row">
-            <dt>{t('dash.heatmap.tip_tokens')}</dt>
-            <dd title={formatTokensFull(day.tokens)}>{formatTokens(day.tokens, tokenStyle)}</dd>
-          </div>
-          <Link className="heatmap-tip-link" to={href}>
+    <TooltipReadout
+      heading={date}
+      rows={
+        isRecorded
+          ? [
+              { name: t('dash.heatmap.tip_requests'), value: full(day.requests) },
+              {
+                name: t('dash.heatmap.tip_tokens'),
+                value: (
+                  <span data-tip={exactTokens !== compactTokens ? exactTokens : undefined}>
+                    {compactTokens}
+                  </span>
+                ),
+              },
+            ]
+          : [{ value: t('dash.heatmap.tip_no_requests') }]
+      }
+      footer={
+        isRecorded ? (
+          <Link className="heatmap-tip-link inline-flex items-center gap-1" to={href}>
             {t('dash.heatmap.open_requests')}
             <RightOutlined className="heatmap-tip-link-icon" />
           </Link>
-        </>
-      ) : (
-        <div className="heatmap-tip-empty">{t('dash.heatmap.tip_no_requests')}</div>
-      )}
-    </dl>
+        ) : undefined
+      }
+    />
   );
 };
 
@@ -178,17 +179,17 @@ const ActiveHeatmapTooltip: React.FC<{
   lang: Lang;
   onClose: () => void;
 }> = ({ target, entry, lang, onClose }) => {
-  const popupRef = React.useRef<TooltipRef>(null);
+  const popupRef = React.useRef<HTMLDivElement | null>(null);
   const popupId = React.useId();
   const { element, isOpen } = target;
 
   React.useLayoutEffect(() => {
     if (!isOpen) return;
     element.setAttribute('aria-describedby', popupId);
-    element.classList.add('ant-tooltip-open');
+    element.classList.add('omc-tooltip-open');
     return () => {
       element.removeAttribute('aria-describedby');
-      element.classList.remove('ant-tooltip-open');
+      element.classList.remove('omc-tooltip-open');
     };
   }, [element, isOpen, popupId, entry]);
 
@@ -196,12 +197,12 @@ const ActiveHeatmapTooltip: React.FC<{
     if (!isOpen) return;
     const dismissOutside = (event: PointerEvent) => {
       const node = event.target;
-      if (!(node instanceof Node) || element.contains(node) || popupRef.current?.popupElement?.contains(node)) return;
+      if (!(node instanceof Node) || element.contains(node) || popupRef.current?.contains(node)) return;
       onClose();
     };
     const dismissEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (popupRef.current?.popupElement?.contains(document.activeElement)) element.focus({ preventScroll: true });
+      if (popupRef.current?.contains(document.activeElement)) element.focus({ preventScroll: true });
       onClose();
     };
     document.addEventListener('pointerdown', dismissOutside, true);
@@ -212,21 +213,22 @@ const ActiveHeatmapTooltip: React.FC<{
     };
   }, [element, isOpen, onClose]);
 
-  return createPortal(
-    <Tooltip
-      ref={popupRef}
-      id={popupId}
-      open={isOpen}
-      trigger={[]}
-      placement="top"
-      classNames={{ root: 'heatmap-tip-popper' }}
-      styles={{ container: { maxWidth: 'none' } }}
-      title={<HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />}
-      destroyOnHidden
-    >
-      <span className="heatmap-tooltip-anchor" aria-hidden="true" />
-    </Tooltip>,
-    element,
+  if (!isOpen) return null;
+
+  return (
+    <TooltipRoot open>
+      <TooltipContent
+        ref={popupRef}
+        id={popupId}
+        anchor={element}
+        side="top"
+        sideOffset={6}
+        interactive
+        className="min-w-[180px] max-w-none rounded-lg px-3 py-2"
+      >
+        <HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />
+      </TooltipContent>
+    </TooltipRoot>
   );
 };
 

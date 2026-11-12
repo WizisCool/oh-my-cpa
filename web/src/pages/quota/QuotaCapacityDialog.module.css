@@ -1,5 +1,5 @@
 /* Three cards drawn the way every card in the console is: the page's ground inside the dialog's
-   elevated fill, one --border hairline, a PanelTitle head over a rule. Nothing here names a colour;
+   elevated fill, the edge shadow, a PanelTitle head over a rule. Nothing here names a colour;
    the theme's tokens carry every palette, light or dark. The forecast is told apart the way a
    selected tile is, by an accent frame, and its figures by their "≈". */
 .dialog-title {
@@ -10,13 +10,14 @@
 }
 
 .mark-tile {
+  border: 0;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
   border-radius: var(--radius-md);
   background: var(--bg);
 }
@@ -39,19 +40,20 @@
 }
 
 .card {
+  border: 0;
   display: grid;
   grid-row: span 4;
   grid-template-rows: subgrid;
   row-gap: 0;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
 .card[data-tone='forecast'] {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
 }
 
 .head {
@@ -191,6 +193,7 @@
   }
 
   .card {
+    border: 0;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: none;

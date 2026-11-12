@@ -49,9 +49,9 @@ export function usePlaygroundRun(language?: string): PlaygroundRun {
   const [lastRunID, setLastRunID] = React.useState('');
   const lastRunIDRef = React.useRef('');
   const [isRunning, setIsRunning] = React.useState(false);
-  const controllerRef = React.useRef<AbortController>();
-  const liveRef = React.useRef<Turn>();
-  const timerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const controllerRef = React.useRef<AbortController | undefined>(undefined);
+  const liveRef = React.useRef<Turn | undefined>(undefined);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = React.useRef(true);
 
   React.useEffect(() => {

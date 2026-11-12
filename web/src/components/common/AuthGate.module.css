@@ -65,11 +65,11 @@
   margin: -6px 0 20px;
 }
 
-.submit :global(.anticon-arrow-right) {
+.submit :global(.omc-icon-arrow-right) {
   transition: transform var(--motion-base) var(--ease-out);
 }
-.submit:hover :global(.anticon-arrow-right),
-.submit:focus-visible :global(.anticon-arrow-right) {
+.submit:hover :global(.omc-icon-arrow-right),
+.submit:focus-visible :global(.omc-icon-arrow-right) {
   transform: translateX(3px);
 }
 

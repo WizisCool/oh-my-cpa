@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Checkbox, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CloseOutlined, PlusOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
 import type { ManagementOAuthProviderModel } from '../../types/managementOAuthModelAlias';
@@ -173,7 +175,7 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
                     {meta && <span className={styles['row-meta']}>{meta}</span>}
                   </span>
                   <Button
-                    type="text"
+                    variant="ghost"
                     className={styles['row-action']}
                     icon={<CloseOutlined />}
                     aria-label={t('af.excluded_rule_remove', { rule: entry.rule })}
@@ -228,13 +230,13 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
                           className={styles['row-check']}
                           checked={model.isExcluded}
                           disabled={isDisabled || isHeldByPattern}
-                          onChange={(event) => {
-                            if (event.target.checked && rules.length >= OAUTH_EXCLUDED_MODEL_RULE_LIMIT) {
+                          onCheckedChange={(checked) => {
+                            if (checked && rules.length >= OAUTH_EXCLUDED_MODEL_RULE_LIMIT) {
                               setRuleError('too_many');
                               return;
                             }
                             setRuleError(undefined);
-                            onChange(setExcludedModelRule(rules, model.id, event.target.checked));
+                            onChange(setExcludedModelRule(rules, model.id, checked));
                           }}
                         >
                           <span className={styles['row-copy']}>

@@ -28,7 +28,7 @@ export function SIWCDialog({ file, canEdit, bindings, onClose }: SIWCDialogProps
     <AppModal open={Boolean(file)} title={t('siwc.title')} footer={null} onCancel={onClose} size="small" destroyOnHidden>
       {file && (
         <div className={styles.dialog} data-testid="siwc-dialog">
-          <p className={styles.target} title={identity?.isAccountPrimary ? maskAccountIn(file.name, identity.primary) : file.name}>{targetName ?? file.name}</p>
+          <p className={styles.target} data-tip={identity?.isAccountPrimary ? maskAccountIn(file.name, identity.primary) : file.name} data-tip-overflow="">{targetName ?? file.name}</p>
           <SIWCBindingPanel file={file} canEdit={canEdit} bindings={bindings} />
         </div>
       )}

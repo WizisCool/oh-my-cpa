@@ -1,5 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
-import { Button, Input, Select } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 import { useT } from '../../i18n';
 import { PROVIDER_ERROR_RULE_ACTIONS } from '../../types/providers';
@@ -108,24 +110,24 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                   />
                   <div className={styles['rule-tools']}>
                     <Button
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       icon={<ArrowUpOutlined />}
                       disabled={position === 0}
                       aria-label={`${ruleLabel}: ${t('policy.rule_move_up')}`}
                       onClick={() => onChange(moveErrorRule(rules, rule.id, -1))}
                     />
                     <Button
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       icon={<ArrowDownOutlined />}
                       disabled={position === rules.length - 1}
                       aria-label={`${ruleLabel}: ${t('policy.rule_move_down')}`}
                       onClick={() => onChange(moveErrorRule(rules, rule.id, 1))}
                     />
                     <Button
-                      size="small"
-                      type="text"
+                      size="sm"
+                      variant="ghost"
                       danger
                       icon={<DeleteOutlined />}
                       aria-label={`${ruleLabel}: ${t('common.delete')}`}
@@ -152,8 +154,8 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                         onChange={(event) => updateMatch(rule, match.id, { value: event.target.value })}
                       />
                       <Button
-                        size="small"
-                        type="text"
+                        size="sm"
+                        variant="ghost"
                         icon={<CloseOutlined />}
                         aria-label={`${ruleLabel}: ${t('policy.rule_remove_match')}`}
                         onClick={() =>
@@ -164,7 +166,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                   ))}
                   <div>
                     <Button
-                      size="small"
+                      size="sm"
                       icon={<PlusOutlined />}
                       onClick={() =>
                         updateRule(rule.id, {
@@ -185,7 +187,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
         </div>
       )}
       <Button
-        type="dashed"
+        variant="dashed"
         icon={<PlusOutlined />}
         onClick={() => onChange([...rules, createErrorRuleDraft(nextDraftId('rule'))])}
       >

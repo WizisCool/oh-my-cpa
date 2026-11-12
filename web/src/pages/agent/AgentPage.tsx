@@ -1,6 +1,12 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Button, Dropdown } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 import { ThemeProvider as OpenUIThemeProvider } from '@openuidev/react-ui';
 import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -457,7 +463,7 @@ export function AgentPage() {
           description={<code>{rejection.code}</code>}
           action={(
             <Button
-              size="small"
+              size="sm"
               disabled={isRunning || isAwaiting}
               onClick={() => {
                 const text = rejection.text;
@@ -490,40 +496,48 @@ export function AgentPage() {
     <div className={styles['shell-bar']}>
       {hasTurns && (
         <Tooltip title={isPhone ? t('agent.new') : undefined}>
-          <Button type="text" className={styles['shell-new']} data-testid="agent-new" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning} onClick={() => void reset()}>
+          <Button variant="ghost" className={styles['shell-new']} data-testid="agent-new" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning} onClick={() => void reset()}>
             <span>{t('agent.new')}</span>
           </Button>
         </Tooltip>
       )}
       {hasTurns && <span className={styles['shell-bar-rule']} aria-hidden="true" />}
       {hasTurns && (
-        <Dropdown
-          trigger={['click']}
+        <DropdownMenu
           open={isExportMenuOpen}
-          onOpenChange={setIsExportMenuOpen}
-          disabled={!canExport}
-          menu={{
-            items: [
-              { key: 'html', label: t('agent.export.html') },
-              { key: 'image', label: t('agent.export.image') },
-              { key: 'json', label: t('agent.export.json') },
-            ],
-            onClick: ({ key }) => {
-              setIsExportMenuOpen(false);
-              exportConversation(key as 'html' | 'image' | 'json');
-            },
+          onOpenChange={(next) => {
+            if (!canExport) return;
+            setIsExportMenuOpen(next);
           }}
         >
-          <Tooltip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
-            <Button type="text" aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={!canExport} />
-          </Tooltip>
-        </Dropdown>
+          <DropdownMenuTrigger
+            disabled={!canExport}
+            render={
+              <Tooltip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
+                <Button variant="ghost" aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={!canExport} />
+              </Tooltip>
+            }
+          />
+          <DropdownMenuContent placement="bottomRight">
+            {(['html', 'image', 'json'] as const).map((format) => (
+              <DropdownMenuItem
+                key={format}
+                onClick={() => {
+                  setIsExportMenuOpen(false);
+                  exportConversation(format);
+                }}
+              >
+                {t(`agent.export.${format}`)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       <Tooltip title={t('agent.directory')}>
-        <Button type="text" data-testid="agent-directory-open" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />
+        <Button variant="ghost" data-testid="agent-directory-open" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />
       </Tooltip>
       <Tooltip title={t('agent.connect')}>
-        <Button type="text" aria-label={t('agent.connect')} icon={<LinkOutlined />} onClick={() => setDrawerView('connect')} />
+        <Button variant="ghost" aria-label={t('agent.connect')} icon={<LinkOutlined />} onClick={() => setDrawerView('connect')} />
       </Tooltip>
     </div>
   );
@@ -537,8 +551,8 @@ export function AgentPage() {
       <WarningOutlined aria-hidden="true" />
       <span>{t('agent.operation.hint')}</span>
       <Button
-        type="link"
-        size="small"
+        variant="link"
+        size="sm"
         onClick={() => {
           const card = pageRef.current?.querySelector<HTMLElement>(`[data-approval-id="${CSS.escape(openOperation.id)}"]`);
           card?.scrollIntoView({ block: 'center' });
@@ -553,7 +567,7 @@ export function AgentPage() {
     <div className={styles['awaiting']} role="status" data-testid="agent-question">
       <QuestionCircleOutlined aria-hidden="true" />
       <span>{t('agent.openui.form_hint')}</span>
-      <Button type="link" size="small" loading={isSkipping} onClick={() => skipQuestion(openOperation)}>
+      <Button variant="link" size="sm" loading={isSkipping} onClick={() => skipQuestion(openOperation)}>
         {t('agent.openui.form_skip')}
       </Button>
     </div>
@@ -563,7 +577,7 @@ export function AgentPage() {
       <QuoteOutlined aria-hidden="true" />
       <ComposerPrimitive.QuoteText className={styles['quote-text']} />
       <ComposerPrimitive.QuoteDismiss asChild>
-        <Button type="text" size="small" aria-label={t('agent.quote.dismiss')} icon={<CloseOutlined />} />
+        <Button variant="ghost" size="sm" aria-label={t('agent.quote.dismiss')} icon={<CloseOutlined />} />
       </ComposerPrimitive.QuoteDismiss>
     </ComposerPrimitive.Quote>
   );
@@ -579,7 +593,7 @@ export function AgentPage() {
             {!!newestTurn?.images?.length && <> · {t('agent.turn.images', { n: newestTurn.images.length })}</>}
           </span>
           <Tooltip title={t('agent.turn.edit_cancel')}>
-            <Button type="text" size="small" aria-label={t('agent.turn.edit_cancel')} icon={<CloseOutlined />} onClick={() => { setEditTarget(''); runtime.thread.composer.setText(''); }} />
+            <Button variant="ghost" size="sm" aria-label={t('agent.turn.edit_cancel')} icon={<CloseOutlined />} onClick={() => { setEditTarget(''); runtime.thread.composer.setText(''); }} />
           </Tooltip>
         </span>
       )}
@@ -588,7 +602,7 @@ export function AgentPage() {
           {PRESENTATIONS[present].icon}
           <span className={workspace['composer-chip-text']}>{t(PRESENTATIONS[present].label)}</span>
           <Tooltip title={t('agent.present.remove')}>
-            <Button type="text" size="small" aria-label={t('agent.present.remove')} icon={<CloseOutlined />} onClick={() => setPresent(undefined)} />
+            <Button variant="ghost" size="sm" aria-label={t('agent.present.remove')} icon={<CloseOutlined />} onClick={() => setPresent(undefined)} />
           </Tooltip>
         </span>
       )}
@@ -641,7 +655,7 @@ export function AgentPage() {
                 toolbar={(
                   <SelectionToolbarPrimitive.Root className={styles['selection-toolbar']}>
                     <SelectionToolbarPrimitive.Quote asChild>
-                      <Button type="text" size="small" className={styles['selection-action']} icon={<QuoteOutlined />}>{t('agent.quote')}</Button>
+                      <Button variant="ghost" size="sm" className={styles['selection-action']} icon={<QuoteOutlined />}>{t('agent.quote')}</Button>
                     </SelectionToolbarPrimitive.Quote>
                   </SelectionToolbarPrimitive.Root>
                 )}

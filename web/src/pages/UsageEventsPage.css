@@ -64,12 +64,13 @@
   flex-direction: column;
   position: relative;
   z-index: 2;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   /* overflow: clip clips the translated stream without creating a programmatic scroll
      container, so keyboard focus inside the list can never scroll the slot itself. */
   overflow: clip;
 }
 .request-stream {
+  border: 0;
   container-type: inline-size;
   container-name: reqstream;
   --req-grid-columns: 20px 96px 88px minmax(140px, 1.6fr) minmax(130px, 1.3fr) 84px 76px 78px 132px 64px 64px 124px 76px 14px;
@@ -82,9 +83,30 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   position: relative;
+}
+/* The slot clips the stream it slides, and would clip an edge drawn outside it with it. So this
+   enclosure draws its ring inside: the top and sides on an overlay over the stream, the bottom and
+   its corners on the pagination, which stays at the slot's visible bottom while the stream slides.
+   The overlay reaches a pixel past the stream so its own bottom never doubles the pagination's. */
+.request-stream::after,
+.request-pagination::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--edge-ring);
+}
+.request-stream::after {
+  inset: 0 0 -1px;
+  z-index: 4;
+  border-radius: inherit;
+}
+.request-pagination::after {
+  inset: auto 0 0;
+  height: var(--radius-xl);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  clip-path: inset(1px 0 0);
 }
 .request-pagination {
   position: relative;
@@ -241,19 +263,19 @@
     gap: 4px;
   }
   /* The ingest verdict is the one flexible item: it gives way first, and the tools keep the edge. */
-  .request-events-page .terminal-page-head > .request-actions > .ant-btn:has(.ant-badge) {
+  .request-events-page .terminal-page-head > .request-actions > [data-slot="button"]:has([data-slot="status-dot"]) {
     flex: 0 1 auto;
     min-width: 0;
     margin-inline-end: auto;
     padding-inline: 6px;
     overflow: hidden;
   }
-  .request-events-page .terminal-page-head .ant-badge {
+  .request-events-page .terminal-page-head [data-slot="status-dot"] {
     display: flex;
     align-items: center;
     min-width: 0;
   }
-  .request-events-page .terminal-page-head .ant-badge-status-text {
+  .request-events-page .terminal-page-head [data-slot="status-dot"] > span:last-child {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -264,10 +286,12 @@
     min-height: 0;
   }
   .request-stream {
-    border-inline: 0;
-    border-bottom: 0;
     border-radius: 0;
     min-height: 0;
+  }
+  .request-stream::after,
+  .request-pagination::after {
+    content: none;
   }
   .request-pagination {
     padding: 6px 12px max(6px, env(safe-area-inset-bottom));

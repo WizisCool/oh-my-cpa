@@ -242,7 +242,7 @@ function ProviderRow({ provider, blocks, isPhone, hasActivityGrid, activityLabel
           />
           <span
             className={`status-pip ${provider.disabled ? 'is-disabled' : 'is-active'}`}
-            title={provider.disabled ? t('dash.providers_status_disabled') : undefined}
+            data-tip={provider.disabled ? t('dash.providers_status_disabled') : undefined}
           />
         </div>
         <div className="provider-title-line">

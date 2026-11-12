@@ -23,9 +23,7 @@
 }
 
 .recovery-panel {
-  border-color: var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: none;
+  border-radius: var(--radius-xl);
 }
 
 /* Programmatic heading focus identifies the new page, not an interactive control. */
@@ -63,12 +61,13 @@
 }
 
 .diagnostic-code {
+  border: 0;
   max-height: 240px;
   overflow: auto;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg-2);
   font-family: var(--font-mono);
@@ -110,7 +109,7 @@
     flex-direction: column;
   }
 
-  .recovery-actions :global(.ant-btn) {
+  .recovery-actions :global([data-slot='button']) {
     width: 100%;
     min-height: 44px;
     height: auto;
@@ -121,7 +120,7 @@
     flex-wrap: wrap;
   }
 
-  .diagnostics :global(.panel-title-extra .ant-btn),
+  .diagnostics :global(.panel-title-extra [data-slot='button']),
   .stack-details summary {
     min-height: 44px;
   }

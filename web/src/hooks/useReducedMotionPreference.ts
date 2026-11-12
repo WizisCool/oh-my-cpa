@@ -1,6 +1,4 @@
 import React from 'react';
-import { Provider as LibraryMotionProvider } from '@rc-component/motion';
-import { usePrefersReducedMotion } from './usePrefersReducedMotion';
 import { usePreference, type Preference } from './usePreference';
 import {
   DEFAULT_REDUCED_MOTION,
@@ -23,7 +21,5 @@ export const MotionPreferenceSync: React.FC = () => {
 };
 
 /** Keep the provider mounted so changing motion preserves page state and portalled control lifecycles. */
-export const MotionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const isReducedMotion = usePrefersReducedMotion();
-  return React.createElement(LibraryMotionProvider, { motion: !isReducedMotion }, children);
-};
+export const MotionProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
+  React.createElement(React.Fragment, null, children);

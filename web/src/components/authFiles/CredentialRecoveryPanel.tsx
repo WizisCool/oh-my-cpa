@@ -1,4 +1,4 @@
-import { App, Button, Typography } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useMutation } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { api, describeError } from '../../api/client';
@@ -8,12 +8,11 @@ import { isDemoMode } from '../../types/demoMode';
 import { formatGatewayTimestamp } from '../../utils/time';
 import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel } from '../common/StatusLabel';
-import { Notice, useToast } from '../feedback';
+import { Notice, useConfirmModal, useToast } from '../feedback';
 import { CheckOutlined } from '../icons';
 import { renewalDetail, renewalLabel, renewalTone } from './credentialRecovery';
 import styles from './CredentialRecoveryPanel.module.css';
 
-const { Text } = Typography;
 
 /** One piece of evidence: confirmed, refuted, or not yet observed at all. */
 function EvidenceStep({ title, value, hint, action }: {
@@ -29,7 +28,7 @@ function EvidenceStep({ title, value, hint, action }: {
     <div className={styles['step-body']}>
       <span className={styles['step-title']}>{title}</span>
       <span className={styles['step-state']}>{t(`recovery.${evidence}`)}</span>
-      {hint && <Text type="secondary" className={styles['hint']}>{hint}</Text>}
+      {hint && <span className={`text-muted-foreground ${styles['hint']}`}>{hint}</span>}
     </div>
     {action}
   </li>;
@@ -42,7 +41,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
   onChanged: () => void;
 }) {
   const t = useT();
-  const { modal } = App.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const verification = useMutation({
     mutationFn: (target: { name: string; authIndex?: string }) => api.verifyManagementAuthFile(target.name, target.authIndex),
@@ -70,7 +69,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
     <div className={styles['status']}>
       <div className={styles['status-head']}>
         <StatusLabel tone={renewalTone(file)} className={styles['status-headline']}>{t(renewalLabel(file))}</StatusLabel>
-        <Text type="secondary" className={styles['status-detail']}>{t(renewalDetail(file))}</Text>
+        <span className={`text-muted-foreground ${styles['status-detail']}`}>{t(renewalDetail(file))}</span>
       </div>
       <dl className={styles['status-facts']}>
         <div><dt>{t('recovery.access_expires')}</dt><dd className="mono-num">{timestamp(file.access_token_expires_at)}</dd></div>
@@ -95,7 +94,7 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
           title={t('recovery.inference')}
           value={file.inference_verified}
           hint={file.inference_verified ? undefined : t('recovery.inference_hint')}
-          action={file.inference_verified ? undefined : <Button size="small" disabled={isBlocked} loading={verification.isPending} data-credential-verify onClick={verify}>
+          action={file.inference_verified ? undefined : <Button size="sm" disabled={isBlocked} loading={verification.isPending} data-credential-verify onClick={verify}>
             {t('recovery.verify_now')}
           </Button>}
         />
@@ -106,8 +105,8 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
     {onRecover && <div className={styles['block']}>
       <SectionHeading level="label" as="h4" title={t('recovery.sign_in')} />
       <div className={styles['recover']}>
-        <Text type="secondary" className={styles['hint']}>{t('recovery.recover_hint')}</Text>
-        <Button type={file.requires_sign_in ? 'primary' : 'default'} disabled={isBlocked} onClick={onRecover} data-credential-recover>
+        <span className={`text-muted-foreground ${styles['hint']}`}>{t('recovery.recover_hint')}</span>
+        <Button variant={file.requires_sign_in ? 'primary' : 'secondary'} disabled={isBlocked} onClick={onRecover} data-credential-recover>
           {t('recovery.recover')}
         </Button>
       </div>

@@ -109,7 +109,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--muted);
   transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
@@ -162,7 +162,7 @@
   align-items: start;
   gap: 12px 14px;
   padding: 12px 14px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   transition: background-color var(--motion-fast) var(--ease-standard);
 }
 
@@ -312,12 +312,13 @@
 /* Oh My CPA's registry is the store's featured section: one enclosure, washed with ink and
    lit from the top edge with the accent, its cards set on the page colour inside it. */
 .showcase {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 140px),
     color-mix(in srgb, var(--fg) 2.5%, transparent);
@@ -331,13 +332,14 @@
 }
 
 .showcase-mark {
+  border: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -375,13 +377,14 @@
 }
 
 .tag-filter {
+  border: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--fg);
   font-size: var(--text-sm);
@@ -417,21 +420,20 @@
 }
 
 .store-card {
+  border: 0;
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 10px;
   padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--bg);
-  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+  box-shadow: var(--shadow-edge);
+  transition: box-shadow var(--motion-fast) var(--ease-standard);
 }
 
-/* A store card is something to open, so the pointer raises it a step: its edge darkens and the
-   raised shadow comes under it, without moving it. */
+/* A store card is something to open, so the pointer raises it a step without moving it. */
 .store-card:hover {
-  border-color: color-mix(in srgb, var(--fg) 18%, transparent);
   box-shadow: var(--shadow-raised);
 }
 
@@ -494,7 +496,6 @@
 
 .card-description-muted {
   color: var(--meta);
-  font-style: italic;
 }
 
 .text-toggle {
@@ -645,13 +646,14 @@
 }
 
 .source-fixed {
+  border: 0;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--fg) 2.5%, transparent);
 }
 
@@ -667,7 +669,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--success);
 }
@@ -707,12 +709,13 @@
 }
 
 .rule-card {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -765,14 +768,15 @@
 /* ── config drawer ─────────────────────────────────────────────────────── */
 
 .config-hero {
+  border: 0;
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr) auto;
   align-items: start;
   gap: 14px;
   margin-bottom: 16px;
   padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--fg) 2.5%, transparent);
 }
 
@@ -825,7 +829,7 @@
   margin: 0 -8px;
   padding-right: 8px;
   padding-left: 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
@@ -902,13 +906,13 @@
 }
 
 .extra-key {
+  border: 0;
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   padding: 2px 8px;
-  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
@@ -977,6 +981,7 @@
   }
 
   .showcase {
+    border: 0;
     padding: 12px;
   }
 
@@ -986,6 +991,7 @@
   }
 
   .config-hero {
+    border: 0;
     grid-template-columns: 44px minmax(0, 1fr);
   }
 
@@ -1012,6 +1018,7 @@
 }
 
 .config-pages {
+  border: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1019,7 +1026,7 @@
   gap: 8px 12px;
   margin-bottom: 16px;
   padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }

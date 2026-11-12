@@ -2,12 +2,13 @@
    its own ground and frame over whatever is scrolled beneath it, the selection's count and scope
    leading and the actions trailing, on one line while the width allows. */
 .bar:global(.selection-bar.is-inline) {
+  border: 0;
   flex-wrap: nowrap;
   gap: 12px 20px;
-  min-height: 48px;
-  padding: 8px 8px 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  min-height: 46px;
+  /* The trailing buttons sit 6px inside the slab's corner, concentric with it (6 + 6 = 12). */
+  padding: 6px 6px 6px 16px;
+  border-radius: var(--radius-xl);
   background: var(--elevated);
   box-shadow: var(--shadow-float);
 }
@@ -40,6 +41,7 @@
 /* Where one line cannot hold both halves, the actions take a line of their own under the count. */
 @media (max-width: 900px) {
   .bar:global(.selection-bar.is-inline) {
+    border: 0;
     flex-wrap: wrap;
   }
 
@@ -51,6 +53,7 @@
 
 @media (max-width: 640px) {
   .bar:global(.selection-bar.is-inline) {
+    border: 0;
     padding: 12px;
   }
 
@@ -65,7 +68,7 @@
     width: 100%;
   }
 
-  .scope-controls > :global(.ant-btn) {
+  .scope-controls > :global([data-slot='button']) {
     height: auto;
     min-height: 24px;
     white-space: normal;
@@ -95,7 +98,7 @@
     border-inline-start: 0;
   }
 
-  .destructive-action > :global(.ant-btn) {
+  .destructive-action > :global([data-slot='button']) {
     width: 100%;
   }
 }

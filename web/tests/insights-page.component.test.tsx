@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router-dom';
@@ -6,36 +5,7 @@ import { installOmcApi, json, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { InsightsPage } from '../src/pages/insights/InsightsPage';
 import { ThemeProvider } from '../src/theme/ThemeContext';
-import { echarts, type ECharts } from '../src/charts/echarts/core';
-import type { EChartProps } from '../src/charts/echarts/EChart';
 import type { InsightsCubeResponse } from '../src/types/insights';
-
-vi.mock('../src/charts/echarts/EChart', () => ({
-  EChart: ({ option, label, testId, handlers }: EChartProps) => {
-    if (testId === 'insights-trend-chart') {
-      trendOption = option;
-      trendHandlers = handlers;
-    }
-    const chart = React.useRef<ECharts | null>(null);
-    const [svg, setSvg] = React.useState('');
-    React.useEffect(() => {
-      const instance = echarts.init(null, undefined, { renderer: 'svg', ssr: true, width: 800, height: 280 });
-      chart.current = instance;
-      return () => { instance.dispose(); chart.current = null; };
-    }, []);
-    React.useEffect(() => {
-      const instance = chart.current;
-      if (!instance) return;
-      instance.setOption({ ...option, animation: false }, { replaceMerge: ['series', 'xAxis', 'yAxis', 'grid'] });
-      setSvg(instance.renderToSVGString());
-    }, [option]);
-    const series = option.series as Array<{ id: string; name: string }>;
-    return <>
-      <div role="img" aria-label={label} data-testid={testId} dangerouslySetInnerHTML={{ __html: svg }} />
-      {testId === 'insights-trend-chart' && <ol data-testid="trend-series">{series.map((item) => <li key={item.id}>{item.name}</li>)}</ol>}
-    </>;
-  },
-}));
 vi.mock('../src/pages/insights/charts/InsightsFlowChart', () => ({ default: () => null }));
 vi.mock('../src/components/dashboard/RollingNumber', () => ({
   RollingNumber: ({ readout }: { readout?: { number: number; prefix?: string; suffix: string; format: Intl.NumberFormatOptions } }) =>
@@ -70,8 +40,7 @@ const CUBE: InsightsCubeResponse = {
   coverage: { fact_requests: 45, detail_requests: 0 },
 };
 
-let trendOption: EChartProps['option'];
-let trendHandlers: EChartProps['handlers'];
+
 let api: OmcApi;
 let lastSearch = '';
 
@@ -124,21 +93,19 @@ describe('insights page', () => {
     expect(new URLSearchParams(lastSearch).get('metric')).toBe('latency');
   });
 
-  it('isolates a series from the legend or chart click and formats tooltips for bar and line metrics', async () => {
+  it('isolates a series from the legend or chart click and resets on background click', async () => {
     mount('/insights?metric=tokens&group=key');
-    await screen.findByTestId('insights-trend-chart');
-    const series = () => trendOption.series as Array<{ id: string; name: string }>;
-    const names = () => series().map((item) => item.name);
+    const chart = await screen.findByTestId('insights-trend-chart');
+    const names = () => JSON.parse(chart.getAttribute('data-series') ?? '[]') as string[];
 
     const legend = screen.getByTestId('insights-trend-legend');
     const buttons = within(legend).getAllByRole('button');
     expect(names()).toEqual(['Design team', 'sk-…bbbb']);
 
-    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[0]!);
     await waitFor(() => expect(names()).toEqual(['Design team']));
 
-    const fakeChart = { convertFromPixel: () => [0, 0], dispatchAction: vi.fn() } as unknown as ECharts;
-    trendHandlers?.backgroundClick?.({}, fakeChart);
+    fireEvent.click(chart);
     await waitFor(() => expect(names()).toEqual(['Design team', 'sk-…bbbb']));
   });
 

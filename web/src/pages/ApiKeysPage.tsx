@@ -2,7 +2,9 @@ import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Form, Input } from 'antd';
+import { Field } from '@/components/ui/field';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { PlusOutlined, SyncOutlined } from '../components/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
@@ -414,10 +416,10 @@ export const ApiKeysPage: React.FC = () => {
 
   const addButton = (
     <Button
-      type="primary"
+      variant="primary"
       icon={<PlusOutlined />}
       disabled={!canWrite}
-      title={isDemo ? t('demo.blocked') : undefined}
+      data-tip={isDemo ? t('demo.blocked') : undefined}
       onClick={openAddEditor}
     >
       {t('cfg.api_keys_add')}
@@ -477,7 +479,7 @@ export const ApiKeysPage: React.FC = () => {
             onChange={setSearchQuery}
           />
           {isFiltered && (
-            <Button type="link" size="small" onClick={() => { setSearchQuery(''); setUseFilter('all'); }}>
+            <Button variant="link" size="sm" onClick={() => { setSearchQuery(''); setUseFilter('all'); }}>
               {t('pro.clear_filters')}
             </Button>
           )}
@@ -528,7 +530,7 @@ export const ApiKeysPage: React.FC = () => {
           <>
             <Button onClick={closeEditor}>{t('common.cancel')}</Button>
             <Button
-              type="primary"
+              variant="primary"
               loading={isSavingEditor}
               disabled={!keyInput.trim()}
               onClick={() => void handleSaveKey()}
@@ -540,8 +542,8 @@ export const ApiKeysPage: React.FC = () => {
       >
         {/* The provider editor's form: the name a reader knows the key by, then the secret, with
             the two actions that produce and take it beside the field. */}
-        <Form layout="vertical">
-          <Form.Item label={t('keys.col_name')} htmlFor="gateway-key-alias">
+        <div>
+          <Field label={t('keys.col_name')} htmlFor="gateway-key-alias">
             <Input
               id="gateway-key-alias"
               placeholder={t('keys.modal_alias_placeholder')}
@@ -552,8 +554,8 @@ export const ApiKeysPage: React.FC = () => {
               showCount
               autoFocus
             />
-          </Form.Item>
-          <Form.Item label={t('keys.modal_label')} htmlFor="gateway-key-value" required>
+          </Field>
+          <Field label={t('keys.modal_label')} htmlFor="gateway-key-value" required>
             <div className={styles['secret-field']}>
               <SecretInput
                 id="gateway-key-value"
@@ -566,7 +568,7 @@ export const ApiKeysPage: React.FC = () => {
                 className="config-mono-input"
               />
               <ToolButton
-                type="text"
+                variant="ghost"
                 icon={<SyncOutlined />}
                 label={t('cfg.api_keys_generate')}
                 onClick={() => {
@@ -576,11 +578,11 @@ export const ApiKeysPage: React.FC = () => {
               />
               <CopyButton size="middle" text={keyInput.trim()} label={t('cfg.api_keys_copy')} disabled={!keyInput.trim()} />
             </div>
-          </Form.Item>
+          </Field>
           {isValueChanged && (
             <Notice tone="warning" title={t('keys.value_change_warning')} />
           )}
-        </Form>
+        </div>
       </AppDrawer>
     </div>
   );

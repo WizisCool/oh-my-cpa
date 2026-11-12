@@ -92,7 +92,7 @@
   color: var(--muted);
   font-size: var(--text-sm);
   border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 
 .field {
@@ -149,22 +149,23 @@
 /* ── status: the verdict the panel opens on. Its tone washes in from the icon's corner, so the
    reading is carried by the icon, the words and a tint together rather than by colour alone. ── */
 .status {
+  border: 0;
   --tone: var(--muted);
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background:
     radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--tone) 11%, transparent), transparent 62%),
     var(--bg);
-  transition: border-color var(--motion-slow) var(--ease-standard);
+  transition: box-shadow var(--motion-slow) var(--ease-standard);
 }
 
 .status[data-tone='ok'] { --tone: var(--success); }
-.status[data-tone='warn'] { --tone: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
-.status[data-tone='run'] { --tone: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.status[data-tone='warn'] { --tone: var(--warn); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent), var(--edge-drop); }
+.status[data-tone='run'] { --tone: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), var(--edge-drop); }
 
 .status-head {
   display: flex;
@@ -224,7 +225,7 @@
   color: var(--fg-2);
   font-size: var(--text-sm);
   line-height: 1.5;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
@@ -250,7 +251,7 @@
 .stage {
   position: relative;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--fg) 10%, transparent);
   overflow: hidden;
 }
@@ -280,7 +281,7 @@
   gap: 18px;
   padding: 20px;
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--accent) 5%, var(--bg));
   animation: rise-in var(--motion-slow) var(--ease-out);
 }
@@ -338,7 +339,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: transparent;
   border: 1px solid var(--border);
   border-radius: 50%;
@@ -368,7 +369,7 @@
   line-height: 1.5;
 }
 
-.keep-safe > :global(.anticon) { flex: none; color: var(--warn); }
+.keep-safe > :global(.omc-icon) { flex: none; color: var(--warn); }
 
 /* ── schedule: a settings group, as on every settings page ── */
 /* Short controls stay beside their label even on a phone; the row does not need two lines. */
@@ -384,23 +385,25 @@
 .row-fold { padding: 0 18px 14px; }
 
 .passphrase-change {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--fg) 3%, transparent);
 }
 
 /* A one-off export is the same kind of card as the settings it sits beside. */
 .form-card {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 
@@ -408,13 +411,14 @@
 .locations,
 .archives,
 .jobs {
+  border: 0;
   display: flex;
   flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
   overflow: hidden;
 }
@@ -444,11 +448,11 @@
 /* The mark: every location sits on the same quiet tile, so a brand logo and a protocol glyph read
    as one family. The hue lives in the logo or the glyph, never in a tile of its own. */
 .mark {
+  border: 0;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--fg) 4%, transparent);
   color: var(--fg-2);
@@ -530,7 +534,7 @@
   color: var(--fg-2);
   background: transparent;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   cursor: pointer;
   transition:
     border-color var(--motion-fast) var(--ease-standard),
@@ -559,6 +563,7 @@
 }
 
 .choice {
+  border: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -569,12 +574,12 @@
   text-align: start;
   color: var(--fg);
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   overflow-wrap: anywhere;
   transition:
-    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
     background-color var(--motion-fast) var(--ease-standard),
     transform var(--motion-fast) var(--ease-standard);
 }
@@ -586,7 +591,7 @@
 }
 
 .choice:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), var(--edge-drop);
   background: color-mix(in srgb, var(--accent) 4%, var(--bg));
   transform: translateY(-1px);
 }
@@ -613,16 +618,17 @@
 }
 
 .step {
+  border: 0;
   display: flex;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
 .step[data-state='muted'] { opacity: 0.6; }
-.step[data-state='active'] { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.step[data-state='active'] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), var(--edge-drop); }
 
 .step-index {
   display: inline-flex;
@@ -662,14 +668,15 @@
 }
 
 .callback-url {
+  border: 0;
   display: block;
   padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--fg-2);
   background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   overflow-wrap: anywhere;
 }
 
@@ -764,12 +771,13 @@
 .unlock .field { flex: 1 1 240px; }
 
 .preview {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background:
     radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--success) 9%, transparent), transparent 60%),
     var(--bg);
@@ -863,14 +871,14 @@
   .form-card,
   .preview { padding: 16px; }
   .status-actions { padding-inline-start: 0; }
-  .status-actions > :global(.ant-btn-primary) { flex: 1 1 auto; min-height: 40px; }
+  .status-actions > :global([data-slot='button'][data-variant='primary']) { flex: 1 1 auto; min-height: 40px; }
   .row-fold { padding-inline: 16px; }
   .location { padding-inline-start: 10px; }
   /* Two providers per row on a phone: one per row turned the picker into a long column that
      pushed the rest of the panel out of sight. */
   .choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .choice { min-height: 68px; padding: 10px 8px; flex-direction: column; align-items: flex-start; gap: 6px; }
-  .location-actions :global(.ant-btn) { min-width: 36px; min-height: 36px; }
+  .choice { border: 0; min-height: 68px; padding: 10px 8px; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .location-actions :global([data-slot='button']) { min-width: 36px; min-height: 36px; }
   .job > .facts,
   .job > .job-actions,
   .job > :global(.omc-notice) { margin-inline-start: 0; }

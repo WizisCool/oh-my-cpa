@@ -23,7 +23,7 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
@@ -93,7 +93,7 @@
 
 .drawer-section {
   padding: 14px 16px 16px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -142,7 +142,7 @@
   margin-top: 4px;
   margin-bottom: 20px;
   padding: 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -213,7 +213,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 

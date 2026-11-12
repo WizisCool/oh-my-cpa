@@ -36,8 +36,9 @@
   opacity: 0.72;
 }
 
-/* Each entry is bounded by its own hairline, so a swatch can only belong to the name inside its box. */
+/* Each entry is bounded by its own edge, so a swatch can only belong to the name inside its box. */
 .button {
+  border: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -45,8 +46,8 @@
   max-width: 240px;
   min-height: 26px;
   padding: 2px 8px 2px 7px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-2);
   font: inherit;

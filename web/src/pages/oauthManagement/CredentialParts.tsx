@@ -1,7 +1,15 @@
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Checkbox, Dropdown } from 'antd';
-import type { MenuProps } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useConfirmModal } from '../../components/feedback';
 import { CredentialRenewalBadge } from '../../components/authFiles/CredentialRenewalBadge';
 import { renewalLabel } from '../../components/authFiles/credentialRecovery';
 import {
@@ -146,7 +154,7 @@ export function SelectBox({ record, isSelected, isBusy, actions }: {
     <Checkbox
       checked={isSelected}
       disabled={isBusy || !record.canSelectForFileBatch}
-      onChange={(event) => actions.onPick(record, isRangeCheckboxClick(event.nativeEvent as MouseEvent))}
+      onCheckedChange={(_checked, details) => actions.onPick(record, isRangeCheckboxClick(details.event as MouseEvent))}
       onClick={(event) => event.stopPropagation()}
       aria-label={t('af.select_one', { name: record.file.name })}
     />
@@ -192,8 +200,8 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
             onCancel={onRenamed}
           />
         ) : facts.displayName ? (
-          <span className={styles.primary} title={facts.displayName} data-credential-display-name="true">{facts.displayName}</span>
-        ) : accountToggle ?? <span className={styles.primary} title={file.name}>{facts.headline}</span>}
+          <span className={styles.primary} data-tip={facts.displayName} data-tip-overflow="" data-credential-display-name="true">{facts.displayName}</span>
+        ) : accountToggle ?? <span className={styles.primary} data-tip={file.name} data-tip-overflow="">{facts.headline}</span>}
         {file.note && !isRenaming && (
           <Tooltip title={<span className={styles['note-tip']}>{file.note}</span>}>
             <span className={styles.note} tabIndex={0} role="img" aria-label={`${t('af.field_note')}: ${file.note}`} data-credential-note="true">
@@ -306,7 +314,7 @@ export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true 
         </Tooltip>
         <CredentialRenewalBadge file={file} onOpen={() => actions.onOpen(record, 'renewal')} />
         {failure && !status.needsReauth && (
-          <span className={styles.failed} title={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
+          <span className={styles.failed} data-tip={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
         )}
       </div>
       {hasSIWC && siwc && (
@@ -349,8 +357,8 @@ export function EditCredentialButton({ record, facts, actions }: { record: OAuth
   return (
     <Tooltip title={t('omc.fleet_action_configure')}>
       <Button
-        type="text"
-        size="small"
+        variant="ghost"
+        size="sm"
         className={styles['icon-action']}
         icon={<EditOutlined />}
         disabled={facts.isBusy || !record.canSelectForFileBatch}
@@ -376,8 +384,8 @@ export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWo
   return (
     <Tooltip title={facts.needsRefresh ? `${t('quota.btn_refresh_quota')} · ${t('omc.refresh_needed')}` : t('quota.btn_refresh_quota')}>
       <Button
-        type="text"
-        size="small"
+        variant="ghost"
+        size="sm"
         className={clsx(styles['icon-action'], facts.needsRefresh && styles['refresh-needed'])}
         icon={<SyncOutlined spin={facts.isRefreshing} />}
         disabled={facts.isBusy || facts.isRefreshing || isDemo}
@@ -422,7 +430,7 @@ function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFu
 
 function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, onRename: () => void) {
   const t = useT();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   return (key: ActionKey) => {
     switch (key) {
       case 'details': actions.onOpen(record, 'overview'); break;
@@ -458,22 +466,41 @@ export function CredentialMenu({ record, facts, actions, onRename }: {
   const t = useT();
   const run = useRunAction(record, actions, onRename);
   const list = actionList(record, facts, t);
-  const items: MenuProps['items'] = list.flatMap((action) => {
-    const item = { key: action.key, icon: action.icon, label: action.label, disabled: action.disabled, danger: action.danger };
-    return action.key === 'download' ? [{ type: 'divider' as const }, item] : [item];
-  });
+  const [isOpen, setIsOpen] = React.useState(false);
   return (
-    <Dropdown trigger={['click']} menu={{ items, onClick: ({ key, domEvent }) => { domEvent.stopPropagation(); run(key as ActionKey); } }}>
-      <Tooltip title={t('keys.actions_more')}>
-        <Button
-          type="text"
-          size="small"
-          className={styles['icon-action']}
-          icon={<MoreOutlined />}
-          onClick={(event) => event.stopPropagation()}
-          aria-label={`${t('keys.actions_more')}: ${record.file.name}`}
-        />
-      </Tooltip>
-    </Dropdown>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger
+        render={
+          <Tooltip title={t('keys.actions_more')} open={isOpen ? false : undefined}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles['icon-action']}
+              icon={<MoreOutlined />}
+              onClick={(event) => event.stopPropagation()}
+              aria-label={`${t('keys.actions_more')}: ${record.file.name}`}
+            />
+          </Tooltip>
+        }
+      />
+      <DropdownMenuContent placement="bottomRight" onClick={(event) => event.stopPropagation()}>
+        {list.map((action) => (
+          <React.Fragment key={action.key}>
+            {action.key === 'download' && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              icon={action.icon}
+              disabled={action.disabled}
+              danger={action.danger}
+              onClick={(event) => {
+                event.stopPropagation();
+                run(action.key as ActionKey);
+              }}
+            >
+              {action.label}
+            </DropdownMenuItem>
+          </React.Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

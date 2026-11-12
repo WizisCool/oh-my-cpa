@@ -1,9 +1,9 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Typography } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
-import XMarkdown from '@ant-design/x-markdown';
 import { ArrowRightOutlined, LinkOutlined } from '../icons';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
@@ -13,7 +13,7 @@ import styles from '../../pages/SystemPage.module.css';
 import { LoadFailure, Notice } from '../feedback';
 import { Tooltip } from '../common/Tooltip';
 
-const { Text } = Typography;
+const REMARK_PLUGINS = [remarkGfm];
 
 /** The merged change log for one product, rendered as a drawer's content. */
 interface ProductChangelogProps {
@@ -32,6 +32,25 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
     staleTime: 60000,
   });
 
+  const markdownComponents = React.useMemo(() => ({
+    a: ({ href, children, node: _node, ...props }: any) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} {...props}>
+        {children}
+      </a>
+    ),
+    img: ({ src, alt }: any) => (
+      <a
+        href={src}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={styles['image-link']}
+        aria-label={alt || src}
+      >
+        [{t('sys.image_link')}: {alt || src}]
+      </a>
+    ),
+  }), [t]);
+
   if (isLoading) return <ListLoading />;
 
   if (isError) {
@@ -39,7 +58,7 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
   }
 
   if (!data || data.releases.length === 0) {
-    return <Text type="secondary">{t('sys.no_changelog_entries')}</Text>;
+    return <p className="m-0 text-fg-2">{t('sys.no_changelog_entries')}</p>;
   }
 
   return (
@@ -125,29 +144,9 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
               <div className={styles['release-notes-missing']}>{t('sys.notes_unavailable')}</div>
             ) : (
               <div className={styles['markdown-body']}>
-                <XMarkdown
-                  content={release.body}
-                  escapeRawHtml
-                  openLinksInNewTab
-                  components={{
-                    a: ({ href, children, domNode: _d, streamStatus: _s, ...props }: any) => (
-                      <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} {...props}>
-                        {children}
-                      </a>
-                    ),
-                    img: ({ src, alt, domNode: _d, streamStatus: _s }: any) => (
-                      <a
-                        href={src}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles['image-link']}
-                        aria-label={alt || src}
-                      >
-                        [{t('sys.image_link')}: {alt || src}]
-                      </a>
-                    ),
-                  }}
-                />
+                <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
+                  {release.body}
+                </ReactMarkdown>
               </div>
             )}
           </li>
@@ -156,4 +155,3 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
     </div>
   );
 };
-

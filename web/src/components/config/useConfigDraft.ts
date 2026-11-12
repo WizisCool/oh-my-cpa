@@ -1,6 +1,5 @@
 import React from 'react';
 
-import { App as AntdApp } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
 
@@ -14,7 +13,7 @@ import type { ConfigScalarsResponse } from '../../types/configManagement';
 import type { PayloadValidationIssue } from './payloadRules';
 import { formatStringMapIssue, type StringMapDraftState, type StringMapValidationIssue } from './StringMapEditor';
 import type { YamlSourceEditorRef } from './YamlSourceEditor';
-import { useToast } from '../feedback';
+import { useConfirmModal, useToast } from '../feedback';
 
 /**
  * The configuration draft and the transaction that saves it.
@@ -39,7 +38,7 @@ import { useToast } from '../feedback';
  */
 export function useConfigDraft() {
   const t = useT();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
   const editorRef = React.useRef<YamlSourceEditorRef | null>(null);

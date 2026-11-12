@@ -1,9 +1,14 @@
 import React from 'react';
-import { App as AntdApp, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderResult } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../../src/i18n';
+import {
+  clearActiveConfirmModal,
+  clearAllToasts,
+  ConfirmDialogHost,
+  Toaster,
+} from '../../src/components/feedback';
 
 export interface RenderOptions {
   /** Wraps the tree in a router at this entry. */
@@ -25,24 +30,26 @@ export function createTestQueryClient() {
 /** Called by `setup.ts` after each test, once the tree has been unmounted. */
 export function clearTestQueryClients() {
   for (const client of clients.splice(0)) client.clear();
+  clearAllToasts();
+  clearActiveConfirmModal();
 }
 
 /**
  * Renders inside the providers every console surface runs under: the query client, the
- * console's language and antd's App context. Each mount gets its own client unless one is
+ * console's language and the feedback hosts. Each mount gets its own client unless one is
  * passed; every client is cleared after the test.
  */
 export function renderWithOmc(ui: React.ReactNode, options: RenderOptions = {}): RenderResult & { client: QueryClient } {
   const client = options.client ?? createTestQueryClient();
   const routed = options.route === undefined ? ui : <MemoryRouter initialEntries={[options.route]}>{ui}</MemoryRouter>;
   const tree = (
-    <ConfigProvider theme={{ token: { motion: false } }}>
-      <QueryClientProvider client={client}>
-        <I18nProvider>
-          <AntdApp>{routed}</AntdApp>
-        </I18nProvider>
-      </QueryClientProvider>
-    </ConfigProvider>
+    <QueryClientProvider client={client}>
+      <I18nProvider>
+        <Toaster />
+        <ConfirmDialogHost />
+        {routed}
+      </I18nProvider>
+    </QueryClientProvider>
   );
   return { ...render(options.isStrict ? <React.StrictMode>{tree}</React.StrictMode> : tree), client };
 }

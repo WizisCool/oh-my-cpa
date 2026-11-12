@@ -1,6 +1,112 @@
 /* ── Sarasa Mono SC: the core shard of each weight ──────────────── */
 /* The rest of the font is registered asynchronously by `web/src/theme/sarasaFont.ts`. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "./assets/fonts/sarasa/core.css";
+
+/* ── Tailwind v4 ↔ OMC live palette & material bridge ──────────────────────
+   Every utility reads the active palette's custom properties on :root rather
+   than baked hex or zinc/neutral steps. Default Tailwind color, radius, shadow
+   and font-size scales are cleared so off-scale tokens cannot compile. */
+@theme inline {
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
+  --default-font-family: var(--font-ui);
+  --default-mono-font-family: var(--font-mono);
+
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-meta: var(--meta);
+
+  --color-card: var(--bg);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--elevated);
+  --color-popover-foreground: var(--fg);
+  --color-tooltip: var(--tooltip-bg);
+  --color-tooltip-foreground: var(--tooltip-fg);
+  --color-thumb: var(--thumb-bg);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-on);
+  --color-brand: var(--accent);
+  --color-brand-hover: var(--accent-hover);
+  --color-brand-active: var(--accent-active);
+  --color-brand-foreground: var(--accent-on);
+
+  --color-secondary: color-mix(in srgb, var(--fg) 6%, transparent);
+  --color-secondary-hover: color-mix(in srgb, var(--fg) 10%, transparent);
+  --color-secondary-active: color-mix(in srgb, var(--fg) 13%, transparent);
+  --color-secondary-foreground: var(--fg);
+
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--hover);
+  --color-accent-foreground: var(--fg);
+  --color-hover: var(--hover);
+  --color-hover-inset: var(--hover-inset);
+  --color-selected: var(--selected-inset);
+  --color-field: var(--thread-field);
+  --color-field-hover: var(--thread-field-hover);
+
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-hairline: var(--thread-hairline);
+  --color-input: var(--thread-field);
+  --color-ring: var(--accent);
+  --color-overlay: var(--overlay-mask);
+
+  --radius-*: initial;
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --shadow-edge: var(--shadow-edge);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-float: var(--shadow-float);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-control: var(--shadow-control);
+  --shadow-well: var(--shadow-well);
+  --shadow-field-hover: var(--shadow-field-hover);
+  --shadow-field-focus: var(--shadow-field-focus);
+  --shadow-field-invalid: var(--shadow-field-invalid);
+  --shadow-field-invalid-focus: var(--shadow-field-invalid-focus);
+  --shadow-focus: var(--shadow-focus);
+
+  --text-*: initial;
+  --text-2xs: var(--text-2xs);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-md: var(--text-md);
+  --text-base: var(--text-base);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: var(--ease-standard);
+}
 
 :root {
   /* The two typographic roles, both the bundled Sarasa stack by default; an operator's choice
@@ -34,11 +140,13 @@
      background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 resting,
      6.93:1 pressed). Both are measured against the *same* label, which is why the ladder solves them
      together rather than one at a time. */
+  --primary: #0579bd;
+  --primary-hover: #025e94;
+  --primary-active: #034873;
+  --primary-on: #ffffff;
   --accent: #00a2fb;
   --accent-hover: #0579bd;
   --accent-active: #025e94;
-  /* The label colour for a filled accent control, matching the presets' own `accentOn` token.
-     White in both fallback palettes; a preset whose accent fill is light carries a dark step. */
   --accent-on: #ffffff;
   --success: #10b981;
   --warn: #f59e0b;
@@ -86,15 +194,12 @@
   /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
      where the bright accent reads 6.12:1 - clear of AA, so the ladder's own link step is used. */
   --heatmap-tip-link: #00a2fb;
-  /* Categorical series palette: ZCode & Codex inspired developer console
-     palette matching AntV and Tremor. Alternates vibrant primary hues (Blue -> Emerald -> Purple ->
-     Coral -> Amber -> Cyan) ensuring immediate visual hierarchy, warm-cool harmony, and rich telemetry. */
-  --series-1: #3b82f6;
+  --series-1: #6588f5;
   --series-2: #10b981;
-  --series-3: #8b5cf6;
+  --series-3: #9b7bf7;
   --series-4: #f43f5e;
   --series-5: #f59e0b;
-  --series-6: #06b6d4;
+  --series-6: #14b8a6;
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
@@ -108,38 +213,102 @@
   --effort-5: #f08dee;
   --effort-6: #ff8cc1;
   --effort-tint: 14%;
-  /* The type scale. Sizes below the page title are these seven steps; a
-     literal size is a display numeral or an icon, which belong to one surface each. */
-  --text-2xs: 10px;
-  --text-xs: 11px;
+  /* 4-step typography scale (>= 12px floor: 12 / 13 / 16 / 20). Legacy aliases
+     (--text-2xs, --text-xs, --text-base) collapse onto the four steps so no surface
+     drops below 12px or introduces extra fractional tiers. */
+  --text-2xs: 12px;
+  --text-xs: 12px;
   --text-sm: 12px;
   --text-md: 13px;
-  --text-base: 14px;
+  --text-base: 13px;
   --text-lg: 16px;
   --text-xl: 20px;
-  /* The corner scale nests: a shape inside another takes the next step down, so an inner
-     corner never reads rounder than the edge around it. */
+  --hairline: 1px;
+  /* The corner scale. Five steps, one per role, and nothing between them: radii are read as a
+     family, so a sixth value reads as a mistake rather than as a choice. `RADIUS` in
+     `theme/radius.ts` carries the same numbers to the component theme, the canvas painters and
+     exported conversations.
+       xs  2  a mark: meters, bars, swatches, a key cap
+       sm  4  a shape nested in a control: tags, check boxes, a thumb in its track
+       md  6  a control: buttons, fields, rows, tabs, menu entries, brand tiles
+       lg 10  a block: menus and popovers, notices, code, a card inside a card
+       xl 12  a surface: the page panel, cards, tables, dialogs, drawers, toasts
+     Nested shapes are concentric: the inner radius is the outer radius less the gap between
+     them, so a 6 control inset 4 sits in a 10 block, a 4 thumb inset 2 in a 6 track and a 6 row
+     inset 6 in a 12 card. Once the gap is as wide as the outer radius the curves no longer read
+     together, and each shape keeps its own step. A dot, a radio, a spinner and an avatar are
+     circles; nothing else is a pill. */
   --radius-xs: 2px;
-  /* A check box is a mark-sized control: the control step would round a 16px box into a dot. */
-  --radius-check: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  /* Conversation shapes sit on the same scale: printed documents and controls take the
-     control step, floating conversation surfaces the menu step, and the composer and
-     bubbles the card step. Foreground fills group content without adding a border; theme
-     hydration projects the same values from THREAD_RADII and THREAD_FILL_SHARES. */
-  --radius-document: 8px;
-  --radius-control: 6px;
-  --radius-surface: 10px;
-  --radius-thread: 12px;
-  /* Elevation belongs to what floats. A static surface is a fill and a hairline; a layer the
-     reader summoned - a menu, a tooltip, a dialog - lifts off the page with a soft shadow, so
-     "above the page" and "part of the page" never share a look. Dark pages need a deeper
-     shadow to read at all, which is why each mode carries its own pair. */
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.32), 0 0 0 0.5px rgb(0 0 0 / 0.28);
-  --shadow-float: 0 12px 32px -8px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.3);
-  --shadow-overlay: 0 28px 64px -16px rgb(0 0 0 / 0.7), 0 4px 16px rgb(0 0 0 / 0.35);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  /* Edges are shadows, never borders, and every one is a material at a depth relative to the page:
+       raised   a surface resting on the page - the panel, cards, tables, code, the composer - and
+                a control standing on whatever holds it: a button, a segmented thumb
+       ground   the page itself
+       set in   a field or a track cut into the surface it sits on
+     A raised thing is a ring of the ink one pixel wide, which keeps the edge legible where a shadow
+     has nothing to fall on (a white card on a white page), and soft drops below it that grow with
+     the height; a set-in thing is the same ring drawn inside, with its shade at the top edge. The
+     surface steps say how far a thing stands off the page:
+       edge     a static surface or block
+       raised   something the hand moves or writes into: the composer, a dragged card, a knob,
+                and a pickable card under the pointer
+       float    a layer the reader summoned: menus, popovers, toasts, tooltips
+       overlay  a layer over the work: dialogs and side sheets
+     and the control steps sit under them at the scale of a control:
+       control  a button or a thumb standing on its ground
+       well     a field or a track set into its ground
+     The ring shares are solved per palette (`EDGE_STEPS` in `theme/palette.ts`) so that every
+     palette's edges stand the same perceptual step off its page, and the drops are cast in the
+     palette's own `--shade` ink; the values here are OMC Dark's and OMC Light's, for the first
+     frame. Dark pages need deeper drops to read at all, so each mode carries its own stack. */
+  --edge-share: 8.5%;
+  --lift-share: 11.5%;
+  --fine-share: 5.5%;
+  --shade: #000000;
+  --edge-ring: color-mix(in srgb, var(--fg) var(--edge-share), transparent);
+  --lift-ring: color-mix(in srgb, var(--fg) var(--lift-share), transparent);
+  --fine-ring: color-mix(in srgb, var(--fg) var(--fine-share), transparent);
+  /* On a dark page a drop has little to darken, so each dark stack also catches light on its top
+     edge: the inset line is what reads as material rather than as an outline. */
+  --edge-drop:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 5%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shade) 30%, transparent),
+    0 2px 8px -2px color-mix(in srgb, var(--shade) 30%, transparent);
+  --raised-drop:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 6%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shade) 36%, transparent),
+    0 4px 12px -4px color-mix(in srgb, var(--shade) 42%, transparent);
+  --float-drop:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 7%, transparent),
+    0 4px 12px color-mix(in srgb, var(--shade) 35%, transparent),
+    0 18px 40px -10px color-mix(in srgb, var(--shade) 60%, transparent);
+  --overlay-drop:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 7%, transparent),
+    0 8px 24px color-mix(in srgb, var(--shade) 40%, transparent),
+    0 32px 64px -16px color-mix(in srgb, var(--shade) 70%, transparent);
+  --control-drop:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 6%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shade) 30%, transparent);
+  --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 28%, transparent);
+  /* A state that colours an edge - selected, invalid, a drop target - swaps the ring and keeps
+     the drop: `box-shadow: 0 0 0 1px var(--accent), var(--edge-drop)`. */
+  --shadow-edge: 0 0 0 1px var(--edge-ring), var(--edge-drop);
+  --shadow-raised: 0 0 0 1px var(--lift-ring), var(--raised-drop);
+  --shadow-float: 0 0 0 1px var(--lift-ring), var(--float-drop);
+  --shadow-overlay: 0 0 0 1px var(--lift-ring), var(--overlay-drop);
+  --shadow-control: 0 0 0 1px var(--fine-ring), var(--control-drop);
+  --shadow-well: inset 0 0 0 1px var(--fine-ring), var(--well-drop);
+  --shadow-field-hover: inset 0 0 0 1px var(--lift-ring), var(--well-drop);
+  --shadow-field-focus: inset 0 0 0 1px var(--accent), 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  --shadow-field-invalid: inset 0 0 0 1px var(--danger), var(--well-drop);
+  --shadow-field-invalid-focus: inset 0 0 0 1px var(--danger), 0 0 0 2px color-mix(in srgb, var(--danger) 16%, transparent);
+  --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --tooltip-bg: var(--surface);
+  --tooltip-fg: var(--fg);
+  --thumb-bg: var(--border);
   --overlay-mask: rgb(0 0 0 / 0.5);
   --thread-field: color-mix(in srgb, var(--fg) 5%, transparent);
   --thread-field-hover: color-mix(in srgb, var(--fg) 8%, transparent);
@@ -182,6 +351,12 @@
   --ease-sheet-out: cubic-bezier(0.45, 0, 0.2, 1);
 }
 
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+
 :root[data-theme-mode='light'] {
   color-scheme: light;
   --bg: #ffffff;
@@ -189,10 +364,28 @@
   --canvas: #f5f5f5;
   --elevated: #ffffff;
   --selected-inset: #eaedef;
-  --shadow-raised: 0 1px 2px rgb(20 20 30 / 0.08), 0 0 0 0.5px rgb(20 20 30 / 0.06);
-  --shadow-float: 0 12px 32px -8px rgb(20 20 30 / 0.14), 0 2px 8px rgb(20 20 30 / 0.05);
-  --shadow-overlay: 0 28px 64px -16px rgb(20 20 30 / 0.22), 0 4px 16px rgb(20 20 30 / 0.06);
+  --edge-share: 12%;
+  --lift-share: 16.5%;
+  --fine-share: 7.5%;
+  --shade: #0d0d0e;
+  --edge-drop:
+    0 1px 2px color-mix(in srgb, var(--shade) 5%, transparent),
+    0 2px 8px -3px color-mix(in srgb, var(--shade) 7%, transparent);
+  --raised-drop:
+    0 1px 2px color-mix(in srgb, var(--shade) 6%, transparent),
+    0 4px 12px -4px color-mix(in srgb, var(--shade) 10%, transparent);
+  --float-drop:
+    0 2px 6px color-mix(in srgb, var(--shade) 6%, transparent),
+    0 16px 36px -10px color-mix(in srgb, var(--shade) 20%, transparent);
+  --overlay-drop:
+    0 4px 16px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 28px 60px -16px color-mix(in srgb, var(--shade) 26%, transparent);
+  --control-drop: 0 1px 2px color-mix(in srgb, var(--shade) 7%, transparent);
+  --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 5%, transparent);
   --overlay-mask: rgb(20 20 30 / 0.12);
+  --tooltip-bg: var(--fg);
+  --tooltip-fg: var(--bg);
+  --thumb-bg: var(--elevated);
   --fg: #1c1c1e;
   --fg-2: #505055;
   --muted: #787880;
@@ -200,6 +393,10 @@
   /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
      reads 2.71:1 there, while this reads 6.57:1 as a link and 7.09:1 under white text. The dark
      theme's link step is therefore this theme's filled-control step. */
+  --primary: #005d8f;
+  --primary-hover: #004a73;
+  --primary-active: #023b5d;
+  --primary-on: #ffffff;
   --accent: #005d8f;
   --accent-hover: #004a73;
   --accent-active: #023b5d;
@@ -229,15 +426,12 @@
   /* The link step of the accent ladder for this theme; the tooltip is on the card's surface rather
      than the page, and this is the step that clears 4.5:1 there. */
   --heatmap-tip-link: #005d8f;
-  /* Categorical series palette (light mode): Deep, rich, warm-neutral data visualization counterparts
-     for light card surfaces. Each slot maintains visual correspondence with its dark mode family while
-     clearing >= 3.0 graphical contrast. */
-  --series-1: #2563eb;
+  --series-1: #3d63cf;
   --series-2: #059669;
-  --series-3: #7c3aed;
+  --series-3: #6d47d9;
   --series-4: #e11d48;
   --series-5: #b45309;
-  --series-6: #0891b2;
+  --series-6: #0d8a7e;
   --series-track: #dcdce1;
   /* The same sweep as its darker steps, which is what stays legible on a light page. */
   --effort-1: #39626e;
@@ -249,174 +443,128 @@
   --effort-tint: 12%;
 }
 
-* { box-sizing: border-box; }
-/* Fixed-viewport shell: body itself never scrolls; the sidebar and the main
-   content column scroll independently (wheel applies to the hovered region). */
-html, body, #root { height: 100%; }
-body { overflow: hidden; }
-body {
-  margin: 0;
-  min-width: 320px;
-  background: var(--bg);
-  color: var(--fg);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  *, ::before, ::after {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+  /* Fixed-viewport shell: body itself never scrolls; the sidebar and the main
+     content column scroll independently (wheel applies to the hovered region). */
+  html, body, #root { height: 100%; }
+  body {
+    overflow: hidden;
+    margin: 0;
+    min-width: 320px;
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--accent); color: var(--accent-on); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  a { color: inherit; }
+  [hidden]:where(:not([hidden='until-found'])) { display: none !important; }
 }
-::selection { background: var(--accent); color: var(--accent-on); }
-button, input, textarea, select { font: inherit; }
-a { color: inherit; }
 
-/* Static surfaces are flat: a card, a table and the layout are a fill and a hairline. */
-.ant-layout, .ant-card, .ant-drawer-section {
-  box-shadow: none !important;
-}
-/* Floating layers lift off the page. A layer the reader summoned carries a soft
-   shadow and a hairline: the shadow says "above", the hairline keeps its edge legible where the
-   shadow has nothing to fall on - a light menu over a light page, a dark one over a dark page. */
-.ant-popover-container, .ant-dropdown-menu, .ant-select-dropdown,
-.ant-picker-dropdown .ant-picker-panel-container, .ant-notification-notice {
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-float) !important;
-}
-.ant-modal-container {
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-overlay) !important;
-}
-/* The mask dims the page rather than hiding it: the dialog is a question about what is behind it. */
-.ant-modal-mask, .ant-drawer-mask { background: var(--overlay-mask) !important; }
-/* The date panel needs the same fill step as the popover, dropdown and select
-   panels above; antd exposes no component token for it. */
-.ant-picker-dropdown .ant-picker-panel-container {
-  background: var(--elevated);
-}
-/* ── entrances: fade and settle ─────────────────────────────────────────────
-   antd zooms a panel in from 80% (a dialog from 20%, out of the pointer) and stretches a menu
-   down from 80% of its height. Both read as the panel flying in. Here a panel fades in while
-   settling the last few percent toward its origin, a menu also drops the last 4px toward its
-   control, and a dialog rises 8px into place: the reader sees the result arrive, not travel.
-   Opacity and transform only, so the transition stays on the compositor. */
-.ant-zoom-big-enter.ant-zoom-big-enter-active, .ant-zoom-big-appear.ant-zoom-big-appear-active,
-.ant-zoom-big-fast-enter.ant-zoom-big-fast-enter-active, .ant-zoom-big-fast-appear.ant-zoom-big-fast-appear-active {
-  animation-name: omc-float-in !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-slide-up-enter.ant-slide-up-enter-active, .ant-slide-up-appear.ant-slide-up-appear-active {
-  animation-name: omc-drop-in-below !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-slide-down-enter.ant-slide-down-enter-active, .ant-slide-down-appear.ant-slide-down-appear-active {
-  animation-name: omc-drop-in-above !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-zoom-big-leave.ant-zoom-big-leave-active, .ant-zoom-big-fast-leave.ant-zoom-big-fast-leave-active,
-.ant-slide-up-leave.ant-slide-up-leave-active, .ant-slide-down-leave.ant-slide-down-leave-active {
-  animation-name: omc-float-out !important;
-  animation-duration: var(--motion-fast) !important;
-  animation-timing-function: var(--ease-standard) !important;
-}
-.ant-popover,
-.ant-dropdown,
-.ant-select-dropdown,
-.ant-picker-dropdown {
-  animation-duration: var(--motion-float) !important;
-}
-.ant-tooltip { animation-duration: var(--motion-fast) !important; }
-.ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active {
-  animation-name: omc-dialog-in !important;
-  animation-duration: var(--motion-slow) !important;
-  animation-timing-function: var(--ease-out) !important;
-}
-.ant-modal.ant-zoom-leave.ant-zoom-leave-active {
-  animation-name: omc-float-out !important;
-  animation-duration: var(--motion-base) !important;
-  animation-timing-function: var(--ease-standard) !important;
-}
-@keyframes omc-float-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes omc-drop-in-below {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes omc-drop-in-above {
-  from { opacity: 0; transform: translateY(4px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes omc-float-out {
-  from { opacity: 1; }
-  to { opacity: 0; transform: scale(0.98); }
-}
-@keyframes omc-dialog-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to { opacity: 1; transform: none; }
-}
-/* A card is drawn on the panel's own ground and enclosed by its hairline: grouping comes from the
-   enclosure, not from a second fill, so a page of cards reads as one sheet with sections on it. */
-.ant-card, .ant-table-wrapper .ant-table {
-  background: var(--bg);
-}
-/* A record sheet (AppDrawer) is the page continued beside it, so it draws on the page's ground.
-   Every quiet step - the soft rule, a card's fill, a row's hover - is derived against that ground;
-   on the elevated fill antd paints a sheet with, a dark palette's soft rule landed within one level
-   of the fill and vanished while a light one, whose elevated fill is the page's white, still showed.
-   The selector outranks antd's own `:where(.css-…).ant-drawer .ant-drawer-section`. Pickers that
-   open as sheets (navigation, time range, search) are summoned layers and keep the elevated fill. */
-.ant-drawer .ant-drawer-section.app-drawer {
-  background: var(--bg);
-}
-.ant-modal-container { background: var(--elevated); }
-/* Viewport dimensions land immediately; only the sheet's position slides. */
-.ant-drawer .ant-drawer-content-wrapper {
-  transition-property: transform !important;
-}
-/* A sheet slides opaque, so the page below cannot show through its content. */
-.ant-drawer [class*='-panel-motion-'] {
-  opacity: 1 !important;
-}
-.ant-btn, .ant-input, .ant-select, .ant-table, .ant-tag, .ant-menu { font-family: inherit; }
-/* A dashed button is an invitation to add the next item, drawn as the outline of the slot it will
-   fill - so it keeps its dashed hairline where every other secondary button is a fill. */
-/* A press answers the finger before the action does: the control gives a little under it and
-   springs back on release, so a click is felt even when what it starts takes a moment. */
-.ant-btn:not(:disabled):active { transform: scale(0.97); }
-.ant-btn-variant-dashed:not(:disabled) { background: transparent !important; border-color: var(--border) !important; }
-.ant-btn-variant-dashed:not(:disabled):hover { border-color: var(--muted) !important; background: color-mix(in srgb, var(--fg) 4%, transparent) !important; }
-.ant-typography, h1, h2, h3, h4 { font-family: inherit; }
-.ant-divider, .ant-tabs-top > .ant-tabs-nav::before { border-color: var(--border) !important; }
-/* ── console chrome: bend antd away from its admin-template defaults ────── */
-.ant-card .ant-card-body { padding: 20px; }
-.ant-form-item .ant-form-item-label > label { font-size: var(--text-md); color: var(--muted); letter-spacing: .04em; }
-.ant-table-wrapper .ant-table-thead > tr > th {
-  /* A header names its column in one line: a squeezed column wraps its cells, never its name,
-     which is how "前缀" came to read one glyph per line. The strip is the OAuth list's header,
-     so every list in the console names its columns the same way. */
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--muted) !important;
-  background: var(--surface) !important;
-  border-bottom: 1px solid var(--border-soft) !important;
-}
-.ant-table-wrapper .ant-table-thead > tr > th::before { display: none; }
-.ant-drawer-title, .ant-modal-title { font-size: var(--text-lg); font-weight: 600; }
-.ant-drawer-header { border-bottom: 1px solid var(--border); }
-.ant-drawer-footer { border-top: 1px solid var(--border); }
-.ant-drawer-right .ant-drawer-section { border-left: 1px solid var(--border); }
-.ant-drawer-left .ant-drawer-section { border-right: 1px solid var(--border); }
-/* On a desktop a side sheet floats like the page panel it covers: inset from the window's edges,
-   rounded, and lifted by the overlay shadow, so it reads as a layer over the work rather than as
-   a second column bolted onto it. A phone's sheet stays edge to edge. */
-@media (min-width: 901px) {
-  .ant-drawer-right > .ant-drawer-content-wrapper { top: 8px; bottom: 8px; right: 8px; }
-  .ant-drawer-right .ant-drawer-section {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-overlay) !important;
+/* ── Base UI / shadcn interruptible floating & overlay transitions ──────────
+   Base UI marks enter/exit frames with [data-starting-style] and [data-ending-style]
+   and sets --transform-origin on positioned popups, so closing mid-entrance reverses
+   smoothly in place instead of snapping between keyframes. */
+:root:not([data-reduced-motion='true']) {
+  .omc-float-surface {
+    transform-origin: var(--transform-origin, center);
+    transition:
+      opacity var(--motion-float) var(--ease-out),
+      transform var(--motion-float) var(--ease-out);
+  }
+  .omc-float-surface[data-starting-style] {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  .omc-float-surface[data-side='bottom'][data-starting-style] {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  .omc-float-surface[data-side='top'][data-starting-style] {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  .omc-float-surface[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.98);
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+  .omc-float-surface[data-instant] {
+    transition-duration: 0s;
+  }
+  .omc-dialog-surface {
+    transition:
+      opacity var(--motion-slow) var(--ease-out),
+      transform var(--motion-slow) var(--ease-out);
+  }
+  .omc-dialog-surface[data-starting-style] {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  .omc-dialog-surface[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.98);
+    transition-duration: var(--motion-base);
+    transition-timing-function: var(--ease-standard);
+  }
+  .omc-overlay-backdrop {
+    transition: opacity var(--motion-base) var(--ease-out);
+  }
+  .omc-overlay-backdrop[data-starting-style],
+  .omc-overlay-backdrop[data-ending-style] {
+    opacity: 0;
+  }
+  .omc-overlay-backdrop[data-ending-style] {
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+  .omc-sheet-surface {
+    transition: transform var(--motion-sheet-in) var(--ease-sheet-in);
+  }
+  .omc-sheet-surface[data-ending-style] {
+    transition-duration: var(--motion-sheet-out);
+    transition-timing-function: var(--ease-sheet-out);
+  }
+  .omc-sheet-surface[data-side='right'][data-starting-style],
+  .omc-sheet-surface[data-side='right'][data-ending-style] {
+    transform: translateX(calc(100% + 16px));
+  }
+  .omc-sheet-surface[data-side='left'][data-starting-style],
+  .omc-sheet-surface[data-side='left'][data-ending-style] {
+    transform: translateX(-100%);
+  }
+  .omc-sheet-surface[data-side='bottom'][data-starting-style],
+  .omc-sheet-surface[data-side='bottom'][data-ending-style] {
+    transform: translateY(100%);
+  }
+  .omc-sheet-surface[data-side='top'][data-starting-style],
+  .omc-sheet-surface[data-side='top'][data-ending-style] {
+    transform: translateY(-100%);
+  }
+  .omc-sheet-backdrop {
+    transition: opacity var(--motion-sheet-in) var(--ease-sheet-in);
+  }
+  .omc-sheet-backdrop[data-starting-style],
+  .omc-sheet-backdrop[data-ending-style] {
+    opacity: 0;
+  }
+  .omc-sheet-backdrop[data-ending-style] {
+    transition-duration: var(--motion-sheet-out);
+    transition-timing-function: var(--ease-sheet-out);
   }
 }
-.ant-drawer-top .ant-drawer-section { border-bottom: 1px solid var(--border); }
-.ant-drawer-bottom .ant-drawer-section { border-top: 1px solid var(--border); }
+[data-slot='sheet-content']:has(> .app-drawer-resize[data-dragging]) { user-select: none; }
+a[data-slot='button']:not([data-variant='link']) { color: var(--fg); }
+a[data-slot='button'][data-variant='primary'] { color: var(--primary-on); }
+
+h1, h2, h3, h4 { font-family: inherit; }
+[data-slot="panel-body"] { padding: 20px; }
 
 .terminal-page {
   max-width: 1440px;
@@ -461,14 +609,10 @@ a { color: inherit; }
 /* Feedback surfaces (docs/design.md, Feedback and loading). A toast reports an action and leaves; a
    notice describes a region while it is on screen. Both read at the console's body size so a
    failure is never smaller than the data it interrupts. */
-/* A toast is a floating panel like a menu: the elevated fill and the 1px border above - with
-   shadows off, the border is the only edge it has over the page. Its icon is the notice's size,
+/* A toast is a floating panel like a menu: the elevated fill on the float shadow above, whose ring
+   keeps its edge where the drop has nothing to fall on. Its icon is the notice's size,
    so a failure reads at the same weight whether it floats or sits in the page. */
-.ant-notification .omc-toast.ant-notification-notice { --ant-notification-icon-font-size: 18px; }
-.omc-toast .ant-notification-notice-title { font-size: var(--text-base); line-height: 1.5; color: var(--fg); }
-.omc-toast .ant-notification-notice-description { color: var(--fg-2); overflow-wrap: anywhere; }
 .omc-toast-detail { margin-bottom: 6px; }
-.omc-toast .ant-notification-notice-description { max-height: min(320px, 50vh); overflow-y: auto; }
 /* A report's per-target list scrolls inside the toast, so forty failures cannot push it past the
    viewport. */
 .omc-toast-report {
@@ -494,11 +638,12 @@ a { color: inherit; }
   color: var(--muted);
 }
 .omc-toast-items {
+  border: 0;
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
 }
 .omc-toast-items li {
   padding: 6px 10px;
@@ -547,37 +692,36 @@ a { color: inherit; }
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  padding: 10px 14px 12px 14px;
+  padding: 10px 14px;
   color: var(--fg);
   font-size: var(--text-md);
   line-height: 1.5;
   text-align: start;
-  /* A notice is a soft wash of its tone rather than a bar on its edge: it belongs to the region it
-     describes, so it is tinted like part of the page instead of flagged like an interruption. */
-  background: color-mix(in srgb, var(--notice-tone) 8%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--notice-tone) 16%, transparent);
-  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--notice-tone) 28%, transparent), var(--edge-drop);
+  border-radius: var(--radius-lg);
 }
-/* The basis is the narrowest measure a sentence keeps beside its tools; below it the tools wrap
-   under the text instead of squeezing it. */
-.omc-notice-main { flex: 1 1 220px; display: grid; gap: 4px; min-width: 0; }
+.omc-notice-main { flex: 1 1 220px; display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .omc-notice.is-warning { --notice-tone: var(--warn); }
 .omc-notice.is-error { --notice-tone: var(--danger); }
 .omc-notice.is-success { --notice-tone: var(--success); }
-/* The tone's code, in the type the table headers use. */
 .omc-notice-label {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--notice-tone) 12%, transparent);
   color: var(--notice-tone);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  line-height: 16px;
-  letter-spacing: 0.02em;
+  line-height: 18px;
   white-space: nowrap;
 }
 .omc-notice-icon { display: inline-flex; font-size: var(--text-sm); }
-.omc-notice-body { min-width: 0; }
+.omc-notice-body { flex: 1 1 0; min-width: 0; }
 .omc-notice-title { overflow-wrap: anywhere; }
 .omc-notice-detail {
   display: block;
@@ -609,23 +753,24 @@ a { color: inherit; }
   margin-inline-end: -25px;
 }
 /* An action here is a quiet control of the callout, not a button laid on top of it: no fill of
-   its own, the callout's hairline for an edge, and the inset's hover step. The declarations
+   its own, a hairline outline for an edge, and the inset's hover step. The declarations
    outrank Ant Design's variant rules, which are injected after this stylesheet. */
-.omc-notice-tools .ant-btn-default:not(:disabled) {
+.omc-notice-tools [data-slot="button"][data-variant="secondary"]:not(:disabled) {
   height: 26px;
   padding-inline: 10px;
   color: var(--fg) !important;
   font-size: var(--text-sm);
   background: transparent !important;
   border-color: var(--thread-hairline) !important;
-  box-shadow: none !important;
+  box-shadow: inset 0 0 0 1px var(--thread-hairline) !important;
 }
-.omc-notice-tools .ant-btn-default:not(:disabled):hover {
+.omc-notice-tools [data-slot="button"][data-variant="secondary"]:not(:disabled):hover {
   background: var(--thread-field-hover) !important;
   border-color: var(--fg-2) !important;
+  box-shadow: inset 0 0 0 1px var(--fg-2) !important;
 }
-.omc-notice-tools .ant-btn-default .ant-btn-icon { color: var(--muted); }
-.omc-notice-tools .ant-btn-default:not(:disabled):hover .ant-btn-icon { color: var(--fg); }
+.omc-notice-tools [data-slot="button"][data-variant="secondary"] [data-slot="button-icon"] { color: var(--muted); }
+.omc-notice-tools [data-slot="button"][data-variant="secondary"]:not(:disabled):hover [data-slot="button-icon"] { color: var(--fg); }
 .omc-notice-tools a { font-size: var(--text-md); white-space: nowrap; }
 /* Centred on the code's line: 10px of padding and half of that line's 16px. */
 .omc-notice-close {
@@ -642,7 +787,7 @@ a { color: inherit; }
   font-size: var(--text-base);
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
@@ -679,7 +824,7 @@ a { color: inherit; }
   flex-shrink: 0;
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--meta);
 }
 .status-label.is-success .status-label-pip { background: var(--success); }
@@ -704,6 +849,7 @@ a { color: inherit; }
    sheet fanned behind it: the list's page, empty. It is drawn from the page's own layers (the
    panel ground, the border ink, the raised shadow), so it belongs to every palette. */
 .empty-state-mark {
+  border: 0;
   position: relative;
   isolation: isolate;
   display: flex;
@@ -715,22 +861,22 @@ a { color: inherit; }
   height: 44px;
   padding: 0 10px;
   margin-bottom: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   box-shadow: var(--shadow-raised);
 }
 .empty-state-mark::before {
+  border: 0;
   content: '';
   position: absolute;
-  inset: -1px;
+  inset: 0;
   z-index: -1;
-  border: 1px solid var(--border);
   border-radius: inherit;
   background: var(--surface);
+  box-shadow: var(--shadow-edge);
   transform: translate(-6px, 2px) rotate(-9deg);
 }
-.empty-state-mark > span { height: 2px; border-radius: 1px; background: var(--border); }
+.empty-state-mark > span { height: 2px; border-radius: var(--radius-xs); background: var(--border); }
 .empty-state-mark > span:nth-child(1) { width: 100%; }
 .empty-state-mark > span:nth-child(2) { width: 64%; }
 .empty-state-mark > span:nth-child(3) { width: 36%; }
@@ -751,7 +897,7 @@ a { color: inherit; }
 /* The gutter is held whether or not the body scrolls: a card folding open past the panel's height
    would otherwise bring a scrollbar in mid-fold and narrow every card above it, then widen them again
    when it folds shut. */
-.app-drawer .ant-drawer-body {
+.app-drawer [data-slot="sheet-body"] {
   scrollbar-gutter: stable;
 }
 
@@ -822,14 +968,12 @@ a { color: inherit; }
   left: 50%;
   width: 16px;
   height: 72px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 0 0 2px var(--accent);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
-/* While a drag holds the edge, the cursor stays a resize cursor over whatever it crosses and the
-   panel's text cannot be selected by the sweep. */
-.ant-drawer-content-wrapper:has(> .app-drawer-resize[data-dragging]) { user-select: none; }
+
 
 /* SectionHeading (components/common/SectionHeading.tsx): one head at three weights. The frame
    around it - padding, a rule, a tinted strip - is the caller's; the type is not. */
@@ -894,7 +1038,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    reaches the edge or the keyboard lands on it, when it slides in. The inline grip is the phone's. */
 .reorder-handle {
   display: inline-flex; flex: none; align-items: center; justify-content: center; padding: 0; border: 0;
-  border-radius: var(--radius-xs); background: none; color: var(--meta); font-size: var(--text-sm);
+  border-radius: var(--radius-sm); background: none; color: var(--meta); font-size: var(--text-sm);
   cursor: grab; touch-action: none;
 }
 .reorder-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -952,7 +1096,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .selection-bar.is-framed {
   margin-bottom: 16px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 .selection-bar.is-inline { border-bottom: 1px solid var(--border); }
 .selection-bar-start,
@@ -960,7 +1104,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .selection-bar-actions { gap: 8px; margin-inline-start: auto; }
 .selection-bar-count { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .selection-bar-note { color: var(--muted); }
-.selection-bar-start .ant-btn-link { padding-inline: 0; }
+.selection-bar-start [data-slot="button"][data-variant="link"] { padding-inline: 0; }
 
 /* Tag (components/common/Tag.tsx): a short label on a soft fill with no edge. A row carries
    several facts, and an outline around each made the row a strip of boxes; a wash keeps each one
@@ -1013,7 +1157,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 
 /* SearchInput (components/common/SearchInput.tsx): the glyph is chrome, so it takes the muted ink
    on every surface the field appears on. */
-.search-input .ant-input-prefix { color: var(--muted); }
+.search-input [data-slot="input-prefix"] { color: var(--muted); }
 
 /* A label/value list (`FactList`). */
 .fact-list { margin: 0; }
@@ -1044,63 +1188,45 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    too, and a table's bottom border overflows by a subpixel, so every list became a vertical
    scroller of one pixel that caught the wheel: over a stack of lists the page would not scroll. */
 .table-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
-/* The console's one list surface, drawn after the OAuth credential list: a hairline frame, the
+/* The console's one list surface, drawn after the OAuth credential list: an edge-shadow frame, the
    header strip above, rows on the page background divided by soft rules. */
 .data-table {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
+  overflow: clip;
 }
-.data-table .ant-table-wrapper .ant-table { background: transparent; }
-.data-table .ant-table-wrapper .ant-table-thead > tr > th { padding: 8px 16px; }
-.data-table .ant-table-wrapper .ant-table-tbody > tr > td {
-  background: transparent;
-  border-bottom: 1px solid var(--border-soft);
-  padding: 12px 16px;
-}
-.data-table .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td { background: color-mix(in srgb, var(--fg) 3%, transparent); }
-.data-table .ant-table-wrapper .ant-table-tbody > tr:last-child > td { border-bottom: 0; }
-/* A header a reader already saw above an identical table: kept for assistive technology,
-   which reads each table on its own, and clipped from view. */
-.data-table .data-table-head-hidden .ant-table-thead {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.responsive-list .ant-pagination { margin-top: 12px; }
+.responsive-list [data-slot="pager"] { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
-.ant-card-body [data-testid="phone-row"] { padding-inline: 0; }
+[data-slot="panel-body"] [data-testid="phone-row"] { padding-inline: 0; }
 @media (max-width: 640px) {
-  .ant-card .ant-card-body { padding: 16px; }
+  [data-slot="panel-body"] { padding: 16px; }
 }
 
 /* A row's action cluster: square 28px icon buttons, 8px apart so the touch rules' 4px hit insets
-   meet rather than overlap. At rest an action is its glyph alone - a column of framed buttons
-   repeated down every row was the loudest thing in a list - and the pointer brings up a soft
-   fill under it. A destructive action shows its colour only on hover: a column of red bins read
-   as a column of errors. `!important` because antd's variant colours are injected after this
-   sheet at the same specificity. */
+   meet rather than overlap. At rest an action is its glyph alone, and the pointer brings up a soft
+   fill under it. A destructive action shows its colour only on hover. */
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.ant-btn.row-action-btn {
+[data-slot="button"].row-action-btn {
   width: 28px;
   min-width: 28px;
   height: 28px;
   padding: 0;
   border-color: transparent !important;
   background: transparent !important;
+  box-shadow: none !important;
   color: var(--muted) !important;
 }
-.ant-btn.row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 7%, transparent) !important; color: var(--fg) !important; }
-.ant-btn.row-action-btn.ant-btn-dangerous:not(:disabled):hover { background: color-mix(in srgb, var(--danger) 12%, transparent) !important; color: var(--danger) !important; }
-.ant-btn.row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
+[data-slot="button"].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 7%, transparent) !important; color: var(--fg) !important; }
+[data-slot="button"][data-danger].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--danger) 12%, transparent) !important; color: var(--danger) !important; }
+[data-slot="button"].row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
 .terminal-title { margin: 4px 0 0; font-size: var(--text-xl); font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
 .terminal-panel {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 .terminal-muted { color: var(--muted); }
@@ -1113,9 +1239,6 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   --scrollbar-thumb: color-mix(in srgb, var(--fg) 18%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--fg) 30%, transparent);
   --scrollbar-track: transparent;
-  /* A virtual list (the request list, a select's options) draws its own bar from a custom property,
-     at 50% black by default: it takes the same wash, and a slimmer gutter inset from the edge. */
-  --rc-virtual-list-scrollbar-bg: var(--scrollbar-thumb);
 }
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
 @supports not (scrollbar-color: auto) {
@@ -1124,20 +1247,19 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
     background: var(--scrollbar-thumb);
     background-clip: padding-box;
     border: 3px solid transparent;
-    border-radius: 999px;
+    border-radius: var(--radius-xs);
   }
   *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
   *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: var(--scrollbar-track); }
 }
-.ant-listy-scrollbar-vertical, .rc-virtual-list-scrollbar-vertical { width: 6px !important; right: 2px !important; }
-.ant-listy-scrollbar-thumb:hover, .rc-virtual-list-scrollbar-thumb:hover { --rc-virtual-list-scrollbar-bg: var(--scrollbar-thumb-hover); }
+
 /* The console's one focus ring, for everything a keyboard reaches - except a text field. A text
    field sits inside a control that draws its own focus on the *outer* box (antd's accent border
    and halo on an Input, a Select, a picker or a number field), and a browser matches
    `:focus-visible` on every focused text field, mouse or keyboard alike. Ringing the inner field
    as well drew a second, smaller rectangle inside the control - its corners showing beside the
    prefix glyph and the caret of every Select. */
-:focus-visible:not(input):not(textarea) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-sm); }
+:focus-visible:not(input):not(textarea):not([data-slot="select-trigger"]):not([data-slot="combobox-trigger"]):not([data-slot="color-picker-trigger"]) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
 input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* ── shell: a rail on the canvas, the page on one sheet ─────────────────────
@@ -1145,26 +1267,56 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    the page is drawn on a single panel inset from the window's edges, which is the work. The
    panel's rounded edge is what separates the two, so neither the rail nor the header carries a
    border of its own. */
-.app-shell { height: 100vh; height: 100dvh; overflow: hidden; background: var(--canvas); }
+.app-shell {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--canvas);
+}
 .app-shell > .app-body {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  border: 0;
   height: calc(100% - 16px);
   margin: 8px 8px 8px 0;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
 }
-.app-sider { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--canvas) !important; }
-/* antd wraps a Sider's children in a plain block, so the flex column above
-   never reached brand / nav / foot. The nav box stayed content-sized and the
-   footer floated just below it, leaving dead space at the bottom edge. */
-.app-sider .ant-layout-sider-children { display: flex; flex-direction: column; height: 100%; }
+.app-sider {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--sider-width, 236px);
+  height: 100%;
+  overflow: hidden;
+  padding-left: env(safe-area-inset-left);
+  background: var(--canvas);
+}
 /* The wordmark is left-aligned with the navigation's own text axis rather than centred.
    Every other row in this rail starts on that axis, so a centred mark is the only element
    off it and reads as detached from the list below it. 20px puts the artwork's ink (which
    has ~8 units of its own leading margin) on the same axis as the group titles. */
-.app-brand { display: flex; align-items: center; min-height: 60px; height: 60px; padding: 0 20px; cursor: pointer; }
+.app-brand {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  height: 60px;
+  padding: 0 20px;
+  cursor: pointer;
+}
 /* Sized by height: the wordmark is about 5.9:1 and the O about 1:1, so both take their own
    width and neither is letterboxed by a fixed box. */
 .app-brand-logo { display: block; flex: none; width: auto; }
@@ -1172,74 +1324,107 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    out of one side of a 236px rail, so the rows sat off the brand's axis whenever the list
    overflowed and jumped back when it did not. */
 .app-sider-scroll { flex: 1 1 0; }
-.app-sider-viewport { padding: 0 10px 12px; }
-.app-menu { background: transparent !important; border-inline-end: 0 !important; }
+.app-sider-viewport { padding: 2px 10px 12px; }
+.app-menu { display: flex; flex-direction: column; margin: 0; padding: 0; background: transparent; }
+.app-menu-group-list { display: flex; flex-direction: column; }
 /* A group's name is a quiet caption over its entries, in the reading case: it orients, it does
    not compete with the entries for the eye. */
-.app-menu .ant-menu-item-group-title { color: var(--meta) !important; font-size: var(--text-sm); font-weight: 500; padding: 16px 10px 4px; }
-.app-menu .ant-menu-item-group:first-child .ant-menu-item-group-title { padding-top: 4px; }
-/* An entry is a soft row. Its fills are foreground washed over whatever it stands on, so the
-   same rule reads on the canvas rail and on the phone sheet's elevated ground alike. The
-   selected entry is the stronger wash in the full text colour - never a coloured bar, because
-   the rail is chrome and colour belongs to the data. */
-.app-menu .ant-menu-item {
-  color: var(--fg-2);
-  margin: 1px 0;
-  width: 100%;
-  padding-inline: 10px;
-  border-radius: var(--radius-md);
-  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard) !important;
+.app-menu-group-title {
+  color: var(--meta);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 16px 10px 4px;
+  user-select: none;
 }
-.app-menu .ant-menu-item .ant-menu-item-icon { font-size: var(--text-lg); color: var(--muted); transition: color var(--motion-fast) var(--ease-standard); }
-/* The selected wash is `NavSelectionHighlight`'s layer under the menu, so the row itself stays
-   clear and the wash can slide within a group and cross-fade between groups. */
+.app-menu-group:first-child .app-menu-group-title { padding-top: 4px; }
+/* An entry is a soft row: hover lifts it with a quiet foreground wash, and the selected
+   wash lives on `NavSelectionHighlight`'s layer under the menu so it can slide within a
+   group and cross-fade between groups. */
+.app-menu-item {
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  margin: 1px 0;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 400;
+  line-height: 1.25;
+  text-align: start;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--motion-base) var(--ease-standard), color var(--motion-base) var(--ease-standard);
+}
+.app-menu-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  font-size: var(--text-lg);
+  color: var(--muted);
+  transition: color var(--motion-base) var(--ease-standard);
+}
+.app-menu-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .app-menu-frame { position: relative; }
 .app-menu-frame > .app-menu { position: relative; }
 .app-menu-highlight {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline: 0;
   opacity: 0;
   pointer-events: none;
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--fg) 8%, transparent);
   transition: transform var(--motion-slow) var(--ease-out), height var(--motion-slow) var(--ease-out), opacity var(--motion-base) var(--ease-standard);
 }
-.app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 500; background: transparent !important; }
-.app-menu .ant-menu-item-selected .ant-menu-item-icon, .app-menu .ant-menu-item:hover .ant-menu-item-icon { color: var(--fg); }
+.app-menu-item-selected,
+.app-menu-item-selected:hover { color: var(--fg); font-weight: 500; background: transparent; }
+.app-menu-item-selected .app-menu-item-icon { color: var(--fg); }
+@media (hover: hover) {
+  .app-menu-item:not(.app-menu-item-selected):hover {
+    color: var(--fg);
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+  }
+  .app-menu-item:hover .app-menu-item-icon { color: var(--fg); }
+}
+.app-menu-item:focus-visible { border-radius: var(--radius-md); }
+@media (forced-colors: active) {
+  .app-menu-highlight { border: 1px solid Highlight; }
+  .app-menu-item:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+}
 /* A plugin page's artwork can have any intrinsic size. The nav model hands the
    same element to the rail and to the sidebar-visibility dialog, so the glyph box belongs to the
    logo itself rather than to the rail that first drew it. */
 .app-menu-plugin-logo { width: 16px; height: 16px; flex: none; }
-.app-menu .ant-menu-item:hover { color: var(--fg) !important; background: color-mix(in srgb, var(--fg) 5%, transparent) !important; }
-/* An available update marks the System Information entry: a `--warn` dot just outside the
-   icon's corner, where it touches neither the glyph nor the row's hover fill. */
+/* An available update marks the entry with a `--warn` dot just outside the icon's corner,
+   where it touches neither the glyph nor the row's hover fill. */
 .app-menu .app-menu-flagged-icon { position: relative; display: inline-flex; align-items: center; flex: none; }
 .app-menu .app-menu-update-dot { position: absolute; top: -3px; inset-inline-end: -4px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
-.app-menu .ant-menu-item-selected:hover { background: transparent !important; }
 /* Stands in for every page while the gateway is older than CPA v8. The steps read
    left-aligned under the centred result, like instructions rather than a slogan. */
 .cpa-blocked { max-width: 680px; margin: 48px auto; padding: 0 16px; }
 .cpa-blocked-steps { text-align: left; display: flex; flex-direction: column; gap: 12px; }
-/* Collapsed: antd centres the icon with inline padding computed against a box
-   this app has already resized (the scroll wrapper insets the menu, and the
-   expanded rule adds its own margin and width). The result is an icon 19px off
-   its own row — a selected pill with nothing visibly inside it. Center it
-   structurally instead of guessing at antd's padding maths. */
-.ant-layout-sider-collapsed .app-menu .ant-menu-item {
-  width: 100%;
-  margin-inline: 0;
-  /* antd ships the collapsed item's inline padding as `!important`, so a plain
-     override only wins half of it — the start stayed at 24px and pushed the
-     icon out of its own pill. Match the specificity, then centre structurally. */
-  padding-inline: 0 !important;
+/* Collapsed: center the icon structurally inside its 38x32 pill. */
+.app-sider-collapsed .app-menu-item {
   justify-content: center;
+  padding-inline: 0;
+  gap: 0;
 }
-.ant-layout-sider-collapsed .app-menu .ant-menu-item-icon { margin-inline-end: 0; }
-/* The label is invisible in collapsed mode but still takes 17px of the flex
-   line, which is what dragged the icon left of centre. Take it out of the
-   layout; the row's own `title` and antd's tooltip still carry the name. */
-.ant-layout-sider-collapsed .app-menu .ant-menu-title-content { display: none; }
 /* Collapsed there is no room for a wordmark, so the row centres the O instead. */
 .app-brand-collapsed { justify-content: center; padding: 0; }
 /* With `viewport-fit=cover` the shell owns the whole screen, which in landscape puts the
@@ -1247,18 +1432,16 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    to the chrome that touches an edge rather than to `.app-content`, because a scroll
    container given a bottom inset scrolls its last line out from under itself. Each inset
    is a floor beneath the design system's own padding, never a replacement for it. */
-.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--app-header-height); padding: 0 max(16px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg) !important; }
-.app-sider { padding-left: env(safe-area-inset-left); }
+.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--app-header-height); padding: 0 max(16px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg); }
 .app-header-left, .app-header-actions, .app-breadcrumb { display: flex; align-items: center; }
 .app-header-left { min-width: 0; gap: 8px; }
 .app-header-actions { gap: 6px; flex-shrink: 0; }
-.app-header-left > .ant-btn { flex-shrink: 0; }
-.app-breadcrumb { gap: 0; min-width: 0; font-size: var(--text-sm); white-space: nowrap; }
-.app-breadcrumb ol { min-width: 0; flex-wrap: nowrap; }
-.app-breadcrumb li:last-child { min-width: 0; }
-.app-breadcrumb a { color: var(--fg-2); text-decoration: none; }
-.app-breadcrumb .ant-breadcrumb-link { color: var(--muted); }
-.app-breadcrumb li:last-child .ant-breadcrumb-link { color: var(--fg); }
+.app-header-left > [data-slot="button"] { flex-shrink: 0; }
+.app-breadcrumb { min-width: 0; font-size: var(--text-sm); white-space: nowrap; }
+.app-breadcrumb-list { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.app-breadcrumb-group { color: var(--muted); flex: none; }
+.app-breadcrumb-sep { color: var(--meta); flex: none; user-select: none; }
+.app-breadcrumb-item { min-width: 0; }
 .app-breadcrumb-current { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-weight: 500; }
 /* Neutral, not amber: amber is the console's warning hue, and this star is a count. */
 .header-star-icon { color: var(--fg-2); }
@@ -1267,7 +1450,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* The demonstration's marker. It borrows the credential card's own badge language -
    accent text on the surface with a border edge - rather than introducing a hue, so it
    reads as one more label in the shell instead of as an alert. */
-.demo-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; }
+.demo-chip { border: 0; display: inline-flex; align-items: center; height: 20px; padding: 0 6px;  border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; }
 /* The page's one scroller is also its content's containing block. An absolutely positioned element
    with no positioned ancestor - a visually hidden label - would otherwise escape this clip and lengthen
    the document, which the shell's `overflow: hidden` stops the reader scrolling but not a script: a
@@ -1275,7 +1458,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-content { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
 /* A phone has no room for a frame around the page: the panel becomes the screen. */
 @media (max-width: 900px) {
-  .app-shell > .app-body { height: 100%; margin: 0; border: 0; border-radius: 0; }
+  .app-shell > .app-body { border: 0; height: 100%; margin: 0; border-radius: 0; box-shadow: none; }
 }
 /* On the phone shell the content column never pans sideways. `overflow-y: auto` alone computes the
    other axis to `auto`, so anything that reaches past the right edge for a moment - a chart
@@ -1290,7 +1473,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    and nav - and uses the rail's rules. All this adds is what a full-height overlay
    needs and a rail does not: the notch inset, and a scroll region that cannot drag the
    sheet itself. The left-drawer edge rule comes from the shared drawer treatment. */
-.mobile-nav-drawer .ant-drawer-body {
+.mobile-nav-drawer [data-slot='sheet-body'] {
   padding: 0;
   padding-left: env(safe-area-inset-left);
 }
@@ -1347,9 +1530,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .auth-alert {
   margin-bottom: 20px;
 }
-.auth-form .ant-form-item { margin-bottom: 20px; }
-.auth-form .ant-form-item .ant-form-item-label { padding-bottom: 8px; }
-.auth-form .ant-form-item .ant-form-item-label > label { font-size: var(--text-sm); }
+.auth-form [data-slot="field"] { margin-bottom: 20px; }
 .auth-submit { font-weight: 600; }
 
 @media (max-width: 640px) {
@@ -1361,11 +1542,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   }
 }
 .terminal-subtitle { margin: 6px 0 0; color: var(--fg-2); font-size: var(--text-sm); line-height: 1.4; font-variant-numeric: tabular-nums; }
-/* Status pips: 7×7, 2px radius. Both vocabularies are covered —
+/* Status pips: 7×7 dots. Both vocabularies are covered —
    the chart tone names and the status names — because a pip that
    matches no rule silently falls back to grey, which is how a failed
    request once ended up reading as healthy. */
-.legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 999px; background: var(--meta); }
+.legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 50%; background: var(--meta); }
 .legend-dot.success { background: var(--success); }
 .legend-dot.warn, .legend-dot.warning { background: var(--warn); }
 .legend-dot.danger, .legend-dot.failure { background: var(--danger); }
@@ -1385,18 +1566,18 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .app-breadcrumb li:not(:last-child) { display: none; }
 }
 .dashboard-tile {
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) !important;
+  border: 0 !important;
+  border-radius: var(--radius-xl) !important;
   background: var(--bg) !important;
-  box-shadow: none !important;
+  box-shadow: var(--shadow-edge) !important;
   min-width: 0;
   /* The body takes the height under the panel's header, not the whole card's: a body sized to
      100% of a card that also has a header ran past the card's bottom by the header's height. */
   display: flex;
   flex-direction: column;
 }
-.ant-btn.tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
-.dashboard-tile .ant-card-body { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+[data-slot="button"].tile-link { height: auto; padding: 0; font-size: var(--text-sm); }
+.dashboard-tile [data-slot="panel-body"] { padding: 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 /* A tile given more rows than its reading needs spends them on its sparkline. */
 .dashboard-tile .tile-caption { flex: none; }
 .dashboard-tile .chart-slot { display: flex; flex: 1 1 auto; flex-direction: column; }
@@ -1419,7 +1600,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
 
 @media (max-width: 640px) {
-  .dashboard-tile .ant-card-body { padding: 16px; }
+  .dashboard-tile [data-slot="panel-body"] { padding: 16px; }
   .tile-caption { margin-top: 6px; gap: 2px 10px; font-size: var(--text-sm); }
   .dashboard-tile .chart-slot, .dashboard-tile .chart-placeholder { margin-top: 8px; }
 }
@@ -1493,29 +1674,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    without occupying layout. */
 /* The heading must not stretch the data tracks: a timestamp is often wider than a KPI value.
    Shared content-sized tracks keep markers beside names and align numeric edges across model rows. */
-.omc-tip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }
-.omc-tip-time { color: var(--muted); margin-bottom: 2px; }
-.omc-tip-rows { display: grid; grid-template-columns: max-content max-content; gap: 2px 6px; max-width: 100%; }
-.omc-tip-rows.has-names { grid-template-columns: max-content minmax(0, max-content) max-content; }
-.omc-tip-rows.has-shares,
-.omc-tip-rows.has-notes { grid-template-columns: max-content max-content max-content; }
-.omc-tip-rows.has-names.has-shares,
-.omc-tip-rows.has-names.has-notes { grid-template-columns: max-content minmax(0, max-content) max-content max-content; }
-.omc-tip-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; font-variant-numeric: tabular-nums; }
-.omc-tip-swatch { grid-column: 1; width: 8px; height: 8px; border-radius: 999px; }
-.omc-tip-name { grid-column: 2; color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.omc-tip-value { grid-column: 2; color: var(--fg-2); white-space: nowrap; text-align: right; }
-.omc-tip-rows.has-names .omc-tip-value { grid-column: 3; }
-/* Reserve a metadata track only for readouts that report it. */
-.omc-tip-share,
-.omc-tip-note { grid-column: 3; color: var(--muted); white-space: nowrap; text-align: right; }
-.omc-tip-rows.has-names .omc-tip-share,
-.omc-tip-rows.has-names .omc-tip-note { grid-column: 4; }
+
 
 /* A glyph in the header's own muted ink rather than a framed button: the panel is a reading, and
    its one control should not outweigh the title it sits beside. */
-.quota-refresh.ant-btn { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
-.quota-refresh.ant-btn:hover { color: var(--accent); }
+.quota-refresh[data-slot="button"] { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+.quota-refresh[data-slot="button"]:hover { color: var(--accent); }
 @keyframes heatmap-progress { from { transform: translateX(-100%); } to { transform: translateX(433%); } }
 
 /* ── transitions: a view never hard-swaps ───────────────────────────────────
@@ -1538,20 +1702,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 :root[data-theme-switching] *::after {
   transition: none !important;
 }
-/* A side sheet springs into place and glides away (`--ease-sheet-*`); its mask fades on the same
-   clock so the two read as one movement. Reduced motion keeps its own zeroed durations. */
-:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-enter-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-appear-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-enter-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-appear-active"] {
-  transition-duration: var(--motion-sheet-in) !important;
-  transition-timing-function: var(--ease-sheet-in) !important;
-}
-:root:not([data-reduced-motion='true']) .ant-drawer-content-wrapper[class*="-leave-active"],
-:root:not([data-reduced-motion='true']) .ant-drawer-mask[class*="-leave-active"] {
-  transition-duration: var(--motion-sheet-out) !important;
-  transition-timing-function: var(--ease-sheet-out) !important;
-}
+
 /* A palette change cross-fades the whole page (ThemeContext's `withCrossFade`). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -1669,7 +1820,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .placeholder-list-row + .placeholder-list-row { border-top: 1px solid var(--border-soft); }
 .placeholder-list-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
-.placeholder-pill { border-radius: 10px; }
 .block-loading .placeholder-list-row { padding-inline: 0; }
 .placeholder-paragraph { padding: 4px 0; }
 .placeholder-paragraph .placeholder-lines { gap: 14px; }
@@ -1684,7 +1834,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .placeholder-table-cell { flex: 1 1 0; min-width: 0; }
 /* A table's own column header stays drawn on a first read; its body holds the rows instead of the
    empty message, edge to edge as real rows would be. */
-.ant-table-placeholder:has(.placeholder-table) > .ant-table-cell { padding: 0; text-align: start; }
+[data-slot="table-cell"]:has(.placeholder-table) { padding: 0; text-align: start; }
 .placeholder-panels { display: flex; flex-direction: column; gap: 16px; }
 .placeholder-panel-body { margin-top: 18px; }
 /* A conversation's first load, at the thread's reading column. Global because a lazy route draws it
@@ -1739,19 +1889,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .shell-loading-sider { display: none; }
   .shell-loading-header { padding: 0 16px 0 12px; }
 }
-/* Icon shims (`web/src/components/icons`).
-
-   The console renders Lucide icons through forwarders that carry Ant Design's `anticon`
-   class names, because first-party CSS already selects on `.anticon`
-   (`.req-back-to-top-btn .anticon`, `.request-source-chain > .anticon`, ...) and antd's own
-   components still emit it.
-
-   Both declarations below used to arrive as a side effect: `@ant-design/icons` injects them
-   when one of its components mounts, and no first-party module imports it any more. The base
-   rule is what aligns a Lucide glyph with the text beside it; without it the icon falls back
-   to `vertical-align: baseline` and its box model differs from what the console's CSS and
-   antd's own components expect. */
-.anticon {
+/* Console icon wrappers (`web/src/components/icons`). */
+.omc-icon {
   display: inline-flex;
   align-items: center;
   color: inherit;
@@ -1760,14 +1899,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 /* One rotation per 900ms: a spinner's period is not a state transition, so reduced motion
    freezes it rather than shortening it. */
-.anticon-spin {
+.omc-icon-spin {
   animation: omc-icon-spin 900ms linear infinite;
 }
 @keyframes omc-icon-spin {
   to { transform: rotate(360deg); }
 }
 :root[data-reduced-motion='true'] {
-  /* Library lifecycles use MotionProvider; CSS-owned effects settle in place. */
   *, *::before, *::after {
     scroll-behavior: auto !important;
     transition-duration: 0s !important;
@@ -1775,21 +1913,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     animation-duration: 0s !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
-  }
-  .ant-popover,
-  .ant-dropdown,
-  .ant-select-dropdown,
-  .ant-picker-dropdown,
-  .ant-tooltip,
-  .ant-zoom-big-enter.ant-zoom-big-enter-active, .ant-zoom-big-appear.ant-zoom-big-appear-active,
-  .ant-zoom-big-fast-enter.ant-zoom-big-fast-enter-active, .ant-zoom-big-fast-appear.ant-zoom-big-fast-appear-active,
-  .ant-slide-up-enter.ant-slide-up-enter-active, .ant-slide-up-appear.ant-slide-up-appear-active,
-  .ant-slide-down-enter.ant-slide-down-enter-active, .ant-slide-down-appear.ant-slide-down-appear-active,
-  .ant-zoom-big-leave.ant-zoom-big-leave-active, .ant-zoom-big-fast-leave.ant-zoom-big-fast-leave-active,
-  .ant-slide-up-leave.ant-slide-up-leave-active, .ant-slide-down-leave.ant-slide-down-leave-active,
-  .ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active,
-  .ant-modal.ant-zoom-leave.ant-zoom-leave-active {
-    animation: none !important;
   }
   .route-transition { animation: none; }
   &::view-transition-old(root),
@@ -1800,7 +1923,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   /* A placeholder keeps its place and drops the breath. */
   .placeholder { animation: none; opacity: 0.7; }
   /* The static glyph still reads as "refreshing"; only its rotation is dropped. */
-  .anticon-spin { animation: none; }
+  .omc-icon-spin { animation: none; }
 }
 
 /* ── logs: a tail, not a table ────────────────────────────────────────────── */
@@ -1847,12 +1970,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   letter-spacing: -0.01em;
 }
 
-/* A settings group is one enclosure on the panel's own ground: the hairline and the large corner
+/* A settings group is one enclosure on the panel's own ground: the edge shadow and the large corner
    group its rows, and the rows inside it are divided by a dashed rule inset from the edge, which
    reads as "the same group, the next setting" rather than as a new box. */
 .settings-group {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
   overflow: hidden;
 }
@@ -1863,8 +1987,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: var(--hairline) solid var(--border-soft);
 }
+
+
 
 .settings-group-body {
   padding: 20px;
@@ -1888,9 +2014,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   width: 100%;
 }
 
-.settings-field-host-port .settings-number-control .ant-input-number {
-  width: 100% !important;
-  flex: 1 1 100% !important;
+.settings-field-host-port .settings-number-control [data-slot="number-input"] {
+  width: 100%;
+  flex: 1 1 100%;
 }
 
 .settings-toggle-row {
@@ -1908,7 +2034,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   position: absolute;
   top: 0;
   inset-inline: 20px;
-  border-top: 1px dashed var(--border);
+  border-top: var(--hairline) solid var(--border-soft);
 }
 
 /* A notice belongs to the row above it rather than becoming a second setting. */
@@ -1976,7 +2102,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    spilled out of it. Scoped by the `is-select` modifier the config renderer emits, which the OMC
    settings page's rows do not carry: that page's own pickers size themselves (the timezone picker is
    440px) and are measured by their own browser scenario. */
-.settings-toggle-control.is-select .ant-select {
+.settings-toggle-control.is-select [data-slot="select-trigger"] {
   width: 100%;
 }
 
@@ -1986,35 +2112,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   align-items: center;
 }
 
-.settings-field-control .ant-input-affix-wrapper {
-  width: 100% !important;
-  height: 40px !important;
-  padding-block: 0 !important;
-  padding-inline: 11px !important;
-  font-size: var(--text-base) !important;
-  border-radius: var(--radius-sm) !important;
-  display: flex !important;
-  align-items: center !important;
-  box-sizing: border-box !important;
+.settings-field-control > :is([data-slot="input-wrapper"], [data-slot="input"]) {
+  width: 100%;
+  height: 36px;
 }
 
-.settings-field-control .ant-input-affix-wrapper > input.ant-input {
-  height: auto !important;
-  line-height: 1.5 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-.settings-field-control > .ant-input {
-  width: 100% !important;
-  height: 40px !important;
-  line-height: 38px !important;
-  font-size: var(--text-base) !important;
-  border-radius: var(--radius-sm) !important;
-  box-sizing: border-box !important;
-}
-
-/* Number inputs: compact semantic width 132px + unit, left-aligned text avoiding stepper overlap */
+/* Number inputs: compact semantic width 132px + unit */
 .settings-number-control {
   display: inline-flex;
   align-items: center;
@@ -2022,69 +2125,26 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   width: auto;
 }
 
-.settings-number-control .ant-input-number {
-  flex: 0 0 132px !important;
-  width: 132px !important;
-  height: 40px !important;
-  font-size: var(--text-base) !important;
-  border-radius: var(--radius-sm) !important;
-}
-
-.settings-number-control .ant-input-number-input-wrap {
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-}
-
-.settings-number-control .ant-input-number-input {
-  height: 38px !important;
-  line-height: 38px !important;
-  text-align: left !important;
-  padding-inline-start: 12px !important;
-  padding-inline-end: 34px !important;
+.settings-number-control [data-slot="number-input"] {
+  flex: 0 0 132px;
+  width: 132px;
+  height: 36px;
 }
 
 /* Select dropdowns */
-.settings-field-control .ant-select {
-  width: 100% !important;
-  max-width: 280px !important;
-  height: 40px !important;
-  font-size: var(--text-base) !important;
+.settings-field-control [data-slot="select-trigger"] {
+  width: 100%;
+  max-width: 280px;
+  height: 36px;
 }
 
-.settings-field-control .ant-select-selector {
-  height: 40px !important;
-  padding-inline: 12px !important;
-  border-radius: var(--radius-sm) !important;
-  display: flex !important;
-  align-items: center !important;
-}
-
-.settings-field-control .ant-select-selection-item {
-  line-height: 38px !important;
-  font-size: var(--text-base) !important;
-}
-
-/* A list field is a free-form tag editor rather than a picker: it has no dropdown to open, and
-   it wraps onto further lines as values accumulate. It therefore takes its column's full width -
-   the 280px bound above sizes a picker against its longest option, which says nothing about how
-   many addresses an operator trusts - and grows in height, where the single-line frame above
-   would paint the tags outside a box pinned at 40px. */
-.settings-field-control.is-string_list .ant-select,
-.settings-toggle-control.is-string_list .ant-select {
-  width: 100% !important;
-  max-width: none !important;
-  height: auto !important;
-}
-
-.settings-field-control.is-string_list .ant-select {
-  min-height: 40px !important;
-}
-
-/* The tag itself keeps a single line's height: the 38px line above lets a chip fill the frame,
-   which turns each address into a 40px block where the wrapping editor expects a chip. */
-.settings-field-control.is-string_list .ant-select-selection-item {
-  line-height: 22px !important;
+/* Free-form list fields wrap tags across lines across the full column width. */
+.settings-field-control.is-string_list [data-slot="combobox-trigger"],
+.settings-toggle-control.is-string_list [data-slot="combobox-trigger"] {
+  width: 100%;
+  max-width: none;
+  min-height: 36px;
+  height: auto;
 }
 
 .config-mono-input {
@@ -2174,23 +2234,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    enclosure into a caption above it - the caption names the section, the enclosure holds its
    settings, and nothing inside the card competes with the rows. */
 .omc-settings-page { max-width: 920px; }
-.omc-settings-group { margin-bottom: 28px; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.omc-settings-group { margin-bottom: 28px; }
 .omc-settings-group > .settings-group-head { padding: 0 2px 8px; border: 0; }
 .omc-settings-group > .settings-group-head .section-head-title { color: var(--fg-2); font-size: var(--text-md); font-weight: 500; }
-.omc-settings-group > :not(.settings-group-head) {
-  background: var(--bg);
-  border-inline: 1px solid var(--border);
-}
-.omc-settings-group > .settings-group-head + * {
-  border-top: 1px solid var(--border);
-  border-start-start-radius: var(--radius-lg);
-  border-start-end-radius: var(--radius-lg);
-}
-.omc-settings-group > :last-child {
-  border-bottom: 1px solid var(--border);
-  border-end-start-radius: var(--radius-lg);
-  border-end-end-radius: var(--radius-lg);
-}
+/* A group whose rows are still loading draws no empty enclosure. */
+.omc-settings-card:empty { display: none; }
 .theme-preset-grid {
   display: grid;
   /* Four columns: three registered palettes for the mode plus the operator's own. `minmax(0, 1fr)`
@@ -2208,28 +2256,29 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 .theme-preset-card {
+  border: 0;
   display: flex;
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+  transition: box-shadow var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
 }
 
 .theme-preset-card:hover {
-  border-color: var(--muted);
+  box-shadow: var(--shadow-raised);
   background: var(--hover-inset);
 }
 
 .theme-preset-card.is-active {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   background: var(--selected-inset);
 }
 
@@ -2304,10 +2353,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* The custom palette's card before anything has been authored: an empty slot that says "make one"
-   rather than a card showing a palette that does not exist yet. The dashed border is the one dashed
-   rule in the console and it is doing the one job dashes are for - marking a placeholder. */
+   rather than a card showing a palette that does not exist yet. A dash is the one stroke an
+   enclosure keeps, because it does the one job dashes are for - marking a placeholder. */
 .theme-preset-card.is-custom.is-empty {
-  border-style: dashed;
+  border: 1px dashed var(--border);
+  box-shadow: none;
 }
 
 .theme-preset-blank {
@@ -2322,10 +2372,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    rather than part of the row's control column: nine token rows need the width of the card, and the
    row's column is sized for a segmented picker. */
 .palette-editor {
+  border: 0;
   margin: 0 20px 14px;
   padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -2402,7 +2453,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    label and sat in a narrow column beside empty space, so it is given the row's whole width here:
    the options are the row's content at this width, not a control beside a description. */
 @media (max-width: 900px) {
-  .omc-settings-group .settings-toggle-control .ant-segmented { width: 100%; }
+  .omc-settings-group .settings-toggle-control [data-slot="segmented"] { width: 100%; }
   .theme-preset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* The editor's three columns become a stack: a 132px colour control beside a fixed ratio column
      cannot also hold a token name on a phone, and the ratio belongs under the colour it measures. */
@@ -2427,7 +2478,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      the delay is felt as lag. It is deliberately not applied to the page: double-tap
      zoom is how a reader enlarges a dense table, and taking it away would be an
      accessibility regression dressed as a latency win. */
-  button, a, label, summary, .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
+  button, a, label, summary, [data-slot="segmented-item"], [data-slot="tabs-trigger"], [data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="select-trigger"], [data-slot="combobox-trigger"] {
     touch-action: manipulation;
   }
 
@@ -2444,65 +2495,18 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      Enumerating those wrappers would mean this floor silently stops applying the next time a
      field gains one, which is the defect it exists to prevent. It is a device-level floor,
      so it is meant to outrank the component layer. */
-  .ant-input,
-  .ant-input-affix-wrapper > input.ant-input,
-  .ant-input-textarea textarea,
-  .ant-input-number-input,
-  .ant-select-input,
-  .ant-picker-input > input,
   textarea,
   input {
     font-size: var(--text-lg) !important;
   }
-  /* The *displayed* text of a Select is deliberately left as the token sizes it: the browser
-     reads the size of the element it focuses, and that is the search input above, not this
-     label. Enlarging the label would trade the console's density for zoom that is already
-     prevented. */
 
-  /* Tabs and segmented items sit edge to edge, so they grow on the axis nothing else
-     occupies. A horizontal inset would steal the neighbour's taps, and on the request
-     page the segmented control is three options in a 350px row - there is no gap to take. */
-  .ant-tabs-nav-list .ant-tabs-tab { padding-block: 6px; }
-  .ant-segmented-item > .ant-segmented-item-label { min-height: 30px; display: flex; align-items: center; justify-content: center; }
-
-  /* Measured at 1x19px against the config page: the steppers are a mouse affordance that
-     cannot be hit by a finger, and `!important` for the same source-order reason as the
-     font floor above - antd keeps its own display value for this box. Keyboard entry and
-     the native numeric keypad remain, and an unusable control is worse than an absent one. */
-  .ant-input-number-actions { display: none !important; }
-  .ant-input-number-input { padding-inline-end: 8px; }
-
-  /* The hit area grows while the control keeps its drawn size: the spacing scale
-     keeps the console dense, so enlarging every 28px button would
-     trade a reachability defect for a layout one.
-
-     **The scope is controls small in both dimensions.** A control that is wide - a labelled
-     text button, or any of the console's 32px-tall buttons, which is antd's own height
-     everywhere - is aimable even when it is short, so it keeps its box. What cannot be aimed
-     at is a control with no label and no width: an icon button.
-
-     `.ant-drawer-close` is listed beside antd's icon-only variant
-     because it is a dense control of its own rather than antd's button: it is a plain
-     button, so the first version of this rule missed it, and the browser probe missed the
-     gap in turn because its metric accepted an *ancestor* as a hit - which is exactly what a
-     probe just outside an unexpanded button lands on. A control added here must be a real
-     icon-sized control; adding a wide one would steal its neighbour's taps.
-
-     The remaining cost is stated rather than hidden: in a cluster whose gap is under 8px, two
-     adjacent 4px insets overlap, and the DOM-later control wins that band. The clusters that
-     are still that tight are the ones whose controls are wide enough not to need an inset. */
-  .ant-btn.ant-btn-icon-only,
-  .ant-drawer-close,
-  .ant-pagination-prev,
-  .ant-pagination-next,
-  .ant-input-clear-icon {
+  /* Expand touch hit targets on icon-sized controls without inflating layout geometry. */
+  [data-slot="button"][data-icon-only],
+  [data-slot="input-clear"] {
     position: relative;
   }
-  .ant-btn.ant-btn-icon-only::before,
-  .ant-drawer-close::before,
-  .ant-pagination-prev::before,
-  .ant-pagination-next::before,
-  .ant-input-clear-icon::before {
+  [data-slot="button"][data-icon-only]::before,
+  [data-slot="input-clear"]::before {
     content: '';
     position: absolute;
     inset: -4px;
@@ -2533,14 +2537,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   overscroll-behavior: contain;
   gap: 4px;
 }
-.action-menu-content .ant-btn {
+.action-menu-content [data-slot="button"] {
   min-height: 44px;
   height: auto;
   justify-content: flex-start;
   white-space: normal;
   text-align: start;
 }
-.action-menu-content > .ant-btn[aria-pressed="true"] {
+.action-menu-content > [data-slot="button"][aria-pressed="true"] {
   background: var(--selected-inset);
   font-weight: 600;
 }
@@ -2576,23 +2580,23 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .terminal-subtitle { margin-top: 4px; overflow-wrap: anywhere; }
   .terminal-page-actions { min-width: 0; max-width: 100%; gap: 8px; }
   .app-header-actions { gap: 8px; }
-  .app-header-actions > .ant-btn { min-width: 40px; min-height: 40px; }
+  .app-header-actions > [data-slot="button"] { min-width: 40px; min-height: 40px; }
   .app-header-left { flex: 1; }
   .app-header .demo-chip { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dashboard-tile .ant-card-body { padding: 12px; }
+  .dashboard-tile [data-slot="panel-body"] { padding: 12px; }
   .toolbar.is-ruled { gap: 8px; margin-bottom: 12px; }
   .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }
   .config-toolbar-phone .config-toolbar-left { flex-wrap: nowrap; gap: 8px; width: 100%; justify-content: space-between; }
-  .config-toolbar-phone .ant-segmented { flex-shrink: 0; }
+  .config-toolbar-phone [data-slot="segmented"] { flex-shrink: 0; }
   .settings-group-head, .settings-group-body { padding: 12px; }
   .settings-group-head { gap: 8px; }
   .settings-toggle-row { gap: 8px; padding-block: 12px; }
   .settings-inline-notice { padding: 0 20px 12px; }
   .config-page.has-dirty-bar { padding-bottom: calc(var(--config-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 24px) !important; }
-  .ant-drawer .ant-drawer-body { min-width: 0; }
+  [data-slot="sheet-body"] { min-width: 0; }
 }
 .phone-filter-disclosure { width: 100%; min-width: 0; }
 .phone-filter-disclosure > summary { min-height: 44px; cursor: pointer; padding-block: 10px; color: var(--fg-2); }
 .phone-filter-current { margin-inline-start: 8px; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
 .phone-filter-content { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 8px; }
-.phone-filter-content > .ant-select { width: 100%; min-width: 0; }
+.phone-filter-content > :is([data-slot="select-trigger"], [data-slot="combobox-trigger"]) { width: 100%; min-width: 0; }

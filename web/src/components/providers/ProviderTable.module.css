@@ -1,8 +1,8 @@
 .provider-list { min-width: 0; }
 /* Nine columns of facts share the content column, so cells sit 12px from their neighbours rather
    than the console's 16px: at 16px the row was wider than the frame and cut the actions off. */
-.provider-list :global(.data-table .ant-table-wrapper .ant-table-thead > tr > th),
-.provider-list :global(.data-table .ant-table-wrapper .ant-table-tbody > tr > td) { padding-inline: 12px; }
+.provider-list :global(.data-table [data-slot='table-head']),
+.provider-list :global(.data-table [data-slot='table-cell']) { padding-inline: 12px; }
 
 .provider-identity {
   display: flex;
@@ -143,9 +143,10 @@
 /* On a phone the providers are one framed group, as the OAuth list's sections are, each card
    ruled from the next. */
 .provider-list :global(.responsive-list) {
+  border: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 
@@ -229,7 +230,7 @@
   white-space: nowrap;
 }
 
-.phone-card-route > :global(.anticon),
+.phone-card-route > :global(.omc-icon),
 .phone-card-route > svg {
   flex: none;
   color: var(--muted);

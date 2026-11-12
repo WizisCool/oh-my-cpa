@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Typography } from 'antd';
+import { Button } from '@/components/ui/button';
 import dayjs from '../../utils/time';
 import { PauseCircleOutlined, PlayCircleOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -16,7 +16,6 @@ import { Toolbar } from '../common/Toolbar';
 import './logs.css';
 import { Tooltip } from '../common/Tooltip';
 
-const { Text } = Typography;
 
 type ServiceLogLevel = (typeof SERVICE_LOG_LEVELS)[number];
 
@@ -110,12 +109,12 @@ export const ServiceLogPanel: React.FC = () => {
           ))}
         </div>
         <div className={styles['toolbar-summary']}>
-          <Text className="logs-counts">
+          <span className="logs-counts text-foreground">
             {t('logs.service_counts', { shown: rows.length, total: tail.records.length })}
             {tail.capacity && tail.startedAtMS
               ? ` · ${t('logs.service_retention', { capacity: tail.capacity, since: dayjs(tail.startedAtMS).format('MM-DD HH:mm') })}`
               : ''}
-          </Text>
+          </span>
           <div className={styles['toolbar-actions']}>
             <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
               <Button

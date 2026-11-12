@@ -1,4 +1,7 @@
-import { Button, Input, Select, Typography } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { NumberInput } from '../common/NumberInput';
 import { DeleteOutlined, PlusOutlined, SettingOutlined } from '../icons';
 
@@ -17,7 +20,6 @@ import type { PayloadRulesDraft } from './usePayloadRulesDraft';
 import { ConfirmAction } from '../common/ConfirmAction';
 import './config.css';
 
-const { Text } = Typography;
 
 /**
  * The three payload-rule panels: the typed rules' parameters and per-model
@@ -58,7 +60,7 @@ export function renderModelsSection(draft: PayloadRulesDraft, category: PayloadC
               <div key={m.id} className="payload-model-row-wrap">
                 <div className="payload-model-row">
                   <Input
-                    size="small"
+                    size="sm"
                     className="payload-model-input"
                     status={modelError ? 'error' : undefined}
                     placeholder={t('cfg.payload_model_name_ph')}
@@ -80,7 +82,7 @@ export function renderModelsSection(draft: PayloadRulesDraft, category: PayloadC
                     }
                   />
                   <Button
-                    size="small"
+                    size="sm"
                     icon={<SettingOutlined />}
                     onClick={() =>
                       setAdvModalState({
@@ -95,8 +97,8 @@ export function renderModelsSection(draft: PayloadRulesDraft, category: PayloadC
                     {t('cfg.payload_model_advanced')}
                   </Button>
                   <Button
-                    size="small"
-                    type="text"
+                    size="sm"
+                    variant="ghost"
                     danger
                     icon={<DeleteOutlined />}
                     onClick={() => deleteModelFromRule(category, ruleIndex, mIdx)}
@@ -113,8 +115,8 @@ export function renderModelsSection(draft: PayloadRulesDraft, category: PayloadC
 
         <div className="payload-sub-actions">
           <Button
-            size="small"
-            type="dashed"
+            size="sm"
+            variant="dashed"
             icon={<PlusOutlined />}
             onClick={() => addModelToRule(category, ruleIndex)}
           >
@@ -192,7 +194,7 @@ export function renderTypedParamsSection(draft: PayloadRulesDraft, category: 'de
               <div key={p.id} className="payload-param-row-wrap">
                 <div className="payload-param-row">
                   <Input
-                    size="small"
+                    size="sm"
                     className="payload-param-path"
                     status={paramError && !isJsonError ? 'error' : undefined}
                     placeholder={t('cfg.payload_param_path_ph')}
@@ -243,10 +245,10 @@ export function renderTypedParamsSection(draft: PayloadRulesDraft, category: 'de
                         onBlur={() => markTouched(p.id)}
                       />
                     ) : p.type === 'null' ? (
-                      <Input size="small" disabled value="null" style={{ color: 'var(--muted)' }} />
+                      <Input size="sm" disabled value="null" style={{ color: 'var(--muted)' }} />
                     ) : (
                       <Input
-                        size="small"
+                        size="sm"
                         status={isJsonError ? 'error' : undefined}
                         placeholder={p.type === 'json' ? '{"key": "value"}' : t('cfg.payload_param_str_ph')}
                         value={String(p.value ?? '')}
@@ -257,8 +259,8 @@ export function renderTypedParamsSection(draft: PayloadRulesDraft, category: 'de
                   </div>
 
                   <Button
-                    size="small"
-                    type="text"
+                    size="sm"
+                    variant="ghost"
                     danger
                     icon={<DeleteOutlined />}
                     onClick={() => deleteParam(pIdx)}
@@ -274,7 +276,7 @@ export function renderTypedParamsSection(draft: PayloadRulesDraft, category: 'de
         </div>
 
         <div className="payload-sub-actions">
-          <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addParam}>
+          <Button size="sm" variant="dashed" icon={<PlusOutlined />} onClick={addParam}>
             {t('cfg.payload_param_add')}
           </Button>
         </div>
@@ -340,7 +342,7 @@ export function renderRawParamsSection(draft: PayloadRulesDraft, category: 'defa
               <div key={p.id} className="payload-param-row-wrap">
                 <div className="payload-param-row is-raw">
                   <Input
-                    size="small"
+                    size="sm"
                     className="payload-param-path"
                     status={paramError && !isJsonError ? 'error' : undefined}
                     placeholder={t('cfg.payload_param_path_ph')}
@@ -349,7 +351,7 @@ export function renderRawParamsSection(draft: PayloadRulesDraft, category: 'defa
                     onBlur={() => markTouched(p.id)}
                   />
                   <div className="payload-param-value-wrap">
-                    <Input.TextArea
+                    <Textarea
                       rows={1}
                       autoSize={{ minRows: 1, maxRows: 4 }}
                       className="config-mono-input"
@@ -361,8 +363,8 @@ export function renderRawParamsSection(draft: PayloadRulesDraft, category: 'defa
                     />
                   </div>
                   <Button
-                    size="small"
-                    type="text"
+                    size="sm"
+                    variant="ghost"
                     danger
                     icon={<DeleteOutlined />}
                     onClick={() => deleteRawParam(pIdx)}
@@ -378,7 +380,7 @@ export function renderRawParamsSection(draft: PayloadRulesDraft, category: 'defa
         </div>
 
         <div className="payload-sub-actions">
-          <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addRawParam}>
+          <Button size="sm" variant="dashed" icon={<PlusOutlined />} onClick={addRawParam}>
             {t('cfg.payload_param_add')}
           </Button>
         </div>
@@ -442,7 +444,7 @@ export function renderFilterParamsSection(draft: PayloadRulesDraft, ruleIndex: n
               <div key={p.id} className="payload-param-row-wrap">
                 <div className="payload-param-row is-filter">
                   <Input
-                    size="small"
+                    size="sm"
                     style={{ flex: 1 }}
                     status={paramError ? 'error' : undefined}
                     placeholder={t('cfg.payload_filter_path_ph')}
@@ -451,8 +453,8 @@ export function renderFilterParamsSection(draft: PayloadRulesDraft, ruleIndex: n
                     onBlur={() => markTouched(p.id)}
                   />
                   <Button
-                    size="small"
-                    type="text"
+                    size="sm"
+                    variant="ghost"
                     danger
                     icon={<DeleteOutlined />}
                     onClick={() => deleteFilterParam(pIdx)}
@@ -466,7 +468,7 @@ export function renderFilterParamsSection(draft: PayloadRulesDraft, ruleIndex: n
         </div>
 
         <div className="payload-sub-actions">
-          <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addFilterParam}>
+          <Button size="sm" variant="dashed" icon={<PlusOutlined />} onClick={addFilterParam}>
             {t('cfg.payload_filter_add')}
           </Button>
         </div>
@@ -487,10 +489,10 @@ export function renderTypedCategoryContent(draft: PayloadRulesDraft, category: '
     if (rules.length === 0) {
       return (
         <div className="payload-empty-box">
-          <Text type="secondary">{t('cfg.payload_no_rules')}</Text>
+          <span className="text-muted-foreground">{t('cfg.payload_no_rules')}</span>
           <Button
-            size="small"
-            type="primary"
+            size="sm"
+            variant="primary"
             icon={<PlusOutlined />}
             onClick={() => addTypedRule(category)}
           >
@@ -514,7 +516,7 @@ export function renderTypedCategoryContent(draft: PayloadRulesDraft, category: '
                 isDanger
                 onConfirm={() => deleteTypedRule(category, rIdx)}
               >
-                <Button size="small" type="text" danger icon={<DeleteOutlined />}>
+                <Button size="sm" variant="ghost" danger icon={<DeleteOutlined />}>
                   {t('cfg.payload_delete_rule')}
                 </Button>
               </ConfirmAction>
@@ -529,8 +531,8 @@ export function renderTypedCategoryContent(draft: PayloadRulesDraft, category: '
 
         <div className="payload-add-rule-footer">
           <Button
-            size="small"
-            type="dashed"
+            size="sm"
+            variant="dashed"
             icon={<PlusOutlined />}
             onClick={() => addTypedRule(category)}
           >
@@ -554,10 +556,10 @@ export function renderRawCategoryContent(draft: PayloadRulesDraft, category: 'de
     if (rules.length === 0) {
       return (
         <div className="payload-empty-box">
-          <Text type="secondary">{t('cfg.payload_no_rules')}</Text>
+          <span className="text-muted-foreground">{t('cfg.payload_no_rules')}</span>
           <Button
-            size="small"
-            type="primary"
+            size="sm"
+            variant="primary"
             icon={<PlusOutlined />}
             onClick={() => addRawRule(category)}
           >
@@ -581,7 +583,7 @@ export function renderRawCategoryContent(draft: PayloadRulesDraft, category: 'de
                 isDanger
                 onConfirm={() => deleteRawRule(category, rIdx)}
               >
-                <Button size="small" type="text" danger icon={<DeleteOutlined />}>
+                <Button size="sm" variant="ghost" danger icon={<DeleteOutlined />}>
                   {t('cfg.payload_delete_rule')}
                 </Button>
               </ConfirmAction>
@@ -596,8 +598,8 @@ export function renderRawCategoryContent(draft: PayloadRulesDraft, category: 'de
 
         <div className="payload-add-rule-footer">
           <Button
-            size="small"
-            type="dashed"
+            size="sm"
+            variant="dashed"
             icon={<PlusOutlined />}
             onClick={() => addRawRule(category)}
           >
@@ -619,10 +621,10 @@ export function renderFilterCategoryContent(draft: PayloadRulesDraft) {
     if (filterRules.length === 0) {
       return (
         <div className="payload-empty-box">
-          <Text type="secondary">{t('cfg.payload_no_rules')}</Text>
+          <span className="text-muted-foreground">{t('cfg.payload_no_rules')}</span>
           <Button
-            size="small"
-            type="primary"
+            size="sm"
+            variant="primary"
             icon={<PlusOutlined />}
             onClick={addFilterRule}
           >
@@ -646,7 +648,7 @@ export function renderFilterCategoryContent(draft: PayloadRulesDraft) {
                 isDanger
                 onConfirm={() => deleteFilterRule(rIdx)}
               >
-                <Button size="small" type="text" danger icon={<DeleteOutlined />}>
+                <Button size="sm" variant="ghost" danger icon={<DeleteOutlined />}>
                   {t('cfg.payload_delete_rule')}
                 </Button>
               </ConfirmAction>
@@ -661,8 +663,8 @@ export function renderFilterCategoryContent(draft: PayloadRulesDraft) {
 
         <div className="payload-add-rule-footer">
           <Button
-            size="small"
-            type="dashed"
+            size="sm"
+            variant="dashed"
             icon={<PlusOutlined />}
             onClick={addFilterRule}
           >

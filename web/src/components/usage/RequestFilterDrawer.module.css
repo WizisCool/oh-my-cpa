@@ -1,5 +1,5 @@
 /* Advanced filter drawer: one field per row, grouped by what the field means. */
-.drawer :global(.ant-drawer-body) {
+.drawer :global([data-slot='sheet-body']) {
   padding: 16px 20px 8px;
 }
 .group + .group {
@@ -36,13 +36,13 @@
   flex-direction: column;
   gap: 4px;
 }
-.control > :global(.ant-select),
-.control > :global(.ant-input-affix-wrapper),
-.control > :global(.ant-segmented) {
+.control > :global([data-slot='select-trigger']),
+.control > :global([data-slot='combobox-trigger']),
+.control > :global([data-slot='input-wrapper']),
+.control > :global([data-slot='input']),
+.control > :global([data-slot='segmented']),
+.select {
   width: 100%;
-}
-.select :global(.ant-select-selector) {
-  align-items: flex-start;
 }
 .range-pair {
   display: flex;
@@ -72,11 +72,12 @@
   line-height: 1.5;
 }
 .note {
+  border: 0;
   margin: 0 0 14px;
   padding: 8px 10px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font-size: var(--text-sm);
 }

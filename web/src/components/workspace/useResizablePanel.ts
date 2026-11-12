@@ -9,7 +9,7 @@ export interface ResizablePanelOptions {
 export interface ResizablePanel {
   width: number;
   /** Attach to the panel whose width is being dragged, so a drag can write it without a render. */
-  panelRef: React.RefObject<HTMLElement>;
+  panelRef: React.RefObject<HTMLElement | null>;
   separatorProps: React.HTMLAttributes<HTMLDivElement> & {
     role: 'separator';
     tabIndex: number;

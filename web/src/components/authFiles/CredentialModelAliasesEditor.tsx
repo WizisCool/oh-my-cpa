@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Checkbox, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 
 import { VertexModelOpenAPI } from './VertexModelOpenAPI';
 import { useT } from '../../i18n';
@@ -65,15 +67,15 @@ export const CredentialModelAliasesEditor: React.FC<CredentialModelAliasesEditor
                 <div className={styles['policy-desc']}>{t('vertex.openapi_precedence')}</div>
               </>}
               <div className={styles['alias-flags']}>
-                <Checkbox checked={Boolean(entry.fork)} onChange={(event) => patchAlias(entry.rowKey, { fork: event.target.checked })}>
+                <Checkbox checked={Boolean(entry.fork)} onCheckedChange={(checked) => patchAlias(entry.rowKey, { fork: checked })}>
                   {t('af.alias_col_fork')}
                 </Checkbox>
-                <Checkbox checked={Boolean(entry.force_mapping)} onChange={(event) => patchAlias(entry.rowKey, { force_mapping: event.target.checked })}>
+                <Checkbox checked={Boolean(entry.force_mapping)} onCheckedChange={(checked) => patchAlias(entry.rowKey, { force_mapping: checked })}>
                   {t('af.alias_col_force')}
                 </Checkbox>
                 <Button
-                  type="text"
-                  size="small"
+                  variant="ghost"
+                  size="sm"
                   danger
                   icon={<DeleteOutlined />}
                   className={styles['alias-remove']}
@@ -86,7 +88,7 @@ export const CredentialModelAliasesEditor: React.FC<CredentialModelAliasesEditor
         </ul>
       )}
       <Button
-        size="small"
+        size="sm"
         icon={<PlusOutlined />}
         disabled={aliases.length >= MAX_CREDENTIAL_MODEL_ALIASES}
         onClick={() => {

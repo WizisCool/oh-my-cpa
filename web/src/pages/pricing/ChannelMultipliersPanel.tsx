@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { NumberInput } from '../../components/common/NumberInput';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckOutlined, UndoOutlined } from '../../components/icons';
@@ -128,7 +129,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
         data-testid="pricing-channel-multiplier"
       />
       <Input
-        size="small"
+        size="sm"
         value={note}
         maxLength={512}
         onChange={(event) => setNote(event.target.value)}
@@ -139,7 +140,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
       <div className="row-actions">
         <Tooltip title={t('common.save')}>
           <Button
-            size="small"
+            size="sm"
             className="row-action-btn"
             icon={<CheckOutlined />}
             disabled={!isDirty}
@@ -157,7 +158,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
             tooltip={t('pricing.channels.reset')}
           >
             <Button
-              size="small"
+              size="sm"
               className="row-action-btn"
               icon={<UndoOutlined />}
               loading={reset.isPending}

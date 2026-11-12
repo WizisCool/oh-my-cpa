@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button, Segmented } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../../api/client';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
@@ -105,7 +106,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
               confirmLabel={t('sys.backup_restore')}
               onConfirm={() => onSchedule(preview)}
             >
-              <Button type="primary" danger disabled={isBusy || preview.state !== 'ready'}>
+              <Button variant="primary" danger disabled={isBusy || preview.state !== 'ready'}>
                 {t('sys.backup_restore')}
               </Button>
             </ConfirmAction>
@@ -131,7 +132,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
         />
       </label>
       <Button
-        type="primary"
+        variant="primary"
         loading={isWorking}
         disabled={isBusy || !isPassphraseLongEnough(passphrase)}
         onClick={() => void inspect()}
@@ -187,8 +188,8 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
               {archives.data ? t('sys.backup_archive_count', { count: archives.data.items.length }) : ' '}
             </span>
             <ToolButton
-              type="text"
-              size="small"
+              variant="ghost"
+              size="sm"
               icon={<ReloadOutlined spin={archives.isFetching} />}
               label={t('sys.backup_archive_refresh')}
               disabled={archives.isFetching}
@@ -213,7 +214,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
                     </div>
                     {source === LOCAL && (
                       <ToolButton
-                        type="text"
+                        variant="ghost"
                         icon={<DownloadOutlined />}
                         label={t('sys.backup_download')}
                         href={api.databaseBackupArchiveDownloadUrl(item.key)}
@@ -222,8 +223,8 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
                       />
                     )}
                     <Button
-                      size="small"
-                      type={selectedKey === item.key ? 'primary' : 'default'}
+                      size="sm"
+                      variant={selectedKey === item.key ? 'primary' : 'secondary'}
                       aria-expanded={selectedKey === item.key}
                       disabled={isBusy || isWorking}
                       onClick={() => {

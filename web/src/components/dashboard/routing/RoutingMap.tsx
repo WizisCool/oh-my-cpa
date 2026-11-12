@@ -71,7 +71,7 @@ function useRegistry<T extends Element>() {
 
 function useLaneMotion(ref: React.RefObject<SVGGElement | null>, phase: PresencePhase, delayMs: number) {
   const isReducedMotion = usePrefersReducedMotion();
-  const entranceRef = React.useRef<Animation>();
+  const entranceRef = React.useRef<Animation | undefined>(undefined);
   React.useLayoutEffect(() => {
     if (phase !== 'entering' || isMotionReduced()) return;
     entranceRef.current = ref.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
@@ -551,7 +551,7 @@ function ModelNode({ row, phase, delayMs, containerRef, onMotion, tileRef, washR
       data-phase={phase}
     >
       <span className={styles['row-text']}>
-        <span className={styles['row-name']} title={row.name}>{row.name}</span>
+        <span className={styles['row-name']} data-tip={row.name} data-tip-overflow="">{row.name}</span>
         <span className={styles['row-meta']}>
           {t('routing.requests_count', { count: row.requests.toLocaleString() })}
           {row.failures > 0 && <span className={styles['row-failures']}> · {t('routing.failed_count', { count: row.failures })}</span>}
@@ -599,7 +599,7 @@ function TargetNode({ target, phase, delayMs, containerRef, onMotion, tileRef, n
           <span className={styles['row-name']}>{identity.title}</span>
           {target.cooldown && <CooldownLabel cooldown={target.cooldown} nowMs={nowMs} skewMs={skewMs} />}
         </span>
-        <span className={styles['row-meta']} title={identity.credential || undefined}>
+        <span className={styles['row-meta']} data-tip={identity.credential || undefined} data-tip-overflow="">
           {identity.credential || target.sample.model || '—'}
           {target.failures > 0 && (
             <span className={styles['row-failures']}> · {t('routing.failed_count', { count: target.failures })}</span>

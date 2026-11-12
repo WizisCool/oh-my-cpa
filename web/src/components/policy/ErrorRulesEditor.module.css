@@ -9,13 +9,14 @@
 }
 
 .rule {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
 }
 
 .rule-invalid {
-  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger), var(--edge-drop);
 }
 
 .rule-head {
@@ -89,8 +90,8 @@
 
 /* A finger has no hover and needs a taller target than a pointer does. */
 @media (pointer: coarse) {
-  .rule-tools :global(.ant-btn),
-  .match-row :global(.ant-btn) {
+  .rule-tools :global([data-slot='button']),
+  .match-row :global([data-slot='button']) {
     min-width: 40px;
     min-height: 40px;
   }

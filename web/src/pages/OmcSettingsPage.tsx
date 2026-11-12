@@ -3,7 +3,10 @@ import type { MessageKey } from '../i18n/catalog';
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, ColorPicker, Segmented, Select } from 'antd';
+import { ColorPicker } from '@/components/ui/color-picker';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../components/common/Switch';
 import { PlusOutlined } from '../components/icons';
 import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
@@ -15,12 +18,16 @@ import {
   CORE_TOKEN_KEYS,
   builtInPalettesForMode,
   derivePalette,
-  resolvedBuiltInPalette,
+  getThemeRegistryRevision,
+  listRegisteredThemes,
+  resolvedRegisteredTheme,
+  subscribeThemeRegistry,
   type ContrastRole,
   type ThemeCore,
   type ThemeMode,
 } from '../theme/palette';
 import { contrastRatio } from '../theme/colorMath';
+import { resolveThemeText } from '../theme/themeContract';
 import { THEME_MODE_PREFERENCES, resolveModePreference, type ThemeModePreference } from '../theme/themePreference';
 import { ThemeSwatch } from '../components/common/ThemeSwatch';
 import { CountryFlag, LANGUAGE_FLAGS } from '../components/common/CountryFlag';
@@ -31,7 +38,7 @@ import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
 import { REDUCED_MOTION_PREFERENCES, type ReducedMotionPreference } from '../utils/motionPreference';
-import { SectionHeading } from '../components/common/SectionHeading';
+import { SettingsGroup } from '../components/settings/SettingsGroup';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { DataRetentionSettings } from '../components/settings/DataRetentionSettings';
@@ -163,8 +170,7 @@ export const OmcSettingsPage: React.FC = () => {
     <div className="terminal-page omc-settings-page">
       <PageHeader title={t('omc.title')} />
 
-      <div className="settings-group omc-settings-group">
-        <SectionHeading className="settings-group-head" title={t('omc.section_display')} />
+      <SettingsGroup title={t('omc.section_display')}>
         <SettingRow
           label={t('omc.timezone')}
           description={t('omc.timezone_desc')}
@@ -218,7 +224,7 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
-      </div>
+      </SettingsGroup>
 
       <QuotaAutoRefreshGroup />
 
@@ -230,8 +236,7 @@ export const OmcSettingsPage: React.FC = () => {
 
       <PluginSourceGroup />
 
-      <div className="settings-group omc-settings-group">
-        <SectionHeading className="settings-group-head" title={t('omc.section_appearance')} />
+      <SettingsGroup title={t('omc.section_appearance')}>
         <SettingRow
           label={t('omc.theme_mode')}
           description={t(
@@ -300,7 +305,7 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
-      </div>
+      </SettingsGroup>
 
       <SidebarNavSettings />
     </div>
@@ -312,8 +317,7 @@ const PluginSourceGroup: React.FC = () => {
   const t = useT();
   const source = useOmcPluginSource();
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_plugin_source')} />
+    <SettingsGroup title={t('omc.section_plugin_source')}>
       <SettingRow
         label={t('omc.plugin_source')}
         description={t('omc.plugin_source_desc')}
@@ -326,7 +330,7 @@ const PluginSourceGroup: React.FC = () => {
           />
         )}
       />
-    </div>
+    </SettingsGroup>
   );
 };
 
@@ -355,8 +359,7 @@ const QuotaAutoRefreshGroup: React.FC = () => {
     intervals.sort((left, right) => left - right);
   }
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_quota')} />
+    <SettingsGroup title={t('omc.section_quota')}>
       <SettingRow
         label={t('omc.quota_auto_refresh_interval')}
         description={t('omc.quota_auto_refresh_interval_desc')}
@@ -383,7 +386,7 @@ const QuotaAutoRefreshGroup: React.FC = () => {
           />
         }
       />
-    </div>
+    </SettingsGroup>
   );
 };
 
@@ -406,8 +409,7 @@ export const UpdateCheckGroup: React.FC = () => {
     : t('omc.update_check_minutes', { n: minutes }));
 
   return (
-    <div className="settings-group omc-settings-group">
-      <SectionHeading className="settings-group-head" title={t('omc.section_update_check')} />
+    <SettingsGroup title={t('omc.section_update_check')}>
       <SettingRow
         label={t('omc.update_check_interval')}
         description={t('omc.update_check_interval_desc')}
@@ -423,7 +425,7 @@ export const UpdateCheckGroup: React.FC = () => {
         }
       />
 
-    </div>
+    </SettingsGroup>
   );
 };
 
@@ -459,16 +461,21 @@ const PaletteSetting: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
  */
 const PaletteChooser: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
   const t = useT();
+  const { lang } = useI18n();
   const { preferences, setPaletteRef, openCustomEditor, customFor } = useTheme();
+  React.useSyncExternalStore(subscribeThemeRegistry, getThemeRegistryRevision, getThemeRegistryRevision);
   const selected = preferences.palettes[mode];
   const custom = customFor(mode);
   const groupLabel = t(mode === 'light' ? 'omc.palette_light' : 'omc.palette_dark');
 
   return (
     <div className="theme-preset-grid" role="group" aria-label={groupLabel}>
-      {builtInPalettesForMode(mode).map((definition) => {
-        const resolved = resolvedBuiltInPalette(definition.id);
+      {listRegisteredThemes(mode).map((definition) => {
+        const resolved = resolvedRegisteredTheme(definition.id);
+        if (!resolved) return null;
         const isActive = selected === definition.id;
+        const displayName = definition.nameKey ? t(definition.nameKey) : resolveThemeText(definition.label, lang, definition.id);
+        const displayDesc = definition.descriptionKey ? t(definition.descriptionKey) : resolveThemeText(definition.description, lang);
         return (
           <button
             key={definition.id}
@@ -478,8 +485,8 @@ const PaletteChooser: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
             onClick={() => setPaletteRef(mode, definition.id)}
           >
             <ThemeSwatch palette={resolved.palette} className="theme-preset-preview" />
-            <span className="theme-preset-name">{t(definition.nameKey)}</span>
-            <span className="theme-preset-desc">{t(definition.descriptionKey)}</span>
+            <span className="theme-preset-name">{displayName}</span>
+            {displayDesc && <span className="theme-preset-desc">{displayDesc}</span>}
           </button>
         );
       })}
@@ -549,7 +556,7 @@ const CustomPaletteEditor: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
           <Button onClick={() => resetCustomPalette(mode)}>
             {t('omc.palette_reset')}
           </Button>
-          <Button type="primary" onClick={closeCustomEditor}>{t('omc.palette_done')}</Button>
+          <Button variant="primary" onClick={closeCustomEditor}>{t('omc.palette_done')}</Button>
         </div>
       </div>
       <div className="palette-token-list">
@@ -594,18 +601,14 @@ const PaletteTokenRow: React.FC<{
       <span className="palette-token-name">{t(TOKEN_LABEL_KEYS[tokenKey])}</span>
       <ColorPicker
         value={value}
-        disabledAlpha
-        // Named for a screen reader: the row's label is a sibling span, so without this the control
-        // announces a hex value and nothing about which token it belongs to. Ant Design forwards `aria-*`
-        // to the trigger, which is what makes the name land on the focusable element rather than the field.
         aria-label={t(TOKEN_LABEL_KEYS[tokenKey])}
-        showText={(color) => color.toHexString()}
-        onChange={(color) => onChange(color.toHexString())}
+        showText
+        onChange={(hex) => onChange(hex)}
         onChangeComplete={() => onCommit()}
       />
       <span
         className={`terminal-mono palette-token-ratio is-${status}`}
-        title={
+        data-tip={
           floor === undefined
             ? t('omc.contrast_layer')
             : t('omc.contrast_floor', { floor: String(floor), role: t(ROLE_LABEL_KEYS[role]) })

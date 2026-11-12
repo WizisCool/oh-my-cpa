@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { Button, Select } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { LeftOutlined, RightOutlined } from '../icons';
 
 import { useT } from '../../i18n';

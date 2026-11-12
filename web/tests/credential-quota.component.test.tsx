@@ -10,7 +10,6 @@ import {
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
 import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
-import { App as AntdApp } from 'antd';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
@@ -245,9 +244,7 @@ function renderCredentialRow(
   return render(
     <MemoryRouter>
       <I18nProvider>
-        <AntdApp>
-          <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />
-        </AntdApp>
+        <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />
       </I18nProvider>
     </MemoryRouter>,
   );

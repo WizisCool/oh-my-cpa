@@ -16,17 +16,18 @@
   color: var(--fg);
   background: color-mix(in srgb, var(--danger) 15%, transparent);
   padding: 1px 6px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font-family: var(--font-mono, monospace);
 }
 .request-failure-detail .req-overview-error-body {
+  border: 0;
   margin: 8px 0 0;
   padding: 8px 12px;
   font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   max-height: 220px;
   overflow: auto;
   white-space: pre-wrap;

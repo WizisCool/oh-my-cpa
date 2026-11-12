@@ -1,6 +1,7 @@
 .code-frame {
+  border: 0;
   margin: 0;
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
   border-radius: var(--radius-lg);
   background: var(--surface);
   overflow: hidden;
@@ -18,7 +19,7 @@
   font-size: var(--text-xs);
 }
 
-.code-frame-head :global(.ant-btn) {
+.code-frame-head :global([data-slot='button']) {
   color: var(--muted);
 }
 

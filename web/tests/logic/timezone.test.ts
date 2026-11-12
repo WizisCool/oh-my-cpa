@@ -124,6 +124,21 @@ test('gateway timestamps with explicit offsets convert to the display timezone',
     for (const invalid of ['not a timestamp', 'not a timestampZ', '2026-11-02T14:12:18+99:00']) {
       assert.equal(formatGatewayTimestamp(invalid), invalid);
     }
+
+    // Midnight & spring-forward DST gaps resolve monotonically forward into the selected civil day,
+    // never slipping backward into the preceding hour or previous day.
+    configureTimeZone('America/Santiago', 'UTC');
+    assert.equal(dayjs('2026-09-06 00:00').format('YYYY-MM-DD HH:mm Z'), '2026-09-06 01:00 -03:00');
+    assert.equal(dayjs('2026-09-06').startOf('day').format('YYYY-MM-DD HH:mm Z'), '2026-09-06 01:00 -03:00');
+    assert.equal(
+      dayjs('2026-09-06').endOf('day').valueOf() - dayjs('2026-09-06').startOf('day').valueOf() + 1,
+      23 * 3_600_000,
+    );
+
+    configureTimeZone('America/New_York', 'UTC');
+    assert.equal(dayjs('2026-03-08 02:30').format('YYYY-MM-DD HH:mm Z'), '2026-03-08 03:00 -04:00');
+    assert.ok(dayjs('2026-03-08 01:59').valueOf() < dayjs('2026-03-08 02:30').valueOf());
+    assert.ok(dayjs('2026-03-08 02:30').valueOf() <= dayjs('2026-03-08 03:00').valueOf());
   } finally {
     configureTimeZone('', 'UTC');
   }

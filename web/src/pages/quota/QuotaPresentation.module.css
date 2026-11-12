@@ -161,7 +161,7 @@
   gap: 8px 12px;
   flex-wrap: wrap;
   padding: 10px 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--danger) 9%, transparent);
 }
 

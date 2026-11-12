@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../../api/client';
 import { AppDrawer } from '../../components/common/AppDrawer';
@@ -148,8 +148,8 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
           ) : (
             <span className={styles['drawer-title']}>
               <ToolButton
-                type="text"
-                size="small"
+                variant="ghost"
+                size="sm"
                 icon={<LeftOutlined />}
                 label={t('common.back')}
                 onClick={() => go('plan')}
@@ -164,8 +164,8 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
         extra={
           view === 'plan' && (
             <span className={styles['drawer-tools']}>
-              <ToolButton type="text" icon={<DownloadOutlined />} label={t('sys.backup_export_task')} onClick={() => go('export')} />
-              <ToolButton type="text" icon={<HistoryOutlined />} label={t('sys.backup_history')} onClick={() => go('history')} />
+              <ToolButton variant="ghost" icon={<DownloadOutlined />} label={t('sys.backup_export_task')} onClick={() => go('export')} />
+              <ToolButton variant="ghost" icon={<HistoryOutlined />} label={t('sys.backup_history')} onClick={() => go('history')} />
             </span>
           )
         }

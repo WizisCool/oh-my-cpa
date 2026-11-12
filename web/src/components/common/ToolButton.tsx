@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, type ButtonProps } from 'antd';
+import { Button, type ButtonProps } from '@/components/ui/button';
 import { Tooltip } from './Tooltip';
 
 /**
@@ -8,31 +8,36 @@ import { Tooltip } from './Tooltip';
  */
 export const LabelledActionsContext = React.createContext(false);
 
-export interface ToolButtonProps extends Omit<ButtonProps, 'children' | 'icon' | 'title'> {
+export interface ToolButtonProps extends Omit<ButtonProps, 'children' | 'icon' | 'title' | 'size'> {
   icon: React.ReactNode;
   /** The accessible name, the tooltip, and the row's text inside a menu. */
   label: string;
   /** What hovering shows when it should say more than the name. */
   tooltip?: React.ReactNode;
+  size?: ButtonProps['size'] | 'small' | 'middle' | 'large';
 }
 
-/**
- * A page's secondary action: one square glyph, named by its tooltip and its accessible name.
- *
- * Every secondary control in a page header and a toolbar is this, so they share one size and one
- * resting weight whatever their names' lengths in each language - a row of labelled buttons is
- * as wide as its words, and moving between pages made the row reflow under the pointer. The
- * page's primary action keeps its label: it is the one a reader looks for by name.
- */
+function normalizeSize(size: ToolButtonProps['size']): ButtonProps['size'] {
+  if (size === 'small') return 'sm';
+  if (size === 'large') return 'lg';
+  if (size === 'middle') return 'default';
+  return size;
+}
+
 export const ToolButton = React.forwardRef<HTMLButtonElement, ToolButtonProps>(
-  ({ icon, label, tooltip, ...buttonProps }, ref) => {
+  ({ icon, label, tooltip, size, ...buttonProps }, ref) => {
     const isLabelled = React.useContext(LabelledActionsContext);
+    const resolvedSize = normalizeSize(size);
     if (isLabelled) {
-      return <Button ref={ref} icon={icon} {...buttonProps}>{label}</Button>;
+      return (
+        <Button ref={ref} size={resolvedSize} icon={icon} {...buttonProps}>
+          {label}
+        </Button>
+      );
     }
     return (
       <Tooltip title={tooltip ?? label}>
-        <Button ref={ref} icon={icon} aria-label={label} {...buttonProps} />
+        <Button ref={ref} size={resolvedSize} icon={icon} aria-label={label} {...buttonProps} />
       </Tooltip>
     );
   },

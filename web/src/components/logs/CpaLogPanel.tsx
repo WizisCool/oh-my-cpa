@@ -2,7 +2,10 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Checkbox, Segmented, Tabs, Typography } from 'antd';
+import { Tabs } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -17,7 +20,7 @@ import {
 } from '../icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType } from '@/components/ui/table';
 import { api, apiErrorCode, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -61,15 +64,13 @@ import { Toolbar } from '../common/Toolbar';
 import { Count } from '../common/Count';
 import './logs.css';
 import { Tooltip } from '../common/Tooltip';
-import { TAB_OVERFLOW } from '../common/tabOverflow';
 
-const { Text } = Typography;
 
 // Status classes are shown as the numeric class, not as invented English words:
 // the log line itself says 400, and a localized UI must not caption it SUCCESS
 // under a different reading language.
 /** Anything of antd's that Escape should close before it closes the fullscreen viewer. */
-const OPEN_OVERLAY_SELECTOR = '.ant-select-open, .ant-popover:not(.ant-popover-hidden), .ant-modal-wrap:not([style*="display: none"]), .ant-drawer-open';
+const OPEN_OVERLAY_SELECTOR = '[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="popover-content"], [data-slot="dialog-popup"], [data-slot="sheet-content"]';
 
 const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
   all: '',
@@ -103,7 +104,7 @@ const CpaLogLine: React.FC<{
           <button
             type="button"
             className="log-req is-link"
-            title={t('logs.view_request', { id: requestId })}
+            data-tip={t('logs.view_request', { id: requestId })}
             aria-label={t('logs.view_request', { id: requestId })}
             onClick={(event) => {
               event.stopPropagation();
@@ -176,23 +177,23 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
       render: (_value, file) => (
         <span className={styles['file-actions']}>
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             icon={<EyeOutlined />}
             aria-label={`${t('logs.view_file')} ${file.name}`}
             disabled={isDemo}
-            title={isDemo ? t('demo.blocked') : t('logs.view_file')}
+            data-tip={isDemo ? t('demo.blocked') : t('logs.view_file')}
             onClick={() => onView(file)}
           />
           <Button
-            size="small"
-            type="text"
+            size="sm"
+            variant="ghost"
             icon={<DownloadOutlined />}
             aria-label={`${t('logs.download')} ${file.name}`}
             // An error log quotes request content, so the demonstration does not hand
             // one back at all; the server refuses the download too.
             disabled={isDemo}
-            title={isDemo ? t('demo.blocked') : undefined}
+            data-tip={isDemo ? t('demo.blocked') : undefined}
             onClick={async () => {
               try {
                 saveBlob(await api.downloadRequestErrorLog(file.name), file.name);
@@ -339,7 +340,7 @@ export const CpaLogPanel: React.FC = () => {
         title={t('logs.disabled_title')}
         action={(
           <Button
-            size="small"
+            size="sm"
             icon={<ReloadOutlined />}
             onClick={() => {
               void status.refetch();
@@ -400,7 +401,7 @@ export const CpaLogPanel: React.FC = () => {
                   className={styles['filter-toggle']}
                   aria-expanded={isFiltersOpen}
                   aria-controls="log-request-filters"
-                  type={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'default'}
+                  variant={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'secondary'}
                   onClick={() => setIsFiltersOpen((isOpen) => !isOpen)}
                 >
                   {activeFilterCount > 0 ? t('logs.filters_active', { n: activeFilterCount }) : t('events.more_filters')}
@@ -409,10 +410,10 @@ export const CpaLogPanel: React.FC = () => {
             )}
             <div className={styles['toolbar-summary']}>
               {isTail && (
-                <Text className="logs-counts">
+                <span className="logs-counts text-foreground">
                   {t('logs.counts', { shown: rows.length, total: parsed.length })}
                   {tail.dropped > 0 ? ` · ${t('logs.dropped', { n: tail.dropped })}` : ''}
-                </Text>
+                </span>
               )}
               <div className={styles['toolbar-actions']}>
                 {isTail && (
@@ -429,7 +430,7 @@ export const CpaLogPanel: React.FC = () => {
                   <Tooltip title={t('logs.wrap')}>
                     <Button
                       icon={<WrapTextOutlined />}
-                      type={filters.wrapLines ? 'primary' : 'default'}
+                      variant={filters.wrapLines ? 'primary' : 'secondary'}
                       aria-pressed={filters.wrapLines}
                       aria-label={t('logs.wrap')}
                       onClick={() => patchFilters({ wrapLines: !filters.wrapLines })}
@@ -467,7 +468,7 @@ export const CpaLogPanel: React.FC = () => {
               <div className={styles['filter-field']}>
                 <span className={styles['filter-label']}>{t('logs.status_filter')}</span>
                 <Segmented
-                  size="small"
+                  size="sm"
                   value={filters.statusClass}
                   options={LOG_STATUS_CLASSES.map((value) => ({
                     value,
@@ -529,14 +530,14 @@ export const CpaLogPanel: React.FC = () => {
               <Checkbox
                 className={styles['filter-check']}
                 checked={filters.hideManagement}
-                onChange={(event) => patchFilters({ hideManagement: event.target.checked })}
+                onCheckedChange={(checked) => patchFilters({ hideManagement: checked })}
               >
                 {t('logs.hide_management')}
               </Checkbox>
               {activeFilterCount > 0 && (
                 <Button
-                  type="link"
-                  size="small"
+                  variant="link"
+                  size="sm"
                   className={styles['filter-clear']}
                   onClick={() => patchFilters({ statusClass: 'all', methods: [], paths: [] })}
                 >
@@ -546,7 +547,7 @@ export const CpaLogPanel: React.FC = () => {
             </div>
           )}
 
-          <Tabs more={TAB_OVERFLOW}
+          <Tabs
             size="small"
             activeKey={tab}
             onChange={(key) => setTab(key as 'tail' | 'errors')}

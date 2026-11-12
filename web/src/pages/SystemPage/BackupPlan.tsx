@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Button, Checkbox, Select, TimePicker } from 'antd';
+import { Select } from '@/components/ui/select';
+import { TimePicker, clockToMinuteOfDay, minuteOfDayToClock } from '@/components/ui/time-picker';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import dayjs from '../../utils/time';
 import {
   CheckCircleOutlined,
@@ -52,8 +55,7 @@ interface Props {
 /** The stages a run passes through, in order; a run with no cloud location has nothing to upload. */
 const RUN_STAGES: DatabaseBackupJob['state'][] = ['snapshotting', 'packaging', 'validating', 'uploading'];
 
-const minuteToTime = (minute: number) =>
-  dayjs().hour(Math.floor(minute / 60)).minute(minute % 60).second(0).millisecond(0);
+
 
 /**
  * The backup panel is one form: the daily time, the passphrase, and where copies go.
@@ -86,7 +88,7 @@ export function BackupPlan(props: Props) {
               title={t('sys.backup_cancel_confirm')}
               onConfirm={() => props.onCancelRestore(props.pendingRestore!)}
             >
-              <Button size="small">{t('sys.backup_cancel')}</Button>
+              <Button size="sm">{t('sys.backup_cancel')}</Button>
             </ConfirmAction>
           }
         />
@@ -182,7 +184,7 @@ function Status({
       <div className={styles['status-actions']}>
         {value.has_passphrase && (
           <Button
-            type="primary"
+            variant="primary"
             icon={<CloudUploadOutlined />}
             // A run in progress shows as this button working, not as a dead one: a loading button
             // already refuses clicks, so it keeps its colour and spinner instead of greying out.
@@ -200,7 +202,7 @@ function Status({
             {t('sys.backup_auto_run')}
           </Button>
         )}
-        <Button type="text" icon={<RollbackOutlined />} onClick={onRestore}>
+        <Button variant="ghost" icon={<RollbackOutlined />} onClick={onRestore}>
           {t('sys.backup_restore_from_backup')}
         </Button>
       </div>
@@ -269,7 +271,7 @@ function PassphraseSetup({ isBusy, onSave }: { isBusy: boolean; onSave: Props['o
       />
       <div className={styles['actions']}>
         <Button
-          type="primary"
+          variant="primary"
           loading={isSaving}
           disabled={!isPassphrasePairValid(passphrase, confirmation) || isBusy}
           onClick={() => void submit()}
@@ -304,12 +306,12 @@ function PassphraseChange({ isBusy, onSave, onDone }: { isBusy: boolean; onSave:
         onConfirmation={setConfirmation}
       />
       <div className={styles['actions']}>
-        <Button size="small" onClick={finish} disabled={isSaving}>
+        <Button size="sm" onClick={finish} disabled={isSaving}>
           {t('common.cancel')}
         </Button>
         <Button
-          size="small"
-          type="primary"
+          size="sm"
+          variant="primary"
           loading={isSaving}
           disabled={!isPassphrasePairValid(passphrase, confirmation) || isBusy}
           onClick={async () => {
@@ -335,8 +337,8 @@ function PassphraseChange({ isBusy, onSave, onDone }: { isBusy: boolean; onSave:
 function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: boolean; onSave: Props['onSave'] }) {
   const t = useT();
   const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
-  const [time, setTime] = useState(() => minuteToTime(value.daily_at_minute));
-  useEffect(() => setTime(minuteToTime(value.daily_at_minute)), [value.daily_at_minute]);
+  const [time, setTime] = useState(() => minuteOfDayToClock(value.daily_at_minute));
+  useEffect(() => setTime(minuteOfDayToClock(value.daily_at_minute)), [value.daily_at_minute]);
   // A count saved outside the presets (the server accepts 1-100) is still offered, so the control
   // names it rather than showing a bare number.
   const keepOptions = [...new Set([...KEEP_COUNTS, value.keep_local, value.keep_remote])]
@@ -366,15 +368,11 @@ function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: 
               className={styles['time-picker']}
               aria-label={t('sys.backup_daily_at')}
               value={time}
-              format="HH:mm"
-              allowClear={false}
-              needConfirm={false}
               disabled={isBusy || !value.enabled}
-              minuteStep={1}
               onChange={(next) => {
-                if (!next) return;
                 setTime(next);
-                void onSave({ daily_at_minute: next.hour() * 60 + next.minute() });
+                const minute = clockToMinuteOfDay(next);
+                if (minute !== null) void onSave({ daily_at_minute: minute });
               }}
             />
           }
@@ -416,7 +414,7 @@ function Schedule({ value, isBusy, onSave }: { value: BackupAutomation; isBusy: 
           description={t('sys.backup_passphrase_set')}
           control={
             <Button
-              size="small"
+              size="sm"
               icon={<LockOutlined />}
               aria-expanded={isChangingPassphrase}
               onClick={() => setIsChangingPassphrase((isOpen) => !isOpen)}
@@ -463,7 +461,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
             // With no cloud location the disk is the only place a backup can go, and a backup that
             // went nowhere is not a backup: the box is on and cannot be cleared yet.
             disabled={isBusy || (isLocalOn && !hasCloud)}
-            onChange={(event) => void props.onSave({ keep_local: event.target.checked ? DEFAULT_KEEP_LOCAL : 0 })}
+            onCheckedChange={(checked) => void props.onSave({ keep_local: checked ? DEFAULT_KEEP_LOCAL : 0 })}
           />
           <BackupProviderMark provider="local" />
           <div className={styles['location-text']}>
@@ -499,7 +497,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
             </div>
             <div className={styles['location-actions']}>
               <ToolButton
-                type="text"
+                variant="ghost"
                 icon={<SyncOutlined spin={probing === destination.id} />}
                 label={t('sys.backup_destination_test')}
                 disabled={isBusy || !!probing}
@@ -516,7 +514,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
                 }}
               />
               <ToolButton
-                type="text"
+                variant="ghost"
                 icon={<EditOutlined />}
                 label={t('sys.backup_destination_edit')}
                 disabled={isBusy}
@@ -529,7 +527,7 @@ function Locations(props: Props & { value: BackupAutomation }) {
                 tooltip={t('common.delete')}
                 onConfirm={() => remove(destination.id)}
               >
-                <Button type="text" icon={<DeleteOutlined />} aria-label={t('common.delete')} disabled={isBusy} />
+                <Button variant="ghost" icon={<DeleteOutlined />} aria-label={t('common.delete')} disabled={isBusy} />
               </ConfirmAction>
             </div>
           </li>

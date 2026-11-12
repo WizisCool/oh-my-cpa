@@ -116,7 +116,7 @@ function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
         title={<div className={styles.tip}>{detail.map((line) => <div key={line}>{line}</div>)}</div>}
       >
         <div className={styles.reading} role="group" aria-label={window.label} tabIndex={0}>
-          <span className={styles.name} title={name}>{name}</span>
+          <span className={styles.name} data-tip={name} data-tip-overflow="">{name}</span>
           <span className={styles.value}>
             <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
             {/* The bar carries the tone; the figure takes it only once the window is nearly spent. */}

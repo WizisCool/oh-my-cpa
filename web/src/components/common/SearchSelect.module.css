@@ -1,22 +1,18 @@
 /* The sheet is a layer the reader summoned from the bottom edge, so it takes the floating layers'
    rounded top and their fill. */
-.sheet :global(.ant-drawer-section) {
-  /* As tall as the content, between the floor and the cap the wrapper carries; past the cap the
-     list scrolls. */
+.sheet {
   height: auto;
-  min-height: inherit;
-  max-height: inherit;
   background: var(--elevated);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 
-.sheet :global(.ant-drawer-body) {
+.sheet :global([data-slot='sheet-body']) {
   display: flex;
   padding: 0;
   overflow: hidden;
 }
 
-.sheet :global(.ant-drawer-footer) {
+.sheet :global([data-slot='sheet-footer']) {
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
 }
 
@@ -43,7 +39,7 @@
   padding: 4px 8px calc(12px + env(safe-area-inset-bottom));
 }
 
-.sheet:has(:global(.ant-drawer-footer)) .list {
+.sheet:has(:global([data-slot='sheet-footer'])) .list {
   padding-bottom: 8px;
 }
 

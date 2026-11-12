@@ -1,11 +1,9 @@
 import type { MessageKey } from '../i18n/catalog';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
-import {
-  Badge,
-  Button,
-  Popover,
-} from 'antd';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/badge';
 import clsx from 'clsx';
 import { Switch } from '../components/common/Switch';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
@@ -617,10 +615,18 @@ export const UsageEventsPage: React.FC = () => {
                   aria-label={t('events.auto_refresh')}
                 />
               </label>
-              <Popover
-                trigger="click"
-                title={t('events.ingest_status')}
-                content={
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button variant="ghost">
+                      <StatusDot status={ingestTone} text={t(ingestLabel)} />
+                    </Button>
+                  }
+                />
+                <PopoverContent placement="bottomRight">
+                  <PopoverTitle className="m-0 mb-2 text-base font-semibold text-foreground">
+                    {t('events.ingest_status')}
+                  </PopoverTitle>
                   <div className="request-ingest">
                     <FactList
                       emphasis="quiet"
@@ -634,16 +640,12 @@ export const UsageEventsPage: React.FC = () => {
                     <p>{t('events.delivery_semantics_hint')}</p>
                     {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
                   </div>
-                }
-              >
-                <Button type="text">
-                  <Badge status={ingestTone} text={t(ingestLabel)} />
-                </Button>
+                </PopoverContent>
               </Popover>
               {hasCustomWidths && (
                 <Button
-                  size="small"
-                  type="text"
+                  size="sm"
+                  variant="ghost"
                   className="req-reset-columns-btn"
                   onClick={handleResetAllColumns}
                 >
@@ -653,8 +655,7 @@ export const UsageEventsPage: React.FC = () => {
               <ToolButton
                 icon={<CheckSquareOutlined />}
                 label={t('events.select_requests')}
-                type={isSelecting ? 'primary' : 'default'}
-                ghost={isSelecting}
+                variant={isSelecting ? 'active' : 'secondary'}
                 aria-pressed={isSelecting}
                 onClick={() => (isSelecting ? clearSelection() : setIsSelectMode(true))}
               />

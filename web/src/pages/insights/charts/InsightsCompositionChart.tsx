@@ -1,109 +1,181 @@
-import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
-import { EChart } from '../../../charts/echarts/EChart';
-import { renderChartTooltip } from '../../../charts/chartTooltip';
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
+import { useMotionPreference } from '@/utils/motionPreference';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
+import { useInsightsFormat } from '../useInsightsFormat';
 
 export interface CompositionSegment {
-  /** The column value (a model), or null for the row's remainder. */
   id: string | null;
   name: string;
   color: string;
 }
 
 export interface InsightsCompositionChartProps {
-  /** One bar per row (a key), top to bottom. */
   rows: ReadonlyArray<{ id: string; name: string }>;
   segments: readonly CompositionSegment[];
-  /** `values[segment][row]`. */
   values: ReadonlyArray<readonly number[]>;
   metric: InsightsMetric;
   totalLabel: string;
   label: string;
-  /** Steps back what the page is not narrowed to; absent, every segment is at full ink. */
   isDimmed?: (rowId: string, segmentId: string | null) => boolean;
   onSelect?: (rowId: string, segmentId: string | null) => void;
 }
 
-interface ItemParams {
-  seriesIndex: number;
-  dataIndex: number;
-  value?: number;
+const ROW_HEIGHT = 32;
+const REST_KEY = '__rest__';
+
+function segKey(segment: CompositionSegment, index: number): string {
+  return segment.id !== null ? `seg:${segment.id}` : `${REST_KEY}:${index}`;
 }
 
-const ROW_HEIGHT = 30;
-
-/**
- * What each key is made of: one horizontal bar per key, its length the key's whole, cut into the
- * models it used. Read like a sentence - "this key, this much, mostly this model" - which a heat table
- * of the same numbers asks the reader to assemble cell by cell. Hovering a segment names the model,
- * its amount and its part of the key; selecting it narrows the page to that key and model.
- */
-const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({ rows, segments, values, metric, totalLabel, label, isDimmed, onSelect }) => {
+const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
+  rows,
+  segments,
+  values,
+  metric,
+  totalLabel,
+  label,
+  isDimmed,
+  onSelect,
+}) => {
+  const { isReducedMotion } = useMotionPreference();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
-  const selectRef = React.useRef(onSelect);
-  selectRef.current = onSelect;
 
-  const option = React.useMemo(() => {
-    const totals = rows.map((_, row) => values.reduce((sum, series) => sum + (series[row] ?? 0), 0));
-    return {
-      grid: { left: 4, right: 16, top: 4, bottom: 4, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
-      xAxis: { type: 'value', splitNumber: 4, axisLabel: { formatter: (value: number) => formatMetric(metric, value, style) } },
-      yAxis: {
-        type: 'category',
-        inverse: true,
-        data: rows.map((row) => row.name),
-        axisLabel: { width: 150, overflow: 'truncate' },
-        axisLine: { show: false },
-      },
-      tooltip: {
-        trigger: 'item',
-        className: 'omc-echart-tip',
-        formatter: (item: ItemParams) => {
-          const segment = segments[item.seriesIndex];
-          const total = totals[item.dataIndex] ?? 0;
-          const value = item.value ?? 0;
-          return renderChartTooltip(rows[item.dataIndex]?.name, [
-            { name: segment?.name, color: segment?.color, value: formatMetric(metric, value, style), exact: formatMetricExact(metric, value), share: formatShare(total > 0 ? value / total : null) },
-            { name: totalLabel, value: formatMetric(metric, total, style), exact: formatMetricExact(metric, total) },
-          ]);
-        },
-      },
-      series: segments.map((segment, index) => ({
-        id: segment.id ?? '\u0000rest',
-        name: segment.name,
-        type: 'bar',
-        stack: 'composition',
-        barMaxWidth: 18,
-        itemStyle: { color: segment.color },
-        emphasis: { focus: 'series' },
-        data: isDimmed
-          ? values[index].map((value, row) => ({ value, itemStyle: { opacity: isDimmed(rows[row].id, segment.id) ? 0.22 : 1 } }))
-          : values[index],
-      })),
-    };
-  }, [isDimmed, metric, rows, segments, style, totalLabel, values, formatMetric, formatMetricExact]);
+  const totals = React.useMemo(
+    () => rows.map((_, rowIdx) => values.reduce((sum, series) => sum + (series[rowIdx] ?? 0), 0)),
+    [rows, values],
+  );
 
-  const handlers = React.useMemo(() => ({
-    click: (params: unknown) => {
-      const item = params as ItemParams;
-      const row = rows[item.dataIndex];
-      const segment = segments[item.seriesIndex];
-      if (row && segment) selectRef.current?.(row.id, segment.id);
-    },
-  }), [rows, segments]);
+  const data = React.useMemo(
+    () =>
+      rows.map((row, rowIdx) => {
+        const entry: Record<string, string | number> = {
+          rowId: row.id,
+          rowName: row.name,
+          total: totals[rowIdx] ?? 0,
+        };
+        segments.forEach((segment, segIdx) => {
+          entry[segKey(segment, segIdx)] = values[segIdx]?.[rowIdx] ?? 0;
+        });
+        return entry;
+      }),
+    [rows, segments, totals, values],
+  );
+
+  const config = React.useMemo<ChartConfig>(() => {
+    const out: ChartConfig = {};
+    segments.forEach((segment, idx) => {
+      out[segKey(segment, idx)] = { label: segment.name, color: segment.color };
+    });
+    return out;
+  }, [segments]);
+
+  const chartHeight = Math.max(120, rows.length * ROW_HEIGHT + 32);
 
   return (
-    <EChart
-      option={option}
-      height={Math.max(120, rows.length * ROW_HEIGHT + 32)}
-      label={label}
-      handlers={handlers}
-      testId="insights-composition-chart"
-    />
+    <ChartContainer
+      config={config}
+      role="img"
+      aria-label={label}
+      data-testid="insights-composition-chart"
+      style={{ height: chartHeight }}
+      initialDimension={{ width: 560, height: chartHeight }}
+    >
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+        <CartesianGrid horizontal={false} />
+        <XAxis
+          type="number"
+          tickCount={4}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(v: number) => formatMetric(metric, v, style)}
+        />
+        <YAxis
+          type="category"
+          dataKey="rowName"
+          width={148}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(name: string) => (name.length > 20 ? `${name.slice(0, 19)}…` : name)}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              buildRows={(payload) => {
+                const entry = payload[0]?.payload as Record<string, string | number> | undefined;
+                if (!entry) return null;
+                const total = Number(entry.total ?? 0);
+                const breakdown = segments
+                  .map((segment, segIdx) => {
+                    const v = Number(entry[segKey(segment, segIdx)] ?? 0);
+                    return { segment, v };
+                  })
+                  .filter((item) => item.v > 0)
+                  .map(({ segment, v }) => ({
+                    key: segment.id ?? segment.name,
+                    name: segment.name,
+                    color: segment.color,
+                    value: formatMetric(metric, v, style),
+                    share: formatShare(total > 0 ? v / total : null),
+                  }));
+                return {
+                  heading: String(entry.rowName),
+                  rows: [
+                    ...breakdown,
+                    {
+                      key: '__total__',
+                      name: totalLabel,
+                      value: formatMetric(metric, total, style),
+                      note: formatMetricExact(metric, total) !== formatMetric(metric, total, style)
+                        ? formatMetricExact(metric, total)
+                        : undefined,
+                      isTotal: true,
+                    },
+                  ],
+                };
+              }}
+            />
+          }
+        />
+        {segments.map((segment, segIdx) => {
+          const key = segKey(segment, segIdx);
+          return (
+            <Bar
+              key={key}
+              dataKey={key}
+              name={segment.name}
+              stackId="composition"
+              maxBarSize={18}
+              fill={segment.color}
+              isAnimationActive={!isReducedMotion}
+              animationDuration={180}
+              onClick={(_, rowIdx) => {
+                const row = rows[rowIdx];
+                if (row) onSelect?.(row.id, segment.id);
+              }}
+            >
+              {rows.map((row) => (
+                <Cell
+                  key={row.id}
+                  fill={segment.color}
+                  fillOpacity={isDimmed?.(row.id, segment.id) ? 0.22 : 1}
+                  className="cursor-pointer"
+                />
+              ))}
+            </Bar>
+          );
+        })}
+      </BarChart>
+    </ChartContainer>
   );
 };
 

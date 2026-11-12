@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Checkbox } from 'antd';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CredentialMark } from '../../components/LobeIcon';
 import { ReorderHandle, RowReorder, useReorderList, useReorderRow } from '../../components/common/RowReorder';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -146,7 +146,7 @@ export function GroupHead({ group, pluginLogos, selectedKeys, actions, hasColumn
           checked={selectable.length > 0 && selectedCount === selectable.length}
           indeterminate={selectedCount > 0 && selectedCount < selectable.length}
           disabled={selectable.length === 0}
-          onChange={(event) => actions.onSelect(selectable, event.target.checked)}
+          onCheckedChange={(checked) => actions.onSelect(selectable, checked)}
           aria-label={t('omc.section_select', { provider: group.title })}
         />
       </span>
@@ -179,7 +179,7 @@ export function isRecordBodyClick(event: React.MouseEvent<HTMLElement>): boolean
   if (target && !event.currentTarget.contains(target)) return false;
   if (!target) return false;
   if (window.getSelection()?.toString()) return false;
-  return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], .ant-dropdown, .ant-popover');
+  return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], [data-slot="dropdown-menu-content"], [data-slot="popover-content"]');
 }
 
 function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, actions, pluginLogos }: {

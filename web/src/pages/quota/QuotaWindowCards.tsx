@@ -65,19 +65,19 @@ function QuotaWindowCard({ window, name, nowMS, owner }: {
   const content = (
     <>
       <span className={styles.head}>
-        <span className={styles.name} title={window.label}>{name}</span>
+        <span className={styles.name} data-tip={window.label} data-tip-overflow="">{name}</span>
         <span className={styles.value}>
           <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
           <b style={remaining != null && remaining < 70 ? { color: stroke } : undefined}>{remaining == null ? '--' : `${remaining}%`}</b>
         </span>
       </span>
       <Meter value={remaining ?? 0} color={stroke} label={remaining == null ? undefined : name} />
-      {window.description && <span className={styles.description} title={window.description}>{window.description}</span>}
+      {window.description && <span className={styles.description} data-tip={window.description} data-tip-overflow="">{window.description}</span>}
       <span className={styles.foot}>
         <span className={styles.estimate}>
           {estimate && <>{t('quota.capacity_estimate')} <b>{estimate}</b></>}
         </span>
-        {reset && <span className={styles.reset} title={resetTitle}>{reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
+        {reset && <span className={styles.reset} data-tip={resetTitle}>{reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
       </span>
     </>
   );

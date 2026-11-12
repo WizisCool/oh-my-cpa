@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntdApp, Button, Segmented } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { DeleteOutlined, SaveOutlined } from '../icons';
 import { CredentialMark } from '../LobeIcon';
 import { providerDisplayName } from '../../types/providerMetadata';
@@ -26,7 +27,7 @@ import { excludedModelRulesEqual, normalizeExcludedModelRules } from './oauthExc
 import { OAuthExcludedModelsPanel, type OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
 import { OAuthModelAliasPanel } from './OAuthModelAliasPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
-import { LoadFailure, Notice, useToast } from '../feedback';
+import { LoadFailure, Notice, useConfirmModal, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { ListLoading } from '../common/PageLoading';
 import { SearchSelect } from '../common/SearchSelect';
@@ -92,7 +93,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [section, setSection] = useState<OAuthModelRulesSection>('aliases');
@@ -392,11 +393,11 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   const footerStart = (
     <Button
       danger
-      type="text"
+      variant="ghost"
       icon={<DeleteOutlined />}
       data-testid="oauth-model-rules-clear"
       disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving || isDemo}
-      title={isDemo ? t('demo.blocked') : undefined}
+      data-tip={isDemo ? t('demo.blocked') : undefined}
       onClick={confirmClear}
     >
       {t(section === 'aliases' ? 'af.alias_delete_provider' : 'af.excluded_delete_provider')}
@@ -412,12 +413,12 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         {t('af.rules_revert')}
       </Button>
       <Button
-        type="primary"
+        variant="primary"
         icon={<SaveOutlined />}
         data-testid="oauth-model-rules-save"
         loading={isSaving}
         disabled={!isSectionReady || !isSectionDirty || isDemo}
-        title={isDemo ? t('demo.blocked') : undefined}
+        data-tip={isDemo ? t('demo.blocked') : undefined}
         onClick={() => void (section === 'aliases' ? saveAliases() : saveRules())}
       >
         {t(section === 'aliases' ? 'af.alias_save' : 'af.excluded_save')}

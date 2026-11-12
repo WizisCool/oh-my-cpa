@@ -1,87 +1,153 @@
-import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
-import { EChart } from '../../../charts/echarts/EChart';
-import { renderChartTooltip } from '../../../charts/chartTooltip';
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceArea, XAxis, YAxis } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
+import { useMotionPreference } from '@/utils/motionPreference';
+import { RADIUS } from '../../../theme/radius';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
+import { useInsightsFormat } from '../useInsightsFormat';
 
 export interface InsightsHourChartProps {
-  /** Twenty-four values, local hour 0 first. */
   values: readonly number[];
-  /** The busiest hours, drawn in the full series ink; the rest are drawn lighter. */
   peakHours: ReadonlySet<number>;
-  /** The word written over the busiest stretch. */
   peakLabel: string;
   metric: InsightsMetric;
   label: string;
 }
 
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
+const VISIBLE_TICKS = HOUR_LABELS.filter((_, hour) => hour % 3 === 0);
 
-/**
- * When in the day the window's usage happened: one bar per local hour, summed over every day of the
- * window. The busiest hours carry the full ink and the rest a lighter one, and the stretch is named
- * on the chart, so the peak is the first thing read without a sentence or a legend to learn.
- */
-const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({ values, peakHours, peakLabel, metric, label }) => {
+function contiguousRuns(hours: ReadonlySet<number>): number[][] {
+  const runs: number[][] = [];
+  for (let hour = 0; hour < 24; hour += 1) {
+    if (!hours.has(hour)) continue;
+    const last = runs[runs.length - 1];
+    if (last && last[last.length - 1] === hour - 1) last.push(hour);
+    else runs.push([hour]);
+  }
+  return runs;
+}
+
+const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({
+  values,
+  peakHours,
+  peakLabel,
+  metric,
+  label,
+}) => {
   const { theme } = useTheme();
+  const { isReducedMotion } = useMotionPreference();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
+  const ink = theme.palette.series[0] ?? theme.palette.accent;
 
-  const option = React.useMemo(() => {
-    const total = values.reduce((sum, value) => sum + value, 0);
-    const ink = theme.palette.series[0];
-    const peak = [...peakHours].sort((left, right) => left - right);
-    // A stretch over midnight is two areas on a 00-23 axis; the label goes on the larger part.
-    const runs: number[][] = [];
-    for (const hour of peak) {
-      const last = runs.at(-1);
-      if (last && last.at(-1) === hour - 1) last.push(hour);
-      else runs.push([hour]);
-    }
-    const longest = runs.reduce<number[]>((best, run) => (run.length > best.length ? run : best), []);
-    // Always an object: a merged update keeps a mark area an option merely leaves out.
-    const markArea = runs.length === 0 ? { data: [] } : {
-      silent: true,
-      itemStyle: { color: theme.palette.hover, opacity: 0.55 },
-      label: { color: theme.palette.fg2, fontSize: 11, position: 'insideTop', distance: 2 },
-      data: runs.map((run) => [
-        { xAxis: HOUR_LABELS[run[0]], name: run === longest ? peakLabel : '' },
-        { xAxis: HOUR_LABELS[run[run.length - 1]] },
-      ]),
-    };
-    return {
-      grid: { left: 4, right: 8, top: 22, bottom: 4, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
-      xAxis: { type: 'category', data: HOUR_LABELS, axisLabel: { interval: 2 } },
-      yAxis: { type: 'value', splitNumber: 3, axisLabel: { formatter: (value: number) => formatMetric(metric, value, style) } },
-      tooltip: {
-        trigger: 'axis',
-        className: 'omc-echart-tip',
-        axisPointer: { type: 'shadow' },
-        formatter: (items: Array<{ dataIndex: number; value?: number }>) => {
-          const hour = items[0]?.dataIndex ?? 0;
-          const value = items[0]?.value ?? 0;
-          return renderChartTooltip(`${HOUR_LABELS[hour]} – ${HOUR_LABELS[(hour + 1) % 24]}`, [
-            { value: formatMetric(metric, value, style), exact: formatMetricExact(metric, value), share: formatShare(total > 0 ? value / total : null) },
-          ]);
-        },
-      },
-      series: [{
-        id: 'hours',
-        type: 'bar',
-        markArea,
-        barCategoryGap: '24%',
-        data: values.map((value, hour) => ({
-          value,
-          itemStyle: { color: ink, opacity: peakHours.has(hour) ? 1 : 0.42 },
-        })),
-      }],
-    };
-  }, [metric, peakHours, peakLabel, style, theme.palette, values, formatMetric, formatMetricExact]);
+  const total = React.useMemo(() => values.reduce((sum, v) => sum + v, 0), [values]);
+  const runs = React.useMemo(() => contiguousRuns(peakHours), [peakHours]);
+  const longest = React.useMemo(
+    () => runs.reduce<number[]>((best, run) => (run.length > best.length ? run : best), []),
+    [runs],
+  );
 
-  return <EChart option={option} height={200} label={label} testId="insights-hour-chart" />;
+  const data = React.useMemo(
+    () =>
+      HOUR_LABELS.map((hourLabel, hour) => ({
+        hour,
+        hourLabel,
+        value: values[hour] ?? 0,
+      })),
+    [values],
+  );
+
+  const config = React.useMemo<ChartConfig>(() => ({ value: { color: ink } }), [ink]);
+
+  return (
+    <ChartContainer
+      config={config}
+      role="img"
+      aria-label={label}
+      data-testid="insights-hour-chart"
+      style={{ height: 200 }}
+      initialDimension={{ width: 520, height: 200 }}
+    >
+      <BarChart data={data} margin={{ top: 18, right: 8, bottom: 4, left: 4 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis
+          dataKey="hourLabel"
+          ticks={VISIBLE_TICKS}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={6}
+        />
+        <YAxis
+          width={52}
+          tickCount={4}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(value: number) => formatMetric(metric, value, style)}
+        />
+        {runs.map((run) => (
+          <ReferenceArea
+            key={run[0]}
+            x1={HOUR_LABELS[run[0]!]}
+            x2={HOUR_LABELS[run[run.length - 1]!]}
+            fill={ink}
+            fillOpacity={0.07}
+            ifOverflow="extendDomain"
+            label={
+              run === longest
+                ? { value: peakLabel, position: 'insideTop', fill: theme.palette.fg2, fontSize: 12 }
+                : undefined
+            }
+          />
+        ))}
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              buildRows={(payload) => {
+                const entry = payload[0]?.payload as { hour: number; value: number } | undefined;
+                if (!entry) return null;
+                const display = formatMetric(metric, entry.value, style);
+                const exact = formatMetricExact(metric, entry.value);
+                return {
+                  heading: `${HOUR_LABELS[entry.hour]} – ${HOUR_LABELS[(entry.hour + 1) % 24]}`,
+                  rows: [
+                    {
+                      color: ink,
+                      value: display,
+                      share: formatShare(total > 0 ? entry.value / total : null),
+                      note: exact && exact !== display ? exact : undefined,
+                    },
+                  ],
+                };
+              }}
+            />
+          }
+        />
+        <Bar
+          dataKey="value"
+          radius={[RADIUS.xs, RADIUS.xs, 0, 0]}
+          isAnimationActive={!isReducedMotion}
+          animationDuration={180}
+        >
+          {data.map((entry) => (
+            <Cell
+              key={entry.hour}
+              fill={ink}
+              fillOpacity={peakHours.has(entry.hour) ? 1 : 0.38}
+            />
+          ))}
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  );
 };
 
 export const InsightsHourChart = React.memo(InsightsHourChartView);

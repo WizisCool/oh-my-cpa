@@ -1,5 +1,6 @@
 import React from 'react';
-import { App as AntdApp, Button, Popover } from 'antd';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
 import { useBlocker } from 'react-router-dom';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,7 +14,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ConfigDirtyBar } from '../../components/config/ConfigDirtyBar';
 import { ModelMark } from '../../components/ModelMark';
 import { renderFacetOption } from '../../components/usage/RequestFacetMark';
-import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { LoadFailure, Notice, useConfirmModal, useToast } from '../../components/feedback';
 import { useProviderBranding } from '../../hooks/useProviderBranding';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { isDemoMode } from '../../types/demoMode';
@@ -87,7 +88,7 @@ export function RoutingPage() {
   const branding = useProviderBranding();
   const t = useT();
   const toast = useToast();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const queryClient = useQueryClient();
   const isPhone = useIsPhoneViewport();
   const isDemo = isDemoMode();
@@ -240,7 +241,7 @@ export function RoutingPage() {
       if (code === 'routing_conflict') {
         toast.error(t('orch.conflict'), {
           key: 'routing-conflict',
-          actions: <Button size="small" onClick={() => { toast.dismiss('routing-conflict'); void reload(); }}>{t('orch.reload')}</Button>,
+          actions: <Button size="sm" onClick={() => { toast.dismiss('routing-conflict'); void reload(); }}>{t('orch.reload')}</Button>,
         });
         return;
       }
@@ -302,16 +303,13 @@ export function RoutingPage() {
   }
 
   const review = (
-    <Popover
-      trigger="click"
-      placement="topLeft"
-      content={(
+    <Popover>
+      <PopoverTrigger render={<Button size="sm" variant="link">{t('orch.review')}</Button>} />
+      <PopoverContent placement="topLeft">
         <ul className={styles['review']}>
           {diff.changes.map((change, index) => <li key={index}>{describeChange(t, change, displayName)}</li>)}
         </ul>
-      )}
-    >
-      <Button size="small" type="link">{t('orch.review')}</Button>
+      </PopoverContent>
     </Popover>
   );
 
@@ -322,7 +320,7 @@ export function RoutingPage() {
         <LoadFailure tone="warning" title={t('orch.readback_pending')} error={boardQuery.error} onRetry={() => void reload()} />
       )}
       {hasRemoteChange && isDirty && !isAwaitingReadback && (
-        <Notice tone="warning" title={t('orch.remote_change')} action={<Button size="small" onClick={() => void reload()}>{t('orch.reload')}</Button>} />
+        <Notice tone="warning" title={t('orch.remote_change')} action={<Button size="sm" onClick={() => void reload()}>{t('orch.reload')}</Button>} />
       )}
       {baseline.partial.length > 0 && (
         <Notice tone="warning" title={t('orch.partial_board', { sources: baseline.partial.join(', ') })} />

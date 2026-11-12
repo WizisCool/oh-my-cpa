@@ -9,9 +9,10 @@
   margin-bottom: 12px;
 }
 .req-export-json {
+  border: 0;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
   background: var(--surface);
   color: var(--fg-2);
   font: 12px/1.6 var(--font-mono);
@@ -42,7 +43,7 @@
   align-items: center;
   gap: 8px 24px;
 }
-.req-export-masks .ant-checkbox-group {
+.req-export-masks [data-slot='checkbox-group'] {
   gap: 6px 16px;
 }
 .req-export-columns {
@@ -56,7 +57,7 @@
 .req-export-preview {
   max-height: min(52vh, 560px);
   overflow-y: auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .req-export-preview:focus-visible {
   outline: 2px solid var(--accent);

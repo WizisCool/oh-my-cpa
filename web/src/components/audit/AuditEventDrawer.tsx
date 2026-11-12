@@ -1,7 +1,7 @@
 import { translateOr } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import dayjs from '../../utils/time';
 import { DownOutlined, FilterOutlined, UpOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -100,21 +100,21 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
       <span className={styles['drawer-title-text']}>{event ? auditActionLabel(event.action, t) : t('common.details')}</span>
       <span className={styles['drawer-nav']}>
         <Button
-          size="small"
-          type="text"
+          size="sm"
+          variant="ghost"
           icon={<UpOutlined />}
           disabled={!newer}
           onClick={() => newer && onNavigate(newer)}
-          title={`${t('events.prev_item')} ([)`}
+          data-tip={`${t('events.prev_item')} ([)`}
           aria-label={t('events.prev_item')}
         />
         <Button
-          size="small"
-          type="text"
+          size="sm"
+          variant="ghost"
           icon={<DownOutlined />}
           disabled={!older}
           onClick={() => older && onNavigate(older)}
-          title={`${t('events.next_item')} (])`}
+          data-tip={`${t('events.next_item')} (])`}
           aria-label={t('events.next_item')}
         />
       </span>

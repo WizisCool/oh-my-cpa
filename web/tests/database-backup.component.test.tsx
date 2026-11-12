@@ -99,6 +99,6 @@ it('validates a retained cloud archive and binds restore confirmation to the pre
   fireEvent.click(screen.getByRole('button', { name: 'Validate backup' }));
   await screen.findByText('Backup validated');
   fireEvent.click(screen.getByRole('button', { name: 'Restore on next restart' }));
-  fireEvent.click(within(await screen.findByRole('tooltip')).getByRole('button', { name: 'Restore on next restart' }));
+  fireEvent.click(within(await screen.findByRole('dialog', { name: 'Restore this database backup?' })).getByRole('button', { name: 'Restore on next restart' }));
   await waitFor(() => expect(server.requests.find((r) => r.path.endsWith('/apply'))?.body).toEqual({ digest: preview.digest }));
 });

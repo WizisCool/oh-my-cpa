@@ -1,11 +1,8 @@
 import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Button,
-  Typography,
-  Spin,
-} from 'antd';
+import { Spinner } from '@/components/ui/spinner';
+import { Button } from '@/components/ui/button';
 import {
   DownloadOutlined,
   CheckCircleOutlined,
@@ -61,7 +58,6 @@ import { AppDrawer } from '../components/common/AppDrawer';
 import { Panel } from '../components/common/Panel';
 import { AppModal } from '../components/common/AppModal';
 
-const { Text, Paragraph } = Typography;
 
 // The change log renders release notes as Markdown, and the Markdown renderer is the largest
 // dependency on this page. It is only needed once a reader opens a log, so it is loaded then.
@@ -160,8 +156,8 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
           <div className={styles['version-actions']}>
             {canDismiss && (
               <Button
-                type="text"
-                size="small"
+                variant="ghost"
+                size="sm"
                 // A pressed toggle rather than a label that swaps: the wording, and so the
                 // button's width and everything beside it, stays put, and the outcome of each
                 // press is said in a toast instead of in a line that would push the card down.
@@ -178,8 +174,8 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             )}
             {presentation.hasChangelog && (
               <Button
-                type="text"
-                size="small"
+                variant="ghost"
+                size="sm"
                 className={styles['version-action']}
                 icon={<FileTextOutlined />}
                 aria-label={t('sys.open_changelog', { product: productTitle, count: version.merge_count })}
@@ -667,8 +663,8 @@ export const SystemPage: React.FC = () => {
                   sheds its label rather than pushing it onto a row of its own: a title has to
                   stay readable in every language, and the accessible name keeps the meaning. */}
               <Button
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 className={styles['check-updates-action']}
                 icon={<CloudDownloadOutlined />}
                 loading={isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
@@ -676,7 +672,7 @@ export const SystemPage: React.FC = () => {
                 // disabled rather than offered: a button whose only outcome is a refusal
                 // teaches the reader something untrue about the product.
                 disabled={isDemo || isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
-                title={isDemo ? t('demo.blocked') : checkUpdatesLabel}
+                data-tip={isDemo ? t('demo.blocked') : checkUpdatesLabel}
                 aria-label={checkUpdatesLabel}
                 onClick={() => void handleCheckUpdates()}
               >
@@ -880,7 +876,7 @@ export const SystemPage: React.FC = () => {
                   aria-label={t('sys.download_diag')}
                   loading={downloadingDiag}
                   disabled={isDemo}
-                  title={isDemo ? t('demo.blocked') : undefined}
+                  data-tip={isDemo ? t('demo.blocked') : undefined}
                   onClick={() => void handleDownloadDiagnostics()}
                 >
                   {t('sys.action_download')}
@@ -896,7 +892,7 @@ export const SystemPage: React.FC = () => {
           {effectiveMaintenance?.running && (
             <Notice
               tone="info"
-              icon={<Spin size="small" />}
+              icon={<Spinner size="small" />}
               className={styles['maintenance-running']}
               title={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
             />
@@ -932,14 +928,14 @@ export const SystemPage: React.FC = () => {
                       : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
                 </span>
                 <Button
-                  type="text"
+                  variant="ghost"
                   // The console's square row-action size, not `small`: a 28px control gains only 36px
                   // from the coarse-pointer 4px hit inset, and the floor this console measures is
                   // ~40px. The drawn box is what a finger has to hit here.
                   className={styles['maintenance-box-close']}
                   icon={<CloseOutlined />}
                   aria-label={t('common.close')}
-                  title={t('common.close')}
+                  data-tip={t('common.close')}
                   onClick={() => setDismissedOutcomeJobID(displayedOutcome.job_id)}
                 />
               </div>
@@ -953,9 +949,9 @@ export const SystemPage: React.FC = () => {
               </div>
 
               {displayedOutcome.detail && (
-                <Text type="secondary" className={styles['maintenance-detail']}>
+                <span className={`text-muted-foreground ${styles['maintenance-detail']}`}>
                   {displayedOutcome.detail}
-                </Text>
+                </span>
               )}
 
               {displayedOutcome.incomplete && (
@@ -1010,9 +1006,9 @@ export const SystemPage: React.FC = () => {
         cancelText={t('common.cancel')}
       >
         <div className={styles['vacuum-modal-content']}>
-          <Paragraph type="secondary" className={styles['vacuum-desc']}>
+          <p className={`m-0 text-muted-foreground ${styles['vacuum-desc']}`}>
             {t('sys.vacuum_confirm_desc')}
-          </Paragraph>
+          </p>
 
           <div className={styles['vacuum-space-table']}>
             <div className={styles['vacuum-space-row']}>

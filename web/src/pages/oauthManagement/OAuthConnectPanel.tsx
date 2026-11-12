@@ -3,13 +3,10 @@ import { Notice } from '../../components/feedback';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Button,
-  Checkbox,
-  Input,
-  Space,
-  Spin,
-} from 'antd';
+import { Spinner } from '@/components/ui/spinner';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   ArrowRightOutlined,
   CheckCircleOutlined,
@@ -138,11 +135,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
     value: candidate.id,
     title: candidate.title,
     label: (
-      <Space size={8}>
+      <span className="inline-flex items-center gap-2">
         <ProviderBrandIcon mark={candidate} size={18} />
         <span>{candidate.title}</span>
         <ProviderKindTag choice={candidate} />
-      </Space>
+      </span>
     ),
   }));
 
@@ -177,7 +174,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 options={providerOptions}
                 onChange={(value) => onSelectProvider((value ?? '').trim())}
                 style={{ width: '100%' }}
-                getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
               />
             </div>
 
@@ -209,7 +205,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                             <span className={styles['tile-title']}>{candidate.title}</span>
                             <ProviderKindTag choice={candidate} />
                           </div>
-                          <span className={styles['tile-desc']} title={candidate.description}>
+                          <span className={styles['tile-desc']} data-tip={candidate.description} data-tip-overflow="">
                             {candidate.description}
                           </span>
                         </div>
@@ -228,8 +224,8 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                   {t('omc.connect_provider')}
                 </label>
                 {!target && <Button
-                  size="small"
-                  type="link"
+                  size="sm"
+                  variant="link"
                   onClick={() => onSelectProvider('')}
                   style={{ padding: 0 }}
                 >
@@ -247,7 +243,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 options={providerOptions}
                 onChange={(value) => onSelectProvider((value ?? '').trim())}
                 style={{ width: '100%' }}
-                getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
               />
             </div>
 
@@ -267,7 +262,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
             {target && <>
               <Notice tone="info" title={t('recovery.target', { name: target.name })} description={t('recovery.target_hint')} />
               {!isRecoverySupported && <Notice tone="warning" title={t('recovery.upgrade_required')} />}
-              <Checkbox checked={shouldVerify} disabled={isWaiting || session?.starting || isDemo || !isRecoverySupported} onChange={(event) => setShouldVerify(event.target.checked)}>
+              <Checkbox checked={shouldVerify} disabled={isWaiting || session?.starting || isDemo || !isRecoverySupported} onCheckedChange={(checked) => setShouldVerify(checked)}>
                 {t('recovery.verify_opt_in')}
               </Checkbox>
             </>}
@@ -298,7 +293,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 </Button>
               )}
               <Button
-                type="primary"
+                variant="primary"
                 loading={session?.starting}
                 disabled={isWaiting || isStartBlocked || (Boolean(target) && !isRecoverySupported) || isDemo}
                 onClick={startAuthorization}
@@ -316,7 +311,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 </Button>
               )}
               {isStartBlocked && (
-                <Button type="link" data-oauth-default-route onClick={useDefaultRoute}>
+                <Button variant="link" data-oauth-default-route onClick={useDefaultRoute}>
                   {t('oauth.use_default_route')}
                 </Button>
               )}
@@ -333,7 +328,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                     <div className={styles['step-body']}>
                       <div className={styles['auth-url-actions']}>
                         <Button
-                          type="primary"
+                          variant="primary"
                           icon={<LinkOutlined />}
                           onClick={() => window.open(session.url, '_blank', 'noopener,noreferrer')}
                         >
@@ -344,7 +339,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                         </Button>
                       </div>
                       <div className={styles['auth-url-box']}>
-                        <Input.TextArea
+                        <Textarea
                           value={session.url}
                           autoSize={{ minRows: 1, maxRows: 3 }}
                           readOnly
@@ -365,7 +360,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       <p className={styles['step-hint']}>
                         {choice.callback.errorKeys.hintKey ? t(choice.callback.errorKeys.hintKey) : t('oauth.callback_hint')}
                       </p>
-                      <Input.TextArea
+                      <Textarea
                         id="oauth-callback-url"
                         data-oauth-callback-input
                         value={session?.callbackUrl ?? ''}
@@ -377,7 +372,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       />
                       <div className={styles['callback-actions']}>
                         <Button
-                          type="primary"
+                          variant="primary"
                           data-oauth-callback-submit
                           loading={session?.callbackSubmitting}
                           onClick={() => void sessions.submitCallback(choice.id)}
@@ -408,7 +403,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       {session.userCode && (
                         <div className={styles['device-code-row']}>
                           <span className={styles['device-code']} data-oauth-user-code>{session.userCode}</span>
-                          <Button size="middle" icon={<CopyOutlined />} onClick={() => void copyValue(session.userCode, 'common.copied')}>
+                          <Button icon={<CopyOutlined />} onClick={() => void copyValue(session.userCode, 'common.copied')}>
                             {t('oauth.copy_code')}
                           </Button>
                         </div>
@@ -428,7 +423,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                 <div className={styles['session-status-card']} aria-live="polite">
                   {isWaiting && (
                     <div className={styles['status-waiting-box']}>
-                      <Spin size="small" />
+                      <Spinner size="small" />
                       <div className={styles['waiting-copy']}>
                         <span className={styles['waiting-title']}>{t('oauth.status_waiting_badge')}</span>
                         <span className={styles['waiting-desc']}>{t('oauth.status_waiting')}</span>
@@ -456,7 +451,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       </div>
                       <div className={styles['success-actions']}>
                         <Button
-                          type="primary"
+                          variant="primary"
                           icon={<ArrowRightOutlined />}
                           onClick={() => onViewCredentials(choice.id)}
                         >

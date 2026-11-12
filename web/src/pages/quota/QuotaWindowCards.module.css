@@ -24,13 +24,14 @@
 }
 
 .card {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: inherit;
   font: inherit;
@@ -40,11 +41,11 @@
 
 button.card {
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard);
+  transition: box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 button.card:hover {
-  border-color: var(--muted);
+  box-shadow: var(--shadow-raised);
 }
 
 button.card:focus-visible {

@@ -1,7 +1,11 @@
 import type { MessageKey } from '../../i18n/catalog';
 import clsx from 'clsx';
 import React from 'react';
-import { Button, Input, Segmented, Select, Space } from 'antd';
+import { Select } from '@/components/ui/select';
+import { ButtonGroup } from '@/components/ui/button-group';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import type {
   UsageCostFilter,
@@ -306,7 +310,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
     'events.regex',
     'req-regex-pattern',
     <>
-      <Space.Compact className={styles['regex']}>
+      <ButtonGroup className={styles['regex']}>
         <Select<UsageRegexField>
           className={styles['regex-field']}
           aria-label={t('events.regex_field')}
@@ -332,7 +336,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           onChange={(event) => setText('regex', formatUsageRegex(regexField, event.target.value))}
           onPressEnter={handleApply}
         />
-      </Space.Compact>
+      </ButtonGroup>
       <p className={styles['hint']}>{t('events.regex_hint')}</p>
     </>,
     ['regex'],
@@ -432,7 +436,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             </Button>
             <Button
               data-testid="req-filter-apply"
-              type="primary"
+              variant="primary"
               disabled={!isDirty || Object.keys(errors).length > 0}
               onClick={handleApply}
             >

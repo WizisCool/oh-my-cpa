@@ -5,7 +5,8 @@ import styles from './Switch.module.css';
 export type SwitchSize = 'default' | 'small';
 
 export interface SwitchProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange' | 'type' | 'role' | 'children' | 'value'> {
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange' | 'type' | 'role' | 'children' | 'value' | 'title'> {
+  'data-tip'?: string;
   checked?: boolean;
   onChange?: (checked: boolean, event: React.MouseEvent<HTMLButtonElement>) => void;
   /** `small` is the row density: a list, a table cell or a toolbar. */

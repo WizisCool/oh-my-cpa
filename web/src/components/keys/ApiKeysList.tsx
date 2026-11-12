@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import { Button } from '@/components/ui/button';
+import type { ColumnsType } from '@/components/ui/table';
 import { DeleteOutlined, EditOutlined, EyeInvisibleOutlined, EyeOutlined, HistoryOutlined, KeyOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
@@ -103,8 +103,8 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         <span className={className}>{isRevealed ? record.key : maskKeyText(record.key)}</span>
         <Tooltip title={toggleLabel}>
           <Button
-            type="text"
-            size="small"
+            variant="ghost"
+            size="sm"
             className={styles['secret-action']}
             icon={isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
             aria-label={`${toggleLabel}: ${nameOf(record)}`}
@@ -173,7 +173,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     <div className="row-actions">
       <Tooltip title={record.usageFingerprint ? t('keys.view_requests') : t('keys.not_linked')}>
         <Button
-          size="small"
+          size="sm"
           className="row-action-btn"
           icon={<HistoryOutlined />}
           disabled={!record.usageFingerprint}
@@ -183,7 +183,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       </Tooltip>
       <Tooltip title={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_edit')}>
         <Button
-          size="small"
+          size="sm"
           className="row-action-btn"
           icon={<EditOutlined />}
           disabled={isReadOnly}
@@ -206,7 +206,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         tooltip={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_delete')}
       >
         <Button
-          size="small"
+          size="sm"
           danger
           className="row-action-btn"
           icon={<DeleteOutlined />}

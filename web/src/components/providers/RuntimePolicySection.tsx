@@ -2,7 +2,9 @@ import { ConnectionPoolEditor } from './ConnectionPoolEditor';
 import type { ConnectionPoolDraft } from './connectionPool';
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { Checkbox, Input, Segmented } from 'antd';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 
 import { useT } from '../../i18n';
@@ -116,7 +118,7 @@ export function RuntimePolicySection({
         <div key={item.name} className={styles['flag']}>
           <Checkbox
             checked={behavior[item.name]}
-            onChange={(event) => onBehaviorChange((prev) => ({ ...prev, [item.name]: event.target.checked }))}
+            onCheckedChange={(checked) => onBehaviorChange((prev) => ({ ...prev, [item.name]: checked }))}
           >
             <span className={styles['flag-label']}>{t(item.labelKey)}</span>
           </Checkbox>

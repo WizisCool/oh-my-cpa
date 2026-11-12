@@ -1,4 +1,3 @@
-import { ConfigProvider } from 'antd';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { useT } from '../src/i18n';
@@ -146,7 +145,7 @@ it('saves a changed protocol with the original identity and refreshes migrated i
   });
   api.on('PUT', '/management/providers/openai-compat-0', () => ({ status: 'ok', id: 'codex-1', ids: ['codex-1', 'codex-2'] }));
   const writes = () => api.writes() as { path: string; body: Record<string, unknown> }[];
-  const view = renderWithOmc(<ConfigProvider theme={{ token: { motion: false } }}><Editor /></ConfigProvider>, { client });
+  const view = renderWithOmc(<Editor />, { client });
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
     const protocol = await screen.findByRole('combobox', { name: 'Driver / Protocol' });

@@ -58,7 +58,7 @@ it('updates catalog display, search and an open confirmation without changing in
   fireEvent.click(within(storePanel).getByRole('button', { name: makeT('en')('plugin.install') }));
   const dialog = await screen.findByRole('dialog');
   expect(dialog.textContent).toContain('Base name');
-  const language = screen.getByRole('combobox', { name: 'Catalog language' });
+  const language = screen.getByLabelText('Catalog language');
   fireEvent.change(language, { target: { value: 'zh' } });
   await waitFor(() => expect(dialog.textContent).toContain('简体标题'));
   for (const panel of [storePanel, installedPanel]) {
@@ -73,10 +73,10 @@ it('updates catalog display, search and an open confirmation without changing in
   expect(within(storePanel).getByText('&lt;tag&gt;')).toBeTruthy();
   expect(storePanel.querySelector('tag')).toBeNull();
   expect(storePanel.querySelector('a[href="https://github.com/publisher/stable-plugin"]')).not.toBeNull();
-  const search = within(storePanel).getByRole('textbox');
+  const search = within(storePanel).getByRole('textbox', { hidden: true });
   fireEvent.change(search, { target: { value: '简体标签 & 保护' } });
   expect(storePanel.querySelector('[data-plugin-id="stable-plugin"]')).not.toBeNull();
-  const installedSearch = within(installedPanel).getByRole('textbox');
+  const installedSearch = within(installedPanel).getByRole('textbox', { hidden: true });
   fireEvent.change(installedSearch, { target: { value: '简体描述 & 保护' } });
   expect(installedPanel.querySelector('[data-plugin-id="stable-plugin"]')).not.toBeNull();
   fireEvent.change(language, { target: { value: 'zh-Hant' } });
@@ -218,24 +218,24 @@ it('keeps background registry refresh separate from a manually requested update 
   const { client } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins' });
   expect((await automatic.arrived).query.has('refresh')).toBe(false);
   const check = screen.getByTestId('plugin-check-updates');
-  expect(check.classList.contains('ant-btn-loading')).toBe(false);
+  expect(check.getAttribute('aria-busy')).toBeNull();
   await act(async () => automatic.release());
 
   const refresh = server.hold('GET', '/management/plugin-store');
   fireEvent.click(screen.getByRole('switch', { name: makeT('en')('plugin.toggle_label', { name: 'Runtime name' }) }));
   const backgroundRequest = await refresh.arrived;
   expect(backgroundRequest.query.has('refresh')).toBe(false);
-  expect(check.classList.contains('ant-btn-loading')).toBe(false);
+  expect(check.getAttribute('aria-busy')).toBeNull();
 
   const manual = server.hold('GET', '/management/plugin-store');
   fireEvent.click(check);
   expect((await manual.arrived).query.get('refresh')).toBe('true');
-  await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(true));
+  await waitFor(() => expect(check.getAttribute('aria-busy')).toBe('true'));
   expect(backgroundRequest.init.signal?.aborted).toBe(true);
   const updated = { ...store, plugins: [{ ...entry, installed: true, install_source_status: 'matched', version: '1.3.0', update_available: true }] };
   await act(async () => manual.release(updated));
   expect(await screen.findByText(makeT('en')('plugin.check_updates_found', { n: 1 }))).toBeTruthy();
-  await waitFor(() => expect(check.classList.contains('ant-btn-loading')).toBe(false));
+  await waitFor(() => expect(check.getAttribute('aria-busy')).toBeNull());
   await act(async () => refresh.release());
   expect(client.getQueryData<PluginStoreResponse>(['management-plugin-store'])).toEqual(updated);
 });
@@ -286,7 +286,7 @@ it.each(['complete', 'partial'] as const)('reports a %s manual check without cla
     : [];
   await act(async () => manual.release({ ...store, source_errors: sourceErrors }));
   const title = await screen.findByText(t(outcome === 'partial' ? 'plugin.store_refresh_partial' : 'plugin.check_updates_none'));
-  expect(title.closest(outcome === 'partial' ? '.ant-notification-notice-warning' : '.ant-notification-notice-info')).not.toBeNull();
+  expect(title.closest(outcome === 'partial' ? '.omc-toast-warning' : '.omc-toast-info')).not.toBeNull();
   if (outcome === 'partial') expect(screen.getByText('Registry unavailable')).toBeTruthy();
   expect(screen.getByText('Runtime name')).toBeTruthy();
 });

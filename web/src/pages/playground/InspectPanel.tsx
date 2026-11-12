@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Tabs } from 'antd';
+import { Tabs } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { HistoryOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
@@ -12,7 +13,6 @@ import type { Turn } from './state';
 import { playgroundErrorKey } from './errors';
 import styles from './PlaygroundPage.module.css';
 import { Notice } from '../../components/feedback';
-import { TAB_OVERFLOW } from '../../components/common/tabOverflow';
 
 export interface InspectPanelProps {
   turn: Turn | undefined;
@@ -97,7 +97,7 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
           <p className={workspace['field-hint']}>{t(turn.requestID ? 'pg.usage_delay' : 'pg.request_id_missing')}</p>
         </div>
       </section>
-      <Tabs more={TAB_OVERFLOW}
+      <Tabs
         className={styles['inspect-tabs']}
         size="small"
         destroyOnHidden

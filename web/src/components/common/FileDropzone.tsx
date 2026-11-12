@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { PlusOutlined, UploadOutlined } from '../icons';
 import styles from './FileDropzone.module.css';
 

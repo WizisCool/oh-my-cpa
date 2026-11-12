@@ -1,11 +1,19 @@
 import React from 'react';
 import clsx from 'clsx';
-import { App as AntdApp, Button, Dropdown } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useConfirmModal } from '../feedback';
+import { Button } from '@/components/ui/button';
 import { Switch } from '../common/Switch';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { GlyphBadge } from '../common/GlyphBadge';
 import { BoxOutlined, DeleteOutlined, EditOutlined, ExternalLinkOutlined, KeyOutlined, MoreOutlined, PictureOutlined, RenameOutlined, TagOutlined } from '../icons';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType } from '@/components/ui/table';
 
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -127,7 +135,7 @@ export function ProviderTable({
 }: ProviderTableProps) {
   const t = useT();
   const isPhone = useIsPhoneViewport();
-  const { modal } = AntdApp.useApp();
+  const modal = useConfirmModal();
   const [listRef, listWidth] = useElementWidth<HTMLDivElement>();
   const columnSurplus = Math.max(0, Math.floor((listWidth - TABLE_FRAME - COLUMN_BASE_TOTAL) / COLUMN_COUNT));
   const columnWidth = (key: ProviderColumnKey) => COLUMN_BASE_WIDTHS[key] + columnSurplus;
@@ -184,7 +192,7 @@ export function ProviderTable({
             {!isPhone && <RowContextHandle name={record.name} />}
             <div
               className={styles['provider-mark']}
-              title={t('pro.change_icon')}
+              data-tip={t('pro.change_icon')}
               role="button"
               tabIndex={0}
               aria-label={`${t('pro.change_icon')}: ${record.name}`}
@@ -405,7 +413,7 @@ export function ProviderTable({
         <div className="row-actions">
           <Tooltip title={t('common.edit')}>
             <Button
-              size="small"
+              size="sm"
               className="row-action-btn"
               icon={<EditOutlined />}
               onClick={() => handleOpenEdit(record)}
@@ -420,7 +428,7 @@ export function ProviderTable({
             tooltip={isDemo ? t('demo.blocked') : t('common.delete')}
           >
             <Button
-              size="small"
+              size="sm"
               danger
               className="row-action-btn"
               icon={<DeleteOutlined />}
@@ -528,32 +536,36 @@ export function ProviderTable({
         )}
         <div className={styles['phone-card-switch']}>{cell('switch')}</div>
         <div className={styles['phone-card-tools']}>
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                { key: 'edit', icon: <EditOutlined />, label: t('common.edit') },
-                { key: 'rename', icon: <RenameOutlined />, label: t('af.rename') },
-                { key: 'icon', icon: <PictureOutlined />, label: t('pro.change_icon') },
-                // On a desktop the name is the website link; the card's name opens the editor instead.
-                ...(website ? [{
-                  key: 'website',
-                  icon: <ExternalLinkOutlined />,
-                  label: <a href={website} target="_blank" rel="noopener noreferrer">{t('pro.field_website')}</a>,
-                }] : []),
-                { type: 'divider' as const },
-                { key: 'delete', icon: <DeleteOutlined />, label: t('common.delete'), danger: true, disabled: isDemo },
-              ],
-              onClick: ({ key }) => {
-                if (key === 'edit') handleOpenEdit(record);
-                else if (key === 'rename') setRenamingID(record.id);
-                else if (key === 'icon') openIconPicker(record);
-                else if (key === 'delete') confirmDelete();
-              },
-            }}
-          >
-            <Button type="text" size="small" className="row-action-btn" icon={<MoreOutlined />} aria-label={`${t('keys.actions_more')}: ${record.name}`} />
-          </Dropdown>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="sm" className="row-action-btn" icon={<MoreOutlined />} aria-label={`${t('keys.actions_more')}: ${record.name}`} />
+              }
+            />
+            <DropdownMenuContent placement="bottomRight">
+              <DropdownMenuItem icon={<EditOutlined />} onClick={() => handleOpenEdit(record)}>
+                {t('common.edit')}
+              </DropdownMenuItem>
+              <DropdownMenuItem icon={<RenameOutlined />} onClick={() => setRenamingID(record.id)}>
+                {t('af.rename')}
+              </DropdownMenuItem>
+              <DropdownMenuItem icon={<PictureOutlined />} onClick={() => openIconPicker(record)}>
+                {t('pro.change_icon')}
+              </DropdownMenuItem>
+              {website && (
+                <DropdownMenuItem
+                  icon={<ExternalLinkOutlined />}
+                  render={<a href={website} target="_blank" rel="noopener noreferrer" />}
+                >
+                  {t('pro.field_website')}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem icon={<DeleteOutlined />} danger disabled={isDemo} onClick={confirmDelete}>
+                {t('common.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <RowContextHandle name={record.name} variant="inline" />
         </div>
       </article>

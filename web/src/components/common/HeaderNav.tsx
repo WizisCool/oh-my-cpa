@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { api } from '../../api/client';
 import { GithubOutlined, LogoutOutlined, ReloadOutlined, Star } from '../icons';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -89,26 +89,26 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   if (isPhone) {
     return (
       <div className="app-header-actions">
-        {isDemo && <span className="demo-chip" role="note" title={t('demo.badge_tooltip')}>{t('demo.badge')}</span>}
-        <Button type="text" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
+        {isDemo && <Tooltip title={t('demo.badge_tooltip')}><span className="demo-chip" role="note">{t('demo.badge')}</span></Tooltip>}
+        <Button variant="ghost" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
         <ActionMenu label={t('header.tools')}>
           <span className="action-menu-label">{t('header.theme')}</span>
           {(['light', 'dark', 'system'] as const).map((mode) => (
-            <Button key={mode} type="text" aria-pressed={modePreference === mode} onClick={() => setModePreference(mode)}>
+            <Button key={mode} variant="ghost" aria-pressed={modePreference === mode} onClick={() => setModePreference(mode)}>
               {t(`omc.theme_mode_${mode}`)}
             </Button>
           ))}
           <span className="action-menu-label">{t('header.language')}</span>
           {LANGUAGES.map((language) => (
-            <Button key={language.id} type="text" aria-pressed={lang === language.id} onClick={() => setLang(language.id)}>
+            <Button key={language.id} variant="ghost" aria-pressed={lang === language.id} onClick={() => setLang(language.id)}>
               {language.name}
             </Button>
           ))}
-          <Button type="text" icon={<GithubOutlined />} href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer">
+          <Button variant="ghost" icon={<GithubOutlined />} href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer">
             {t('header.open_repository')}
             {stars === null ? null : <span className="header-star-count">{stars}</span>}
           </Button>
-          {!isDemo && <Button type="text" icon={<LogoutOutlined />} loading={isLoggingOut} onClick={onLogout}>{t('header.logout')}</Button>}
+          {!isDemo && <Button variant="ghost" icon={<LogoutOutlined />} loading={isLoggingOut} onClick={onLogout}>{t('header.logout')}</Button>}
         </ActionMenu>
       </div>
     );

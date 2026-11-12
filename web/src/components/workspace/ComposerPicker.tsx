@@ -1,6 +1,9 @@
 import React from 'react';
-import { Button, Popover } from 'antd';
-import { CheckOutlined, DownOutlined } from '../icons';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
+import { CheckOutlined } from '../icons';
 import { nextPickerIndex, pickerRoom, PICKER_GAP } from './pickerNavigation';
 import type { PickerRoom } from './pickerNavigation';
 import styles from './Workspace.module.css';
@@ -20,19 +23,6 @@ interface ComposerPickerProps {
   onOpenChange?: (isOpen: boolean) => void;
   children: (close: () => void) => React.ReactNode;
 }
-
-/**
- * Where the surface sits, decided here rather than by the popup library. The library fits a popup
- * inside the nearest scrolling ancestor of its trigger, not inside the window: with the composer
- * in the middle of a scrolling page that region is too short for the list, the fit is abandoned,
- * and the surface hangs over the top of the window. The trigger's own position says how much room
- * there is on each side, and the surface is capped to the side it opens on.
- */
-const PICKER_OVERFLOW = { adjustX: false, adjustY: false, shiftX: true, shiftY: false };
-const PICKER_PLACEMENTS = {
-  topRight: { points: ['br', 'tr'], offset: [0, -PICKER_GAP], overflow: PICKER_OVERFLOW, dynamicInset: true },
-  bottomRight: { points: ['tr', 'br'], offset: [0, PICKER_GAP], overflow: PICKER_OVERFLOW, dynamicInset: true },
-};
 
 /** Both message settings share one floating surface and one focus/confirmation policy. */
 export function ComposerPicker({
@@ -57,82 +47,91 @@ export function ComposerPicker({
   };
 
   React.useEffect(() => {
-    // The parent may hold this state, so a control that became disabled says it closed: a parent
-    // left believing it is open draws an open list over a control nobody can use.
     if (isDisabled && isOpen) {
       setIsOpen(false);
       onOpenChange?.(false);
     }
   }, [isDisabled, isOpen, onOpenChange]);
 
-  const content = (
-    <div ref={contentRef} className={[styles['picker-surface'], surfaceClassName].filter(Boolean).join(' ')} role="dialog" aria-label={label} data-testid={contentTestId} style={room.height ? { maxHeight: room.height } : undefined} onKeyDown={event => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        close();
-      }
-      // Search keeps the caret for typing; up/down hand navigation to the visible choices.
-      if (event.target instanceof HTMLInputElement) {
-        const options = contentRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          event.preventDefault();
-          const option = event.key === 'ArrowUp' ? options?.[options.length - 1] : options?.[0];
-          option?.focus({ preventScroll: true });
-          option?.scrollIntoView({ block: 'nearest' });
-        } else if (event.key === 'Enter') {
-          event.preventDefault();
-          options?.[0]?.click();
-        }
-      }
-    }}>
-      {children(close)}
-    </div>
-  );
+  const focusInitial = React.useCallback(() => {
+    const first = contentRef.current?.querySelector<HTMLElement>('[data-picker-search] input, [data-picker-list] [tabindex="0"]');
+    if (first?.matches('[role="option"]')) first.scrollIntoView({ block: 'nearest' });
+    return first ?? null;
+  }, []);
 
   return (
     <Popover
-      trigger="click"
-      placement={room.placement}
-      builtinPlacements={PICKER_PLACEMENTS}
-      arrow={false}
       open={isOpen && !isDisabled && !isPending}
-      onOpenChange={next => { if (!isDisabled || !next) changeOpen(next); }}
-      afterOpenChange={next => {
-        if (!next) return;
-        const first = contentRef.current?.querySelector<HTMLElement>('[data-picker-search] input, [data-picker-list] [tabindex="0"]');
-        first?.focus({ preventScroll: true });
-        if (first?.matches('[role="option"]')) first.scrollIntoView({ block: 'nearest' });
+      onOpenChange={(next) => {
+        if (!isDisabled || !next) changeOpen(next);
       }}
-      destroyOnHidden
-      content={content}
-      classNames={{ root: styles['picker-popover'] }}
     >
-      <Button
-        ref={triggerRef}
-        type="text"
-        size="small"
-        className={[styles['picker-trigger'], className].filter(Boolean).join(' ')}
-        data-testid={testId}
-        data-state={isPending ? 'pending' : isUnset ? 'unset' : undefined}
-        aria-label={isPending ? label : `${label}: ${valueLabel}`}
-        aria-busy={isPending || undefined}
-        aria-haspopup="dialog"
-        aria-expanded={isOpen && !isDisabled}
-        disabled={isDisabled || isPending}
-        onKeyDown={event => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            changeOpen(true);
-          }
-        }}
+      <PopoverTrigger
+        render={
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="sm"
+            className={[styles['picker-trigger'], className].filter(Boolean).join(' ')}
+            data-testid={testId}
+            data-state={isPending ? 'pending' : isUnset ? 'unset' : undefined}
+            aria-label={isPending ? label : `${label}: ${valueLabel}`}
+            aria-busy={isPending || undefined}
+            aria-haspopup="dialog"
+            aria-expanded={isOpen && !isDisabled}
+            disabled={isDisabled || isPending}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                changeOpen(true);
+              }
+            }}
+          >
+            {icon && <span className={styles['picker-trigger-icon']} aria-hidden="true">{icon}</span>}
+            {isPending
+              ? <span className={styles['picker-trigger-pending']} />
+              : <span className={styles['picker-trigger-value']} data-tip={valueLabel} data-tip-overflow="">{valueLabel}</span>}
+            <DropdownCaret className={styles['picker-caret']} />
+          </Button>
+        }
+      />
+      <PopoverContent
+        placement={room.placement}
+        sideOffset={PICKER_GAP}
+        initialFocus={focusInitial}
+        finalFocus={triggerRef}
+        className={cn('bg-card p-0', styles['picker-popover'])}
       >
-        {icon && <span className={styles['picker-trigger-icon']} aria-hidden="true">{icon}</span>}
-        {isPending
-          ? <span className={styles['picker-trigger-pending']} />
-          : <span className={styles['picker-trigger-value']} title={valueLabel}>{valueLabel}</span>}
-        <DownOutlined className={styles['picker-caret']} aria-hidden="true" />
-      </Button>
+        <div
+          ref={contentRef}
+          className={[styles['picker-surface'], surfaceClassName].filter(Boolean).join(' ')}
+          role="dialog"
+          aria-label={label}
+          data-testid={contentTestId}
+          style={room.height ? { maxHeight: room.height } : undefined}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+            }
+            if (event.target instanceof HTMLInputElement) {
+              const options = contentRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const option = event.key === 'ArrowUp' ? options?.[options.length - 1] : options?.[0];
+                option?.focus({ preventScroll: true });
+                option?.scrollIntoView({ block: 'nearest' });
+              } else if (event.key === 'Enter') {
+                event.preventDefault();
+                options?.[0]?.click();
+              }
+            }
+          }}
+        >
+          {children(close)}
+        </div>
+      </PopoverContent>
     </Popover>
   );
 }
@@ -184,7 +183,7 @@ export function ComposerPickerList({ label, options, value, onSelect, optionTest
           onClick={() => onSelect(option.value)}
         >
           {option.icon && <span className={styles['picker-option-icon']} aria-hidden="true">{option.icon}</span>}
-          <span className={styles['picker-option-name']} title={option.label}>{option.label}</span>
+          <span className={styles['picker-option-name']} data-tip={option.label} data-tip-overflow="">{option.label}</span>
           {option.detail && <span className={styles['picker-option-detail']}>{option.detail}</span>}
           {shouldShowSelectionMark && <span className={styles['picker-option-check']} aria-hidden="true">{option.value === value && <CheckOutlined />}</span>}
         </button>

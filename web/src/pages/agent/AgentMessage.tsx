@@ -1,5 +1,14 @@
 import React from 'react';
-import { Button, Image } from 'antd';
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogClose,
+  DialogPopup,
+  DialogPortal,
+  DialogViewport,
+} from '@/components/ui/dialog';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
@@ -66,21 +75,101 @@ export function AgentUserMessage() {
           ))}
         </div>
       )}
-      {!!images?.length && (
-        <div className={styles['sent-images']} data-testid="agent-sent-images">
-          <Image.PreviewGroup>
-            {images.map((src, index) => (
-              <Image key={`${index}:${src.slice(-24)}`} className={styles['sent-image']} src={src} alt={t('agent.image.alt', { n: index + 1 })} />
-            ))}
-          </Image.PreviewGroup>
-        </div>
-      )}
+      {!!images?.length && <SentImageGallery images={images} />}
       {hasText && (
         <div className={clsx(workspace['user-bubble'], workspace['user-text'])} data-aui-quote-selectable>
           <MessagePrimitive.Parts components={USER_PART_COMPONENTS} />
         </div>
       )}
     </MessagePrimitive.Root>
+  );
+}
+
+function SentImageGallery({ images }: { images: readonly string[] }) {
+  const { t } = useI18n();
+  const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
+  const count = images.length;
+  const isOpen = activeIndex !== null && activeIndex < count;
+
+  return (
+    <>
+      <div className={styles['sent-images']} data-testid="agent-sent-images">
+        {images.map((src, index) => (
+          <button
+            key={`${index}:${src.slice(-24)}`}
+            type="button"
+            className={styles['sent-image-btn']}
+            onClick={() => setActiveIndex(index)}
+            aria-label={t('agent.image.alt', { n: index + 1 })}
+          >
+            <img
+              className={styles['sent-image']}
+              src={src}
+              alt={t('agent.image.alt', { n: index + 1 })}
+            />
+          </button>
+        ))}
+      </div>
+      <Dialog
+        open={isOpen}
+        onOpenChange={(next) => {
+          if (!next) setActiveIndex(null);
+        }}
+      >
+        <DialogPortal>
+          <DialogBackdrop className="omc-overlay-backdrop fixed inset-0 z-[1100] bg-overlay" />
+          <DialogViewport
+            className="fixed inset-0 z-[1101] flex items-center justify-center p-6"
+            onClick={() => setActiveIndex(null)}
+          >
+            <DialogPopup
+              aria-label={isOpen ? t('agent.image.alt', { n: activeIndex + 1 }) : undefined}
+              className="omc-dialog-surface relative flex max-h-[90dvh] max-w-[92vw] items-center justify-center outline-none"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (!isOpen || count < 2) return;
+                if (event.key === 'ArrowLeft') setActiveIndex((activeIndex - 1 + count) % count);
+                else if (event.key === 'ArrowRight') setActiveIndex((activeIndex + 1) % count);
+              }}
+            >
+              {isOpen && (
+                <img
+                  src={images[activeIndex]}
+                  alt={t('agent.image.alt', { n: activeIndex + 1 })}
+                  className="max-h-[86dvh] max-w-[88vw] rounded-lg bg-card object-contain shadow-overlay"
+                />
+              )}
+              {count > 1 && isOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-label={t('events.prev_item')}
+                    onClick={() => setActiveIndex((activeIndex - 1 + count) % count)}
+                    className="absolute left-3 inline-flex size-9 items-center justify-center rounded-md border-0 bg-elevated/90 text-foreground shadow-float hover:bg-elevated cursor-pointer"
+                  >
+                    <ChevronLeft className="size-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t('events.next_item')}
+                    onClick={() => setActiveIndex((activeIndex + 1) % count)}
+                    className="absolute right-3 inline-flex size-9 items-center justify-center rounded-md border-0 bg-elevated/90 text-foreground shadow-float hover:bg-elevated cursor-pointer"
+                  >
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </button>
+                </>
+              )}
+              <DialogClose
+                aria-label={t('common.close')}
+                className="absolute -top-3 -right-3 inline-flex size-8 items-center justify-center rounded-md border-0 bg-elevated text-foreground shadow-float hover:bg-secondary cursor-pointer"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </DialogClose>
+            </DialogPopup>
+          </DialogViewport>
+        </DialogPortal>
+      </Dialog>
+    </>
   );
 }
 
@@ -213,23 +302,23 @@ function TurnFooter({ turn }: { turn: Turn }) {
         {replaceableTurnID === turn.id && (
           <>
             <Tooltip title={t('agent.turn.retry')}>
-              <Button type="text" size="small" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
+              <Button variant="ghost" size="sm" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
             </Tooltip>
             <Tooltip title={t('agent.turn.edit')}>
-              <Button type="text" size="small" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
+              <Button variant="ghost" size="sm" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
             </Tooltip>
           </>
         )}
         <Tooltip title={t('conversation.copy_answer')}>
           <ActionBarPrimitive.Copy asChild>
-            <Button type="text" size="small" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
+            <Button variant="ghost" size="sm" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
               <span className={styles['copy-idle']}><CopyOutlined /></span>
               <span className={styles['copy-done']}><CheckOutlined /></span>
             </Button>
           </ActionBarPrimitive.Copy>
         </Tooltip>
         <Tooltip title={t('agent.export.answer')}>
-          <Button type="text" size="small" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
+          <Button variant="ghost" size="sm" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
             disabled={isExporting || turn.status === 'running'}
             onClick={() => void readTurnImages([turn]).then(images => exportSnapshot(agentSnapshot({ id: '', revision: 0, model: '', client_key_fingerprint: '', omitted: 0, turns: [turn] }, images), 'html'))}
           />

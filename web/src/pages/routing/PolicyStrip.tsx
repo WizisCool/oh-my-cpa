@@ -1,5 +1,6 @@
 import React from 'react';
-import { Input, Segmented } from 'antd';
+import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../../components/common/NumberInput';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
@@ -83,7 +84,7 @@ export const PolicyStrip: React.FC<PolicyStripProps> = ({ settings, onChange, di
           <span className={styles['policy-inline']}>
             {settings.session_affinity && (
               <Input
-                size="small"
+                size="sm"
                 className={styles['ttl-input']}
                 aria-label={t('cfg.f_affinity_ttl')}
                 placeholder="1h"

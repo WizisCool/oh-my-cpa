@@ -39,20 +39,17 @@
   pointer-events: auto;
 }
 
-.shell-bar :global(.ant-btn) {
+.shell-bar :global([data-slot='button']) {
   color: var(--fg-2);
   background: var(--bg);
 }
 
-.shell-new:global(.ant-btn) {
+.shell-new:global([data-slot='button']) {
+  border: 0;
   gap: 8px;
   padding-inline: 10px;
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
   color: var(--fg);
-}
-
-.shell-new:global(.ant-btn:not(:disabled):hover) {
-  border-color: var(--muted);
 }
 
 /* Parts the named action from the icons after it. */
@@ -210,7 +207,7 @@
 
   /* On a phone the label would crowd the actions beside it; the icon and its name for assistive
      technology carry it. */
-  .shell-new:global(.ant-btn) > span:not(:global(.ant-btn-icon)) {
+  .shell-new:global([data-slot='button']) > span:not(:global([data-slot='button-icon'])) {
     display: none;
   }
 }
@@ -364,7 +361,7 @@
   min-height: 28px;
   padding: 3px 8px 3px 0;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-md);
   background: none;
   color: var(--fg-2);
   font: inherit;
@@ -375,7 +372,7 @@
 }
 
 .call-row:focus-visible {
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-md);
 }
 
 .call-row:hover .call-title,
@@ -435,7 +432,7 @@
   white-space: nowrap;
   /* What was typed for the machine, set as a chip so it never reads as part of the sentence. */
   padding: 1px 6px;
-  border-radius: var(--radius-document);
+  border-radius: var(--radius-sm);
   background: var(--thread-field);
   color: var(--fg-2);
   font-family: var(--font-mono);
@@ -486,7 +483,7 @@
   min-width: 0;
   margin: 2px 0 8px 22px;
   padding: 10px 12px 12px;
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-lg);
   background: var(--thread-field);
 }
 
@@ -552,7 +549,7 @@
   max-width: 100%;
   height: 26px;
   padding: 0 10px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-md);
   background: var(--thread-field);
   color: var(--fg-2);
   font-size: var(--text-sm);
@@ -585,15 +582,23 @@
   max-width: min(80%, 640px);
 }
 
-.sent-images :global(.ant-image) {
+.sent-image-btn {
+  border: 0;
+  padding: 0;
   display: block;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface);
+  cursor: zoom-in;
 }
 
-.sent-image:global(.ant-image-img) {
+.sent-image-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sent-image {
   display: block;
   width: auto;
   max-width: 220px;
@@ -640,25 +645,23 @@
   color: var(--fg-2);
 }
 
-/* The selection toolbar is portalled outside Ant Design's scoped CSS variable container. */
-.selection-action:global(.ant-btn) {
+.selection-action:global([data-slot='button']) {
   background: var(--elevated);
   color: var(--fg);
-  border-color: transparent;
   font-family: var(--font-mono);
 }
 
-.selection-action:global(.ant-btn):not(:disabled):hover,
-.selection-action:global(.ant-btn):not(:disabled):active {
+.selection-action:global([data-slot='button']):not(:disabled):hover,
+.selection-action:global([data-slot='button']):not(:disabled):active {
   background: var(--hover);
   color: var(--fg);
-  border-color: transparent;
 }
 
 .selection-toolbar {
+  border: 0;
   padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   background: var(--elevated);
 }
 
@@ -669,7 +672,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 10px 14px;
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-lg);
   /* The state colours the whole notice faintly; an edge bar would be a second line on it. */
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   font-size: var(--text-md);
@@ -705,13 +708,14 @@
 /* ── approval card ─────────────────────────────────────────────────────────── */
 
 .approval {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-left: 22px;
   padding: 16px;
-  border: 1px solid var(--thread-hairline);
-  border-radius: var(--radius-thread);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
   font-size: var(--text-md);
 }
@@ -724,18 +728,18 @@
 .approval:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: var(--radius-thread);
+  border-radius: var(--radius-xl);
 }
 
 /* What will change, as a field inside the card rather than a second box. */
 .approval .operation-fields {
   padding: 10px 14px;
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-lg);
   background: var(--thread-field);
 }
 
-.approval .operation-actions :global(.ant-btn) {
-  border-radius: var(--radius-control);
+.approval .operation-actions :global([data-slot='button']) {
+  border-radius: var(--radius-md);
 }
 
 .approval-head {
@@ -798,10 +802,10 @@
 }
 
 .oauth-code {
+  border: 0;
   padding: 2px 8px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   letter-spacing: .08em;
 }
 
@@ -826,7 +830,7 @@
     min-width: 0;
   }
 
-  .approval .operation-actions :global(.ant-btn) {
+  .approval .operation-actions :global([data-slot='button']) {
     height: 40px;
   }
 }
@@ -961,7 +965,7 @@
   color: var(--fg-2);
 }
 
-.capability :global(.ant-btn) {
+.capability :global([data-slot='button']) {
   margin-top: 6px;
   color: var(--muted);
 }
@@ -1017,13 +1021,14 @@
 }
 
 .connect-client {
+  border: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   min-height: 40px;
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--fg);
@@ -1031,7 +1036,7 @@
   font-size: var(--text-sm);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+  transition: box-shadow var(--motion-fast), background-color var(--motion-fast);
 }
 
 .connect-client:hover {
@@ -1047,7 +1052,7 @@
    chosen client, and the checker reads line-initial selectors. */
 .is-selected,
 .connect-client.is-selected {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
   font-weight: 600;
 }
@@ -1178,22 +1183,23 @@
 }
 
 .openui :global(.openui-follow-up-item) {
+  border: 0;
   width: auto;
   max-width: 100%;
   padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-2);
   font: inherit;
   font-size: var(--text-sm);
   line-height: 1.35;
-  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+  transition: color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
 
 .openui :global(.openui-follow-up-item):hover {
   color: var(--fg);
-  border-color: var(--muted);
+  box-shadow: var(--shadow-raised);
   background: var(--hover);
 }
 
@@ -1233,7 +1239,7 @@
   max-height: 64vh;
   padding: 14px 16px 12px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-thread);
+  border-radius: var(--radius-xl);
   background: var(--surface);
   outline: none;
 }
@@ -1355,13 +1361,14 @@
 }
 
 .question-chip {
+  border: 0;
   padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-document);
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: var(--text-xs);
   font-weight: 400;
   line-height: 18px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
 }
 
 .question-mode {
@@ -1379,33 +1386,35 @@
 /* A row the width of the panel: the target is the sentence, not a 16px control, and the number is
    the key that picks it. */
 .question-option {
+  border: 0;
   display: flex;
   align-items: flex-start;
   gap: 10px;
   width: 100%;
   padding: 9px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--fg);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+  transition: box-shadow var(--motion-fast), background-color var(--motion-fast);
 }
 
 .question-option:hover {
-  border-color: var(--border);
+  box-shadow: var(--shadow-raised);
   background: var(--hover-inset);
 }
 
 .question-option.is-selected,
 .question-other.is-selected {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
 }
 
 .question-key {
+  border: 0;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -1413,16 +1422,15 @@
   min-width: 20px;
   height: 20px;
   padding: 0 4px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
 }
 
 .is-selected .question-key {
-  border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-on);
 }
@@ -1457,11 +1465,11 @@
 
 /* "Something else" is an option row whose field opens inside it once chosen. */
 .question-other {
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-md);
 }
 
 .question-other .question-option {
-  border-color: var(--border-soft);
+  box-shadow: none;
   background: transparent;
 }
 
@@ -1470,11 +1478,7 @@
 }
 
 .question-other.is-selected {
-  border: 1px solid var(--accent);
-}
-
-.question-other.is-selected .question-option {
-  border-color: transparent;
+  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
 }
 
 .question-other.is-selected .question-check {
@@ -1549,7 +1553,7 @@
 
 @media (hover: none) {
   .question-option:hover {
-    border-color: var(--border-soft);
+    box-shadow: var(--shadow-raised);
     background: var(--bg);
   }
 

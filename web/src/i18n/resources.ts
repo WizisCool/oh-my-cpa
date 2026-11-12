@@ -1,14 +1,7 @@
-import type { ConfigProviderProps } from 'antd';
-import enUS from 'antd/locale/en_US';
-import msMY from 'antd/locale/ms_MY';
-import zhCN from 'antd/locale/zh_CN';
-import zhHK from 'antd/locale/zh_HK';
 import type { Catalog } from './catalog';
 import type { Lang } from './language';
 import en from './locales/en';
 import zh from './locales/zh';
-
-type AntdLocale = NonNullable<ConfigProviderProps['locale']>;
 
 /**
  * Where each registered language's copy comes from.
@@ -27,16 +20,4 @@ export const CATALOGS: Record<Lang, Catalog | (() => Promise<Catalog>)> = {
   en,
   'zh-Hant': () => import('./locales/zh-Hant').then((module) => module.default),
   ms: () => import('./locales/ms').then((module) => module.default),
-};
-
-/**
- * Ant Design's own strings and date-picker conventions for each reading language. These ship in
- * antd's vendor chunk whichever way they are imported, so they are not deferred. Traditional
- * Chinese takes antd's Hong Kong locale, the variety the catalog is written in.
- */
-export const ANTD_LOCALES: Record<Lang, AntdLocale> = {
-  zh: zhCN,
-  'zh-Hant': zhHK,
-  en: enUS,
-  ms: msMY,
 };

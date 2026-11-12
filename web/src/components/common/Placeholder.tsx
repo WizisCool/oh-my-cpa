@@ -89,7 +89,7 @@ export function ListPlaceholder({ rows = 6, isFramed = false }: { rows?: number;
             <Placeholder width={`${NAME_WIDTHS[index % NAME_WIDTHS.length]}%`} row={index} className="placeholder-line" />
             <Placeholder width={`${META_WIDTHS[index % META_WIDTHS.length]}%`} row={index} className="placeholder-line is-meta" />
           </span>
-          <Placeholder width={56} height={20} row={index} className="placeholder-pill" />
+          <Placeholder width={56} height={20} row={index} />
         </div>
       ))}
     </div>

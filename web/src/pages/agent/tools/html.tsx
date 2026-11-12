@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Segmented } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { AppModal } from '../../../components/common/AppModal';
 import { CodeBody } from '../../../components/common/CodeBody';
 import { CodeFrame } from '../../../components/common/CodeFrame';
@@ -44,19 +45,19 @@ export function HTMLSurface({ argumentsText, isStreaming }: HTMLSurfaceProps) {
   const actions = (
     <>
       <Segmented
-        size="small"
+        size="sm"
         value={view}
         onChange={value => setView(value as HTMLView)}
         options={[{ label: t('agent.html.page'), value: 'page' }, { label: t('agent.html.code'), value: 'code' }]}
       />
       {!isStreaming && view === 'page' && (
         <Tooltip title={t('agent.html.expand')}>
-          <Button size="small" type="text" icon={<FullscreenOutlined />} onClick={() => setIsExpanded(true)} aria-label={t('agent.html.expand')} />
+          <Button size="sm" variant="ghost" icon={<FullscreenOutlined />} onClick={() => setIsExpanded(true)} aria-label={t('agent.html.expand')} />
         </Tooltip>
       )}
       {!isStreaming && (
         <Tooltip title={t('agent.html.download')}>
-          <Button size="small" type="text" icon={<DownloadOutlined />} onClick={() => saveDocument(source)} aria-label={t('agent.html.download')} />
+          <Button size="sm" variant="ghost" icon={<DownloadOutlined />} onClick={() => saveDocument(source)} aria-label={t('agent.html.download')} />
         </Tooltip>
       )}
     </>

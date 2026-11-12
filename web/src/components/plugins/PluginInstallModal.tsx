@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Input, Radio } from 'antd';
+import { RadioGroup, RadioItem } from '@/components/ui/radio-group';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useI18n, useT } from '../../i18n';
@@ -60,7 +62,7 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
       } else {
         toast.warning(outcome, {
           detail: t('plugin.installed_while_disabled'),
-          actions: <Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>,
+          actions: <Button size="sm" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>,
         });
       }
       void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
@@ -131,10 +133,10 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
         {!isPluginSystemEnabled && <Notice tone="warning" title={t('plugin.installed_while_disabled')} />}
         <div>
           <div className={styles['setting-label']}>{t('plugin.version_label')}</div>
-          <Radio.Group value={versionMode} onChange={(event) => setVersionMode(event.target.value)}>
-            <Radio value="latest">{t('plugin.version_latest', { version: formatPluginVersion(entry.version) || '—' })}</Radio>
-            <Radio value="pinned">{t('plugin.version_pinned')}</Radio>
-          </Radio.Group>
+          <RadioGroup value={versionMode} onValueChange={(next) => setVersionMode(next as 'latest' | 'pinned')}>
+            <RadioItem value="latest">{t('plugin.version_latest', { version: formatPluginVersion(entry.version) || '—' })}</RadioItem>
+            <RadioItem value="pinned">{t('plugin.version_pinned')}</RadioItem>
+          </RadioGroup>
           {versionMode === 'pinned' && (
             <div className={styles['install-version-row']}>
               <Input

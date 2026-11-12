@@ -1,6 +1,8 @@
 import React from 'react';
 import { flushSync } from 'react-dom';
-import { Button, Checkbox, Form, Input, type InputRef } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { PasswordInput } from '@/components/ui/input';
 import { ArrowRightOutlined, LockOutlined } from '../icons';
 import { api, ApiError, setUnauthorizedHandler } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -89,8 +91,10 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, [queryClient]);
 
   const [failures, setFailures] = React.useState(0);
+  const [password, setPassword] = React.useState(() => (isDemo ? 'omc-demo' : ''));
+  const [fieldError, setFieldError] = React.useState<string>();
   const fieldRef = React.useRef<HTMLDivElement>(null);
-  const inputRef = React.useRef<InputRef>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
   const isNarrow = useIsNarrowViewport();
   useProgressTask(status === 'loading');
   useProgressTask(isSubmitting);
@@ -152,7 +156,8 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   React.useEffect(() => {
     if (failures === 0) return;
-    inputRef.current?.focus({ cursor: 'all' });
+    inputRef.current?.focus();
+    inputRef.current?.select();
     if (isMotionReduced()) return;
     fieldRef.current?.animate(
       [{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }],
@@ -192,13 +197,19 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 <p className={`${styles['subtitle']} ${styles['rise']}`} style={rise(1)}>{t('auth.subtitle')}</p>
                 {error && <Notice tone="error" description={error} className="auth-alert" />}
                 {isDemo && <Notice tone="info" description={t('demo.login_hint')} className="auth-alert" />}
-                <Form
-                  layout="vertical"
-                  onFinish={login}
-                  requiredMark={false}
-                  size="large"
+                <form
                   className="auth-form"
-                  initialValues={isDemo ? { password: 'omc-demo' } : undefined}
+                  noValidate
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!password) {
+                      setFieldError(t('auth.required'));
+                      inputRef.current?.focus();
+                      return;
+                    }
+                    setFieldError(undefined);
+                    void login({ password });
+                  }}
                 >
                   <input
                     type="text"
@@ -210,34 +221,47 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     aria-hidden="true"
                     className="sr-only"
                   />
-                  <div ref={fieldRef} className={styles['rise']} style={rise(2)}>
-                    <Form.Item
-                      label={t('auth.label')}
+                  <div ref={fieldRef} className={`mb-5 flex flex-col gap-2 ${styles['rise']}`} style={rise(2)}>
+                    <label htmlFor="auth-password" className="text-sm text-muted-foreground tracking-[0.04em]">
+                      {t('auth.label')}
+                    </label>
+                    <PasswordInput
+                      ref={inputRef}
+                      id="auth-password"
+                      size="lg"
+                      autoFocus
                       name="password"
-                      rules={[{ required: true, message: t('auth.required') }]}
-                    >
-                      <Input.Password
-                        ref={inputRef}
-                        autoFocus
-                        name="password"
-                        prefix={<LockOutlined className="terminal-muted" />}
-                        autoComplete="current-password"
-                        spellCheck={false}
-                      />
-                    </Form.Item>
+                      value={password}
+                      aria-invalid={Boolean(fieldError) || undefined}
+                      aria-describedby={fieldError ? 'auth-password-error' : undefined}
+                      prefix={<LockOutlined className="terminal-muted" />}
+                      revealLabel={t('common.reveal_secret')}
+                      hideLabel={t('common.hide_secret')}
+                      autoComplete="current-password"
+                      spellCheck={false}
+                      onChange={(event) => {
+                        setPassword(event.target.value);
+                        if (fieldError && event.target.value) setFieldError(undefined);
+                      }}
+                    />
+                    {fieldError && (
+                      <p id="auth-password-error" role="alert" className="m-0 text-sm text-danger">
+                        {fieldError}
+                      </p>
+                    )}
                   </div>
                   <div className={`${styles['options']} ${styles['rise']}`} style={rise(3)}>
-                    <Checkbox checked={isKeptSignedIn} onChange={(event) => changeKeptSignedIn(event.target.checked)}>
+                    <Checkbox checked={isKeptSignedIn} onCheckedChange={changeKeptSignedIn}>
                       {t('auth.keep_signed_in')}
                     </Checkbox>
                   </div>
                   <div className={styles['rise']} style={rise(4)}>
                     <Button
-                      type="primary"
-                      htmlType="submit"
+                      variant="primary"
+                      size="lg"
+                      type="submit"
                       block
                       loading={isSubmitting}
-                      autoInsertSpace={false}
                       icon={<ArrowRightOutlined />}
                       iconPlacement="end"
                       className={`auth-submit ${styles['submit']}`}
@@ -245,7 +269,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       {t('auth.submit')}
                     </Button>
                   </div>
-                </Form>
+                </form>
               </>
             )}
           </section>

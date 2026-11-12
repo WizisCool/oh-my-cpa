@@ -1,7 +1,7 @@
 .dashboard-alert { margin-bottom: 16px; }
 .dashboard-section { margin-bottom: 32px; }
 .section-heading { margin-bottom: 12px; }
-.status-pip { width: 7px; height: 7px; border-radius: 999px; background: var(--success); }
+.status-pip { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
 /* ── Dashboard Providers Section ─────────────────────────────────────────── */
 .provider-list-panel {
   display: flex;
@@ -63,15 +63,16 @@
   min-width: 0;
 }
 .provider-brand-badge {
+  border: 0;
   position: relative;
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
   flex: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-edge);
 }
 .provider-brand-badge .status-pip {
   position: absolute;
@@ -236,7 +237,7 @@
 /* The head is the label's height on every tile: a drill-down link is a line of the label's size,
    so the tile that carries one starts its figure on the same line as the tiles that do not. */
 .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.tile-head .ant-btn.tile-link { line-height: 1; }
+.tile-head [data-slot='button'].tile-link { line-height: 1; }
 /* A phone tile is half the row (`dashboardGrid.css`), so its figure and caption shrink to fit. */
 @media (max-width: 640px) {
   .tile-value { --kpi-figure-size: 1em; margin-top: 4px; font-size: 24px; }
@@ -249,7 +250,7 @@
 .model-series-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
 .model-series-mark { flex: none; }
 .model-series-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.model-usage-card .ant-card-body {
+.model-usage-card [data-slot="panel-body"] {
   /* Centre the row in any height the operator gave the card beyond its content. Grid centring keeps
      the row stretched to the body's full width, unlike flex centring, which would shrink it to its
      content width and let the list collapse. */
@@ -308,7 +309,7 @@
   font-variant-numeric: tabular-nums;
 }
 .model-usage-row:last-child { border-bottom: none; }
-.model-usage-swatch { width: 8px; height: 8px; border-radius: 999px; }
+.model-usage-swatch { width: 8px; height: 8px; border-radius: var(--radius-xs); }
 .model-usage-name {
   display: flex;
   align-items: center;
@@ -324,7 +325,7 @@
   max-width: 100%;
   padding: 3px 6px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -649,30 +650,10 @@
 .heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 /* The cell whose tooltip is open keeps the ring, so the tooltip is visibly attached to it while
    the pointer moves off to the link inside. */
-.heatmap-cell.ant-tooltip-open { box-shadow: inset 0 0 0 1px var(--fg-2); }
-/* The heatmap tooltip's content. antd owns the popper, the placement, the arrow and the motion,
-   so what is styled here is only the inside - which is what keeps this tooltip's chrome from
-   diverging from the app's other forty-odd tooltips.
-   The rows are a definition list with the values right-aligned: the pairing is the point, since
-   "Requests 6" and "Tokens 6,000" only mean something read against each other. */
-/* The panel's own class on antd's popper, rather than a selector reaching into `.ant-tooltip`: the
-   tooltip is click-triggered and contains a link, so the popper's box, placement and arrow stay
-   antd's business. What this owns is only the box's fit - `max-width: none` is what lets the value
-   column sit beside its label instead of wrapping under it. */
+.heatmap-cell[data-popup-open] { box-shadow: inset 0 0 0 1px var(--fg-2); }
 .heatmap-tip-popper {
   max-width: none;
-  /* The panel's tooltip paints its own text from the palette's text tokens, because its rows are a
-     definition list rather than a sentence. That makes the global spotlight wrong for it: antd's
-     spotlight is near-black in the light theme to suit its white text, which put near-black text on
-     a near-black box - a measured 1.0:1. Overriding the fill and the arrow here keeps the fix
-     inside this popper, where the reason applies, instead of moving a token every other tooltip
-     in the console also reads. */
-  --ant-tooltip-arrow-background-color: var(--surface);
-}
-.heatmap-tip-popper .ant-tooltip-container {
-  /* The columns need room; below this the value wraps away from the label it belongs to. */
   min-width: 176px;
-  background: var(--surface);
 }
 /* The rows lay out two-column, so the box has to be at least as wide as the widest label plus the
    longest value; below that the value column would wrap away from its label. antd's container
@@ -729,7 +710,7 @@
   font-size: var(--text-xs);
 }
 .heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
-.heatmap-tip-link-icon { font-size: 9px; }
+.heatmap-tip-link-icon { font-size: var(--text-sm); }
 /* The key is the field's footer, right-aligned under the newest weeks. */
 .heatmap-legend {
   align-self: flex-end;
@@ -750,11 +731,12 @@
 }
 /* Static skeleton, never a shimmer. */
 .heatmap-skeleton {
+  border: 0;
   margin-top: 12px;
   /* The measured field's own height: the month axis, then seven rows at the target size. */
   height: calc(16px + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-md);
 }
 .heatmap-alert { margin-top: 12px; }
 /* A 2px indeterminate bar for the panel's own background re-read: one composited layer, no layout,

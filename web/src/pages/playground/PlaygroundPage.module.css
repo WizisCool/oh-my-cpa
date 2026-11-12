@@ -32,19 +32,19 @@
   height: 28px;
   padding: 0 8px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
 .turn-error {
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--danger);
-  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 32%, transparent), var(--edge-drop);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   font-size: var(--text-md);
 }
@@ -76,21 +76,22 @@
 }
 
 /* An unset parameter is not a value: the slider rests muted until it is moved. */
-.is-unset :global(.ant-slider-track) {
+.is-unset :global([data-slot='slider-indicator']) {
   background: transparent;
 }
 
-.is-unset :global(.ant-slider-handle)::after {
-  box-shadow: 0 0 0 2px var(--border);
+.is-unset :global([data-slot='slider-thumb']) {
+  box-shadow: 0 0 0 1.5px var(--border), var(--edge-drop);
 }
 
-.number-input:global(.ant-input-number) {
+.number-input,
+.number-row .number-input {
   width: 88px;
-  flex-shrink: 0;
+  flex: 0 0 88px;
 }
 
-.json-input textarea,
-.json-input:global(.ant-input) {
+.json-input,
+.json-input textarea {
   font-family: var(--font-mono);
   font-size: var(--text-md);
 }
@@ -124,11 +125,12 @@
 }
 
 .metrics {
+  border: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -165,7 +167,7 @@
   color: var(--meta);
 }
 
-.inspect-tabs :global(.ant-tabs-nav) {
+.inspect-tabs :global([data-slot='tabs-list']) {
   margin: 0;
   padding: 0 20px;
 }

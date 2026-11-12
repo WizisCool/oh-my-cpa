@@ -1,10 +1,11 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '../../i18n';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
 import type { GatewayModelItem } from '../../types/gatewayModels';
 import type { ClientAPIKeyItem } from '../../types/providers';
-import { ArrowLeftOutlined, BoxOutlined, DownOutlined, KeyOutlined, LoadingOutlined, ReloadOutlined } from '../icons';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
+import { ArrowLeftOutlined, BoxOutlined, KeyOutlined, LoadingOutlined, ReloadOutlined } from '../icons';
 import { ModelMark } from './ModelMark';
 import { ComposerPicker, ComposerPickerList } from './ComposerPicker';
 import styles from './Workspace.module.css';
@@ -73,10 +74,10 @@ export function TargetChip({
       {close => (
         <div ref={contentRef} className={styles['picker-body']}>
           <div className={styles['picker-head']}>
-            {isChoosingKey && <Button type="text" size="small" aria-label={t('conversation.target.back')} icon={<ArrowLeftOutlined />} onClick={() => { setIsChoosingKey(false); setQuery(''); }} />}
+            {isChoosingKey && <Button variant="ghost" size="sm" aria-label={t('conversation.target.back')} icon={<ArrowLeftOutlined />} onClick={() => { setIsChoosingKey(false); setQuery(''); }} />}
             <span>{t(isChoosingKey ? 'conversation.client_key' : 'conversation.model')}</span>
             {!isChoosingKey && <span className={styles['picker-count']}>{isModelsLoading ? <LoadingOutlined /> : callPoints.length}</span>}
-            {!isChoosingKey && <Tooltip title={t('common.refresh')}><Button type="text" size="small" className={styles['picker-refresh']} aria-label={t('common.refresh')} icon={<ReloadOutlined />} loading={isLoading} onClick={onRefresh} /></Tooltip>}
+            {!isChoosingKey && <Tooltip title={t('common.refresh')}><Button variant="ghost" size="sm" className={styles['picker-refresh']} aria-label={t('common.refresh')} icon={<ReloadOutlined />} loading={isLoading} onClick={onRefresh} /></Tooltip>}
           </div>
           {!isChoosingKey && callPoints.length > SEARCH_THRESHOLD && (
             <div className={styles['picker-search']} data-picker-search>
@@ -101,7 +102,7 @@ export function TargetChip({
             <button type="button" className={styles['picker-key']} onClick={() => setIsChoosingKey(true)}>
               <KeyOutlined aria-hidden="true" />
               <span className={styles['picker-key-copy']}><span className={styles['picker-key-label']}>{t('conversation.client_key')}</span><span className={styles['picker-key-name']}>{selectedKey?.label || t('conversation.target.pick_key')}</span></span>
-              <DownOutlined className={styles['picker-caret']} aria-hidden="true" />
+              <DropdownCaret className={styles['picker-caret']} rotateOnOpen={false} />
             </button>
           )}
         </div>

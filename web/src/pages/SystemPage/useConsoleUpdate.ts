@@ -32,7 +32,7 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
   const queryClient = useQueryClient();
   const [watched, setWatched] = React.useState<{ id: string; product: ReleaseProduct } | null>(null);
   const [submittingProduct, setSubmittingProduct] = React.useState<ReleaseProduct | null>(null);
-  const lastReadyRef = React.useRef<SystemUpdaterResponse>();
+  const lastReadyRef = React.useRef<SystemUpdaterResponse | undefined>(undefined);
   const lastAnsweredAtRef = React.useRef(0);
   /**
    * The jobs this page has already reported an end for. One update has one end: an answer that

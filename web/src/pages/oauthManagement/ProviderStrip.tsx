@@ -65,7 +65,7 @@ export function ProviderStrip(props: ProviderStripProps) {
           tab reads one figure, its total. */}
       <span className={styles['tab-mark']}>
         {mark}
-        {needs > 0 && <span className={styles.attention} role="img" aria-label={t('omc.fleet_attention_n', { n: needs })} title={t('omc.fleet_attention_n', { n: needs })} />}
+        {needs > 0 && <span className={styles.attention} role="img" aria-label={t('omc.fleet_attention_n', { n: needs })} data-tip={t('omc.fleet_attention_n', { n: needs })} />}
       </span>
       <span className={styles['tab-name']}>{name}</span>
       <span className={styles['tab-count']}>{count}</span>
@@ -186,9 +186,9 @@ function RailItem({ isActive, mark, name, total, attention, onClick, handle, row
       >
         <span className={styles['item-mark']}>
           {mark}
-          {attention > 0 && <span className={styles.attention} role="img" aria-label={t('omc.fleet_attention_n', { n: attention })} title={t('omc.fleet_attention_n', { n: attention })} />}
+          {attention > 0 && <span className={styles.attention} role="img" aria-label={t('omc.fleet_attention_n', { n: attention })} data-tip={t('omc.fleet_attention_n', { n: attention })} />}
         </span>
-        <span className={styles['item-name']} title={name}>{name}</span>
+        <span className={styles['item-name']} data-tip={name} data-tip-overflow="">{name}</span>
         <span className={styles['item-count']}>{total}</span>
       </button>
     </div>

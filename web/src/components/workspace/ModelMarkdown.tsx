@@ -1,6 +1,7 @@
 import React from 'react';
-import XMarkdown from '@ant-design/x-markdown';
-import { Button } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Button } from '@/components/ui/button';
 import { clsx } from 'clsx';
 import { safeMarkdownComponents } from '../common/safeMarkdownComponents';
 import { CodeBody } from '../common/CodeBody';
@@ -11,13 +12,23 @@ import { useI18n } from '../../i18n';
 import { isHTMLDocument } from '../../agent/htmlDocument';
 import styles from './Workspace.module.css';
 
-interface CodeProps {
+export interface CodeProps {
   className?: string;
   children?: React.ReactNode;
   lang?: string;
   block?: boolean;
   streamStatus?: 'loading' | 'done';
+  node?: { position?: { end?: { offset?: number } } };
 }
+
+interface StreamState {
+  isStreaming: boolean;
+  contentLength: number;
+}
+
+const InsidePreContext = React.createContext(false);
+const StreamStateContext = React.createContext<StreamState>({ isStreaming: false, contentLength: 0 });
+const REMARK_PLUGINS = [remarkGfm];
 
 function textOf(children: React.ReactNode): string {
   if (typeof children === 'string') return children;
@@ -45,8 +56,8 @@ export function CodeBlock({ lang, children, streamStatus }: CodeProps) {
       className={styles['code-block']}
       actions={isDocument && (
         <Button
-          size="small"
-          type="text"
+          size="sm"
+          variant="ghost"
           icon={showsPage ? <CodeOutlined /> : <EyeOutlined />}
           onClick={() => setShowsPage(page => !page)}
           data-testid="markdown-document-view"
@@ -65,24 +76,27 @@ export function CodeBlock({ lang, children, streamStatus }: CodeProps) {
 }
 
 function Code(props: CodeProps) {
-  if (props.block) return <CodeBlock {...props} />;
+  const isInsidePre = React.useContext(InsidePreContext);
+  const stream = React.useContext(StreamStateContext);
+  if (props.block || isInsidePre) {
+    const lang = props.lang ?? /language-([\w+#.-]+)/.exec(props.className ?? '')?.[1];
+    const endOffset = props.node?.position?.end?.offset;
+    const resolvedStatus =
+      props.streamStatus ??
+      (stream.isStreaming && (endOffset === undefined || endOffset >= stream.contentLength - 1) ? 'loading' : 'done');
+    return <CodeBlock {...props} lang={lang} streamStatus={resolvedStatus} />;
+  }
   return <code className={clsx(props.className, styles['inline-code'])}>{props.children}</code>;
 }
 
 /** The block renderer supplies its own frame, so the parser's `pre` wrapper is dissolved. */
 function Pre({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>;
+  return <InsidePreContext.Provider value={true}>{children}</InsidePreContext.Provider>;
 }
 
 function Table({ children }: { children?: React.ReactNode }) {
   return <div className={styles['table-scroll']}><table>{children}</table></div>;
 }
-
-function StreamCaret() {
-  return <span className={styles['stream-caret']} aria-hidden="true" />;
-}
-
-const STREAM_TAIL = { component: StreamCaret };
 
 export interface ModelMarkdownProps {
   content: string;
@@ -93,11 +107,8 @@ export interface ModelMarkdownProps {
 }
 
 /**
- * Model output, rendered safely: raw HTML is escaped, links open outside the console, and an
- * image is shown as a link rather than fetched (`safeMarkdownComponents`).
- *
- * The library's own element styles are switched off: they draw tables as blocks sized to their
- * content and set type in their own scale, and the console's styles below are the whole look.
+ * Model output, rendered safely: raw HTML stays plain text, links open outside the console, and
+ * an image is shown as a link rather than fetched (`safeMarkdownComponents`).
  *
  * Memoised on its text, so a transcript that re-renders for a new token re-parses only the answer
  * that changed. The component table is built once per label for the same reason: a new table on
@@ -110,22 +121,20 @@ export const ModelMarkdown = React.memo(function ModelMarkdown({ content, isStre
     pre: Pre,
     table: Table,
   }), [externalImageLabel]);
-  // Arriving text fades in and a caret marks where the next words land. Both are tied
-  // to the stream: with the animation left on, a stored answer would fade in as one block on mount.
-  const streaming = React.useMemo(() => ({
-    hasNextChunk: isStreaming,
-    enableAnimation: isStreaming,
-    tail: isStreaming ? STREAM_TAIL : false,
-  }), [isStreaming]);
+  const streamState = React.useMemo(
+    () => ({ isStreaming, contentLength: content.length }),
+    [isStreaming, content.length],
+  );
   return (
-    <XMarkdown
-      content={content}
-      components={components}
-      streaming={streaming}
-      escapeRawHtml
-      openLinksInNewTab
-      disableDefaultStyles
-      className={clsx(styles['markdown'], className)}
-    />
+    <StreamStateContext.Provider value={streamState}>
+      <div
+        className={clsx(styles['markdown'], className)}
+        data-streaming={isStreaming ? '' : undefined}
+      >
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    </StreamStateContext.Provider>
   );
 });

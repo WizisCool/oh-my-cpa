@@ -3,7 +3,7 @@ import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
 import { TokenAccountingNote } from '../usage/TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import dayjs from '../../utils/time';
 import { DollarOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -41,7 +41,7 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
   const openEditor = useOpenPriceEditor();
   const setPrice = openEditor ? (
     <div className={styles['breakdown-action']}>
-      <Button size="small" icon={<DollarOutlined />} onClick={() => openEditor(model)} data-testid="cost-set-price">
+      <Button size="sm" icon={<DollarOutlined />} onClick={() => openEditor(model)} data-testid="cost-set-price">
         {t('cost.set_price', { model })}
       </Button>
       <span className={styles['mode-hint']}>{t('cost.set_price_note')}</span>

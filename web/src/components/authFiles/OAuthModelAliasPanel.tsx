@@ -1,5 +1,8 @@
 import React, { useMemo, useRef } from 'react';
-import { AutoComplete, Button, Input, Table } from 'antd';
+import { AutoComplete } from '@/components/ui/autocomplete';
+import { Table } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { VertexModelOpenAPI } from './VertexModelOpenAPI';
 import { Switch } from '../common/Switch';
 import { DeleteOutlined, PlusOutlined } from '../icons';
@@ -81,11 +84,11 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
               value={value}
               options={modelOptions}
               disabled={isDisabled}
-              showSearch={{ filterOption: (input, option) => String(option?.label ?? '').toLowerCase().includes(input.trim().toLowerCase()) }}
+              filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.trim().toLowerCase())}
               onChange={(next) => updateDraft(row.rowKey, 'name', next)}
-            >
-              <Input data-alias-field="name" aria-label={t('af.alias_col_name')} />
-            </AutoComplete>
+              data-alias-field="name"
+              aria-label={t('af.alias_col_name')}
+            />
             {excludingRule && (
               <span className={styles['field-warning']} data-testid="oauth-model-alias-excluded-source">
                 {t('af.alias_source_excluded', { rule: excludingRule })}
@@ -162,7 +165,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
       fixed: 'end' as const,
       render: (_: unknown, row: ManagementOAuthModelAliasDraft) => (
         <Button
-          type="text"
+          variant="ghost"
           danger
           disabled={isDisabled}
           aria-label={`${t('af.alias_remove')} ${row.alias || row.name}`}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Checkbox } from 'antd';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useT } from '../../i18n';
 import { filterModelOptions } from '../../utils/modelOptions';
 import styles from './ModelPickerModal.module.css';
@@ -88,7 +88,7 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
           checked={isAllVisiblePicked}
           indeterminate={pickedVisibleCount > 0 && !isAllVisiblePicked}
           disabled={visiblePickable.length === 0}
-          onChange={(event) => toggleAllVisible(event.target.checked)}
+          onCheckedChange={(checked) => toggleAllVisible(checked)}
         >
           {t('pro.select_all')}
         </Checkbox>
@@ -110,7 +110,7 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
                   <Checkbox
                     checked={isConfigured || picked.has(name)}
                     disabled={isConfigured}
-                    onChange={(event) => togglePicked(name, event.target.checked)}
+                    onCheckedChange={(checked) => togglePicked(name, checked)}
                   >
                     <span className={styles['name']}>{name}</span>
                   </Checkbox>

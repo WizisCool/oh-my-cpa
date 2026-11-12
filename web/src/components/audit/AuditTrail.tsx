@@ -2,8 +2,10 @@ import { translateOr } from '../../i18n/catalog';
 import { FilterDisclosure } from '../common/FilterDisclosure';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Segmented, Select } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
+import type { ColumnsType } from '@/components/ui/table';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
@@ -249,7 +251,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       title: t('audit.field_time'),
       width: 96,
       render: (_, event) => (
-        <span className={styles['audit-time']} title={dayjs(event.occurred_at_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}>
+        <span className={styles['audit-time']} data-tip={dayjs(event.occurred_at_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}>
           {dayjs(event.occurred_at_ms).format('HH:mm:ss')}
         </span>
       ),
@@ -275,7 +277,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       render: (_, event) => {
         const target = readableTarget(event);
         return target
-          ? <span className={styles['audit-target']} title={event.target_id}>{target}</span>
+          ? <span className={styles['audit-target']} data-tip={event.target_id} data-tip-overflow="">{target}</span>
           : <span className={styles['audit-none']}>—</span>;
       },
     },
@@ -307,7 +309,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       align: 'right',
       render: (_, event) => (
         <Button
-          size="small"
+          size="sm"
           icon={<ProfileOutlined />}
           onClick={(clickEvent) => {
             clickEvent.stopPropagation();
@@ -408,7 +410,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
             />
           )}
           {isFiltered && (
-            <Button type="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
+            <Button variant="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
               {t('audit.clear_filters')}
             </Button>
           )}

@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useState } from 'react';
-import { Button, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../../api/client';
 import { SecretInput } from '../../components/common/SecretInput';
@@ -111,7 +112,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
               <>
                 <span className={styles['hint']}>{t('sys.backup_oauth_intro')}</span>
                 <div className={styles['actions']}>
-                  <Button type="primary" loading={isWorking} onClick={() => void start()}>
+                  <Button variant="primary" loading={isWorking} onClick={() => void start()}>
                     {t('sys.backup_oauth_connect')}
                   </Button>
                 </div>
@@ -168,7 +169,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
                     treats a window opened after the request returns as a pop-up and blocks it. */}
                 <div className={styles['actions']}>
                   <Button
-                    type="primary"
+                    variant="primary"
                     href={session?.authorization_url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -193,7 +194,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
                     </label>
                     <div className={styles['actions']}>
                       <Button
-                        type="primary"
+                        variant="primary"
                         loading={isWorking}
                         disabled={isWorking || !callback.trim()}
                         onClick={() =>
@@ -209,7 +210,7 @@ export function BackupOAuth({ provider, hasConnection, onAuthorized }: Props) {
                         {t('sys.backup_oauth_finish')}
                       </Button>
                       <Button
-                        type="text"
+                        variant="ghost"
                         disabled={isWorking}
                         onClick={() =>
                           void run(async () => {

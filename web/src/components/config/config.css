@@ -81,13 +81,13 @@
   margin-bottom: 20px;
 }
 /* A card the nav jumps to lands this far below the scroller's top, clear of the sticky toolbar. A
-   card its row points at takes the stronger hairline a focused field's enclosure does. */
+   card its row points at takes the stronger ring a focused field's enclosure does. */
 .config-main .settings-group {
   scroll-margin-top: 96px;
-  transition: border-color var(--motion-fast) var(--ease-standard);
+  transition: box-shadow var(--motion-fast) var(--ease-standard);
 }
 .config-main .settings-group[data-outline-target] {
-  border-color: var(--muted);
+  box-shadow: 0 0 0 1px var(--muted), var(--edge-drop);
 }
 /* The card nav mirrors the section rail - the same row height, type and ink washes - so the two
    frame the column as one instrument, first level and second. The trailing count is what sets it
@@ -289,7 +289,7 @@
   width: 100%;
   font-family: var(--font-mono);
   font-size: var(--text-md);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 @media (max-width: 1599px) {
   .config-workbench {
@@ -356,33 +356,35 @@
   box-sizing: border-box;
 }
 .config-source-toolbar {
+  border: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
   flex-wrap: wrap;
   gap: 10px;
   position: relative;
   z-index: 0;
 }
 .config-editor-wrap {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--bg);
   position: relative;
   overflow: visible;
   z-index: 1;
-  transition: border-color var(--motion-fast) var(--ease-standard);
+  transition: box-shadow var(--motion-fast) var(--ease-standard);
 }
 .config-editor-wrap:focus-within {
-  border-color: var(--muted);
+  box-shadow: 0 0 0 1px var(--muted), var(--edge-drop);
 }
 .config-monaco-shell,
 .config-monaco-shell .monaco-editor {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .config-monaco-shell {
   width: 100%;
@@ -415,12 +417,12 @@
   padding: 6px 2px 0;
 }
 .config-source-hint kbd {
+  border: 0;
   padding: 0 4px;
   font: inherit;
   color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  border-radius: var(--radius-sm);
 }
 /* ── Floating dirty action bar (sticky bottom bar) ──────────────────── */
 .config-dirty-bar-portal {
@@ -436,11 +438,12 @@
   transition: inset-inline-start var(--motion-base) var(--ease-standard);
 }
 .config-dirty-bar {
+  border: 0;
   pointer-events: auto;
   width: min(100%, 720px);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   padding: 10px 18px;
   display: flex;
   align-items: center;
@@ -466,11 +469,11 @@
   font-size: var(--text-sm);
   margin-left: 4px;
 }
-.config-dirty-bar-actions .ant-btn {
+.config-dirty-bar-actions [data-slot="button"] {
   height: 32px;
   padding-inline: 14px;
   font-size: var(--text-md);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .config-dirty-btn-discard {
   background: transparent !important;
@@ -500,28 +503,26 @@
 }
 .payload-collapse {
   background: transparent !important;
-  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-.payload-collapse > .ant-collapse-item {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) !important;
+.payload-collapse > [data-slot="accordion-item"] {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-edge);
   overflow: hidden;
 }
-.payload-collapse > .ant-collapse-item > .ant-collapse-header {
-  padding: 14px 18px !important;
-  align-items: center !important;
-  color: var(--fg) !important;
+.payload-collapse > [data-slot="accordion-item"] [data-slot="accordion-trigger"] {
+  padding: 14px 18px;
 }
-.payload-collapse > .ant-collapse-item > .ant-collapse-content {
-  background: var(--bg) !important;
-  border-top: 1px solid var(--border-soft) !important;
-}
-.payload-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
-  padding: 16px !important;
+.payload-collapse > [data-slot="accordion-item"] > [data-slot="accordion-panel"] {
+  background: var(--bg);
+  border-top: 1px solid var(--border-soft);
+  padding: 16px;
 }
 .payload-panel-header {
   display: flex;
@@ -554,7 +555,7 @@
   gap: 14px;
   padding: 32px 20px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--surface);
   text-align: center;
 }
@@ -564,8 +565,9 @@
   gap: 14px;
 }
 .payload-rule-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 0;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-xl);
   background: var(--surface);
   padding: 14px 16px;
   display: flex;
@@ -729,6 +731,7 @@
     padding: 0 12px;
   }
   .config-dirty-bar {
+    border: 0;
     padding: 8px 12px;
     flex-wrap: wrap;
     gap: 10px;
@@ -787,13 +790,13 @@
   .config-source-container { gap: 8px; }
   .config-source-toolbar { padding: 4px 0; border: 0; background: transparent; gap: 8px; }
   .config-source-actions { gap: 4px; width: 100%; }
-  .config-source-actions > .ant-btn { padding-inline: 8px; min-height: 40px; }
+  .config-source-actions > [data-slot="button"] { padding-inline: 8px; min-height: 40px; }
   .config-monaco-shell { height: var(--source-available-height, 440px); }
   .config-monaco-loading { min-height: 0; height: 100%; padding: 12px; }
   .config-source-hint { display: none; }
   .config-dirty-bar-portal { inset-inline: 0; padding-inline: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
-  .config-dirty-bar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+  .config-dirty-bar { border: 0; padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
   .config-dirty-bar-left { gap: 8px; min-width: 0; flex-wrap: wrap; }
   .config-dirty-bar-actions { margin-inline-start: auto; }
-  .config-dirty-bar-actions .ant-btn { min-height: 40px; }
+  .config-dirty-bar-actions [data-slot="button"] { min-height: 40px; }
 }

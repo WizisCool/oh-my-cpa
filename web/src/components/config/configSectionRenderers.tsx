@@ -1,4 +1,8 @@
-import { Button, Input, Select, Typography } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { NumberInput } from '../common/NumberInput';
 import { Switch } from '../common/Switch';
 import {
@@ -28,7 +32,6 @@ import type { useConfigDraft } from './useConfigDraft';
 import { SectionHeading } from '../common/SectionHeading';
 import './config.css';
 
-const { Text } = Typography;
 
 /**
  * Everything a configuration field or group panel reads and rewrites: the draft
@@ -130,9 +133,9 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
           onChange={(num) => updateFieldInDoc(field, num)}
         />
         {field.unitKey && (
-          <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+          <span className="text-xs whitespace-nowrap text-muted-foreground">
             {t(field.unitKey)}
-          </Text>
+          </span>
         )}
       </div>
     );
@@ -145,9 +148,8 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
     // list that never opens promises an interaction the field does not have.
     const items = Array.isArray(val) ? val.map(String) : [];
     return (
-      <Select
+      <Combobox<string[]>
         id={`cfg-${field.id}`}
-        aria-describedby={ariaDescribedBy}
         mode="tags"
         tokenSeparators={[',']}
         open={false}
@@ -214,7 +216,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
 
   if (field.type === 'json_editor') {
     return (
-      <Input.TextArea
+      <Textarea
         id={`cfg-${field.id}`}
         aria-describedby={ariaDescribedBy}
         rows={2}
@@ -237,7 +239,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
 
   if (field.type === 'textarea') {
     return (
-      <Input.TextArea
+      <Textarea
         id={`cfg-${field.id}`}
         aria-describedby={ariaDescribedBy}
         rows={3}
@@ -391,7 +393,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
               <span className="settings-managed-count">
                 {t('cfg.api_keys_count', { n: configuredKeyCount })}
               </span>
-              <Button size="small" type="primary" onClick={() => navigate('/api-keys')}>
+              <Button size="sm" variant="primary" onClick={() => navigate('/api-keys')}>
                 {t('cfg.api_keys_manage')}
               </Button>
             </div>

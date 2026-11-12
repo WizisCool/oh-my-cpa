@@ -21,15 +21,14 @@
   margin-left: auto;
 }
 
-.layout :global(.ant-segmented-item-icon) + :global(.ant-segmented-item-label-text),
-.layout :global(.ant-segmented-item-label) {
+.layout :global([data-slot='segmented-item']) {
   display: inline-flex;
   align-items: center;
 }
 
 .caret {
-  width: 28px !important;
-  min-width: 28px;
+  width: 26px !important;
+  min-width: 26px;
 }
 
 .tool-button {
@@ -105,7 +104,7 @@
 .pip {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 50%;
   flex: none;
 }
 
@@ -136,7 +135,8 @@
   gap: 6px;
 }
 
-.filter-field :global(.ant-select) {
+.filter-field :global([data-slot='combobox-trigger']),
+.filter-field :global([data-slot='select-trigger']) {
   width: 100%;
 }
 

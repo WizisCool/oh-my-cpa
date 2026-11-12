@@ -1,6 +1,6 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
-import type { ColumnsType } from 'antd/es/table';
+import type { ColumnsType } from '@/components/ui/table';
 import dayjs from '../../../utils/time';
 import { ResponsiveList } from '../../../components/common/ResponsiveList';
 import { useT } from '../../../i18n';
@@ -49,7 +49,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       key: 'name',
       title: t('insights.col.key'),
       render: (_, group) => (
-        <button type="button" className={styles['key-name']} onClick={() => onOpen(group.id)} title={group.id}>
+        <button type="button" className={styles['key-name']} onClick={() => onOpen(group.id)} data-tip={group.id}>
           <InsightsValue dimension="key" id={group.id} labels={labels} />
           {labels.detail('key', group.id) && <span className={styles['key-mask']}>{labels.detail('key', group.id)}</span>}
         </button>
@@ -67,14 +67,14 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       title: t('insights.col.input'),
       align: 'right',
       sorter: byNumber((group) => group.measures.inputTokens),
-      render: (_, group) => <span title={formatTokensFull(group.measures.inputTokens)}>{formatTokens(group.measures.inputTokens, style)}</span>,
+      render: (_, group) => <span data-tip={formatTokensFull(group.measures.inputTokens)}>{formatTokens(group.measures.inputTokens, style)}</span>,
     },
     {
       key: 'output',
       title: t('insights.col.output'),
       align: 'right',
       sorter: byNumber((group) => group.measures.outputTokens),
-      render: (_, group) => <span title={formatTokensFull(group.measures.outputTokens)}>{formatTokens(group.measures.outputTokens, style)}</span>,
+      render: (_, group) => <span data-tip={formatTokensFull(group.measures.outputTokens)}>{formatTokens(group.measures.outputTokens, style)}</span>,
     },
     {
       key: 'cost',

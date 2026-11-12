@@ -1,6 +1,7 @@
 import { translateOr } from '../../../i18n/catalog';
 import React from 'react';
-import { Button, Input } from 'antd';
+import { Button } from '@/components/ui/button';
+import { PasswordInput } from '@/components/ui/input';
 import { ParagraphPlaceholder } from '../../../components/common/ContentPlaceholder';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { Notice } from '../../../components/feedback';
@@ -126,7 +127,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
       {operation.human_input === 'secret' && (
         <div className={workspace['field']}>
           <label className={workspace['field-label']} htmlFor={`secret-${operation.id}`}>{t('agent.private_input')}</label>
-          <Input.Password
+          <PasswordInput
             id={`secret-${operation.id}`}
             autoComplete="new-password"
             aria-label={t('agent.private_input')}
@@ -156,7 +157,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
       <footer className={styles['operation-actions']}>
         <Button disabled={!!pendingAction} loading={pendingAction === 'reject'} onClick={() => void decide(false)}>{t('agent.reject')}</Button>
         <Button
-          type="primary"
+          variant="primary"
           danger={isDestructive}
           loading={pendingAction === 'approve'}
           disabled={!canApprove}

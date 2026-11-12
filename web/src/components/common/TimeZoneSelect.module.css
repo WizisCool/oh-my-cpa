@@ -69,27 +69,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.timezone-select :global(.ant-select-selection-item) {
-  display: flex;
-  align-items: center;
-}
-
 .timezone-popup {
   max-width: calc(100vw - 32px);
 }
 
 /* Reserve the selection indicator on every row so the offset column never shifts. */
-.timezone-popup :global(.ant-select-item-option) {
+.timezone-popup :global([data-slot='combobox-item']) {
   position: relative;
-  height: 64px;
-  padding: 6px 32px 6px 12px;
-}
-
-.timezone-popup :global(.ant-select-item-option-state) {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  min-height: 60px;
 }
 
 @media (max-width: 900px) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from 'antd';
+import { Button } from '@/components/ui/button';
 import { useRouteError } from 'react-router-dom';
 import { ReloadOutlined } from '../icons';
 import { BrandArtwork } from './BrandArtwork';
@@ -57,7 +57,7 @@ export const RouteErrorPage: React.FC = () => {
             <Button href={dashboardPath}>
               {t('route_error.home')}
             </Button>
-            <Button type="primary" icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
+            <Button variant="primary" icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
               {t('route_error.reload')}
             </Button>
           </div>

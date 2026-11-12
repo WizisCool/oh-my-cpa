@@ -20,6 +20,10 @@ import { SummaryStrip } from '../src/components/common/SummaryStrip';
 import { MaskedText } from '../src/components/common/MaskedText';
 import { MarkArtwork } from '../src/components/common/MarkArtwork';
 import { RemoteImage } from '../src/components/common/RemoteImage';
+import { Select } from '../src/components/ui/select';
+import { Tabs } from '../src/components/ui/tabs';
+import { Combobox } from '../src/components/ui/combobox';
+import { AutoComplete } from '../src/components/ui/autocomplete';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { renderWithOmc } from './support/render';
 import { installOmcApi } from './support/omcApi';
@@ -38,12 +42,12 @@ describe('SearchInput', () => {
 
   it('keeps a longer placeholder apart from the accessible name and clears to an empty string', () => {
     const onChange = vi.fn();
-    const { container } = render(
+    render(
       <SearchInput value="prod" onChange={onChange} label="Search requests" placeholder="Model, key or request ID" />,
     );
     expect(screen.getByRole('textbox', { name: 'Search requests' }).getAttribute('placeholder')).toBe('Model, key or request ID');
 
-    fireEvent.click(container.querySelector('.ant-input-clear-icon')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(onChange.mock.calls).toEqual([['']]);
   });
@@ -131,7 +135,7 @@ describe('AppDrawer', () => {
     act(() => select(null));
 
     expect(screen.getByText('Body of request 42')).toBeTruthy();
-    expect(document.querySelector('.ant-drawer-title')?.textContent).toBe('request 42');
+    expect(document.querySelector('[data-slot="sheet-title"]')?.textContent).toBe('request 42');
     expect(document.querySelector('.app-drawer-footer-actions button')?.textContent).toBe('Copy request 42');
   });
 
@@ -185,7 +189,7 @@ describe('ConfirmAction', () => {
     );
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
     const confirm = screen.getByRole('button', { name: 'Delete' });
-    expect(confirm.classList.contains('ant-btn-dangerous')).toBe(true);
+    expect(confirm.hasAttribute('data-danger')).toBe(true);
 
     fireEvent.click(confirm);
 
@@ -209,8 +213,8 @@ describe('ConfirmAction', () => {
     await screen.findByRole('button', { name: 'Cancel' });
     // jsdom never ends a motion, so a tooltip on its way out keeps its node in the leave state.
     await waitFor(() => {
-      const tooltip = screen.queryByText('Delete key')?.closest('.ant-tooltip');
-      expect(!tooltip || /-leave\b/.test(tooltip.className)).toBe(true);
+      const tooltip = screen.queryByRole('tooltip');
+      expect(!tooltip || tooltip.hasAttribute('data-ending-style')).toBe(true);
     });
   });
 });
@@ -293,16 +297,16 @@ describe('Pager', () => {
   it('reports the page chosen and offers no page-size menu', () => {
     const onChange = vi.fn();
     const { container } = render(<Pager page={1} pageSize={20} total={48} onChange={onChange} />);
-    expect(container.querySelector('.ant-pagination-options')).toBeNull();
+    expect(container.querySelector('select')).toBeNull();
 
-    fireEvent.click(container.querySelector('.ant-pagination-item-2') as HTMLElement);
+    fireEvent.click(container.querySelector('[data-page="2"]') as HTMLElement);
 
     expect(onChange).toHaveBeenCalledWith(2, 20);
   });
 
   it('steps through pages without a field to type in', () => {
     const { container } = render(<Pager variant="stepped" page={2} pageSize={10} total={48} onChange={() => undefined} />);
-    expect(container.querySelector('.ant-pagination-simple')).toBeTruthy();
+    expect(container.querySelector('[data-variant="stepped"]')).toBeTruthy();
     expect(container.querySelector('input')).toBeNull();
   });
 });
@@ -342,6 +346,52 @@ describe('Tooltip', () => {
     expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(trigger);
     expect(document.activeElement).toBe(trigger);
     expect(trigger.getAttribute('aria-describedby')).toBe('field-hint');
+  });
+
+  it('opens a tap-readable or delegated data-tip on mobile touch and reliably closes on outside tap, repeat tap, or scroll', async () => {
+    const { ChartContainer, ChartTooltipContent } = await import('../src/components/ui/chart');
+    const { DelegatedTooltipLayer } = await import('../src/components/ui/tooltip');
+
+    render(
+      <div>
+        <DelegatedTooltipLayer />
+        <span data-testid="tip-badge" data-tip="Exact: 1,234,567 tokens">1.2M</span>
+        <div data-testid="outside">Outside area</div>
+        <ChartContainer config={{ val: { label: 'Tokens', color: '#00a2fb' } }} responsive={false} data-testid="mobile-chart">
+          <ChartTooltipContent active label="12:00" payload={[{ name: 'val', dataKey: 'val', value: 4200, payload: { t: 1 } }]} />
+        </ChartContainer>
+      </div>,
+    );
+
+    const badge = screen.getByTestId('tip-badge');
+    const outside = screen.getByTestId('outside');
+    const chart = screen.getByTestId('mobile-chart');
+
+    // 1. Mobile tap on non-interactive data-tip opens it, outside tap closes it immediately.
+    fireEvent.pointerDown(badge, { pointerType: 'touch', clientX: 20, clientY: 20 });
+    fireEvent.pointerUp(badge, { pointerType: 'touch', clientX: 20, clientY: 20 });
+    await waitFor(() => expect(screen.getByText('Exact: 1,234,567 tokens')).toBeTruthy());
+
+    fireEvent.pointerDown(outside, { pointerType: 'touch', clientX: 200, clientY: 200 });
+    await waitFor(() => expect(screen.queryByText('Exact: 1,234,567 tokens')).toBeNull());
+
+    // 2. ChartTooltipContent on mobile touch: visible on tap, closes on outside tap and on scroll.
+    fireEvent.pointerDown(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).not.toBeNull();
+
+    // Repeat tap on same active point toggles chart tooltip off!
+    fireEvent.pointerDown(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(chart, { pointerType: 'touch', clientX: 50, clientY: 50 });
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
+
+    // Tap again to open, then scroll page -> closes immediately!
+    fireEvent.pointerDown(chart, { pointerType: 'touch', clientX: 60, clientY: 50 });
+    fireEvent.pointerUp(chart, { pointerType: 'touch', clientX: 60, clientY: 50 });
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).not.toBeNull();
+
+    fireEvent.scroll(document);
+    expect(chart.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
   });
 });
 
@@ -634,6 +684,140 @@ describe('PageHeader', () => {
     const subtitle = container.querySelector('.terminal-subtitle');
     expect(subtitle?.tagName.toLowerCase()).toBe('div');
     expect(subtitle?.querySelector('[class*="summary-strip"]')).not.toBeNull();
+  });
+});
+
+describe('Base UI Select, Tabs, Combobox & AutoComplete contracts', () => {
+  it('keeps an initially empty controlled Select synchronized across external updates and clear', () => {
+    function Harness() {
+      const [val, setVal] = React.useState<string | undefined>(undefined);
+      return (
+        <div>
+          <button type="button" onClick={() => setVal('claude')}>Set Claude</button>
+          <Select
+            aria-label="Protocol"
+            allowClear
+            placeholder="All protocols"
+            value={val}
+            onChange={(next) => setVal(next)}
+            options={[
+              { value: 'alpha', label: 'Alpha' },
+              { value: 'claude', label: 'Claude' },
+            ]}
+          />
+        </div>
+      );
+    }
+    renderWithOmc(<Harness />);
+    const trigger = screen.getByRole('combobox', { name: 'Protocol' });
+    expect(trigger.textContent).toContain('All protocols');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set Claude' }));
+    expect(trigger.textContent).toContain('Claude');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(trigger.textContent).toContain('All protocols');
+  });
+
+  it('retains visited Tabs panel state when destroyOnHidden is false and discards it when true', () => {
+    function CounterPanel({ label }: { label: string }) {
+      const [count, setCount] = React.useState(0);
+      return (
+        <button type="button" onClick={() => setCount((c) => c + 1)}>
+          {label}: {count}
+        </button>
+      );
+    }
+    const { rerender } = renderWithOmc(
+      <Tabs
+        defaultActiveKey="tail"
+        items={[
+          { key: 'tail', label: 'Tail', children: <CounterPanel label="Tail count" /> },
+          { key: 'errors', label: 'Errors', children: <CounterPanel label="Error count" /> },
+        ]}
+      />,
+    );
+
+    // Lazy initial mount: inactive Errors panel is not mounted before first visit.
+    expect(screen.queryByRole('button', { name: /Error count/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tail count: 0' }));
+    expect(screen.getByRole('button', { name: 'Tail count: 1' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Errors' }));
+    expect(screen.getByRole('button', { name: 'Error count: 0' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Tail' }));
+    expect(screen.getByRole('button', { name: 'Tail count: 1' })).toBeTruthy();
+
+    rerender(
+      <Tabs
+        destroyOnHidden
+        defaultActiveKey="tail"
+        items={[
+          { key: 'tail', label: 'Tail', children: <CounterPanel label="Tail count" /> },
+          { key: 'errors', label: 'Errors', children: <CounterPanel label="Error count" /> },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Errors' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Tail' }));
+    expect(screen.getByRole('button', { name: 'Tail count: 0' })).toBeTruthy();
+  });
+
+  it('wires aria-activedescendant on Combobox and AutoComplete and ignores Enter during IME composition', async () => {
+    const onComboChange = vi.fn();
+    const onAutoSelect = vi.fn();
+    renderWithOmc(
+      <div>
+        <Combobox
+          aria-label="Model picker"
+          showSearch
+          open
+          options={[
+            { value: 'gpt-5', label: 'GPT-5' },
+            { value: 'claude-4', label: 'Claude 4' },
+          ]}
+          onChange={onComboChange}
+        />
+        <AutoComplete
+          aria-label="Alias target"
+          value="g"
+          options={[
+            { value: 'gpt-5', label: 'GPT-5' },
+            { value: 'gemini', label: 'Gemini' },
+          ]}
+          onSelect={onAutoSelect}
+        />
+      </div>,
+    );
+
+    const searchInput = await screen.findByRole('combobox', { name: 'Model picker search' });
+    const firstOptId = searchInput.getAttribute('aria-activedescendant');
+    expect(firstOptId).toBeTruthy();
+    expect(document.getElementById(firstOptId!)?.textContent).toContain('GPT-5');
+
+    fireEvent.keyDown(searchInput, { key: 'ArrowDown' });
+    const secondOptId = searchInput.getAttribute('aria-activedescendant');
+    expect(secondOptId).toBeTruthy();
+    expect(secondOptId).not.toBe(firstOptId);
+    expect(document.getElementById(secondOptId!)?.textContent).toContain('Claude 4');
+
+    // IME composition confirmation must not commit the highlighted option.
+    fireEvent.keyDown(searchInput, { key: 'Enter', isComposing: true });
+    expect(onComboChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+    expect(onComboChange).toHaveBeenCalledWith('claude-4', expect.objectContaining({ value: 'claude-4' }));
+
+    const autoInput = screen.getByRole('combobox', { name: 'Alias target' });
+    fireEvent.focus(autoInput);
+    await waitFor(() => expect(autoInput.getAttribute('aria-expanded')).toBe('true'));
+    const autoActiveId = autoInput.getAttribute('aria-activedescendant');
+    expect(autoActiveId).toBeTruthy();
+    expect(document.getElementById(autoActiveId!)?.textContent).toContain('GPT-5');
+
+    fireEvent.keyDown(autoInput, { key: 'Enter', isComposing: true });
+    expect(onAutoSelect).not.toHaveBeenCalled();
   });
 });
 

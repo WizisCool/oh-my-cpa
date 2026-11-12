@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input } from 'antd';
+import { Input } from '@/components/ui/input';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useI18n, useT } from '../../i18n';

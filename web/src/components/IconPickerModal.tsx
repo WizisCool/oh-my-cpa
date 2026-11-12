@@ -1,7 +1,8 @@
 import { CustomIconLibrary } from './CustomIconLibrary';
 import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Segmented, theme } from 'antd';
+
+import { Segmented } from '@/components/ui/segmented';
 import {
   LOBE_ICON_CATALOG,
   type LobeIconCatalogEntry,
@@ -49,10 +50,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   const t = useT();
   const [isLibraryBusy, setIsLibraryBusy] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
-  const { token } = theme.useToken();
-  // Derived from the live theme token, so a themed z-index base is respected
-  // rather than pinned to today's default of 1000.
-  const zIndex = token.zIndexPopupBase + ANTD_CONTAINER_ZINDEX_STEP * 2;
+  const zIndex = 1000 + ANTD_CONTAINER_ZINDEX_STEP * 2;
   const [tab, setTab] = useState<'builtin' | 'custom'>('builtin');
   useEffect(() => {
     if (open) setTab(currentIcon?.startsWith('custom:') ? 'custom' : 'builtin');
@@ -235,7 +233,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                       }
                     }}
                     className={styles['tile']}
-                    title={`${item.fullTitle} (${item.id})`}
+                    data-tip={`${item.fullTitle} (${item.id})`}
                   >
                     {visibleIconIds.has(item.id) ? (
                       <LobeIcon iconId={item.id} size={28} loading="lazy" />

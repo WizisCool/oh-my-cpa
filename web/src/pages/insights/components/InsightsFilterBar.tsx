@@ -1,5 +1,7 @@
 import React from 'react';
-import { Button, Checkbox, Popover } from 'antd';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CloseOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../../../components/icons';
 import { SearchInput } from '../../../components/common/SearchInput';
 import { useT } from '../../../i18n';
@@ -68,7 +70,7 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
   ) : (
     <div className={styles['filter-values']}>
       <div className={styles['filter-values-head']}>
-        <Button type="text" size="small" icon={<LeftOutlined />} aria-label={t('insights.filter_back')} onClick={() => { setDimension(null); setSearch(''); }} />
+        <Button variant="ghost" size="sm" icon={<LeftOutlined />} aria-label={t('insights.filter_back')} onClick={() => { setDimension(null); setSearch(''); }} />
         <span>{t(`insights.dim.${dimension}`)}</span>
       </div>
       <SearchInput value={search} onChange={setSearch} label={t('insights.filter_search')} autoFocus />
@@ -79,7 +81,7 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
             <label key={facet.id} className={styles['filter-value']}>
               <Checkbox
                 checked={(filters[dimension] ?? []).includes(facet.id)}
-                onChange={() => onChange(toggleFilter(filters, dimension, facet.id))}
+                onCheckedChange={() => onChange(toggleFilter(filters, dimension, facet.id))}
               />
               <InsightsValue dimension={dimension} id={facet.id} labels={labels} hasDetail className={styles['filter-value-name']} />
               <span className={styles['filter-value-count']}>{COUNT.format(facet.requests)}</span>
@@ -101,7 +103,7 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
               type="button"
               className={styles['filter-chip-action']}
               aria-label={t('insights.open_detail')}
-              title={t('insights.open_detail')}
+              data-tip={t('insights.open_detail')}
               onClick={() => onOpenKey(chip.value)}
             >
               <RightOutlined />
@@ -117,21 +119,20 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
           </button>
         </span>
       ))}
-      <Popover
-        trigger="click"
-        placement="bottomLeft"
-        open={isOpen}
-        onOpenChange={close}
-        content={panel}
-        arrow={false}
-        destroyOnHidden
-      >
-        <Button size="small" type="text" icon={<PlusOutlined />} className={styles['filter-add']} disabled={!cube}>
-          {t('insights.filter_add')}
-        </Button>
+      <Popover open={isOpen} onOpenChange={(next) => close(next)}>
+        <PopoverTrigger
+          render={
+            <Button size="sm" variant="ghost" icon={<PlusOutlined />} className={styles['filter-add']} disabled={!cube}>
+              {t('insights.filter_add')}
+            </Button>
+          }
+        />
+        <PopoverContent placement="bottomLeft">
+          {panel}
+        </PopoverContent>
       </Popover>
       {hasFilters(filters) && (
-        <Button size="small" type="link" className={styles['filter-clear']} onClick={() => onChange({})}>
+        <Button size="sm" variant="link" className={styles['filter-clear']} onClick={() => onChange({})}>
           {t('insights.filter_clear')}
         </Button>
       )}

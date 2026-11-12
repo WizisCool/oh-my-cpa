@@ -1,6 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Checkbox, Input, Select } from 'antd';
+import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox, CheckboxGroup } from '@/components/ui/checkbox';
 import { Switch } from '../common/Switch';
 import { ListLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -180,7 +183,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
           tone="warning"
           title={t('plugin.settings_conflict')}
           description={t('plugin.settings_conflict_desc')}
-          action={<Button size="small" onClick={reload}>{t('plugin.settings_reload')}</Button>}
+          action={<Button size="sm" onClick={reload}>{t('plugin.settings_reload')}</Button>}
         />
       )}
 
@@ -230,7 +233,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
             count={current.sources.length}
             extra={(
               <Button
-                size="small"
+                size="sm"
                 icon={<PlusOutlined />}
                 disabled={isDemo}
                 onClick={() => update({ sources: [...current.sources, ''] })}
@@ -286,7 +289,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
             description={t('plugin.settings_auth_desc')}
             extra={(
               <Button
-                size="small"
+                size="sm"
                 icon={<PlusOutlined />}
                 disabled={isDemo}
                 onClick={() => update({ rules: [...current.rules, newRule()] })}
@@ -312,8 +315,8 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
                     <div className={styles['rule-head']}>
                       <span className={styles['rule-title']}>{rule.match.trim() || t('plugin.settings_rule_untitled', { n: index + 1 })}</span>
                       <Button
-                        size="small"
-                        type="text"
+                        size="sm"
+                        variant="ghost"
                         danger
                         icon={<DeleteOutlined />}
                         disabled={isDemo}
@@ -345,11 +348,11 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
                       </label>
                       <div className={`${styles['rule-field']} ${styles['rule-field-wide']}`}>
                         <span className={styles['rule-field-label']}>{t('plugin.auth_apply_to')}</span>
-                        <Checkbox.Group
+                        <CheckboxGroup
                           value={rule.apply_to}
                           disabled={isDemo}
                           options={PLUGIN_STORE_AUTH_TARGETS.map((target) => ({ value: target, label: targetLabels[target] }))}
-                          onChange={(values) => updateRule(index, { apply_to: values as PluginStoreAuthTarget[] })}
+                          onValueChange={(values) => updateRule(index, { apply_to: values as PluginStoreAuthTarget[] })}
                         />
                         <span className={styles['setting-hint']}>{t('plugin.auth_apply_to_hint')}</span>
                       </div>
@@ -387,7 +390,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
                         <Checkbox
                           checked={rule.allow_insecure}
                           disabled={isDemo}
-                          onChange={(event) => updateRule(index, { allow_insecure: event.target.checked })}
+                          onCheckedChange={(checked) => updateRule(index, { allow_insecure: checked })}
                         >
                           {t('plugin.auth_allow_insecure')}
                         </Checkbox>
@@ -409,7 +412,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
         </Button>
         <Tooltip title={isDemo ? t('demo.blocked') : undefined}>
           <Button
-            type="primary"
+            variant="primary"
             icon={<SaveOutlined />}
             disabled={isDemo || !isDirty}
             loading={saveMutation.isPending}
@@ -446,7 +449,7 @@ function OmcSourceRow({ url, isDemo }: { url?: string; isDemo: boolean }) {
       <Switch
         checked={source.isEnabled}
         disabled={isDemo || !source.isLoaded}
-        title={isDemo ? t('demo.blocked') : undefined}
+        data-tip={isDemo ? t('demo.blocked') : undefined}
         onChange={(enabled) => void toggle(enabled)}
         aria-label={t('plugin.settings_omc_source')}
       />

@@ -1,10 +1,14 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Input, Segmented, TimePicker } from 'antd';
+import { TimeRangeField } from '@/components/ui/time-picker';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Segmented } from '@/components/ui/segmented';
 import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
-import dayjs, { timeZoneOptions } from '../../utils/time';
+import { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
 import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, ThunderboltOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
@@ -272,7 +276,7 @@ export const PriceSchedule: React.FC<{
                 const isInherited = row.tier !== null && row.inherited.has(key);
                 const ratio = !isInherited && row.tier && from > 0 ? rate / from : null;
                 return (
-                  <td key={key} className={clsx(isInherited && styles['schedule-inherited'])} title={isInherited ? t('pricing.schedule.inherited') : undefined}>
+                  <td key={key} className={clsx(isInherited && styles['schedule-inherited'])} data-tip={isInherited ? t('pricing.schedule.inherited') : undefined}>
                     {formatRatePer1M(rate)}
                     {ratio !== null && Math.abs(ratio - 1) > 1e-9 && (
                       <span className={clsx(styles['schedule-ratio'], ratio > 1 ? styles['rate-up'] : styles['rate-down'])}>
@@ -300,7 +304,7 @@ const WindowField: React.FC<{
 }> = ({ draft, onChange }) => {
   const t = useT();
   const consoleZone = useTimeZone();
-  const pickerValue = (text: string) => (text ? dayjs(`2000-01-01 ${text}`, 'YYYY-MM-DD HH:mm') : null);
+
   const zones = React.useMemo(() => timeZoneOptions(consoleZone, draft.timeZone, t('pricing.editor.window_zone_console')), [consoleZone, draft.timeZone, t]);
   const shift = clockShiftMinutes(draft.timeZone, consoleZone, Date.now());
   const isComplete = draft.windowStart !== '' && draft.windowEnd !== '';
@@ -308,16 +312,11 @@ const WindowField: React.FC<{
     <div className={styles['tier-window']}>
       <div className={styles['tier-field']}>
         <span>{t('pricing.editor.window_range')}</span>
-        <TimePicker.RangePicker
-          format="HH:mm"
-          order={false}
-          allowEmpty={[true, true]}
-          value={[pickerValue(draft.windowStart), pickerValue(draft.windowEnd)]}
+        <TimeRangeField
+          startValue={draft.windowStart}
+          endValue={draft.windowEnd}
           aria-label={t('pricing.editor.window_range')}
-          onChange={(values) => onChange({
-            windowStart: values?.[0] ? values[0].format('HH:mm') : '',
-            windowEnd: values?.[1] ? values[1].format('HH:mm') : '',
-          })}
+          onChange={({ start, end }) => onChange({ windowStart: start, windowEnd: end })}
         />
       </div>
       <div className={styles['tier-field']}>
@@ -359,7 +358,7 @@ const TierRateFields: React.FC<{
     <div className={styles['tier-rates-block']}>
       <div className={styles['tier-unit']}>
         <Segmented<TierRateUnit>
-          size="small"
+          size="sm"
           value={draft.rateUnit}
           disabled={!base}
           onChange={onUnitChange}
@@ -471,7 +470,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
     <Tooltip title={t('pricing.editor.tier_remove')}>
       <Button
         className="row-action-btn"
-        size="small"
+        size="sm"
         danger
         icon={<DeleteOutlined />}
         aria-label={t('pricing.editor.tier_remove')}
@@ -514,7 +513,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
             <Tooltip title={t('pricing.editor.lane_remove')}>
               <Button
                 className="row-action-btn"
-                size="small"
+                size="sm"
                 danger
                 icon={<DeleteOutlined />}
                 aria-label={t('pricing.editor.lane_remove')}
@@ -583,7 +582,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
                   <span className={styles['tier-note']}>{t('pricing.editor.context_threshold_full', { n: formatTokensFull(threshold) })}</span>
                 )}
               </div>
-              <Checkbox checked={draft.isWindowed} onChange={(event) => update(draft.key, { isWindowed: event.target.checked })}>
+              <Checkbox checked={draft.isWindowed} onCheckedChange={(checked) => update(draft.key, { isWindowed: checked })}>
                 {t('pricing.editor.context_windowed')}
               </Checkbox>
               {draft.isWindowed && windowField(draft)}

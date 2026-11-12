@@ -32,7 +32,7 @@
   font-size: var(--text-sm);
 }
 
-.sync-schedule :global(.ant-select) {
+.sync-schedule :global([data-slot='select-trigger']) {
   width: 140px;
 }
 
@@ -52,8 +52,9 @@
   align-items: center;
   gap: 2px 8px;
   max-width: 100%;
-  padding: 2px 0 2px 8px;
-  border-left: 2px solid var(--accent);
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .candidate-text {
@@ -189,9 +190,14 @@ a.usage-unpriced:hover {
     width: 100%;
   }
 
+  .provider-filter {
+    width: 100%;
+    margin-left: 0;
+  }
+
   /* Five filters do not fit a phone. They swipe inside their own strip rather than widening the
      page, which made a sideways swipe drag the whole price list. */
-  .toolbar :global(.ant-segmented) {
+  .toolbar :global([data-slot='segmented']) {
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
@@ -199,7 +205,7 @@ a.usage-unpriced:hover {
     scrollbar-width: none !important;
   }
 
-  .toolbar :global(.ant-segmented)::-webkit-scrollbar {
+  .toolbar :global([data-slot='segmented'])::-webkit-scrollbar {
     display: none !important;
   }
 }
@@ -255,30 +261,9 @@ a.usage-unpriced:hover {
   font-variant-numeric: tabular-nums;
 }
 
-.pagination-bar :global(.ant-pagination) {
+.pagination-bar :global([data-slot='pager']) {
   margin: 0;
   margin-inline-start: auto;
-}
-
-@media (max-width: 640px) {
-  .pagination-bar :global(.ant-pagination-prev),
-  .pagination-bar :global(.ant-pagination-next) {
-    min-width: 40px;
-    min-height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .pagination-bar :global(.ant-pagination-item-link) {
-    min-width: 40px;
-    min-height: 40px;
-  }
-
-  .pagination-bar :global(.ant-pagination-simple-pager) {
-    height: 40px;
-    line-height: 40px;
-  }
 }
 
 :global(.action-menu-content) > .sync-popover {

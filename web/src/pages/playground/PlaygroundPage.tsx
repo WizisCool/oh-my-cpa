@@ -1,5 +1,11 @@
 import React from 'react';
-import { Button, Dropdown } from 'antd';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -107,7 +113,7 @@ export const PlaygroundPage: React.FC = () => {
   // each stored choice is used only once it is known to still exist: a deleted key or a model the
   // gateway no longer serves is never selected. Until all three have been reconciled
   // nothing is written back, so a slow read cannot persist an empty target over a stored one.
-  const storedRef = React.useRef<PlaygroundSession>();
+  const storedRef = React.useRef<PlaygroundSession | undefined>(undefined);
   const [hydration, setHydration] = React.useState({ session: false, key: false, model: false });
 
   React.useEffect(() => {
@@ -174,7 +180,7 @@ export const PlaygroundPage: React.FC = () => {
   // matches the last one is skipped.
   const { set: persistSession } = sessionPref;
   const lastWrittenRef = React.useRef('');
-  const pendingRef = React.useRef<PlaygroundSession>();
+  const pendingRef = React.useRef<PlaygroundSession | undefined>(undefined);
   const wasRunningRef = React.useRef(false);
   const flushSession = React.useCallback(() => {
     const document = pendingRef.current;
@@ -185,7 +191,7 @@ export const PlaygroundPage: React.FC = () => {
     lastWrittenRef.current = serialized;
     void persistSession(document);
   }, [persistSession]);
-  const persistedTargetRef = React.useRef<PlaygroundTarget>();
+  const persistedTargetRef = React.useRef<PlaygroundTarget | undefined>(undefined);
   React.useEffect(() => {
     if (isDemo || !isHydrated || !isRecoveryChecked || isRunning) return;
     pendingRef.current = sessionDocument(target, parameters, turns, lastRunID);
@@ -279,7 +285,7 @@ export const PlaygroundPage: React.FC = () => {
     if (link) navigate(link);
   }, [navigate]);
 
-  const runtimeRef = React.useRef<ReturnType<typeof usePlaygroundThreadRuntime>>();
+  const runtimeRef = React.useRef<ReturnType<typeof usePlaygroundThreadRuntime> | undefined>(undefined);
   const attachmentAdapter = React.useMemo(() => new PlaygroundImageAdapter(
     () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
     () => refuse('invalid_image'),
@@ -351,31 +357,39 @@ export const PlaygroundPage: React.FC = () => {
 
   const actions = (
     <>
-      <Dropdown
-        trigger={['click']}
+      <DropdownMenu
         open={isExportMenuOpen}
-        onOpenChange={setIsExportMenuOpen}
-        disabled={turns.length === 0 || isRunning || isExporting}
-        menu={{
-          items: [
-            { key: 'html', label: t('agent.export.html') },
-            { key: 'image', label: t('agent.export.image') },
-            { key: 'json', label: t('agent.export.json') },
-          ],
-          onClick: ({ key }) => {
-            setIsExportMenuOpen(false);
-            exportConversation(key as 'html' | 'image' | 'json');
-          },
+        onOpenChange={(next) => {
+          if (turns.length === 0 || isRunning || isExporting) return;
+          setIsExportMenuOpen(next);
         }}
       >
-        <ToolButton label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting} />
-      </Dropdown>
+        <DropdownMenuTrigger
+          disabled={turns.length === 0 || isRunning || isExporting}
+          render={
+            <ToolButton label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting} />
+          }
+        />
+        <DropdownMenuContent placement="bottomRight">
+          {(['html', 'image', 'json'] as const).map((format) => (
+            <DropdownMenuItem
+              key={format}
+              onClick={() => {
+                setIsExportMenuOpen(false);
+                exportConversation(format);
+              }}
+            >
+              {t(`agent.export.${format}`)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ToolButton label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || !isRecoveryChecked || turns.length === 0} onClick={resetConversation} />
       <Tooltip title={t('pg.parameters')}>
         <Button
           aria-label={t('pg.parameters')}
           aria-pressed={isPanelOpen}
-          type={isPanelOpen ? 'default' : 'text'}
+          variant={isPanelOpen ? 'secondary' : 'ghost'}
           icon={<LayoutOutlined />}
           onClick={() => setIsPanelOpen(value => !value)}
         />

@@ -39,7 +39,7 @@ export function MaskedText({ masked, value, revealLabel, hideLabel, className }:
       type="button"
       className={clsx(styles['toggle'], className)}
       aria-pressed={isRevealed}
-      title={label}
+      data-tip={label}
       // A mask inside a draggable card or row takes its own pointer: without this, pressing it
       // would start the drag instead of the reveal.
       onPointerDown={(event) => event.stopPropagation()}

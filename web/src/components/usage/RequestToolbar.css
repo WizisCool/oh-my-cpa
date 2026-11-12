@@ -9,7 +9,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.request-filters > .ant-select {
+.request-filters > :is([data-slot='select-trigger'], [data-slot='combobox-trigger']) {
   flex: 1 1 130px;
   min-width: 130px;
   max-width: 240px;
@@ -47,7 +47,7 @@
   height: 16px;
   margin-left: 6px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--surface);
   font-size: var(--text-2xs);
@@ -70,7 +70,7 @@
   flex-wrap: wrap;
   gap: 10px;
 }
-.request-toolbar-bottom .ant-select {
+.request-toolbar-bottom [data-slot='select-trigger'] {
   min-width: 140px;
 }
 /* ── phone ───────────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@
   min-width: 0;
   max-width: none;
 }
-.request-filter-strip > .ant-select {
+.request-filter-strip > [data-slot='select-trigger'] {
   width: 132px;
 }
 .request-filter-strip > .req-facet-select {

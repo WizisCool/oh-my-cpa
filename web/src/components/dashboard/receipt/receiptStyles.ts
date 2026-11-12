@@ -60,7 +60,7 @@ export const RECEIPT_CSS = `
 .omc-receipt-total { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0; text-align: center; }
 .omc-receipt-total-label { color: var(--ink-2); font-size: 12px; letter-spacing: 0.16em; }
 .omc-receipt-total-value { font-size: 46px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
-.omc-receipt-total-note { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; }
+.omc-receipt-total-note { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
 
 .omc-receipt-items { display: flex; flex-direction: column; }
 .omc-receipt-line {
@@ -72,10 +72,10 @@ export const RECEIPT_CSS = `
 .omc-receipt-line > :not(:first-child) { text-align: right; white-space: nowrap; }
 .omc-receipt-line-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .omc-receipt-line-name > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.omc-receipt-items-head { margin-bottom: 6px; color: var(--muted); font-size: 11px; letter-spacing: 0.08em; }
+.omc-receipt-items-head { margin-bottom: 6px; color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
 .omc-receipt-key { margin-top: 10px; font-weight: 700; }
 .omc-receipt-key > :nth-child(2) { color: var(--ink-2); font-weight: 400; }
-.omc-receipt-key-detail { margin: -2px 0 2px; color: var(--muted); font-size: 11px; }
+.omc-receipt-key-detail { margin: -2px 0 2px; color: var(--muted); font-size: 12px; }
 .omc-receipt-model { padding-left: 14px; color: var(--ink-2); font-size: 12px; line-height: 1.75; }
 .omc-receipt-model > :nth-child(2) { color: var(--muted); }
 .omc-receipt-line.is-muted, .omc-receipt-line.is-muted > * { color: var(--muted); }
@@ -85,7 +85,7 @@ export const RECEIPT_CSS = `
 .omc-receipt-mark.is-blank::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); }
 .omc-receipt-placeholder { padding: 14px 0 4px; color: var(--muted); text-align: center; }
 
-.omc-receipt-notes { margin-top: 8px; color: var(--muted); font-size: 11px; }
+.omc-receipt-notes { margin-top: 8px; color: var(--muted); font-size: 12px; }
 
 .omc-receipt-foot { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .omc-receipt-foot-mark { display: block; flex: none; font-size: 13px; }
