@@ -58,6 +58,30 @@ export function changeTrend(comparison: MetricComparison): 'up' | 'down' | undef
   return comparison.change > 0 ? 'up' : 'down';
 }
 
+export interface CompareWindowBounds {
+  from: number;
+  to: number;
+}
+
+/**
+ * Formats the endpoints of a comparison window, omitting the year only when both endpoints fall
+ * inside the active calendar year.
+ */
+export function formatCompareWindowBounds(
+  compare: CompareWindowBounds,
+  currentYear: number,
+  formatInstant: (ms: number, layout: string) => string,
+  yearOf: (ms: number) => number,
+): { from: string; to: string } {
+  const fromYear = yearOf(compare.from);
+  const toYear = yearOf(compare.to);
+  const layout = fromYear === toYear && fromYear === currentYear ? 'MM-DD HH:mm' : 'YYYY-MM-DD HH:mm';
+  return {
+    from: formatInstant(compare.from, layout),
+    to: formatInstant(compare.to, layout),
+  };
+}
+
 export function formatShare(share: number | null): string {
   if (share === null || !Number.isFinite(share)) return '—';
   const percent = share * 100;

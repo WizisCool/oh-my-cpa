@@ -74,6 +74,7 @@ export default {
   "dash.cost_hint": "Kos setiap permintaan dikunci pada harga yang berkuat kuasa semasa ia berjalan; permintaan tanpa harga tidak dikira.",
   "dash.cost_placeholder_note": "tiada permintaan berharga dalam tetingkap ini",
   "dash.cost_partial_note": "sesetengah permintaan tidak mempunyai harga pada masa permintaan; jumlahnya tidak termasuk mereka",
+  "dash.calendar_quiet": "Tiada permintaan direkodkan dalam tempoh ini lagi.",
   "dash.empty_title": "Tiada rekod permintaan ditangkap lagi",
   "dash.empty_desc": "Hantar permintaan proksi atau sahkan CPA telah didayakan statistik penggunaan dihidupkan.",
   "dash.providers": "Penyedia",

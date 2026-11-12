@@ -74,6 +74,7 @@ export default {
   'dash.cost_hint': 'Each request\'s cost is locked at the price in force when it ran; unpriced requests are left out.',
   'dash.cost_placeholder_note': 'no priced requests in this window',
   'dash.cost_partial_note': 'some requests had no price at request time; the total excludes them',
+  'dash.calendar_quiet': 'No requests recorded in this period yet.',
   'dash.empty_title': 'No request records captured yet',
   'dash.empty_desc': 'Send a proxy request, or confirm CPA has usage-statistics-enabled turned on.',
   'dash.providers': 'Providers',

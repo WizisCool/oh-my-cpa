@@ -74,6 +74,7 @@ export default {
   "dash.cost_hint": "每個請求在發生時依當時的價格鎖定費用；未定價的請求不計入。",
   "dash.cost_placeholder_note": "視窗內沒有已計價的請求",
   "dash.cost_partial_note": "部分請求發生時沒有價格，金額不包含這些請求",
+  "dash.calendar_quiet": "目前週期尚無請求記錄。",
   "dash.empty_title": "尚未捕獲任何請求記錄",
   "dash.empty_desc": "傳送一次代理請求，或確認 CPA 已開啟 usage-statistics-enabled。",
   "dash.providers": "供應商",

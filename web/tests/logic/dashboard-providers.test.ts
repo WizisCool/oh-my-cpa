@@ -10,6 +10,15 @@ import {
 import type { ManagementOverviewProvider } from '../../src/types/management';
 import type { ProviderItem } from '../../src/types/providers';
 import { pluginOAuthProviderKeys } from '../../src/types/pluginOAuthProviders';
+import {
+  applyTail,
+  dashboardMetricComparison,
+  isOpenCalendarPreset,
+  previousCalendarPreset,
+  type DashboardResponse,
+  type DashboardTailResponse,
+} from '../../src/types/dashboard';
+import { formatCompareWindowBounds } from '../../src/types/insightsFormat';
 import { test } from 'vitest';
 
 test('dashboard providers', () => {
@@ -707,4 +716,186 @@ test('dashboard providers', () => {
   const unsettledCline = unsettledRows.find((p) => p.providerId === 'openai-compat-0');
   assert.ok(unsettledCline);
   assert.equal(unsettledCline.isIdentityUnknown, true);
+});
+
+test('dashboard adaptive calendar tail healing and pace comparisons', () => {
+  const base: DashboardResponse = {
+    window: {
+      preset: 'today',
+      from: 1_000_000,
+      to: 1_300_000,
+      bucket_ms: 60_000,
+      minutes: 5,
+      complete: true,
+      open_end: true,
+    },
+    requests: {
+      total: 11,
+      success: 11,
+      failed: 0,
+      success_rate: 100,
+      series: [
+        { t: 1_020_000, v: 4, f: 0 },
+        { t: 1_080_000, v: 7, f: 0 },
+      ],
+    },
+    tokens: {
+      total: 1_000_000,
+      input: 950_000,
+      output: 50_000,
+      reasoning: 0,
+      cached: 0,
+      cache_read: 900_000,
+      cache_creation: 0,
+      series: [
+        { t: 1_020_000, tokens: 400_000, cache_read: 360_000, cost_nanos: 120_000_000 },
+        { t: 1_080_000, tokens: 600_000, cache_read: 540_000, cost_nanos: 200_000_000 },
+      ],
+    },
+    metrics: {
+      rpm: 2.2,
+      tpm: 200_000,
+      cache_rate: 94.74,
+      cost: 0.32,
+      cost_nanos: 320_000_000,
+      costed_requests: 11,
+      cost_source: 'estimated',
+      cost_note: '',
+      avg_latency_ms: 420,
+      avg_ttft_ms: 110,
+    },
+    comparison: {
+      from: 136_000,
+      to: 436_000,
+      same_stretch: true,
+      requests: 5,
+      tokens: 400_000,
+      cost_nanos: 160_000_000,
+      costed_requests: 5,
+    },
+    coverage: {
+      rollup_requests: 0,
+      detail_requests: 11,
+      pending_inbox: 0,
+      has_usage: true,
+    },
+    partial_errors: [],
+  };
+
+  // Stepping from 1m buckets to 2m buckets on a live 'today' poll triggers a clean full refetch.
+  const steppedTail: DashboardTailResponse = {
+    window: { ...base.window, to: 3_900_000, bucket_ms: 120_000, minutes: 48 },
+    requests: { ...base.requests, series: [{ t: 3_780_000, v: 2, f: 0 }] },
+    tokens: { ...base.tokens, series: [{ t: 3_780_000, tokens: 100_000 }] },
+    metrics: base.metrics,
+    comparison: base.comparison,
+    live: {
+      as_of_ms: 3_900_000,
+      bucket_ms: 120_000,
+      series_start_ms: 1_020_000,
+      tail_from_ms: 3_780_000,
+    },
+    partial_errors: [],
+  };
+  assert.equal(applyTail(base, steppedTail).broken, true);
+
+  // Stale or cross-preset tails are ignored without triggering a broken refetch.
+  assert.equal(
+    applyTail(base, { ...steppedTail, live: { ...steppedTail.live, as_of_ms: base.window.to - 1 } }).broken,
+    false,
+  );
+  assert.equal(
+    applyTail(base, { ...steppedTail, window: { ...steppedTail.window, preset: '24h' } }).broken,
+    false,
+  );
+
+  // Same-grid live tail splices series and updates comparison totals.
+  const sameGridTail: DashboardTailResponse = {
+    window: { ...base.window, to: 1_360_000 },
+    requests: { ...base.requests, total: 14, success: 14, series: [{ t: 1_080_000, v: 7, f: 0 }, { t: 1_140_000, v: 3, f: 0 }] },
+    tokens: { ...base.tokens, total: 1_200_000, series: [{ t: 1_080_000, tokens: 600_000 }, { t: 1_140_000, tokens: 200_000 }] },
+    metrics: { ...base.metrics, cost: 0.4, cost_nanos: 400_000_000, costed_requests: 14 },
+    comparison: { ...base.comparison!, requests: 6, tokens: 500_000, cost_nanos: 200_000_000, costed_requests: 6 },
+    live: {
+      as_of_ms: 1_360_000,
+      bucket_ms: 60_000,
+      series_start_ms: 1_020_000,
+      tail_from_ms: 1_080_000,
+    },
+    partial_errors: [],
+  };
+  const merged = applyTail(base, sameGridTail);
+  assert.equal(merged.broken, false);
+  assert.equal(merged.data?.requests.series.length, 3);
+  assert.equal(merged.data?.comparison?.requests, 6);
+
+  // A tail whose comparison is absent clears the stale base comparison rather than
+  // dividing newer current totals by an older comparison stretch.
+  const degradedTail: DashboardTailResponse = {
+    ...sameGridTail,
+    comparison: undefined,
+    partial_errors: ['comparison unavailable'],
+  };
+  const degradedMerged = applyTail({ ...base, partial_errors: ['pipeline stats unavailable'] }, degradedTail);
+  assert.equal(degradedMerged.data?.comparison, undefined);
+  assert.deepEqual(degradedMerged.data?.partial_errors, ['pipeline stats unavailable', 'comparison unavailable']);
+
+  // A subsequent healthy tail clears the transient comparison warning while keeping collector warnings.
+  const healedComparison = applyTail(degradedMerged.data!, sameGridTail);
+  assert.deepEqual(healedComparison.data?.partial_errors, ['pipeline stats unavailable']);
+
+  // Pace-matched comparisons evaluate requests, tokens and cost.
+  const reqDelta = dashboardMetricComparison(base, 'requests');
+  assert.ok(reqDelta);
+  assert.equal(reqDelta.isSameStretch, true);
+  assert.equal(reqDelta.previousValue, 5);
+  assert.equal(reqDelta.comparison.kind, 'change');
+
+  // Quiet midnight start (0 requests today, active yesterday same stretch) preserves yesterday's spend readout.
+  const quietMidnight: DashboardResponse = {
+    ...base,
+    requests: { ...base.requests, total: 0, success: 0, success_rate: null, series: [{ t: 1_000_000, v: 0, f: 0 }] },
+    tokens: { ...base.tokens, total: 0, input: 0, output: 0, cache_read: 0, series: [{ t: 1_000_000, tokens: 0 }] },
+    metrics: { ...base.metrics, rpm: null, tpm: null, cache_rate: null, cost: 0, cost_nanos: 0, costed_requests: 0, cost_source: 'placeholder' },
+  };
+  const quietReqDelta = dashboardMetricComparison(quietMidnight, 'requests');
+  assert.ok(quietReqDelta);
+  assert.equal(quietReqDelta.comparison.kind, 'none');
+  assert.equal(quietReqDelta.previousValue, 5);
+  const quietCostDelta = dashboardMetricComparison(quietMidnight, 'cost');
+  assert.ok(quietCostDelta);
+  assert.equal(quietCostDelta.comparison.kind, 'none');
+  assert.equal(quietCostDelta.previousValue, 0.16);
+
+  // Completely idle windows omit comparison noise.
+  const bothIdle: DashboardResponse = {
+    ...quietMidnight,
+    comparison: { ...base.comparison!, requests: 0, tokens: 0, cost_nanos: 0, costed_requests: 0 },
+  };
+  assert.equal(dashboardMetricComparison(bothIdle, 'requests'), null);
+
+  assert.equal(isOpenCalendarPreset('today'), true);
+  assert.equal(isOpenCalendarPreset('this_week'), true);
+  assert.equal(isOpenCalendarPreset('yesterday'), false);
+  assert.equal(isOpenCalendarPreset('24h'), false);
+  assert.equal(previousCalendarPreset('today'), 'yesterday');
+  assert.equal(previousCalendarPreset('this_week'), 'last_week');
+  assert.equal(previousCalendarPreset('this_month'), 'last_month');
+  assert.equal(previousCalendarPreset('24h'), undefined);
+
+  // Compare-window formatting omits the year only when both endpoints fall inside the active year.
+  const sameYearBounds = formatCompareWindowBounds(
+    { from: Date.UTC(2026, 10, 12, 0, 0), to: Date.UTC(2026, 10, 12, 0, 5) },
+    2026,
+    (ms, layout) => `${layout}:${new Date(ms).toISOString().slice(0, 16)}`,
+    (ms) => new Date(ms).getUTCFullYear(),
+  );
+  assert.equal(sameYearBounds.from, 'MM-DD HH:mm:2026-11-12T00:00');
+  const crossYearBounds = formatCompareWindowBounds(
+    { from: Date.UTC(2025, 11, 31, 0, 0), to: Date.UTC(2026, 0, 1, 0, 0) },
+    2026,
+    (ms, layout) => `${layout}:${new Date(ms).toISOString().slice(0, 16)}`,
+    (ms) => new Date(ms).getUTCFullYear(),
+  );
+  assert.equal(crossYearBounds.from, 'YYYY-MM-DD HH:mm:2025-12-31T00:00');
 });

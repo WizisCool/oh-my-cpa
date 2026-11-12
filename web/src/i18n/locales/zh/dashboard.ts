@@ -71,6 +71,7 @@ export default {
   'dash.cost_hint': '每个请求在发生时按当时的价格锁定费用；未定价的请求不计入。',
   'dash.cost_placeholder_note': '窗口内没有已计价的请求',
   'dash.cost_partial_note': '部分请求发生时没有价格，金额不包含这些请求',
+  'dash.calendar_quiet': '当前周期尚无请求记录。',
   'dash.empty_title': '尚未捕获任何请求记录',
   'dash.empty_desc': '发送一次代理请求，或确认 CPA 已开启 usage-statistics-enabled。',
   'dash.providers': '提供商',

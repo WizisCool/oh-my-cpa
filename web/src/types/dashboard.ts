@@ -1,5 +1,6 @@
 import type { MessageKey } from '../i18n/catalog';
-import { CALENDAR_PRESETS, isCalendarPreset, isClosedCalendarPreset } from './calendarPresets';
+import { CALENDAR_PRESETS, isCalendarPreset, isClosedCalendarPreset, type CalendarPreset } from './calendarPresets';
+import { compareMetric, emptyMeasures, metricValue, type Measures, type MetricComparison } from './insightsCube';
 /** Response shapes for the dashboard, which reads permanent usage facts. */
 
 export interface DashboardWindow {
@@ -58,10 +59,22 @@ export interface DashboardMetrics {
   tpm: number | null;
   cache_rate: number | null;
   cost: number;
+  cost_nanos?: number;
+  costed_requests?: number;
   cost_source: string;
   cost_note: string;
   avg_latency_ms: number | null;
   avg_ttft_ms: number | null;
+}
+
+export interface DashboardComparison {
+  from: number;
+  to: number;
+  same_stretch: boolean;
+  requests: number;
+  tokens: number;
+  cost_nanos: number;
+  costed_requests: number;
 }
 
 /**
@@ -100,8 +113,83 @@ export interface DashboardResponse {
   requests: DashboardRequests;
   tokens: DashboardTokens;
   metrics: DashboardMetrics;
+  comparison?: DashboardComparison;
   coverage: DashboardCoverage;
   partial_errors: string[];
+}
+
+export type DashboardComparableMetric = 'requests' | 'tokens' | 'cost';
+
+export interface DashboardMetricDelta {
+  comparison: MetricComparison;
+  previousValue: number | null;
+  window: { from: number; to: number };
+  isSameStretch: boolean;
+}
+
+function currentMeasuresOf(data: DashboardResponse): Measures {
+  const measures = emptyMeasures();
+  measures.requests = data.requests.total;
+  measures.failures = data.requests.failed;
+  measures.totalTokens = data.tokens.total;
+  measures.costNanos = data.metrics.cost_nanos ?? Math.round(data.metrics.cost * 1_000_000_000);
+  measures.costedRequests = data.metrics.costed_requests
+    ?? (data.metrics.cost_source === 'estimated' || data.metrics.cost_source === 'partial' ? data.requests.total : 0);
+  return measures;
+}
+
+function previousMeasuresOf(comparison: DashboardComparison): Measures {
+  const measures = emptyMeasures();
+  measures.requests = comparison.requests;
+  measures.totalTokens = comparison.tokens;
+  measures.costNanos = comparison.cost_nanos;
+  measures.costedRequests = comparison.costed_requests;
+  return measures;
+}
+
+/**
+ * Evaluates a KPI tile's change against the server's comparison window using the same
+ * Poisson noise-floor rules as Insights. Returns null when neither window carried
+ * traffic so an idle deployment is not littered with empty deltas.
+ */
+export function dashboardMetricComparison(
+  data: DashboardResponse,
+  metric: DashboardComparableMetric,
+): DashboardMetricDelta | null {
+  const previousBlock = data.comparison;
+  if (!previousBlock) return null;
+  if (data.requests.total === 0 && previousBlock.requests === 0) return null;
+  const current = currentMeasuresOf(data);
+  const previous = previousMeasuresOf(previousBlock);
+  if (metric === 'cost' && current.costedRequests === 0 && previous.costedRequests === 0) return null;
+  // Before the first request of an open calendar unit arrives, '-100%' only restates that
+  // the period just started; keep the previous stretch's figure without a percentage alarm.
+  const isUnstartedOpenUnit = data.requests.total === 0 && isOpenCalendarPreset(data.window.preset);
+  return {
+    comparison: isUnstartedOpenUnit ? { kind: 'none' } : compareMetric(current, previous, metric),
+    previousValue: metricValue(previous, metric),
+    window: { from: previousBlock.from, to: previousBlock.to },
+    isSameStretch: previousBlock.same_stretch,
+  };
+}
+
+/** Whether a preset is an open calendar unit still accumulating ('today', 'this_week', 'this_month'). */
+export function isOpenCalendarPreset(preset: string | undefined): preset is 'today' | 'this_week' | 'this_month' {
+  return isCalendarPreset(preset) && !isClosedCalendarPreset(preset);
+}
+
+/** Maps an open calendar unit to its closed predecessor for one-click fallback when the new period is quiet. */
+export function previousCalendarPreset(preset: string | undefined): CalendarPreset | undefined {
+  switch (preset) {
+    case 'today':
+      return 'yesterday';
+    case 'this_week':
+      return 'last_week';
+    case 'this_month':
+      return 'last_month';
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -293,21 +381,25 @@ export function applyTail(base: DashboardResponse, patch?: DashboardTailResponse
   if (!patch || !patch.live?.bucket_ms || !patch.live.tail_from_ms) {
     return { data: base, broken: false };
   }
-  // A poll answers for the window it was asked about. If a full fetch finished
-  // after this tail was computed — or the two disagree about which window or
-  // which grid they describe — the tail is simply older, not wrong, and the
-  // fresher full response wins.
-  if (
-    patch.live.as_of_ms < base.window.to
-    || patch.window.preset !== base.window.preset
-    || patch.live.bucket_ms !== base.window.bucket_ms
-  ) {
+  // A poll from an older instant or an abandoned preset was overtaken in flight;
+  // discard it without triggering a heal.
+  if (patch.live.as_of_ms < base.window.to || patch.window.preset !== base.window.preset) {
     return { data: base, broken: false };
+  }
+  // A newer poll on the same preset whose bucket width stepped up (e.g. 'today'
+  // crossing from 1m to 2m buckets) cannot splice onto the old grid; mark broken
+  // so the page refetches the full series on the new resolution.
+  if (patch.live.bucket_ms !== base.window.bucket_ms) {
+    return { data: base, broken: true };
   }
   const { live } = patch;
   const requests = spliceTail(base.requests.series, patch.requests.series, live);
   const tokens = spliceTail(base.tokens.series, patch.tokens.series, live);
   if (requests.broken || tokens.broken) return { data: base, broken: true };
+  // Collector warnings come only from the full response, while comparison degradation
+  // is re-evaluated on every tail poll.
+  const collectorErrors = base.partial_errors.filter((entry) => entry !== 'comparison unavailable');
+  const mergedErrors = Array.from(new Set([...collectorErrors, ...patch.partial_errors]));
   return {
     broken: false,
     data: {
@@ -316,6 +408,8 @@ export function applyTail(base: DashboardResponse, patch?: DashboardTailResponse
       requests: { ...base.requests, ...patch.requests, series: requests.series },
       tokens: { ...base.tokens, ...patch.tokens, series: tokens.series },
       metrics: patch.metrics,
+      comparison: patch.comparison,
+      partial_errors: mergedErrors,
     },
   };
 }
