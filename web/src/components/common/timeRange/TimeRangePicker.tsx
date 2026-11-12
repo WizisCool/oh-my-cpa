@@ -123,7 +123,6 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
   // than the surface jumping to its new box.
   const panelRef = React.useRef<HTMLDivElement | null>(null);
   const panelSizeBefore = React.useRef<{ width: number; height: number } | null>(null);
-  const panelResize = React.useRef<Animation | null>(null);
   const switchMode = (next: PanelMode) => {
     const panel = panelRef.current;
     panelSizeBefore.current = panel ? { width: panel.offsetWidth, height: panel.offsetHeight } : null;
@@ -134,18 +133,19 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
     const before = panelSizeBefore.current;
     panelSizeBefore.current = null;
     if (!panel || !before || isMotionReduced()) return;
-    // A switch back mid-ease starts from where the panel had got to (measured above, with the ease
-    // still on), but its target is the new mode's own size, so the running ease comes off first.
-    panelResize.current?.cancel();
     const after = { width: panel.offsetWidth, height: panel.offsetHeight };
     if (after.width === before.width && after.height === before.height) return;
-    panelResize.current = panel.animate(
+    // A switch back mid-ease starts from where the panel had got to (measured before this commit,
+    // with the ease still on); the cleanup takes the running ease off before the new size is read,
+    // and also when the panel closes or unmounts mid-ease.
+    const resize = panel.animate(
       [
         { width: `${before.width}px`, height: `${before.height}px`, overflow: 'clip' },
         { width: `${after.width}px`, height: `${after.height}px`, overflow: 'clip' },
       ],
       { duration: 260, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
     );
+    return () => resize.cancel();
   }, [mode]);
 
   // A popover is not a focus trap, so Escape is heard on the document: focus may still be on

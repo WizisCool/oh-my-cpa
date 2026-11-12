@@ -184,6 +184,9 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
         <CartesianGrid vertical={false} />
         <XAxis
           dataKey="bucketIndex"
+          // Bands in both modes: a line-only chart would otherwise take a point scale, and the brush
+          // reads the plot as equal bucket bands.
+          scale="band"
           tickLine={false}
           axisLine={false}
           tickMargin={6}

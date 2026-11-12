@@ -405,6 +405,7 @@ const ModelUsageTotal: React.FC<{ groups: readonly DashboardModelUsage[]; totalT
           data-tip={isPartial ? t('dash.models.cost_partial', { priced, total: requests }) : undefined}
         >
           {formatCurrency(cost, currency)}
+          {isPartial ? <span className="sr-only">{` (${t('dash.models.cost_partial', { priced, total: requests })})`}</span> : null}
         </b>
       ) : null}
     </span>
@@ -444,7 +445,10 @@ const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> 
   }
   return (
     <Tooltip title={note}>
-      <span className={className}>{text}</span>
+      <span className={className}>
+        {text}
+        <span className="sr-only">{` (${note})`}</span>
+      </span>
     </Tooltip>
   );
 };
