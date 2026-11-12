@@ -99,7 +99,7 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
           <FilterTransition itemKeys={shown.map((group) => group.id)}>
             {shown.map((group) => {
               const color = colorOf?.(group.id);
-              const comparison = group.previous ? compareMetric(group.measures, group.previous, ranking) : NO_COMPARISON;
+              const comparison = group.previous ? compareMetric(group.measures, group.previous, ranking, group.previousRaw ?? undefined) : NO_COMPARISON;
               const isSelected = selected.includes(group.id);
               const width = top > 0 && group.value !== null ? Math.max(2, (group.value / top) * 100) : 0;
               return (

@@ -8,6 +8,16 @@ import { formatTokens, formatTokensFull, type TokenNumberStyle } from './tokenDi
 import type { InsightsMetric, MetricComparison } from './insightsCube';
 
 const COUNT = new Intl.NumberFormat('en');
+const BASELINE_COUNT_1 = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
+const BASELINE_COUNT_2 = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+
+/** Formats a request count, keeping readable decimals when a pro-rata baseline is fractional. */
+export function formatCountBaseline(value: number): string {
+  if (Number.isInteger(value) || Math.abs(value) >= 100) return COUNT.format(Math.round(value));
+  if (Math.abs(value) >= 10) return BASELINE_COUNT_1.format(value);
+  if (value > 0 && value < 0.01) return '<0.01';
+  return BASELINE_COUNT_2.format(value);
+}
 
 export function formatLatency(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
@@ -22,7 +32,7 @@ export function formatMetric(metric: InsightsMetric, value: number | null, style
     case 'tokens':
       return formatTokens(value, style);
     case 'requests':
-      return COUNT.format(value);
+      return Number.isInteger(value) ? COUNT.format(value) : formatCountBaseline(value);
     case 'latency':
       return formatLatency(value);
   }

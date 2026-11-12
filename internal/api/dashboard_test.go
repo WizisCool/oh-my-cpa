@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -915,18 +916,28 @@ func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
 		}
 		return body
 	}
-	assertWireCostFields := func(label string, payload []byte) {
+	assertWireCostFields := func(label string, payload []byte, wantCmpRequests, wantCmpTokens int64) {
 		t.Helper()
 		var wire struct {
+			Window struct {
+				FromMS int64 `json:"from"`
+				ToMS   int64 `json:"to"`
+			} `json:"window"`
 			Metrics struct {
 				CostNanos      *int64 `json:"cost_nanos"`
 				CostedRequests *int64 `json:"costed_requests"`
 			} `json:"metrics"`
 			Comparison *struct {
-				Requests       int64  `json:"requests"`
-				Tokens         int64  `json:"tokens"`
-				CostNanos      *int64 `json:"cost_nanos"`
-				CostedRequests *int64 `json:"costed_requests"`
+				FromMS                 int64    `json:"from"`
+				ToMS                   int64    `json:"to"`
+				Requests               int64    `json:"requests"`
+				Tokens                 int64    `json:"tokens"`
+				CostNanos              *int64   `json:"cost_nanos"`
+				CostedRequests         *int64   `json:"costed_requests"`
+				BaselineRequests       *float64 `json:"baseline_requests"`
+				BaselineTokens         *float64 `json:"baseline_tokens"`
+				BaselineCostNanos      *float64 `json:"baseline_cost_nanos"`
+				BaselineCostedRequests *float64 `json:"baseline_costed_requests"`
 			} `json:"comparison"`
 		}
 		if err := json.Unmarshal(payload, &wire); err != nil {
@@ -935,8 +946,19 @@ func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
 		if wire.Metrics.CostNanos == nil || *wire.Metrics.CostNanos != 400_000_000 || wire.Metrics.CostedRequests == nil || *wire.Metrics.CostedRequests != 1 {
 			t.Fatalf("%s metrics wire cost fields wrong: %+v", label, wire.Metrics)
 		}
-		if wire.Comparison == nil || wire.Comparison.Requests != 2 || wire.Comparison.Tokens != 35 || wire.Comparison.CostNanos == nil || *wire.Comparison.CostNanos != 250_000_000 || wire.Comparison.CostedRequests == nil || *wire.Comparison.CostedRequests != 1 {
+		if wire.Comparison == nil || wire.Comparison.Requests != wantCmpRequests || wire.Comparison.Tokens != wantCmpTokens || wire.Comparison.CostNanos == nil || *wire.Comparison.CostNanos != 250_000_000 || wire.Comparison.CostedRequests == nil || *wire.Comparison.CostedRequests != 1 {
 			t.Fatalf("%s comparison wire cost fields wrong: %+v", label, wire.Comparison)
+		}
+		scale := float64(wire.Window.ToMS-wire.Window.FromMS+1) / float64(wire.Comparison.ToMS-wire.Comparison.FromMS+1)
+		wantBaselineReqs := float64(wantCmpRequests) * scale
+		wantBaselineTokens := float64(wantCmpTokens) * scale
+		wantBaselineCostNanos := float64(250_000_000) * scale
+		wantBaselineCosted := float64(1) * scale
+		if wire.Comparison.BaselineRequests == nil || math.Abs(*wire.Comparison.BaselineRequests-wantBaselineReqs) > 1e-6 ||
+			wire.Comparison.BaselineTokens == nil || math.Abs(*wire.Comparison.BaselineTokens-wantBaselineTokens) > 1e-4 ||
+			wire.Comparison.BaselineCostNanos == nil || math.Abs(*wire.Comparison.BaselineCostNanos-wantBaselineCostNanos) > 1e-2 ||
+			wire.Comparison.BaselineCostedRequests == nil || math.Abs(*wire.Comparison.BaselineCostedRequests-wantBaselineCosted) > 1e-6 {
+			t.Fatalf("%s comparison baseline wire values wrong (scale=%v): %+v", label, scale, wire.Comparison)
 		}
 	}
 
@@ -955,7 +977,8 @@ func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
 	}
 
 	todayPayload := readRaw("/omc/api/v1/management/dashboard?preset=today")
-	assertWireCostFields("today full", todayPayload)
+	// Full yesterday holds all 3 records (15 + 20 + 50 = 85 tokens); baseline scales by 5m / 24h.
+	assertWireCostFields("today full", todayPayload, 3, 85)
 	var today dashboardResponse
 	if err := json.Unmarshal(todayPayload, &today); err != nil {
 		t.Fatal(err)
@@ -966,18 +989,22 @@ func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
 	if today.Window.BucketMS != time.Minute.Milliseconds() || len(today.Requests.Series) != 6 {
 		t.Fatalf("today at 00:05 must use 1m buckets (6 points), got bucket=%d len=%d", today.Window.BucketMS, len(today.Requests.Series))
 	}
-	if today.Comparison == nil || !today.Comparison.SameStretch || today.Comparison.Requests != 2 || today.Comparison.Tokens != 35 {
-		t.Fatalf("today at 00:05 must compare only against yesterday 00:00–00:05: %+v", today.Comparison)
+	if today.Comparison == nil || today.Comparison.SameStretch || today.Comparison.Requests != 3 || today.Comparison.Tokens != 85 {
+		t.Fatalf("today at 00:05 must draw comparison from full yesterday: %+v", today.Comparison)
+	}
+	expectedScale := float64(today.Window.ToMS-today.Window.FromMS+1) / float64(today.Comparison.ToMS-today.Comparison.FromMS+1)
+	if math.Abs(today.Comparison.BaselineTokens-85*expectedScale) > 1e-6 {
+		t.Fatalf("today baseline tokens = %v, want %v", today.Comparison.BaselineTokens, 85*expectedScale)
 	}
 
-	// Tail endpoint carries the same adaptive bucket width, pace comparison and wire cost fields.
+	// Tail endpoint carries the same adaptive bucket width, full-period baseline and wire cost fields.
 	tailPayload := readRaw("/omc/api/v1/management/dashboard/tail?preset=today")
-	assertWireCostFields("today tail", tailPayload)
+	assertWireCostFields("today tail", tailPayload, 3, 85)
 	var tailBody dashboardTailResponse
 	if err := json.Unmarshal(tailPayload, &tailBody); err != nil {
 		t.Fatal(err)
 	}
-	if tailBody.Live.BucketMS != today.Window.BucketMS || tailBody.Comparison == nil || tailBody.Comparison.Tokens != 35 {
+	if tailBody.Live.BucketMS != today.Window.BucketMS || tailBody.Comparison == nil || tailBody.Comparison.Tokens != 85 {
 		t.Fatalf("today tail disagreed with full response: live=%+v cmp=%+v", tailBody.Live, tailBody.Comparison)
 	}
 
@@ -1011,7 +1038,7 @@ func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
 		t.Fatalf("late today must converge to 30m buckets, got %d", lateToday.Window.BucketMS)
 	}
 
-	// March 31 this_month clamps its comparison end into February rather than spilling into March.
+	// March 31 this_month compares against the full month of February rather than a partial stretch.
 	marchEnd := time.Date(2026, time.March, 31, 9, 0, 0, 0, shanghai)
 	marchFrom, marchTo, marchSameStretch, marchOK := dashboardComparisonBounds(dashboardWindow{
 		Preset: "this_month",
@@ -1019,9 +1046,9 @@ func TestDashboardCalendarPresetsFollowTheCivilDay(t *testing.T) {
 		ToMS:   marchEnd.UnixMilli(),
 	}, shanghai)
 	febStart := time.Date(2026, time.February, 1, 0, 0, 0, 0, shanghai).UnixMilli()
-	febClampedEnd := time.Date(2026, time.February, 28, 9, 0, 0, 0, shanghai).UnixMilli()
-	if !marchOK || !marchSameStretch || marchFrom != febStart || marchTo != febClampedEnd {
-		t.Fatalf("March 31 this_month comparison must clamp to Feb 28: from=%d to=%d", marchFrom, marchTo)
+	febFullEnd := time.Date(2026, time.March, 1, 0, 0, 0, 0, shanghai).UnixMilli() - 1
+	if !marchOK || marchSameStretch || marchFrom != febStart || marchTo != febFullEnd {
+		t.Fatalf("March 31 this_month comparison must cover full February: from=%d to=%d sameStretch=%v", marchFrom, marchTo, marchSameStretch)
 	}
 
 	// All-time starts at the first recorded request, so no preceding comparison window exists.

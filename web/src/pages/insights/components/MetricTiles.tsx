@@ -13,11 +13,10 @@ import styles from '../insights.module.css';
 interface MetricTilesProps {
   current: Measures;
   /**
-   * The window the tiles are measured against and its sums; null when the page is not comparing.
-   * The two travel together because the tile's label depends on the window: a running unit is
-   * measured against the same elapsed stretch of the period before it, not against all of it.
+   * The window the tiles are measured against, its robust progress-scaled baseline (`measures`),
+   * and its unscaled raw totals (`raw`) for sample-size confidence; null when not comparing.
    */
-  baseline: { measures: Measures; window: InsightsCompareWindow; isSameStretch: boolean } | null;
+  baseline: { measures: Measures; raw: Measures; window: InsightsCompareWindow } | null;
   metric: InsightsMetric;
   onMetricChange: (metric: InsightsMetric) => void;
 }
@@ -28,10 +27,6 @@ interface MetricTilesProps {
  * The change against the comparison window carries an arrow and a muted red for a rise or green for
  * a fall, unless it is within chance. The tones are mixed well toward the ink: they say which way a figure moved, and stay
  * clear of the saturated state colours that mark a failure.
- *
- * A unit still running is measured against the same elapsed stretch of the period before it, so the
- * figure under the change is labelled for that stretch rather than left to read as the previous
- * period's total; the window itself is the title.
  */
 export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, metric, onMetricChange }) => {
   const t = useT();
@@ -44,11 +39,12 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
       {INSIGHTS_METRICS.map((item) => {
         const value = metricValue(current, item);
         const before = baseline ? metricValue(baseline.measures, item) : null;
-        const comparison = baseline ? compareMetric(current, baseline.measures, item) : null;
+        const comparison = baseline ? compareMetric(current, baseline.measures, item, baseline.raw) : null;
         const changeText = comparison?.kind === 'change' ? formatChange(comparison.change) : null;
         const changeTitle = [
           comparison?.kind === 'change' && comparison.isNoise ? t('insights.change_noise') : null,
           baseline ? formatCompareWindow(baseline.window) : null,
+          baseline ? t('insights.compare_baseline_note') : null,
         ].filter(Boolean).join(' · ');
         const isActive = item === metric;
         return (
@@ -88,7 +84,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
               )}
               {baseline !== null && (
                 <span className={styles['tile-change-was']}>
-                  {t(baseline.isSameStretch ? 'insights.change_was_same_stretch' : 'insights.change_was', { value: formatMetric(item, before, style) })}
+                  {t('insights.change_was', { value: formatMetric(item, before, style) })}
                 </span>
               )}
             </span>

@@ -102,24 +102,6 @@ func civilStart(at time.Time, zone *time.Location, unit string, previous int) ti
 	}
 }
 
-// civilShift moves a local instant back by one unit, keeping its wall-clock time. A
-// month shift clamps to the shorter month's last day, so 31 March compares against
-// 28 February rather than 3 March.
-func civilShift(at time.Time, zone *time.Location, unit string) time.Time {
-	local := at.In(zone)
-	switch unit {
-	case "day":
-		return time.Date(local.Year(), local.Month(), local.Day()-1, local.Hour(), local.Minute(), local.Second(), local.Nanosecond(), zone)
-	case "week":
-		return time.Date(local.Year(), local.Month(), local.Day()-7, local.Hour(), local.Minute(), local.Second(), local.Nanosecond(), zone)
-	default:
-		firstOfPrevious := time.Date(local.Year(), local.Month()-1, 1, 0, 0, 0, 0, zone)
-		lastDay := firstOfPrevious.AddDate(0, 1, -1).Day()
-		return time.Date(firstOfPrevious.Year(), firstOfPrevious.Month(), min(local.Day(), lastDay),
-			local.Hour(), local.Minute(), local.Second(), local.Nanosecond(), zone)
-	}
-}
-
 // resolveInsightsRange reads the window, its comparison and its granularity from a
 // request. firstUsageMS places the all-time window and is only called for it.
 func resolveInsightsRange(query url.Values, now time.Time, zone *time.Location, firstUsageMS func() (*int64, error)) (insightsRange, string, error) {
@@ -184,9 +166,11 @@ func resolveInsightsRange(query url.Values, now time.Time, zone *time.Location, 
 		window.Preset, window.FromMS = preset, start.UnixMilli()
 		comparisonStart := civilStart(now, zone, calendar.unit, calendar.previous+1)
 		if calendar.previous == 0 {
-			// The unit so far, against the same stretch of the unit before it.
+			// Running units compare against the complete previous calendar unit so the
+			// robust average baseline represents the entire prior cycle rather than one
+			// wall-clock slice of it.
 			window.ToMS, window.OpenEnd = nowMS, true
-			result.compare = &insightsCompareWindow{FromMS: comparisonStart.UnixMilli(), ToMS: civilShift(now, zone, calendar.unit).UnixMilli()}
+			result.compare = &insightsCompareWindow{FromMS: comparisonStart.UnixMilli(), ToMS: start.UnixMilli() - 1}
 		} else {
 			window.ToMS = civilStart(now, zone, calendar.unit, calendar.previous-1).UnixMilli() - 1
 			result.compare = &insightsCompareWindow{FromMS: comparisonStart.UnixMilli(), ToMS: window.FromMS - 1}

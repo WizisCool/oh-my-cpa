@@ -42,27 +42,27 @@ func TestInsightsWindowsFollowTheDeploymentCalendar(t *testing.T) {
 		compareTo      int64
 		expectedBucket insightsBucket
 	}{
-		{"today grows and compares against the same hours of yesterday", "today", wednesday, shanghai,
+		{"today grows and compares against full yesterday", "today", wednesday, shanghai,
 			local(shanghai, 2026, 10, 21, 0, 0), wednesday.UnixMilli(), true,
-			local(shanghai, 2026, 10, 20, 0, 0), local(shanghai, 2026, 10, 20, 14, 30), insightsBucketHour},
+			local(shanghai, 2026, 10, 20, 0, 0), local(shanghai, 2026, 10, 21, 0, 0) - 1, insightsBucketHour},
 		{"yesterday is closed", "yesterday", wednesday, shanghai,
 			local(shanghai, 2026, 10, 20, 0, 0), local(shanghai, 2026, 10, 21, 0, 0) - 1, false,
 			local(shanghai, 2026, 10, 19, 0, 0), local(shanghai, 2026, 10, 20, 0, 0) - 1, insightsBucketHour},
-		{"this week starts on Monday", "this_week", wednesday, shanghai,
+		{"this week starts on Monday and compares against full last week", "this_week", wednesday, shanghai,
 			local(shanghai, 2026, 10, 19, 0, 0), wednesday.UnixMilli(), true,
-			local(shanghai, 2026, 10, 12, 0, 0), local(shanghai, 2026, 10, 14, 14, 30), insightsBucketDay},
+			local(shanghai, 2026, 10, 12, 0, 0), local(shanghai, 2026, 10, 19, 0, 0) - 1, insightsBucketDay},
 		{"last week", "last_week", wednesday, shanghai,
 			local(shanghai, 2026, 10, 12, 0, 0), local(shanghai, 2026, 10, 19, 0, 0) - 1, false,
 			local(shanghai, 2026, 10, 5, 0, 0), local(shanghai, 2026, 10, 12, 0, 0) - 1, insightsBucketDay},
-		{"this month", "this_month", wednesday, shanghai,
+		{"this month compares against full last month", "this_month", wednesday, shanghai,
 			local(shanghai, 2026, 10, 1, 0, 0), wednesday.UnixMilli(), true,
-			local(shanghai, 2026, 9, 1, 0, 0), local(shanghai, 2026, 9, 21, 14, 30), insightsBucketDay},
+			local(shanghai, 2026, 9, 1, 0, 0), local(shanghai, 2026, 10, 1, 0, 0) - 1, insightsBucketDay},
 		{"last month", "last_month", wednesday, shanghai,
 			local(shanghai, 2026, 9, 1, 0, 0), local(shanghai, 2026, 10, 1, 0, 0) - 1, false,
 			local(shanghai, 2026, 8, 1, 0, 0), local(shanghai, 2026, 9, 1, 0, 0) - 1, insightsBucketDay},
-		{"the 31st compares against the end of a shorter month", "this_month", time.Date(2026, 3, 31, 9, 0, 0, 0, shanghai), shanghai,
+		{"the 31st compares against full February", "this_month", time.Date(2026, 3, 31, 9, 0, 0, 0, shanghai), shanghai,
 			local(shanghai, 2026, 3, 1, 0, 0), local(shanghai, 2026, 3, 31, 9, 0), true,
-			local(shanghai, 2026, 2, 1, 0, 0), local(shanghai, 2026, 2, 28, 9, 0), insightsBucketDay},
+			local(shanghai, 2026, 2, 1, 0, 0), local(shanghai, 2026, 3, 1, 0, 0) - 1, insightsBucketDay},
 		{"the day clocks fall back is 25 hours", "yesterday", time.Date(2026, 11, 2, 9, 0, 0, 0, newYork), newYork,
 			local(newYork, 2026, 11, 1, 0, 0), local(newYork, 2026, 11, 2, 0, 0) - 1, false,
 			local(newYork, 2026, 10, 31, 0, 0), local(newYork, 2026, 11, 1, 0, 0) - 1, insightsBucketHour},
@@ -202,8 +202,10 @@ func TestInsightsCubeCarriesEveryDimensionWithoutKeys(t *testing.T) {
 	if requests != 3 || tokensByHour[9] != 160 || tokensByHour[12] != 40 {
 		t.Fatalf("rows %v hold %d requests by hour %v", body.Rows, requests, tokensByHour)
 	}
-	// Yesterday up to 14:30, not the evening record after it.
-	if len(body.PreviousRows) != 1 || body.PreviousRows[0][column["total_tokens"]-1] != 500 {
+	// Full yesterday across hourly buckets: 09:00 (500 tokens) and 20:00 (900 tokens).
+	if len(body.PreviousRows) != 2 ||
+		body.PreviousRows[0][column["bucket"]] != 9 || body.PreviousRows[0][column["total_tokens"]] != 500 ||
+		body.PreviousRows[1][column["bucket"]] != 20 || body.PreviousRows[1][column["total_tokens"]] != 900 {
 		t.Fatalf("previous rows %v", body.PreviousRows)
 	}
 
@@ -234,6 +236,40 @@ func TestInsightsCubeCarriesEveryDimensionWithoutKeys(t *testing.T) {
 	response, _ = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?preset=30d&bucket=hour")
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("hourly buckets over 30 days answered %d", response.StatusCode)
+	}
+
+	// Changing the display bucket (day vs week) must not alter PreviousRows, so the
+	// robust comparison baseline stays invariant to chart granularity.
+	// 7d window at 2026-10-21 14:30 covers Oct 14 14:30–Oct 21 14:30; its comparison
+	// period is Oct 07 14:30–Oct 14 14:30.
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: event("cmp-day-1", "sk-alpha-secret-0001", "fast", "gpt-5", time.Date(2026, 10, 9, 10, 0, 0, 0, shanghai), 700)},
+		{Event: event("cmp-day-2", "sk-alpha-secret-0001", "fast", "gpt-5", time.Date(2026, 10, 12, 10, 0, 0, 0, shanghai), 800)},
+	})
+	var dayCube, weekCube insightsCubeResponse
+	dayRes, dayPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?preset=7d&bucket=day")
+	if dayRes.StatusCode != http.StatusOK {
+		t.Fatalf("day cube status %d: %s", dayRes.StatusCode, dayPayload)
+	}
+	weekRes, weekPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?preset=7d&bucket=week")
+	if weekRes.StatusCode != http.StatusOK {
+		t.Fatalf("week cube status %d: %s", weekRes.StatusCode, weekPayload)
+	}
+	if err := json.Unmarshal(dayPayload, &dayCube); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(weekPayload, &weekCube); err != nil {
+		t.Fatal(err)
+	}
+	var prevTokenSum int64
+	for _, r := range dayCube.PreviousRows {
+		prevTokenSum += r[column["total_tokens"]]
+	}
+	if len(dayCube.PreviousRows) != 2 || prevTokenSum != 1500 {
+		t.Fatalf("expected 2 non-empty comparison day buckets totalling 1500 tokens, got %v", dayCube.PreviousRows)
+	}
+	if !reflect.DeepEqual(dayCube.PreviousRows, weekCube.PreviousRows) || !reflect.DeepEqual(dayCube.Compare, weekCube.Compare) {
+		t.Fatalf("comparison rows changed across display buckets: day=%v week=%v", dayCube.PreviousRows, weekCube.PreviousRows)
 	}
 }
 
