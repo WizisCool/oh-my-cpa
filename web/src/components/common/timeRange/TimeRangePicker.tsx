@@ -137,7 +137,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
     if (after.width === before.width && after.height === before.height) return;
     // A switch back mid-ease starts from where the panel had got to (measured before this commit,
     // with the ease still on); the cleanup takes the running ease off before the new size is read,
-    // and also when the panel closes or unmounts mid-ease.
+    // and also when the panel closes, turns into the sheet or unmounts mid-ease.
     const resize = panel.animate(
       [
         { width: `${before.width}px`, height: `${before.height}px`, overflow: 'clip' },
@@ -146,7 +146,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
       { duration: 260, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
     );
     return () => resize.cancel();
-  }, [mode]);
+  }, [mode, isOpen, isSheet]);
 
   // A popover is not a focus trap, so Escape is heard on the document: focus may still be on
   // the trigger, or on nothing at all after a press on the calendar's padding. The sheet
