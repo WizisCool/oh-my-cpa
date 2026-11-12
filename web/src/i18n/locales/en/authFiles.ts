@@ -216,7 +216,7 @@ export default {
   'af.field_websockets': 'WebSockets',
   'af.field_using_api': 'Using API',
   'af.field_excluded_models': 'Disabled models',
-  'af.field_excluded_models_hint': 'Comma- or newline-separated model IDs; credential list takes precedence over provider default',
+  'af.field_excluded_models_hint': 'This credential’s own list takes precedence over the provider’s rules',
   'af.field_priority_hint': 'Higher values are selected first; weight applies only within the same priority.',
   'af.field_weight_hint': 'Used only by weighted-round-robin. Positive integers set weight; 0 or negative numbers are excluded from scheduling.',
   'af.safe_fields_error': 'Safe configuration fields could not be read. Priority, weight and note remain editable.',

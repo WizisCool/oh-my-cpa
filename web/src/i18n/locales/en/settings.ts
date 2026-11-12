@@ -225,6 +225,7 @@ export default {
   'omc.fleet_add_other': 'Other ways to add',
   'omc.fleet_action_select': 'Select',
   'omc.fleet_select_page': 'Select every credential on this page',
+  'omc.fleet_col_account': 'Account',
   'omc.fleet_col_state': 'Status',
   'omc.fleet_col_quota': 'Quota',
   'omc.fleet_col_switch': 'On',

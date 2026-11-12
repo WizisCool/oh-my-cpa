@@ -740,5 +740,11 @@
   .provider-jump-arrow { opacity: .5; transform: none; }
 }
 @media (max-width: 640px) {
-  .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
+  .dashboard-page .terminal-page-head > .terminal-page-actions { flex: 1 1 auto; }
+  .dashboard-phone-head { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+  .dashboard-phone-head > .time-range-trigger[data-slot='button'] { flex: 0 1 auto; min-width: 0; max-width: 50%; }
+  .dashboard-phone-head > .dashboard-key-filter { flex: 1 1 0; min-width: 0; width: auto; max-width: none; }
+  .dashboard-phone-head > [data-slot='button']:last-child { flex: none; margin-inline-start: auto; }
+  /* The window and the key filter are one pair of fields, so they share one height. */
+  .dashboard-phone-head > :is(.time-range-trigger, .dashboard-key-filter) { height: 40px; }
 }

@@ -43,6 +43,7 @@ import { SearchSelect } from '../common/SearchSelect';
 import { SectionHeading } from '../common/SectionHeading';
 import './requestMarks.css';
 import { Tooltip } from '../common/Tooltip';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 
 /**
  * canonicalViewKey gives the committed view a stable identity so the drawer can
@@ -93,6 +94,12 @@ const ROUTING_FACETS: FacetSpec[] = [
  * it as a text box would leave every edit silently ignored, so it gets the same
  * multi-select as the other exact dimensions.
  */
+/** The two facets the desktop bar draws inline; a phone's bar has no room for them, so the panel does. */
+const INLINE_FACETS: FacetSpec[] = [
+  { key: 'model', facet: 'models', labelKey: 'events.col_model' },
+  { key: 'provider', facet: 'providers', labelKey: 'events.provider' },
+];
+
 const ALIAS_FACETS: FacetSpec[] = [
   { key: 'model_alias', facet: 'model_aliases', labelKey: 'events.call_model' },
 ];
@@ -149,6 +156,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   onApply,
 }) => {
   const t = useT();
+  const isPhone = useIsPhoneViewport();
   const [draft, setDraft] = React.useState<UsageEventsFilterDraft>(EMPTY_FILTER_DRAFT);
   const [pendingRegexField, setPendingRegexField] = React.useState<UsageRegexField>('model');
 
@@ -550,6 +558,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
       {section(
         'events.group_routing',
         <>
+          {isPhone && INLINE_FACETS.map(multiRow)}
           {ROUTING_FACETS.map(multiRow)}
           {TEXT_FIELDS.map(textRow)}
           {regexRow}

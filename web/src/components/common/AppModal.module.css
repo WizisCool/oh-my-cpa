@@ -154,9 +154,15 @@
 /* A phone's dialog is a bottom sheet: edge to edge, rounded only where it meets the page, rising
    from the edge the thumb is on, and clear of the home indicator. */
 @media (max-width: 640px) {
+  /* The sheet holds its own height and scrolls inside itself, so the layer around it never scrolls.
+     It must not: the sheet's entrance offset below the screen made the layer scrollable, and the
+     focus moving into the sheet scrolled the layer to it. The scroll then rose with the slide and
+     the two cancelled out, so the sheet appeared mid-screen and settled from there. */
   .wrapper {
     align-items: flex-end;
     padding: 0 0 var(--sheet-bottom, 0px);
+    /* `clip`, not `hidden`: a hidden box can still be scrolled by script, which is what focus does. */
+    overflow: clip !important;
   }
 
   .modal.modal {

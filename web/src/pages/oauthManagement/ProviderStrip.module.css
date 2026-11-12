@@ -7,6 +7,12 @@
   border-bottom: 1px solid var(--border-soft);
 }
 
+/* A phone draws the scope as one control in the page's head row, with no rule under it. */
+.strip:has(> .scope) {
+  flex: 1 1 auto;
+  border-bottom: 0;
+}
+
 .tabs {
   display: flex;
   flex: 1 1 auto;
@@ -222,4 +228,27 @@
   border: 1.5px solid var(--bg);
   border-radius: 50%;
   background: var(--warn);
+}
+
+/* A phone's scope: a standard control naming what is in scope, the same height as the actions
+   beside it, which opens the provider list. */
+.scope {
+  flex: 1 1 auto;
+  justify-content: flex-start !important;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.scope-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-caret {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--muted);
 }

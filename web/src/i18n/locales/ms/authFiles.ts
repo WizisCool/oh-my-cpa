@@ -216,7 +216,7 @@ export default {
   "af.field_websockets": "Soket Web",
   "af.field_using_api": "Menggunakan API",
   "af.field_excluded_models": "Model dilumpuhkan",
-  "af.field_excluded_models_hint": "ID model dipisahkan dengan koma atau baris baharu; senarai kelayakan mendahului lalai penyedia",
+  "af.field_excluded_models_hint": "Senarai kelayakan ini mengatasi peraturan penyedia",
   "af.field_priority_hint": "Nilai yang lebih tinggi dipilih dahulu; berat terpakai hanya dalam keutamaan yang sama.",
   "af.field_weight_hint": "Hanya digunakan oleh weighted-round-robin. Integer positif menetapkan berat; 0 atau nombor negatif dikecualikan daripada penjadualan.",
   "af.safe_fields_error": "Medan konfigurasi selamat tidak dapat dibaca. Keutamaan, berat dan nota kekal boleh diedit.",

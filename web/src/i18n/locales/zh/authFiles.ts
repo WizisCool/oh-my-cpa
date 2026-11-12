@@ -213,7 +213,7 @@ export default {
   'af.field_websockets': 'WebSocket 传输 (WebSockets)',
   'af.field_using_api': '使用 API 模式 (Using API)',
   'af.field_excluded_models': '禁用模型',
-  'af.field_excluded_models_hint': '以逗号或换行分隔模型 ID；自定义列表优先于提供商默认规则',
+  'af.field_excluded_models_hint': '此凭据的列表优先于提供商的禁用规则',
   'af.field_priority_hint': '数值越高越先被调度；同优先级内再按权重分配。',
   'af.field_weight_hint': '仅在加权轮询策略下生效。正整数作为权重，0 或负数不参与调度。',
   'af.safe_fields_error': '无法读取该认证文件的安全配置字段，核心优先级、权重和备注仍可编辑。',

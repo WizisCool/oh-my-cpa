@@ -281,9 +281,10 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = React.memo(funct
   // A pointer over a row or a segment marks that group in the bar and washes its row; only a click
   // dims the rest, and that choice is the one the trend card shares. The mark clears when the pointer
   // leaves the bar or the list, not between two rows, so crossing a row boundary never flickers.
-  // Mouse only - a tap is a choice.
+  // Mouse only - a tap is a choice. A choice outranks a passing pointer: while a group is chosen the
+  // bar keeps marking it, so reaching for another row on the way to the trend does not unmark it.
   const [hoveredKey, setHoveredKey] = React.useState<string | null>(null);
-  const markedKey = hoveredKey ?? focusedKey;
+  const markedKey = focusedKey ?? hoveredKey;
   const onHover = (key: string) => (event: React.PointerEvent) => {
     if (event.pointerType === 'mouse') setHoveredKey(key);
   };

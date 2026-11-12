@@ -74,9 +74,8 @@
   min-width: 140px;
 }
 /* ── phone ───────────────────────────────────────────────────────────────────
-   Two rows. The search box and the way into the full filter panel hold the first; the second is
-   one strip of single-tap choices that swipes inside itself, because five wrapped rows of
-   controls left less than half the screen to the records they filter. */
+   Three rows that each fill the width and none that scrolls sideways: the search with the way into
+   the filter panel, the window with the verdict, and the grouping with the model view. */
 .request-toolbar.is-phone {
   gap: 8px;
 }
@@ -87,31 +86,23 @@
   flex: 1 1 0;
   min-width: 0;
 }
-.request-filter-strip {
+
+.request-phone-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Bled to the page's own edge, so a control cut off by it reads as "more this way". */
-  margin-inline: -12px;
-  padding-inline: 12px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-.request-filter-strip::-webkit-scrollbar {
-  display: none;
-}
-.request-filter-strip > * {
-  flex: none;
-}
-.request-filter-strip > .req-time-button {
-  width: auto;
   min-width: 0;
+}
+.request-phone-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.request-phone-row > .req-time-button {
   max-width: none;
 }
-.request-filter-strip > [data-slot='select-trigger'] {
-  width: 132px;
+.request-phone-row > :is([data-slot='segmented'], .req-result-segmented, .req-model-view-toggle) {
+  flex: 0 0 auto;
 }
-.request-filter-strip > .req-facet-select {
-  width: 148px;
+.request-toolbar.is-phone > .req-reset-filters {
+  align-self: flex-start;
 }

@@ -433,7 +433,9 @@
   display: flex;
   justify-content: center;
   pointer-events: none;
-  z-index: 1100;
+  /* Page chrome: above the focused editor (900), under every overlay - drawers and dialogs (1000)
+     and the save confirmation it opens itself (1050), which would otherwise slide under the bar. */
+  z-index: 950;
   padding: 0 24px;
   transition: inset-inline-start var(--motion-base) var(--ease-standard);
 }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useMorphedProps } from '../../../charts/useChartMorph';
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from 'recharts';
 import {
   ChartContainer,
@@ -6,7 +7,6 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { useMotionPreference } from '@/utils/motionPreference';
 import { STACK_CAP_KEY, stackCapOf, stackCapShape } from '../../../charts/stackCap';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsMetric } from '../../../types/insightsCube';
@@ -47,7 +47,6 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
   isDimmed,
   onSelect,
 }) => {
-  const { isReducedMotion } = useMotionPreference();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
 
@@ -159,8 +158,7 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
               maxBarSize={18}
               fill={segment.color}
               shape={stackCapShape(key, 'row')}
-              isAnimationActive={!isReducedMotion}
-              animationDuration={180}
+              isAnimationActive={false}
               onClick={(_, rowIdx) => {
                 const row = rows[rowIdx];
                 if (row) onSelect?.(row.id, segment.id);
@@ -182,5 +180,19 @@ const InsightsCompositionChartView: React.FC<InsightsCompositionChartProps> = ({
   );
 };
 
-export const InsightsCompositionChart = React.memo(InsightsCompositionChartView);
+/**
+ * The chart takes its props through `useChartMorph`: a new dataset is one render of the marks inside
+ * a compositor cross-fade, not a library tween that re-renders every SVG mark on every frame - which
+ * is what made a filter or metric change stall the page.
+ */
+const InsightsCompositionChartPlot = React.memo(InsightsCompositionChartView);
+export const InsightsCompositionChart = React.memo<InsightsCompositionChartProps>((props) => {
+  const { shown, scopeRef } = useMorphedProps(props);
+  return (
+    <div ref={scopeRef} className="omc-chart-morph">
+      <InsightsCompositionChartPlot {...shown} />
+    </div>
+  );
+});
+InsightsCompositionChart.displayName = 'InsightsCompositionChart';
 export default InsightsCompositionChart;

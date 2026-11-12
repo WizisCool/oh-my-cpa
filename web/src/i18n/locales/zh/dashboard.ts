@@ -21,6 +21,7 @@ export default {
   'dash.range.until_now': '至今',
   'dash.window_minutes': '桶宽 {n} 分钟',
   'dash.filter_by_key': '按客户端密钥筛选',
+  'dash.filter_by_key_short': '全部密钥',
   'dash.total_requests': '请求总数',
   'dash.total_tokens': 'Token 总数',
   'dash.success_rate_short': '成功率',

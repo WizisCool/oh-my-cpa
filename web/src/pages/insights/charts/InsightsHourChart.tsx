@@ -1,4 +1,5 @@
 import React from 'react';
+import { useMorphedProps } from '../../../charts/useChartMorph';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceArea, XAxis, YAxis } from 'recharts';
 import {
   ChartContainer,
@@ -6,7 +7,6 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { useMotionPreference } from '@/utils/motionPreference';
 import { COLUMN_CAP } from '../../../charts/stackCap';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
@@ -44,7 +44,6 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({
   label,
 }) => {
   const { theme } = useTheme();
-  const { isReducedMotion } = useMotionPreference();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
   const ink = theme.palette.series[0] ?? theme.palette.accent;
@@ -135,8 +134,7 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({
         <Bar
           dataKey="value"
           radius={COLUMN_CAP}
-          isAnimationActive={!isReducedMotion}
-          animationDuration={180}
+          isAnimationActive={false}
         >
           {data.map((entry) => (
             <Cell
@@ -151,5 +149,19 @@ const InsightsHourChartView: React.FC<InsightsHourChartProps> = ({
   );
 };
 
-export const InsightsHourChart = React.memo(InsightsHourChartView);
+/**
+ * The chart takes its props through `useChartMorph`: a new dataset is one render of the marks inside
+ * a compositor cross-fade, not a library tween that re-renders every SVG mark on every frame - which
+ * is what made a filter or metric change stall the page.
+ */
+const InsightsHourChartPlot = React.memo(InsightsHourChartView);
+export const InsightsHourChart = React.memo<InsightsHourChartProps>((props) => {
+  const { shown, scopeRef } = useMorphedProps(props);
+  return (
+    <div ref={scopeRef} className="omc-chart-morph">
+      <InsightsHourChartPlot {...shown} />
+    </div>
+  );
+});
+InsightsHourChart.displayName = 'InsightsHourChart';
 export default InsightsHourChart;

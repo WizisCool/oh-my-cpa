@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapse } from '@/components/ui/accordion';
 import { CloseOutlined, PlusOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
 import type { ManagementOAuthProviderModel } from '../../types/managementOAuthModelAlias';
@@ -79,6 +80,7 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
   const [ruleInput, setRuleInput] = useState('');
   const [ruleError, setRuleError] = useState<ExcludedModelRuleError>();
   const [query, setQuery] = useState('');
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const view = useMemo(() => describeExcludedModels(rules, catalog), [rules, catalog]);
   const visibleModels = useMemo(() => filterCatalogModels(view.models, query), [view.models, query]);
@@ -189,8 +191,23 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
         )}
       </section>
 
-      <section className={styles['section']} aria-labelledby="oauth-excluded-catalog-heading">
-        <SectionHeading level="label" id="oauth-excluded-catalog-heading" title={t('af.excluded_catalog_title')} />
+      {/* The catalogue folds: a provider can list hundreds of models, and the summary above already
+          says how many are excluded. It starts folded and opens on the reader's click. */}
+      <Collapse
+        ghost
+        className={styles['catalog-fold']}
+        activeKey={isCatalogOpen ? ['catalog'] : []}
+        onChange={(keys) => setIsCatalogOpen(keys.includes('catalog'))}
+        items={[{
+          key: 'catalog',
+          label: (
+            <span className={styles['catalog-fold-label']} data-testid="oauth-excluded-models-catalog-toggle">
+              {t('af.excluded_catalog_title')}
+              {hasCatalog && <span className={styles['catalog-fold-count']}>{view.totalCount}</span>}
+            </span>
+          ),
+          children: (
+            <div className={styles['section']}>
         {catalogState === 'loading' && <p className={styles['hint']}>{t('af.rules_catalog_loading')}</p>}
         {catalogState === 'error' && (
           <LoadFailure title={t('af.rules_catalog_failed')} error={catalogError} onRetry={onRetryCatalog} />
@@ -256,7 +273,10 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
             )}
           </>
         )}
-      </section>
+            </div>
+          ),
+        }]}
+      />
     </div>
   );
 };

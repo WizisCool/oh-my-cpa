@@ -1,24 +1,35 @@
-/* Find, triage, narrow, order, look and refresh: one row that wraps only when the width runs out. */
+/* Search, verdicts, tools: three areas on one grid. The grid follows the width the workspace has. */
+.frame {
+  container: fleet-toolbar / inline-size;
+  min-width: 0;
+}
+
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(200px, 320px) minmax(0, 1fr) auto auto;
+  grid-template-areas: 'search health query view';
   align-items: center;
-  gap: 8px 10px;
+  gap: 10px 12px;
   min-width: 0;
 }
 
 .search {
-  flex: 1 1 200px;
-  min-width: 160px;
-  max-width: 320px;
+  grid-area: search;
+  min-width: 0;
 }
+
+.health {
+  grid-area: health;
+}
+
+.query-tools { grid-area: query; }
+.view-tools { grid-area: view; }
 
 .tools {
   display: flex;
-  flex: none;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
-  margin-left: auto;
 }
 
 /* Icon-only items: square, with no gap reserved for the visually hidden label, so each glyph sits
@@ -59,7 +70,7 @@
 /* Health verdicts as quiet chips: a pip, the verdict and its count. */
 .health {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 2px;
   min-width: 0;
@@ -157,18 +168,46 @@
   margin-left: -7px;
 }
 
-/* A phone: the search takes the first line beside the tools, the verdicts the next. */
-@media (max-width: 640px) {
-  .search {
-    max-width: none;
+/* Narrow: the search shares its line with what narrows and orders the list; the verdicts share
+   theirs with how the list is drawn and refreshed. Two lines, neither wrapping into a ragged third. */
+@container fleet-toolbar (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'search query'
+      'health view';
   }
 
+  /* The verdicts share their line with the view tools here; a translation too long for it scrolls
+     rather than running under them. */
   .health {
-    order: 3;
-    width: 100%;
+    margin-inline-start: -7px;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .lens {
     padding: 0 8px 0 7px;
+  }
+}
+
+/* A phone: the search with its narrowing tools, the verdicts across the full width, then the view
+   and the labelled refresh. Three lines that each fit, none clipped or wrapped ragged. */
+@container fleet-toolbar (max-width: 560px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'search query'
+      'health health'
+      'view   view';
+  }
+
+  .health {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .view-tools {
+    justify-content: space-between;
   }
 }

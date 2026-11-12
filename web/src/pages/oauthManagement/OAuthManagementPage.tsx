@@ -26,6 +26,7 @@ import { useT } from '../../i18n';
 import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
 import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { isDemoMode } from '../../types/demoMode';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../types/pluginOAuthProviders';
 import { storeListingsByPluginId } from '../../components/plugins/pluginStoreLogic';
@@ -66,7 +67,7 @@ import { CredentialMark } from '../../components/LobeIcon';
 import { PageHeader } from '../../components/common/PageHeader';
 import { LoadFailure, Notice, useConfirmModal, useToast } from '../../components/feedback';
 import { EmptyState } from '../../components/common/EmptyState';
-import { ToolButton } from '../../components/common/ToolButton';
+import { ActionMenu } from '../../components/common/ActionMenu';
 import { Pager } from '../../components/common/Pager';
 import { DeferredMount } from '../../components/common/DeferredMount';
 import { createRouteLoader } from '../../utils/routeLoader';
@@ -113,6 +114,7 @@ export const OAuthManagementPage: React.FC = () => {
   const visibleNow = useVisibleNow();
   const [isConnectOpen, setIsConnectOpen] = React.useState(false);
   const isDemo = isDemoMode();
+  const isPhone = useIsPhoneViewport();
 
   const filesQuery = useQuery({
     queryKey: ['management-auth-files'],
@@ -584,6 +586,7 @@ export const OAuthManagementPage: React.FC = () => {
     .map((section) => ({ ...section, title: providerDisplayName(section.provider, pluginTitles) }));
   const credentialActions: CredentialActions = {
     isBusy: (record) => actions.isRecordBusy(record),
+    isFileBusy: (record) => actions.isFileBusy(record),
     isTogglingStatus: (record) => actions.isTogglingStatus(record),
     isRefreshingQuota: (record) => Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex)),
     siwcBadge: (record) => siwcBadgeState(record.file, siwcBindings.sessions[siwcTargetKey(record.file)]),
@@ -633,6 +636,16 @@ export const OAuthManagementPage: React.FC = () => {
     pluginTitles,
     reorder: sectionOrder.reorder,
   };
+  const pageSelection = (
+    <Checkbox
+      checked={selectablePage.length > 0 && selectedOnPage === selectablePage.length}
+      indeterminate={selectedOnPage > 0 && selectedOnPage < selectablePage.length}
+      disabled={!isViewLoaded || selectablePage.length === 0}
+      onCheckedChange={(checked) => credentialActions.onSelect(selectablePage, checked)}
+      aria-label={t('omc.fleet_select_page')}
+      data-testid="oauth-select-page"
+    />
+  );
   const allRefreshCount = new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size;
   const viewProps = {
     groups,
@@ -642,53 +655,76 @@ export const OAuthManagementPage: React.FC = () => {
     actions: credentialActions,
   };
 
+  const modelRulesButton = (
+    <Button
+      icon={<BranchesOutlined />}
+      disabled={actions.isOperating}
+      onClick={() => {
+        setModelRulesProvider(scopeProvider === 'all' ? undefined : scopeProvider);
+        setIsModelRulesOpen(true);
+      }}
+      data-testid="oauth-model-rules"
+    >
+      {t('af.rules_open')}
+    </Button>
+  );
+  const warmupButton = (
+    <Button icon={<TimerResetOutlined />} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings">
+      {t('warmup.settings')}
+    </Button>
+  );
+  // Signing in is how a credential usually arrives, so it is the button; a file or a Vertex key are
+  // the other ways in, under its caret.
+  const connectButton = (
+    <ButtonGroup>
+      <Button variant="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="primary" data-split-caret="" icon={<DropdownCaret />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
+          }
+        />
+        <DropdownMenuContent placement="bottomRight">
+          <DropdownMenuItem
+            icon={<UploadOutlined />}
+            disabled={isDemo || actions.isOperating}
+            onClick={() => setIsUploadOpen(true)}
+          >
+            {t('af.upload')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={<CloudUploadOutlined />}
+            disabled={isDemo || actions.isOperating}
+            onClick={() => setIsVertexImportOpen(true)}
+          >
+            {t('af.vertex_open')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </ButtonGroup>
+  );
+
   return (
     <div className={`terminal-page oauth-management-page ${styles.page} ${selectedKeys.length > 0 ? 'has-fleet-selection' : ''}`}>
       <PageHeader
         title={t('nav.auth_files')}
         actions={(
           <>
-            {/* Disabling a model is a routine task, so its entry carries words rather than a glyph alone. */}
-            <Button
-              icon={<BranchesOutlined />}
-              disabled={actions.isOperating}
-              onClick={() => {
-                setModelRulesProvider(scopeProvider === 'all' ? undefined : scopeProvider);
-                setIsModelRulesOpen(true);
-              }}
-              data-testid="oauth-model-rules"
-            >
-              {t('af.rules_open')}
-            </Button>
-            <ToolButton icon={<TimerResetOutlined />} label={t('warmup.settings')} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings" />
-            {/* Signing in is how a credential usually arrives, so it is the button; a file or a
-                Vertex key are the other ways in, under its caret. */}
-            <ButtonGroup>
-              <Button variant="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="primary" data-split-caret="" icon={<DropdownCaret />} aria-label={t('omc.fleet_add_other')} data-testid="oauth-add-menu" />
-                  }
-                />
-                <DropdownMenuContent placement="bottomRight">
-                  <DropdownMenuItem
-                    icon={<UploadOutlined />}
-                    disabled={isDemo || actions.isOperating}
-                    onClick={() => setIsUploadOpen(true)}
-                  >
-                    {t('af.upload')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    icon={<CloudUploadOutlined />}
-                    disabled={isDemo || actions.isOperating}
-                    onClick={() => setIsVertexImportOpen(true)}
-                  >
-                    {t('af.vertex_open')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
+            {/* Disabling a model and warming windows up are routine tasks, so both entries carry words. */}
+            {modelRulesButton}
+            {warmupButton}
+            {connectButton}
+          </>
+        )}
+        // A phone's head row holds the scope, the two settings behind a menu, and the way in.
+        mobileActions={(
+          <>
+            <ProviderStrip {...railProps} />
+            <ActionMenu>
+              {modelRulesButton}
+              {warmupButton}
+            </ActionMenu>
+            {connectButton}
           </>
         )}
       />
@@ -738,19 +774,8 @@ export const OAuthManagementPage: React.FC = () => {
       )}
 
       <div className={styles.workspace}>
-        <ProviderStrip {...railProps} />
+        {!isPhone && <ProviderStrip {...railProps} />}
         <FleetToolbar
-          leading={(
-            <Checkbox
-              className={styles['select-all']}
-              checked={selectablePage.length > 0 && selectedOnPage === selectablePage.length}
-              indeterminate={selectedOnPage > 0 && selectedOnPage < selectablePage.length}
-              disabled={!isViewLoaded || selectablePage.length === 0}
-              onCheckedChange={(checked) => credentialActions.onSelect(selectablePage, checked)}
-              aria-label={t('omc.fleet_select_page')}
-              data-testid="oauth-select-page"
-            />
-          )}
           search={searchValue}
           onSearch={setSearchValue}
           counts={scopeCounts}
@@ -794,8 +819,8 @@ export const OAuthManagementPage: React.FC = () => {
           ) : (
             <>
               {queryState.layout === 'cards'
-                ? <CredentialCards {...viewProps} hasGroupHeads={scopeProvider === 'all'} />
-                : <CredentialList {...viewProps} onReorder={credentialOrder.loaded && !quotaDirection ? reorderCredential : undefined} />}
+                ? <CredentialCards {...viewProps} pageSelection={pageSelection} />
+                : <CredentialList {...viewProps} pageSelection={pageSelection} onReorder={credentialOrder.loaded && !quotaDirection ? reorderCredential : undefined} />}
               <div className={styles.pagination}>
                 <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
                 <Select

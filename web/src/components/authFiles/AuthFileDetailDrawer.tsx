@@ -19,6 +19,8 @@ import {
   SyncOutlined,
 } from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { OAuthExcludedModelsPanel, type OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
+import { normalizeOAuthModelAliasProvider } from './oauthModelAliasLogic';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -401,6 +403,24 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     enabled: Boolean(file?.name && open && activeSection === 'models' && !file?.runtime_only),
     staleTime: 60000,
   });
+
+  // The provider's catalogue, which the excluded-models picker lists. The credential's own model list
+  // cannot serve: it already leaves out the models this credential excludes.
+  const excludedCatalogProvider = normalizeOAuthModelAliasProvider(provider || file?.provider || file?.type || '');
+  const excludedCatalogQuery = useQuery({
+    queryKey: ['management-oauth-provider-models', excludedCatalogProvider],
+    queryFn: () => api.getManagementOAuthProviderModels(excludedCatalogProvider),
+    enabled: open && activeSection === 'configuration' && Boolean(excludedCatalogProvider),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const excludedCatalogState: OAuthModelCatalogState = excludedCatalogQuery.isLoading
+    ? 'loading'
+    : excludedCatalogQuery.isError
+      ? 'error'
+      : excludedCatalogQuery.data?.available === false
+        ? 'unavailable'
+        : 'ready';
 
   const priorityInvalid =
     draft.priority !== undefined &&
@@ -1033,20 +1053,21 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           </div>
                         )}
 
+                        {/* Models are chosen from the provider's catalogue rather than typed: an ID typed
+                            wrong excludes nothing and says nothing. A pattern can still be added. */}
                         <Field
                           className={styles['field-grid-wide']}
                           label={t('af.field_excluded_models')}
-                          htmlFor="af-field-excluded-models"
                           extra={t('af.field_excluded_models_hint')}
                         >
-                          <Textarea
-                            id="af-field-excluded-models"
-                            rows={4}
-                            maxLength={8192}
-                            disabled={!safeFieldsReady || saveMutation.isPending || file.runtime_only || !canEdit}
-                            placeholder="model-a&#10;model-b"
-                            value={draft.excluded_models ?? ''}
-                            onChange={(e) => updateDraft({ excluded_models: e.target.value })}
+                          <OAuthExcludedModelsPanel
+                            rules={normalizeExcludedModelsText(draft.excluded_models)}
+                            onChange={(rules) => updateDraft({ excluded_models: rules.join('\n') })}
+                            catalog={excludedCatalogQuery.data?.models ?? []}
+                            catalogState={excludedCatalogState}
+                            catalogError={excludedCatalogQuery.error}
+                            onRetryCatalog={() => void excludedCatalogQuery.refetch()}
+                            isDisabled={!safeFieldsReady || saveMutation.isPending || file.runtime_only || !canEdit}
                           />
                         </Field>
 

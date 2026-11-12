@@ -216,8 +216,10 @@ export const RequestToolbar = React.memo(function RequestToolbar({
     />
   );
 
-  // A phone gets the same controls in two rows instead of five: what is typed or opened stays
-  // put, and every choice that is a single tap swipes in one strip.
+  // A phone gets the same controls in three fixed rows, each filling the width: what is typed and
+  // the way into every filter; the window and the verdict; how the list is grouped and named. The
+  // model and provider facets are in the filter panel there, beside the other facets. Nothing slides
+  // sideways under the thumb, which fought the list's own scroll.
   if (isPhone) {
     return (
       <section className="request-toolbar is-phone" aria-label={t('events.filters')}>
@@ -225,15 +227,15 @@ export const RequestToolbar = React.memo(function RequestToolbar({
           {searchInput}
           {moreFilters}
         </div>
-        <div className="request-filter-strip">
+        <div className="request-phone-row">
           {timeWindow}
           {resultFilter}
-          {facetMulti('model', 'events.col_model', facets?.models)}
-          {facetMulti('provider', 'events.provider', facets?.providers)}
+        </div>
+        <div className="request-phone-row">
           {groupingSelect}
           {modelViewToggle}
-          {resetFilters}
         </div>
+        {resetFilters}
         {facetsNote}
       </section>
     );

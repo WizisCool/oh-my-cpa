@@ -216,7 +216,7 @@ export default {
   "af.field_websockets": "WebSocket 傳輸 (WebSockets)",
   "af.field_using_api": "使用 API 模式 (Using API)",
   "af.field_excluded_models": "停用模型",
-  "af.field_excluded_models_hint": "以逗號或換行分隔模型 ID；自訂列表優先於供應商預設規則",
+  "af.field_excluded_models_hint": "此憑證的清單優先於供應商的停用規則",
   "af.field_priority_hint": "數值越高越先被排程；同優先順序內再按權重分配。",
   "af.field_weight_hint": "僅在加權輪詢策略下生效。正整數作為權重，0 或負數不參與排程。",
   "af.safe_fields_error": "無法讀取該認證檔案的安全設定欄位，核心優先順序、權重和備註仍可編輯。",
