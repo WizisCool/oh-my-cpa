@@ -71,7 +71,7 @@ export default {
   "icons.error_unknown": "Operasi ikon gagal. Cuba lagi.",
   "demo.badge": "SANDBOX",
   "demo.badge_tooltip": "Kotak pasir demo interaktif: perubahan pada kunci, penyedia, penghalaan dan tetapan kekal dalam pelayar ini sehingga ditetapkan semula atau storan pelayar dikosongkan.",
-  "demo.badge_dirty": "SANDBOX · {count}",
+  "demo.badge_dirty": "SANDBOX ({count})",
   "demo.reset_sandbox": "Tetap semula kotak pasir",
   "demo.reset_sandbox_confirm": "Kosongkan semua perubahan kotak pasir demo dan storan perbualan dalam pelayar ini serta pulihkan keadaan asal?",
   "demo.reset_sandbox_done": "Kotak pasir demo dipulihkan ke keadaan asal",

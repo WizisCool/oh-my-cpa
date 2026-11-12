@@ -68,7 +68,7 @@ export default {
   'icons.error_unknown': '图标操作失败，请重试。',
   'demo.badge': 'DEMO',
   'demo.badge_tooltip': '互动演示：数据来自内置样例，你的修改仅保存在当前浏览器本地存储中，直到手动重置或清除浏览器数据，不会连接真实服务。',
-  'demo.badge_dirty': 'DEMO · {count}',
+  'demo.badge_dirty': 'DEMO ({count})',
   'demo.reset_sandbox': '重置演示',
   'demo.reset_sandbox_confirm': '确定清空当前浏览器中的所有演示沙盒修改与对话记录并恢复初始状态？',
   'demo.reset_sandbox_done': '已重置演示数据到初始状态',

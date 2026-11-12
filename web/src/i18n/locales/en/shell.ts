@@ -71,7 +71,7 @@ export default {
   'icons.error_unknown': 'The icon operation failed. Try again.',
   'demo.badge': 'SANDBOX',
   'demo.badge_tooltip': 'Interactive demo sandbox: edits to keys, providers, routing, and settings stay in this browser until reset or storage is cleared.',
-  'demo.badge_dirty': 'SANDBOX · {count}',
+  'demo.badge_dirty': 'SANDBOX ({count})',
   'demo.reset_sandbox': 'Reset sandbox',
   'demo.reset_sandbox_confirm': 'Clear all interactive sandbox changes and demo conversation storage in this browser and restore the baseline snapshot?',
   'demo.reset_sandbox_done': 'Demo sandbox restored to baseline',

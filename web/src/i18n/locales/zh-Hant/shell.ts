@@ -71,7 +71,7 @@ export default {
   "icons.error_unknown": "圖示操作失敗，請重試。",
   "demo.badge": "DEMO",
   "demo.badge_tooltip": "互動示範：資料來自內建範例，你的修改僅儲存在目前瀏覽器本機儲存空間中，直到手動重設或清除瀏覽器資料，不會連線真實服務。",
-  "demo.badge_dirty": "DEMO · {count}",
+  "demo.badge_dirty": "DEMO ({count})",
   "demo.reset_sandbox": "重設示範",
   "demo.reset_sandbox_confirm": "確定清除目前瀏覽器中的所有示範沙盒修改與對話紀錄並恢復至初始狀態？",
   "demo.reset_sandbox_done": "已重設示範資料至初始狀態",
