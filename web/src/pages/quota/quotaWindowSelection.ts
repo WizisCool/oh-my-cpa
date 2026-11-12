@@ -29,7 +29,7 @@ export function quotaWindowKindOf(window: QuotaWindow): QuotaWindow['kind'] {
  * data: this is the one place that reads it, and a surface shows the two parts as two elements, never
  * the joined string.
  */
-export const QUOTA_GROUP_LABEL_SEPARATOR = ' \u00b7 ';
+export const QUOTA_GROUP_LABEL_SEPARATOR = ' \u00b7 '; // separator-ok: parses the stored Antigravity label
 
 export function quotaWindowParts(window: Pick<QuotaWindow, 'label' | 'scope'>): { group: string | null; name: string } {
   if (window.scope !== 'group') return { group: null, name: window.label };

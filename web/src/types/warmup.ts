@@ -188,7 +188,7 @@ function triggerToken(trigger: WarmupTaskInput['trigger']): string | null {
 function legacyGeneratedTaskName(task: Pick<WarmupTaskInput, 'account' | 'auth_index' | 'provider' | 'trigger'>): string {
   const target = task.account.trim() || task.auth_index.trim() || task.provider.trim();
   const trigger = triggerToken(task.trigger);
-  return trigger === null ? target : `${target} \u00b7 ${trigger}`;
+  return trigger === null ? target : `${target} \u00b7 ${trigger}`; // separator-ok: recognises names stored before
 }
 
 export function hasCustomTaskName(task: Pick<WarmupTaskInput, 'name' | 'account' | 'auth_index' | 'provider' | 'trigger'>): boolean {

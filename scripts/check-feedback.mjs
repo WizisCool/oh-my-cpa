@@ -13,8 +13,8 @@
  * - tooltips go through `Tooltip`, `DelegatedTooltipLayer`, or the dedicated chart/list/heatmap layers;
  * - no middle dot (`\u00b7`) separates information in web source, styles or catalogs
  *   (docs/design.md, Information expression). Facts take a layout (`MetaLine`, label/value rows,
- *   a tooltip card), a sentence or parentheses. A line that parses data an upstream stored joined
- *   on the dot spells it as an escape and says why with `separator-ok:`.
+ *   a tooltip card), a sentence or parentheses. Escaped spellings count too. A line that parses
+ *   data an upstream stored joined on the dot says why with `separator-ok:`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,14 +54,15 @@ const MODULE_OWNERS = {
   ],
 };
 
-const MIDDLE_DOT = '\u00b7';
+// The literal glyph, or its JS / CSS escape spellings, which render the same separator.
+const MIDDLE_DOT = /\u00b7|\\u00b7|\\u\{b7\}|\\0*b7\b/i;
 const SEPARATOR_EXEMPTION = 'separator-ok:';
 
 /** Every line of a web source, stylesheet or catalog that strings information on a middle dot. */
 export function findSeparatorViolations(source) {
   const violations = [];
   source.split('\n').forEach((text, index) => {
-    if (!text.includes(MIDDLE_DOT) || text.includes(SEPARATOR_EXEMPTION)) return;
+    if (!MIDDLE_DOT.test(text) || text.includes(SEPARATOR_EXEMPTION)) return;
     violations.push({
       line: index + 1,
       rule: 'middle-dot-separator',
