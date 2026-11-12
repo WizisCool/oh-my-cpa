@@ -55,3 +55,75 @@ it('preserves credential status when only its display name is saved', async () =
     view.unmount();
   }
 });
+
+it('reorders excluded models via the row handle and saves the new order', async () => {
+  const fields = { ...FIELDS, excluded_models: ['claude-3-5-sonnet-20240620', 'claude-opus-*'] };
+  const api = installOmcApi({ authFiles: [{ file: FILE, fields }] });
+  api.on('GET', '/management/auth-files/provider-models', (request) => ({
+    provider: request.query.get('provider') ?? '',
+    available: true,
+    models: [{ id: 'claude-3-5-sonnet-20240620', display_name: 'Claude 3.5 Sonnet' }],
+  }));
+  const onSaved = vi.fn();
+  const view = renderWithOmc(
+    <AuthFileDetailDrawer file={FILE} open canEdit initialSection="configuration" onClose={vi.fn()} onSaved={onSaved} onDownload={vi.fn()} />,
+  );
+  try {
+    const list = await screen.findByTestId('oauth-excluded-models-typed-rules');
+    await waitFor(() => expect(list.querySelectorAll('li[data-rule]')).toHaveLength(2));
+    const handles = list.querySelectorAll<HTMLButtonElement>('[data-reorder-handle]');
+    expect(handles).toHaveLength(2);
+    fireEvent.keyDown(handles[0], { key: 'ArrowDown' });
+    await waitFor(() => {
+      const order = Array.from(list.querySelectorAll('li[data-rule]')).map(el => el.getAttribute('data-rule'));
+      expect(order).toEqual(['claude-opus-*', 'claude-3-5-sonnet-20240620']);
+    });
+    const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(saveButton);
+    const writes = () => api.writes('/management/auth-files/fields').map(request => request.body);
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0]).toMatchObject({ excluded_models: ['claude-opus-*', 'claude-3-5-sonnet-20240620'] });
+  } finally {
+    view.unmount();
+  }
+});
+
+it('reorders credential model aliases via the row handle and saves the new order', async () => {
+  const fields = {
+    ...FIELDS,
+    model_aliases: [
+      { name: 'claude-3-5-sonnet-20240620', alias: 'sonnet', fork: true },
+      { name: 'claude-opus-4-1', alias: 'opus', fork: true },
+    ],
+  };
+  const api = installOmcApi({ authFiles: [{ file: FILE, fields }] });
+  serveProviderCatalog(api);
+  const view = renderWithOmc(
+    <AuthFileDetailDrawer file={FILE} open canEdit initialSection="configuration" onClose={vi.fn()} onSaved={vi.fn()} onDownload={vi.fn()} />,
+  );
+  try {
+    const list = await screen.findByTestId('credential-model-aliases-list');
+    await waitFor(() => expect(list.querySelectorAll('li[data-alias-row]')).toHaveLength(2));
+    const handles = list.querySelectorAll<HTMLButtonElement>('[data-reorder-handle]');
+    expect(handles).toHaveLength(2);
+    fireEvent.keyDown(handles[0], { key: 'ArrowDown' });
+    await waitFor(() => {
+      const inputs = Array.from(list.querySelectorAll<HTMLInputElement>('input[placeholder="Client alias"]')).map(el => el.value);
+      expect(inputs).toEqual(['opus', 'sonnet']);
+    });
+    const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(saveButton);
+    const writes = () => api.writes('/management/auth-files/fields').map(request => request.body);
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0]).toMatchObject({
+      model_aliases: [
+        { name: 'claude-opus-4-1', alias: 'opus', fork: true },
+        { name: 'claude-3-5-sonnet-20240620', alias: 'sonnet', fork: true },
+      ],
+    });
+  } finally {
+    view.unmount();
+  }
+});

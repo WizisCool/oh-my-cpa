@@ -53,7 +53,7 @@ test('a typed rule is refused for the reason the operator can act on', () => {
   assert.equal(validateExcludedModelRule('gpt-5-*', ['gpt-5']), undefined);
 });
 
-test('the view counts catalog models a rule covers, not rules', () => {
+test('the view counts catalog models a rule covers and keeps all active rules in order', () => {
   const view = describeExcludedModels(['gpt-5', 'gpt-5-*', 'retired-model', 'claude-*'], CATALOG);
   assert.equal(view.totalCount, 5);
   assert.equal(view.excludedCount, 3);
@@ -62,6 +62,12 @@ test('the view counts catalog models a rule covers, not rules', () => {
     { rule: 'gpt-5-*', isWildcard: true, matchCount: 2 },
     { rule: 'retired-model', isWildcard: false, matchCount: 0 },
     { rule: 'claude-*', isWildcard: true, matchCount: 0 },
+  ]);
+  assert.deepEqual(view.activeRules, [
+    { rule: 'gpt-5', isWildcard: false, matchCount: 0, displayName: 'GPT-5', inCatalog: true },
+    { rule: 'gpt-5-*', isWildcard: true, matchCount: 2, inCatalog: false },
+    { rule: 'retired-model', isWildcard: false, matchCount: 0, displayName: undefined, inCatalog: false },
+    { rule: 'claude-*', isWildcard: true, matchCount: 0, inCatalog: false },
   ]);
   const byId = Object.fromEntries(view.models.map((model) => [model.id, model]));
   assert.deepEqual(
@@ -104,8 +110,9 @@ test('toggling adds once and removes case-insensitively', () => {
   assert.deepEqual(setExcludedModelRule(['gpt-5', 'o3'], ' GPT-5 ', false), ['o3']);
 });
 
-test('rule order is not a change', () => {
-  assert.equal(excludedModelRulesEqual(['a', 'b'], ['B', 'a']), true);
+test('rule order is preserved as a change', () => {
+  assert.equal(excludedModelRulesEqual(['a', 'b'], ['A', 'b']), true);
+  assert.equal(excludedModelRulesEqual(['a', 'b'], ['B', 'a']), false);
   assert.equal(excludedModelRulesEqual(['a'], ['a', 'b']), false);
   assert.equal(excludedModelRulesEqual([], []), true);
 });

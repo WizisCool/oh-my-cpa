@@ -16,6 +16,26 @@ import { matchesExcludedModelRule } from './oauthExcludedModelLogic';
 import type { OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
 import { EmptyState } from '../common/EmptyState';
+import { RowContextHandle, RowHandleContext, RowReorder, useReorderRow } from '../common/RowReorder';
+import { applyKeyOrder, moveKey, type DropSide } from '../../types/displayOrder';
+
+type AliasBodyRowProps = React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: React.Key };
+
+function AliasBodyRow(props: AliasBodyRowProps) {
+  const key = props['data-row-key'];
+  return key === undefined ? <tr {...props} /> : <ReorderableAliasRow {...props} rowKey={String(key)} />;
+}
+
+function ReorderableAliasRow({ rowKey, style, ...props }: AliasBodyRowProps & { rowKey: string }) {
+  const { row, handle } = useReorderRow(rowKey);
+  return (
+    <RowHandleContext.Provider value={handle}>
+      <tr {...props} {...row} style={style ? { ...style, ...row.style } : row.style} />
+    </RowHandleContext.Provider>
+  );
+}
+
+const REORDERABLE_ALIAS_BODY = { body: { row: AliasBodyRow } };
 
 interface OAuthModelAliasPanelProps {
  isVertex?: boolean;
@@ -62,9 +82,36 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
     return name ? excludedRules.find((rule) => matchesExcludedModelRule(rule, name)) : undefined;
   };
 
+  const draftKeys = useMemo(() => drafts.map((draft) => draft.rowKey), [drafts]);
+  const canReorder = !isDisabled && drafts.length > 1;
+
+  const moveDraft = (key: string, target: string, side: DropSide) => {
+    onChange((current) => {
+      const keys = current.map((draft) => draft.rowKey);
+      const nextKeys = moveKey(keys, key, target, side);
+      return nextKeys === keys ? current : applyKeyOrder(current, (draft) => draft.rowKey, nextKeys);
+    });
+  };
+
+  const stepDraft = (key: string, direction: -1 | 1) => {
+    const index = draftKeys.indexOf(key);
+    const neighbour = draftKeys[index + direction];
+    if (index >= 0 && neighbour !== undefined) {
+      moveDraft(key, neighbour, direction < 0 ? 'before' : 'after');
+    }
+  };
+
   // The fixed widths leave the upstream model the remainder, so the whole row
   // fits the drawer's content width without scrolling sideways.
   const columns = [
+    ...(canReorder ? [{
+      title: '',
+      key: 'reorder',
+      width: 32,
+      render: (_value: unknown, row: ManagementOAuthModelAliasDraft) => (
+        <RowContextHandle name={row.alias || row.name || row.rowKey} variant="inline" />
+      ),
+    }] : []),
     ...(isVertex ? [{
       title: t('vertex.openapi_model'), key: 'openapi', width: 160,
       render: (_value: unknown, row: ManagementOAuthModelAliasDraft) => <VertexModelOpenAPI value={row.openapi}
@@ -192,15 +239,18 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
         </EmptyState>
       ) : (
         <>
-          <Table<ManagementOAuthModelAliasDraft>
-            className={styles['alias-table']}
-            rowKey="rowKey"
-            size="small"
-            pagination={false}
-            dataSource={drafts}
-            columns={columns}
-            scroll={{ x: 680 }}
-          />
+          <RowReorder items={draftKeys} isEnabled={canReorder} onMove={moveDraft} onStep={stepDraft}>
+            <Table<ManagementOAuthModelAliasDraft>
+              className={styles['alias-table']}
+              rowKey="rowKey"
+              size="small"
+              pagination={false}
+              dataSource={drafts}
+              columns={columns}
+              components={REORDERABLE_ALIAS_BODY}
+              scroll={{ x: 680 }}
+            />
+          </RowReorder>
           <div>
             <Button icon={<PlusOutlined />} disabled={isDisabled || drafts.length >= OAUTH_MODEL_ALIAS_ENTRY_LIMIT} onClick={addDraft}>
               {t('af.alias_add_mapping')}

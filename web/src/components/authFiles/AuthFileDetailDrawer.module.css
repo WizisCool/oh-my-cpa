@@ -210,11 +210,24 @@
 
 .alias {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
   border-radius: var(--radius-lg);
   background: var(--bg);
+}
+
+.alias[data-dragging] {
+  background: var(--elevated);
+}
+
+.alias-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .alias-names {

@@ -89,14 +89,26 @@
   min-width: 0;
 }
 
-.summary {
+.excluded-box {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  min-width: 0;
+}
+
+.excluded-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
 .summary-count {
-  font-size: var(--text-md);
+  color: var(--fg-2);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -148,10 +160,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 40px;
-  padding: 6px 4px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 2px;
   border-bottom: 1px solid var(--border-soft);
+  min-width: 0;
+}
+
+.row[data-dragging] {
+  border-radius: var(--radius-md);
+  background: var(--elevated);
+}
+
+.row-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -192,10 +217,11 @@
    box and the footer's actions stay within reach of the rule list above it. */
 .catalog {
   border: 0;
-  max-height: 360px;
+  max-height: 320px;
   overflow-y: auto;
+  background: var(--surface);
   box-shadow: var(--shadow-edge);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-md);
 }
 
 .catalog .row {
@@ -236,7 +262,7 @@
 
 /* The model catalogue's fold: a label line with the catalogue's size, the list behind it. */
 .catalog-fold {
-  margin-inline: -4px;
+  padding-top: 2px;
 }
 
 .catalog-fold-label {
