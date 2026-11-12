@@ -115,11 +115,12 @@
 
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 .card {
-  min-width: 0; max-width: 360px; max-height: 60px; margin: 0 8px 8px 0; border-radius: var(--radius-lg); outline: none;
+  interpolate-size: allow-keywords;
+  min-width: 0; inline-size: auto; block-size: auto; max-width: 360px; margin: 0 8px 8px 0; border-radius: var(--radius-lg); outline: none;
   transition: opacity var(--motion-base) var(--ease-standard),
               transform var(--motion-base) var(--ease-standard),
-              max-width var(--motion-base) var(--ease-standard),
-              max-height var(--motion-base) var(--ease-standard),
+              inline-size var(--motion-base) var(--ease-standard),
+              block-size var(--motion-base) var(--ease-standard),
               margin var(--motion-base) var(--ease-standard),
               padding var(--motion-base) var(--ease-standard);
 }
@@ -184,9 +185,6 @@
 .card-hidden {
   opacity: 0;
   transform: scale(0.92);
-  width: 0 !important;
-  max-width: 0 !important;
-  max-height: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
@@ -195,10 +193,49 @@
   visibility: hidden;
   transition: opacity var(--motion-base) var(--ease-standard),
               transform var(--motion-base) var(--ease-standard),
-              max-width var(--motion-base) var(--ease-standard),
-              max-height var(--motion-base) var(--ease-standard),
+              inline-size var(--motion-base) var(--ease-standard),
+              block-size var(--motion-base) var(--ease-standard),
               margin var(--motion-base) var(--ease-standard),
               visibility 0s linear var(--motion-base);
+}
+@supports (interpolate-size: allow-keywords) {
+  .card-hidden {
+    inline-size: 0 !important;
+    block-size: 0 !important;
+  }
+  @media (max-width: 640px) {
+    .card-hidden {
+      inline-size: auto !important;
+    }
+  }
+}
+/* Engines without keyword size interpolation fall back to bounded max-width/max-height clamping so
+   cards still collapse smoothly instead of snapping to zero on the first frame. */
+@supports not (interpolate-size: allow-keywords) {
+  .card {
+    max-height: 60px;
+    transition: opacity var(--motion-base) var(--ease-standard),
+                transform var(--motion-base) var(--ease-standard),
+                max-width var(--motion-base) var(--ease-standard),
+                max-height var(--motion-base) var(--ease-standard),
+                margin var(--motion-base) var(--ease-standard),
+                padding var(--motion-base) var(--ease-standard);
+  }
+  .card-hidden {
+    max-width: 0 !important;
+    max-height: 0 !important;
+    transition: opacity var(--motion-base) var(--ease-standard),
+                transform var(--motion-base) var(--ease-standard),
+                max-width var(--motion-base) var(--ease-standard),
+                max-height var(--motion-base) var(--ease-standard),
+                margin var(--motion-base) var(--ease-standard),
+                visibility 0s linear var(--motion-base);
+  }
+  @media (max-width: 640px) {
+    .card-hidden {
+      max-width: none !important;
+    }
+  }
 }
 .card-hidden .card-face {
   padding: 0 !important;

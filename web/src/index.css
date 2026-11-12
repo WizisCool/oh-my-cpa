@@ -116,6 +116,7 @@
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
+  interpolate-size: allow-keywords;
   background: var(--bg);
   color: var(--fg);
   --bg: #121214;
@@ -1234,16 +1235,23 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 /* A scrollbar is a quiet wash of the ink on no track, so an inner list's bar reads as part of the
    panel rather than as a grey slab beside it. Engines that honour the standard properties use
    them; the prefixed rules are for the ones that do not, drawn as a slim pill inside its gutter. */
-* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--fg) 18%, transparent) transparent; }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--fg) 18%, transparent);
-  background-clip: padding-box;
-  border: 3px solid transparent;
-  border-radius: var(--radius-xs);
+:root {
+  --scrollbar-thumb: color-mix(in srgb, var(--fg) 18%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--fg) 30%, transparent);
+  --scrollbar-track: transparent;
 }
-*::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--fg) 30%, transparent); }
-*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+@supports not (scrollbar-color: auto) {
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: var(--radius-xs);
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: var(--scrollbar-track); }
+}
 
 /* The console's one focus ring, for everything a keyboard reaches - except a text field. A text
    field sits inside a control that draws its own focus on the *outer* box (antd's accent border

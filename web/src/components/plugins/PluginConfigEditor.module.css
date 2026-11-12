@@ -1,4 +1,7 @@
 .editor {
+  inline-size: 100%;
+  min-inline-size: 0;
+  container: plugineditor / inline-size;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -26,6 +29,7 @@
    height rather than a fixed number of rows above an empty half. */
 .source {
   min-height: max(320px, calc(100vh - 330px)) !important;
+  min-height: max(320px, calc(100dvh - 330px)) !important;
   font-family: var(--font-mono) !important;
   font-size: var(--text-sm) !important;
   line-height: 1.5 !important;
@@ -81,7 +85,7 @@
 
 /* 720px is the editor's own width, not the device's: its two panes are a JSON document beside a
    parsed view, and below this the parsed table has no room left for its own columns. */
-@media (max-width: 720px) {
+@container plugineditor (max-width: 720px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
