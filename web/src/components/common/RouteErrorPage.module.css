@@ -1,8 +1,11 @@
+/* The body never scrolls (see the fixed-viewport shell in index.css), so the page is its own scroller.
+   Auto margins centre the column without pushing tall content past the top edge. */
 .error-page {
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 32px;
   background: var(--bg);
   color: var(--fg);
@@ -11,6 +14,7 @@
 .error-content {
   width: min(100%, 720px);
   min-width: 0;
+  margin: auto;
 }
 
 .brand-header {
