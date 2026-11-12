@@ -76,8 +76,9 @@ export function AppModal({
   mask = true,
   /**
    * Default z-index sits above Sheet/AppDrawer (1000/1001) regardless of portal mount order,
-   * while remaining below Popover (1050), DropdownMenu (1060), Tooltip (1070),
-   * ConfirmDialogHost (1080), Toast (1120), and Select/Combobox (1150).
+   * while remaining below Popover (1050), TimeRangePicker mobile sheet (1050), SearchSelect mobile
+   * sheet (1055), DropdownMenu (1060), ConfirmDialogHost (1080), lightbox (1100), Toast (1120),
+   * Select/Combobox (1150), and Tooltip (1160).
    */
   zIndex = 1020,
   afterOpenChange,
@@ -145,7 +146,7 @@ export function AppModal({
           if (
             details.reason === 'outside-press' &&
             details.event.target instanceof Element &&
-            details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"]')
+            details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"]')
           ) {
             details.cancel();
             return;

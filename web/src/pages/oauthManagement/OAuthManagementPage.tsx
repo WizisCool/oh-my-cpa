@@ -469,6 +469,14 @@ export const OAuthManagementPage: React.FC = () => {
     records.find((record) => record.authorizationProviderId === providerId)?.displayProvider ?? providerId
   ), [records]);
 
+  const hasActiveOverlay = Boolean(selectedRecord)
+    || isConnectOpen
+    || isUploadOpen
+    || isVertexImportOpen
+    || Boolean(siwcRecord)
+    || isWarmupSettingsOpen
+    || isModelRulesOpen;
+
   const openConnect = () => {
     if (hasActiveOverlay) return;
     setConnectRecoveryTarget(undefined);
@@ -479,14 +487,6 @@ export const OAuthManagementPage: React.FC = () => {
     setConnectProviderId(selectedProvider ?? '');
     setIsConnectOpen(true);
   };
-
-  const hasActiveOverlay = Boolean(selectedRecord)
-    || isConnectOpen
-    || isUploadOpen
-    || isVertexImportOpen
-    || Boolean(siwcRecord)
-    || isWarmupSettingsOpen
-    || isModelRulesOpen;
 
   const openCredential = (record: OAuthWorkspaceRecord, section: DetailSection = 'overview') => {
     if (hasActiveOverlay) return;
@@ -650,6 +650,7 @@ export const OAuthManagementPage: React.FC = () => {
     pluginLogos,
     pluginTitles,
     reorder: sectionOrder.reorder,
+    isOverlayBlocked: hasActiveOverlay,
   };
   const pageSelection = (
     <Checkbox

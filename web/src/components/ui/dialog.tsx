@@ -11,7 +11,7 @@ const DialogDescription = DialogPrimitive.Description;
 const DialogClose = DialogPrimitive.Close;
 
 const OPEN_OVERLAY_SELECTOR =
-  '[data-slot="dialog-content"][data-open], [data-slot="alert-dialog-content"][data-open], [data-slot="sheet-content"][data-open]';
+  '[data-slot="dialog-content"][data-open], [data-slot="alert-dialog-content"][data-open], [data-slot="sheet-content"][data-open], [data-slot="popover-content"][data-open], [data-slot="dropdown-menu-content"][data-open]';
 
 export function effectiveOverlayZIndex(element: Element | null): number {
   for (let current: Element | null = element; current; current = current.parentElement) {
@@ -22,15 +22,24 @@ export function effectiveOverlayZIndex(element: Element | null): number {
 }
 
 /**
- * Whether a higher-stacked modal, alert-dialog, or sheet is currently open above `ownZIndex`.
- * Sibling portals (e.g. root-mounted AlertDialog or sibling AppModal above an AppDrawer) sit outside
- * Base UI's nested-dialog tree, so outer overlays check this before dismissing on Escape/outside-press.
+ * Whether another modal, alert-dialog, sheet, popover, or menu is currently open above `ownZIndex`
+ * (or at the same z-index later in DOM order).
+ * Sibling portals sit outside Base UI's nested-dialog tree, so outer overlays check this before
+ * dismissing on Escape/outside-press.
  */
 export function hasHigherOpenOverlay(ownZIndex: number, ownElement?: Element | null): boolean {
   const overlays = document.querySelectorAll(OPEN_OVERLAY_SELECTOR);
   for (const overlay of overlays) {
     if (overlay === ownElement) continue;
-    if (effectiveOverlayZIndex(overlay) > ownZIndex) return true;
+    const z = effectiveOverlayZIndex(overlay);
+    if (z > ownZIndex) return true;
+    if (
+      z === ownZIndex &&
+      ownElement &&
+      (ownElement.compareDocumentPosition(overlay) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+    ) {
+      return true;
+    }
   }
   return false;
 }

@@ -108,7 +108,7 @@ export function PopoverContent({
         sideOffset={sideOffset}
         alignOffset={alignOffset}
         collisionPadding={12}
-        style={positionerStyle}
+        style={{ zIndex: 1050, ...positionerStyle }}
         className={cn('z-[1050] outline-none', positionerClassName)}
       >
         <PopoverPrimitive.Popup

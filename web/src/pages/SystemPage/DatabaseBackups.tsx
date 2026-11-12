@@ -216,39 +216,39 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
             />
           )}
         </div>
-        <AppModal
-          open={!!editing}
-          size="medium"
-          title={editing ? providerLabel(editing.draft.provider) : ''}
-          description={
-            editing?.draft.provider === 'drive' || editing?.draft.provider === 'onedrive'
-              ? t('sys.backup_destination_kind_account')
-              : t('sys.backup_destination_kind_server')
-          }
-          onCancel={() => setEditing(null)}
-          footer={null}
-          destroyOnHidden
-        >
-          {editing && value && (
-            <BackupDestination
-              key={`${editing.draft.provider}-${editing.index}`}
-              value={editing.draft}
-              hasConnection={editing.index !== null && !!value.destinations[editing.index]?.has_config}
-              isBusy={isBusy}
-              onCancel={() => setEditing(null)}
-              onApply={async (destination) => {
-                const destinations = automationInput(value).destinations;
-                if (editing.index === null) destinations.push(destination);
-                else destinations[editing.index] = destination;
-                await api.saveDatabaseBackupAutomation({ ...automationInput(value), destinations });
-                await queryClient.invalidateQueries({ queryKey: AUTOMATION_KEY });
-                toast.success(t('sys.backup_destination_saved'));
-                setEditing(null);
-              }}
-            />
-          )}
-        </AppModal>
       </AppDrawer>
+      <AppModal
+        open={isOpen && !!editing}
+        size="medium"
+        title={editing ? providerLabel(editing.draft.provider) : ''}
+        description={
+          editing?.draft.provider === 'drive' || editing?.draft.provider === 'onedrive'
+            ? t('sys.backup_destination_kind_account')
+            : t('sys.backup_destination_kind_server')
+        }
+        onCancel={() => setEditing(null)}
+        footer={null}
+        destroyOnHidden
+      >
+        {editing && value && (
+          <BackupDestination
+            key={`${editing.draft.provider}-${editing.index}`}
+            value={editing.draft}
+            hasConnection={editing.index !== null && !!value.destinations[editing.index]?.has_config}
+            isBusy={isBusy}
+            onCancel={() => setEditing(null)}
+            onApply={async (destination) => {
+              const destinations = automationInput(value).destinations;
+              if (editing.index === null) destinations.push(destination);
+              else destinations[editing.index] = destination;
+              await api.saveDatabaseBackupAutomation({ ...automationInput(value), destinations });
+              await queryClient.invalidateQueries({ queryKey: AUTOMATION_KEY });
+              toast.success(t('sys.backup_destination_saved'));
+              setEditing(null);
+            }}
+          />
+        )}
+      </AppModal>
     </>
   );
 }
