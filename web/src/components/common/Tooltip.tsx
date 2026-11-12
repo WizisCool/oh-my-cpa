@@ -295,8 +295,8 @@ export const Tooltip = React.forwardRef<TooltipHandle, TooltipProps>(
                   align={align}
                   sideOffset={6}
                   collisionPadding={12}
-                  style={styles?.root}
-                  className={cn('z-[1070] pointer-events-none', classNames?.root)}
+                  style={{ zIndex: 1160, ...styles?.root }}
+                  className={cn('z-[1160] pointer-events-none', classNames?.root)}
                 >
                   <TooltipPrimitive.Popup
                     id={resolvedId}

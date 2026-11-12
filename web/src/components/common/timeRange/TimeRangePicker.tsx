@@ -332,6 +332,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
         >
           <SheetContent
             side="bottom"
+            zIndex={1050}
             destroyOnHidden
             className="time-range-sheet h-auto max-h-[92dvh]"
           >

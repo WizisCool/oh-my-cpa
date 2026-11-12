@@ -34,7 +34,7 @@ function TooltipContent({
         align={align}
         sideOffset={sideOffset}
         collisionPadding={12}
-        className={cn('z-[1070]', !interactive && 'pointer-events-none')}
+        className={cn('z-[1160]', !interactive && 'pointer-events-none')}
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip"

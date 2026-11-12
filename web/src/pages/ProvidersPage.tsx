@@ -390,9 +390,18 @@ export const ProvidersPage: React.FC = () => {
         toggleProviderStatus={toggleProviderStatus}
         busyProviderIds={busyProviderIds}
         deleteProviderMutation={deleteProviderMutation}
-        handleOpenEdit={handleOpenEdit}
-        setIconPickerOpen={setIconPickerOpen}
-        setTargetProviderForIcon={setTargetProviderForIcon}
+        handleOpenEdit={(provider) => {
+          if (providerDrawerOpen || iconPickerOpen) return;
+          handleOpenEdit(provider);
+        }}
+        setIconPickerOpen={(open) => {
+          if (open && (providerDrawerOpen || iconPickerOpen)) return;
+          setIconPickerOpen(open);
+        }}
+        setTargetProviderForIcon={(provider) => {
+          if (provider && (providerDrawerOpen || iconPickerOpen)) return;
+          setTargetProviderForIcon(provider);
+        }}
         onRename={renameProvider}
         onMove={providerOrder.loaded ? providerOrder.move : undefined}
       />

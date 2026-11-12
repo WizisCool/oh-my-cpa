@@ -48,6 +48,7 @@ export function DropdownMenuContent({
         sideOffset={sideOffset}
         alignOffset={alignOffset}
         collisionPadding={12}
+        style={{ zIndex: 1060 }}
         className="z-[1060] outline-none"
       >
         <MenuPrimitive.Popup

@@ -218,7 +218,7 @@ export function DatabaseBackups({ isDemo }: { isDemo: boolean }) {
         </div>
       </AppDrawer>
       <AppModal
-        open={!!editing}
+        open={isOpen && !!editing}
         size="medium"
         title={editing ? providerLabel(editing.draft.provider) : ''}
         description={

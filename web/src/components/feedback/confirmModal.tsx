@@ -1,4 +1,5 @@
 import React from 'react';
+import { hasHigherOpenOverlay } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogBackdrop,
@@ -66,6 +67,7 @@ export function ConfirmDialogHost() {
   const t = useT();
   const [item, setItem] = React.useState<ActiveConfirm | null>(currentItem);
   const [isPending, setIsPending] = React.useState(false);
+  const popupRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     activeListener = setItem;
@@ -108,17 +110,29 @@ export function ConfirmDialogHost() {
   return (
     <AlertDialog
       open={item.isOpen}
-      onOpenChange={(next) => {
-        if (!next) handleCancel();
+      onOpenChange={(next, details) => {
+        if (!next) {
+          if (
+            (details.reason === 'escape-key' || details.reason === 'outside-press') &&
+            ((details.reason === 'escape-key' && details.event.defaultPrevented) ||
+              hasHigherOpenOverlay(1081, popupRef.current))
+          ) {
+            details.cancel();
+            return;
+          }
+          handleCancel();
+        }
       }}
     >
       <AlertDialogPortal>
         <AlertDialogBackdrop
           data-slot="alert-dialog-backdrop"
+          style={{ zIndex: 1080 }}
           className="omc-overlay-backdrop fixed inset-0 z-[1080] bg-overlay"
         />
-        <AlertDialogViewport className="fixed inset-0 z-[1081] flex items-center justify-center p-4 max-sm:items-end max-sm:p-0">
+        <AlertDialogViewport style={{ zIndex: 1081 }} className="fixed inset-0 z-[1081] flex items-center justify-center p-4 max-sm:items-end max-sm:p-0">
           <AlertDialogPopup
+            ref={popupRef}
             role="dialog"
             data-slot="alert-dialog-content"
             className="omc-dialog-surface flex w-[min(440px,calc(100vw-32px))] max-sm:w-full flex-col gap-4 rounded-xl max-sm:rounded-b-none bg-elevated p-6 max-sm:px-5 max-sm:pt-5 max-sm:pb-[max(20px,env(safe-area-inset-bottom))] max-sm:[&_[data-slot=button]]:min-h-10 text-foreground shadow-overlay outline-none"

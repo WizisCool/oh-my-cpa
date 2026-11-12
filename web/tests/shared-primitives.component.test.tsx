@@ -6,7 +6,9 @@ import { DeferredMount } from '../src/components/common/DeferredMount';
 import { Tooltip } from '../src/components/common/Tooltip';
 import { progressTasks } from '../src/utils/progressTasks';
 import { AppDrawer } from '../src/components/common/AppDrawer';
+import { AppModal } from '../src/components/common/AppModal';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
+import { confirmModal } from '../src/components/feedback';
 import { EmptyState } from '../src/components/common/EmptyState';
 import { Meter } from '../src/components/common/Meter';
 import { NumberInput } from '../src/components/common/NumberInput';
@@ -818,6 +820,97 @@ describe('Base UI Select, Tabs, Combobox & AutoComplete contracts', () => {
 
     fireEvent.keyDown(autoInput, { key: 'Enter', isComposing: true });
     expect(onAutoSelect).not.toHaveBeenCalled();
+  });
+
+  it('layers AppModal above AppDrawer even when the modal portal mounted first', () => {
+    installOmcApi();
+    let setModalOpen!: (open: boolean) => void;
+    let setDrawerOpen!: (open: boolean) => void;
+    const Host = () => {
+      const [modalOpen, _setModalOpen] = React.useState(true);
+      const [drawerOpen, _setDrawerOpen] = React.useState(false);
+      setModalOpen = _setModalOpen;
+      setDrawerOpen = _setDrawerOpen;
+      return (
+        <>
+          <AppModal open={modalOpen} title="First modal" onCancel={() => _setModalOpen(false)}>
+            modal body
+          </AppModal>
+          <AppDrawer open={drawerOpen} widthKey="test_stacking" title="Later drawer" onClose={() => _setDrawerOpen(false)}>
+            drawer body
+          </AppDrawer>
+        </>
+      );
+    };
+    renderWithOmc(<Host />);
+
+    // Close modal (kept mounted via keepMounted), open drawer later, then reopen modal.
+    act(() => setModalOpen(false));
+    act(() => setDrawerOpen(true));
+    act(() => setModalOpen(true));
+
+    const sheet = document.querySelector<HTMLElement>('[data-slot="sheet-content"]')!;
+    const dialogBackdrop = document.querySelector<HTMLElement>('[data-slot="dialog-backdrop"]')!;
+    const dialogViewport = document.querySelector<HTMLElement>('[data-slot="dialog-viewport"]')!;
+    expect(Number(dialogBackdrop.style.zIndex)).toBeGreaterThan(Number(sheet.style.zIndex));
+    expect(Number(dialogViewport.style.zIndex)).toBeGreaterThan(Number(dialogBackdrop.style.zIndex));
+
+    // Pressing Escape dismisses only the top modal and keeps the underlying drawer open.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[data-slot="dialog-content"][data-open]')).toBeNull();
+    expect(document.querySelector('[data-slot="sheet-content"][data-open]')).not.toBeNull();
+
+    // A second Escape dismisses the now-topmost drawer.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[data-slot="sheet-content"][data-open]')).toBeNull();
+  });
+
+  it('dismisses only the topmost sibling ConfirmDialogHost or equal-zIndex AppModal on Escape', () => {
+    installOmcApi();
+    let setDrawerOpen!: (open: boolean) => void;
+    const Host = () => {
+      const [drawerOpen, _setDrawerOpen] = React.useState(true);
+      const [firstModalOpen, setFirstModalOpen] = React.useState(true);
+      const [secondModalOpen, setSecondModalOpen] = React.useState(true);
+      setDrawerOpen = _setDrawerOpen;
+      return (
+        <>
+          <AppDrawer open={drawerOpen} widthKey="test_confirm_stack" title="Base drawer" onClose={() => _setDrawerOpen(false)}>
+            drawer body
+          </AppDrawer>
+          <AppModal open={firstModalOpen} title="Lower modal" onCancel={() => setFirstModalOpen(false)}>
+            lower modal
+          </AppModal>
+          <AppModal open={secondModalOpen} title="Upper modal" onCancel={() => setSecondModalOpen(false)}>
+            upper modal
+          </AppModal>
+        </>
+      );
+    };
+    renderWithOmc(<Host />);
+
+    act(() => {
+      confirmModal({ title: 'Confirm action' });
+    });
+
+    // Escape closes ConfirmDialogHost (1081) without closing either modal or the drawer.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[data-slot="alert-dialog-content"][data-open]')).toBeNull();
+    expect(document.querySelectorAll('[data-slot="dialog-content"][data-open]')).toHaveLength(2);
+    expect(document.querySelector('[data-slot="sheet-content"][data-open]')).not.toBeNull();
+
+    // Next Escape closes only the later-DOM equal-zIndex modal ("Upper modal"), keeping "Lower modal" open.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    const remainingDialogs = [...document.querySelectorAll('[data-slot="dialog-content"][data-open]')];
+    expect(remainingDialogs).toHaveLength(1);
+    expect(remainingDialogs[0].textContent).toContain('Lower modal');
+    expect(document.querySelector('[data-slot="sheet-content"][data-open]')).not.toBeNull();
+
+    // Next Escape closes "Lower modal", leaving only the drawer open.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[data-slot="dialog-content"][data-open]')).toBeNull();
+    expect(document.querySelector('[data-slot="sheet-content"][data-open]')).not.toBeNull();
+    act(() => setDrawerOpen(false));
   });
 });
 

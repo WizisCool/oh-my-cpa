@@ -9,6 +9,7 @@ import {
   DialogPortal,
   DialogTitle,
   DialogViewport,
+  hasHigherOpenOverlay,
 } from '@/components/ui/dialog';
 import { Button, type ButtonProps } from '@/components/ui/button';
 import { CloseOutlined, LeftOutlined } from '../icons';
@@ -73,7 +74,13 @@ export function AppModal({
   destroyOnHidden = false,
   keyboard = true,
   mask = true,
-  zIndex = 1000,
+  /**
+   * Default z-index sits above Sheet/AppDrawer (1000/1001) regardless of portal mount order,
+   * while remaining below Popover (1050), TimeRangePicker mobile sheet (1050), SearchSelect mobile
+   * sheet (1055), DropdownMenu (1060), ConfirmDialogHost (1080), lightbox (1100), Toast (1120),
+   * Select/Combobox (1150), and Tooltip (1160).
+   */
+  zIndex = 1020,
   afterOpenChange,
   className,
   children,
@@ -83,6 +90,7 @@ export function AppModal({
   const [hasOpened, setHasOpened] = React.useState(open);
   if (open && !hasOpened) setHasOpened(true);
   const [isScrolled, setIsScrolled] = React.useState(false);
+  const popupRef = React.useRef<HTMLDivElement | null>(null);
   const viewport = useVisibleViewport(open);
   const sheetSpan = useOpenSheetSpan(open, MODAL_WIDTHS[size]);
 
@@ -138,7 +146,15 @@ export function AppModal({
           if (
             details.reason === 'outside-press' &&
             details.event.target instanceof Element &&
-            details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"]')
+            details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"]')
+          ) {
+            details.cancel();
+            return;
+          }
+          if (
+            (details.reason === 'escape-key' || details.reason === 'outside-press') &&
+            ((details.reason === 'escape-key' && details.event.defaultPrevented) ||
+              hasHigherOpenOverlay(zIndex + 1, popupRef.current))
           ) {
             details.cancel();
             return;
@@ -172,6 +188,7 @@ export function AppModal({
           className={clsx('fixed inset-0 overflow-y-auto', styles['wrapper'])}
         >
           <DialogPopup
+            ref={popupRef}
             data-slot="dialog-content"
             data-testid={testId}
             style={{ width: `min(${MODAL_WIDTHS[size]}px, calc(100vw - 32px))` }}
@@ -265,9 +282,12 @@ const SPAN_GUTTER = 16;
 function useOpenSheetSpan(open: boolean, width: number) {
   const [span, setSpan] = React.useState<{ start: number; end: number } | null>(null);
   React.useLayoutEffect(() => {
-    if (!open) return undefined;
+    if (!open) {
+      setSpan(null);
+      return undefined;
+    }
     const measure = () => {
-      const sheets = document.querySelectorAll<HTMLElement>('[data-slot="sheet-content"][data-open]');
+      const sheets = document.querySelectorAll<HTMLElement>('[data-slot="sheet-content"][data-side="right"][data-open]');
       const box = sheets[sheets.length - 1]?.getBoundingClientRect();
       const fits = box && window.innerWidth > 640 && box.width >= width + 2 * SPAN_GUTTER;
       setSpan(fits ? { start: box.left, end: window.innerWidth - box.right } : null);

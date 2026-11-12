@@ -116,6 +116,7 @@ export function SearchSelect<
       >
         <SheetContent
           side="bottom"
+          zIndex={1055}
           destroyOnHidden
           className={styles['sheet']}
           style={{

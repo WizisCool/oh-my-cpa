@@ -34,6 +34,8 @@ export interface ProviderStripProps {
     onMove: (key: string, target: string, side: DropSide) => void;
     onStep: (key: string, direction: -1 | 1) => void;
   };
+  /** Suppresses opening the provider-picker modal while a page-level overlay is active/loading. */
+  isOverlayBlocked?: boolean;
 }
 
 /**
@@ -47,8 +49,11 @@ export interface ProviderStripProps {
  */
 export function ProviderStrip(props: ProviderStripProps) {
   const t = useT();
-  const { summaries, total, attention, active, onChange, pluginLogos, pluginTitles } = props;
+  const { summaries, total, attention, active, onChange, pluginLogos, pluginTitles, isOverlayBlocked = false } = props;
   const [isOpen, setIsOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (isOverlayBlocked && isOpen) setIsOpen(false);
+  }, [isOverlayBlocked, isOpen]);
   const isPhone = useIsPhoneViewport();
   const scroller = React.useRef<HTMLDivElement>(null);
   // The tab in scope is kept in view, whichever way the scope changed.
@@ -80,7 +85,7 @@ export function ProviderStrip(props: ProviderStripProps) {
   const isAll = active === 'all';
   const scopeAttention = isAll ? attention : (activeSummary?.attention ?? 0);
   const list = (
-    <AppModal open={isOpen} title={t('omc.fleet_providers')} size="small" footer={null} destroyOnHidden onCancel={() => setIsOpen(false)}>
+    <AppModal open={isOpen && !isOverlayBlocked} title={t('omc.fleet_providers')} size="small" footer={null} destroyOnHidden onCancel={() => setIsOpen(false)}>
       <ProviderList
         {...props}
         onChange={(provider) => {
@@ -101,7 +106,7 @@ export function ProviderStrip(props: ProviderStripProps) {
       <nav className={styles.strip} aria-label={t('omc.fleet_providers')}>
         <Button
           className={styles.scope}
-          onClick={() => setIsOpen(true)}
+          onClick={() => { if (!isOverlayBlocked) setIsOpen(true); }}
           aria-haspopup="dialog"
           data-testid="oauth-provider-switcher"
           icon={(

@@ -117,12 +117,14 @@ function SentImageGallery({ images }: { images: readonly string[] }) {
         }}
       >
         <DialogPortal>
-          <DialogBackdrop className="omc-overlay-backdrop fixed inset-0 z-[1100] bg-overlay" />
+          <DialogBackdrop style={{ zIndex: 1100 }} className="omc-overlay-backdrop fixed inset-0 z-[1100] bg-overlay" />
           <DialogViewport
+            style={{ zIndex: 1101 }}
             className="fixed inset-0 z-[1101] flex items-center justify-center p-6"
             onClick={() => setActiveIndex(null)}
           >
             <DialogPopup
+              data-slot="dialog-content"
               aria-label={isOpen ? t('agent.image.alt', { n: activeIndex + 1 }) : undefined}
               className="omc-dialog-surface relative flex max-h-[90dvh] max-w-[92vw] items-center justify-center outline-none"
               onClick={(event) => event.stopPropagation()}
