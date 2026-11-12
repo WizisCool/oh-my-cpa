@@ -1,10 +1,20 @@
 import React from 'react';
 import { useT } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
+import QuotaCapacityDialog from './QuotaCapacityDialog';
 import styles from './QuotaPresentation.module.css';
 
-// The dialog and its chart load on first open, so a list of credentials carries neither.
-const QuotaCapacityDialog = React.lazy(() => import('./QuotaCapacityDialog'));
+interface QuotaCapacityScopeValue {
+  isBlocked: boolean;
+}
+
+const QuotaCapacityScopeContext = React.createContext<QuotaCapacityScopeValue | null>(null);
+
+/** Suppresses or dismisses row-level capacity dialogs while a page overlay is active. */
+export function QuotaCapacityScope({ isBlocked, children }: { isBlocked: boolean; children: React.ReactNode }) {
+  const value = React.useMemo(() => ({ isBlocked }), [isBlocked]);
+  return <QuotaCapacityScopeContext.Provider value={value}>{children}</QuotaCapacityScopeContext.Provider>;
+}
 
 /** The credential a window belongs to, as the details name it. */
 export interface QuotaCapacityOwner {
@@ -25,8 +35,15 @@ export interface QuotaCapacityButtonProps {
 /** A window's estimate that opens its capacity details. */
 export function QuotaCapacityButton({ owner, window, className, children }: QuotaCapacityButtonProps) {
   const t = useT();
+  const scope = React.useContext(QuotaCapacityScopeContext);
+  const isBlocked = Boolean(scope?.isBlocked);
   const [isOpen, setIsOpen] = React.useState(false);
   const [hasOpened, setHasOpened] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isBlocked && isOpen) setIsOpen(false);
+  }, [isBlocked, isOpen]);
+
   return (
     <>
       <button
@@ -37,6 +54,7 @@ export function QuotaCapacityButton({ owner, window, className, children }: Quot
         // A row or reading around the estimate may answer clicks of its own.
         onClick={(event) => {
           event.stopPropagation();
+          if (isBlocked) return;
           setHasOpened(true);
           setIsOpen(true);
         }}
@@ -44,14 +62,12 @@ export function QuotaCapacityButton({ owner, window, className, children }: Quot
         {children}
       </button>
       {hasOpened && (
-        <React.Suspense fallback={null}>
-          <QuotaCapacityDialog
-            open={isOpen}
-            onClose={() => setIsOpen(false)}
-            owner={owner}
-            window={window}
-          />
-        </React.Suspense>
+        <QuotaCapacityDialog
+          open={isOpen && !isBlocked}
+          onClose={() => setIsOpen(false)}
+          owner={owner}
+          window={window}
+        />
       )}
     </>
   );

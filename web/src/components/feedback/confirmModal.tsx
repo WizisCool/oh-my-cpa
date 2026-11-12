@@ -115,9 +115,10 @@ export function ConfirmDialogHost() {
       <AlertDialogPortal>
         <AlertDialogBackdrop
           data-slot="alert-dialog-backdrop"
+          style={{ zIndex: 1080 }}
           className="omc-overlay-backdrop fixed inset-0 z-[1080] bg-overlay"
         />
-        <AlertDialogViewport className="fixed inset-0 z-[1081] flex items-center justify-center p-4 max-sm:items-end max-sm:p-0">
+        <AlertDialogViewport style={{ zIndex: 1081 }} className="fixed inset-0 z-[1081] flex items-center justify-center p-4 max-sm:items-end max-sm:p-0">
           <AlertDialogPopup
             role="dialog"
             data-slot="alert-dialog-content"

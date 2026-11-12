@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { I18nProvider, makeT } from '../src/i18n';
@@ -10,6 +10,7 @@ import {
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
 import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
+import { QuotaCapacityButton, QuotaCapacityScope } from '../src/pages/quota/QuotaCapacityButton';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
@@ -375,6 +376,40 @@ describe('provider sections across pages', () => {
       await waitFor(() => expect(visibleIdentities()[0]).toBe('account-13'));
       const firstRow = screen.getAllByTestId('oauth-credential-record')[0];
       expect(within(firstRow).getByRole('button', { name: /^SIWC settings:/ }).getAttribute('data-siwc-badge')).toBe('active');
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('dismisses and blocks row capacity dialogs while a page overlay is active', async () => {
+    const api = installOmcApi();
+    api.on('GET', '/management/quota/acct-1/capacity', () => ({ current: null, previous: null }));
+    const windowItem: QuotaWindow = {
+      ...quotaWindow('five_hour', 70, 2),
+      capacity: { requests: 100, tokens: 1_000_000, cost_nanos: 10_000_000_000, error_percent: 5 },
+    };
+    const owner = { authIndex: 'acct-1', credentialName: 'Primary' };
+    let setBlocked!: (blocked: boolean) => void;
+    const Host = () => {
+      const [blocked, _setBlocked] = React.useState(false);
+      setBlocked = _setBlocked;
+      return (
+        <QuotaCapacityScope isBlocked={blocked}>
+          <QuotaCapacityButton owner={owner} window={windowItem}>≈ $10.00</QuotaCapacityButton>
+        </QuotaCapacityScope>
+      );
+    };
+    const view = renderWithOmc(<Host />);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '≈ $10.00' }));
+      expect(await screen.findByRole('dialog')).toBeTruthy();
+
+      act(() => setBlocked(true));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+      // Clicking while blocked does not reopen the row dialog.
+      fireEvent.click(screen.getByRole('button', { name: '≈ $10.00' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
     } finally {
       view.unmount();
     }

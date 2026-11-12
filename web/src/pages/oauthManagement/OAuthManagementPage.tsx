@@ -36,6 +36,7 @@ import { WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmu
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { providerDisplayName } from '../../types/providerMetadata';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
+import { QuotaCapacityScope } from '../quota/QuotaCapacityButton';
 import { buildCredentialSections, credentialOrderKey, orderBySection, providersInSectionOrder, type QuotaColumnSort } from './credentialSections';
 import { useCredentialOrder } from './useCredentialOrder';
 import { useOAuthSectionOrder } from './useOAuthSectionOrder';
@@ -469,6 +470,7 @@ export const OAuthManagementPage: React.FC = () => {
   ), [records]);
 
   const openConnect = () => {
+    if (hasActiveOverlay) return;
     setConnectRecoveryTarget(undefined);
     for (const provider of Object.keys(sessions.states)) { if (!sessions.activeProviders.includes(provider)) sessions.reset(provider); }
     const selectedProvider = queryState.provider !== 'all'
@@ -478,7 +480,16 @@ export const OAuthManagementPage: React.FC = () => {
     setIsConnectOpen(true);
   };
 
+  const hasActiveOverlay = Boolean(selectedRecord)
+    || isConnectOpen
+    || isUploadOpen
+    || isVertexImportOpen
+    || Boolean(siwcRecord)
+    || isWarmupSettingsOpen
+    || isModelRulesOpen;
+
   const openCredential = (record: OAuthWorkspaceRecord, section: DetailSection = 'overview') => {
+    if (hasActiveOverlay) return;
     setDrawerSection(section);
     setSelectedIdentity({ key: record.key, name: record.fileName, authIndex: record.authIndex });
   };
@@ -614,8 +625,12 @@ export const OAuthManagementPage: React.FC = () => {
     onClearCooldown: (record) => void actions.clearCooldown(record),
     onRedeemCredit: (record) => void actions.redeemCredit(record),
     onReauthenticate: openConnectForRecord,
-    onOpenSIWC: (record) => setSIWCRecordKey(record.key),
+    onOpenSIWC: (record) => {
+      if (hasActiveOverlay) return;
+      setSIWCRecordKey(record.key);
+    },
     onOpenModelRules: (record) => {
+      if (hasActiveOverlay) return;
       setModelRulesProvider(record.displayProvider);
       setIsModelRulesOpen(true);
     },
@@ -660,6 +675,7 @@ export const OAuthManagementPage: React.FC = () => {
       icon={<BranchesOutlined />}
       disabled={actions.isOperating}
       onClick={() => {
+        if (hasActiveOverlay) return;
         setModelRulesProvider(scopeProvider === 'all' ? undefined : scopeProvider);
         setIsModelRulesOpen(true);
       }}
@@ -669,7 +685,7 @@ export const OAuthManagementPage: React.FC = () => {
     </Button>
   );
   const warmupButton = (
-    <Button icon={<TimerResetOutlined />} onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings">
+    <Button icon={<TimerResetOutlined />} onClick={() => { if (!hasActiveOverlay) setIsWarmupSettingsOpen(true); }} data-testid="oauth-warmup-settings">
       {t('warmup.settings')}
     </Button>
   );
@@ -688,14 +704,14 @@ export const OAuthManagementPage: React.FC = () => {
           <DropdownMenuItem
             icon={<UploadOutlined />}
             disabled={isDemo || actions.isOperating}
-            onClick={() => setIsUploadOpen(true)}
+            onClick={() => { if (!hasActiveOverlay) setIsUploadOpen(true); }}
           >
             {t('af.upload')}
           </DropdownMenuItem>
           <DropdownMenuItem
             icon={<CloudUploadOutlined />}
             disabled={isDemo || actions.isOperating}
-            onClick={() => setIsVertexImportOpen(true)}
+            onClick={() => { if (!hasActiveOverlay) setIsVertexImportOpen(true); }}
           >
             {t('af.vertex_open')}
           </DropdownMenuItem>
@@ -733,6 +749,7 @@ export const OAuthManagementPage: React.FC = () => {
         sessions={sessions}
         choices={choices}
         onOpen={(providerId, recoveryTarget) => {
+          if (hasActiveOverlay) return;
           setConnectRecoveryTarget(recoveryTarget);
           setConnectProviderId(providerId);
           setIsConnectOpen(true);
@@ -818,9 +835,11 @@ export const OAuthManagementPage: React.FC = () => {
             </div>
           ) : (
             <>
-              {queryState.layout === 'cards'
-                ? <CredentialCards {...viewProps} pageSelection={pageSelection} />
-                : <CredentialList {...viewProps} pageSelection={pageSelection} onReorder={credentialOrder.loaded && !quotaDirection ? reorderCredential : undefined} />}
+              <QuotaCapacityScope isBlocked={hasActiveOverlay}>
+                {queryState.layout === 'cards'
+                  ? <CredentialCards {...viewProps} pageSelection={pageSelection} />
+                  : <CredentialList {...viewProps} pageSelection={pageSelection} onReorder={credentialOrder.loaded && !quotaDirection ? reorderCredential : undefined} />}
+              </QuotaCapacityScope>
               <div className={styles.pagination}>
                 <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
                 <Select

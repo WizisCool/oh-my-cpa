@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Dialog as SheetPrimitive } from '@base-ui/react/dialog';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { effectiveOverlayZIndex, hasHigherOpenOverlay } from '@/components/ui/dialog';
 
 export type SheetSide = 'right' | 'left' | 'top' | 'bottom';
 
@@ -10,24 +11,40 @@ export interface SheetProps extends Omit<SheetPrimitive.Root.Props, 'onOpenChang
   afterOpenChange?: (open: boolean) => void;
 }
 
+const SheetPopupRefContext = React.createContext<React.MutableRefObject<HTMLDivElement | null> | null>(null);
+
 export function Sheet({ onOpenChange, afterOpenChange, ...props }: SheetProps) {
+  const popupRef = React.useRef<HTMLDivElement | null>(null);
   return (
-    <SheetPrimitive.Root
-      {...props}
-      onOpenChange={(next, details) => {
-        if (
-          !next &&
-          details.reason === 'outside-press' &&
-          details.event.target instanceof Element &&
-          details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"]')
-        ) {
-          details.cancel();
-          return;
-        }
-        onOpenChange?.(next, details);
-      }}
-      onOpenChangeComplete={afterOpenChange}
-    />
+    <SheetPopupRefContext.Provider value={popupRef}>
+      <SheetPrimitive.Root
+        {...props}
+        onOpenChange={(next, details) => {
+          if (!next) {
+            if (
+              details.reason === 'outside-press' &&
+              details.event.target instanceof Element &&
+              details.event.target.closest('[data-slot="select-content"], [data-slot="combobox-content"]')
+            ) {
+              details.cancel();
+              return;
+            }
+            if (details.reason === 'escape-key' || details.reason === 'outside-press') {
+              const ownZ = popupRef.current ? effectiveOverlayZIndex(popupRef.current) : 1001;
+              if (
+                (details.reason === 'escape-key' && details.event.defaultPrevented) ||
+                hasHigherOpenOverlay(ownZ, popupRef.current)
+              ) {
+                details.cancel();
+                return;
+              }
+            }
+          }
+          onOpenChange?.(next, details);
+        }}
+        onOpenChangeComplete={afterOpenChange}
+      />
+    </SheetPopupRefContext.Provider>
   );
 }
 
@@ -44,7 +61,7 @@ export interface SheetContentProps extends Omit<SheetPrimitive.Popup.Props, 'cla
   className?: string;
 }
 
-export function SheetContent({
+export const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(function SheetContent({
   side = 'right',
   floatingDesktop = false,
   surface = 'elevated',
@@ -56,7 +73,14 @@ export function SheetContent({
   style,
   children,
   ...props
-}: SheetContentProps) {
+}, forwardedRef) {
+  const contextPopupRef = React.useContext(SheetPopupRefContext);
+  const setPopupRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (contextPopupRef) contextPopupRef.current = node;
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  }, [contextPopupRef, forwardedRef]);
+
   if (!hasOpened && !destroyOnHidden) return null;
 
   return (
@@ -70,6 +94,7 @@ export function SheetContent({
         )}
       />
       <SheetPrimitive.Popup
+        ref={setPopupRef}
         data-slot="sheet-content"
         data-side={side}
         data-floating-desktop={floatingDesktop ? '' : undefined}
@@ -92,7 +117,7 @@ export function SheetContent({
       </SheetPrimitive.Popup>
     </SheetPrimitive.Portal>
   );
-}
+});
 
 export interface SheetHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   title?: React.ReactNode;
