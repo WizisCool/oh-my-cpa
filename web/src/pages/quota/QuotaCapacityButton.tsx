@@ -27,13 +27,15 @@ export interface QuotaCapacityOwner {
 export interface QuotaCapacityButtonProps {
   owner: QuotaCapacityOwner;
   window: QuotaWindow;
+  /** All windows of the credential or family, so the modal can switch between sibling periods (e.g. 5h ↔ weekly). */
+  windows?: readonly QuotaWindow[];
   /** Replaces the inline text style, for a trigger that is a whole surface. */
   className?: string;
   children: React.ReactNode;
 }
 
 /** A window's estimate that opens its capacity details. */
-export function QuotaCapacityButton({ owner, window, className, children }: QuotaCapacityButtonProps) {
+export function QuotaCapacityButton({ owner, window, windows, className, children }: QuotaCapacityButtonProps) {
   const t = useT();
   const scope = React.useContext(QuotaCapacityScopeContext);
   const isBlocked = Boolean(scope?.isBlocked);
@@ -67,6 +69,7 @@ export function QuotaCapacityButton({ owner, window, className, children }: Quot
           onClose={() => setIsOpen(false)}
           owner={owner}
           window={window}
+          windows={windows}
         />
       )}
     </>

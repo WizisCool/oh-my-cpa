@@ -37,7 +37,7 @@ export function QuotaWindowCards({ windows, nowMS, owner }: QuotaWindowCardsProp
           {group.name && <div className={styles['group-name']}>{group.name}</div>}
           <div className={styles.grid}>
             {group.windows.map((window) => (
-              <QuotaWindowCard key={window.id} window={window} name={quotaWindowName(window, t)} nowMS={nowMS} owner={owner} />
+              <QuotaWindowCard key={window.id} window={window} siblings={group.windows} name={quotaWindowName(window, t)} nowMS={nowMS} owner={owner} />
             ))}
           </div>
         </section>
@@ -46,8 +46,9 @@ export function QuotaWindowCards({ windows, nowMS, owner }: QuotaWindowCardsProp
   );
 }
 
-function QuotaWindowCard({ window, name, nowMS, owner }: {
+function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
   window: QuotaWindow;
+  siblings: readonly QuotaWindow[];
   name: string;
   nowMS: number;
   owner?: QuotaWindowCardsProps['owner'];
@@ -83,7 +84,7 @@ function QuotaWindowCard({ window, name, nowMS, owner }: {
   );
   if (hasDetails && owner) {
     return (
-      <QuotaCapacityButton className={styles.card} owner={owner} window={window}>
+      <QuotaCapacityButton className={styles.card} owner={owner} window={window} windows={siblings}>
         {content}
       </QuotaCapacityButton>
     );

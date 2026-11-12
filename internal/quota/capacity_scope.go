@@ -95,6 +95,23 @@ func isKnownCapacityFamily(family string) bool {
 	return false
 }
 
+func matchWindowModelScope(window QuotaWindow, families []string, exactModel, rawModel string) (isMatch bool, isUnknownFamily bool) {
+	model := normalizeCapacityModel(rawModel)
+	family := capacityModelFamily(model)
+	if len(families) == 0 {
+		// Only harmless spelling differences are removed; fuzzy aliases never
+		// expand an exact model's quota scope.
+		isMatch = model != "" && !usage.IsModelSubstituted(exactModel, model)
+	} else {
+		for _, meteredFamily := range families {
+			if family == meteredFamily || meteredFamily == "claude" && strings.HasPrefix(family, "claude-") || strings.HasPrefix(meteredFamily, "gemini-") && (model == meteredFamily || strings.HasPrefix(model, meteredFamily+"-")) {
+				isMatch = true
+			}
+		}
+	}
+	return isMatch, !isMatch && family == ""
+}
+
 // SelectWindowUsage counts identified models and records unclassified traffic
 // separately. A client alias must not erase useful evidence from served models,
 // nor be silently assigned to a metered family.
@@ -110,30 +127,115 @@ func SelectWindowUsage(window QuotaWindow, groups []ModelWindowUsage) (WindowUsa
 			return total, CapacityReasonScopeUnknown
 		}
 	}
+	hasFirstTier := false
+	hasFirstBounds := false
+	hasAllBounds := true
 	for _, group := range groups {
-		model := normalizeCapacityModel(group.Model)
-		family := capacityModelFamily(model)
-		isMatch := false
-		if len(families) == 0 {
-			// Only harmless spelling differences are removed; fuzzy aliases never
-			// expand an exact model's quota scope.
-			isMatch = model != "" && !usage.IsModelSubstituted(exactModel, model)
-		} else {
-			for _, meteredFamily := range families {
-				if family == meteredFamily || meteredFamily == "claude" && strings.HasPrefix(family, "claude-") || strings.HasPrefix(meteredFamily, "gemini-") && (model == meteredFamily || strings.HasPrefix(model, meteredFamily+"-")) {
-					isMatch = true
-				}
-			}
-		}
-		if !isMatch && family == "" {
+		isMatch, isUnknown := matchWindowModelScope(window, families, exactModel, group.Model)
+		if isUnknown {
 			total.UnmatchedRequests += group.Usage.Requests
 		}
 		if isMatch {
 			total.Requests += group.Usage.Requests
+			total.BreakdownRequests += group.Usage.BreakdownRequests
 			total.PricedRequests += group.Usage.PricedRequests
 			total.Tokens += group.Usage.Tokens
+			total.PricedTokens += group.Usage.PricedTokens
+			total.PromptTokens += group.Usage.PromptTokens
+			total.CachedTokens += group.Usage.CachedTokens
+			total.CacheWriteTokens += group.Usage.CacheWriteTokens
+			total.OutputTokens += group.Usage.OutputTokens
 			total.CostNanos += group.Usage.CostNanos
+			if gMin, gMax, ok := group.Usage.inputBounds(); !ok {
+				hasAllBounds = false
+			} else if !hasFirstBounds {
+				total.MinInputTokens, total.MaxInputTokens = gMin, gMax
+				hasFirstBounds = true
+			} else {
+				total.MinInputTokens = min(total.MinInputTokens, gMin)
+				total.MaxInputTokens = max(total.MaxInputTokens, gMax)
+			}
+			if group.Usage.HasMixedServiceTiers {
+				total.HasMixedServiceTiers = true
+				hasFirstTier = true
+			} else if !hasFirstTier {
+				total.ServiceTier = group.Usage.ServiceTier
+				hasFirstTier = true
+			} else if total.ServiceTier != group.Usage.ServiceTier {
+				total.HasMixedServiceTiers = true
+			}
 		}
 	}
+	total.HasInputBounds = hasFirstBounds && hasAllBounds
+	total.CacheRate = ComputeCacheRate(total.CachedTokens, total.PromptTokens)
 	return total, ""
+}
+
+// IsModelInWindowScope reports whether a model name belongs to the quota pool
+// that window meters.
+func IsModelInWindowScope(window QuotaWindow, rawModel string) bool {
+	name := strings.TrimSpace(rawModel)
+	if name == "" || strings.EqualFold(name, "unknown") {
+		return false
+	}
+	if window.Scope != "model" && window.Scope != "group" {
+		return window.Scope == "standard"
+	}
+	families := windowModelFamilies(window)
+	exactModel := normalizeCapacityModel(window.Model)
+	if window.Scope == "group" && len(families) == 0 || window.Scope == "model" && len(families) == 0 && exactModel == "" {
+		return false
+	}
+	for _, family := range families {
+		if !isKnownCapacityFamily(family) {
+			return false
+		}
+	}
+	isMatch, _ := matchWindowModelScope(window, families, exactModel, name)
+	return isMatch
+}
+
+// FilterScopedModels returns all named in-scope model usage groups ordered by
+// dominant rank (highest request count first).
+func FilterScopedModels(window QuotaWindow, groups []ModelWindowUsage) []ModelWindowUsage {
+	matched := make([]ModelWindowUsage, 0, len(groups))
+	for _, group := range groups {
+		name := strings.TrimSpace(group.Model)
+		if group.Usage.Requests <= 0 || group.Usage.Tokens <= 0 || !IsModelInWindowScope(window, name) {
+			continue
+		}
+		candidate := group
+		candidate.Model = name
+		matched = append(matched, candidate)
+	}
+	for i := 1; i < len(matched); i++ {
+		for j := i; j > 0 && dominantModelOutranks(matched[j], matched[j-1]); j-- {
+			matched[j], matched[j-1] = matched[j-1], matched[j]
+		}
+	}
+	return matched
+}
+
+// SelectDominantModelUsage chooses the named in-scope model with the highest
+// recent request count (breaking ties by effective tokens, raw tokens, then
+// model name) for forward capacity projection.
+func SelectDominantModelUsage(window QuotaWindow, groups []ModelWindowUsage) (ModelWindowUsage, bool) {
+	matched := FilterScopedModels(window, groups)
+	if len(matched) == 0 {
+		return ModelWindowUsage{}, false
+	}
+	return matched[0], true
+}
+
+func dominantModelOutranks(candidate, current ModelWindowUsage) bool {
+	if candidate.Usage.Requests != current.Usage.Requests {
+		return candidate.Usage.Requests > current.Usage.Requests
+	}
+	if candidate.Usage.CostNanos != current.Usage.CostNanos {
+		return candidate.Usage.CostNanos > current.Usage.CostNanos
+	}
+	if candidate.Usage.Tokens != current.Usage.Tokens {
+		return candidate.Usage.Tokens > current.Usage.Tokens
+	}
+	return candidate.Model < current.Model
 }

@@ -84,3 +84,30 @@ export function quotaWindowName(window: QuotaWindow, t: TFunc): string {
   }
   return window.scope === 'model' ? window.label : quotaWindowLabel(window.kind, window.label, t);
 }
+
+/** Whether the server attaches capacity evidence or an unavailable reason to this window. */
+export function isEstimableQuotaWindow(window: QuotaWindow): boolean {
+  return Boolean(window.capacity || window.usage || window.capacity_unavailable);
+}
+
+/**
+ * All estimable sibling periods belonging to the same quota family (e.g. 5-hour and weekly on the
+ * plan or on one Antigravity model group), ordered shortest period first so the capacity modal can
+ * switch directly between them.
+ */
+export function siblingCapacityWindows(target: QuotaWindow, allWindows?: readonly QuotaWindow[]): QuotaWindow[] {
+  const familyKey = quotaWindowGroupKey(target);
+  const seen = new Set<string>();
+  const matched: QuotaWindow[] = [];
+  for (const candidate of allWindows ?? []) {
+    if (!candidate.id || seen.has(candidate.id)) continue;
+    if (quotaWindowGroupKey(candidate) !== familyKey) continue;
+    if (candidate.id !== target.id && !isEstimableQuotaWindow(candidate)) continue;
+    seen.add(candidate.id);
+    matched.push(candidate);
+  }
+  if (!seen.has(target.id)) {
+    matched.push(target);
+  }
+  return orderQuotaWindows(matched);
+}

@@ -11,6 +11,7 @@ import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src
 import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { QuotaCapacityButton, QuotaCapacityScope } from '../src/pages/quota/QuotaCapacityButton';
+import QuotaCapacityDialog from '../src/pages/quota/QuotaCapacityDialog';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
@@ -21,6 +22,11 @@ import { buildCredentialSections } from '../src/pages/oauthManagement/credential
 import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../src/types/quota';
+
+vi.mock('../src/components/dashboard/RollingNumber', () => ({
+  RollingNumber: ({ readout }: { readout?: { number: number; prefix?: string; suffix: string; format: Intl.NumberFormatOptions } }) =>
+    <>{readout ? `${readout.prefix ?? ''}${new Intl.NumberFormat('en', readout.format).format(readout.number)}${readout.suffix}` : '—'}</>,
+}));
 
 const NOW_MS = Date.parse('2026-10-10T08:00:00Z');
 const HOUR_MS = 3_600_000;
@@ -415,3 +421,95 @@ describe('provider sections across pages', () => {
     }
   });
 });
+
+describe('quota capacity dialog', () => {
+  it('switches between 5-hour and weekly windows and updates total window projections across models', async () => {
+    const api = installOmcApi();
+    const fiveHour: QuotaWindow = {
+      ...quotaWindow('five_hour', 80, 3),
+      period_hours: 5,
+      usage: { from_ms: NOW_MS - 2 * HOUR_MS, to_ms: NOW_MS, requests: 90, priced_requests: 90, tokens: 1_750_000, cache_rate: 78.5, cost_nanos: 10_000_000_000 },
+      capacity: {
+        requests: 450,
+        tokens: 8_750_000,
+        cost_nanos: 50_000_000_000,
+        error_percent: 2.5,
+        projection: { model: 'claude-sonnet-4-6', sample_requests: 80, cache_rate: 80, requests: 890, tokens: 17_750_000 },
+      },
+    };
+    const weekly: QuotaWindow = {
+      ...quotaWindow('weekly', 60, 100),
+      id: 'seven_day',
+      period_hours: 168,
+      usage: { from_ms: NOW_MS - 68 * HOUR_MS, to_ms: NOW_MS, requests: 400, priced_requests: 400, tokens: 8_000_000, cache_rate: 85, cost_nanos: 80_000_000_000 },
+      capacity: {
+        requests: 1_000,
+        tokens: 20_000_000,
+        cost_nanos: 200_000_000_000,
+        error_percent: 1.5,
+        projection: { model: 'claude-sonnet-4-6', sample_requests: 350, cache_rate: 85, requests: 2_800, tokens: 56_000_000 },
+      },
+    };
+    api.on('GET', '/management/quota/claude-seat/capacity', (req) => {
+      const win = req.query.get('window');
+      if (win === 'seven_day') {
+        return {
+          window_id: 'seven_day',
+          current: { from_ms: NOW_MS - 68 * HOUR_MS, reset_at_ms: NOW_MS + 100 * HOUR_MS, used_percent: 40, usage: weekly.usage },
+          previous: null,
+          model_projections: [
+            { model: 'claude-sonnet-4-6', sample_requests: 350, cache_rate: 85, requests: 2_800, tokens: 56_000_000 },
+            { model: 'claude-opus-4-6', sample_requests: 50, cache_rate: 50, requests: 600, tokens: 10_000_000 },
+          ],
+        };
+      }
+      return {
+        window_id: 'five_hour',
+        current: { from_ms: NOW_MS - 2 * HOUR_MS, reset_at_ms: NOW_MS + 3 * HOUR_MS, used_percent: 20, usage: fiveHour.usage },
+        previous: {
+          from_ms: NOW_MS - 7 * HOUR_MS,
+          reset_at_ms: NOW_MS - 2 * HOUR_MS,
+          used_percent: 50,
+          usage: { from_ms: NOW_MS - 7 * HOUR_MS, to_ms: NOW_MS - 2 * HOUR_MS, requests: 200, priced_requests: 200, tokens: 4_000_000, cache_rate: 90, cost_nanos: 25_000_000_000 },
+        },
+        model_projections: [
+          { model: 'claude-sonnet-4-6', sample_requests: 80, cache_rate: 80, requests: 890, tokens: 17_750_000 },
+          { model: 'claude-opus-4-6', sample_requests: 10, cache_rate: 50, requests: 157, tokens: 2_350_000 },
+        ],
+      };
+    });
+
+    const view = renderWithOmc(
+      <QuotaCapacityDialog
+        open
+        onClose={vi.fn()}
+        owner={{ authIndex: 'claude-seat', credentialName: 'Claude Max' }}
+        window={fiveHour}
+        windows={[fiveHour, weekly]}
+      />,
+    );
+    try {
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() => expect(within(dialog).getByTestId('quota-capacity-model-select')).toBeTruthy());
+      const forecastCard = within(dialog).getByRole('region', { name: 'This window holds' });
+      expect(forecastCard.textContent).toContain('$50.00');
+      expect(forecastCard.textContent).toContain('890');
+
+      // Switch target model to claude-opus-4-6: total window requests update to 157 while window budget stays $50.00.
+      fireEvent.click(within(dialog).getByTestId('quota-capacity-model-select'));
+      fireEvent.click(await screen.findByRole('option', { name: 'claude-opus-4-6' }));
+      await waitFor(() => expect(forecastCard.textContent).toContain('157'));
+      expect(forecastCard.textContent).toContain('$50.00');
+
+      // Switch period to Weekly inside the dialog; selected model claude-opus-4-6 carries across once history loads.
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Weekly limit' }));
+      await waitFor(() => {
+        expect(forecastCard.textContent).toContain('$200');
+        expect(forecastCard.textContent).toContain('600');
+      });
+    } finally {
+      view.unmount();
+    }
+  });
+});
+

@@ -1,6 +1,10 @@
 package quota
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
+)
 
 func floatPtr(value float64) *float64 { return &value }
 func int64Ptr(value int64) *int64     { return &value }
@@ -133,11 +137,38 @@ func TestEstimateWindowCapacity(t *testing.T) {
 		t.Fatalf("external climb = %+v %q, want no_traffic", capacity, reason)
 	}
 
-	// A dollar figure needs nearly every request priced.
-	unpriced := point(8, 20, 4, 2_000_000)
-	unpriced.PricedRequests = 3
-	if capacity, _ := estimate(20, cycle(unpriced)); capacity == nil || capacity.CostNanos != nil || capacity.Tokens != 10_000_000 {
-		t.Fatalf("unpriced climb = %+v, want tokens without a cost", capacity)
+	// Majority-priced mixed intervals with explicit priced-token evidence scale
+	// the unpriced remainder; legacy mixed points without PricedTokens or
+	// minority-priced climbs withhold a dollar figure rather than guessing from
+	// request counts.
+	majorityPriced := point(8, 20, 4, 2_000_000)
+	majorityPriced.PricedRequests = 3
+	majorityPriced.PricedTokens = 1_500_000
+	majorityPriced.CostNanos = 1_500_000
+	if capacity, _ := estimate(20, cycle(majorityPriced)); capacity == nil || capacity.CostNanos == nil || *capacity.CostNanos != 10_000_000 || capacity.Tokens != 10_000_000 {
+		t.Fatalf("majority-priced climb = %+v, want scaled $0.01 cost and 10M tokens", capacity)
+	}
+	legacyMixed := point(8, 20, 4, 2_000_000)
+	legacyMixed.PricedRequests = 3
+	legacyMixed.CostNanos = 1_500_000
+	if capacity, _ := estimate(20, cycle(legacyMixed)); capacity == nil || capacity.CostNanos != nil {
+		t.Fatalf("legacy mixed point without PricedTokens = %+v, want nil cost rather than request-ratio inference", capacity)
+	}
+	minorityPriced := point(8, 20, 4, 2_000_000)
+	minorityPriced.PricedRequests = 1
+	minorityPriced.PricedTokens = 500_000
+	if capacity, _ := estimate(20, cycle(minorityPriced)); capacity == nil || capacity.CostNanos != nil || capacity.Tokens != 10_000_000 {
+		t.Fatalf("minority-priced climb = %+v, want tokens without a cost", capacity)
+	}
+
+	// A cleanly priced interval anchors dollar capacity directly even when a
+	// later interval in the same cycle ran only unpriced models.
+	mixedIntervals := cycle(
+		CalibrationPoint{ObservedAtMS: 6 * hourMS, UsedPercent: 10, Requests: 5, PricedRequests: 5, Tokens: 1_000_000, PricedTokens: 1_000_000, CostNanos: 5_000_000_000},
+		CalibrationPoint{ObservedAtMS: 8 * hourMS, UsedPercent: 40, Requests: 20, PricedRequests: 5, Tokens: 4_000_000, PricedTokens: 1_000_000, CostNanos: 5_000_000_000},
+	)
+	if capacity, _ := estimate(40, mixedIntervals); capacity == nil || capacity.CostNanos == nil || *capacity.CostNanos != 50_000_000_000 || capacity.Tokens != 10_000_000 {
+		t.Fatalf("clean + unpriced intervals = %+v, want $50 from the clean 10%% climb and 10M tokens over 40%%", capacity)
 	}
 
 	if capacity, reason := EstimateWindowCapacity(QuotaWindow{ID: "five_hour", Scope: "standard"}, nil, 9*hourMS, nil); capacity != nil || reason != CapacityReasonNoReading {
@@ -175,6 +206,52 @@ func TestEstimateWindowCapacityAfterReset(t *testing.T) {
 	}
 	if capacity, reason := EstimateWindowCapacity(capacityWindow(0), &QuotaPlan{PlanType: "pro"}, 9*hourMS, []CycleCalibration{previous}); capacity != nil || reason != CapacityReasonLowUsage {
 		t.Fatalf("another plan = %+v %q, want no reference", capacity, reason)
+	}
+	if prev := PreviousCapacityCycle(capacityWindow(0), plus, 9*hourMS, []CycleCalibration{previous}); prev == nil || prev.CycleResetAtMS != 5*hourMS {
+		t.Fatalf("same-plan previous cycle = %+v, want 5h reset", prev)
+	}
+	if prev := PreviousCapacityCycle(capacityWindow(0), &QuotaPlan{PlanType: "pro"}, 9*hourMS, []CycleCalibration{previous}); prev != nil {
+		t.Fatalf("different-plan previous cycle = %+v, want nil", prev)
+	}
+
+	// Subscribing or re-anchoring mid-week replaces an overlapping earlier cycle
+	// (e.g. 11/07..11/14 superseded on 11/12 by 11/12..11/19): neither the
+	// overlapping cycle nor anything before that schedule break counts as a
+	// previous cycle or calibration reference.
+	const dayMS = 24 * hourMS
+	ancient := CycleCalibration{
+		WindowKey:      "antigravity|ag_gemini_weekly|group|gemini",
+		CycleResetAtMS: 7 * dayMS,
+		PeriodHours:    168,
+		Points:         []CalibrationPoint{{ObservedAtMS: 6 * dayMS, UsedPercent: 50, Requests: 100, PricedRequests: 100, Tokens: 10_000_000, CostNanos: 5_000_000_000}},
+	}
+	superseded := CycleCalibration{
+		WindowKey:      "antigravity|ag_gemini_weekly|group|gemini",
+		CycleResetAtMS: 14 * dayMS,
+		PeriodHours:    168,
+		Points:         []CalibrationPoint{{ObservedAtMS: 11 * dayMS, UsedPercent: 7, Requests: 353, PricedRequests: 353, Tokens: 61_400_000, CostNanos: 10_650_000_000}},
+	}
+	active := CycleCalibration{
+		WindowKey:      "antigravity|ag_gemini_weekly|group|gemini",
+		CycleResetAtMS: 19 * dayMS,
+		PeriodHours:    168,
+		Points:         []CalibrationPoint{{ObservedAtMS: 13 * dayMS, UsedPercent: 53, Requests: 1_740, PricedRequests: 1_740, Tokens: 455_000_000, CostNanos: 103_720_000_000}},
+	}
+	activeWindow := QuotaWindow{
+		ID:            "ag_gemini_weekly",
+		Scope:         "group",
+		ModelFamilies: []string{"gemini"},
+		UsedPercent:   floatPtr(53),
+		ResetAtMS:     int64Ptr(19 * dayMS),
+		PeriodHours:   floatPtr(168),
+		ResetAccuracy: "exact",
+	}
+	if prev := PreviousCapacityCycle(activeWindow, nil, 13*dayMS, []CycleCalibration{active, superseded, ancient}); prev != nil {
+		t.Fatalf("overlapping superseded cycle returned as previous = %+v, want nil", prev)
+	}
+	reanchoredCap, reason := EstimateWindowCapacity(activeWindow, nil, 13*dayMS, []CycleCalibration{active, superseded, ancient})
+	if reanchoredCap == nil || reason != "" || reanchoredCap.Basis != "current_cycle" {
+		t.Fatalf("reanchored capacity = %+v %q, want current_cycle without blending superseded history", reanchoredCap, reason)
 	}
 }
 
@@ -231,5 +308,194 @@ func TestNextCalibrationCycle(t *testing.T) {
 	}
 	if _, ok := NextCalibrationCycle(nil, "codex", QuotaWindow{ID: "code_review", Scope: "code_review", UsedPercent: floatPtr(5)}, nil, 7*hourMS); ok {
 		t.Fatal("an unsupported window gathered evidence")
+	}
+}
+
+func TestCacheWeightedCapacityAndDominantModelProjection(t *testing.T) {
+	if got := ComputeCacheRate(0, 0); got != nil {
+		t.Fatalf("empty prompt cache rate = %v, want nil", got)
+	}
+	if got := ComputeCacheRate(9_999, 10_000); got == nil || *got != 99.9 {
+		t.Fatalf("near-100%% cache rate = %v, want 99.9 ceiling", got)
+	}
+
+	// Previous cycle ran at high cache rate ($50 = 100M tokens); current cycle
+	// runs uncached ($1 over 2% = $50 = 20M tokens). Dollar capacity blends at
+	// $50 and raw tokens follow the current cycle's uncached rate (~20M).
+	previous := CycleCalibration{
+		WindowKey:      "codex|five_hour|standard|",
+		CycleResetAtMS: 5 * hourMS,
+		PeriodHours:    5,
+		Points: []CalibrationPoint{{
+			ObservedAtMS: 4 * hourMS, UsedPercent: 50, Requests: 500, PricedRequests: 500,
+			Tokens: 50_000_000, PricedTokens: 50_000_000, PromptTokens: 50_000_000, CachedTokens: 45_000_000, CostNanos: 25_000_000_000,
+		}},
+	}
+	current := cycle(CalibrationPoint{
+		ObservedAtMS: 6 * hourMS, UsedPercent: 2, Requests: 10, PricedRequests: 10,
+		Tokens: 400_000, PricedTokens: 400_000, PromptTokens: 400_000, CachedTokens: 0, CostNanos: 1_000_000_000,
+	})
+	capacity, reason := EstimateWindowCapacity(capacityWindow(2), nil, 9*hourMS, []CycleCalibration{current, previous})
+	if capacity == nil || reason != "" || capacity.CostNanos == nil || *capacity.CostNanos != 50_000_000_000 || capacity.Tokens != 20_000_000 {
+		t.Fatalf("cache-shifted blend = %+v %q, want $50 and 20M uncached tokens", capacity, reason)
+	}
+
+	// Multi-model workload: $50 window at 20% used ($10 spent = 90 reqs, 1.75M tokens).
+	// Dominant model is claude-sonnet-4-6 (80 reqs, $4 = $0.05/req, 20k tok/req, 80% cache rate),
+	// alongside 10 reqs of claude-opus-4-6 ($6 = $0.60/req, 15k tok/req).
+	window := capacityWindow(20)
+	costCap := int64(50_000_000_000)
+	sized := &WindowCapacity{Requests: 450, Tokens: 8_750_000, CostNanos: &costCap, ErrorPercent: 2.6}
+	groups := []ModelWindowUsage{
+		{
+			Model: "claude-opus-4-6",
+			Usage: WindowUsage{Requests: 10, PricedRequests: 10, Tokens: 150_000, PricedTokens: 150_000, PromptTokens: 120_000, CachedTokens: 60_000, OutputTokens: 30_000, MinInputTokens: 12_000, MaxInputTokens: 12_000, HasInputBounds: true, CostNanos: 6_000_000_000},
+		},
+		{
+			Model: "claude-sonnet-4-6",
+			Usage: WindowUsage{Requests: 80, PricedRequests: 80, Tokens: 1_600_000, PricedTokens: 1_600_000, PromptTokens: 1_500_000, CachedTokens: 1_200_000, OutputTokens: 100_000, MinInputTokens: 15_000, MaxInputTokens: 20_000, HasInputBounds: true, CostNanos: 4_000_000_000},
+		},
+	}
+	AttachModelProjection(sized, window, groups)
+	// $50 window converted onto Sonnet ($0.05/req, 20k tok/req): 1,000 requests, 20M tokens.
+	if sized.Projection == nil || sized.Projection.Model != "claude-sonnet-4-6" || sized.Projection.Requests != 1_000 || sized.Projection.Tokens != 20_000_000 {
+		t.Fatalf("projection = %+v, want claude-sonnet-4-6 with 1,000 requests and 20M tokens", sized.Projection)
+	}
+	if sized.Projection.CacheRate == nil || *sized.Projection.CacheRate != 80 {
+		t.Fatalf("projection cache rate = %+v, want 80%%", sized.Projection)
+	}
+
+	longContextRate := 20.0
+	projections := BuildModelProjections(
+		sized,
+		window,
+		groups,
+		[]string{"claude-haiku-4-5", "claude-sonnet-long", "claude-priority-only"},
+		map[string]ModelQuoteRate{
+			// Updated current rate for Sonnet ($0.10/req instead of historical $0.05/req) takes precedence.
+			"claude-sonnet-4-6": {
+				Price: pricing.ModelPrice{Model: "claude-sonnet-4-6", PromptPricePer1M: 10.0, CompletionPer1M: 38.0, CacheReadPer1M: 1.0, PriceMultiplier: 1},
+			},
+			"claude-haiku-4-5": {
+				Price: pricing.ModelPrice{Model: "claude-haiku-4-5", PromptPricePer1M: 1.0, CompletionPer1M: 5.0, CacheReadPer1M: 0.1, PriceMultiplier: 1},
+			},
+			// Long-context tier (>10k input tokens, which avgPrompt ~18k exceeds) overrides the $1 base rate with $20.
+			"claude-sonnet-long": {
+				Price: pricing.ModelPrice{
+					Model: "claude-sonnet-long", PromptPricePer1M: 1.0, CompletionPer1M: 5.0, CacheReadPer1M: 0.1, PriceMultiplier: 1,
+					Tiers: []pricing.PriceTier{{MinPromptTokens: 10_000, PromptPricePer1M: &longContextRate}},
+				},
+			},
+			"claude-priority-only": {
+				Price: pricing.ModelPrice{
+					Model: "claude-priority-only", PromptPricePer1M: 2.0, CompletionPer1M: 10.0, CacheReadPer1M: 0.2, PriceMultiplier: 1,
+					Tiers: []pricing.PriceTier{{ServiceTiers: []string{"priority"}, PromptPricePer1M: &longContextRate}},
+				},
+			},
+		},
+	)
+	if len(projections) != 5 || projections[0].Model != "claude-sonnet-4-6" || projections[1].Model != "claude-opus-4-6" || projections[2].Model != "claude-haiku-4-5" {
+		t.Fatalf("projections = %+v, want sonnet, opus, haiku, priority-only, sonnet-long", projections)
+	}
+	// Sonnet updated rate ($0.10/req -> 500 requests instead of historical 1,000); Opus historical fallback ($0.60/req -> 83 requests).
+	if projections[0].Requests != 500 || projections[1].Requests != 83 || projections[2].Requests <= projections[0].Requests {
+		t.Fatalf("model switch projections = %+v, want 500 Sonnet (current rate), 83 Opus, and >500 Haiku", projections)
+	}
+	// Long-context tier applied to claude-sonnet-long makes it hold far fewer requests than claude-haiku-4-5 despite identical base rates.
+	if projections[4].Model != "claude-sonnet-long" || projections[4].Requests >= projections[2].Requests {
+		t.Fatalf("tiered candidate = %+v vs base %+v, want long-context tier applied", projections[4], projections[2])
+	}
+
+	// Reference groups without a prompt/output breakdown omit candidate projections rather than treating all tokens as completion,
+	// and mixed service tiers withhold candidates with service-tier rules.
+	noBreakdown := BuildModelProjections(
+		sized,
+		window,
+		[]ModelWindowUsage{{Model: "claude-sonnet-4-6", Usage: WindowUsage{Requests: 10, PricedRequests: 10, Tokens: 200_000, CostNanos: 1_000_000_000}}},
+		[]string{"claude-haiku-4-5"},
+		map[string]ModelQuoteRate{"claude-haiku-4-5": {Price: pricing.ModelPrice{Model: "claude-haiku-4-5", PromptPricePer1M: 1.0, CompletionPer1M: 5.0, PriceMultiplier: 1}}},
+	)
+	if len(noBreakdown) != 1 || noBreakdown[0].Model != "claude-sonnet-4-6" {
+		t.Fatalf("total-only reference = %+v, want observed model only and candidate omitted", noBreakdown)
+	}
+	mixedTierGroups := []ModelWindowUsage{{
+		Model: "claude-sonnet-4-6",
+		Usage: WindowUsage{Requests: 10, PricedRequests: 10, Tokens: 200_000, PromptTokens: 180_000, OutputTokens: 20_000, HasMixedServiceTiers: true, CostNanos: 1_000_000_000},
+	}}
+	withheld := BuildModelProjections(
+		sized,
+		window,
+		mixedTierGroups,
+		[]string{"claude-priority-only"},
+		map[string]ModelQuoteRate{
+			"claude-priority-only": {
+				Price: pricing.ModelPrice{
+					Model: "claude-priority-only", PromptPricePer1M: 2.0, CompletionPer1M: 10.0, PriceMultiplier: 1,
+					Tiers: []pricing.PriceTier{{ServiceTiers: []string{"priority"}, PromptPricePer1M: &longContextRate}},
+				},
+			},
+		},
+	)
+	if len(withheld) != 1 || withheld[0].Model != "claude-sonnet-4-6" {
+		t.Fatalf("ambiguous service-tier candidate = %+v, want service-tier candidate withheld", withheld)
+	}
+
+	// Minority-priced or legacy mixed model usage without PricedTokens falls back
+	// to token-based projection rather than extrapolating noisy partial cost.
+	minorityModelProj := BuildModelProjections(
+		&WindowCapacity{Requests: 100, Tokens: 2_000_000, CostNanos: &costCap, ErrorPercent: 2},
+		window,
+		[]ModelWindowUsage{{
+			Model: "claude-sonnet-4-6",
+			Usage: WindowUsage{Requests: 10, PricedRequests: 1, Tokens: 200_000, CostNanos: 10_000_000},
+		}},
+		nil,
+		nil,
+	)
+	if len(minorityModelProj) != 1 || minorityModelProj[0].Requests != 100 {
+		t.Fatalf("minority-priced model projection = %+v, want token-based 100 requests", minorityModelProj)
+	}
+
+	// Straddled long-context threshold (50k @ $1/M = $0.05 + 250k @ $10/M = $2.50 ->
+	// mean input 150k < 200k, empirical mean cost $1.275/req): observed projection
+	// must use empirical $1.275/req (39 requests on $50, matching AttachModelProjection)
+	// rather than quoting mean(150k) at $0.15/req (333 requests), and candidate models
+	// whose threshold is straddled are withheld.
+	tierTen := 10.0
+	straddledCap := &WindowCapacity{Requests: 39, Tokens: 5_882_353, CostNanos: &costCap, ErrorPercent: 2}
+	straddledGroups := []ModelWindowUsage{{
+		Model: "claude-sonnet-4-6",
+		Usage: WindowUsage{
+			Requests: 2, PricedRequests: 2, Tokens: 300_000, PricedTokens: 300_000,
+			PromptTokens: 300_000, MinInputTokens: 50_000, MaxInputTokens: 250_000, HasInputBounds: true,
+			CostNanos: 2_550_000_000,
+		},
+	}}
+	AttachModelProjection(straddledCap, window, straddledGroups)
+	straddledProjs := BuildModelProjections(
+		straddledCap,
+		window,
+		straddledGroups,
+		[]string{"claude-opus-tiered"},
+		map[string]ModelQuoteRate{
+			"claude-sonnet-4-6": {
+				Price: pricing.ModelPrice{
+					Model: "claude-sonnet-4-6", PromptPricePer1M: 1.0, CompletionPer1M: 5.0, PriceMultiplier: 1,
+					Tiers: []pricing.PriceTier{{MinPromptTokens: 200_000, PromptPricePer1M: &tierTen}},
+				},
+			},
+			"claude-opus-tiered": {
+				Price: pricing.ModelPrice{
+					Model: "claude-opus-tiered", PromptPricePer1M: 2.0, CompletionPer1M: 10.0, PriceMultiplier: 1,
+					Tiers: []pricing.PriceTier{{MinPromptTokens: 200_000, PromptPricePer1M: &longContextRate}},
+				},
+			},
+		},
+	)
+	if straddledCap.Projection == nil || straddledCap.Projection.Requests != 39 {
+		t.Fatalf("AttachModelProjection straddled = %+v, want 39 empirical requests", straddledCap.Projection)
+	}
+	if len(straddledProjs) != 1 || straddledProjs[0].Requests != straddledCap.Projection.Requests {
+		t.Fatalf("BuildModelProjections straddled = %+v, want empirical 39 requests matching AttachModelProjection and straddled candidate withheld", straddledProjs)
 	}
 }

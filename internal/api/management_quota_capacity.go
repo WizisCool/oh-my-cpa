@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
 
@@ -26,6 +27,7 @@ func (h *Handler) attachWindowCapacity(ctx context.Context, observation *quota.N
 	var cycles map[string][]quota.CycleCalibration
 	var cyclesErr error
 	hasLoadedCycles := false
+	var lookbackCache map[int64][]quota.ModelWindowUsage
 	for i := range windows {
 		window := &windows[i]
 		window.Usage, window.Capacity, window.CapacityUnavailable = nil, nil, ""
@@ -36,10 +38,10 @@ func (h *Handler) attachWindowCapacity(ctx context.Context, observation *quota.N
 			cycles, cyclesErr = h.repo.LoadCapacityCycles(ctx, observation.AuthIndex)
 			hasLoadedCycles = true
 		}
-		// What the cycle has recorded so far is shown while there is no estimate.
 		usageReason := ""
+		var cycleGroups []quota.ModelWindowUsage
 		if fromMS, toMS, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, observation.ObservedAtMS); reason == "" {
-			usage, scopeReason, err := h.repo.QueryCapacityUsage(ctx, observation.AuthIndex, *window, fromMS, toMS)
+			usage, groups, scopeReason, err := h.repo.QueryCapacityUsageWithModels(ctx, observation.AuthIndex, *window, fromMS, toMS)
 			switch {
 			case err != nil:
 				usageReason = quota.CapacityReasonUsageUnavailable
@@ -47,6 +49,7 @@ func (h *Handler) attachWindowCapacity(ctx context.Context, observation *quota.N
 				usageReason = scopeReason
 			default:
 				window.Usage = &usage
+				cycleGroups = groups
 			}
 		}
 		if cyclesErr != nil {
@@ -63,12 +66,48 @@ func (h *Handler) attachWindowCapacity(ctx context.Context, observation *quota.N
 		}
 		isLive := observation.Status != "stale" && observation.Status != "error" && observation.Error == "" && !observation.Disabled && (window.ResetAtMS == nil || *window.ResetAtMS > nowMS)
 		quota.AttachRemainingCapacity(capacity, *window, isLive)
+		projectionGroups := cycleGroups
+		if dominant, ok := quota.SelectDominantModelUsage(*window, projectionGroups); !ok || dominant.Usage.Requests < 5 {
+			horizonMS := recentProjectionHorizonMS(*window)
+			recentGroups, cached := lookbackCache[horizonMS]
+			if !cached {
+				if lookbackCache == nil {
+					lookbackCache = make(map[int64][]quota.ModelWindowUsage, 2)
+				}
+				_, loaded, _, err := h.repo.QueryCapacityUsageWithModels(
+					ctx,
+					observation.AuthIndex,
+					quota.QuotaWindow{ID: "lookback", Scope: "standard"},
+					observation.ObservedAtMS-horizonMS,
+					observation.ObservedAtMS,
+				)
+				if err == nil {
+					recentGroups = loaded
+				}
+				lookbackCache[horizonMS] = recentGroups
+			}
+			if _, hasScoped := quota.SelectDominantModelUsage(*window, recentGroups); hasScoped {
+				projectionGroups = recentGroups
+			}
+		}
+		quota.AttachModelProjection(capacity, *window, projectionGroups)
 		window.Capacity = capacity
 	}
 }
 
-// capacityCycleDTO is one cycle of a window as the capacity details state it:
-// its span, its latest share and what this gateway recorded in it.
+func recentProjectionHorizonMS(window quota.QuotaWindow) int64 {
+	const (
+		hourMS = int64(3600 * 1000)
+		minMS  = 24 * hourMS
+		maxMS  = 7 * 24 * hourMS
+	)
+	if window.PeriodHours == nil || *window.PeriodHours <= 0 {
+		return minMS
+	}
+	span := int64(*window.PeriodHours * 2 * float64(hourMS))
+	return min(max(span, minMS), maxMS)
+}
+
 type capacityCycleDTO struct {
 	FromMS      int64              `json:"from_ms"`
 	ResetAtMS   int64              `json:"reset_at_ms"`
@@ -77,7 +116,9 @@ type capacityCycleDTO struct {
 }
 
 // getQuotaCapacityHistory answers the capacity details of one window from local
-// evidence alone: the cycle the latest reading belongs to and the one before it.
+// evidence alone: the cycle the latest reading belongs to, the one before it,
+// and per-model whole-window projections if the remaining allowance is spent on
+// a chosen model.
 func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	authIndex := strings.TrimSpace(chi.URLParam(request, "authIndex"))
@@ -112,29 +153,155 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 		writeError(writer, http.StatusInternalServerError, "capacity evidence could not be read")
 		return
 	}
-	previous := quota.PreviousCapacityCycle(window, snapshot.ObservedAtMS, cycles[quota.CapacityWindowKey(snapshot.Provider, window)])
+	var plan *quota.QuotaPlan
+	if snapshot.PlanJSON != "" {
+		var parsed quota.QuotaPlan
+		if json.Unmarshal([]byte(snapshot.PlanJSON), &parsed) == nil {
+			plan = &parsed
+		}
+	}
+	if plan == nil && (snapshot.PlanType != "" || snapshot.PlanTier != "") {
+		plan = &quota.QuotaPlan{PlanType: snapshot.PlanType, Tier: snapshot.PlanTier}
+	}
+
+	windowKey := quota.CapacityWindowKey(snapshot.Provider, window)
+	previous := quota.PreviousCapacityCycle(window, plan, snapshot.ObservedAtMS, cycles[windowKey])
 
 	response := map[string]any{"window_id": window.ID, "current": nil, "previous": nil}
+	var currentGroups []quota.ModelWindowUsage
+	var currentFromMS *int64
 	if fromMS, toMS, reason := quota.WindowCycleRange(window, snapshot.ObservedAtMS, snapshot.ObservedAtMS); reason == "" {
+		currentFromMS = &fromMS
 		current := capacityCycleDTO{FromMS: fromMS, ResetAtMS: *window.ResetAtMS}
 		if used, hasReading := quota.WindowUsedPercent(window); hasReading {
 			current.UsedPercent = &used
 		}
-		if usage, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, toMS); err == nil && scopeReason == "" {
+		if usage, groups, scopeReason, err := h.repo.QueryCapacityUsageWithModels(ctx, authIndex, window, fromMS, toMS); err == nil && scopeReason == "" {
 			current.Usage = &usage
+			currentGroups = groups
 		}
 		response["current"] = current
 	}
 	if previous != nil && len(previous.Points) > 0 {
 		last := previous.Points[len(previous.Points)-1]
-		cycle := capacityCycleDTO{FromMS: previous.CycleStartMS(), ResetAtMS: previous.CycleResetAtMS, UsedPercent: &last.UsedPercent}
-		// Records retention removed are still counted up to the cycle's last change.
-		usage := quota.WindowUsage{FromMS: cycle.FromMS, ToMS: cycle.ResetAtMS, Requests: last.Requests, PricedRequests: last.PricedRequests, Tokens: last.Tokens, CostNanos: last.CostNanos}
-		if recorded, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, cycle.FromMS, cycle.ResetAtMS); err == nil && scopeReason == "" && recorded.Requests >= usage.Requests {
-			usage = recorded
+		resetAtMS := previous.CycleResetAtMS
+		if currentFromMS != nil && resetAtMS > *currentFromMS {
+			resetAtMS = *currentFromMS
+		}
+		measuredToMS := min(last.ObservedAtMS, resetAtMS)
+		cycle := capacityCycleDTO{FromMS: previous.CycleStartMS(), ResetAtMS: resetAtMS, UsedPercent: &last.UsedPercent}
+		usage := quota.WindowUsage{
+			FromMS:         cycle.FromMS,
+			ToMS:           measuredToMS,
+			Requests:       last.Requests,
+			PricedRequests: last.PricedRequests,
+			Tokens:         last.Tokens,
+			PromptTokens:   last.PromptTokens,
+			CachedTokens:   last.CachedTokens,
+			CacheRate:      quota.ComputeCacheRate(last.CachedTokens, last.PromptTokens),
+			CostNanos:      last.CostNanos,
+		}
+		if measuredToMS > cycle.FromMS {
+			if recorded, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, cycle.FromMS, measuredToMS); err == nil && scopeReason == "" && recorded.Requests >= usage.Requests {
+				usage = recorded
+			}
 		}
 		cycle.Usage = &usage
 		response["previous"] = cycle
 	}
+
+	if capacity, _ := quota.EstimateWindowCapacity(window, plan, snapshot.ObservedAtMS, cycles[windowKey]); capacity != nil {
+		projectionGroups := currentGroups
+		if dominant, hasDom := quota.SelectDominantModelUsage(window, projectionGroups); !hasDom || dominant.Usage.Requests < 5 {
+			lookbackFrom := snapshot.ObservedAtMS - recentProjectionHorizonMS(window)
+			if _, recentGroups, scopeReason, err := h.repo.QueryCapacityUsageWithModels(ctx, authIndex, window, lookbackFrom, snapshot.ObservedAtMS); err == nil && scopeReason == "" && len(recentGroups) > 0 {
+				projectionGroups = recentGroups
+			}
+		}
+		prices := h.loadCapacityModelRates(ctx, snapshot.Provider, snapshot.ObservedAtMS)
+		candidates := h.loadCapacityCandidateModels(ctx, snapshot.Provider)
+		if projections := quota.BuildModelProjections(capacity, window, projectionGroups, candidates, prices); len(projections) > 0 {
+			response["model_projections"] = projections
+		}
+	}
 	writeJSON(writer, http.StatusOK, response)
+}
+
+func (h *Handler) loadCapacityModelRates(ctx context.Context, provider string, quoteAtMS int64) map[string]quota.ModelQuoteRate {
+	rates := make(map[string]quota.ModelQuoteRate)
+	if h.repo == nil {
+		return rates
+	}
+	channelMultiplier := 1.0
+	if channels, err := h.repo.ListChannelMultipliers(ctx); err == nil {
+		for _, ch := range channels {
+			if strings.EqualFold(ch.Channel, provider) && ch.Multiplier > 0 {
+				channelMultiplier = ch.Multiplier
+				break
+			}
+		}
+	}
+	toRate := func(price pricing.ModelPrice) quota.ModelQuoteRate {
+		return quota.ModelQuoteRate{
+			Price:             price,
+			ChannelMultiplier: channelMultiplier,
+			QuoteAtMS:         quoteAtMS,
+		}
+	}
+	sharedPrices, _ := h.repo.ListModelPrices(ctx)
+	sharedByModel := make(map[string]quota.ModelQuoteRate, len(sharedPrices))
+	for _, row := range sharedPrices {
+		rate := toRate(row)
+		sharedByModel[row.Model] = rate
+		rates[row.Model] = rate
+	}
+	if catalog, err := h.repo.ListPricingModels(ctx); err == nil {
+		for served, target := range catalog {
+			if _, hasDirect := rates[served]; !hasDirect && target != "" {
+				if rate, ok := sharedByModel[target]; ok {
+					rates[served] = rate
+				}
+			}
+		}
+	}
+	if channelPrices, err := h.repo.ListChannelModelPrices(ctx); err == nil {
+		for _, row := range channelPrices {
+			if strings.EqualFold(row.Channel, provider) {
+				rates[row.Model] = toRate(row)
+			}
+		}
+	}
+	return rates
+}
+
+func (h *Handler) loadCapacityCandidateModels(ctx context.Context, provider string) []string {
+	seen := make(map[string]bool)
+	var models []string
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			models = append(models, name)
+		}
+	}
+	h.warmupRuntime.mu.Lock()
+	if cached, ok := h.warmupRuntime.models[provider]; ok {
+		for _, m := range cached.models {
+			add(m)
+		}
+	}
+	h.warmupRuntime.mu.Unlock()
+
+	if h.repo != nil {
+		if providers, err := h.repo.ListPricingProviders(ctx); err == nil {
+			for _, item := range providers {
+				if strings.EqualFold(item.Channel, provider) || strings.EqualFold(item.Family, provider) {
+					for _, m := range item.Models {
+						add(m)
+					}
+				}
+			}
+		}
+	}
+	return models
 }
