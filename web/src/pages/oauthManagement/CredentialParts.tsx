@@ -63,6 +63,11 @@ export type DetailSection = 'overview' | 'renewal' | 'configuration' | 'models';
 /** Everything the workspace can do to one credential, wired once by the page for both views. */
 export interface CredentialActions {
   isBusy: (record: OAuthWorkspaceRecord) => boolean;
+  /**
+   * Whether a write to the credential's file is under way - a delete, a batch refresh. Only that
+   * holds its switch: a quota refresh reads the provider and does not touch whether CPA may use it.
+   */
+  isFileBusy?: (record: OAuthWorkspaceRecord) => boolean;
   isTogglingStatus?: (record: OAuthWorkspaceRecord) => boolean;
   isRefreshingQuota: (record: OAuthWorkspaceRecord) => boolean;
   siwcBadge: (record: OAuthWorkspaceRecord) => SIWCBadgeState | undefined;
@@ -105,6 +110,7 @@ export interface CredentialFacts {
   credits: number;
   canRename: boolean;
   isBusy: boolean;
+  isFileBusy: boolean;
   isTogglingStatus: boolean;
   isRefreshing: boolean;
   /** The reading is out of date or failed, and a refresh is the operator's fix. */
@@ -140,6 +146,7 @@ export function credentialFacts(record: OAuthWorkspaceRecord, actions: Credentia
     credits: quota?.reset_credits?.available_count ?? 0,
     canRename: !file.runtime_only && record.hasUniqueFileName,
     isBusy: actions.isBusy(record),
+    isFileBusy: actions.isFileBusy?.(record) ?? actions.isBusy(record),
     isTogglingStatus: actions.isTogglingStatus?.(record) ?? false,
     isRefreshing: actions.isRefreshingQuota(record),
     needsRefresh: (status.canRefreshFix || Boolean(failure)) && record.canRefreshQuota,
@@ -341,19 +348,43 @@ export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true 
   );
 }
 
-/** Whether the gateway may use the credential: a column of its own in the list, the card's head corner. */
-export function CredentialSwitch({ record, facts, actions }: { record: OAuthWorkspaceRecord; facts: CredentialFacts; actions: CredentialActions }) {
+/**
+ * Whether the gateway may use the credential: a column of its own in the list, the card's head corner.
+ *
+ * The switch is small, and it sits on a row whose body opens the credential, so a press that landed a
+ * few pixels off it used to open the drawer instead - the switch read as one that could not be hit.
+ * Its target is therefore the whole box it stands in: a press anywhere in it flips the switch, and
+ * never reaches the row.
+ */
+export function CredentialSwitch({ record, facts, actions, className }: {
+  record: OAuthWorkspaceRecord;
+  facts: CredentialFacts;
+  actions: CredentialActions;
+  className?: string;
+}) {
   const t = useT();
   const { file } = record;
+  const switchRef = React.useRef<HTMLButtonElement>(null);
+  const isDisabled = facts.isFileBusy || file.runtime_only || !record.canSelectForFileBatch;
   return (
-    <Switch
-      size="small"
-      checked={!facts.isDisabled}
-      aria-busy={facts.isTogglingStatus || undefined}
-      disabled={facts.isBusy || file.runtime_only || !record.canSelectForFileBatch}
-      onChange={() => actions.onToggle(record)}
-      aria-label={t('af.status_toggle_label', { name: file.name })}
-    />
+    <span
+      className={clsx(styles['switch-hit'], isDisabled && styles['switch-hit-disabled'], className)}
+      data-control-hit=""
+      onClick={(event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget && !isDisabled) switchRef.current?.click();
+      }}
+    >
+      <Switch
+        ref={switchRef}
+        size="small"
+        checked={!facts.isDisabled}
+        aria-busy={facts.isTogglingStatus || undefined}
+        disabled={isDisabled}
+        onChange={() => actions.onToggle(record)}
+        aria-label={t('af.status_toggle_label', { name: file.name })}
+      />
+    </span>
   );
 }
 

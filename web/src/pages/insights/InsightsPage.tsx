@@ -143,20 +143,27 @@ export const InsightsPage: React.FC = () => {
 
   // Each narrowing, regrouping or metric switch is one step of the browser's Back.
   const [search, setSearch] = useViewSearchParams();
-  const view = React.useMemo(() => readInsightsView(search), [search]);
+  // What the reader asked for, and the view the page is drawn from. A filter, a metric or a grouping
+  // reshapes every panel and chart on the page, and drawn in the click's own task that was most of
+  // a second before the press itself showed. The page now draws from a deferred copy: the pressed
+  // row, tile or segment answers on the next frame, and the panels follow in an interruptible
+  // render that a second click can overtake.
+  const requestedView = React.useMemo(() => readInsightsView(search), [search]);
+  const view = React.useDeferredValue(requestedView);
+  const isViewPending = view !== requestedView;
   const setView = React.useCallback((patch: Partial<InsightsViewState>) => {
     setSearch((current) => writeInsightsView({ ...readInsightsView(current), ...patch }));
   }, [setSearch]);
   // A narrowing reshapes the panels above the row it was chosen in; the row stays under the finger.
-  const anchorPress = useScrollAnchor(search.toString());
+  const anchorPress = useScrollAnchor(view);
 
   const { value: range, ready: isRangeReady, loaded: isRangeStored, set: setRange } = usePreference<InsightsRange>(
     INSIGHTS_RANGE_PREFERENCE, DEFAULT_INSIGHTS_RANGE, parseInsightsRange,
   );
 
   const cubeQuery = useQuery({
-    queryKey: ['insights-cube', insightsRangeParams(range, view.bucket)],
-    queryFn: () => api.getInsightsCube(insightsRangeParams(range, view.bucket)),
+    queryKey: ['insights-cube', insightsRangeParams(range, requestedView.bucket)],
+    queryFn: () => api.getInsightsCube(insightsRangeParams(range, requestedView.bucket)),
     enabled: isRangeReady,
     placeholderData: keepPreviousData,
     staleTime: 10_000,
@@ -313,16 +320,16 @@ export const InsightsPage: React.FC = () => {
 
   const selectFilter = React.useCallback((dimension: InsightsDimension, id: string) => {
     if (id === FOLDED_ID) return;
-    setView({ filters: toggleFilter(view.filters, dimension, id) });
-  }, [setView, view.filters]);
+    setView({ filters: toggleFilter(requestedView.filters, dimension, id) });
+  }, [setView, requestedView.filters]);
   const toggleTrendGroup = React.useCallback((id: string) => {
     setSelectedTrendIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }, []);
   const clearFilter = React.useCallback((dimension: InsightsDimension) => {
-    const next = { ...view.filters };
+    const next = { ...requestedView.filters };
     delete next[dimension];
     setView({ filters: next });
-  }, [setView, view.filters]);
+  }, [setView, requestedView.filters]);
   const selectTrendGroup = React.useCallback((id: string | null) => {
     setSelectedTrendIds(id === null ? [] : [id]);
   }, []);
@@ -384,7 +391,7 @@ export const InsightsPage: React.FC = () => {
       size="small"
       variant={isPhone ? 'borderless' : undefined}
       className={styles['bucket-control']}
-      value={view.bucket}
+      value={requestedView.bucket}
       // A phone has one line for the title and both controls, so "Auto" shows only what it resolved to.
       labelRender={isPhone && view.bucket === 'auto' && shownWindow ? () => t(`insights.bucket.${shownWindow.bucket}`) : undefined}
       aria-label={t('insights.bucket_label')}
@@ -403,11 +410,11 @@ export const InsightsPage: React.FC = () => {
   const compareButton = (
     <ToolButton
       icon={<SwapOutlined />}
-      label={t(view.isComparing ? 'insights.compare_off' : 'insights.compare_on')}
-      variant={view.isComparing ? 'active' : 'secondary'}
-      aria-pressed={view.isComparing}
+      label={t(requestedView.isComparing ? 'insights.compare_off' : 'insights.compare_on')}
+      variant={requestedView.isComparing ? 'active' : 'secondary'}
+      aria-pressed={requestedView.isComparing}
       disabled={!cube?.compare}
-      onClick={() => setView({ isComparing: !view.isComparing })}
+      onClick={() => setView({ isComparing: !requestedView.isComparing })}
       data-testid="insights-compare"
     />
   );
@@ -469,9 +476,9 @@ export const InsightsPage: React.FC = () => {
   const groupingOptions = INSIGHTS_GROUPINGS.map((grouping) => ({ value: grouping, label: t(`insights.group.${grouping}`) }));
 
   return (
-    <div className={`terminal-page ${styles['page']}`} data-testid="insights-page" onPointerDownCapture={anchorPress}>
+    <div className={`terminal-page ${styles['page']}`} data-testid="insights-page" aria-busy={isViewPending || undefined} onPointerDownCapture={anchorPress}>
       {header}
-      <InsightsFilterBar cube={cube} filters={view.filters} labels={labels} modelDimension={modelDimension} onChange={(filters) => setView({ filters })} onOpenKey={setOpenKey} />
+      <InsightsFilterBar cube={cube} filters={requestedView.filters} labels={labels} modelDimension={modelDimension} onChange={(filters) => setView({ filters })} onOpenKey={setOpenKey} />
       {cubeQuery.isError && (
         <LoadFailure
           tone="warning"
@@ -480,7 +487,7 @@ export const InsightsPage: React.FC = () => {
           onRetry={() => void cubeQuery.refetch()}
         />
       )}
-      <MetricTiles current={current} baseline={baseline} metric={metric} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
+      <MetricTiles current={current} baseline={baseline} metric={requestedView.metric} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
       <Panel
         className={styles['trend-panel']}
         title={(
@@ -491,7 +498,7 @@ export const InsightsPage: React.FC = () => {
                   size="small"
                   variant={isPhone ? 'borderless' : undefined}
                   className={styles['grouping-select']}
-                  value={view.grouping}
+                  value={requestedView.grouping}
                   options={groupingOptions}
                   onChange={(grouping: InsightsGrouping) => setView({ grouping })}
                   aria-label={t('insights.group_label')}
@@ -556,13 +563,13 @@ export const InsightsPage: React.FC = () => {
       </Panel>
       <div className={styles['rankings']} data-layout={panels.key.length === 1 ? 'single-key' : 'grid'}>
         <RankingPanel dimension="key" title={t('insights.dim.key')} groups={panels.key} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('key')} selected={view.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={setOpenKey} limit={rankingLimit} testId="insights-ranking-key" />
+          colorOf={groupedColor('key')} selected={requestedView.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={setOpenKey} limit={rankingLimit} testId="insights-ranking-key" />
         <RankingPanel dimension={modelDimension} title={t(`insights.dim.${modelDimension}`)} groups={panels.model} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor(modelDimension)} selected={view.filters[modelDimension] ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-model" />
+          colorOf={groupedColor(modelDimension)} selected={requestedView.filters[modelDimension] ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-model" />
         <RankingPanel dimension="provider" title={t('insights.ranking.provider')} groups={panels.provider} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('provider')} selected={view.filters.provider ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-provider" />
+          colorOf={groupedColor('provider')} selected={requestedView.filters.provider ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-provider" />
         <RankingPanel dimension="credential" title={t('insights.ranking.credential')} groups={panels.credential} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('credential')} selected={view.filters.credential ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-credential" />
+          colorOf={groupedColor('credential')} selected={requestedView.filters.credential ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-credential" />
       </div>
       {/* On a phone the key ranking above already lists every key and opens its detail; the table
           would repeat it as a column of label rows. */}
@@ -591,9 +598,9 @@ export const InsightsPage: React.FC = () => {
             selectedKeys={view.filters.key ?? []}
             selectedColumns={view.filters[modelDimension] ?? []}
             onSelect={(keyId, columnId) => {
-              const isSame = (view.filters.key ?? []).join() === keyId
-                && (view.filters[modelDimension] ?? []).join() === (columnId ?? '');
-              const next = { ...view.filters };
+              const isSame = (requestedView.filters.key ?? []).join() === keyId
+                && (requestedView.filters[modelDimension] ?? []).join() === (columnId ?? '');
+              const next = { ...requestedView.filters };
               delete next.key;
               delete next[modelDimension];
               // Choosing the segment already chosen takes it back, as a ranking row does.
@@ -601,7 +608,7 @@ export const InsightsPage: React.FC = () => {
             }}
             onSelectColumn={(columnId) => selectFilter(modelDimension, columnId)}
             onClear={() => {
-              const next = { ...view.filters };
+              const next = { ...requestedView.filters };
               delete next.key;
               delete next[modelDimension];
               setView({ filters: next });
@@ -625,7 +632,7 @@ export const InsightsPage: React.FC = () => {
                     count={flowDimensions.reduce((sum, dimension) => sum + (view.filters[dimension]?.length ?? 0), 0)}
                     unit={t(`insights.metric.${isAdditiveMetric(metric) ? metric : 'requests'}`)}
                     onClear={() => {
-                      const next = { ...view.filters };
+                      const next = { ...requestedView.filters };
                       for (const dimension of flowDimensions) delete next[dimension];
                       setView({ filters: next });
                     }}
@@ -684,7 +691,7 @@ export const InsightsPage: React.FC = () => {
         onClose={() => setOpenKey(null)}
         onFilter={(keyId) => {
           setOpenKey(null);
-          setView({ filters: { ...view.filters, key: [keyId] } });
+          setView({ filters: { ...requestedView.filters, key: [keyId] } });
         }}
       />
     </div>

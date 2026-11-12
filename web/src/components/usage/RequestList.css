@@ -538,13 +538,20 @@
      in the neighbouring column; the line's own tooltip lists every exact count. */
   max-width: 100%;
   overflow: hidden;
-  justify-content: flex-end;
   font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .req-tokens-breakdown > span {
+  flex: none;
   white-space: nowrap;
+}
+/* Right-aligned by an auto margin rather than `justify-content: flex-end`: a line that end-justifies
+   overflows past its start, which clipped the input arrow - the count that names the line. An auto
+   margin collapses to zero instead, so an outsized line keeps its arrow and loses the reasoning
+   count at the end, which its tooltip still lists. */
+.req-tokens-breakdown > :first-child {
+  margin-inline-start: auto;
 }
 .req-tokens-reasoning {
   display: inline-flex;

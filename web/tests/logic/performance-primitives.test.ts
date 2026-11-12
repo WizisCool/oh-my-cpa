@@ -26,6 +26,8 @@ import {
 } from '../../src/performance/index.ts';
 import { dashboardWidgetSpec } from '../../src/types/dashboardLayout.ts';
 import { isDiscreteWheel, keyScrollFor, pageDistance, type WheelSample } from '../../src/utils/scrollSmoothing.ts';
+import { isSameDrawing } from '../../src/charts/useChartMorph.ts';
+import { isSameReadout } from '../../src/components/dashboard/RollingNumber.tsx';
 
 test('frame scheduler separates priority tiers across slices, caps per-slice jobs, and yields across frames', () => {
   let clock = 0;
@@ -823,4 +825,24 @@ test('invalidateQueriesSilently keeps DataProgress bar idle when cached data rec
   cacheSubUnsub();
   observerUnsub();
   queryClient.clear();
+});
+
+test('a chart redraws for a new dataset, not for a parent re-render that only renews its handlers', () => {
+  const groups = [{ id: 'a', values: [1, 2] }];
+  const drawn = { groups, metric: 'tokens', onSelect: () => undefined };
+  assert.equal(isSameDrawing({ ...drawn, onSelect: () => undefined }, drawn), true);
+  assert.equal(isSameDrawing({ ...drawn, groups: [...groups] }, drawn), false);
+  assert.equal(isSameDrawing({ ...drawn, metric: 'cost' }, drawn), false);
+  assert.equal(isSameDrawing({ groups, metric: 'tokens' }, drawn), false);
+  assert.equal(isSameDrawing(drawn, { ...drawn, onSelect: undefined }), false);
+});
+
+test('a rolling number re-renders only when the reading it prints changes', () => {
+  const reading = { number: 1.2, suffix: 'M', format: { maximumFractionDigits: 1 } };
+  assert.equal(isSameReadout({ ...reading, format: { maximumFractionDigits: 1 } }, reading), true);
+  assert.equal(isSameReadout({ ...reading, number: 1.3 }, reading), false);
+  assert.equal(isSameReadout({ ...reading, suffix: 'B' }, reading), false);
+  assert.equal(isSameReadout({ ...reading, format: { maximumFractionDigits: 2 } }, reading), false);
+  assert.equal(isSameReadout(undefined, reading), false);
+  assert.equal(isSameReadout(undefined, undefined), true);
 });

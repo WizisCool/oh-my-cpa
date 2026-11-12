@@ -24,6 +24,7 @@ export default {
   "dash.range.until_now": "Sehingga kini",
   "dash.window_minutes": "tetingkap {n} minit",
   "dash.filter_by_key": "Tapis mengikut kunci klien",
+  "dash.filter_by_key_short": "Semua kunci",
   "dash.total_requests": "Permintaan",
   "dash.total_tokens": "Token",
   "dash.success_rate_short": "Kadar kejayaan",

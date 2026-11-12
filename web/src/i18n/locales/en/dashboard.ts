@@ -24,6 +24,7 @@ export default {
   'dash.range.until_now': 'Until now',
   'dash.window_minutes': '{n}-minute window',
   'dash.filter_by_key': 'Filter by client key',
+  'dash.filter_by_key_short': 'All keys',
   'dash.total_requests': 'Requests',
   'dash.total_tokens': 'Tokens',
   'dash.success_rate_short': 'Success rate',

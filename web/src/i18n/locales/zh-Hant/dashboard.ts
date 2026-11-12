@@ -24,6 +24,7 @@ export default {
   "dash.range.until_now": "至今",
   "dash.window_minutes": "桶寬 {n} 分鐘",
   "dash.filter_by_key": "按客戶端金鑰篩選",
+  "dash.filter_by_key_short": "全部金鑰",
   "dash.total_requests": "請求總數",
   "dash.total_tokens": "Token 總數",
   "dash.success_rate_short": "成功率",

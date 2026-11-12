@@ -332,10 +332,6 @@
   color: var(--fg);
 }
 
-.follow-up:active {
-  transform: scale(.98);
-}
-
 .follow-up:focus-visible {
   border-radius: var(--radius-md);
 }
@@ -1775,10 +1771,6 @@
   text-align: left;
   cursor: pointer;
   transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
-}
-
-.example:active {
-  transform: scale(.98);
 }
 
 .example:focus-visible {

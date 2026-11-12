@@ -1,15 +1,10 @@
-import { currencyReadout, type DisplayCurrency } from '../../../types/currencyDisplay';
-import { useDisplayCurrency } from '../../../types/CurrencyDisplayContext';
 import { type InsightsCompareWindow } from '../../../types/insights';
 import { useInsightsFormat } from '../useInsightsFormat';
 import { useCompareWindowLabel } from '../useCompareWindowLabel';
 import React from 'react';
 import clsx from 'clsx';
-import { RollingNumber } from '../../../components/dashboard/RollingNumber';
 import { ArrowDownOutlined, ArrowUpOutlined } from '../../../components/icons';
 import { useT } from '../../../i18n';
-import { resolveCountFlowReadout, resolveTokenFlowReadout, type TokenNumberStyle } from '../../../types/tokenDisplay';
-import type { RollingReadout } from '../../../types/rollingNumber';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { compareMetric, INSIGHTS_METRICS, metricValue, type InsightsMetric, type Measures } from '../../../types/insightsCube';
 import { changeTrend, formatChange } from '../../../types/insightsFormat';
@@ -27,22 +22,6 @@ interface MetricTilesProps {
   onMetricChange: (metric: InsightsMetric) => void;
 }
 
-function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNumberStyle, currency: DisplayCurrency): RollingReadout | undefined {
-  if (value === null) return undefined;
-  switch (metric) {
-    case 'cost':
-      return currencyReadout(value, currency);
-    case 'tokens':
-      return resolveTokenFlowReadout(value, style);
-    case 'requests':
-      return resolveCountFlowReadout(value);
-    case 'latency':
-      return value >= 1000
-        ? { number: value / 1000, suffix: 's', format: { minimumFractionDigits: 2, maximumFractionDigits: 2 } }
-        : { number: Math.round(value), suffix: 'ms', format: { maximumFractionDigits: 0 } };
-  }
-}
-
 /**
  * The window's four headline numbers, each also the switch for what the trend plots.
  *
@@ -56,7 +35,6 @@ function readoutOf(metric: InsightsMetric, value: number | null, style: TokenNum
  */
 export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, metric, onMetricChange }) => {
   const t = useT();
-  const { currency } = useDisplayCurrency();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
   const formatCompareWindow = useCompareWindowLabel();
@@ -85,7 +63,10 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
           >
             <span className={styles['tile-label']}>{t(`insights.metric.${item}`)}</span>
             <span className={styles['tile-value']} data-tip={formatMetricExact(item, value)}>
-              <RollingNumber readout={readoutOf(item, value, style, currency)} />
+              {/* Printed, not rolled: here the four figures change together on every filter, and a
+                  rolling readout measures its glyphs with a forced layout on each change - the
+                  dominant cost of a click on this page. The dashboard keeps its rolling figures. */}
+              {formatMetric(item, value, style)}
             </span>
             <span
               className={styles['tile-change']}

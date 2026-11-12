@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils';
 const buttonVariants = cva(
   [
     'inline-flex items-center justify-center whitespace-nowrap border-0 font-medium select-none',
-    'rounded-md transition-[background-color,color,box-shadow,transform,opacity] cursor-pointer',
+    // A press answers in colour alone: a button that shrinks under the pointer shifts its label and
+    // neighbours for a frame, and the console's controls do not give way under a hand.
+    'rounded-md transition-[background-color,color,box-shadow,opacity] cursor-pointer',
     'focus-visible:outline-none focus-visible:shadow-focus',
-    'active:enabled:scale-[0.97]',
     'disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
     '[&_svg]:pointer-events-none [&_svg]:shrink-0',
   ].join(' '),
@@ -21,14 +22,14 @@ const buttonVariants = cva(
         // alone, so a toggled tool never gains an outline its neighbours do not have.
         active: 'bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-brand hover:enabled:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] shadow-control',
         secondary: 'bg-secondary text-secondary-foreground hover:enabled:bg-secondary-hover active:enabled:bg-secondary-active shadow-control',
-        // A field holding a value, drawn like the selects beside it: it does not give under a press.
-        filled: 'bg-field text-foreground hover:enabled:bg-field-hover active:enabled:scale-100 shadow-well',
+        // A field holding a value, drawn like the selects beside it.
+        filled: 'bg-field text-foreground hover:enabled:bg-field-hover shadow-well',
         ghost: 'bg-transparent text-foreground hover:enabled:bg-secondary active:enabled:bg-secondary-hover shadow-none',
         dashed: 'border border-dashed border-border bg-transparent text-foreground hover:enabled:border-muted-foreground hover:enabled:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)] shadow-none',
         destructive: 'bg-destructive text-destructive-foreground hover:enabled:opacity-90 shadow-none',
         'destructive-secondary': 'bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] text-danger hover:enabled:bg-[color-mix(in_srgb,var(--danger)_16%,transparent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_28%,transparent)]',
         'destructive-ghost': 'bg-transparent text-danger hover:enabled:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] shadow-none',
-        link: 'h-auto px-0 py-0 bg-transparent text-brand hover:enabled:underline active:enabled:scale-100 shadow-none',
+        link: 'h-auto px-0 py-0 bg-transparent text-brand hover:enabled:underline shadow-none',
       },
       size: {
         default: 'h-8 px-3 text-base gap-1.5',

@@ -233,3 +233,22 @@
     align-items: stretch;
   }
 }
+
+/* The model catalogue's fold: a label line with the catalogue's size, the list behind it. */
+.catalog-fold {
+  margin-inline: -4px;
+}
+
+.catalog-fold-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.catalog-fold-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

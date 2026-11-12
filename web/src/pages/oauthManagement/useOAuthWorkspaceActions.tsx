@@ -50,6 +50,8 @@ export interface OAuthWorkspaceActions {
   clearCooldown: (record: OAuthWorkspaceRecord) => Promise<void>;
   redeemCredit: (record: OAuthWorkspaceRecord) => Promise<void>;
   isRecordBusy: (record: OAuthWorkspaceRecord) => boolean;
+  /** Whether a write to the credential's file holds it; a quota read does not. */
+  isFileBusy: (record: OAuthWorkspaceRecord) => boolean;
 }
 
 const BATCH_REFRESH_CONCURRENCY = 3;
@@ -730,6 +732,10 @@ export function useOAuthWorkspaceActions(
     return recordTargetKeys(record).some((key) => reservedTargetsRef.current.has(key));
   }, [busyFileKeys, busyQuotaIndexes, recordTargetKeys]);
 
+  const isFileBusy = React.useCallback((record: OAuthWorkspaceRecord) => (
+    busyFileKeys.has(record.key) || reservedTargetsRef.current.has(`file:${record.fileName}`)
+  ), [busyFileKeys]);
+
   return {
     busyFileKeys,
     busyQuotaIndexes,
@@ -747,6 +753,7 @@ export function useOAuthWorkspaceActions(
     clearCooldown,
     redeemCredit,
     isRecordBusy,
+    isFileBusy,
     isTogglingStatus: (record: OAuthWorkspaceRecord) => togglingStatusKeys.has(record.key),
   };
 }

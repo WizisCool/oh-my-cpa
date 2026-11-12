@@ -17,7 +17,7 @@ import {
   credentialFacts,
   type CredentialActions,
 } from './CredentialParts';
-import { GroupHead, isRecordBodyClick, type CredentialViewProps } from './CredentialList';
+import { isRecordBodyClick, type CredentialViewProps } from './CredentialList';
 import { rowClickIntent } from '../../types/rowSelection';
 import { activityOf } from './fleetPresentation';
 import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
@@ -27,57 +27,54 @@ import styles from './CredentialCards.module.css';
 /**
  * The card view: the workspace for reading the fleet at a glance.
  *
- * Each credential is a card: who it is, then every limit it reports in the list's two tracks - the
- * five-hour and weekly limits side by side, further limits under them - and its state and recent
- * traffic at the foot. A card
- * opens the credential's details; its switch, refresh and menu are on the card itself.
+ * The cards flow in one grid in the list's order - its providers in turn - and each card's mark
+ * names its provider. A grid cut into a section per provider left a row with one card in it and the
+ * rest of the width empty whenever a provider had few credentials, which is most of them.
+ *
+ * Every card has the same four bands, in the same places, whatever its credential reports: a head
+ * with the selection, the provider mark, the name and the switch; a line of traits; the limits in
+ * the list's two tracks; and a foot with the state on the left and the tools on the right. A card
+ * opens the credential's details.
  */
-export function CredentialCards({ groups, hasGroupHeads, pluginLogos, selectedKeys, nowMS, actions }: CredentialViewProps & {
-  /** Whether each group names its provider: the scope is every provider, not one. */
-  hasGroupHeads: boolean;
-}) {
+export function CredentialCards({ groups, pluginLogos, selectedKeys, nowMS, actions, pageSelection }: CredentialViewProps) {
+  const t = useT();
+  // Each card carries its provider's name: with the sections gone, the mark is the only sign of it.
+  const entries = React.useMemo(
+    () => groups.flatMap((group) => group.records.map((record) => ({ record, providerName: group.title }))),
+    [groups],
+  );
+  const keys = React.useMemo(() => entries.map(({ record }) => record.key), [entries]);
   return (
     <div className={styles.cards}>
-      <FilterTransition itemKeys={groups.map((group) => group.provider)}>
-        {groups.map((group) => (
-          <CardGroup key={group.provider} group={group} hasHead={hasGroupHeads} pluginLogos={pluginLogos} selectedKeys={selectedKeys} nowMS={nowMS} actions={actions} />
+      {pageSelection && (
+        <div className={styles['page-select']}>
+          {pageSelection}
+          <span aria-hidden="true">{t('omc.fleet_select_page')}</span>
+        </div>
+      )}
+      <div className={styles.grid} data-testid="oauth-credential-section" data-provider="all">
+      <FilterTransition itemKeys={keys}>
+        {entries.map(({ record, providerName }) => (
+          <CredentialCard
+            key={record.key}
+            record={record}
+            providerName={providerName}
+            isSelected={selectedKeys.has(record.key)}
+            hasSelection={selectedKeys.size > 0}
+            nowMS={nowMS}
+            actions={actions}
+            pluginLogos={pluginLogos}
+          />
         ))}
       </FilterTransition>
+      </div>
     </div>
   );
 }
 
-function CardGroup({ group, hasHead, pluginLogos, selectedKeys, nowMS, actions }: Omit<CredentialViewProps, 'groups'> & {
-  group: CredentialViewProps['groups'][number];
-  hasHead: boolean;
-}) {
-  const filterMotion = useFilterItemMotion();
-  const keys = React.useMemo(() => group.records.map((record) => record.key), [group.records]);
-  return (
-    <m.section {...filterMotion} className={styles.group} data-testid="oauth-credential-section" data-provider={group.provider}>
-      {hasHead && <GroupHead group={group} pluginLogos={pluginLogos} selectedKeys={selectedKeys} actions={actions} className={styles['group-head']} />}
-      <div className={styles.grid}>
-        <FilterTransition itemKeys={keys}>
-          {group.records.map((record) => (
-            <CredentialCard
-              key={record.key}
-              record={record}
-              isSelected={selectedKeys.has(record.key)}
-              hasSelection={selectedKeys.size > 0}
-              nowMS={nowMS}
-              actions={actions}
-              pluginLogos={pluginLogos}
-            />
-          ))}
-        </FilterTransition>
-      </div>
-    </m.section>
-  );
-}
-
-/** Whether a click on a card's body opens it, rather than landing on a control inside it. */
-function CredentialCard({ record, isSelected, hasSelection, nowMS, actions, pluginLogos }: {
+function CredentialCard({ record, providerName, isSelected, hasSelection, nowMS, actions, pluginLogos }: {
   record: OAuthWorkspaceRecord;
+  providerName: string;
   isSelected: boolean;
   /** Whether any credential is chosen, which makes a click on a card pick it. */
   hasSelection: boolean;
@@ -115,19 +112,23 @@ function CredentialCard({ record, isSelected, hasSelection, nowMS, actions, plug
       data-quota-focus-anchor={record.quota ? record.authIndex : undefined}
     >
       <header className={styles.head}>
-        <span className={styles.mark}>
-          <CredentialMark credential={{ provider: record.displayProvider, hint: file.name }} pluginLogos={pluginLogos} size={22} />
+        <span className={styles.select}>
+          <SelectBox record={record} isSelected={isSelected} isBusy={facts.isBusy} actions={actions} />
+        </span>
+        <span className={styles.mark} role="img" aria-label={providerName} data-tip={providerName}>
+          <CredentialMark credential={{ provider: record.displayProvider, hint: file.name }} pluginLogos={pluginLogos} size={18} />
         </span>
         <div className={styles.identity}>
-          <CredentialName record={record} facts={facts} isRenaming={isRenaming} onRename={() => setIsRenaming(true)} onRenamed={() => setIsRenaming(false)} actions={actions} size="large" />
+          <CredentialName record={record} facts={facts} isRenaming={isRenaming} onRename={() => setIsRenaming(true)} onRenamed={() => setIsRenaming(false)} actions={actions} />
         </div>
-        <div className={styles['head-tools']}>
-          <SelectBox record={record} isSelected={isSelected} isBusy={facts.isBusy} actions={actions} />
-          <CredentialSwitch record={record} facts={facts} actions={actions} />
-          <CredentialMenu record={record} facts={facts} actions={actions} onRename={() => setIsRenaming(true)} />
-        </div>
+        <CredentialSwitch record={record} facts={facts} actions={actions} className={styles.switch} />
       </header>
-      <CredentialTraits record={record} facts={facts} actions={actions} />
+
+      <div className={styles.traits}>
+        {/* Named as well as drawn: a mark that falls back to a neutral glyph says nothing of whose it is. */}
+        <span className={styles.provider}>{providerName}</span>
+        <CredentialTraits record={record} facts={facts} actions={actions} />
+      </div>
 
       <div className={styles.readings} data-quota-missing={!hasLines && metrics.length === 0 ? 'true' : undefined}>
         {/* The list's two tracks: the five-hour and weekly limits side by side, further limits under them. */}
@@ -150,6 +151,7 @@ function CredentialCard({ record, isSelected, hasSelection, nowMS, actions, plug
         <div className={styles['foot-tools']}>
           <EditCredentialButton record={record} facts={facts} actions={actions} />
           <RefreshQuotaButton record={record} facts={facts} actions={actions} />
+          <CredentialMenu record={record} facts={facts} actions={actions} onRename={() => setIsRenaming(true)} />
         </div>
       </footer>
     </m.article>
