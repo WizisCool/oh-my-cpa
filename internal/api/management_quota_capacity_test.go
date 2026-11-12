@@ -458,5 +458,3 @@ func TestQuotaCapacityHistorySkipsOverlappingSupersededCycle(t *testing.T) {
 		t.Fatalf("current = %v, want active cycle from %d with $103.72", current, activeStart)
 	}
 }
-
-
