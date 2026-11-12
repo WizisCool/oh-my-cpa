@@ -54,11 +54,6 @@ export interface QuotaCapacityReading {
   note: string | null;
 }
 
-/** "≈ $987 (196M tokens)": one line for a tooltip. */
-export function formatCapacityFigure(amount: CapacityFigure, t: TFunc): string {
-  return amount.tokens ? t('quota.capacity_figure', { value: amount.value, tokens: amount.tokens }) : amount.value;
-}
-
 /**
  * The reading of a window's estimate: its whole size, or what was recorded and why there is no
  * estimate yet. Returns null for a window the estimate does not apply to.
@@ -88,13 +83,6 @@ export function compactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNu
   if (!capacity) return null;
   if (capacity.cost_nanos != null) return `≈${formatEstimatedUsd(capacity.cost_nanos / NANOS_PER_USD, capacity.error_percent)}`;
   return `≈${t('quota.capacity_tokens', { n: formatTokens(capacity.tokens, tokenStyle) })}`;
-}
-
-/** The same estimate as a tooltip line, with its tokens beside a cost. */
-export function describeCompactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
-  const reading = describeQuotaCapacity(window, tokenStyle, t);
-  if (!reading?.capacity) return null;
-  return `${t('quota.capacity_estimate')} ${formatCapacityFigure(reading.capacity, t)}`;
 }
 
 /** What a cycle recorded: its cost with the tokens beside it, or the tokens alone when too much is unpriced. */

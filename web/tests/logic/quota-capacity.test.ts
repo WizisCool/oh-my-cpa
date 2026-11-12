@@ -4,7 +4,6 @@ import type { TFunc } from '../../src/i18n/index.tsx';
 import type { QuotaWindowCapacity } from '../../src/types/quota.ts';
 import {
   compactQuotaCapacity,
-  describeCompactQuotaCapacity,
   describeQuotaCapacity,
   formatEstimatedUsd,
 } from '../../src/pages/quota/quotaCapacity.ts';
@@ -39,7 +38,6 @@ test('an estimate states only the size of the window, live or dated', () => {
       note: null,
     });
     assert.equal(compactQuotaCapacity({ capacity: window }, 'en-compact', t), '≈$24.00');
-    assert.equal(describeCompactQuotaCapacity({ capacity: window }, 'en-compact', t), 'quota.capacity_estimate quota.capacity_figure(≈ $24.00,quota.capacity_tokens(9.6M))');
   }
 });
 

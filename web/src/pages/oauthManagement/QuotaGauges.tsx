@@ -1,13 +1,12 @@
 import clsx from 'clsx';
 import { Meter } from '../../components/common/Meter';
-import { Tooltip } from '../../components/common/Tooltip';
 import { useT, type TFunc } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import type { QuotaMetric } from '../../types/quota';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { compactQuotaCapacity, describeCompactQuotaCapacity } from '../quota/quotaCapacity';
+import { compactQuotaCapacity } from '../quota/quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
-import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown, quotaResetText } from '../quota/quotaFormat';
+import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
 import { packQuotaLines, type QuotaLine, type QuotaLineCell, type QuotaPeriod } from './credentialSections';
@@ -70,8 +69,7 @@ export function QuotaLines({ lines, provider, isMuted, nowMS, owner }: {
 /**
  * One reading: its name and the share left, the bar, then the window's estimated size and when it
  * resets. Explicitly unused, full Codex five-hour readings show the window duration; rounded or
- * unknown usage keeps a countdown. The window's label, reset instant, accuracy and the estimate's
- * basis remain in its tooltip.
+ * unknown usage keeps a countdown. The estimate opens the window's capacity details.
  */
 function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
   cell: QuotaLineCell;
@@ -86,8 +84,8 @@ function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
   const { window } = cell;
   const remaining = quotaRemainingPercent(window);
   // Use the unrounded upstream reading: a displayed 100% alone does not prove zero usage.
-  // Show the unused window's duration, independent of its moving reset estimate. The tooltip
-  // preserves that estimate; zero usage does not prove whether the upstream window has started.
+  // Show the unused window's duration, independent of its moving reset estimate: zero usage does not
+  // prove whether the upstream window has started.
   const isUnusedFullCodexWindow = provider === 'codex'
     && window.scope === 'standard'
     && quotaWindowKindOf(window) === 'five_hour'
@@ -96,8 +94,6 @@ function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
   // A plugin window has no estimate; its own words for what is left take the estimate's place.
   const estimate = compactQuotaCapacity(window, tokenStyle, t) ?? window.description;
-  const capacity = describeCompactQuotaCapacity(window, tokenStyle, t);
-  const detail = [window.label, window.description, quotaResetText(window, nowMS, t), capacity].filter(Boolean);
   return (
     <div
       className={clsx(
@@ -109,28 +105,21 @@ function QuotaReading({ cell, name, provider, isMuted, nowMS, owner }: {
       data-quota-window-label={window.label}
       data-quota-spans={cell.spans ? 'true' : undefined}
     >
-      {/* A reading is plain text, so the shared hint answers touch and keyboard focus without
-          turning quota inspection into an action or relying on a hover-only native title. */}
-      <Tooltip
-        classNames={{ root: styles['tip-popper'] }}
-        title={<div className={styles.tip}>{detail.map((line) => <div key={line}>{line}</div>)}</div>}
-      >
-        <div className={styles.reading} role="group" aria-label={window.label} tabIndex={0}>
-          <span className={styles.name} data-tip={name} data-tip-overflow="">{name}</span>
-          <span className={styles.value}>
-            <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
-            {/* The bar carries the tone; the figure takes it only once the window is nearly spent. */}
-            <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
+      <div className={styles.reading} role="group" aria-label={window.label}>
+        <span className={styles.name} data-tip={name} data-tip-overflow="">{name}</span>
+        <span className={styles.value}>
+          <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
+          {/* The bar carries the tone; the figure takes it only once the window is nearly spent. */}
+          <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
+        </span>
+        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
+        {estimate && (owner && window.capacity ? (
+          <span className={styles.estimate}>
+            <QuotaCapacityButton owner={owner} window={window}>{estimate}</QuotaCapacityButton>
           </span>
-          <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : window.label} />
-          {estimate && (owner && window.capacity ? (
-            <span className={styles.estimate}>
-              <QuotaCapacityButton owner={owner} window={window}>{estimate}</QuotaCapacityButton>
-            </span>
-          ) : <span className={styles.estimate}>{estimate}</span>)}
-          {reset && <span className={styles.reset}>{reset}</span>}
-        </div>
-      </Tooltip>
+        ) : <span className={styles.estimate}>{estimate}</span>)}
+        {reset && <span className={styles.reset}>{reset}</span>}
+      </div>
     </div>
   );
 }

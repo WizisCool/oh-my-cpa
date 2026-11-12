@@ -107,18 +107,6 @@
   opacity: 0.5;
 }
 
-/* The window's name, its reset and its estimate are three facts, one per line; the default width
-   would fold a line mid-phrase, so the box widens to the longest one within the viewport. */
-.tip-popper {
-  max-width: min(420px, calc(100vw - 32px));
-}
-
-.tip {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 /* On a narrow track the two readings of a line keep their figures; the bar and its colour already
    say the figure is what is left. */
 @container (max-width: 420px) {
