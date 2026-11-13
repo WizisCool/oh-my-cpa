@@ -102,6 +102,14 @@ export interface LogsStatus {
 import type { UsageRoutingResponse } from '../types/usageRouting';
 import { UsageEventPage, UsageEventDetail, UsageFacetsResponse, parseUsageIngestRefresh, type UsageIngestRefresh } from '../types/usageEvents';
 
+/** A batch quota refresh stream that ended before the server's closing frame; the caller names it in the reader's language. */
+export class QuotaRefreshStreamCut extends Error {
+  constructor() {
+    super('quota refresh stream ended before done');
+    this.name = 'QuotaRefreshStreamCut';
+  }
+}
+
 export class ApiError extends Error {
   status: number;
   data: unknown;
@@ -1489,12 +1497,12 @@ export const api = {
       headers: { Accept: 'text/event-stream' },
       body: JSON.stringify({ auth_indexes: authIndexes }),
     });
-    if (!response.body) throw new ApiError('Quota refresh returned no stream', response.status);
+    if (!response.body) throw new QuotaRefreshStreamCut();
     for await (const frame of readSSE(response.body)) {
       if (frame.event === 'quota') onQuota(JSON.parse(frame.data) as QuotaItem);
       else if (frame.event === 'done') return;
     }
-    throw new ApiError('Quota refresh stream ended early', 0);
+    throw new QuotaRefreshStreamCut();
   },
 
   async clearCredentialCooldown(authIndex: string): Promise<{ status: string; auth_index: string }> {

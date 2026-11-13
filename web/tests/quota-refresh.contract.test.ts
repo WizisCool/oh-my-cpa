@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
-import { refreshCredentialQuotas } from '../src/utils/quotaRefresh';
+import { quotaRefreshFailureReason, refreshCredentialQuotas } from '../src/utils/quotaRefresh';
+import type { TFunc } from '../src/i18n';
 import type { QuotaItem } from '../src/types/quota';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -88,5 +89,6 @@ it('keeps what a cut stream delivered and fails only the credentials it never an
   expect(outcome.succeeded).toBe(1);
   expect(outcome.unknownIndexes).toEqual([]);
   expect(outcome.failures.map((failure) => failure.authIndex)).toEqual(['slow']);
-  expect(outcome.failures[0].cause).toBeInstanceOf(Error);
+  // Named in the reader's language, not with the client's own wording.
+  expect(quotaRefreshFailureReason(outcome.failures[0], ((key: string) => key) as TFunc)).toBe('omc.quota_refresh_cut');
 });

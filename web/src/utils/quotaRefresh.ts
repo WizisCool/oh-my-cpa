@@ -1,4 +1,4 @@
-import { api, ApiError } from '../api/client';
+import { api, ApiError, QuotaRefreshStreamCut } from '../api/client';
 import type { TFunc } from '../i18n';
 import type { QuotaItem } from '../types/quota';
 
@@ -66,5 +66,6 @@ export async function refreshCredentialQuotas(
 export function quotaRefreshFailureReason(failure: QuotaRefreshFailure, t: TFunc): string {
   if (failure.cause === undefined) return failure.error || t('quota.status_error');
   if (failure.cause instanceof ApiError && failure.cause.status === 501) return t('af.unsupported');
+  if (failure.cause instanceof QuotaRefreshStreamCut) return t('omc.quota_refresh_cut');
   return failure.cause instanceof Error ? failure.cause.message : t('af.request_failed');
 }

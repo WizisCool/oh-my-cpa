@@ -247,6 +247,7 @@ export default {
   'omc.operation_conflict': 'Another operation on the same target is in progress',
   'omc.quota_refresh_none': 'No quota target can be refreshed',
   'omc.quota_refresh_unknown': 'The response did not include an outcome for this target',
+  'omc.quota_refresh_cut': 'The connection ended before the outcome for this target arrived',
   'omc.quota_refresh_report': 'Quota refresh: {succeeded} succeeded, {failed} failed or unknown, {skipped} skipped',
   'omc.quota_refresh_report_clean': 'Quota refresh finished: {succeeded} succeeded, {skipped} skipped',
   'omc.quota_skip_missing-auth-index': 'Missing auth index',
