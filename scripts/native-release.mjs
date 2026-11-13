@@ -21,7 +21,7 @@ export function createNativePlan(tag, packageVersion, webVersion) {
     goos, goarch,
     binary: `oh-my-cpa${goos === 'windows' ? '.exe' : ''}`,
     archive: `oh-my-cpa_${version}_${goos}_${goarch}.${goos === 'windows' ? 'zip' : 'tar.gz'}`,
-    buildArgs: ['build', '-p', '2', '-trimpath', '-buildvcs=false', '-tags', 'timetzdata',
+    buildArgs: ['build', '-trimpath', '-buildvcs=false', '-tags', 'timetzdata',
       '-ldflags', `-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=${tag}`],
   }));
 }
@@ -84,11 +84,73 @@ export function verifyReleaseAssets(directory, plan) {
     'Every release asset must match its SHA-256 checksum');
 }
 
-export function buildNativeRelease(tag, { root = ROOT, execute = execFileSync } = {}) {
-  const output = path.join(root, 'tmp/native-release');
-  const plan = createNativePlan(tag,
+function readValidatedPlan(tag, root = ROOT) {
+  return createNativePlan(tag,
     JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
     JSON.parse(fs.readFileSync(path.join(root, 'web/package.json'), 'utf8')).version);
+}
+
+export function buildNativeWeb(tag, { root = ROOT, execute = execFileSync } = {}) {
+  readValidatedPlan(tag, root);
+  execute('pnpm', ['build'], { cwd: root, stdio: 'inherit' });
+  validateEmbeddedConsole(path.join(root, 'internal/web/dist'));
+}
+
+function buildTargetArchive(target, epoch, output, { root = ROOT, execute = execFileSync } = {}) {
+  const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-native-build-'));
+  try {
+    const staging = path.join(stagingRoot, `${target.goos}-${target.goarch}`);
+    fs.mkdirSync(staging);
+    const executable = path.join(staging, target.binary);
+    execute('go', [...target.buildArgs, '-o', executable, './cmd/oh-my-cpa'], {
+      cwd: root, stdio: 'inherit', env: { ...process.env, CGO_ENABLED: '0', GOOS: target.goos, GOARCH: target.goarch },
+    });
+    const metadata = execute('go', ['version', '-m', executable], { encoding: 'utf8' });
+    for (const setting of [`GOOS=${target.goos}`, `GOARCH=${target.goarch}`, 'CGO_ENABLED=0']) {
+      assert.ok(metadata.includes(`\tbuild\t${setting}\n`), `Release binary must record ${setting}`);
+    }
+    for (const name of ARCHIVE_FILES.filter(name => name !== '.env.example')) {
+      fs.mkdirSync(path.dirname(path.join(staging, name)), { recursive: true });
+      fs.copyFileSync(path.join(root, name), path.join(staging, name));
+    }
+    fs.copyFileSync(path.join(root, 'deploy/native.env.example'), path.join(staging, '.env.example'));
+    packageNativeArchive(target, staging, output, epoch, execute);
+    console.log(`PACKAGED ${target.goos}/${target.goarch}: ${target.archive} (${summarizeBuildSettings(metadata)})`);
+  } finally {
+    fs.rmSync(stagingRoot, { recursive: true, force: true });
+  }
+}
+
+export function buildNativeTarget(tag, targetSpec, { root = ROOT, execute = execFileSync, skipWebBuild = false } = {}) {
+  const output = path.join(root, 'tmp/native-release');
+  const plan = readValidatedPlan(tag, root);
+  const target = plan.find(entry => `${entry.goos}/${entry.goarch}` === targetSpec);
+  assert.ok(target, `Unsupported native release target: ${targetSpec}`);
+  const epoch = Number(execute('git', ['show', '-s', '--format=%ct', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim());
+  assert.ok(Number.isSafeInteger(epoch) && epoch >= 315532800, 'Archive timestamp must be a valid Git commit date');
+  if (!skipWebBuild) execute('pnpm', ['build'], { cwd: root, stdio: 'inherit' });
+  validateEmbeddedConsole(path.join(root, 'internal/web/dist'));
+  fs.rmSync(output, { recursive: true, force: true });
+  fs.mkdirSync(output, { recursive: true });
+  buildTargetArchive(target, epoch, output, { root, execute });
+}
+
+export function finalizeNativeRelease(tag, { root = ROOT } = {}) {
+  const output = path.join(root, 'tmp/native-release');
+  const plan = readValidatedPlan(tag, root);
+  for (const target of plan) {
+    const file = path.join(output, target.archive);
+    assert.ok(fs.existsSync(file) && fs.lstatSync(file).isFile(), `Missing native archive: ${target.archive}`);
+    assert.ok(fs.statSync(file).size > 0, `Native archive must not be empty: ${target.archive}`);
+  }
+  for (const name of INSTALLATION_FILES) fs.copyFileSync(path.join(root, 'deploy', name), path.join(output, name));
+  writeReleaseChecksums(output, plan);
+  verifyReleaseAssets(output, plan);
+}
+
+export function buildNativeRelease(tag, { root = ROOT, execute = execFileSync } = {}) {
+  const output = path.join(root, 'tmp/native-release');
+  const plan = readValidatedPlan(tag, root);
   const epoch = Number(execute('git', ['show', '-s', '--format=%ct', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim());
   assert.ok(Number.isSafeInteger(epoch) && epoch >= 315532800, 'Archive timestamp must be a valid Git commit date');
   // Build once before any Go target: concurrent embedding could capture a half-written SPA.
@@ -96,46 +158,54 @@ export function buildNativeRelease(tag, { root = ROOT, execute = execFileSync } 
   validateEmbeddedConsole(path.join(root, 'internal/web/dist'));
   fs.rmSync(output, { recursive: true, force: true });
   fs.mkdirSync(output, { recursive: true });
-  const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-native-build-'));
-  try {
-    for (const target of plan) {
-      const staging = path.join(stagingRoot, `${target.goos}-${target.goarch}`);
-      fs.mkdirSync(staging);
-      const executable = path.join(staging, target.binary);
-      execute('go', [...target.buildArgs, '-o', executable, './cmd/oh-my-cpa'], {
-        cwd: root, stdio: 'inherit', env: { ...process.env, CGO_ENABLED: '0', GOOS: target.goos, GOARCH: target.goarch },
-      });
-      const metadata = execute('go', ['version', '-m', executable], { encoding: 'utf8' });
-      for (const setting of [`GOOS=${target.goos}`, `GOARCH=${target.goarch}`, 'CGO_ENABLED=0']) {
-        assert.ok(metadata.includes(`\tbuild\t${setting}\n`), `Release binary must record ${setting}`);
-      }
-      for (const name of ARCHIVE_FILES.filter(name => name !== '.env.example')) {
-        fs.mkdirSync(path.dirname(path.join(staging, name)), { recursive: true });
-        fs.copyFileSync(path.join(root, name), path.join(staging, name));
-      }
-      fs.copyFileSync(path.join(root, 'deploy/native.env.example'), path.join(staging, '.env.example'));
-      packageNativeArchive(target, staging, output, epoch, execute);
-      console.log(`PACKAGED ${target.goos}/${target.goarch}: ${target.archive} (${summarizeBuildSettings(metadata)})`);
-    }
-    for (const name of INSTALLATION_FILES) fs.copyFileSync(path.join(root, 'deploy', name), path.join(output, name));
-    writeReleaseChecksums(output, plan);
-    verifyReleaseAssets(output, plan);
-  } finally {
-    fs.rmSync(stagingRoot, { recursive: true, force: true });
+  for (const target of plan) {
+    buildTargetArchive(target, epoch, output, { root, execute });
   }
+  for (const name of INSTALLATION_FILES) fs.copyFileSync(path.join(root, 'deploy', name), path.join(output, name));
+  writeReleaseChecksums(output, plan);
+  verifyReleaseAssets(output, plan);
 }
 
 function summarizeBuildSettings(metadata) {
   return metadata.split('\n').filter(line => /\tbuild\t(?:GOOS|GOARCH|CGO_ENABLED)=/.test(line)).map(line => line.trim().split('\t').at(-1)).join(', ');
 }
 
+export function parseNativeArgs(argv) {
+  let mode = 'all';
+  let target;
+  let skipWebBuild = false;
+  for (let i = 0; i < argv.length; i++) {
+    const argument = argv[i];
+    if (argument === '--verify' || argument === '--web-only' || argument === '--finalize') {
+      assert.equal(mode, 'all', 'Only one mode flag may be specified');
+      mode = argument.slice(2);
+    } else if (argument === '--target') {
+      assert.equal(mode, 'all', 'Only one mode flag may be specified');
+      target = argv[++i];
+      assert.ok(target, '--target requires a <goos/goarch> argument');
+      mode = 'target';
+    } else if (argument === '--skip-web-build') {
+      skipWebBuild = true;
+    } else {
+      throw new Error(`Unsupported argument: ${argument}`);
+    }
+  }
+  assert.ok(!skipWebBuild || mode === 'target', '--skip-web-build requires --target');
+  return { mode, target, skipWebBuild };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.slice(2).some(argument => argument !== '--verify')) throw new Error('Only --verify is supported');
-  if (process.argv.includes('--verify')) {
-    const plan = createNativePlan(process.env.RELEASE_TAG,
-      JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version,
-      JSON.parse(fs.readFileSync(path.join(ROOT, 'web/package.json'), 'utf8')).version);
+  const { mode, target, skipWebBuild } = parseNativeArgs(process.argv.slice(2));
+  if (mode === 'verify') {
+    const plan = readValidatedPlan(process.env.RELEASE_TAG);
     verifyReleaseAssets(RELEASE_DIRECTORY, plan);
     console.log('Verified complete native release assets and SHA-256 checksums');
+  } else if (mode === 'web-only') {
+    buildNativeWeb(process.env.RELEASE_TAG);
+  } else if (mode === 'target') {
+    buildNativeTarget(process.env.RELEASE_TAG, target, { skipWebBuild });
+  } else if (mode === 'finalize') {
+    finalizeNativeRelease(process.env.RELEASE_TAG);
+    console.log('Finalized native release assets and SHA-256 checksums');
   } else buildNativeRelease(process.env.RELEASE_TAG);
 }

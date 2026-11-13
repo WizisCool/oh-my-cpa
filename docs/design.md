@@ -363,6 +363,8 @@ redraws the field under the hand.
 
 Inspect light and dark modes, a narrow viewport, keyboard flow, loading/error/empty
 states and reduced motion where affected. Use [Testing](testing.md) to choose checks.
-If a pictured user-facing page changed, refresh the relevant README screenshots with
-`pnpm build && pnpm readme:screenshots`; screenshots are presentation assets, not a test
-of exact pixels. Do not duplicate this guide in component comments or feature documents.
+If a pictured user-facing page changed, [`.github/workflows/readme-screenshots.yml`](../.github/workflows/readme-screenshots.yml)
+refreshes README screenshots automatically after changes land on `main` (or you can run
+`pnpm build && pnpm readme:screenshots` locally when previewing changes before merge);
+screenshots are presentation assets, not a test of exact pixels. Do not duplicate this
+guide in component comments or feature documents.

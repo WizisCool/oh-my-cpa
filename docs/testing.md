@@ -50,13 +50,15 @@ retain diagnostics under `tmp/browser-acceptance-failure/`.
 
 ## CI and releases
 
-The GitHub Actions workflows (`.github/workflows/ci.yml` and `.github/workflows/release.yml`)
+The GitHub Actions workflows (`.github/workflows/ci.yml`, `.github/workflows/release.yml`,
+`.github/workflows/maintenance.yml`, and `.github/workflows/readme-screenshots.yml`)
 are the executable source of truth:
 
-- **Pull requests**: Path-filtered lanes (`go`, `frontend`, `static`, `browser`) run only when relevant files change, with built-artifact `browser` smoke (`pnpm verify:browser:smoke`) when application code is affected.
-- **Main, nightly, manual, or `full-ci` label**: Full static and unit suites plus full built-artifact browser acceptance (`pnpm verify:browser`).
+- **Pull requests**: Repository hygiene (`static-repo`: workflow lint, toolchain pin, doc links, worktree/history secret scans) runs on every change; `changes` selects `static-go`, `static-frontend`, `docker-check`, and `browser` smoke (`pnpm verify:browser:smoke`) only when relevant paths change.
+- **Main, merge queue, nightly, manual, or `full-ci` label**: Full static and unit suites plus full built-artifact browser acceptance (`pnpm verify:browser`), Cloudflare demo staging dry-run, and `docker-check` when container inputs change.
 - **Weekly/manual maintenance**: Go race detector, bounded fuzzing, dependency advisories, and host-native runtime checks.
-- **Release**: Complete static and browser verification before packaging, immutable tag/commit identity, Ed25519-signed manifests, container/native smoke tests, and promotion gates. See [Releasing](releasing.md).
+- **README screenshots**: Refreshed automatically in CI (`.github/workflows/readme-screenshots.yml`) on UI/demo changes on `main`, weekly schedule, or manual dispatch, updating a rolling pull request without local generation.
+- **Release**: Static gates, full browser acceptance, and isolated candidate native packaging/smoke run in parallel before publication gates (`verify`), followed by immutable tag/commit verification, same-builder container smoke and attested multi-platform Docker push, Ed25519-signed manifests, GitHub Release publication, and `latest` promotion. See [Releasing](releasing.md).
 
 ## Tooling
 

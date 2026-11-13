@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { buildNativeRelease, createNativePlan, packageNativeArchive, runRequiredTool, validateEmbeddedConsole, writeReleaseChecksums, verifyReleaseAssets } from './native-release.mjs';
+import { buildNativeRelease, buildNativeTarget, buildNativeWeb, createNativePlan, finalizeNativeRelease, packageNativeArchive, parseNativeArgs, runRequiredTool, validateEmbeddedConsole, writeReleaseChecksums, verifyReleaseAssets } from './native-release.mjs';
 
 const ARCHIVE_DOCUMENTS = ['LICENSE', 'README.md', 'README.zh-CN.md', 'docs/install.md',
   'docs/install-for-agents.md', 'docs/operations.md', 'docs/ops/sqlite-operations.md'];
@@ -182,4 +182,72 @@ test('native builder embeds once before all Go targets, cleans stale files and p
   } }), /Unsupported dependency target/);
   assert.equal(fs.existsSync(path.join(root, 'tmp/native-release/checksums.txt')), false,
     'A failed target must remove the prior output and cannot leave a publishable manifest');
+}));
+
+test('split native web, per-target, and finalize steps produce the same verified assets and fail closed on missing archives', () => runWithDirectory(root => {
+  fs.mkdirSync(path.join(root, 'web'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'deploy'));
+  for (const directory of [root, path.join(root, 'web')]) {
+    fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ version: '0.1.2' }));
+  }
+  for (const name of ARCHIVE_DOCUMENTS) {
+    fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    fs.writeFileSync(path.join(root, name), name);
+  }
+  for (const name of ['native.env.example', 'compose.full.yml', 'compose.omc.yml', 'cpa.config.example.yaml']) {
+    fs.writeFileSync(path.join(root, 'deploy', name), name);
+  }
+  const commands = [];
+  const execute = (command, args, options) => {
+    commands.push({ command, args, options });
+    if (command === 'git') return '1720000000\n';
+    if (command === 'pnpm') {
+      const consoleDirectory = path.join(root, 'internal/web/dist');
+      fs.mkdirSync(path.join(consoleDirectory, 'assets'), { recursive: true });
+      fs.writeFileSync(path.join(consoleDirectory, 'index.html'), '<script src="./assets/index-hash.js"></script>');
+      fs.writeFileSync(path.join(consoleDirectory, 'assets/index-hash.js'), 'built console');
+      return;
+    }
+    if (command === 'go' && args[0] === 'build') {
+      fs.writeFileSync(args[args.indexOf('-o') + 1], 'executable', { mode: 0o755 });
+      return;
+    }
+    if (command === 'go' && args[0] === 'version') {
+      const build = commands.findLast(entry => entry.command === 'go' && entry.args[0] === 'build');
+      return `\tbuild\tCGO_ENABLED=0\n\tbuild\tGOOS=${build.options.env.GOOS}\n\tbuild\tGOARCH=${build.options.env.GOARCH}\n`;
+    }
+    return execFileSync(command, args, options);
+  };
+
+  buildNativeWeb('v0.1.2', { root, execute });
+  assert.equal(commands.filter(entry => entry.command === 'pnpm').length, 1);
+
+  const collected = path.join(root, 'collected');
+  fs.mkdirSync(collected, { recursive: true });
+  for (const target of PLAN) {
+    buildNativeTarget('v0.1.2', `${target.goos}/${target.goarch}`, { root, execute, skipWebBuild: true });
+    const archive = path.join(root, 'tmp/native-release', target.archive);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp/native-release')), [target.archive]);
+    fs.copyFileSync(archive, path.join(collected, target.archive));
+  }
+  assert.equal(commands.filter(entry => entry.command === 'pnpm').length, 1, 'skipWebBuild must reuse the built SPA');
+
+  // Finalize fails if any archive is missing before touching checksums.
+  fs.rmSync(path.join(root, 'tmp/native-release'), { recursive: true, force: true });
+  fs.mkdirSync(path.join(root, 'tmp/native-release'), { recursive: true });
+  assert.throws(() => finalizeNativeRelease('v0.1.2', { root }), /Missing native archive/);
+
+  for (const target of PLAN) {
+    fs.copyFileSync(path.join(collected, target.archive), path.join(root, 'tmp/native-release', target.archive));
+  }
+  finalizeNativeRelease('v0.1.2', { root });
+  verifyReleaseAssets(path.join(root, 'tmp/native-release'), PLAN);
+
+  assert.throws(() => buildNativeTarget('v0.1.2', 'plan9/amd64', { root, execute, skipWebBuild: true }), /Unsupported native release target/);
+  assert.deepEqual(parseNativeArgs([]), { mode: 'all', target: undefined, skipWebBuild: false });
+  assert.deepEqual(parseNativeArgs(['--web-only']), { mode: 'web-only', target: undefined, skipWebBuild: false });
+  assert.deepEqual(parseNativeArgs(['--target', 'linux/amd64', '--skip-web-build']), { mode: 'target', target: 'linux/amd64', skipWebBuild: true });
+  assert.deepEqual(parseNativeArgs(['--finalize']), { mode: 'finalize', target: undefined, skipWebBuild: false });
+  assert.throws(() => parseNativeArgs(['--skip-web-build']), /--skip-web-build requires --target/);
+  assert.throws(() => parseNativeArgs(['--verify', '--finalize']), /Only one mode flag/);
 }));

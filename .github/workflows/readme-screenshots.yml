@@ -1,0 +1,116 @@
+name: README screenshots
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/src/**'
+      - 'web/index.html'
+      - 'web/public/**'
+      - 'internal/demo/**'
+      - 'internal/api/demo_*.go'
+      - 'scripts/readme-screenshots*.mjs'
+  schedule:
+    - cron: '47 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CGO_ENABLED: '0'
+
+concurrency:
+  group: readme-screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: main
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
+      - name: Cache Playwright Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Prepare Chromium, embedded SPA, and demo server binary
+        run: |
+          set -o pipefail
+          install_log="$(mktemp)"
+          node scripts/install-chromium.mjs >"${install_log}" 2>&1 &
+          install_pid=$!
+          build_status=0
+          pnpm build || build_status=$?
+          go_status=0
+          if [ "${build_status}" -eq 0 ]; then
+            mkdir -p tmp
+            go build -trimpath -o tmp/oh-my-cpa-readme ./cmd/oh-my-cpa || go_status=$?
+          fi
+          install_status=0
+          wait "${install_pid}" || install_status=$?
+          cat "${install_log}"
+          if [ "${build_status}" -ne 0 ]; then
+            exit "${build_status}"
+          fi
+          if [ "${go_status}" -ne 0 ]; then
+            exit "${go_status}"
+          fi
+          exit "${install_status}"
+      - name: Capture README screenshots
+        env:
+          OMCPA_README_BINARY: tmp/oh-my-cpa-readme
+        run: pnpm readme:screenshots
+      - name: Upload screenshot artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: readme-screenshots
+          path: docs/images/readme/*.webp
+          if-no-files-found: error
+          retention-days: 14
+      - name: Open or update rolling screenshot pull request
+        env:
+          GH_TOKEN: ${{ secrets.README_PR_TOKEN || github.token }}
+          BRANCH: chore/readme-screenshots
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain docs/images/readme)" ]; then
+            echo "README screenshots are unchanged."
+            exit 0
+          fi
+          source_sha="$(git rev-parse --short HEAD)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add docs/images/readme/*.webp
+          git commit -m "chore(docs): refresh README screenshots"
+          askpass="$RUNNER_TEMP/git-askpass.sh"
+          trap 'rm -f "$askpass"' EXIT
+          cat > "$askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+          esac
+          EOF
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git push --force origin "HEAD:refs/heads/$BRANCH"
+          existing_pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          body="Automated README screenshot refresh generated from \`main\` (${source_sha}) using \`pnpm readme:screenshots\`."
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" --repo "$GITHUB_REPOSITORY" --title "chore(docs): refresh README screenshots" --body "$body"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+              --title "chore(docs): refresh README screenshots" \
+              --body "$body"
+          fi

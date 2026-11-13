@@ -81,11 +81,14 @@ signed automatic OMC updates.
    git push origin "$TAG"
    ```
 
-4. Follow the release workflow. Verification precedes packaging. The container is
-   smoke-tested in its non-root/read-only form, with SQLite, health, login, root and
-   configured base paths, running version and updater installation exercised. Image
-   publication includes provenance and SBOM. Native packaging runs from the same
-   verified source; its extracted Linux package is smoke-tested.
+4. Follow the release workflow. All static, full browser and isolated native-package
+   gates must succeed before Docker publication (`verify` gate). On the Docker
+   publication builder, the `linux/amd64` container is smoke-tested in its
+   non-root/read-only form (with SQLite, health, login, root and configured base
+   paths, running version and updater installation exercised) immediately before the
+   same builder publishes the multi-platform image with provenance and SBOM. Native
+   packaging runs isolated from shared CI caches against the same verified source;
+   its extracted Linux package is smoke-tested.
 5. After image and native assets succeed, release publication revalidates attachments,
    signs `release-manifest.json` and stages the GitHub release as a draft. It publishes
    only after every attachment succeeds. Docker `latest` promotion follows public

@@ -15,6 +15,7 @@
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -73,7 +74,11 @@ async function startDemoServer() {
   if (!fs.existsSync(path.join(root, 'internal', 'web', 'dist', 'index.html'))) {
     throw new Error('internal/web/dist is missing: run `pnpm build` first');
   }
-  const server = spawn('go', ['run', './cmd/oh-my-cpa'], {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-readme-shots-'));
+  const binary = (process.env.OMCPA_README_BINARY || '').trim();
+  const command = binary || 'go';
+  const args = binary ? [] : ['run', './cmd/oh-my-cpa'];
+  const server = spawn(command, args, {
     cwd: root,
     stdio: ['ignore', 'ignore', 'inherit'],
     // Its own process group, so stopping it also stops the binary `go run` started.
@@ -81,6 +86,8 @@ async function startDemoServer() {
     env: {
       ...process.env,
       OMCPA_DEMO_MODE: 'true',
+      OMCPA_ENV_FILE: '/dev/null',
+      OMCPA_DATA_DIR: dataDir,
       OMCPA_LISTEN_ADDR: `127.0.0.1:${port}`,
       OMCPA_BASE_PATH: '/',
       // A picture must not depend on what GitHub's release feed answers that day.
@@ -102,13 +109,19 @@ async function startDemoServer() {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   })();
-  await Promise.race([healthy, exited]);
+  try {
+    await Promise.race([healthy, exited]);
+  } catch (error) {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    throw error;
+  }
   return () => {
     try {
       process.kill(-server.pid, 'SIGTERM');
     } catch {
       // Already gone.
     }
+    fs.rmSync(dataDir, { recursive: true, force: true });
   };
 }
 
