@@ -120,12 +120,13 @@ export async function resolveGoBinary(root = DEFAULT_ROOT, { env = process.env }
   const versions = JSON.parse(await readFile(join(root, 'scripts', 'tools-versions.json'), 'utf8'));
   const pinnedVersion = parseGoVersion(`go${versions?.go?.version ?? ''}`);
 
+  const sdkEnv = { GOROOT: sdkRoot, GOTOOLCHAIN: 'local' };
   if (existsSync(cachedGo)) {
-    const cachedVersion = await probeGoVersion(cachedGo, root, env);
+    const cachedVersion = await probeGoVersion(cachedGo, root, { ...env, ...sdkEnv });
     const matchesPinned = pinnedVersion && cachedVersion && compareGoVersions(cachedVersion, pinnedVersion) === 0;
     const satisfiesMod = cachedVersion && (!required || compareGoVersions(cachedVersion, required) >= 0);
     if (matchesPinned || (!pinnedVersion && satisfiesMod)) {
-      return { bin: cachedGo, env: { GOROOT: sdkRoot, GOTOOLCHAIN: 'local' } };
+      return { bin: cachedGo, env: sdkEnv };
     }
   }
 
@@ -159,7 +160,7 @@ export async function resolveGoBinary(root = DEFAULT_ROOT, { env = process.env }
     await run('tar', ['-xzf', archiveFile, '-C', sdkDir], { cwd: root });
   }
   await rm(archiveFile, { force: true });
-  return { bin: cachedGo, env: { GOROOT: sdkRoot, GOTOOLCHAIN: 'local' } };
+  return { bin: cachedGo, env: sdkEnv };
 }
 
 function runStreaming(command, args, { cwd, env, timeoutMs }) {
@@ -173,13 +174,15 @@ function runStreaming(command, args, { cwd, env, timeoutMs }) {
     let timedOut = false;
     let killTimer;
 
-    const appendTail = (chunk) => {
-      tail += chunk.toString('utf8');
+    const appendTail = (text) => {
+      tail += text;
       if (tail.length > STDERR_TAIL_BYTES) {
         tail = tail.slice(-STDERR_TAIL_BYTES);
       }
     };
 
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
     child.stdout?.on('data', (chunk) => {
       process.stdout.write(chunk);
       appendTail(chunk);
