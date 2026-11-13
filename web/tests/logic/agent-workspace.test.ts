@@ -7,6 +7,7 @@
  * prove the page renders; this suite proves the rules the page renders by.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   failureKey,
   isAgentSendDisabled,
@@ -524,5 +525,12 @@ test('agent workspace', async () => {
     assert.equal(failureKey('upstream_rate_limited'), 'agent.error.rate_limited');
     assert.equal(failureKey('gateway_auth_failed'), 'agent.error.upstream_auth');
     assert.equal(failureKey('model_not_found'), 'agent.error.model');
+  });
+
+  check('phone agent starter list clears the shared example card edge shadow', () => {
+    const agentCss = readFileSync(new URL('../../src/pages/agent/AgentPage.module.css', import.meta.url), 'utf8');
+    const phoneRule = /\.shell\s+\.examples\s*>\s*\*\s*\{([^}]*)\}/.exec(agentCss);
+    assert.ok(phoneRule, 'phone .examples item rule must outrank .example regardless of stylesheet order');
+    assert.match(phoneRule[1], /\bbox-shadow:\s*none\s*;/);
   });
 });
