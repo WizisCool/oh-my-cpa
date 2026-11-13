@@ -8,7 +8,13 @@
  * `internal/api/usage_routing_test.go`; this pins what the panel draws from it.
  */
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { test } from 'vitest';
+
+import { DashboardTilesPlaceholder } from '../../src/components/dashboard/DashboardSkeleton.tsx';
+import { I18nProvider } from '../../src/i18n/index.tsx';
+import { DEFAULT_DASHBOARD_LAYOUT } from '../../src/types/dashboardLayout.ts';
 
 import {
   MAX_DRAWN_MODELS,
@@ -171,4 +177,16 @@ test('routing expiry scheduler sleeps when idle and wakes right after the earlie
     NOW,
   );
   assert.equal(delayForCooldown, 3_025);
+});
+
+test('dashboard skeleton renders the routing topology placeholder without nested status regions', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(DashboardTilesPlaceholder, { layout: DEFAULT_DASHBOARD_LAYOUT }),
+    ),
+  );
+  assert.match(html, /data-testid="routing-skeleton"/);
+  assert.equal(html.match(/role="status"/g)?.length ?? 0, 1);
 });

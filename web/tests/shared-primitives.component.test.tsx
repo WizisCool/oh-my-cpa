@@ -27,8 +27,10 @@ import { Tabs } from '../src/components/ui/tabs';
 import { Combobox } from '../src/components/ui/combobox';
 import { AutoComplete } from '../src/components/ui/autocomplete';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
+import { ThemeProvider } from '../src/theme/ThemeContext';
+import { RoutingPanel } from '../src/components/dashboard/routing/RoutingPanel';
 import { renderWithOmc } from './support/render';
-import { installOmcApi } from './support/omcApi';
+import { installOmcApi, json } from './support/omcApi';
 
 describe('SearchInput', () => {
   it('is named by its label, shows it as the placeholder, and reports text rather than events', () => {
@@ -1024,5 +1026,34 @@ describe('Base UI Select, Tabs, Combobox & AutoComplete contracts', () => {
     } finally {
       Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: originalInnerWidth });
     }
+  });
+});
+
+describe('RoutingPanel loading topology', () => {
+  it('renders the topology skeleton inside RoutingPanel while initial routing data is pending and swaps to the live map on resolve', async () => {
+    const api = installOmcApi();
+    const held = api.hold('GET', '/usage/routing');
+
+    renderWithOmc(<ThemeProvider><RoutingPanel /></ThemeProvider>);
+
+    const panel = screen.getByTestId('dashboard-routing');
+    const skeleton = screen.getByTestId('routing-skeleton');
+    expect(panel.contains(skeleton)).toBe(true);
+    expect(skeleton.closest('[role="status"][aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByTestId('routing-map')).toBeNull();
+
+    await held.arrived;
+    held.release(json({
+      as_of_ms: 1_760_000_000_000,
+      window_ms: 60_000,
+      records: [],
+      cooldowns: [],
+      has_more: false,
+    }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('routing-skeleton')).toBeNull();
+      expect(screen.getByTestId('routing-map')).toBeTruthy();
+    });
   });
 });

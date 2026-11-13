@@ -40,6 +40,7 @@ import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
 import { RoutingPanel, ROUTING_WINDOW_CACHE_KEY } from '../components/dashboard/routing/RoutingPanel';
+import { RoutingMapSkeleton } from '../components/dashboard/routing/RoutingMapSkeleton';
 import {
   CredentialQuota,
   CREDENTIAL_FILES_QUERY_KEY,
@@ -721,7 +722,7 @@ export const DashboardPage: React.FC = () => {
             fallback={(
               <Panel className="dashboard-tile">
                 <Placeholder width="24%" className="placeholder-line is-meta" />
-                <Placeholder width="100%" height={260} className="tile-placeholder-spark" />
+                <RoutingMapSkeleton className="tile-placeholder-spark" />
               </Panel>
             )}
           >
