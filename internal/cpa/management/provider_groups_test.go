@@ -141,6 +141,28 @@ func TestUpdateOpenAICompatibilityKeepsUnmodelledSettings(t *testing.T) {
 	}
 }
 
+func TestEditableOpenAICompatibilityVerifiesIdentityOnCaseFoldFallback(t *testing.T) {
+	gateway := &groupsGateway{
+		family: "openai-compatibility",
+		stored: `[
+			{"name":"FOO","base-url":"https://right.test/Tenant","keys":[{"api-key":"right-key"}]},
+			{"name":"Foo","base-url":"https://RIGHT.test/tenant/","keys":[{"api-key":"right-key"}],"request-retry":2}
+		]`,
+		runtime: `{"openai-compatibility":[{"name":"foo","base-url":"https://right.test/tenant","api-key-entries":[{"api-key":"right-key","auth-index":"idx-right"}]}]}`,
+	}
+	client := newGroupsClient(t, gateway)
+	entries, err := client.EditableOpenAICompatibility(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].RequestRetry == nil || *entries[0].RequestRetry != 2 {
+		t.Fatalf("selected wrong stored group on case-fold fallback (path casing ignored): %#v", entries)
+	}
+	if entries[0].APIKeyEntries[0].AuthIndex != "idx-right" {
+		t.Fatalf("auth index = %q, want idx-right", entries[0].APIKeyEntries[0].AuthIndex)
+	}
+}
+
 func TestOAuthModelAliasesReadAsCPAAppliesThem(t *testing.T) {
 	gateway := &configGateway{answer: func(method, path string) (int, string) {
 		if method == http.MethodGet && path == "/v8/management/config/oauth/model-alias" {

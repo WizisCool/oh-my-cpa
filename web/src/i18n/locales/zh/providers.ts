@@ -31,6 +31,7 @@ export default {
   'pro.error_credential_exists': '该提供商凭据已存在，请修改密钥或端点',
   'pro.error_stale_identity': '该提供商已在网关中发生变化，请刷新后重试',
   'pro.error_partial_commit': '提供商配置已在网关生效，但本地元数据未能保存，请刷新后重试',
+  'pro.error_archive_failed': '删除前未能归档提供商元数据，请稍后重试',
   'pro.add_provider': '添加提供商',
   'pro.editor_add_title': '添加{family}提供商',
   'pro.editor_edit_title': '编辑{family}提供商',

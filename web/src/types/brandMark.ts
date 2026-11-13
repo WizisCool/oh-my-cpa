@@ -38,6 +38,8 @@ export interface ProviderBrandSources {
   pluginTitles?: ReadonlyMap<string, string>;
   providersByID?: ReadonlyMap<string, ProviderBrandIdentity>;
   isProviderCatalogUnknown?: boolean;
+  /** Archived non-secret icon selections for deleted providers/credentials. */
+  archivedProviderIcons?: ReadonlyMap<string, string>;
 }
 
 function resolveLogo(keys: readonly string[], logos?: PluginOAuthLogos): string | undefined {
@@ -83,12 +85,19 @@ export function resolveProviderPickerIcon(provider: ProviderBrandIdentity, sourc
 }
 
 /** A recorded label can select historical artwork without claiming a current connection. */
-export function resolveRecordedProviderMark(providerKey: string, displayName: string, sources: ProviderBrandSources = {}): BrandMark & { iconId: string } {
-  const fallbackIconId = inferProviderIcon(providerKey, displayName) ?? '';
+export function resolveRecordedProviderMark(
+  providerKey: string,
+  displayName: string,
+  sources: ProviderBrandSources = {},
+  baseUrl?: string,
+): BrandMark & { iconId: string } {
+  const normalizedKey = providerKey.trim().toLowerCase();
+  const archivedIcon = sources.archivedProviderIcons?.get(normalizedKey) || '';
+  const fallbackIconId = inferProviderIcon(providerKey, displayName, baseUrl) ?? '';
   const icons = sources.providerIcons ?? {};
   const providerKeys = [providerKey];
   return {
-    iconId: icons[providerKey] || icons[displayName] || fallbackIconId,
+    iconId: archivedIcon || icons[providerKey] || icons[displayName] || fallbackIconId,
     fallbackIconId,
     logo: resolveLogo(providerKeys, sources.pluginLogos),
     providerKeys,

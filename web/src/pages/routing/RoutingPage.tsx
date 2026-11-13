@@ -211,6 +211,7 @@ export function RoutingPage() {
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
       void queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] });
       void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
+      void queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] });
       if (outcome.board) {
         await queryClient.cancelQueries({ queryKey: ROUTING_QUERY_KEY });
         adopt(outcome.board);

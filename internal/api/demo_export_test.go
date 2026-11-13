@@ -129,6 +129,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "config-source", Path: "/api/v1/management/config/source"},
 		{Name: "config-backups", Path: "/api/v1/management/config/backups"},
 		{Name: "providers", Path: "/api/v1/management/providers"},
+		{Name: "identity-directory", Path: "/api/v1/management/identity-directory"},
 		{Name: "providers-with-keys", Path: "/api/v1/management/providers?include_keys=true"},
 		{Name: "routing", Path: "/api/v1/management/routing"},
 		{Name: "routing-models", Path: "/api/v1/management/routing/models"},

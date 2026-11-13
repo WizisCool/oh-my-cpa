@@ -50,6 +50,8 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"audit_events":                  nil,
 	"client_key_aliases":            nil,
 	"credential_display_names":      nil,
+	"archived_credentials":          nil,
+	"archived_providers":            nil,
 	"connections":                   nil,
 	"cpa_bindings":                  nil,
 	"cpa_config_backup_settings":    nil,

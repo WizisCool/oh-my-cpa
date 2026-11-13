@@ -59,12 +59,12 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
   await page.locator('.logs-page').waitFor({ state: 'visible', timeout: 15_000 });
   let releaseCatalog;
   const catalogGate = new Promise((resolve) => { releaseCatalog = resolve; });
-  const catalogRead = page.waitForRequest('**/api/v1/management/providers', { timeout: 15_000 });
+  const catalogRead = page.waitForRequest('**/api/v1/management/identity-directory', { timeout: 15_000 });
   const holdCatalog = async (route) => {
     await catalogGate;
     await route.fallback();
   };
-  await page.route('**/api/v1/management/providers', holdCatalog);
+  await page.route('**/api/v1/management/identity-directory', holdCatalog);
   try {
     await page.locator('[data-route-path="/usage/events"]').first().click();
     await catalogRead;
@@ -73,7 +73,7 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     check('returning to request records keeps cached provider identities during a catalog refresh', unresolvedCount === 0, `unconfirmed rows=${unresolvedCount}`);
   } finally {
     releaseCatalog();
-    await page.unroute('**/api/v1/management/providers', holdCatalog);
+    await page.unroute('**/api/v1/management/identity-directory', holdCatalog);
   }
 
   // ---- which of the provider's keys answered ----

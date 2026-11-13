@@ -107,6 +107,7 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 	h.pluginIdentities.fill(request.Context(), client, list.Plugins)
 
 	projected := projectPluginItems(list.Plugins, h.cfg.IsDemoMode)
+	_ = h.observePluginIdentities(request.Context(), projected)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"plugins_enabled": list.PluginsEnabled,
 		"plugins_dir":     boundedText(list.PluginsDir, pluginTextLimit),
@@ -289,6 +290,16 @@ func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request
 		return
 	}
 
+	if snapErr := h.snapshotPluginsBeforeDelete(request.Context(), client); snapErr != nil {
+		_ = h.recordAudit(request, "plugin.delete", "plugin", target, "failure", map[string]any{"error": snapErr.Error()})
+		var persistErr *archivePersistError
+		if errors.As(snapErr, &persistErr) {
+			writeInternalError(writer, persistErr)
+			return
+		}
+		writePluginFacadeError(writer, snapErr)
+		return
+	}
 	result, err := client.DeletePlugin(request.Context(), pluginID)
 	if err != nil {
 		_ = h.recordAudit(request, "plugin.delete", "plugin", target, "failure", map[string]any{"error": err.Error()})
@@ -297,6 +308,7 @@ func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request
 	}
 
 	h.pluginIdentities.forget(pluginID)
+	h.publishStateSync(stateScopeIdentityDirectory)
 
 	_ = h.recordAudit(request, "plugin.delete", "plugin", target, "success", map[string]any{
 		"file_deleted":       result.FileDeleted,
@@ -423,6 +435,8 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 	}
 
 	h.pluginIdentities.forget(pluginID)
+	h.identityArchive.reset()
+	h.publishStateSync(stateScopeIdentityDirectory)
 
 	_ = h.recordAudit(request, "plugin.install", "plugin_store", target, "success", map[string]any{"version": boundedText(result.Version, 128)})
 

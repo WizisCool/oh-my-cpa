@@ -127,6 +127,8 @@ func (h *Handler) deleteCustomIcon(writer http.ResponseWriter, request *http.Req
 		writeCustomIconError(writer, err)
 		return
 	}
+	h.identityArchive.reset()
+	h.publishStateSync("management-providers", "management-providers-sanitized", stateScopeIdentityDirectory)
 	writer.WriteHeader(http.StatusNoContent)
 }
 func (h *Handler) customIconContent(writer http.ResponseWriter, request *http.Request) {

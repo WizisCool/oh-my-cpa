@@ -126,6 +126,9 @@ type Handler struct {
 	// providerKeyMasks caches the auth index to provider key mask mapping the
 	// request list needs; see usage_provider_key_masks.go.
 	providerKeyMasks *providerKeyMaskCache
+	// identityArchive deduplicates background writes to archived_credentials and
+	// archived_providers when upstream identity observations have not moved.
+	identityArchive identityArchiveTracker
 	// stateCoord projects high-frequency CPA configuration state in memory with
 	// 250ms debounced write-behind persistence and SSE reconciliation; nil until
 	// EnableStateCoordinator is called.
@@ -355,6 +358,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Delete("/management/client-key-aliases/{fingerprint}", h.deleteClientKeyAlias)
 				v1.Get("/management/client-key-usage", h.clientKeyUsage)
 				v1.Get("/management/providers", h.listManagementProviders)
+				v1.Get("/management/identity-directory", h.getIdentityDirectory)
 				v1.Post("/management/providers", h.createManagementProvider)
 				v1.Post("/management/providers/pull-models", h.pullProviderModels)
 				v1.Post("/management/providers/probe", h.probeProvider)

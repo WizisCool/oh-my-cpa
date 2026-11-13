@@ -107,7 +107,7 @@ export function useOptimisticProviderStatusMutation(options?: {
         flipProviderInCache,
       ),
     ],
-    invalidateKeys: [QUERY_KEYS.providersSanitized, QUERY_KEYS.routing],
+    invalidateKeys: [QUERY_KEYS.providersSanitized, QUERY_KEYS.identityDirectory, QUERY_KEYS.routing],
     formatError: options?.formatError,
   });
 }
@@ -150,7 +150,7 @@ export function useOptimisticAuthFileStatusMutation(options?: {
         },
       ),
     ],
-    invalidateKeys: [QUERY_KEYS.quota, QUERY_KEYS.overview],
+    invalidateKeys: [QUERY_KEYS.quota, QUERY_KEYS.overview, QUERY_KEYS.identityDirectory],
     formatError: options?.formatError,
   });
 }

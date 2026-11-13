@@ -64,6 +64,16 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	if !ok {
 		return
 	}
+	if snapErr := h.snapshotAuthFilesBeforeDelete(request.Context(), client); snapErr != nil {
+		_ = h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "failure", map[string]any{"error": snapErr.Error()})
+		var persistErr *archivePersistError
+		if errors.As(snapErr, &persistErr) {
+			writeInternalError(writer, persistErr)
+			return
+		}
+		writeCPAFacadeError(writer, snapErr)
+		return
+	}
 	cpaResp, err := client.DeleteAuthFiles(request.Context(), unique)
 	if err != nil {
 		_ = h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "failure", map[string]any{"error": err.Error()})
@@ -77,7 +87,7 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		if h.pricing != nil {
 			h.pricing.NotifyModelsChanged()
 		}
-		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
+		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota", stateScopeIdentityDirectory)
 	}
 
 	auditOutcome := "success"

@@ -206,5 +206,12 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		writeInternalError(writer, fmt.Errorf("write preference: %w", err))
 		return
 	}
+	if key == repository.PreferenceProviderIcons || key == repository.PreferenceProviderNames {
+		h.identityArchive.reset()
+		if client, clientErr := h.capabilityClient(request.Context()); clientErr == nil {
+			_ = h.readProviderItems(request.Context(), client)
+		}
+		h.publishStateSync("management-providers", "management-providers-sanitized", stateScopeIdentityDirectory)
+	}
 	writeJSON(writer, http.StatusOK, map[string]any{"key": key, "value": preferenceValue(body)})
 }

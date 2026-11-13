@@ -292,7 +292,7 @@ func (h *Handler) resolveProviderKeyMasks(
 		// another gateway can never serve the previous gateway's masks.
 		cacheKey := instance.ID + "|" + instance.BaseURL + "|" + string(namespace)
 		resolved[namespace] = h.providerKeyMasks.masks(ctx, cacheKey, func(readCtx context.Context) (map[string]string, error) {
-			masks, readErr := readProviderKeyMaskClaims(readCtx, client, namespace)
+			masks, readErr := h.readProviderKeyMaskClaimsWithArchive(readCtx, client, instance.ID, namespace)
 			if readErr != nil && h.logger != nil {
 				// Coalesced and negatively cached, so this is at most one line per
 				// credential list per failure window - not one per request row. The
@@ -356,6 +356,49 @@ func providerKeyMaskNamespaceForEvent(item usageEventResponse) (providerKeyMaskN
 		return namespaceOpenAICompatibility, true
 	}
 	return "", false
+}
+
+// readProviderKeyMaskClaimsWithArchive indexes one live credential list by auth index
+// and augments unclaimed indexes from the sanitized SQLite archive (including disabled
+// OpenAI-compatible providers recovered via keyed-HMAC fingerprints and deleted keys).
+//
+// When the live CPA list cannot be read at all, an error is returned with no stale
+// fallback so a gateway outage never claims masks for keys whose configuration may
+// have moved underneath it.
+func (h *Handler) readProviderKeyMaskClaimsWithArchive(
+	ctx context.Context,
+	client *management.Client,
+	instanceID string,
+	namespace providerKeyMaskNamespace,
+) (map[string]string, error) {
+	claims, err := readProviderKeyMaskClaims(ctx, client, namespace)
+	if err != nil {
+		return nil, err
+	}
+	if h == nil || h.repo == nil {
+		return claims, nil
+	}
+	archCreds, _, archErr := h.repo.ListIdentityArchive(ctx, instanceID)
+	if archErr == nil {
+		for _, cred := range archCreds {
+			if cred.Kind != "apikey" || cred.IsAmbiguous || cred.KeyMask == "" || cred.AuthIndex == "" {
+				continue
+			}
+			matchesNamespace := false
+			if namespace == namespaceOpenAICompatibility {
+				matchesNamespace = cred.ProviderFamily == openAICompatibilityFamily || strings.HasPrefix(cred.ProviderKey, management.OpenAICompatibilityLabelPrefix)
+			} else {
+				matchesNamespace = cred.ProviderFamily == string(namespace) || cred.ProviderKey == string(namespace)
+			}
+			if !matchesNamespace {
+				continue
+			}
+			if _, exists := claims[cred.AuthIndex]; !exists {
+				claims[cred.AuthIndex] = cred.KeyMask
+			}
+		}
+	}
+	return claims, nil
 }
 
 // readProviderKeyMaskClaims indexes one credential list by auth index.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 )
@@ -500,13 +501,27 @@ func (c *Client) EditableOpenAICompatibility(ctx context.Context) ([]OpenAICompa
 	next := 0
 	for i, live := range runtime.Entries {
 		entries[i] = live
+		matchedIdx := -1
 		for j := next; j < len(groups); j++ {
 			name, _ := groups[j]["name"].(string)
-			if strings.TrimSpace(name) != strings.TrimSpace(live.Name) {
-				continue
+			if strings.TrimSpace(name) == strings.TrimSpace(live.Name) {
+				matchedIdx = j
+				break
 			}
+		}
+		if matchedIdx < 0 {
+			for j := next; j < len(groups); j++ {
+				name, _ := groups[j]["name"].(string)
+				if strings.EqualFold(strings.TrimSpace(name), strings.TrimSpace(live.Name)) &&
+					openAICompatStoredGroupMatchesLive(groups[j], live) {
+					matchedIdx = j
+					break
+				}
+			}
+		}
+		if matchedIdx >= 0 {
 			provider := map[string]any{}
-			for field, value := range groups[j] {
+			for field, value := range groups[matchedIdx] {
 				if field == "keys" {
 					field = "api-key-entries"
 				}
@@ -523,10 +538,12 @@ func (c *Client) EditableOpenAICompatibility(ctx context.Context) ([]OpenAICompa
 			for k := range entry.APIKeyEntries {
 				entry.APIKeyEntries[k].AuthIndex = runtimeKeyAuthIndex(live, entry.APIKeyEntries[k].APIKey)
 			}
-			entry.runtimeView = &runtime.Entries[i]
+			// Preserve CPA's live Disabled state when runtime and stored views share the entry,
+			// while retaining the runtime projection for normalized endpoints and key indexes.
+			liveCopy := live
+			entry.runtimeView = &liveCopy
 			entries[i] = entry
-			next = j + 1
-			break
+			next = matchedIdx + 1
 		}
 	}
 	return entries, nil
@@ -539,6 +556,62 @@ func runtimeKeyAuthIndex(provider OpenAICompatibility, apiKey string) string {
 		}
 	}
 	return ""
+}
+
+func canonicalProviderEndpoint(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return strings.TrimRight(trimmed, "/")
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawPath = strings.TrimRight(parsed.RawPath, "/")
+	return parsed.String()
+}
+
+func openAICompatStoredGroupMatchesLive(group map[string]any, live OpenAICompatibility) bool {
+	storedURLRaw, _ := group["base-url"].(string)
+	storedURL := canonicalProviderEndpoint(storedURLRaw)
+	liveURL := canonicalProviderEndpoint(live.BaseURL)
+	if storedURL != "" && liveURL != "" && storedURL != liveURL {
+		return false
+	}
+	liveKeys := make(map[string]struct{}, len(live.APIKeyEntries)+len(live.LegacyAPIKeys))
+	for _, entry := range live.APIKeyEntries {
+		if k := strings.TrimSpace(entry.APIKey); k != "" {
+			liveKeys[k] = struct{}{}
+		}
+	}
+	for _, k := range live.LegacyAPIKeys {
+		if trimmed := strings.TrimSpace(k); trimmed != "" {
+			liveKeys[trimmed] = struct{}{}
+		}
+	}
+	if len(liveKeys) == 0 {
+		return storedURL != "" && storedURL == liveURL
+	}
+	for _, rawKey := range []string{"keys", "api-key-entries"} {
+		list, ok := group[rawKey].([]any)
+		if !ok {
+			continue
+		}
+		for _, elem := range list {
+			obj, ok := elem.(map[string]any)
+			if !ok {
+				continue
+			}
+			keyStr, _ := obj["api-key"].(string)
+			if _, match := liveKeys[strings.TrimSpace(keyStr)]; match {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // UpdateOpenAICompatibility writes the OpenAI-compatible providers as v8

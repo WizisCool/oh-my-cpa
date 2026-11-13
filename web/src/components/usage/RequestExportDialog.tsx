@@ -10,7 +10,7 @@ import { SearchSelect } from '../common/SearchSelect';
 import { useTheme } from '../../theme/ThemeContext';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import type { CredentialIndex, ProviderLookupEntry } from '../../types/usageEventIdentity';
+import type { CredentialIndex, ProviderLookupEntry, ProviderResolutionArchive } from '../../types/usageEventIdentity';
 import type { UsageEvent } from '../../types/usageEvents';
 import { copyText } from '../../utils/clipboard';
 import dayjs from '../../utils/time';
@@ -19,7 +19,8 @@ import { CodeOutlined, CopyOutlined, DownloadOutlined, PictureOutlined } from '.
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { resolveMarkArtworks } from '../../types/brandMark';
-import { pluginOwnsProvider } from '../../types/pluginOAuthProviders';
+import { isPluginOwnedInDirectory } from '../../hooks/useIdentityDirectory';
+import { QUERY_KEYS } from '../../api/queryKeys';
 import { REQUEST_COLUMNS, type RequestColumnId, type RequestColumnWidths } from './requestColumns';
 import { canCopyImage, copyImage, downloadBlob } from './requestExportImage';
 import { buildRequestExport } from './requestExportJson';
@@ -53,6 +54,7 @@ export interface RequestExportDialogProps {
   isProviderUnproven?: boolean;
   /** Re-reads the provider catalog the names come from. */
   onRetryProviders?: () => void;
+  archive?: ProviderResolutionArchive;
 }
 
 type ExportFormat = 'image' | 'json';
@@ -84,6 +86,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   pluginTitles,
   isProviderUnproven = false,
   onRetryProviders,
+  archive,
 }) => {
   const t = useT();
   const toast = useToast();
@@ -91,7 +94,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   const { currency } = useDisplayCurrency();
   const { style: tokenStyle, tpsMode, modelView, showModelIcons } = useTokenDisplayStyle();
   const customIcons = useCustomIcons(open).data;
-  const plugins = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30_000, enabled: open });
+  const identityDir = useQuery({ queryKey: QUERY_KEYS.identityDirectory, queryFn: ({ signal }) => api.getIdentityDirectory({ signal }), staleTime: 30_000, enabled: open });
 
   const [canvas, setCanvas] = React.useState<HTMLCanvasElement | null>(null);
   const imagesRef = React.useRef<SheetImageCache>(new Map());
@@ -126,11 +129,12 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             multiPortalKeys,
             pluginTitles,
             isProviderCatalogUnknown: isProviderUnproven,
+            archive,
           })
         : null,
     [
       open, isImage, rows, masks, colWidths, t, tokenStyle, currency, tpsMode, modelView, showModelIcons,
-      credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderUnproven,
+      credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderUnproven, archive,
     ],
   );
   // A program has no use for the image's row cap, so the document holds the whole selection.
@@ -148,9 +152,10 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             multiPortalKeys,
             pluginTitles,
             isProviderCatalogUnknown: isProviderUnproven,
+            archive,
           })
         : null,
-    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderUnproven],
+    [open, isImage, selection, masks, tpsMode, credentials, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderUnproven, archive],
   );
   const jsonPreview = React.useMemo(
     () =>
@@ -179,8 +184,8 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
       },
       (mark) => resolveMarkArtworks(mark, {
         baseURL: import.meta.env.BASE_URL, customIconURL: api.customIconURL, customIcons,
-        isPluginOwned: pluginOwnsProvider(plugins.data?.plugins, mark.providerKeys ?? []),
-        isOwnershipUnknown: Boolean(mark.providerKeys?.length) && !plugins.data,
+        isPluginOwned: isPluginOwnedInDirectory(identityDir.data, mark.providerKeys ?? []),
+        isOwnershipUnknown: Boolean(mark.providerKeys?.length) && !identityDir.data,
       }),
       imagesRef.current,
       () => paintRef.current === paint,
@@ -190,7 +195,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
     return () => {
       paintRef.current += 1;
     };
-  }, [canvas, sheet, theme.palette, customIcons, plugins.data]);
+  }, [canvas, sheet, theme.palette, customIcons, identityDir.data]);
 
   const fileStem = () => `requests-${dayjs().format('YYYYMMDD-HHmmss')}`;
 

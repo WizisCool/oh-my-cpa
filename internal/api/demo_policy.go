@@ -256,6 +256,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/config/source", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/backups", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/providers", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/identity-directory", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/routing", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/routing/models", demoAllow, ""},
 

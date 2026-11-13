@@ -465,3 +465,104 @@ test('a tooltip card travels as one fact per line plus its structure, and an emp
   assert.deepEqual(tipCard({ rows: [], notes: [null] }), {});
   assert.equal(readTipCard('{not json'), null);
 });
+
+test('insights label resolver handles deleted OAuth credentials, deleted OpenAI-compatible providers, and live ambiguity', async () => {
+  const { createInsightsLabelResolver } = await import('../../src/hooks/useInsightsLabels.ts');
+  const { createServingProviderResolver, indexCredentialFiles } = await import('../../src/types/usageEventIdentity.ts');
+
+  const archivedCredentials = [
+    {
+      auth_index: 'aaaa1111bbbb2222',
+      kind: 'oauth' as const,
+      provider_key: 'codex',
+      provider_family: 'codex',
+      masked_account: 'op•••r@acme.test',
+      file_name: 'codex-op•••r@acme.test.json',
+    },
+    {
+      auth_index: 'idx-inception-1',
+      kind: 'apikey' as const,
+      provider_key: 'openai-compatible-inception',
+      provider_family: 'openai-compatibility',
+      provider_name: 'Inception',
+      upstream_name: 'inception',
+      key_mask: 'test-key••••••••1111',
+    },
+  ];
+  const archivedCredentialsByIndex = new Map(archivedCredentials.map((item) => [item.auth_index, item]));
+  const archivedProvidersByKey = new Map([
+    [
+      'openai-compatible-inception',
+      {
+        provider_key: 'openai-compatible-inception',
+        kind: 'ai_provider' as const,
+        name: 'Inception',
+        upstream_name: 'inception',
+        family: 'openai-compatibility',
+      },
+    ],
+  ]);
+
+  const rawCube: InsightsCubeResponse = {
+    window: { preset: '7d', from: 0, to: 86_400_000, open_end: true, bucket: 'day', timezone: 'UTC', widened: false },
+    compare_window: { from: -86_400_000, to: -1 },
+    bucket_starts: [0],
+    dims: {
+      keys: [{ id: 'hmac:a', alias: 'Team', is_client_key: true }],
+      call_points: ['gpt-5', 'mercury'],
+      models: ['gpt-5', 'mercury'],
+      providers: ['codex', 'openai-compatible-inception'],
+      credentials: [
+        { auth_index: 'aaaa1111bbbb2222', auth_type: 'oauth' },
+        { auth_index: 'idx-inception-1', auth_type: 'apikey' },
+        { auth_index: 'cccc3333dddd4444', auth_type: 'oauth' },
+      ],
+    },
+    columns: [
+      'bucket', 'key', 'call_point', 'model', 'provider', 'credential',
+      'requests', 'failures', 'input_tokens', 'output_tokens', 'reasoning_tokens', 'cached_tokens',
+      'cache_read_tokens', 'cache_creation_tokens', 'total_tokens', 'latency_sum_ms', 'ttft_sum_ms',
+      'ttft_count', 'cost_nanos', 'priced_requests', 'costed_requests',
+    ],
+    rows: [
+      [0, 0, 0, 0, 0, 0, 25, 0, 2500, 0, 0, 0, 0, 0, 2500, 2000, 0, 0, 1_000_000, 25, 25],
+      [0, 0, 1, 1, 1, 1, 15, 0, 1500, 0, 0, 0, 0, 0, 1500, 1200, 0, 0, 1_000_000, 15, 15],
+      [0, 0, 0, 0, 0, 2, 5, 0, 500, 0, 0, 0, 0, 0, 500, 400, 0, 0, 500_000, 5, 5],
+    ],
+    previous_rows: [],
+    coverage: { fact_requests: 45, detail_requests: 0 },
+  };
+
+  const serving = createServingProviderResolver([], archivedCredentialsByIndex);
+  const cube = attributeServingProviders(decodeInsightsCube(rawCube), serving);
+  const labels = createInsightsLabelResolver({
+    cube,
+    credentialFiles: indexCredentialFiles([], archivedCredentials),
+    configuredProviders: [],
+    archivedCredentialsByIndex,
+    archivedProvidersByKey,
+    t: (key) => key,
+  });
+
+  assert.equal(labels.label('credential', 'aaaa1111bbbb2222'), 'op•••r@acme.test');
+  assert.equal(labels.detail('credential', 'aaaa1111bbbb2222'), 'Codex');
+  assert.equal(labels.label('credential', 'cccc3333dddd4444'), 'Codex (#cccc3333)');
+  assert.equal(labels.label('provider', 'openai-compatible-inception'), 'Inception');
+  assert.equal(labels.label('credential', 'idx-inception-1'), 'Inception test-key••••••••1111');
+
+  // If two live configured providers share idx-inception-1, live ambiguity blocks archive fallback.
+  const conflictingLive = [
+    { id: 'openai-compat-0', name: 'Relay One', auth_indexes: ['idx-inception-1'] },
+    { id: 'openai-compat-1', name: 'Relay Two', auth_indexes: ['idx-inception-1'] },
+  ];
+  assert.equal(createServingProviderResolver(conflictingLive, archivedCredentialsByIndex)('idx-inception-1'), undefined);
+  const ambiguousLabels = createInsightsLabelResolver({
+    cube,
+    credentialFiles: indexCredentialFiles([], archivedCredentials),
+    configuredProviders: conflictingLive,
+    archivedCredentialsByIndex,
+    archivedProvidersByKey,
+    t: (key) => key,
+  });
+  assert.equal(ambiguousLabels.label('credential', 'idx-inception-1'), 'idx-inception-1');
+});

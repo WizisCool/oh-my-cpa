@@ -73,6 +73,7 @@ export function useProviderManagement({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['management-providers'] }),
       queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] }),
+      queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] }),
     ]);
   };
 
@@ -504,6 +505,7 @@ export function useProviderManagement({
       case 'provider_stale_identity': return t('pro.error_stale_identity');
       case 'write_busy': return t('pro.status_update_busy');
       case 'provider_commit_partial': return t('pro.error_partial_commit');
+      case 'provider_archive_failed': return t('pro.error_archive_failed');
       default: return describeError(err);
     }
   };

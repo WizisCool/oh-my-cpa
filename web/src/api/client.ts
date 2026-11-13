@@ -6,6 +6,7 @@ import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insi
 import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../types/warmup';
 import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
+import type { IdentityDirectoryResponse } from '../types/identityDirectory';
 import type { InstalledFont } from '../types/fonts';
 import type { SafeProjectedStateSnapshot, StateEnvelope } from './stateLive';
 import { getAppConfig } from '../types/config';
@@ -814,6 +815,13 @@ export const api = {
       `/management/providers${includeKeys ? '?include_keys=true' : ''}`,
       { method: 'GET', signal: options?.signal },
     );
+  },
+
+  async getIdentityDirectory(options?: { signal?: AbortSignal }): Promise<IdentityDirectoryResponse> {
+    return request<IdentityDirectoryResponse>('/management/identity-directory', {
+      method: 'GET',
+      signal: options?.signal,
+    });
   },
 
   /**

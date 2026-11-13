@@ -1695,3 +1695,217 @@ test('usage event view', () => {
   assert.deepEqual(twoStopMix('a', 'b', 2), twoStopMix('a', 'b', 1), 'a position above the scale clamps to its high end');
   assert.deepEqual(twoStopMix('a', 'b', Number.NaN), twoStopMix('a', 'b', 0), 'a broken reading sits at the low end');
 });
+
+test('archived providers and credentials preserve names, custom marks, portals, and key masks after deletion', async () => {
+  const archivedCredentials = [
+    {
+      auth_index: 'aaaa1111bbbb2222',
+      kind: 'oauth' as const,
+      provider_key: 'qoder',
+      oauth_provider: 'qoder-cn',
+      provider_family: 'qoder',
+      file_name: 'codex-ar•••r@example.org.json',
+      display_name: 'CN Seat',
+      masked_account: 'ar•••r@example.org',
+    },
+    {
+      auth_index: 'idx-inception-v1',
+      kind: 'apikey' as const,
+      provider_key: 'openai-compatible-inception',
+      provider_family: 'openai-compatibility',
+      provider_name: 'Inception',
+      upstream_name: 'inception',
+      base_url: 'https://api.inceptionlabs.ai/v1',
+      icon_id: 'custom:inc-mark',
+      key_mask: 'sk-incep••••••••mega',
+    },
+  ];
+  const archivedProviders = new Map([
+    [
+      'openai-compatible-inception',
+      {
+        provider_key: 'openai-compatible-inception',
+        kind: 'ai_provider' as const,
+        name: 'Inception',
+        upstream_name: 'inception',
+        family: 'openai-compatibility',
+        base_url: 'https://api.inceptionlabs.ai/v1',
+        icon_id: 'custom:inc-mark',
+      },
+    ],
+  ]);
+  const archive = {
+    archivedCredentials: new Map(archivedCredentials.map((item) => [item.auth_index, item])),
+    archivedProviders,
+    archivedProviderIcons: new Map([['openai-compatible-inception', 'custom:inc-mark']]),
+  };
+
+  // Live catalogs are empty (both the provider and OAuth credential were deleted).
+  const credentials = indexCredentialFiles([], archivedCredentials);
+  const pluginLogos = { 'qoder-cn': 'data:image/svg+xml,%3Csvg%20id%3D%22qoder-cn%22/%3E' };
+  const pluginTitles = new Map([['qoder-cn', 'Qoder CN']]);
+  const multiPortalKeys = new Set(['qoder', 'qoder-cn']);
+
+  const deletedCompatEvent = {
+    provider: 'openai-compatible-inception',
+    auth_type: 'apikey',
+    auth_index: 'idx-inception-v1',
+  } as UsageEvent;
+
+  const compatResolved = resolveProviderInfo(
+    deletedCompatEvent,
+    credentials,
+    {},
+    [],
+    pluginLogos,
+    false,
+    pluginTitles,
+    multiPortalKeys,
+    archive,
+  );
+  assert.equal(compatResolved.title, 'Inception', 'deleted OpenAI-compatible provider resolves custom name instead of openai-compatible-inception');
+  assert.equal(compatResolved.iconId, 'custom:inc-mark', 'deleted OpenAI-compatible provider retains its custom icon');
+  assert.equal(compatResolved.credential, 'sk-incep••••••••mega');
+
+  const routingTarget = targetIdentity(deletedCompatEvent, {
+    credentials,
+    providerIcons: {},
+    configuredProviders: [],
+    pluginLogos,
+    pluginTitles,
+    multiPortalKeys,
+    archive,
+  });
+  assert.equal(routingTarget.title, 'Inception');
+  assert.equal(routingTarget.credential, 'sk-incep••••••••mega');
+  assert.equal(routingTarget.iconId, 'custom:inc-mark');
+
+  const nameResolver = createProviderNameResolver([], pluginTitles, archivedProviders);
+  assert.equal(nameResolver('openai-compatible-inception'), 'Inception');
+
+  const deletedOAuthEvent = {
+    provider: 'qoder',
+    auth_type: 'oauth',
+    auth_index: 'aaaa1111bbbb2222',
+  } as UsageEvent;
+  const oauthResolved = resolveProviderInfo(
+    deletedOAuthEvent,
+    credentials,
+    {},
+    [],
+    pluginLogos,
+    false,
+    pluginTitles,
+    multiPortalKeys,
+    archive,
+  );
+  assert.equal(oauthResolved.isOAuth, true);
+  assert.equal(oauthResolved.title, 'Qoder CN', 'deleted OAuth credential retains its portal title');
+  assert.equal(oauthResolved.credential, 'CN Seat', 'deleted OAuth credential retains operator display name instead of hex auth_index');
+  assert.equal(oauthResolved.logo, 'data:image/svg+xml,%3Csvg%20id%3D%22qoder-cn%22/%3E');
+
+  // Historical event.resource_name carrying an unmasked account or project ID must still be masked
+  // through the archived entry (including when provider mismatches drop attribution).
+  const unnamedArchived = indexCredentialFiles([], [
+    {
+      auth_index: 'aaaa1111bbbb2222',
+      kind: 'oauth',
+      provider_key: 'codex',
+      provider_family: 'codex',
+      file_name: 'codex-ar•••r@example.org.json',
+      masked_account: 'ar•••r@example.org',
+    },
+    {
+      auth_index: 'auth-vertex-del',
+      kind: 'oauth',
+      provider_key: 'vertex',
+      provider_family: 'vertex',
+      file_name: 'vertex-acm•••od.json',
+      masked_account: 'ru•••r@acme-prod.iam.gserviceaccount.com',
+    },
+  ]);
+  assert.deepEqual(
+    resolveCredential(
+      { provider: 'codex', auth_index: 'aaaa1111bbbb2222', resource_name: 'codex-architect.operator@example.org.json' } as UsageEvent,
+      unnamedArchived,
+    ),
+    {
+      name: 'codex-architect.operator@example.org.json',
+      displayName: 'ar•••r@example.org',
+      kind: 'resource',
+    },
+  );
+  assert.equal(
+    resolveCredential(
+      { provider: 'claude', auth_index: 'aaaa1111bbbb2222', resource_name: 'codex-architect.operator@example.org.json' } as UsageEvent,
+      unnamedArchived,
+    ).displayName,
+    'codex-ar•••r@example.org.json',
+    'a provider mismatch on an archived credential still masks historical resource_name',
+  );
+  assert.equal(
+    resolveCredential(
+      { provider: 'claude', auth_index: 'auth-vertex-del', resource_name: 'vertex-acme-prod.json' } as UsageEvent,
+      unnamedArchived,
+    ).displayName,
+    'vertex-acm•••od.json',
+    'archived project-ID filename template masks non-email historical resource_name',
+  );
+  assert.equal(
+    resolveCredential(
+      { provider: 'claude', auth_index: 'aaaa1111bbbb2222', resource_name: 'seat alice!@example.org' } as UsageEvent,
+      unnamedArchived,
+    ).displayName,
+    'seat al•••!@example.org',
+    'RFC 5322 punctuation in local parts is masked in fallback labels',
+  );
+
+  // Two deleted credentials sharing the same masked_account and lacking file_name keep distinct bucket identities.
+  const sameMaskArchived = indexCredentialFiles([], [
+    { auth_index: 'idx-seat-a', kind: 'oauth', provider_key: 'codex', masked_account: 'al•••e@acme.test' },
+    { auth_index: 'idx-seat-b', kind: 'oauth', provider_key: 'codex', masked_account: 'al•••e@acme.test' },
+  ]);
+  const seatA = resolveCredential({ provider: 'codex', auth_index: 'idx-seat-a' } as UsageEvent, sameMaskArchived);
+  const seatB = resolveCredential({ provider: 'codex', auth_index: 'idx-seat-b' } as UsageEvent, sameMaskArchived);
+  assert.notEqual(seatA.name, seatB.name, 'distinct deleted credentials keep distinct bucket keys');
+  assert.equal(seatA.displayName, 'al•••e@acme.test');
+  assert.equal(seatB.displayName, 'al•••e@acme.test');
+
+  // Ambiguous live configured providers must never fall back to an unambiguous archived record.
+  const conflictingLiveProviders = [
+    { id: 'openai-compat-0', name: 'Live One', auth_indexes: ['idx-inception-v1'] },
+    { id: 'openai-compat-1', name: 'Live Two', auth_indexes: ['idx-inception-v1'] },
+  ];
+  const conflictedResolved = resolveProviderInfo(
+    deletedCompatEvent,
+    credentials,
+    {},
+    conflictingLiveProviders,
+    pluginLogos,
+    false,
+    pluginTitles,
+    multiPortalKeys,
+    archive,
+  );
+  assert.equal(conflictedResolved.title, 'openai-compatible-inception');
+
+  // Merged plugin logos preserve a null prototype so keys like "constructor" remain usable.
+  const { buildMergedPluginLogos } = await import('../../src/hooks/useIdentityDirectory.ts');
+  const logosDict = buildMergedPluginLogos({
+    providers: [],
+    credentials: [],
+    plugins: [],
+    provider_icons: {},
+    archived_credentials: [],
+    archived_providers: [
+      {
+        provider_key: 'constructor',
+        kind: 'oauth_plugin',
+        logo: 'data:image/svg+xml,%3Csvg/%3E',
+      },
+    ],
+    catalog_status: { providers_known: true, credentials_known: true, plugins_known: true },
+  });
+  assert.equal(Object.getPrototypeOf(logosDict), null);
+  assert.equal(logosDict['constructor'], 'data:image/svg+xml,%3Csvg/%3E');
+});

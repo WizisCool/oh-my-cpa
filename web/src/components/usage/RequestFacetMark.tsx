@@ -6,6 +6,7 @@ import {
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
+  type ProviderResolutionArchive,
 } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import type { UsageEvent } from '../../types/usageEvents';
@@ -22,6 +23,7 @@ export interface FacetMarkSources {
   multiPortalKeys?: ReadonlySet<string>;
   /** An option's mark is only a placeholder until the provider catalog read settles. */
   isProviderCatalogUnknown?: boolean;
+  archive?: ProviderResolutionArchive;
 }
 
 export type FacetMarkRenderer = (key: EventFilterKey, value: string) => React.ReactNode;
@@ -47,6 +49,7 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
       sources.isProviderCatalogUnknown,
       undefined,
       sources.multiPortalKeys,
+      sources.archive,
     );
     return <ProviderBrandIcon mark={provider} size={MARK_SIZE} />;
   };

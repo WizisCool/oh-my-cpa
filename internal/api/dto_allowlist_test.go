@@ -158,6 +158,7 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 		"/api/healthz",
 		"/api/v1/resources",
 		"/api/v1/management/auth-files",
+		"/api/v1/management/identity-directory",
 		"/api/v1/management/auth-files/model-aliases",
 		"/api/v1/management/config",
 		"/api/v1/usage/events",

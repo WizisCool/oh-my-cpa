@@ -61,6 +61,7 @@ const (
 	providerDuplicateKeyCode     = "provider_duplicate_key"
 	providerCredentialExistsCode = "provider_credential_exists"
 	providerStaleIdentityCode    = "provider_stale_identity"
+	providerArchiveFailedCode    = "provider_archive_failed"
 	// providerPartialCommitMessage is the stable user-facing refusal for that
 	// state, shared by the response and its regression coverage.
 	providerPartialCommitMessage = "provider configuration changed, but local metadata could not be saved; reload before retrying"
@@ -69,6 +70,10 @@ const (
 	// abandoning that write after the gateway committed is what leaves the two
 	// sides disagreeing.
 	providerMetadataWriteTimeout = 5 * time.Second
+	// providerPostWriteRefreshTimeout bounds the best-effort provider catalog
+	// refresh after a committed write or rename so a slow unrelated family cannot
+	// hold providerWrites across multiple management-client timeouts.
+	providerPostWriteRefreshTimeout = 2 * time.Second
 )
 
 var errProviderWriteBusy = errors.New("another provider configuration write is in progress")
@@ -241,16 +246,25 @@ func gatedProviderListWrite[T any](
 	// them are stale. Dropping them here means a re-keyed or renamed credential
 	// reads correctly on the next page rather than at the end of the TTL.
 	h.providerKeyMasks.invalidate()
+	h.identityArchive.reset()
 	if afterUpdate != nil {
 		overlayCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), providerMetadataWriteTimeout)
 		err := afterUpdate(overlayCtx, list)
 		cancel()
 		if err != nil {
-			h.invalidateCoordinator("management-providers", "management-providers-sanitized", "management-routing", "management-config")
+			h.invalidateCoordinator("management-providers", "management-providers-sanitized", "management-routing", "management-config", stateScopeIdentityDirectory)
 			return &providerPartialCommitError{err: err}
 		}
 	}
-	h.invalidateCoordinator("management-providers", "management-providers-sanitized", "management-routing", "management-config")
+	h.invalidateCoordinator("management-providers", "management-providers-sanitized", "management-routing", "management-config", stateScopeIdentityDirectory)
+	// Refresh and archive the updated provider list (including any regenerated runtime
+	// auth_indexes and new custom names/icons) immediately so subsequent reads do not race.
+	if client, clientErr := h.capabilityClient(ctx); clientErr == nil {
+		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), providerPostWriteRefreshTimeout)
+		items := h.readProviderItemsUpstream(refreshCtx, client)
+		h.enrichAndArchiveProviders(refreshCtx, items)
+		cancel()
+	}
 	return nil
 }
 

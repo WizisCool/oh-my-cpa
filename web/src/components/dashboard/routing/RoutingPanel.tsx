@@ -10,7 +10,6 @@ import { useLiveRevision } from '../../../hooks/useLiveRevision';
 import { useProviderBranding } from '../../../hooks/useProviderBranding';
 import { useT } from '../../../i18n';
 import { EVENT_AUTO_REFRESH_MS } from '../../../types/usageEventCadence';
-import { indexCredentialFiles } from '../../../types/usageEventIdentity';
 import type { UsageEvent } from '../../../types/usageEvents';
 import {
   arrivedRoutes,
@@ -252,23 +251,19 @@ export const RoutingPanel = React.memo(function RoutingPanel() {
     [rolling, nowMs],
   );
 
-  const authFiles = useQuery({
-    queryKey: ['management-auth-files'],
-    queryFn: () => api.getManagementAuthFiles(),
-    staleTime: 60_000,
-  });
   const {
+    credentials,
     providerIcons,
     pluginLogos,
     multiPortalKeys,
     pluginTitles,
     configuredProviders,
+    archive,
     isProviderCatalogUnknown,
   } = useProviderBranding();
-  const credentials = React.useMemo(() => indexCredentialFiles(authFiles.data?.files || []), [authFiles.data]);
   const sources = React.useMemo<IdentitySources>(
-    () => ({ credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderCatalogUnknown }),
-    [credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderCatalogUnknown],
+    () => ({ credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderCatalogUnknown, archive }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, pluginTitles, isProviderCatalogUnknown, archive],
   );
 
   const isLive = liveState === 'live';

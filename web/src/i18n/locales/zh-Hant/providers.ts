@@ -34,6 +34,7 @@ export default {
   "pro.error_credential_exists": "該供應商憑證已存在，請修改金鑰或端點",
   "pro.error_stale_identity": "該供應商已在閘道中發生變化，請重新整理後重試",
   "pro.error_partial_commit": "供應商設定已在閘道生效，但本機中繼資料未能儲存，請重新整理後重試",
+  "pro.error_archive_failed": "刪除前未能封存供應商中繼資料，請稍後重試",
   "pro.add_provider": "新增供應商",
   "pro.editor_add_title": "新增{family}供應商",
   "pro.editor_edit_title": "編輯{family}供應商",

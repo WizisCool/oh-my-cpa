@@ -34,6 +34,7 @@ export default {
   "pro.error_credential_exists": "Kelayakan penyedia ini sudah wujud; tukar kunci atau titik akhir",
   "pro.error_stale_identity": "Penyedia ini berubah dalam gerbang; muat semula dan cuba lagi",
   "pro.error_partial_commit": "Penyedia berubah dalam gerbang, tetapi metadata setempat tidak dapat disimpan; muat semula sebelum mencuba lagi",
+  "pro.error_archive_failed": "Tidak dapat mengarkibkan metadata penyedia sebelum pemadaman; cuba lagi sebentar lagi",
   "pro.add_provider": "Tambah Penyedia",
   "pro.editor_add_title": "Tambah penyedia {family}",
   "pro.editor_edit_title": "Sunting penyedia {family}",

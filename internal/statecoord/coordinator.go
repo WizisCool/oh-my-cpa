@@ -104,8 +104,8 @@ type prefixRegistration[S any] struct {
 //
 // Lock ordering invariant:
 //
-//	External WriteGate (if any) -> flushMu -> mu (leaf RWMutex, zero I/O)
-//	Broker.mu is an independent leaf lock and is never acquired while holding mu.
+//	External WriteGate (if any) -> flushMu -> publishMu -> mu (leaf RWMutex, zero I/O)
+//	Broker.mu is an independent leaf lock acquired under publishMu, never while holding mu.
 //
 // PendingAuditRecord captures request-scoped audit metadata for an asynchronous
 // write-behind mutation so the terminal success/failure audit event is written
@@ -124,6 +124,10 @@ type Coordinator[S any] struct {
 
 	// flushMu serializes flush executions between writeBehindLoop and explicit FlushNow calls.
 	flushMu sync.Mutex
+	// publishMu serializes version allocation + Broker.Publish on Invalidate and Notify so
+	// concurrent notifications deliver strictly monotonic version numbers and never cause
+	// SSE clients' monotonic version guard to drop distinct scope invalidations.
+	publishMu sync.Mutex
 
 	// mu protects state, version, invalidationEpoch, isReady, isClosed, pendingInvalidation, dirtyGen, and pendingAudits.
 	// CRITICAL: Never perform network or disk I/O while holding mu.
@@ -754,7 +758,6 @@ func (c *Coordinator[S]) flushUngatedLocked(ctx context.Context) error {
 		c.isReady = false
 		c.pendingInvalidation = false
 	}
-	currentVersion := c.version
 	c.mu.Unlock()
 
 	if c.opts.OnDomainOutcome != nil {
@@ -770,11 +773,16 @@ func (c *Coordinator[S]) flushUngatedLocked(ctx context.Context) error {
 	}
 
 	scopes := sortedScopeList(scopeSet)
+	c.publishMu.Lock()
+	c.mu.RLock()
+	currentVersion := c.version
+	c.mu.RUnlock()
 	c.opts.Broker.Publish(Event{
 		Type:    EventStateSync,
 		Version: currentVersion,
 		Scopes:  scopes,
 	})
+	c.publishMu.Unlock()
 	return nil
 }
 
@@ -829,14 +837,9 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 	clear(c.dirtyGen)
 	clear(c.pendingAudits)
 	c.pendingInvalidation = false
-	c.version++
-	newVersion = c.version
 	if reloadErr == nil {
 		c.state = c.opts.Clone(authoritative)
 		c.isReady = true
-		if c.opts.ProjectSafe != nil {
-			safePayload = c.opts.ProjectSafe(c.state, newVersion)
-		}
 	} else {
 		// Upstream is still unreachable: mark projection unready so the next read
 		// re-fetches via singleflight instead of serving the rejected optimistic state.
@@ -854,14 +857,24 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 		}
 	}
 
+	sortedScopes := sortedScopeList(scopeSet)
+	c.publishMu.Lock()
+	c.mu.Lock()
+	c.version++
+	newVersion = c.version
+	if reloadErr == nil && c.isReady && c.opts.ProjectSafe != nil {
+		safePayload = c.opts.ProjectSafe(c.state, newVersion)
+	}
+	c.mu.Unlock()
 	c.opts.Broker.Publish(Event{
 		Type:    EventSyncError,
 		Version: newVersion,
-		Scopes:  sortedScopeList(scopeSet),
+		Scopes:  sortedScopes,
 		Code:    code,
 		Error:   message,
 		Data:    safePayload,
 	})
+	c.publishMu.Unlock()
 }
 
 // UpdateBaseline updates upstream-owned baseline metadata in place even when unrelated
@@ -898,6 +911,17 @@ func (c *Coordinator[S]) RefreshCleanBaseline(updateFn func(state *S)) bool {
 // (e.g. raw YAML save, provider create/delete, backup restore) and broadcasts state_sync
 // so open tabs invalidate their React Query caches.
 func (c *Coordinator[S]) Invalidate(scopes ...string) uint64 {
+	scopeSet := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if scope != "" {
+			scopeSet[scope] = struct{}{}
+		}
+	}
+	sortedScopes := sortedScopeList(scopeSet)
+
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+
 	c.mu.Lock()
 	c.invalidationEpoch++
 	if len(c.dirtyGen) == 0 {
@@ -910,16 +934,43 @@ func (c *Coordinator[S]) Invalidate(scopes ...string) uint64 {
 	version := c.version
 	c.mu.Unlock()
 
+	c.opts.Broker.Publish(Event{
+		Type:    EventStateSync,
+		Version: version,
+		Scopes:  sortedScopes,
+	})
+	return version
+}
+
+// Notify advances the state version without discarding the cached CPA projection
+// and broadcasts state_sync so open and reconnecting tabs invalidate local metadata
+// scopes (such as display names, custom icons, or plugin identity caches).
+func (c *Coordinator[S]) Notify(scopes ...string) uint64 {
 	scopeSet := make(map[string]struct{}, len(scopes))
 	for _, scope := range scopes {
 		if scope != "" {
 			scopeSet[scope] = struct{}{}
 		}
 	}
+	sortedScopes := sortedScopeList(scopeSet)
+
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+
+	c.mu.Lock()
+	if c.isClosed {
+		version := c.version
+		c.mu.Unlock()
+		return version
+	}
+	c.version++
+	version := c.version
+	c.mu.Unlock()
+
 	c.opts.Broker.Publish(Event{
 		Type:    EventStateSync,
 		Version: version,
-		Scopes:  sortedScopeList(scopeSet),
+		Scopes:  sortedScopes,
 	})
 	return version
 }

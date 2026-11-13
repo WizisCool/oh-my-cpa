@@ -33,7 +33,10 @@ export function useCredentialRename(): (file: ManagementAuthFile, displayName: s
     try {
       await api.setManagementAuthFileDisplayName(file.name, next, file.display_name_version ?? 0);
       toast.success(t(next ? 'af.renamed' : 'af.rename_cleared'));
-      await queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
+        queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] }),
+      ]);
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {

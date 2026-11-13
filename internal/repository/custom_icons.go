@@ -234,6 +234,13 @@ func (r *Repository) DeleteCustomIconChecked(ctx context.Context, id string, exp
 			return err
 		}
 	}
+	customRef := "custom:" + id
+	if _, err := tx.ExecContext(ctx, `UPDATE archived_credentials SET icon_id = '', updated_at_ms = ? WHERE icon_id = ?`, time.Now().UnixMilli(), customRef); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE archived_providers SET icon_id = '', updated_at_ms = ? WHERE icon_id = ?`, time.Now().UnixMilli(), customRef); err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM custom_icons WHERE id=?`, id)
 	if err != nil {
 		return err
