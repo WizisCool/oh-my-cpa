@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
+import { compareGoVersions, parseGoVersion, resolveGoBinary } from './generate-demo-data.mjs';
 
 function readDeployment(name) {
   return YAML.parse(fs.readFileSync(new URL(`../deploy/${name}`, import.meta.url), 'utf8'));
@@ -94,4 +97,36 @@ test('new gateway bootstrap uses v8, enables usage and has no reusable client se
   assert.equal(config.management['secret-key'], '');
   assert.deepEqual(config.access['api-keys'], []);
   assert.equal(config.observability.usage['usage-statistics-enabled'], true);
+});
+
+test('demo generator skips too-old PATH go and isolates cached SDK GOROOT', async () => {
+  assert.ok(compareGoVersions(parseGoVersion('go version go1.27.3 linux/amd64'), parseGoVersion('go1.26')) > 0);
+  assert.ok(compareGoVersions(parseGoVersion('go version go1.24.9 linux/amd64'), parseGoVersion('go1.26.0')) < 0);
+  assert.equal(compareGoVersions(parseGoVersion('go version go1.26.0 linux/amd64'), parseGoVersion('go1.26')), 0);
+
+  if (process.platform === 'win32') return;
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-demo-go-'));
+  try {
+    const oldBinDir = path.join(sandbox, 'old-bin');
+    const sdkBinDir = path.join(sandbox, 'tmp', 'go-sdk', 'go', 'bin');
+    fs.mkdirSync(oldBinDir, { recursive: true });
+    fs.mkdirSync(sdkBinDir, { recursive: true });
+    fs.mkdirSync(path.join(sandbox, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(sandbox, 'go.mod'), 'module example.com/test\n\ngo 1.26.0\n');
+    fs.writeFileSync(
+      path.join(sandbox, 'scripts', 'tools-versions.json'),
+      JSON.stringify({ go: { version: '1.27.3', archives: {} } }),
+    );
+    const fakeOldGo = path.join(oldBinDir, 'go');
+    fs.writeFileSync(fakeOldGo, '#!/bin/sh\necho "go version go1.24.9 linux/amd64"\n', { mode: 0o755 });
+    const fakeCachedGo = path.join(sdkBinDir, 'go');
+    fs.writeFileSync(fakeCachedGo, '#!/bin/sh\necho "go version go1.27.3 linux/amd64"\n', { mode: 0o755 });
+
+    const resolved = await resolveGoBinary(sandbox, { env: { ...process.env, PATH: oldBinDir } });
+    assert.equal(resolved.bin, fakeCachedGo);
+    assert.equal(resolved.env.GOROOT, path.join(sandbox, 'tmp', 'go-sdk', 'go'));
+    assert.equal(resolved.env.GOTOOLCHAIN, 'local');
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
 });
