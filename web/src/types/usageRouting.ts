@@ -163,8 +163,8 @@ export interface RoutingModel {
   hiddenTargets: number;
 }
 
-export const MAX_DRAWN_MODELS = 7;
-export const MAX_DRAWN_TARGETS = 7;
+export const MAX_DRAWN_MODELS = 4;
+export const MAX_DRAWN_TARGETS = 4;
 
 /**
  * Builds what the panel draws from the window's attempts.
