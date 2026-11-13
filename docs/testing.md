@@ -57,7 +57,7 @@ are the executable source of truth:
 - **Pull requests**: Repository hygiene (`static-repo`: workflow lint, toolchain pin, doc links, worktree/history secret scans) runs on every change; `changes` selects `static-go`, `static-frontend`, `docker-check`, and `browser` smoke (`pnpm verify:browser:smoke`) only when relevant paths change.
 - **Main, merge queue, nightly, manual, or `full-ci` label**: Full static and unit suites plus full built-artifact browser acceptance (`pnpm verify:browser`), Cloudflare demo staging dry-run, and `docker-check` when container inputs change.
 - **Weekly/manual maintenance**: Go race detector, bounded fuzzing, dependency advisories, and host-native runtime checks.
-- **README screenshots**: Refreshed automatically in CI (`.github/workflows/readme-screenshots.yml`) on UI/demo changes on `main`, weekly schedule, or manual dispatch, updating a rolling pull request without local generation.
+- **README screenshots**: Refreshed automatically in CI (`.github/workflows/readme-screenshots.yml`) on a daily schedule or manual dispatch, enabling squash auto-merge on the rolling pull request without local generation.
 - **Release**: Static gates, full browser acceptance, and isolated candidate native packaging/smoke run in parallel before publication gates (`verify`), followed by immutable tag/commit verification, same-builder container smoke and attested multi-platform Docker push, Ed25519-signed manifests, GitHub Release publication, and `latest` promotion. See [Releasing](releasing.md).
 
 ## Tooling
