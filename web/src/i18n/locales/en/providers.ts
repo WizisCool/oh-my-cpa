@@ -34,6 +34,7 @@ export default {
   'pro.error_credential_exists': 'This provider credential already exists; change the key or the endpoint',
   'pro.error_stale_identity': 'This provider changed in the gateway; reload and try again',
   'pro.error_partial_commit': 'The provider changed in the gateway, but local metadata could not be saved; reload before retrying',
+  'pro.error_archive_failed': 'Could not archive provider metadata before deletion; try again shortly',
   'pro.add_provider': 'Add Provider',
   'pro.editor_add_title': 'Add {family} provider',
   'pro.editor_edit_title': 'Edit {family} provider',

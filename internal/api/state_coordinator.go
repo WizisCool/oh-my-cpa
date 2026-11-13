@@ -132,10 +132,30 @@ func cloneViaJSON[T any](value T) T {
 	return cloned
 }
 
+func cloneConfigAPIKeys(src []management.ConfigAPIKey) []management.ConfigAPIKey {
+	cloned := cloneViaJSON(src)
+	if len(cloned) == len(src) {
+		for i := range cloned {
+			cloned[i].CopyRuntimeMetadataFrom(src[i])
+		}
+	}
+	return cloned
+}
+
+func cloneOpenAICompatEntries(src []management.OpenAICompatibility) []management.OpenAICompatibility {
+	cloned := cloneViaJSON(src)
+	if len(cloned) == len(src) {
+		for i := range cloned {
+			cloned[i].CopyRuntimeMetadataFrom(src[i])
+		}
+	}
+	return cloned
+}
+
 func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 	families := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey, len(src.ConfigFamilies))
 	for family, list := range src.ConfigFamilies {
-		families[family] = cloneViaJSON(list)
+		families[family] = cloneConfigAPIKeys(list)
 	}
 	aliases := make(map[string][]managementOAuthModelAlias, len(src.OAuthAliases))
 	for provider, list := range src.OAuthAliases {
@@ -170,7 +190,7 @@ func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 		RuntimeOnlyFam:           maps.Clone(src.RuntimeOnlyFam),
 		FailedProviderFamilies:   maps.Clone(src.FailedProviderFamilies),
 		ProviderSliceFailed:      src.ProviderSliceFailed,
-		OpenAICompat:             cloneViaJSON(src.OpenAICompat),
+		OpenAICompat:             cloneOpenAICompatEntries(src.OpenAICompat),
 		OpenAIRuntime:            src.OpenAIRuntime,
 		OpenAISliceFailed:        src.OpenAISliceFailed,
 		OAuthAliases:             aliases,
@@ -367,9 +387,10 @@ func (h *Handler) EnableStateCoordinator(ctx context.Context, opts StateCoordina
 		OnDomainOutcome: func(rec statecoord.PendingAuditRecord, flushErr error, _ projectedConfigState) {
 			h.recordDeferredDomainAudit(rec, flushErr)
 		},
-		AfterFlush: func(_ []statecoord.DomainKey) {
+		AfterFlush: func(flushedKeys []statecoord.DomainKey) {
 			h.afterConfigWriteSideEffects()
 			h.refreshCoordinatorYAMLBaseline()
+			h.refreshFlushedProviderBaselines(flushedKeys)
 		},
 	})
 
@@ -463,7 +484,7 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 	// are never overwritten.
 	coord.RegisterDomain(stateDomainOpenAICompat, statecoord.DomainSpec[projectedConfigState]{
 		Order:  30,
-		Scopes: []string{"management-providers", "management-providers-sanitized", "management-routing", "management-config"},
+		Scopes: []string{"management-providers", "management-providers-sanitized", "management-routing", "management-config", stateScopeIdentityDirectory},
 		Flush: func(ctx context.Context, _ statecoord.DomainKey, snapshot projectedConfigState) error {
 			if len(snapshot.PendingOpenAIToggles) == 0 {
 				return nil
@@ -491,7 +512,12 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 				}
 				liveEntries[matchedIdx].Disabled = toggle.Disabled
 			}
-			return client.UpdateOpenAICompatibility(ctx, liveEntries)
+			if err := client.UpdateOpenAICompatibility(ctx, liveEntries); err != nil {
+				return err
+			}
+			h.providerKeyMasks.invalidate()
+			h.identityArchive.reset()
+			return nil
 		},
 		CleanPending: func(state *projectedConfigState, _ statecoord.DomainKey, flushed projectedConfigState) {
 			for k, entry := range flushed.PendingOpenAIToggles {
@@ -506,7 +532,7 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 	// reads fresh editable family entries inside the gate and overlays only ExcludedModels status toggles.
 	coord.RegisterDomainPrefix(stateDomainProviderFamilyPrefix, statecoord.DomainSpec[projectedConfigState]{
 		Order:  35,
-		Scopes: []string{"management-providers", "management-providers-sanitized", "management-routing", "management-config"},
+		Scopes: []string{"management-providers", "management-providers-sanitized", "management-routing", "management-config", stateScopeIdentityDirectory},
 		Flush: func(ctx context.Context, key statecoord.DomainKey, snapshot projectedConfigState) error {
 			family := management.ConfigKeyFamily(strings.TrimPrefix(string(key), stateDomainProviderFamilyPrefix))
 			pendingMap := snapshot.PendingFamilyToggles[family]
@@ -536,7 +562,12 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 					return management.ErrConfigChanged
 				}
 			}
-			return client.UpdateConfigAPIKeys(ctx, family, liveEntries)
+			if err := client.UpdateConfigAPIKeys(ctx, family, liveEntries); err != nil {
+				return err
+			}
+			h.providerKeyMasks.invalidate()
+			h.identityArchive.reset()
+			return nil
 		},
 		CleanPending: func(state *projectedConfigState, key statecoord.DomainKey, flushed projectedConfigState) {
 			family := management.ConfigKeyFamily(strings.TrimPrefix(string(key), stateDomainProviderFamilyPrefix))
@@ -626,7 +657,7 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 	// and multi-credential switches inside 250ms under a single write-gate acquisition.
 	coord.RegisterDomainPrefix(stateDomainAuthFileStatusPrefix, statecoord.DomainSpec[projectedConfigState]{
 		Order:  50,
-		Scopes: []string{"management-auth-files", "management-routing", "management-quota"},
+		Scopes: []string{"management-auth-files", "management-routing", "management-quota", stateScopeIdentityDirectory},
 		Flush: func(ctx context.Context, key statecoord.DomainKey, snapshot projectedConfigState) error {
 			selector := strings.TrimPrefix(string(key), stateDomainAuthFileStatusPrefix)
 			pending, exists := snapshot.PendingAuthStatus[selector]
@@ -655,6 +686,68 @@ func (h *Handler) invalidateClientKeyCatalog() {
 	h.agent.catalogMu.Lock()
 	h.agent.catalog = nil
 	h.agent.catalogMu.Unlock()
+}
+
+// refreshFlushedProviderBaselines reloads the runtime/editable slices of flushed
+// provider toggle domains after CleanPending has cleared their staging maps, so
+// regenerated CPA runtime auth_indexes and key masks are visible before state_sync fires.
+func (h *Handler) refreshFlushedProviderBaselines(flushedKeys []statecoord.DomainKey) {
+	if h == nil || h.stateCoord == nil || len(flushedKeys) == 0 {
+		return
+	}
+	needOpenAI := false
+	families := make([]management.ConfigKeyFamily, 0)
+	for _, key := range flushedKeys {
+		switch {
+		case key == stateDomainOpenAICompat:
+			needOpenAI = true
+		case strings.HasPrefix(string(key), stateDomainProviderFamilyPrefix):
+			fam := management.ConfigKeyFamily(strings.TrimPrefix(string(key), stateDomainProviderFamilyPrefix))
+			families = append(families, fam)
+		}
+	}
+	if !needOpenAI && len(families) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client, err := h.capabilityClient(ctx)
+	if err != nil {
+		return
+	}
+	var refreshedOpenAI []management.OpenAICompatibility
+	var gotOpenAI bool
+	if needOpenAI {
+		if entries, readErr := client.EditableOpenAICompatibility(ctx); readErr == nil {
+			refreshedOpenAI = entries
+			gotOpenAI = true
+		}
+	}
+	refreshedFamilies := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey, len(families))
+	for _, fam := range families {
+		if entries, readErr := client.EditableConfigAPIKeys(ctx, fam); readErr == nil {
+			refreshedFamilies[fam] = entries
+		}
+	}
+	if !gotOpenAI && len(refreshedFamilies) == 0 {
+		return
+	}
+	h.stateCoord.UpdateBaseline(func(state *projectedConfigState, _ bool) {
+		if gotOpenAI && len(state.PendingOpenAIToggles) == 0 {
+			state.OpenAICompat = cloneOpenAICompatEntries(refreshedOpenAI)
+			state.OpenAISliceFailed = false
+			state.OpenAIRuntime = false
+		}
+		for fam, entries := range refreshedFamilies {
+			if len(state.PendingFamilyToggles[fam]) == 0 {
+				state.ConfigFamilies[fam] = cloneConfigAPIKeys(entries)
+				delete(state.FailedProviderFamilies, fam)
+				delete(state.RuntimeOnlyFam, fam)
+			}
+		}
+		state.ProviderSliceFailed = state.OpenAISliceFailed || len(state.FailedProviderFamilies) > 0
+	})
+	_, _ = h.readProviderItemsWithVersion(ctx, client)
 }
 
 // refreshCoordinatorYAMLBaseline updates the cached YAML/revision fields after a
@@ -1101,8 +1194,13 @@ func projectProviderItemsFromRaw(
 		}
 		keyEntries := make([]ProviderKeyEntryDTO, 0, len(entry.APIKeyEntries)+len(entry.LegacyAPIKeys))
 		authIndexes := make([]string, 0, len(entry.APIKeyEntries))
+		runtimeKeys := make([]providerRuntimeKey, 0, len(entry.APIKeyEntries)+len(entry.LegacyAPIKeys))
 		for ki, k := range entry.APIKeyEntries {
 			authIndexes = append(authIndexes, nonEmptyStrings(k.AuthIndex)...)
+			runtimeKeys = append(runtimeKeys, providerRuntimeKey{
+				authIndex: k.AuthIndex,
+				apiKey:    k.APIKey,
+			})
 			keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 				ConnectionPool:          providerPoolSettingsDTO(k.ConnectionPool),
 				EffectiveConnectionPool: providerPoolSettingsDTO(management.MergeConnectionPools(entry.ConnectionPool, k.ConnectionPool)),
@@ -1113,6 +1211,7 @@ func projectProviderItemsFromRaw(
 			})
 		}
 		for ki, k := range entry.LegacyAPIKeys {
+			runtimeKeys = append(runtimeKeys, providerRuntimeKey{apiKey: k})
 			keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 				Index:  len(entry.APIKeyEntries) + ki,
 				APIKey: k,
@@ -1142,6 +1241,7 @@ func projectProviderItemsFromRaw(
 			ProxyConfigured: false,
 			RuntimePolicy:   providerRuntimePolicyDTO(entry.DisableCooling, entry.RequestRetry, entry.RequestScopedErrors, compatCapabilities),
 			Behavior:        &ProviderBehaviorDTO{SupportPromptCacheKey: &isPromptCacheKeySupported},
+			runtimeKeys:     runtimeKeys,
 		})
 	}
 

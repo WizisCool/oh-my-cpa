@@ -19,6 +19,7 @@ export const QUERY_KEYS = {
   providers: (includeKeys: boolean) => ['management-providers', includeKeys] as const,
   providersPrefix: ['management-providers'] as const,
   providersSanitized: ['management-providers-sanitized'] as const,
+  identityDirectory: ['management-identity-directory'] as const,
   clientKeys: (mode: 'with-keys' | 'masked' = 'masked') => ['management-client-keys', mode] as const,
   clientKeysPrefix: ['management-client-keys'] as const,
   clientKeyUsage: ['management-client-key-usage'] as const,
@@ -57,16 +58,17 @@ export const MUTATION_KEYS = {
  */
 const SCOPE_TO_QUERY_KEYS = new Map<string, ReadonlyArray<QueryKey>>([
   ['management-config', [QUERY_KEYS.config, QUERY_KEYS.projectedState]],
-  ['management-providers', [QUERY_KEYS.providersPrefix, QUERY_KEYS.projectedState]],
-  ['management-providers-sanitized', [QUERY_KEYS.providersSanitized]],
+  ['management-providers', [QUERY_KEYS.providersPrefix, QUERY_KEYS.projectedState, QUERY_KEYS.identityDirectory]],
+  ['management-providers-sanitized', [QUERY_KEYS.providersSanitized, QUERY_KEYS.identityDirectory]],
+  ['management-identity-directory', [QUERY_KEYS.identityDirectory]],
   ['management-client-keys', [QUERY_KEYS.clientKeysPrefix, QUERY_KEYS.projectedState]],
   ['management-routing', [QUERY_KEYS.routing]],
   ['management-logs-status', [QUERY_KEYS.logsStatus]],
   ['management-oauth-model-aliases', [QUERY_KEYS.oauthModelAliases, QUERY_KEYS.projectedState]],
   ['management-oauth-excluded-models', [QUERY_KEYS.oauthExcludedModels, QUERY_KEYS.projectedState]],
-  ['management-auth-files', [QUERY_KEYS.authFiles, QUERY_KEYS.projectedState]],
+  ['management-auth-files', [QUERY_KEYS.authFiles, QUERY_KEYS.projectedState, QUERY_KEYS.identityDirectory]],
   ['management-quota', [QUERY_KEYS.quota, QUERY_KEYS.overview]],
-  ['management-plugins', [QUERY_KEYS.plugins]],
+  ['management-plugins', [QUERY_KEYS.plugins, QUERY_KEYS.identityDirectory]],
 ]);
 
 /**
@@ -78,6 +80,7 @@ const SCOPE_TO_MUTATION_KEYS = new Map<string, ReadonlyArray<QueryKey>>([
   ['management-config', [MUTATION_KEYS.configScalar]],
   ['management-providers', [MUTATION_KEYS.providerStatus]],
   ['management-providers-sanitized', [MUTATION_KEYS.providerStatus]],
+  ['management-identity-directory', [MUTATION_KEYS.providerStatus, MUTATION_KEYS.authFileStatus]],
   ['management-client-keys', [MUTATION_KEYS.clientKeys]],
   ['management-oauth-model-aliases', [MUTATION_KEYS.oauthModelAliases]],
   ['management-oauth-excluded-models', [MUTATION_KEYS.oauthExcludedModels]],

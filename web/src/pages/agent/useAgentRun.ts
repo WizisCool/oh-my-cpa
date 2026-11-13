@@ -199,8 +199,9 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
         // here is what keeps the rest of the console consistent with what the agent just did.
         for (const key of invalidatedKeys(event)) {
           void queryClient.invalidateQueries({ queryKey: [key] });
-          if (key === 'management-providers') {
+          if (key === 'management-providers' || key === 'management-auth-files' || key === 'management-plugins') {
             void queryClient.invalidateQueries({ queryKey: ['management-providers-sanitized'] });
+            void queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] });
           }
         }
         schedule();

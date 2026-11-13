@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
@@ -48,9 +49,11 @@ func (h *Handler) putManagementAuthFileDisplayName(writer http.ResponseWriter, r
 		return
 	}
 	matches := 0
+	var matchedAuthIndex string
 	for _, file := range files.Files {
 		if firstNonEmpty(file.Name, file.ID) == name {
 			matches++
+			matchedAuthIndex = strings.TrimSpace(file.AuthIndex)
 		}
 	}
 	if matches == 0 {
@@ -91,6 +94,11 @@ func (h *Handler) putManagementAuthFileDisplayName(writer http.ResponseWriter, r
 		}
 		return
 	}
+	if matchedAuthIndex != "" {
+		_ = h.repo.SetArchivedCredentialDisplayName(request.Context(), defaultInstanceID(), matchedAuthIndex, stored.DisplayName)
+	}
+	h.identityArchive.reset()
+	h.publishStateSync("management-auth-files", stateScopeIdentityDirectory)
 	_ = h.recordAudit(request, action, "auth_file", name, "success", nil)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status":               "ok",

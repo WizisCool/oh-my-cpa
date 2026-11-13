@@ -4,8 +4,8 @@
  * operator never typed; the label drops it so the row reads as the name they configured.
  */
 import { PROVIDER_KEY_PREFIX } from '../../types/usageEventIdentity';
-import { resolveProviderMark, type BrandMark, type ProviderBrandSources } from '../../types/brandMark';
-import { providerDisplayName } from '../../types/providerMetadata';
+import { resolveProviderMark, resolveRecordedProviderMark, type BrandMark, type ProviderBrandSources } from '../../types/brandMark';
+import { knownProviderDisplayName, providerDisplayName } from '../../types/providerMetadata';
 import type { PricingProvider } from '../../types/pricing';
 export interface ChannelIdentity extends BrandMark {
   label: string;
@@ -20,9 +20,17 @@ export function channelIdentity(channel: string, providers: readonly PricingProv
   }
   if (channel.startsWith(PROVIDER_KEY_PREFIX)) {
     const name = channel.slice(PROVIDER_KEY_PREFIX.length);
+    if (sources.archivedProviderIcons?.has(channel.trim().toLowerCase())) {
+      return { label: name, ...resolveRecordedProviderMark(channel, name, sources) };
+    }
     return { label: name, ...resolveProviderMark({ family: 'openai-compatibility', name, aliases: [channel] }, sources) };
   }
-  return { label: channel, ...resolveProviderMark({ family: channel, name: channel }, sources) };
+  const knownTitle = knownProviderDisplayName(channel, sources.pluginTitles);
+  const label = knownTitle || channel;
+  if (sources.archivedProviderIcons?.has(channel.trim().toLowerCase()) || sources.pluginLogos?.[channel.trim().toLowerCase()]) {
+    return { label, ...resolveRecordedProviderMark(channel, label, sources) };
+  }
+  return { label, ...resolveProviderMark({ family: channel, name: label }, sources) };
 }
 
 /** Model identity metadata can supply an icon when the model directory owns it. */

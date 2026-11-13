@@ -148,6 +148,7 @@ export function useOAuthWorkspaceActions(
   const invalidateWorkspace = React.useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
+      queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] }),
       queryClient.invalidateQueries({ queryKey: ['management-quota'] }),
       queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
     ]);

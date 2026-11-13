@@ -172,11 +172,14 @@ export const InsightsPage: React.FC = () => {
     refetchInterval: (query) => insightsPollInterval(query.state.data?.window),
   });
   const [wasCubeWarm] = React.useState(() => Boolean(cubeQuery.data));
-  const { configuredProviders } = useProviderBranding();
+  const { configuredProviders, archivedCredentialsByIndex } = useProviderBranding();
   // A provider's own name is the identity of the connection that answered, and the credential that
   // served a row is what says which connection that was: CPA labels an API-key request with its
   // protocol family, which is also the label of that family's OAuth channel.
-  const servingProvider = React.useMemo(() => createServingProviderResolver(configuredProviders), [configuredProviders]);
+  const servingProvider = React.useMemo(
+    () => createServingProviderResolver(configuredProviders, archivedCredentialsByIndex),
+    [configuredProviders, archivedCredentialsByIndex],
+  );
   const cube = React.useMemo(() => {
     if (!cubeQuery.data) return undefined;
     return attributeServingProviders(decodeInsightsCube(cubeQuery.data), servingProvider);

@@ -219,9 +219,6 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 			continue
 		}
 		projected = append(projected, projectManagementAuthFile(file))
-		if len(projected) >= managementAuthFileListLimit {
-			break
-		}
 	}
 	if h.repo != nil {
 		names, namesErr := h.repo.ListCredentialDisplayNames(request.Context(), defaultInstanceID())
@@ -236,9 +233,15 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 			}
 		}
 	}
+	if nameFilter == "" && authIndexFilter == "" {
+		_ = h.observeAuthFileIdentities(request.Context(), projected)
+	}
 	sort.Slice(projected, func(i, j int) bool {
 		return strings.ToLower(projected[i].Name) < strings.ToLower(projected[j].Name)
 	})
+	if len(projected) > managementAuthFileListLimit {
+		projected = projected[:managementAuthFileListLimit]
+	}
 	setStateVersionHeader(writer, stateVersion)
 	writeJSON(writer, http.StatusOK, managementAuthFilesResponse{Files: projected, Total: len(projected)})
 }

@@ -7,6 +7,12 @@ import type {
   ConfigSourceResponse,
 } from '../types/configManagement';
 import type { CustomIcon } from '../types/customIcons';
+import type {
+  ArchivedCredentialItem,
+  ArchivedProviderItem,
+  IdentityDirectoryResponse,
+} from '../types/identityDirectory';
+import { PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../types/providerIcons';
 import type { InstalledFont } from '../types/fonts';
 import type {
   ManagementAuthFile,
@@ -66,6 +72,7 @@ import type { UsageRoutingResponse } from '../types/usageRouting';
 import type { WarmupRun, WarmupStateView, WarmupTask, WarmupTaskInput } from '../types/warmup';
 import type { SafeProjectedStateSnapshot, StateEnvelope } from '../api/stateLive';
 import type { AuditBucket, AuditEvent } from '../types/audit';
+import { maskAccount, maskAccountIn, maskEmailAddresses } from '../utils/maskAccount';
 import { maskKeyText } from '../utils/maskKey';
 import { lookupProviderFamily } from '../types/providerFamilies';
 import { clearDemoConversationStorage } from './session';
@@ -128,6 +135,8 @@ export interface DemoSandboxState {
     deletedIds: string[];
     statusOverrides: Record<string, boolean>;
     nameOverrides: Record<string, string>;
+    archivedProviders?: Record<string, ArchivedProviderItem>;
+    archivedCredentials?: Record<string, ArchivedCredentialItem>;
   };
   config: {
     revision?: string;
@@ -148,6 +157,7 @@ export interface DemoSandboxState {
     siwcOverrides: Record<string, { use_siwc?: boolean; siwc_bound?: boolean; siwc_status?: 'off' | 'valid' | 'invalid'; siwc_expires_at?: string }>;
     modelAliases?: Record<string, ManagementOAuthModelAlias[]>;
     excludedModels?: Record<string, string[]>;
+    archivedByIndex?: Record<string, ArchivedCredentialItem>;
   };
   routing: {
     revision?: string;
@@ -889,6 +899,272 @@ function defaultSafeFieldsFor(file: ManagementAuthFile): ManagementAuthFileSafeF
   };
 }
 
+function sanitizePublicBaseUrl(raw?: string): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/$/, '') || parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function toSandboxArchivedProvider(
+  provider: ProviderItem,
+  state: DemoSandboxState,
+  providerIcons: Record<string, string>,
+): { providerEntry?: ArchivedProviderItem; credentialEntries: ArchivedCredentialItem[] } {
+  const effective = applyProviderOverlays(provider, state, true);
+  const publicBaseUrl = sanitizePublicBaseUrl(effective.base_url);
+  const iconId = providerIcons[effective.id] ?? providerIcons[effective.name] ?? undefined;
+  const upstream = effective.upstream_name?.trim() || '';
+  const providerKey = effective.family === 'openai-compatibility' && upstream
+    ? `openai-compatible-${upstream.toLowerCase()}`
+    : effective.family.toLowerCase();
+  const providerEntry: ArchivedProviderItem | undefined = effective.family === 'openai-compatibility' && upstream
+    ? {
+        provider_key: providerKey,
+        kind: 'ai_provider',
+        name: effective.name,
+        upstream_name: upstream,
+        family: effective.family,
+        base_url: publicBaseUrl,
+        icon_id: iconId,
+      }
+    : undefined;
+  const indexes = effective.auth_indexes?.length
+    ? effective.auth_indexes
+    : effective.auth_index
+      ? [effective.auth_index]
+      : [];
+  const credentialEntries: ArchivedCredentialItem[] = indexes
+    .map((raw, pos): ArchivedCredentialItem | null => {
+      const idx = raw.trim();
+      if (!idx) return null;
+      const rawKey = effective.key_entries?.[pos]?.api_key ?? effective.api_key ?? '';
+      return {
+        auth_index: idx,
+        kind: 'apikey',
+        provider_key: providerKey,
+        provider_family: effective.family,
+        provider_name: effective.name,
+        upstream_name: upstream || undefined,
+        base_url: publicBaseUrl,
+        icon_id: iconId,
+        key_mask: maskKeyText(rawKey) || undefined,
+      };
+    })
+    .filter((entry): entry is ArchivedCredentialItem => entry !== null);
+  return { providerEntry, credentialEntries };
+}
+
+function toSandboxArchivedAuthFile(
+  file: ManagementAuthFile,
+  state: DemoSandboxState,
+): ArchivedCredentialItem | null {
+  const idx = file.auth_index?.trim();
+  if (!idx) return null;
+  const rename = state.authFiles.displayNameOverrides[file.name];
+  const displayName = rename !== undefined ? (rename.display_name || undefined) : file.display_name;
+  const providerKey = (file.provider || (file.type?.toLowerCase() !== 'oauth' ? file.type : '') || '').trim().toLowerCase();
+  const account = (file.email || file.project_id || '').trim();
+  let maskedFile = file.name;
+  if (file.email) maskedFile = maskAccountIn(maskedFile, file.email);
+  if (file.project_id) maskedFile = maskAccountIn(maskedFile, file.project_id);
+  maskedFile = maskEmailAddresses(maskedFile);
+  return {
+    auth_index: idx,
+    kind: 'oauth',
+    provider_key: providerKey,
+    oauth_provider: file.oauth_provider?.trim().toLowerCase() || undefined,
+    provider_family: providerKey,
+    file_name: maskedFile,
+    display_name: displayName,
+    masked_account: account ? maskAccount(account) : undefined,
+  };
+}
+
+function mergeSandboxArchivedProvider(
+  existing: ArchivedProviderItem | undefined,
+  incoming: ArchivedProviderItem,
+  sameClaim = false,
+): ArchivedProviderItem {
+  if (!existing) return incoming;
+  const hasConflict = Boolean(
+    existing.is_ambiguous ||
+    incoming.is_ambiguous ||
+    existing.kind !== incoming.kind ||
+    (!sameClaim && (
+      (existing.name || '') !== (incoming.name || '') ||
+      (existing.base_url || '') !== (incoming.base_url || '') ||
+      (existing.icon_id || '') !== (incoming.icon_id || '')
+    )),
+  );
+  if (hasConflict) {
+    return {
+      provider_key: incoming.provider_key || existing.provider_key,
+      kind: existing.kind,
+      is_ambiguous: true,
+    };
+  }
+  return incoming;
+}
+
+function mergeSandboxArchivedCredential(
+  existing: ArchivedCredentialItem | undefined,
+  incoming: ArchivedCredentialItem,
+  sameClaim = false,
+): ArchivedCredentialItem {
+  if (!existing) return incoming;
+  const hasConflict = Boolean(
+    existing.is_ambiguous ||
+    incoming.is_ambiguous ||
+    existing.kind !== incoming.kind ||
+    (existing.provider_family && incoming.provider_family && existing.provider_family !== incoming.provider_family) ||
+    (existing.provider_key && incoming.provider_key && existing.provider_key !== incoming.provider_key) ||
+    (!sameClaim && (
+      (existing.provider_name || '') !== (incoming.provider_name || '') ||
+      (existing.display_name || '') !== (incoming.display_name || '') ||
+      (existing.masked_account || '') !== (incoming.masked_account || '') ||
+      (existing.key_mask || '') !== (incoming.key_mask || '')
+    )),
+  );
+  if (hasConflict) {
+    return {
+      auth_index: incoming.auth_index || existing.auth_index,
+      kind: existing.kind,
+      is_ambiguous: true,
+    };
+  }
+  return incoming;
+}
+
+function snapshotDeletedSandboxProvider(
+  state: DemoSandboxState,
+  provider: ProviderItem,
+  baselinePrefs?: Record<string, unknown>,
+): void {
+  const mergedPrefs = { ...(baselinePrefs ?? {}), ...state.preferences };
+  const icons = parseProviderIcons(mergedPrefs[PROVIDER_ICONS_PREFERENCE]);
+  const { providerEntry, credentialEntries } = toSandboxArchivedProvider(provider, state, icons);
+  if (providerEntry) {
+    state.providers.archivedProviders = state.providers.archivedProviders ?? {};
+    state.providers.archivedProviders[providerEntry.provider_key] = mergeSandboxArchivedProvider(
+      state.providers.archivedProviders[providerEntry.provider_key],
+      providerEntry,
+    );
+  }
+  if (credentialEntries.length > 0) {
+    state.providers.archivedCredentials = state.providers.archivedCredentials ?? {};
+    for (const item of credentialEntries) {
+      state.providers.archivedCredentials[item.auth_index] = mergeSandboxArchivedCredential(
+        state.providers.archivedCredentials[item.auth_index],
+        item,
+      );
+    }
+  }
+}
+
+function snapshotDeletedSandboxAuthFiles(
+  state: DemoSandboxState,
+  baseline: ManagementAuthFilesResponse | null | undefined,
+  names: readonly string[],
+): void {
+  if (!names.length) return;
+  const targetNames = new Set(names);
+  const all = [...(baseline?.files ?? []), ...state.authFiles.created];
+  state.authFiles.archivedByIndex = state.authFiles.archivedByIndex ?? {};
+  for (const file of all) {
+    if (!targetNames.has(file.name)) continue;
+    const archived = toSandboxArchivedAuthFile(file, state);
+    if (archived) {
+      state.authFiles.archivedByIndex[archived.auth_index] = mergeSandboxArchivedCredential(
+        state.authFiles.archivedByIndex[archived.auth_index],
+        archived,
+      );
+    }
+  }
+}
+
+function buildSandboxIdentityArchive(
+  baseDir: IdentityDirectoryResponse | undefined,
+  provBase: { providers: ProviderItem[]; total: number } | null | undefined,
+  authBase: ManagementAuthFilesResponse | null | undefined,
+  state: DemoSandboxState,
+  providerIcons: Record<string, string>,
+): {
+  archivedCredentials: ArchivedCredentialItem[];
+  archivedProviders: ArchivedProviderItem[];
+} {
+  const credMap = new Map<string, ArchivedCredentialItem>();
+  const provMap = new Map<string, ArchivedProviderItem>();
+  for (const item of baseDir?.archived_credentials ?? []) {
+    if (item.auth_index) credMap.set(item.auth_index, item);
+  }
+  for (const item of baseDir?.archived_providers ?? []) {
+    if (item.provider_key) provMap.set(item.provider_key, item);
+  }
+  const persistedProvs = state.providers.archivedProviders ?? {};
+  const persistedProvCreds = state.providers.archivedCredentials ?? {};
+  const deletedProvIds = new Set(state.providers.deletedIds);
+  for (const baseProv of provBase?.providers ?? []) {
+    if (!deletedProvIds.has(baseProv.id)) continue;
+    const { providerEntry, credentialEntries } = toSandboxArchivedProvider(baseProv, state, providerIcons);
+    if (providerEntry && !(providerEntry.provider_key in persistedProvs)) {
+      provMap.set(
+        providerEntry.provider_key,
+        mergeSandboxArchivedProvider(provMap.get(providerEntry.provider_key), providerEntry, true),
+      );
+    }
+    for (const cred of credentialEntries) {
+      if (!(cred.auth_index in persistedProvCreds)) {
+        credMap.set(cred.auth_index, mergeSandboxArchivedCredential(credMap.get(cred.auth_index), cred, true));
+      }
+    }
+  }
+  for (const [key, item] of Object.entries(persistedProvs)) {
+    provMap.set(key, mergeSandboxArchivedProvider(provMap.get(key), item, true));
+  }
+  for (const [idx, item] of Object.entries(persistedProvCreds)) {
+    credMap.set(idx, mergeSandboxArchivedCredential(credMap.get(idx), item, true));
+  }
+  const persistedAuthCreds = state.authFiles.archivedByIndex ?? {};
+  const deletedAuthNames = new Set(state.authFiles.deletedNames);
+  for (const baseFile of authBase?.files ?? []) {
+    if (!deletedAuthNames.has(baseFile.name)) continue;
+    const item = toSandboxArchivedAuthFile(baseFile, state);
+    if (item && !(item.auth_index in persistedAuthCreds)) {
+      credMap.set(item.auth_index, mergeSandboxArchivedCredential(credMap.get(item.auth_index), item, true));
+    }
+  }
+  for (const [idx, item] of Object.entries(persistedAuthCreds)) {
+    credMap.set(idx, mergeSandboxArchivedCredential(credMap.get(idx), item, true));
+  }
+  const deletedIcons = new Set(state.customIcons.deletedIds.map((id) => `custom:${id}`));
+  if (deletedIcons.size > 0) {
+    for (const [idx, item] of credMap) {
+      if (item.icon_id && deletedIcons.has(item.icon_id)) {
+        credMap.set(idx, { ...item, icon_id: undefined });
+      }
+    }
+    for (const [key, item] of provMap) {
+      if (item.icon_id && deletedIcons.has(item.icon_id)) {
+        provMap.set(key, { ...item, icon_id: undefined });
+      }
+    }
+  }
+  return {
+    archivedCredentials: [...credMap.values()],
+    archivedProviders: [...provMap.values()],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Routing
 // ---------------------------------------------------------------------------
@@ -1342,6 +1618,84 @@ export async function interceptDemoRequest(
       if (!baseRes.ok) return baseRes;
       const base = await readBaselineJson<{ providers: ProviderItem[]; total: number }>('providers-with-keys', baseRes);
       return jsonResponse(mergeProviders(base, state, includeKeys));
+    }
+
+    if (pathname === '/management/identity-directory') {
+      const [dirRes, provBase, authBase, pluginsBase, prefsBase] = await Promise.all([
+        fetchBaseline('/management/identity-directory', { method: 'GET' }),
+        ensureBaseline<{ providers: ProviderItem[]; total: number }>('providers-with-keys', '/management/providers?include_keys=true', fetchBaseline),
+        ensureBaseline<ManagementAuthFilesResponse>('auth-files', '/management/auth-files', fetchBaseline),
+        ensureBaseline<PluginsResponse>('plugins', '/management/plugins', fetchBaseline),
+        ensureBaseline<{ preferences?: Record<string, unknown> }>('preferences', '/preferences', fetchBaseline),
+      ]);
+      const baseDir = dirRes.ok
+        ? await readBaselineJson<IdentityDirectoryResponse>('identity-directory', dirRes)
+        : undefined;
+      const fallbackProvBase = baseDir
+        ? {
+            providers: baseDir.providers.map((item) => ({
+              ...item,
+              disable_cooling: false,
+              proxy_configured: false,
+            })),
+            total: baseDir.providers.length,
+          }
+        : undefined;
+      const fallbackAuthBase: ManagementAuthFilesResponse | undefined = baseDir
+        ? {
+            files: baseDir.credentials.map((item) => ({
+              name: item.name,
+              auth_index: item.auth_index,
+              type: item.type ?? 'oauth',
+              provider: item.provider ?? '',
+              oauth_provider: item.oauth_provider,
+              email: item.email,
+              project_id: item.project_id,
+              display_name: item.display_name,
+              disabled: item.disabled ?? false,
+              status: item.disabled ? 'disabled' : 'ready',
+              unavailable: false,
+              runtime_only: false,
+              success: 0,
+              failed: 0,
+            })),
+            total: baseDir.credentials.length,
+          }
+        : undefined;
+      const fallbackPluginsBase: PluginsResponse | undefined = baseDir
+        ? { plugins: baseDir.plugins, total: baseDir.plugins.length, plugins_enabled: true, plugins_dir: '' }
+        : undefined;
+      const effectiveProvBase = provBase ?? fallbackProvBase;
+      const effectiveAuthBase = authBase ?? fallbackAuthBase;
+      const effectivePluginsBase = pluginsBase ?? fallbackPluginsBase;
+      const mergedProvs = effectiveProvBase ? mergeProviders(effectiveProvBase, state, false).providers : [];
+      const mergedAuth = effectiveAuthBase ? mergeAuthFiles(effectiveAuthBase, state).files : [];
+      const mergedPlugins = effectivePluginsBase ? mergePlugins(effectivePluginsBase, state).plugins : [];
+      const mergedPrefs = { ...(prefsBase?.preferences ?? {}), ...state.preferences };
+      const hasIconPref = PROVIDER_ICONS_PREFERENCE in mergedPrefs;
+      const providerIcons = hasIconPref
+        ? parseProviderIcons(mergedPrefs[PROVIDER_ICONS_PREFERENCE])
+        : (baseDir?.provider_icons ?? {});
+      const { archivedCredentials, archivedProviders } = buildSandboxIdentityArchive(
+        baseDir,
+        effectiveProvBase,
+        effectiveAuthBase,
+        state,
+        providerIcons,
+      );
+      return jsonResponse({
+        providers: mergedProvs,
+        credentials: mergedAuth,
+        plugins: mergedPlugins,
+        provider_icons: providerIcons,
+        archived_credentials: archivedCredentials,
+        archived_providers: archivedProviders,
+        catalog_status: {
+          providers_known: Boolean(provBase || baseDir?.catalog_status.providers_known),
+          credentials_known: Boolean(authBase || baseDir?.catalog_status.credentials_known),
+          plugins_known: Boolean(pluginsBase || baseDir?.catalog_status.plugins_known),
+        },
+      } satisfies IdentityDirectoryResponse);
     }
 
     // Config & Config Source & Config Backups
@@ -2353,6 +2707,14 @@ export async function interceptDemoRequest(
       return jsonResponse({ status: 'ok', id, ids: [id] });
     }
     if (method === 'DELETE') {
+      if (existing) {
+        const prefsBase = await ensureBaseline<{ preferences?: Record<string, unknown> }>(
+          'preferences',
+          '/preferences',
+          fetchBaseline,
+        );
+        snapshotDeletedSandboxProvider(state, existing, prefsBase?.preferences);
+      }
       delete state.providers.byId[id];
       if (!state.providers.deletedIds.includes(id)) state.providers.deletedIds.push(id);
       recordSandboxAudit(state, 'provider.delete', 'provider', id);
@@ -2572,6 +2934,8 @@ export async function interceptDemoRequest(
   if (pathname === '/management/auth-files' && method === 'DELETE') {
     const body = parseJsonBody<{ names?: string[] }>(options);
     const names = body?.names ?? [];
+    const authBase = await ensureBaseline<ManagementAuthFilesResponse>('auth-files', '/management/auth-files', fetchBaseline);
+    snapshotDeletedSandboxAuthFiles(state, authBase, names);
     for (const name of names) {
       if (!state.authFiles.deletedNames.includes(name)) state.authFiles.deletedNames.push(name);
     }

@@ -226,7 +226,10 @@ export const CustomIconLibrary: React.FC<Props> = ({
         cached?.filter((icon) => icon.id !== id),
       );
       onDeleted?.(id);
-      await queryClient.invalidateQueries({ queryKey: CUSTOM_ICONS_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CUSTOM_ICONS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] }),
+      ]);
       returnToLibrary();
       toast.success(t('icons.deleted'));
     } catch (reason) {

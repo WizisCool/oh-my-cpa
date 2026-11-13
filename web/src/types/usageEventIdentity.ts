@@ -1,11 +1,12 @@
 import { resolveCredentialMark, resolveProviderMark, resolveRecordedProviderMark, type BrandMark } from './brandMark';
 import { credentialBrandIdentity } from './credentialIdentity';
+import type { ArchivedCredentialItem, ArchivedProviderItem } from './identityDirectory';
 import type { PluginOAuthLogos } from './pluginOAuthProviders';
 import { knownProviderDisplayName, providerDisplayName } from './providerMetadata';
 import type {
   UsageEvent,
 } from './usageEvents';
-import { maskAccount, maskAccountIn } from '../utils/maskAccount';
+import { ACCOUNT_MASK, maskAccount, maskAccountIn, maskEmailAddresses } from '../utils/maskAccount';
 
 export type CredentialFile = {
   name: string;
@@ -16,8 +17,14 @@ export type CredentialFile = {
   oauth_provider?: string;
   email?: string;
   project_id?: string;
+  /** Pre-masked filename preserved from the server archive after credential deletion. */
+  archived_file_name?: string;
+  /** Pre-masked account preserved from the server archive after credential deletion. */
+  masked_account?: string;
   /** The operator's own name for the credential, kept by Oh My CPA. */
   display_name?: string;
+  /** True when synthesized from the persistent archive rather than a live CPA auth file. */
+  is_archived?: boolean;
 };
 
 export type CredentialIndex = ReadonlyMap<string, CredentialFile | null>;
@@ -45,7 +52,8 @@ export function credentialAccount(file: CredentialFile | null | undefined): stri
   // Each candidate is trimmed before it is chosen, so a blank address cannot shadow the
   // project id beside it.
   const account = file?.email?.trim() || file?.project_id?.trim() || '';
-  return account ? maskAccount(account) : '';
+  if (account) return maskAccount(account);
+  return file?.masked_account?.trim() || '';
 }
 
 /**
@@ -69,6 +77,35 @@ function credentialIdentities(file: CredentialFile | null | undefined): string[]
     .filter(Boolean);
 }
 
+function matchesArchivedFileName(archivedName: string, rawResourceName: string): boolean {
+  const cleanArchived = archivedName.trim();
+  const cleanRaw = rawResourceName.trim();
+  if (!cleanArchived || !cleanRaw) return false;
+  if (cleanArchived === cleanRaw) return true;
+  if (!cleanArchived.includes(ACCOUNT_MASK)) return false;
+  // Linear O(n) prefix/infix/suffix scan without dynamic RegExp compilation to eliminate ReDoS risk.
+  const segments = cleanArchived.split(ACCOUNT_MASK);
+  const lowerRaw = cleanRaw.toLowerCase();
+  const lowerSegs = segments.map((seg) => seg.toLowerCase());
+  const first = lowerSegs[0];
+  if (!lowerRaw.startsWith(first)) return false;
+  if (lowerSegs.length === 1) return lowerRaw.length === first.length;
+  const last = lowerSegs[lowerSegs.length - 1];
+  if (!lowerRaw.endsWith(last)) return false;
+  const rawEnd = lowerRaw.length - last.length;
+  let pos = first.length;
+  for (let i = 1; i < lowerSegs.length - 1; i++) {
+    const seg = lowerSegs[i];
+    // Each ACCOUNT_MASK placeholder stands for at least one masked character (`pos + 1`).
+    const minIdx = pos + 1;
+    if (minIdx > rawEnd) return false;
+    const found = seg ? lowerRaw.indexOf(seg, minIdx) : minIdx;
+    if (found < 0 || found + seg.length > rawEnd) return false;
+    pos = found + seg.length;
+  }
+  return rawEnd >= pos + 1;
+}
+
 /**
  * Masks each reported identity wherever a display label repeats it.
  *
@@ -77,9 +114,19 @@ function credentialIdentities(file: CredentialFile | null | undefined): string[]
  * project. Masking only the first reported value would leave the other printed. The
  * address goes first because a project id can be part of it; masking the whole address
  * before the project id keeps one replacement from breaking the other's match.
+ *
+ * When a credential has been deleted and only its pre-masked archive entry remains,
+ * matching template filenames take the archived masked filename directly and any other
+ * address-shaped token is masked in place.
  */
 export function maskCredentialIdentities(text: string, file: CredentialFile | null | undefined): string {
-  return credentialIdentities(file).reduce((masked, identity) => maskAccountIn(masked, identity), text);
+  const maskedByLive = credentialIdentities(file).reduce((masked, identity) => maskAccountIn(masked, identity), text);
+  if (!file?.is_archived) return maskedByLive;
+  const archivedName = (file.archived_file_name || file.name).trim();
+  if (archivedName.includes(ACCOUNT_MASK) && matchesArchivedFileName(archivedName, maskedByLive)) {
+    return archivedName;
+  }
+  return maskEmailAddresses(maskedByLive);
 }
 
 /**
@@ -91,7 +138,7 @@ export function maskCredentialIdentities(text: string, file: CredentialFile | nu
  * of them is left whole: it is the operator's or CPA's own label, not identity material.
  */
 export function credentialFileName(file: CredentialFile | null | undefined): string {
-  const name = (file?.name || '').trim();
+  const name = (file?.is_archived ? (file.archived_file_name || file.name) : file?.name || '').trim();
   if (!name) return '';
   return maskCredentialIdentities(name, file);
 }
@@ -102,11 +149,44 @@ export function credentialOptionLabel(file: CredentialFile | null | undefined): 
 }
 
 /** Ambiguous indexes must never be guessed, even if one filename looks likely. */
-export function indexCredentialFiles(files: readonly CredentialFile[]): CredentialIndex {
+export function indexCredentialFiles(
+  files: readonly CredentialFile[],
+  archivedCredentials: readonly ArchivedCredentialItem[] = [],
+): CredentialIndex {
   const index = new Map<string, CredentialFile | null>();
   for (const file of files) {
     if (!file.auth_index || !file.name) continue;
     index.set(file.auth_index, index.has(file.auth_index) ? null : file);
+  }
+  for (const archived of archivedCredentials) {
+    const authIndex = archived.auth_index?.trim();
+    if (!authIndex || archived.kind !== 'oauth' || index.has(authIndex)) continue;
+    if (archived.is_ambiguous) {
+      index.set(authIndex, null);
+      continue;
+    }
+    const archivedFileName = archived.file_name?.trim() || '';
+    const hasMetadata = Boolean(
+      archivedFileName ||
+      archived.masked_account?.trim() ||
+      archived.display_name?.trim() ||
+      archived.provider_key?.trim() ||
+      archived.oauth_provider?.trim(),
+    );
+    if (!hasMetadata) continue;
+    index.set(authIndex, {
+      // Keep authIndex as the distinct bucket key so two deleted credentials sharing
+      // the same masked_account never collapse into a single CredentialIdentity.name.
+      name: authIndex,
+      archived_file_name: archivedFileName || undefined,
+      auth_index: authIndex,
+      provider: archived.provider_key?.trim() || undefined,
+      type: archived.provider_family?.trim() || archived.provider_key?.trim() || 'oauth',
+      oauth_provider: archived.oauth_provider?.trim() || undefined,
+      masked_account: archived.masked_account?.trim() || undefined,
+      display_name: archived.display_name?.trim() || undefined,
+      is_archived: true,
+    });
   }
   return index;
 }
@@ -145,7 +225,14 @@ export function resolveCredential(event: UsageEvent, files: CredentialIndex): Cr
     return { name, ...(displayName !== name ? { displayName } : {}), kind };
   };
   const resourceName = event.resource_name?.trim();
-  const isFileOfResource = Boolean(file?.name.trim() && file.name.trim() === resourceName);
+  const fileMatchName = file?.is_archived ? (file.archived_file_name || '') : (file?.name || '');
+  const isFileOfResource = Boolean(
+    resourceName && fileMatchName.trim() && (
+      file?.is_archived
+        ? matchesArchivedFileName(fileMatchName, resourceName)
+        : fileMatchName.trim() === resourceName
+    ),
+  );
   if (resourceName)
     // A resource names the file CPA recorded, so the live file's own name must match it
     // before the operator's name for that file can stand in for the resource's label.
@@ -176,23 +263,28 @@ export interface ProviderLookupEntry {
  */
 export const PROVIDER_KEY_PREFIX = 'openai-compatible-';
 
-type ProviderResolverFn = (providerKey: string | null | undefined, authIndex?: string) => ProviderLookupEntry | undefined;
+type ProviderLookupResult =
+  | { kind: 'matched'; provider: ProviderLookupEntry }
+  | { kind: 'ambiguous' }
+  | { kind: 'unclaimed' };
 
-const providerResolverCache = new WeakMap<readonly ProviderLookupEntry[], ProviderResolverFn>();
+type ProviderLookupFn = (providerKey: string | null | undefined, authIndex?: string) => ProviderLookupResult;
+
+const providerLookupCache = new WeakMap<readonly ProviderLookupEntry[], ProviderLookupFn>();
 
 /**
  * Rows and facets share the same identity claims. Display names and resource
  * names are presentation, not proof that a current provider served a request.
  *
- * Cached by catalog array identity (`WeakMap`) so resolving hundreds of request
- * rows during a render builds the claim maps once per catalog snapshot instead
- * of once per row.
+ * Preserves the distinction between an unclaimed identifier (`unclaimed`, which
+ * may consult the historical archive) and a conflicting live claim (`ambiguous`,
+ * which must never be overridden by an older archived record).
  */
-function createProviderResolver(configured: readonly ProviderLookupEntry[]): ProviderResolverFn {
+function createProviderLookup(configured: readonly ProviderLookupEntry[]): ProviderLookupFn {
   if (configured.length === 0) {
-    return () => undefined;
+    return () => ({ kind: 'unclaimed' });
   }
-  const cached = providerResolverCache.get(configured);
+  const cached = providerLookupCache.get(configured);
   if (cached) return cached;
 
   const providerClaims = new Map<string, ProviderLookupEntry | null>();
@@ -212,32 +304,50 @@ function createProviderResolver(configured: readonly ProviderLookupEntry[]): Pro
     }
   }
 
-  const resolver: ProviderResolverFn = (providerKey, authIndex) => {
+  const lookup: ProviderLookupFn = (providerKey, authIndex) => {
     // A missing or ambiguous credential cannot be replaced by a weaker label:
     // that would transfer history after deletion, rotation or name reuse.
     const credentialKey = authIndex?.trim();
-    if (credentialKey) return credentialClaims.get(credentialKey) ?? undefined;
+    if (credentialKey) {
+      if (!credentialClaims.has(credentialKey)) return { kind: 'unclaimed' };
+      const entry = credentialClaims.get(credentialKey);
+      return entry ? { kind: 'matched', provider: entry } : { kind: 'ambiguous' };
+    }
 
     const rawKey = providerKey?.trim().toLowerCase() || '';
-    return providerClaims.get(rawKey) ?? undefined;
+    if (!rawKey || !providerClaims.has(rawKey)) return { kind: 'unclaimed' };
+    const entry = providerClaims.get(rawKey);
+    return entry ? { kind: 'matched', provider: entry } : { kind: 'ambiguous' };
   };
-  providerResolverCache.set(configured, resolver);
-  return resolver;
+  providerLookupCache.set(configured, lookup);
+  return lookup;
 }
 
 /**
  * Provider facets have no credential index, so only exact provider keys resolve: to the configured
- * provider's name, then to the name a plugin or the brand table gives the key, as a record's row
- * does. A key nobody names stays as recorded.
+ * provider's name, then to an unambiguous archived name, then to the name a plugin or the brand
+ * table gives the key. A key nobody names stays as recorded.
  */
 export function createProviderNameResolver(
   configured: readonly ProviderLookupEntry[] = [],
   pluginTitles?: ReadonlyMap<string, string>,
+  archivedProviders?: ReadonlyMap<string, ArchivedProviderItem>,
 ): (providerKey: string | null | undefined) => string {
-  const resolveProvider = createProviderResolver(configured);
+  const lookupProvider = createProviderLookup(configured);
   return (providerKey) => {
     const key = providerKey?.trim() || '';
-    return resolveProvider(providerKey)?.name.trim() || (key && knownProviderDisplayName(key, pluginTitles)) || key;
+    const normalized = key.toLowerCase();
+    const lookup = lookupProvider(providerKey);
+    if (lookup.kind === 'matched' && lookup.provider.name.trim()) {
+      return lookup.provider.name.trim();
+    }
+    if (lookup.kind === 'unclaimed') {
+      const archived = normalized ? archivedProviders?.get(normalized) : undefined;
+      if (archived && !archived.is_ambiguous && archived.name?.trim()) {
+        return archived.name.trim();
+      }
+    }
+    return (key && knownProviderDisplayName(key, pluginTitles)) || key;
   };
 }
 
@@ -258,9 +368,21 @@ export function createProviderNameResolver(
  */
 export function createServingProviderResolver(
   configured: readonly ProviderLookupEntry[] = [],
+  archivedCredentials?: ReadonlyMap<string, ArchivedCredentialItem>,
 ): (authIndex: string | null | undefined) => string | undefined {
-  const resolveProvider = createProviderResolver(configured);
-  return (authIndex) => resolveProvider(undefined, authIndex ?? undefined)?.id.trim() || undefined;
+  const lookupProvider = createProviderLookup(configured);
+  return (authIndex) => {
+    const idx = authIndex?.trim();
+    if (!idx) return undefined;
+    const lookup = lookupProvider(undefined, idx);
+    if (lookup.kind === 'matched') return lookup.provider.id.trim() || undefined;
+    if (lookup.kind === 'ambiguous') return undefined;
+    const arch = archivedCredentials?.get(idx);
+    if (arch && arch.kind === 'apikey' && !arch.is_ambiguous && arch.provider_key?.startsWith(PROVIDER_KEY_PREFIX)) {
+      return arch.provider_key;
+    }
+    return undefined;
+  };
 }
 
 export interface ResolvedProviderInfo extends BrandMark {
@@ -284,6 +406,12 @@ export interface ResolvedProviderInfo extends BrandMark {
   accountIdentity?: string;
 }
 
+export interface ProviderResolutionArchive {
+  archivedCredentials?: ReadonlyMap<string, ArchivedCredentialItem>;
+  archivedProviders?: ReadonlyMap<string, ArchivedProviderItem>;
+  archivedProviderIcons?: ReadonlyMap<string, string>;
+}
+
 export function resolveProviderInfo(
   event: UsageEvent,
   credentials: CredentialIndex,
@@ -295,12 +423,13 @@ export function resolveProviderInfo(
   /** Titles plugins give the OAuth providers they register. */
   pluginTitles?: ReadonlyMap<string, string>,
   multiPortalKeys?: ReadonlySet<string>,
+  archive?: ProviderResolutionArchive,
 ): ResolvedProviderInfo {
   const file = matchingCredential(event, credentials);
   const isOAuth =
     event.auth_type?.toLowerCase() === 'oauth' ||
     file?.type?.toLowerCase() === 'oauth' ||
-    Boolean(file?.oauth_provider || file?.email || file?.project_id);
+    Boolean(file?.oauth_provider || file?.email || file?.project_id || file?.masked_account || file?.is_archived);
 
   if (isOAuth) {
     // A credential file may say only that it is an OAuth file. That is how it
@@ -339,13 +468,18 @@ export function resolveProviderInfo(
     };
   }
 
-  const matched = createProviderResolver(configuredProviders)(event.provider, event.auth_index);
+  const lookup = createProviderLookup(configuredProviders)(event.provider, event.auth_index);
   const credIdentity = resolveCredential(event, credentials);
   const fileName = credIdentity.name || event.source || '';
-  const providerName = matched?.name.trim() || event.resource_name?.trim() || event.provider?.trim() || 'Unknown';
-
-  const sources = { providerIcons, pluginLogos, isProviderCatalogUnknown };
-  if (matched) {
+  const sources = {
+    providerIcons,
+    pluginLogos,
+    isProviderCatalogUnknown,
+    archivedProviderIcons: archive?.archivedProviderIcons,
+  };
+  if (lookup.kind === 'matched') {
+    const matched = lookup.provider;
+    const providerName = matched.name.trim() || event.resource_name?.trim() || event.provider?.trim() || 'Unknown';
     return {
       isOAuth: false,
       ...resolveProviderMark({ ...matched, family: matched.family || event.provider || '', name: providerName, aliases: [event.provider] }, sources),
@@ -354,12 +488,79 @@ export function resolveProviderInfo(
     };
   }
 
+  // Consult the sanitized historical archive only when no live configured provider claimed
+  // the record (`unclaimed`), never when two live configured providers conflicted (`ambiguous`).
+  if (lookup.kind === 'unclaimed') {
+    const trimmedAuthIndex = event.auth_index?.trim() || '';
+    const archivedCred = trimmedAuthIndex ? archive?.archivedCredentials?.get(trimmedAuthIndex) : undefined;
+    if (archivedCred && archivedCred.kind === 'apikey' && !archivedCred.is_ambiguous) {
+      const archivedTitle = archivedCred.provider_name?.trim()
+        || event.resource_name?.trim()
+        || archivedCred.upstream_name?.trim()
+        || event.provider?.trim()
+        || 'Unknown';
+      const recorded = resolveRecordedProviderMark(
+        archivedCred.provider_key || event.provider || '',
+        archivedTitle,
+        {
+          ...sources,
+          providerIcons: archivedCred.icon_id
+            ? { ...providerIcons, [archivedCred.provider_key || event.provider || '']: archivedCred.icon_id }
+            : providerIcons,
+        },
+        archivedCred.base_url,
+      );
+      return {
+        isOAuth: false,
+        ...recorded,
+        isIdentityUnknown: isProviderCatalogUnknown || recorded.isIdentityUnknown,
+        title: archivedTitle,
+        credential: archivedCred.key_mask || undefined,
+        authFile: fileName,
+      };
+    }
+
+    const rawProviderKey = event.provider?.trim().toLowerCase() || '';
+    const archivedProv = !trimmedAuthIndex && rawProviderKey ? archive?.archivedProviders?.get(rawProviderKey) : undefined;
+    if (archivedProv && archivedProv.kind === 'ai_provider' && !archivedProv.is_ambiguous) {
+      const archivedTitle = archivedProv.name?.trim()
+        || event.resource_name?.trim()
+        || archivedProv.upstream_name?.trim()
+        || event.provider?.trim()
+        || 'Unknown';
+      const recorded = resolveRecordedProviderMark(
+        event.provider || archivedProv.provider_key,
+        archivedTitle,
+        {
+          ...sources,
+          providerIcons: archivedProv.icon_id
+            ? { ...providerIcons, [event.provider || archivedProv.provider_key]: archivedProv.icon_id }
+            : providerIcons,
+        },
+        archivedProv.base_url,
+      );
+      return {
+        isOAuth: false,
+        ...recorded,
+        isIdentityUnknown: isProviderCatalogUnknown || recorded.isIdentityUnknown,
+        title: archivedTitle,
+        authFile: fileName,
+      };
+    }
+  }
+
+  const providerName = event.resource_name?.trim() || event.provider?.trim() || 'Unknown';
   // A record left without a configured provider is ambiguous in two different ways, and a
   // reader has to be able to tell them apart. Its own label is the truth when the catalog was
   // read and does not claim the record - a provider someone deleted, or a request the console
   // never configured. It is only unproven when the catalog could not be read at all: then the
   // name printed is a placeholder until the read settles, and an export must not save it.
-  const recorded = resolveRecordedProviderMark(event.provider || '', providerName, sources);
+  // Conflicting live claims must never borrow archived icons.
+  const recorded = resolveRecordedProviderMark(
+    event.provider || '',
+    providerName,
+    lookup.kind === 'ambiguous' ? { ...sources, archivedProviderIcons: undefined } : sources,
+  );
 
   return {
     isOAuth: false,

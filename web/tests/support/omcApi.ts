@@ -1,4 +1,6 @@
 import { vi } from 'vitest';
+import type { ArchivedCredentialItem, ArchivedProviderItem } from '../../src/types/identityDirectory';
+import { PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../src/types/providerIcons';
 import type { ProviderItem } from '../../src/types/providers';
 import type { HealthStatus } from '../../src/types/resource';
 import type { ManagementAuthFile } from '../../src/types/managementAuthFile';
@@ -28,6 +30,8 @@ export interface OmcState {
   providers: ProviderItem[];
   health: HealthStatus;
   authFiles: OmcAuthFile[];
+  archivedCredentials: ArchivedCredentialItem[];
+  archivedProviders: ArchivedProviderItem[];
 }
 
 export interface OmcRequest {
@@ -111,6 +115,17 @@ const BUILT_IN_ROUTES: Route[] = [
   },
   { method: 'GET', path: '/management/plugins', handler: (_request, state) => ({ plugins: state.plugins }) },
   { method: 'GET', path: '/management/providers', handler: (_request, state) => ({ providers: state.providers }) },
+  {
+    method: 'GET', path: '/management/identity-directory', handler: (_request, state) => ({
+      providers: state.providers,
+      credentials: state.authFiles.map(entry => entry.file),
+      plugins: state.plugins,
+      provider_icons: parseProviderIcons(state.preferences[PROVIDER_ICONS_PREFERENCE]),
+      archived_credentials: state.archivedCredentials,
+      archived_providers: state.archivedProviders,
+      catalog_status: { providers_known: true, credentials_known: true, plugins_known: true },
+    }),
+  },
   { method: 'GET', path: '/management/routing/models', handler: () => ({ models: {}, unknown: [] }) },
   {
     method: 'PUT', path: /^\/management\/providers\/[^/]+$/, handler: (request, state) => {
@@ -157,6 +172,7 @@ let current: OmcApi | undefined;
 export function installOmcApi(seed: Partial<OmcState> = {}): OmcApi {
   const state: OmcState = {
     preferences: {}, serverTimezone: 'UTC', plugins: [], providers: [], authFiles: [],
+    archivedCredentials: [], archivedProviders: [],
     health: { status: 'ok', cpa_connected: true, cpa_management_api: 'v8', database_status: 'ok' },
     ...seed,
   };

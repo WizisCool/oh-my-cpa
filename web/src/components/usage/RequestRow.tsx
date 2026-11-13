@@ -21,6 +21,7 @@ import {
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
+  type ProviderResolutionArchive,
 } from '../../types/usageEventIdentity';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import {
@@ -59,6 +60,7 @@ export interface RequestRowProps {
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
   isProviderCatalogUnknown?: boolean;
+  archive?: ProviderResolutionArchive;
   onOpen: (id: number) => void;
   isSelected?: boolean;
   /** Whether the row is picked. */
@@ -79,6 +81,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     multiPortalKeys,
     pluginTitles,
     isProviderCatalogUnknown = false,
+    archive,
     onOpen,
     isSelected = false,
     isChecked = false,
@@ -126,6 +129,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       isProviderCatalogUnknown,
       pluginTitles,
       multiPortalKeys,
+      archive,
     );
 
     // Which of the provider's keys answered this request. The server resolves it

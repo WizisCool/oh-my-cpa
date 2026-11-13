@@ -3,6 +3,7 @@ import {
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
+  type ProviderResolutionArchive,
 } from '../../../types/usageEventIdentity';
 import type { UsageEvent } from '../../../types/usageEvents';
 import type { BrandMark } from '../../../types/brandMark';
@@ -18,6 +19,7 @@ export interface IdentitySources {
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog could not be read, so a recorded name is a placeholder, not a verdict. */
   isProviderCatalogUnknown?: boolean;
+  archive?: ProviderResolutionArchive;
 }
 
 export interface TargetIdentity extends BrandMark {
@@ -44,10 +46,11 @@ export function targetIdentity(event: UsageEvent, sources: IdentitySources): Tar
     sources.isProviderCatalogUnknown,
     sources.pluginTitles,
     sources.multiPortalKeys,
+    sources.archive,
   );
   const credential = info.isOAuth
     ? info.credential ?? ''
-    : maskKeyText(event.provider_key_mask) || event.auth_index?.trim() || '';
+    : maskKeyText(event.provider_key_mask) || info.credential || event.auth_index?.trim() || '';
   return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo, fallbackIconId: info.fallbackIconId, providerKeys: info.providerKeys, isIdentityUnknown: info.isIdentityUnknown };
 }
 

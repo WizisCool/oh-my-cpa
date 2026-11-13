@@ -121,5 +121,10 @@ func (h *Handler) writeProviderName(ctx context.Context, client *management.Clie
 	if err := h.saveStringPreferences(ctx, map[string]map[string]string{repository.PreferenceProviderNames: names}); err != nil {
 		return newProviderWriteError(http.StatusInternalServerError, "failed to store the name")
 	}
+	h.identityArchive.reset()
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), providerPostWriteRefreshTimeout)
+	_ = h.readProviderItems(refreshCtx, client)
+	cancel()
+	h.publishStateSync("management-providers", "management-providers-sanitized", stateScopeIdentityDirectory)
 	return nil
 }

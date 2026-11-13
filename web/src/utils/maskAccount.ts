@@ -1,4 +1,4 @@
-const ACCOUNT_MASK = '•••';
+export const ACCOUNT_MASK = '•••';
 
 /**
  * maskAccount hides who a credential belongs to while keeping it recognisable to its owner.
@@ -41,7 +41,7 @@ export function maskAccountIn(text: string, account: string): string {
 }
 
 /** The local and domain shape an address is recognised by when the credential is not at hand. */
-const ADDRESS = /[A-Za-z0-9._%+'\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
+const ADDRESS = /[A-Za-z0-9.!#$%&'*+/=?^_`{|}~\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
 
 /**
  * Masks every address-shaped token in a label, for a surface holding the label but not the

@@ -23,7 +23,7 @@ import {
   eventWindowQuery,
   type EventFilterKey,
 } from '../types/usageEventQuery';
-import { createProviderNameResolver, credentialOptionLabel, indexCredentialFiles } from '../types/usageEventIdentity';
+import { createProviderNameResolver, credentialOptionLabel } from '../types/usageEventIdentity';
 import {
   UNKNOWN_EVENT_GROUP,
   eventCredentialIdentity,
@@ -332,40 +332,32 @@ export const UsageEventsPage: React.FC = () => {
   React.useEffect(clearSelectedRows, [clearSelectedRows, signature]);
   const pendingCount = pendingArrivals(result.data?.arrived_count);
 
-  // Safe file metadata only: never download credential contents for the stream.
-  const authFiles = useQuery({
-    queryKey: ['management-auth-files'],
-    queryFn: () => api.getManagementAuthFiles(),
-    staleTime: 60_000,
-  });
-  const credentials = React.useMemo(
-    () => indexCredentialFiles(authFiles.data?.files || []),
-    [authFiles.data],
-  );
-  // A plugin that registers an OAuth provider also publishes its logo, which the
-  // request row shows in place of the console's catalog mark. The catalog itself
-  // comes from the shared hook: a page-local copy of this query drifted from the
-  // freshness rule the other surfaces apply to the same data.
+  // Safe credential metadata and historical archive come from the consolidated
+  // identity directory so live and deleted credentials resolve identically.
   const {
+    credentials,
+    isCredentialsUnavailable,
     providerIcons,
     pluginLogos,
     multiPortalKeys,
     pluginTitles,
     configuredProviders,
+    archivedProvidersByKey,
+    archive,
     isProviderCatalogUnproven,
     refetchProviders,
   } = useProviderBranding();
   // Resolves CPA's stored provider key to the name the operator configured, so
   // the filter names a line the same way the providers page does.
   const providerName = React.useMemo(
-    () => createProviderNameResolver(configuredProviders, pluginTitles),
-    [configuredProviders, pluginTitles],
+    () => createProviderNameResolver(configuredProviders, pluginTitles, archivedProvidersByKey),
+    [configuredProviders, pluginTitles, archivedProvidersByKey],
   );
   // Records resolve by runtime credential index, not a projected positional id.
   // A routine catalog refetch does not withdraw an identity already resolved.
   const renderFacetMark = React.useMemo(
-    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, isProviderCatalogUnknown: isProviderCatalogUnproven }),
-    [credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, isProviderCatalogUnproven],
+    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, isProviderCatalogUnknown: isProviderCatalogUnproven, archive }),
+    [credentials, providerIcons, configuredProviders, pluginLogos, multiPortalKeys, isProviderCatalogUnproven, archive],
   );
 
   /**
@@ -538,6 +530,7 @@ export const UsageEventsPage: React.FC = () => {
         multiPortalKeys={multiPortalKeys}
         pluginTitles={pluginTitles}
         isProviderCatalogUnknown={isProviderCatalogUnproven}
+        archive={archive}
         onOpen={setSelected}
         isSelected={selected === event.id}
         isChecked={selection.has(event.id)}
@@ -555,6 +548,7 @@ export const UsageEventsPage: React.FC = () => {
       pluginLogos,
       pluginTitles,
       providerIcons,
+      archive,
       selected,
       selection,
     ],
@@ -699,7 +693,7 @@ export const UsageEventsPage: React.FC = () => {
               setIsFilterDrawerOpen(false);
             }}
           />
-          {authFiles.isError && (
+          {isCredentialsUnavailable && (
             <div className="request-detail-note" role="status">
               {t('events.credentials_unavailable')}
             </div>
@@ -793,6 +787,7 @@ export const UsageEventsPage: React.FC = () => {
         multiPortalKeys={multiPortalKeys}
         pluginTitles={pluginTitles}
         isProviderCatalogUnknown={isProviderCatalogUnproven}
+        archive={archive}
       />
       <RequestExportDialog
         open={isExportOpen}
@@ -807,6 +802,7 @@ export const UsageEventsPage: React.FC = () => {
         pluginTitles={pluginTitles}
         isProviderUnproven={isProviderCatalogUnproven}
         onRetryProviders={() => void refetchProviders()}
+        archive={archive}
       />
     </div>
   );

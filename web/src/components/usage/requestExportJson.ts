@@ -4,6 +4,7 @@ import {
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
+  type ProviderResolutionArchive,
 } from '../../types/usageEventIdentity';
 import { eventTokensPerSecond } from '../../types/usageEventMetrics';
 import type { UsageEvent } from '../../types/usageEvents';
@@ -36,6 +37,7 @@ export interface RequestExportInput {
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
   isProviderCatalogUnknown?: boolean;
+  archive?: ProviderResolutionArchive;
 }
 
 /**
@@ -68,6 +70,7 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       input.isProviderCatalogUnknown,
       input.pluginTitles,
       input.multiPortalKeys,
+      input.archive,
     );
     const record: Record<string, unknown> = { id: event.id };
     const put = (key: string, value: unknown) => {

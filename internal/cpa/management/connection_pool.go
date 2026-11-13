@@ -250,6 +250,7 @@ func (e ConfigAPIKey) ProviderRuntimeView() ConfigAPIKey {
 	}
 	view := *e.runtimeView
 	view.ConnectionPool, view.pool = e.ConnectionPool, e.pool
+	view.ExcludedModels = append([]string(nil), e.ExcludedModels...)
 	return view
 }
 
@@ -258,6 +259,7 @@ func (e OpenAICompatibility) ProviderRuntimeView() OpenAICompatibility {
 		return e
 	}
 	view := *e.runtimeView
+	view.Disabled = e.Disabled
 	view.ConnectionPool = e.ConnectionPool
 	view.APIKeyEntries = append([]APIKeyEntry(nil), view.APIKeyEntries...)
 	for i := range view.APIKeyEntries {
@@ -269,4 +271,28 @@ func (e OpenAICompatibility) ProviderRuntimeView() OpenAICompatibility {
 		}
 	}
 	return view
+}
+
+// CopyRuntimeMetadataFrom preserves unexported runtime projections across JSON deep clones.
+func (e *ConfigAPIKey) CopyRuntimeMetadataFrom(source ConfigAPIKey) {
+	e.runtimeBaseURL = source.runtimeBaseURL
+	if source.pool != nil {
+		poolCopy := *source.pool
+		e.pool = &poolCopy
+	}
+	if source.runtimeView != nil {
+		viewCopy := *source.runtimeView
+		e.runtimeView = &viewCopy
+	}
+}
+
+// CopyRuntimeMetadataFrom preserves unexported runtime projections across JSON deep clones.
+func (e *OpenAICompatibility) CopyRuntimeMetadataFrom(source OpenAICompatibility) {
+	if source.runtimeView != nil {
+		viewCopy := *source.runtimeView
+		viewCopy.APIKeyEntries = append([]APIKeyEntry(nil), source.runtimeView.APIKeyEntries...)
+		viewCopy.LegacyAPIKeys = append([]string(nil), source.runtimeView.LegacyAPIKeys...)
+		viewCopy.Models = append([]ModelAlias(nil), source.runtimeView.Models...)
+		e.runtimeView = &viewCopy
+	}
 }

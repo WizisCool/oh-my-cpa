@@ -35,6 +35,7 @@ import {
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
+  type ProviderResolutionArchive,
 } from '../../types/usageEventIdentity';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { RequestOverview } from './RequestOverview';
@@ -74,6 +75,7 @@ export interface UsageEventDrawerProps {
   multiPortalKeys?: ReadonlySet<string>;
   pluginTitles?: ReadonlyMap<string, string>;
   isProviderCatalogUnknown?: boolean;
+  archive?: ProviderResolutionArchive;
 }
 
 export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
@@ -88,6 +90,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   multiPortalKeys,
   pluginTitles,
   isProviderCatalogUnknown,
+  archive,
 }) => {
   useTimeZone();
   const { currency } = useDisplayCurrency();
@@ -152,7 +155,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     />
   );
   const providerInfo = event
-    ? resolveProviderInfo(event, credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown, pluginTitles, multiPortalKeys)
+    ? resolveProviderInfo(event, credentials, providerIcons, configuredProviders, pluginLogos, isProviderCatalogUnknown, pluginTitles, multiPortalKeys, archive)
     : undefined;
   // The overview names the credential the way the list's provider cell does: an OAuth account,
   // else the provider key that answered, else whatever identifies the credential at all.

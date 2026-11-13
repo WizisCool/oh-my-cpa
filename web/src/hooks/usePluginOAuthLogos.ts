@@ -1,65 +1,68 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { QUERY_KEYS } from '../api/queryKeys';
+import { type PluginOAuthLogos } from '../types/pluginOAuthProviders';
 import {
-  pluginOAuthProviderKeys,
-  pluginOAuthProviderLogos,
-  pluginOAuthProviderTitles,
-  pluginMultiPortalKeys,
-  pluginOwnsProvider,
-  type PluginOAuthLogos,
-} from '../types/pluginOAuthProviders';
+  buildMergedMultiPortalKeys,
+  buildMergedPluginLogos,
+  buildMergedPluginOAuthIds,
+  buildMergedPluginTitles,
+  isPluginOwnedInDirectory,
+} from './useIdentityDirectory';
 
 /**
- * The logos the installed plugins publish for their OAuth providers.
- *
- * Every provider surface needs the same answer, and the plugin list is the same
- * query the OAuth page and the dashboard already read, so it is fetched under one
- * query key and shared rather than asking CPA once per page.
+ * The logos the installed (and archived) plugins publish for their OAuth providers,
+ * read from the shared `management-identity-directory` query.
  */
 export function usePluginOAuthLogos(): PluginOAuthLogos {
   const { data } = useQuery({
-    queryKey: ['management-plugins'],
-    queryFn: api.getPlugins,
+    queryKey: QUERY_KEYS.identityDirectory,
+    queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
     staleTime: 30000,
   });
 
-  return useMemo(() => pluginOAuthProviderLogos(data?.plugins), [data]);
+  return useMemo(() => buildMergedPluginLogos(data), [data]);
 }
 
-/** The titles the installed plugins' login cards give their OAuth providers, read from the same shared query. */
+/** The titles the installed (and archived) plugins' login cards give their OAuth providers. */
 export function usePluginOAuthTitles(): ReadonlyMap<string, string> {
   const { data } = useQuery({
-    queryKey: ['management-plugins'],
-    queryFn: api.getPlugins,
+    queryKey: QUERY_KEYS.identityDirectory,
+    queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
     staleTime: 30000,
   });
 
-  return useMemo(() => pluginOAuthProviderTitles(data?.plugins), [data]);
+  return useMemo(() => buildMergedPluginTitles(data), [data]);
 }
 
 export function usePluginMultiPortalKeys(): ReadonlySet<string> {
-  const { data } = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000 });
-  return useMemo(() => pluginMultiPortalKeys(data?.plugins), [data]);
+  const { data } = useQuery({
+    queryKey: QUERY_KEYS.identityDirectory,
+    queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
+    staleTime: 30000,
+  });
+  return useMemo(() => buildMergedMultiPortalKeys(data), [data]);
 }
 
 export function usePluginOAuthIds(): Set<string> {
-  const { data } = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000 });
-  return useMemo(() => {
-    const ids = new Set<string>();
-    if (!data?.plugins) return ids;
-    for (const plugin of data.plugins) {
-      const keys = pluginOAuthProviderKeys(plugin);
-      for (const key of keys) ids.add(key);
-      if (keys.length && plugin.metadata?.name) {
-        ids.add(plugin.metadata.name.toLowerCase().trim());
-      }
-    }
-    return ids;
-  }, [data]);
+  const { data } = useQuery({
+    queryKey: QUERY_KEYS.identityDirectory,
+    queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
+    staleTime: 30000,
+  });
+  return useMemo(() => buildMergedPluginOAuthIds(data), [data]);
 }
 
 export function usePluginProviderOwnership(providerKeys: readonly (string | undefined)[], isEnabled: boolean) {
-  const query = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000, enabled: isEnabled });
-  return { isOwned: pluginOwnsProvider(query.data?.plugins, providerKeys), isUnknown: isEnabled && !query.data };
+  const query = useQuery({
+    queryKey: QUERY_KEYS.identityDirectory,
+    queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
+    staleTime: 30000,
+    enabled: isEnabled,
+  });
+  return {
+    isOwned: isPluginOwnedInDirectory(query.data, providerKeys),
+    isUnknown: isEnabled && (!query.data || !query.data.catalog_status.plugins_known),
+  };
 }

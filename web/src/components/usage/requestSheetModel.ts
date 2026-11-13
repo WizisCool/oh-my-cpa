@@ -11,6 +11,7 @@ import {
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
+  type ProviderResolutionArchive,
 } from '../../types/usageEventIdentity';
 import { eventKeyLabel, eventResultLabelKey, eventUserAgentLabel } from '../../types/usageEventLabels';
 import {
@@ -184,6 +185,7 @@ export interface RequestSheetInput {
   pluginTitles?: ReadonlyMap<string, string>;
   /** The provider catalog read has not settled, so a resolved name is a placeholder for now. */
   isProviderCatalogUnknown?: boolean;
+  archive?: ProviderResolutionArchive;
 }
 
 const MASK_LINE: SheetLine = [{ kind: 'mask' }];
@@ -213,6 +215,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       input.isProviderCatalogUnknown,
       input.pluginTitles,
       input.multiPortalKeys,
+      input.archive,
     );
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);
