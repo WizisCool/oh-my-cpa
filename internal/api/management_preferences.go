@@ -37,6 +37,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceCredentialOrder:        true,
 	repository.PreferenceOAuthSectionOrder:      true,
 	repository.PreferencePluginOrder:            true,
+	repository.PreferenceWarmupTaskOrder:        true,
 	repository.PreferenceTimezone:               true,
 	repository.PreferenceDisplayCurrency:        true,
 	repository.PreferenceTokenStyle:             true,

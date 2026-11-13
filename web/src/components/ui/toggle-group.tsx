@@ -56,7 +56,7 @@ export function ToggleGroupItem({ className, children, ...props }: ToggleGroupIt
     <TogglePrimitive
       data-slot="toggle-group-item"
       className={cn(
-        'inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border-0 bg-transparent font-normal text-muted-foreground cursor-pointer',
+        'inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border-0 bg-transparent font-normal text-fg-2 cursor-pointer',
         'transition-[background-color,color,box-shadow] touch-manipulation',
         'hover:not-data-disabled:not-data-pressed:text-foreground',
         'data-pressed:bg-thumb data-pressed:font-medium data-pressed:text-foreground data-pressed:shadow-control',

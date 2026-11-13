@@ -129,7 +129,7 @@
      they are mirrored here so the first frame and the sign-in screen paint the same console the
      palette resolves to. */
   --elevated: #222226;
-  --selected-inset: #2e2e37;
+  --selected-inset: #2f2f38;
   --font-mono: "Sarasa Mono SC", "OMC Noto Sans SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --fg: #f4f4f6;
   --fg-2: #a1a1aa;
@@ -318,7 +318,7 @@
   --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --tooltip-bg: var(--surface);
   --tooltip-fg: var(--fg);
-  --thumb-bg: var(--border);
+  --thumb-bg: #414146;
   --overlay-mask: rgb(0 0 0 / 0.5);
   --thread-field: color-mix(in srgb, var(--fg) 5%, transparent);
   --thread-field-hover: color-mix(in srgb, var(--fg) 8%, transparent);
@@ -409,7 +409,7 @@
   --overlay-mask: rgb(20 20 30 / 0.12);
   --tooltip-bg: var(--fg);
   --tooltip-fg: var(--bg);
-  --thumb-bg: var(--elevated);
+  --thumb-bg: #ffffff;
   --fg: #1c1c1e;
   --fg-2: #505055;
   --muted: #787880;
@@ -1232,7 +1232,7 @@ h1, h2, h3, h4 { font-family: inherit; }
    because a table row paints no background of its own over its cells'. */
 [data-reorder-key][data-dragging] { position: relative; z-index: 3; box-shadow: var(--shadow-overlay); }
 tr[data-reorder-key][data-dragging] > td { background: var(--elevated) !important; }
-div[data-reorder-key][data-dragging] { border-radius: var(--radius-md); background: var(--elevated); }
+:is(div, li)[data-reorder-key][data-dragging] { border-radius: var(--radius-md); background: var(--elevated); }
 body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user-select: none; }
 
 /* The edge grip takes no width: a strip in the row's leading padding, out of sight until the pointer

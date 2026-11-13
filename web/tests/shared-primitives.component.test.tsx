@@ -1057,3 +1057,35 @@ describe('RoutingPanel loading topology', () => {
     });
   });
 });
+
+describe('Combobox empty-string option selection', () => {
+  it('displays and marks an explicit empty-string option when value is "" and shows placeholder otherwise', () => {
+    const { rerender } = renderWithOmc(
+      <Combobox
+        aria-label="Warmup model"
+        value=""
+        open
+        options={[
+          { value: '', label: 'Auto (gpt-6-luna)' },
+          { value: 'gpt-6-luna', label: 'gpt-6-luna' },
+        ]}
+      />,
+    );
+    const trigger = screen.getByRole('combobox', { name: 'Warmup model' });
+    expect(trigger.textContent).toContain('Auto (gpt-6-luna)');
+    const autoOption = screen.getByRole('option', { name: 'Auto (gpt-6-luna)' });
+    expect(autoOption.getAttribute('aria-selected')).toBe('true');
+
+    rerender(
+      <Combobox
+        aria-label="Warmup model"
+        value=""
+        placeholder="Pick a model"
+        options={[
+          { value: 'gpt-6-luna', label: 'gpt-6-luna' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('combobox', { name: 'Warmup model' }).textContent).toContain('Pick a model');
+  });
+});

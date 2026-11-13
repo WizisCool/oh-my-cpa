@@ -48,6 +48,9 @@ const (
 	// the gateway's plugin loading order.
 	PreferencePluginOrder = "omc_plugin_order"
 
+	// PreferenceWarmupTaskOrder stores quota warmup task IDs in display order.
+	PreferenceWarmupTaskOrder = "omc_warmup_task_order"
+
 	// PreferenceRoutingCardOrder is the routing board's display order of the members inside each
 	// tier: a member key mapped to a rank, as a decimal string. Provider members are keyed by
 	// "provider:" and their positional id, so the document is re-keyed with the other provider

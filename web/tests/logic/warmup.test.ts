@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { defaultWarmupTaskInput, groupWarmupAccounts, type WarmupCatalog, type WarmupCatalogAccount } from '../../src/types/warmup';
+import { defaultWarmupTaskInput, groupWarmupAccounts, groupWarmupTasks, type WarmupCatalog, type WarmupCatalogAccount, type WarmupTask } from '../../src/types/warmup';
 
 function account(authIndex: string, provider: string, patch: Partial<WarmupCatalogAccount> = {}): WarmupCatalogAccount {
   return {
@@ -53,4 +53,38 @@ test('defaultWarmupTaskInput starts a new task on the first credential the picke
   });
   // With nothing to choose, the draft names no credential rather than one the picker refuses.
   expect(defaultWarmupTaskInput({ ...catalog, providers: catalog.providers.slice(0, 1) }).auth_index).toBe('');
+});
+
+test('groupWarmupTasks groups tasks by provider in catalogue order', () => {
+  const catalog: WarmupCatalog = {
+    timezone: 'UTC',
+    providers: [
+      { provider: 'claude', accounts: [account('claude-1', 'claude')] },
+      { provider: 'codex', accounts: [account('codex-1', 'codex')] },
+    ],
+  };
+  const makeTask = (id: string, provider: string): WarmupTask => ({
+    id,
+    name: id,
+    enabled: true,
+    provider,
+    auth_index: `${provider}-1`,
+    account: `${provider}.json`,
+    model: '',
+    trigger: { kind: 'window', window: 'five_hour' },
+    created_at: '2026-10-13T05:00:00Z',
+    updated_at: '2026-10-13T05:00:00Z',
+  });
+  const groups = groupWarmupTasks([
+    makeTask('t_codex_1', 'codex'),
+    makeTask('t_claude_1', 'claude'),
+    makeTask('t_custom_1', 'harbor'),
+    makeTask('t_codex_2', 'codex'),
+  ], catalog, new Map([['harbor', 'Harbor Labs']]));
+
+  expect(groups.map((group) => ({ provider: group.provider, label: group.label, ids: group.tasks.map((t) => t.id) }))).toEqual([
+    { provider: 'claude', label: 'Claude', ids: ['t_claude_1'] },
+    { provider: 'codex', label: 'Codex', ids: ['t_codex_1', 't_codex_2'] },
+    { provider: 'harbor', label: 'Harbor Labs', ids: ['t_custom_1'] },
+  ]);
 });

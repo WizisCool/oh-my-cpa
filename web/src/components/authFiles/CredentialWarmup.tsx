@@ -13,9 +13,11 @@ import { formatEventDuration } from '../../types/usageEventMetrics';
 import { credentialBrandIdentity } from '../../types/credentialIdentity';
 import { usePluginMultiPortalKeys, usePluginOAuthLogos, usePluginOAuthTitles } from '../../hooks/usePluginOAuthLogos';
 import {
+  WARMUP_TASK_ORDER_PREFERENCE,
   canSaveWarmupTask,
   defaultWarmupTaskInput,
   groupWarmupAccounts,
+  groupWarmupTasks,
   hasCustomTaskName,
   resolveTaskModel,
   type WarmupCatalog,
@@ -23,6 +25,7 @@ import {
   type WarmupRun,
   type WarmupStateView,
   type WarmupTask,
+  type WarmupTaskGroup,
   type WarmupTaskInput,
   type WarmupTrigger,
 } from '../../types/warmup';
@@ -32,12 +35,17 @@ import { ConfirmAction } from '../common/ConfirmAction';
 import { EmptyState } from '../common/EmptyState';
 import { NumberInput } from '../common/NumberInput';
 import { ListPlaceholder } from '../common/Placeholder';
+import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
 import { SearchSelect } from '../common/SearchSelect';
 import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { Switch } from '../common/Switch';
 import { TimeZoneSelect } from '../common/TimeZoneSelect';
 import { ToolButton } from '../common/ToolButton';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { useSortableList } from '../../hooks/useSortableList';
+import { useOAuthSectionOrder } from '../../pages/oauthManagement/useOAuthSectionOrder';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { ClearOutlined, DeleteOutlined, EditOutlined, PlayCircleOutlined, PlusOutlined } from '../icons';
 import { CredentialMark } from '../LobeIcon';
 import { LoadFailure, useToast } from '../feedback';
@@ -45,6 +53,7 @@ import styles from './CredentialWarmup.module.css';
 
 const WARMUP_QUERY_KEY = ['quota-warmup-settings'] as const;
 const RUNS_PREVIEW = 6;
+const taskKey = (task: WarmupTask) => task.id;
 
 const OUTCOME_KEYS: Record<WarmupRun['outcome'], MessageKey> = {
   ok: 'warmup.outcome_ok',
@@ -401,17 +410,201 @@ function useTaskViews(state: WarmupStateView, tasks: WarmupTask[]): Map<string, 
   })), [state.catalog, t, tasks, timezone]);
 }
 
+function WarmupTaskRow({
+  task,
+  view,
+  next,
+  portalMark,
+  isRunning,
+  isRunDisabled,
+  isDeleting,
+  isToggling,
+  isPhone,
+  onRun,
+  onEdit,
+  onDelete,
+  onToggle,
+}: {
+  task: WarmupTask;
+  view: TaskView;
+  next: string;
+  portalMark?: React.ReactNode;
+  isRunning: boolean;
+  isRunDisabled: boolean;
+  isDeleting: boolean;
+  isToggling: boolean;
+  isPhone: boolean;
+  onRun: () => void;
+  onEdit: () => void;
+  onDelete: () => Promise<unknown>;
+  onToggle: (enabled: boolean) => void;
+}) {
+  const t = useT();
+  const reorder = useReorderRow(task.id);
+  return (
+    <li
+      {...reorder.row}
+      className={styles['task-row']}
+      data-enabled={task.enabled}
+      data-testid={`warmup-task-${task.id}`}
+    >
+      {!isPhone && <ReorderHandle {...reorder.handle} name={view.title} />}
+      {portalMark}
+      <div className={styles['task-copy']}>
+        <span className={styles['task-title']} data-tip={view.title} data-tip-overflow="">{view.title}</span>
+        <MetaLine className={styles['task-meta']}>{view.meta.map((part) => <span key={part}>{part}</span>)}</MetaLine>
+        {next && <span className={styles['task-next']}>{next}</span>}
+      </div>
+      <div className={styles['task-actions']}>
+        <ToolButton
+          size="sm"
+          variant="ghost"
+          icon={<PlayCircleOutlined />}
+          label={t('warmup.run')}
+          loading={isRunning}
+          disabled={isRunDisabled}
+          onClick={onRun}
+        />
+        <ToolButton
+          size="sm"
+          variant="ghost"
+          icon={<EditOutlined />}
+          label={t('warmup.edit_task')}
+          onClick={onEdit}
+        />
+        <ConfirmAction
+          title={t('warmup.confirm_delete', { name: view.title })}
+          confirmLabel={t('warmup.delete_task')}
+          isDanger
+          isConfirming={isDeleting}
+          tooltip={t('warmup.delete_task')}
+          onConfirm={onDelete}
+          disabled={isRunning}
+        >
+          <Button size="sm" variant="ghost" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isRunning} />
+        </ConfirmAction>
+        <Switch
+          size="small"
+          className={styles['task-switch']}
+          aria-label={view.title}
+          loading={isToggling}
+          checked={task.enabled}
+          onChange={onToggle}
+        />
+        {isPhone && <ReorderHandle {...reorder.handle} name={view.title} variant="inline" />}
+      </div>
+    </li>
+  );
+}
+
+function WarmupProviderGroup({
+  group,
+  views,
+  nextLabel,
+  pluginLogos,
+  multiPortalKeys,
+  isPhone,
+  runningTaskId,
+  isAnyRunning,
+  deletingTaskId,
+  togglingTaskId,
+  onRun,
+  onEdit,
+  onDelete,
+  onToggle,
+}: {
+  group: WarmupTaskGroup;
+  views: Map<string, TaskView>;
+  nextLabel: (task: WarmupTask) => string;
+  pluginLogos: PluginOAuthLogos;
+  multiPortalKeys: ReadonlySet<string>;
+  isPhone: boolean;
+  runningTaskId?: string;
+  isAnyRunning: boolean;
+  deletingTaskId?: string;
+  togglingTaskId?: string;
+  onRun: (id: string) => void;
+  onEdit: (task: WarmupTask) => void;
+  onDelete: (id: string) => Promise<unknown>;
+  onToggle: (task: WarmupTask, enabled: boolean) => void;
+}) {
+  const sortable = useSortableList(WARMUP_TASK_ORDER_PREFERENCE, group.provider, group.tasks, taskKey);
+  const showRowPortalMark = multiPortalKeys.has(group.provider);
+  return (
+    <section className={styles['group']} data-testid={`warmup-provider-${group.provider}`}>
+      <div className={styles['group-head']}>
+        <CredentialMark credential={{ provider: group.provider }} pluginLogos={pluginLogos} size={18} />
+        <h5 className={styles['group-title']}>{group.label}</h5>
+        <span className={styles['group-count']}>{sortable.ordered.length}</span>
+      </div>
+      <RowReorder
+        {...sortable.reorder}
+        isEnabled={sortable.reorder.isEnabled && sortable.ordered.length > 1}
+        items={sortable.ordered.map(taskKey)}
+      >
+        <ul className={styles['group-list']}>
+          {sortable.ordered.map((task) => {
+            const view = views.get(task.id)!;
+            const isRunning = runningTaskId === task.id;
+            const portalMark = showRowPortalMark && view.account?.oauth_provider
+              ? (
+                <CredentialMark
+                  className={styles['task-mark']}
+                  credential={credentialBrandIdentity(task.provider, view.account, multiPortalKeys)}
+                  pluginLogos={pluginLogos}
+                  size={18}
+                />
+              )
+              : undefined;
+            return (
+              <WarmupTaskRow
+                key={task.id}
+                task={task}
+                view={view}
+                next={nextLabel(task)}
+                portalMark={portalMark}
+                isRunning={isRunning}
+                isRunDisabled={isAnyRunning && !isRunning}
+                isDeleting={deletingTaskId === task.id}
+                isToggling={togglingTaskId === task.id}
+                isPhone={isPhone}
+                onRun={() => onRun(task.id)}
+                onEdit={() => onEdit(task)}
+                onDelete={() => onDelete(task.id)}
+                onToggle={(enabled) => onToggle(task, enabled)}
+              />
+            );
+          })}
+        </ul>
+      </RowReorder>
+    </section>
+  );
+}
+
 function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   const t = useT();
   const locale = languageLocale(useI18n().lang);
   const toast = useToast();
   const queryClient = useQueryClient();
+  const isPhone = useIsPhoneViewport();
+  const pluginLogos = usePluginOAuthLogos();
+  const pluginTitles = usePluginOAuthTitles();
+  const multiPortalKeys = usePluginMultiPortalKeys();
 
   const catalog = state.catalog;
   const timezone = catalog?.timezone || 'UTC';
   const tasks = state.tasks;
   const runs = state.runs;
   const views = useTaskViews(state, tasks);
+  const taskGroups = React.useMemo(
+    () => groupWarmupTasks(tasks, catalog, pluginTitles),
+    [catalog, pluginTitles, tasks],
+  );
+  const sectionOrder = useOAuthSectionOrder(React.useMemo(() => taskGroups.map((group) => group.provider), [taskGroups]));
+  const orderedGroups = React.useMemo(() => {
+    const byProvider = new Map(taskGroups.map((group) => [group.provider, group]));
+    return sectionOrder.ordered.map((provider) => byProvider.get(provider)).filter((g): g is WarmupTaskGroup => Boolean(g));
+  }, [sectionOrder.ordered, taskGroups]);
 
   const [editing, setEditing] = React.useState<{ id: string | null; draft: WarmupTaskInput } | null>(null);
   const [isShowingAllRuns, setIsShowingAllRuns] = React.useState(false);
@@ -533,63 +726,30 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
             </Button>
           )}
         />
-        {tasks.length === 0 ? (
+        {orderedGroups.length === 0 ? (
           <EmptyState size="compact" title={t('warmup.empty_tasks')} className={styles['empty']} />
         ) : (
-          <ul className={styles['list']} data-testid="warmup-status">
-            {tasks.map((task) => {
-              const view = views.get(task.id)!;
-              const next = nextLabel(task);
-              const isRunning = runMutation.isPending && runMutation.variables === task.id;
-              return (
-                <li key={task.id} className={styles['task-row']} data-enabled={task.enabled} data-testid={`warmup-task-${task.id}`}>
-                  <CredentialMark className={styles['task-mark']} credential={{ provider: task.provider, hint: task.account }} size={20} />
-                  <div className={styles['task-copy']}>
-                    <span className={styles['task-title']} data-tip={view.title} data-tip-overflow="">{view.title}</span>
-                    <MetaLine className={styles['task-meta']}>{view.meta.map((part) => <span key={part}>{part}</span>)}</MetaLine>
-                    {next && <span className={styles['task-next']}>{next}</span>}
-                  </div>
-                  <div className={styles['task-actions']}>
-                    <ToolButton
-                      size="sm"
-                      variant="ghost"
-                      icon={<PlayCircleOutlined />}
-                      label={t('warmup.run')}
-                      loading={isRunning}
-                      disabled={runMutation.isPending && !isRunning}
-                      onClick={() => runMutation.mutate(task.id)}
-                    />
-                    <ToolButton
-                      size="sm"
-                      variant="ghost"
-                      icon={<EditOutlined />}
-                      label={t('warmup.edit_task')}
-                      onClick={() => setEditing({ id: task.id, draft: taskToInput(task, timezone) })}
-                    />
-                    <ConfirmAction
-                      title={t('warmup.confirm_delete', { name: view.title })}
-                      confirmLabel={t('warmup.delete_task')}
-                      isDanger
-                      isConfirming={deleteMutation.isPending && deleteMutation.variables === task.id}
-                      tooltip={t('warmup.delete_task')}
-                      onConfirm={() => deleteMutation.mutateAsync(task.id)}
-                      disabled={isRunning}
-                    >
-                      <Button size="sm" variant="ghost" icon={<DeleteOutlined />} aria-label={t('warmup.delete_task')} disabled={isRunning} />
-                    </ConfirmAction>
-                    <Switch
-                      size="small"
-                      className={styles['task-switch']}
-                      aria-label={view.title}
-                      loading={toggleMutation.isPending && toggleMutation.variables?.task.id === task.id}
-                      checked={task.enabled}
-                      onChange={(enabled) => toggleMutation.mutate({ task, enabled })}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <div className={styles['groups']} data-testid="warmup-status">
+            {orderedGroups.map((group) => (
+              <WarmupProviderGroup
+                key={group.provider}
+                group={group}
+                views={views}
+                nextLabel={nextLabel}
+                pluginLogos={pluginLogos}
+                multiPortalKeys={multiPortalKeys}
+                isPhone={isPhone}
+                runningTaskId={runMutation.isPending ? runMutation.variables : undefined}
+                isAnyRunning={runMutation.isPending}
+                deletingTaskId={deleteMutation.isPending ? deleteMutation.variables : undefined}
+                togglingTaskId={toggleMutation.isPending ? toggleMutation.variables?.task.id : undefined}
+                onRun={(id) => runMutation.mutate(id)}
+                onEdit={(task) => setEditing({ id: task.id, draft: taskToInput(task, timezone) })}
+                onDelete={(id) => deleteMutation.mutateAsync(id)}
+                onToggle={(task, enabled) => toggleMutation.mutate({ task, enabled })}
+              />
+            ))}
+          </div>
         )}
       </section>
 
