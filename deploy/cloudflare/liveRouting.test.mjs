@@ -41,15 +41,15 @@ describe('the simulated live traffic', () => {
     assert.ok(expected.length > 0, 'five seconds passed without a request');
   });
 
-  it('calls five models through seven credentials, with a reroute and a rest within the hour', () => {
+  it('calls three models through four credentials, with a reroute and a rest within the hour', () => {
     const hour = attemptsBetween(NOW - 3_600_000, NOW, DATASET);
     assert.deepEqual(
       [...new Set(hour.map((record) => record.model))].sort(),
-      ['claude-opus-5.5', 'deepseek-v4.1-flash-1017', 'gemini-4-carbon', 'gemini-4-hydrogen', 'gpt-6-astra'],
+      ['claude-opus-5.5', 'deepseek-v4.1-flash-1017', 'gpt-6-astra'],
     );
     assert.deepEqual(
       [...new Set(hour.map((record) => record.auth_index))].sort(),
-      ['auth-antigravity-01', 'auth-claude-01', 'auth-codex-01', 'auth-codex-02', 'auth-ds-01', 'auth-ds-02', 'auth-gemini-01'],
+      ['auth-claude-01', 'auth-codex-01', 'auth-codex-02', 'auth-ds-01'],
     );
     const attemptsPerRequest = new Map();
     for (const record of hour) attemptsPerRequest.set(record.request_id, (attemptsPerRequest.get(record.request_id) ?? 0) + 1);

@@ -217,9 +217,11 @@ export const UsageEventsPage: React.FC = () => {
     [cursor, query],
   );
   const queryString = React.useMemo(() => usageEventParams(baseEventParams), [baseEventParams]);
-  // A live signal moves the list to a new key, so its read has no data yet and would count as a
-  // load. Only the read the signal alone caused is silent: the same key change that also carries a
-  // new filter, page or manual sync is one the operator asked for.
+  // Only a read caused solely by a live signal is silent: a filter/page change
+  // or manual sync is one the operator asked for. Keeping `refresh` out of the
+  // query key lets live signals refetch the current view in place instead of
+  // minting a new key with `isPlaceholderData: true` (which flashed "Updating"
+  // in the pagination footer on every live tick).
   const readCauseRef = React.useRef({ queryString, refresh, liveRevision, isLiveRead: false });
   if (readCauseRef.current.queryString !== queryString || readCauseRef.current.refresh !== refresh) {
     const previous = readCauseRef.current;
@@ -231,7 +233,7 @@ export const UsageEventsPage: React.FC = () => {
     };
   }
   const result = useQuery({
-    queryKey: ['usage-events', queryString, refresh],
+    queryKey: ['usage-events', queryString],
     queryFn: async () => {
       const heldBoundaryID = getHeldBoundaryID();
       const params = heldBoundaryID !== undefined
@@ -244,35 +246,55 @@ export const UsageEventsPage: React.FC = () => {
     enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
     staleTime: 5_000,
-    // Every live signal is a new key and a superseded page is never read again, so
-    // keeping it would hold a page per signal for the default five minutes.
-    // keepPreviousData works from the observer's last result, not the old entry.
-    gcTime: 0,
     meta: { silent: readCauseRef.current.isLiveRead },
   });
+  const refetchEvents = result.refetch;
+  const lastRefreshTriggerRef = React.useRef({ queryString, refresh });
+  React.useEffect(() => {
+    const previous = lastRefreshTriggerRef.current;
+    lastRefreshTriggerRef.current = { queryString, refresh };
+    if (!isQueryEnabled) return;
+    if (previous.queryString !== queryString) {
+      void refetchEvents({ cancelRefetch: false });
+      return;
+    }
+    if (previous.refresh === refresh) return;
+    void refetchEvents();
+  }, [isQueryEnabled, queryString, refresh, refetchEvents]);
+
   // Assigned after the read it describes, so the poll's interval always observes
   // the latest value without naming it in its dependency list.
   isFetchingRef.current = result.isFetching;
+  const wasFetchingRef = React.useRef(false);
   // A record that landed while this read was in flight was held for it; it is read now.
   React.useEffect(() => {
-    if (!result.isFetching) notifySettled();
+    if (result.isFetching) {
+      wasFetchingRef.current = true;
+      return;
+    }
+    if (wasFetchingRef.current) {
+      wasFetchingRef.current = false;
+      readCauseRef.current.isLiveRead = false;
+    }
+    notifySettled();
   }, [result.isFetching, notifySettled]);
+  const isVisibleFetching = result.isFetching && !readCauseRef.current.isLiveRead;
 
   const handlePrevPage = React.useCallback(() => {
-    if (!cursors.length || result.isFetching) return;
+    if (!cursors.length || isVisibleFetching) return;
     markPageNavigation();
     setPagination({ scope: viewScope, cursors: cursors.slice(0, -1) });
     scrollListToTop();
     schedulePageNavigationReset();
-  }, [cursors, markPageNavigation, result.isFetching, schedulePageNavigationReset, scrollListToTop, viewScope]);
+  }, [cursors, isVisibleFetching, markPageNavigation, schedulePageNavigationReset, scrollListToTop, viewScope]);
 
   const handleNextPage = React.useCallback(() => {
-    if (!result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError) return;
+    if (!result.data?.has_more || !result.data?.next_cursor || isVisibleFetching || result.isError) return;
     markPageNavigation();
     setPagination({ scope: viewScope, cursors: [...cursors, result.data.next_cursor] });
     scrollListToTop();
     schedulePageNavigationReset();
-  }, [cursors, markPageNavigation, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scrollListToTop, viewScope]);
+  }, [cursors, isVisibleFetching, markPageNavigation, result.data, result.isError, schedulePageNavigationReset, scrollListToTop, viewScope]);
 
 
   // keepPreviousData covers in-flight changes; retain the last successful page
@@ -630,7 +652,7 @@ export const UsageEventsPage: React.FC = () => {
               />
               <RequestFoldToggle collapse={collapse} onToggle={handleToggleExpand} />
               <RefreshButton
-                isRefreshing={isSyncing || result.isFetching}
+                isRefreshing={isSyncing || isVisibleFetching}
                 disabled={isSyncing}
                 onRefresh={handleManualRefresh}
               />
@@ -647,7 +669,10 @@ export const UsageEventsPage: React.FC = () => {
             <LoadFailure
               title={t('events.load_error')}
               error={result.error}
-              onRetry={() => void result.refetch()}
+              onRetry={() => {
+                readCauseRef.current.isLiveRead = false;
+                void result.refetch();
+              }}
             />
           )}
           <RequestToolbar
@@ -707,7 +732,7 @@ export const UsageEventsPage: React.FC = () => {
           className={clsx('request-stream', isSelecting && 'is-selecting')}
           data-folded-columns={foldedColumns}
           aria-label={t('events.title')}
-          aria-busy={result.isFetching}
+          aria-busy={isVisibleFetching}
           style={streamStyle}
         >
           <div ref={scrollAreaRef} className="request-table-scroll-area">
@@ -755,7 +780,7 @@ export const UsageEventsPage: React.FC = () => {
             page={cursors.length + 1}
             count={events.length}
             limit={query.limit!}
-            isFetching={result.isFetching}
+            isFetching={isVisibleFetching}
             isError={result.isError}
             hasMore={!!result.data?.has_more}
             hasNextCursor={!!result.data?.next_cursor}

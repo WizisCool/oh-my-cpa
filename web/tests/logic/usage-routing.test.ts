@@ -103,7 +103,7 @@ test('rows keep their order by name while volume decides only which are drawn', 
   const records: UsageEvent[] = [];
   let id = 0;
   for (let index = 0; index <= MAX_DRAWN_MODELS; index++) {
-    // model-0 is called once, model-7 eight times: the least called one is folded away.
+    // model-0 is called once and higher-indexed models more often: the least called one is folded away.
     for (let call = 0; call <= index; call++) records.push(event(++id, { model: `model-${index}` }));
   }
   const model = buildRoutingModel(records, [], NOW);

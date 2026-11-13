@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RequestBackToTop,
@@ -9,6 +10,8 @@ import {
 } from '../src/components/usage/RequestFoldControls';
 import { RequestVirtualList } from '../src/components/usage/RequestVirtualList';
 import { useRequestListScroll } from '../src/components/usage/useRequestListScroll';
+import { UsageEventsPage } from '../src/pages/UsageEventsPage';
+import { ThemeProvider } from '../src/theme/ThemeContext';
 import { setReducedMotionPreference } from '../src/utils/motionPreference';
 import usageEventMessages from '../src/i18n/locales/en/usageEvents';
 import { StructuredUsageView } from '../src/components/usage/StructuredUsageView';
@@ -430,5 +433,82 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
       />,
     );
     expect(screen.getAllByTestId('grouped-row').map((row) => row.textContent)).toEqual(['a1:0', 'a2:1', 'a3:2', 'b1:0']);
+  });
+
+  it('refetches live SSE signals in place without blinking Updating in the footer, while still showing Updating on page changes', async () => {
+    const sseListeners = new Map<string, Set<() => void>>();
+    vi.stubGlobal('EventSource', class {
+      static readonly CLOSED = 2;
+      readyState = 1;
+      addEventListener(type: string, handler: () => void) {
+        const set = sseListeners.get(type) ?? new Set();
+        set.add(handler);
+        sseListeners.set(type, set);
+      }
+      removeEventListener(type: string, handler: () => void) {
+        sseListeners.get(type)?.delete(handler);
+      }
+      close() {}
+    });
+
+    const initialEvents = makeSyntheticEvents(2);
+    const api = installOmcApi({
+      preferences: {
+        omc_models_view: 'model',
+        omc_request_model_icons: false,
+        omc_usage_events_view: { preset: '24h', limit: 100, grouping: 'time' },
+      },
+    });
+    api.on('GET', '/usage/ingest-status', () => ({ enabled: true, healthy: true, collector: { mode: 'subscribe', running: true, captured: 2 }, stats: { pending: 0 } }));
+    api.on('GET', '/usage/facets', () => ({ facets: { models: [], model_aliases: [], providers: [], auth_indexes: [], auth_types: [], sources: [], api_keys: [], executors: [], endpoints: [] } }));
+    api.on('GET', '/usage/events', (req) => {
+      const cursor = req.query.get('cursor');
+      if (cursor === 'page-2') {
+        return { items: [{ ...initialEvents[0], id: 99, event_key: 'evt-p2' }], has_more: false };
+      }
+      return { items: initialEvents, has_more: true, next_cursor: 'page-2' };
+    });
+
+    const router = createMemoryRouter([{ path: '/usage/events', element: <UsageEventsPage /> }], { initialEntries: ['/usage/events'] });
+    const { container } = renderWithOmc(<ThemeProvider><TokenDisplayProvider><RouterProvider router={router} /></TokenDisplayProvider></ThemeProvider>);
+
+    const pagination = () => container.querySelector<HTMLElement>('.request-pagination')!;
+    await waitFor(() => expect(pagination().textContent).toContain('Page 1, 2 records'));
+
+    // Connect SSE (`ready` sets liveState = 'live'), then hold the next `/usage/events` fetch
+    // and emit a `usage` signal as the demo Worker and live gateway do.
+    const liveReadHold = api.hold('GET', '/usage/events');
+    act(() => {
+      for (const listener of sseListeners.get('ready') ?? []) listener();
+      for (const listener of sseListeners.get('usage') ?? []) listener();
+    });
+    await liveReadHold.arrived;
+
+    // Footer must remain calm: no "Updating", no "Previous results", refresh button not busy,
+    // and Next page stays clickable during a background live refresh.
+    expect(pagination().textContent).not.toContain('Updating');
+    expect(pagination().textContent).not.toContain('Previous results');
+    const refreshBtn = screen.getByRole('button', { name: 'Refresh' });
+    expect(refreshBtn.getAttribute('aria-busy')).toBe('false');
+    const nextBtn = screen.getByRole('button', { name: 'Next' });
+    expect((nextBtn as HTMLButtonElement).disabled).toBe(false);
+
+    await act(async () => {
+      liveReadHold.release();
+      await Promise.resolve();
+    });
+
+    // By contrast, navigating to page 2 IS a reader view change and DOES show Updating while pending.
+    const nextPageHold = api.hold('GET', '/usage/events');
+    fireEvent.click(nextBtn);
+    const nextPageRequest = await nextPageHold.arrived;
+    expect(nextPageRequest.query.get('cursor')).toBe('page-2');
+    await waitFor(() => expect(pagination().textContent).toContain('Updating'));
+
+    nextPageHold.release();
+    await waitFor(() => {
+      expect(pagination().textContent).toContain('Page 2, 1 records');
+      expect(pagination().textContent).not.toContain('Updating');
+    });
   });
 });
