@@ -26,6 +26,7 @@ import { Select } from '../src/components/ui/select';
 import { Tabs } from '../src/components/ui/tabs';
 import { Combobox } from '../src/components/ui/combobox';
 import { AutoComplete } from '../src/components/ui/autocomplete';
+import { DataTable } from '../src/components/ui/table';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { RoutingPanel } from '../src/components/dashboard/routing/RoutingPanel';
@@ -1087,5 +1088,35 @@ describe('Combobox empty-string option selection', () => {
       />,
     );
     expect(screen.getByRole('combobox', { name: 'Warmup model' }).textContent).toContain('Pick a model');
+  });
+});
+
+describe('DataTable row slots', () => {
+  it('marks rendered data rows with data-slot="table-row" and omits it from empty-state rows', () => {
+    const columns = [{ title: 'Name', dataIndex: 'name', key: 'name' }] as const;
+    const CustomRow = (props: React.HTMLAttributes<HTMLTableRowElement>) => <tr data-custom-row="true" {...props} />;
+
+    const { container, rerender } = render(
+      <DataTable<{ id: string; name: string }>
+        rowKey="id"
+        columns={columns}
+        dataSource={[]}
+        locale={{ emptyText: 'Nothing yet' }}
+      />,
+    );
+    expect(container.querySelectorAll('[data-slot="table-row"]')).toHaveLength(0);
+
+    rerender(
+      <DataTable<{ id: string; name: string }>
+        rowKey="id"
+        columns={columns}
+        dataSource={[{ id: 'p1', name: 'Alpha' }]}
+        components={{ body: { row: CustomRow } }}
+      />,
+    );
+    const rows = container.querySelectorAll('tbody [data-slot="table-row"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-row-key')).toBe('p1');
+    expect(rows[0].getAttribute('data-custom-row')).toBe('true');
   });
 });

@@ -231,6 +231,7 @@ function DataTable<T extends object>({
                 return (
                   <BodyRowComp
                     key={key}
+                    data-slot="table-row"
                     data-row-key={key}
                     {...extraRowProps}
                     className={cn(
