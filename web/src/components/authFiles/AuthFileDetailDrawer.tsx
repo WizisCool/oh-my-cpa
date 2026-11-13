@@ -807,7 +807,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               {
                 key: 'configuration',
                 forceRender: true,
-                label: <span className={styles['tab-label']}>{t('omc.tab_configuration')}{isDirty && <Tag tone="warn">{t('cfg.dirty_bar_unsaved')}</Tag>}</span>,
+                label: <span className={styles['tab-label']}>{t('omc.tab_configuration')}{isDirty && <span className={styles['tab-dirty']} role="img" aria-label={t('cfg.dirty_bar_unsaved')} />}</span>,
                 children: (
                   <div className={styles['drawer-section']}>
                     <SectionHeading

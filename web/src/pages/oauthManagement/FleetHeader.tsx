@@ -15,16 +15,19 @@ import { Button } from '@/components/ui/button';
 import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import { Segmented } from '@/components/ui/segmented';
 import { SearchInput } from '../../components/common/SearchInput';
+import { ToolButton } from '../../components/common/ToolButton';
 import { Tooltip } from '../../components/common/Tooltip';
 import {
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
+  CheckSquareOutlined,
   FilterOutlined,
   ListOutlined,
   SwapOutlined,
   SyncOutlined,
 } from '../../components/icons';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
 import type { AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
@@ -87,6 +90,9 @@ export interface FleetToolbarProps {
   onReset: () => void;
   layout: OAuthWorkspaceLayout;
   onLayout: (layout: OAuthWorkspaceLayout) => void;
+  /** Whether a choice of credentials is under way; the select tool starts one and clears it. */
+  isSelecting: boolean;
+  onSelecting: () => void;
   refresh: {
     filtered: number;
     page: number;
@@ -117,9 +123,10 @@ const SORTS: { key: OAuthWorkspaceSortKey; label: MessageKey; icon?: React.React
  * the search on a line of its own over the verdicts and the tools on a narrow one.
  */
 export function FleetToolbar({
-  search, onSearch, counts, isPending, lens, onLens, status, quota, sort, isViewLoaded, onFilters, onSort, onReset, layout, onLayout, refresh,
+  search, onSearch, counts, isPending, lens, onLens, status, quota, sort, isViewLoaded, onFilters, onSort, onReset, layout, onLayout, isSelecting, onSelecting, refresh,
 }: FleetToolbarProps) {
   const t = useT();
+  const isPhone = useIsPhoneViewport();
   const filterCount = Number(status !== 'all') + Number(quota !== 'all');
   const sortLabel = t(SORTS.find((entry) => entry.key === sort)?.label ?? 'omc.sort_custom');
   return (
@@ -134,7 +141,8 @@ export function FleetToolbar({
           <PopoverTrigger
             render={
               <Button
-                className={clsx(styles['tool-button'], filterCount > 0 && styles['tool-active'])}
+                variant={filterCount > 0 ? 'active' : 'secondary'}
+                className={styles['tool-button']}
                 icon={<FilterOutlined />}
                 aria-label={t('events.more_filters')}
                 aria-controls="oauth-collection-filters"
@@ -194,7 +202,8 @@ export function FleetToolbar({
             render={
               <Tooltip title={`${t('af.sort_label')}: ${sortLabel}`}>
                 <Button
-                  className={clsx(styles['tool-button'], sort !== 'custom' && styles['tool-active'])}
+                  variant={sort !== 'custom' ? 'active' : 'secondary'}
+                  className={styles['tool-button']}
                   icon={<SwapOutlined rotate={90} />}
                   disabled={!isViewLoaded}
                   aria-label={`${t('af.sort_label')}: ${sortLabel}`}
@@ -212,6 +221,15 @@ export function FleetToolbar({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ToolButton
+          icon={<CheckSquareOutlined />}
+          label={t('omc.fleet_action_select')}
+          variant={isSelecting ? 'active' : 'secondary'}
+          aria-pressed={isSelecting}
+          disabled={!isViewLoaded}
+          onClick={onSelecting}
+          data-testid="oauth-select-mode"
+        />
       </div>
       <div className={clsx(styles.tools, styles['view-tools'])}>
         <Segmented<OAuthWorkspaceLayout>
@@ -226,7 +244,8 @@ export function FleetToolbar({
         />
         {/* The main segment refreshes what the workspace is showing; the caret offers the other scopes. */}
         <ButtonGroup>
-          {/* Fetching quota is a call to every provider in scope, so the button says what it does. */}
+          {/* Fetching quota is a call to every provider in scope, so the button says what it does; a
+              phone's line also holds the verdicts, so there it is the glyph its tooltip names. */}
           <Tooltip title={t('omc.refresh_quota_count', { n: refresh.filtered })}>
             <Button
               icon={<SyncOutlined spin={refresh.isBusy} />}
@@ -235,7 +254,7 @@ export function FleetToolbar({
               aria-label={t('omc.refresh_quota_count', { n: refresh.filtered })}
               data-testid="oauth-refresh-quota"
             >
-              {t('quota.btn_refresh_quota')}
+              {isPhone ? null : t('quota.btn_refresh_quota')}
             </Button>
           </Tooltip>
           <DropdownMenu>

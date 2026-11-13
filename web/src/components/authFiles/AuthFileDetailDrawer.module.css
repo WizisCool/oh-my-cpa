@@ -292,9 +292,22 @@
 
 /* A tab's name and the state tag beside it. */
 .tab-label {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Unsaved changes mark the tab with a dot hung off its label's corner, so the tab strip never
+   widens or moves its indicator when the first field changes. */
+.tab-dirty {
+  position: absolute;
+  top: -1px;
+  right: -8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
 }
 
 .identity-alert-details summary {

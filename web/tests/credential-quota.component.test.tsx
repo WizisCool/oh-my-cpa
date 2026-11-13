@@ -252,7 +252,7 @@ function renderCredentialRow(
   return render(
     <MemoryRouter>
       <I18nProvider>
-        <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />
+        <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} isSelecting={false} nowMS={NOW_MS} actions={actions} />
       </I18nProvider>
     </MemoryRouter>,
   );
@@ -332,7 +332,7 @@ describe('credential list row', () => {
       setItem = _setItem;
       const { records } = buildOAuthWorkspaceProjection([file(item.auth_index)], [item], []);
       const [section] = buildCredentialSections(records, records);
-      return <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />;
+      return <CredentialList groups={[{ ...section, title: 'Codex' }]} selectedKeys={new Set()} isSelecting={false} nowMS={NOW_MS} actions={actions} />;
     };
 
     const view = renderWithOmc(<Host />, { route: '/oauth-management' });

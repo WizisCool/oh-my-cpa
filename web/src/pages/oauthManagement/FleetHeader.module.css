@@ -56,11 +56,6 @@
   gap: 6px;
 }
 
-.tool-active {
-  color: var(--accent) !important;
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border)) !important;
-}
-
 .tool-count {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -190,18 +185,34 @@
   }
 }
 
-/* A phone: the search with its narrowing tools, the verdicts across the full width, then the view
-   and the labelled refresh. Three lines that each fit, none clipped or wrapped ragged. */
+/* A phone keeps the narrow page's two lines at a phone's rhythm: the search with what narrows and
+   orders the list, then the verdicts - scrolling if they outgrow their room - with the view and the
+   refresh glyph. Every line is full, so no control stands alone in empty width. */
 @container fleet-toolbar (max-width: 560px) {
+  /* Lines of their own rather than grid tracks: a shared column would size both lines' tools to the
+     wider set, leaving a gap beside the search. The break is a full-width item ordered between. */
   .toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'search query'
-      'health health'
-      'view   view';
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 8px;
   }
 
+  .toolbar::after {
+    content: '';
+    flex: 0 0 100%;
+    order: 1;
+  }
+
+  .search,
+  .health {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* The break is a line of its own, so the second line takes its spacing as a margin, not a gap. */
+  .health,
   .view-tools {
-    justify-content: space-between;
+    order: 2;
+    margin-top: 8px;
   }
 }

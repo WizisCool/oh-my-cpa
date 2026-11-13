@@ -29,6 +29,7 @@ import { LoadFailure, Notice, useConfirmModal, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { ListLoading } from '../common/PageLoading';
 import { SearchSelect } from '../common/SearchSelect';
+import { Tooltip } from '../common/Tooltip';
 import { AppDrawer } from '../common/AppDrawer';
 
 export type OAuthModelRulesSection = 'aliases' | 'excluded';
@@ -425,27 +426,36 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
             <p className={styles['intro']}>{t('af.rules_intro')}</p>
             <div className={styles['scope']}>
               <label className={styles['scope-label']} htmlFor="oauth-model-rules-provider">{t('af.rules_provider_label')}</label>
-              <div data-testid="oauth-model-rules-provider" data-provider={provider} className={styles['scope-control']}>
-                <SearchSelect
-                  label={t('af.rules_provider_label')}
-                  id="oauth-model-rules-provider"
-                  className={styles['provider-select']}
-                  value={provider || undefined}
-                  placeholder={t('af.rules_provider_placeholder')}
-                  options={providerSelectOptions}
-                  // Counts belong to the options and tabs; the selected identity matches the page's provider tabs.
-                  labelRender={(option) => <ProviderIdentity provider={String(option.value ?? '')} pluginLogos={pluginLogos} pluginTitles={pluginTitles} />}
-                  showSearch={{
-                    searchValue: providerSearch,
-                    onSearch: setProviderSearch,
-                    filterOption: (input, option) => (option?.searchText ?? '').includes(input.trim().toLowerCase()) || String(option?.value ?? '').includes(normalizeOAuthModelAliasProvider(input)),
-                  }}
-                  onChange={(value) => loadProvider(String(value))}
-                  disabled={isDirty || isSaving}
-                />
-              </div>
+              {/* Explains the locked picker where it is locked, instead of a notice that would push
+                  the editor down the moment the first change is made. */}
+              <Tooltip title={isDirty ? t('af.rules_dirty_hint') : undefined}>
+                <div
+                  data-testid="oauth-model-rules-provider"
+                  data-provider={provider}
+                  className={styles['scope-control']}
+                  // The locked picker takes no focus, so the wrapper does: a keyboard reaches the reason.
+                  tabIndex={isDirty ? 0 : undefined}
+                >
+                  <SearchSelect
+                    label={t('af.rules_provider_label')}
+                    id="oauth-model-rules-provider"
+                    className={styles['provider-select']}
+                    value={provider || undefined}
+                    placeholder={t('af.rules_provider_placeholder')}
+                    options={providerSelectOptions}
+                    // Counts belong to the options and tabs; the selected identity matches the page's provider tabs.
+                    labelRender={(option) => <ProviderIdentity provider={String(option.value ?? '')} pluginLogos={pluginLogos} pluginTitles={pluginTitles} />}
+                    showSearch={{
+                      searchValue: providerSearch,
+                      onSearch: setProviderSearch,
+                      filterOption: (input, option) => (option?.searchText ?? '').includes(input.trim().toLowerCase()) || String(option?.value ?? '').includes(normalizeOAuthModelAliasProvider(input)),
+                    }}
+                    onChange={(value) => loadProvider(String(value))}
+                    disabled={isDirty || isSaving}
+                  />
+                </div>
+              </Tooltip>
             </div>
-            {isDirty && <Notice tone="info" description={t('af.rules_dirty_hint')} />}
             <Segmented
               block
               className={styles['sections']}
