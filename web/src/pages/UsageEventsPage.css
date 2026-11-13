@@ -314,9 +314,3 @@
     min-height: 0;
   }
 }
-/* On a phone the bar's parts flow as one line of words: the count with "select all", then "clear"
-   with the export at the far edge, two rows instead of three. */
-@media (max-width: 640px) {
-  .request-selection-dock .selection-bar { row-gap: 4px; }
-  .request-selection-dock .selection-bar-start { display: contents; }
-}

@@ -140,10 +140,9 @@ warning. A shape whose rows stack into one card wraps them in a single element t
 shadow, since a drop drawn per row bleeds across the seams. Where a container clips its content
 (the request list slides inside a clipping slot), the ring is drawn inside the clip instead.
 
-A long stream of records (the request list) separates its rows by rhythm instead of rules, and
-marks hover, the open record and a ticked row with a rounded ink wash inset from the card's edge,
-the same shape as a highlighted menu or navigation item. Hundreds of ruled rows read as a ledger
-of hairlines. A short table of entities keeps its soft row rules.
+A long stream of records (the request list) separates its rows by tone instead of rules: the zebra
+bands described under composition and shared controls. Hundreds of ruled rows read as a ledger of
+hairlines. A short table of entities keeps its soft row rules.
 
 Strokes remain where a line is the thing being drawn: dividers between rows and columns, the
 dashed outline of an empty slot or drop target, a state-coloured button, the edge of a circular

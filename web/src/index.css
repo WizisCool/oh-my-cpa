@@ -2803,6 +2803,17 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     position: absolute;
     inset: -4px;
   }
+  /* A picker trigger keeps its 32px (28px small) face; the hand gets a taller target around it. */
+  [data-slot="select-trigger"],
+  [data-slot="combobox-trigger"] {
+    position: relative;
+  }
+  [data-slot="select-trigger"]::before,
+  [data-slot="combobox-trigger"]::before {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+  }
 }
 
 /* A conversation workspace (Playground, Agent) owns its scroll columns within the shell. */

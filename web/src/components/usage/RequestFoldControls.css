@@ -81,6 +81,10 @@
     transform: translateY(0);
   }
 }
+/* A docked selection takes the strip above the footer, so the button stands clear above it. */
+.request-stream-slot:has(.request-selection-dock) .req-back-to-top-btn {
+  bottom: 122px;
+}
 .req-back-to-top-btn:hover {
   box-shadow: var(--shadow-raised);
   color: var(--fg);
@@ -131,6 +135,9 @@
     font-size: var(--text-xs);
     gap: 4px;
     border-radius: var(--radius-md);
+  }
+  .request-stream-slot:has(.request-selection-dock) .req-back-to-top-btn {
+    bottom: 110px;
   }
 }
 :root[data-reduced-motion='true'] {

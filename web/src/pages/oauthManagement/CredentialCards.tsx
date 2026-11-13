@@ -46,7 +46,8 @@ export function CredentialCards({ groups, pluginLogos, selectedKeys, isSelecting
   const keys = React.useMemo(() => entries.map(({ record }) => record.key), [entries]);
   return (
     <div className={styles.cards} data-selecting={isSelecting || undefined}>
-      {isSelecting && pageSelection && (
+      {pageSelection && (
+        // Held in place out of a choice, so starting or ending one never moves the cards.
         <div className={styles['page-select']}>
           {pageSelection}
           <span aria-hidden="true">{t('omc.fleet_select_page')}</span>
