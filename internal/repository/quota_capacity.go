@@ -120,8 +120,9 @@ func capacityPoint(ctx context.Context, q capacityQuerier, authIndex string, win
 		}
 		for _, group := range groups {
 			intervalModels = append(intervalModels, quota.ModelCalibrationUsage{
-				Model: group.Model, Requests: group.Usage.Requests, Tokens: group.Usage.Tokens,
-				PromptTokens: group.Usage.PromptTokens, CachedTokens: group.Usage.CachedTokens, OutputTokens: group.Usage.OutputTokens,
+				Model: group.Model, Requests: group.Usage.Requests, PricedRequests: group.Usage.PricedRequests,
+				Tokens: group.Usage.Tokens, PromptTokens: group.Usage.PromptTokens, CachedTokens: group.Usage.CachedTokens,
+				OutputTokens: group.Usage.OutputTokens, CostNanos: group.Usage.CostNanos,
 				ServiceTier: group.Usage.ServiceTier, HasMixedServiceTiers: group.Usage.HasMixedServiceTiers,
 			})
 		}
@@ -255,10 +256,16 @@ func (r *Repository) QueryCapacityUsage(ctx context.Context, authIndex string, w
 // per-model breakdown of completed requests in [fromMS, toMS). This pairs
 // native meter changes with directly observed model traffic.
 func (r *Repository) QueryCapacityUsageWithModels(ctx context.Context, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
+	return r.QueryCapacityUsageSinceWithModels(ctx, authIndex, window, fromMS, fromMS, toMS)
+}
+
+// QueryCapacityUsageSinceWithModels preserves cycleFromMS as the request start
+// lower bound while filtering completion times to [fromMS, toMS).
+func (r *Repository) QueryCapacityUsageSinceWithModels(ctx context.Context, authIndex string, window quota.QuotaWindow, cycleFromMS, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
 	if r == nil || r.SQL() == nil {
 		return quota.WindowUsage{}, nil, "", errors.New("repository is not initialized")
 	}
-	return queryCapacityUsage(ctx, r.SQL(), strings.TrimSpace(authIndex), window, fromMS, toMS)
+	return queryCapacityUsageSince(ctx, r.SQL(), strings.TrimSpace(authIndex), window, cycleFromMS, fromMS, toMS)
 }
 
 func queryCapacityUsage(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {

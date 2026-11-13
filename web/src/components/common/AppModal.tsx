@@ -92,7 +92,7 @@ export function AppModal({
   const [isScrolled, setIsScrolled] = React.useState(false);
   const popupRef = React.useRef<HTMLDivElement | null>(null);
   const viewport = useVisibleViewport(open);
-  const sheetSpan = useOpenSheetSpan(open, MODAL_WIDTHS[size]);
+  const [sheetSpan, clearSheetSpan] = useOpenSheetSpan(open, MODAL_WIDTHS[size]);
 
   const maskConfig = typeof mask === 'object' && mask !== null ? mask : {};
   const canDismissByEscape = isDismissible && keyboard !== false;
@@ -163,7 +163,10 @@ export function AppModal({
         }
       }}
       onOpenChangeComplete={(next) => {
-        if (!next) setIsScrolled(false);
+        if (!next) {
+          setIsScrolled(false);
+          clearSheetSpan();
+        }
         afterOpenChange?.(next);
       }}
     >
@@ -281,11 +284,10 @@ const SPAN_GUTTER = 16;
  */
 function useOpenSheetSpan(open: boolean, width: number) {
   const [span, setSpan] = React.useState<{ start: number; end: number } | null>(null);
+  const isOpenRef = React.useRef(open);
   React.useLayoutEffect(() => {
-    if (!open) {
-      setSpan(null);
-      return undefined;
-    }
+    isOpenRef.current = open;
+    if (!open) return undefined;
     const measure = () => {
       const sheets = document.querySelectorAll<HTMLElement>('[data-slot="sheet-content"][data-side="right"][data-open]');
       const box = sheets[sheets.length - 1]?.getBoundingClientRect();
@@ -296,5 +298,10 @@ function useOpenSheetSpan(open: boolean, width: number) {
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [open, width]);
-  return span;
+  // Preserve the sheet span while the dialog exit transition runs so it fades out in place
+  // over the drawer instead of jumping to the window centre, then clear once closed.
+  const clearSpan = React.useCallback(() => {
+    if (!isOpenRef.current) setSpan(null);
+  }, []);
+  return [span, clearSpan] as const;
 }

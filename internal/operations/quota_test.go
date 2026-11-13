@@ -32,7 +32,7 @@ func TestSafeQuotaIncludesSubscriptionWithoutRawSignals(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(encoded), `"model_forecasts"`) || strings.Contains(string(encoded), `"capacity":`) || strings.Contains(string(encoded), `"remaining_cost_nanos"`) {
+			if !strings.Contains(string(encoded), `"model_forecasts"`) || strings.Contains(string(encoded), `"capacity":`) {
 				t.Fatalf("invalid agent quota projection: %s", encoded)
 			}
 			if strings.Contains(string(encoded), "synthetic-private-token") || strings.Contains(string(encoded), "raw_signals") {

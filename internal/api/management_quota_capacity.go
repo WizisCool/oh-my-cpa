@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -59,6 +60,54 @@ func (h *Handler) attachQuotaForecasts(ctx context.Context, observation *quota.N
 			continue
 		}
 		window.ModelForecasts, window.ForecastUnavailable = quota.BuildModelForecasts(*window, observation.Plan, observation.ObservedAtMS, cycles[quota.CapacityWindowKey(observation.Provider, *window)])
+		h.backfillLegacyForecastCosts(ctx, observation.AuthIndex, *window, observation.ObservedAtMS)
+	}
+}
+
+// backfillLegacyForecastCosts fills remaining_cost_nanos from usage_events when
+// a stored calibration interval predates per-interval cost persistence.
+func (h *Handler) backfillLegacyForecastCosts(ctx context.Context, authIndex string, window quota.QuotaWindow, observedAtMS int64) {
+	if len(window.ModelForecasts) == 0 {
+		return
+	}
+	cycleFromMS, _, boundaryReason := quota.WindowCycleRange(window, observedAtMS, observedAtMS)
+	if boundaryReason != "" {
+		return
+	}
+	used, hasReading := quota.WindowUsedPercent(window)
+	if !hasReading {
+		return
+	}
+	remaining := 100 - used
+	for index := range window.ModelForecasts {
+		forecast := &window.ModelForecasts[index]
+		if forecast.SampleUsedPercent <= 0 || (forecast.RemainingCostNanos != nil && forecast.SamplePricedRequests >= forecast.SampleRequests) {
+			continue
+		}
+		_, groups, reason, err := h.repo.QueryCapacityUsageSinceWithModels(ctx, authIndex, window, cycleFromMS, forecast.FromMS, forecast.ObservedAtMS)
+		if err != nil || reason != "" {
+			continue
+		}
+		var matchedRequests, pricedRequests, costNanos int64
+		for _, group := range groups {
+			if !strings.EqualFold(group.Model, forecast.Model) {
+				continue
+			}
+			if group.Usage.HasMixedServiceTiers || group.Usage.ServiceTier != forecast.ServiceTier {
+				continue
+			}
+			matchedRequests += group.Usage.Requests
+			pricedRequests += group.Usage.PricedRequests
+			costNanos += group.Usage.CostNanos
+		}
+		if matchedRequests != forecast.SampleRequests {
+			continue
+		}
+		if pricedRequests > forecast.SamplePricedRequests && (pricedRequests == matchedRequests && matchedRequests > 0 || pricedRequests > 0 && costNanos > 0) {
+			cost := int64(math.Floor(float64(costNanos) * remaining / forecast.SampleUsedPercent))
+			forecast.SamplePricedRequests = pricedRequests
+			forecast.RemainingCostNanos = &cost
+		}
 	}
 }
 

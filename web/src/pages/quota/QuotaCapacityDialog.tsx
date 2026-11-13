@@ -20,7 +20,6 @@ import {
   type CycleCardFigures,
   describeForecastCard,
   quotaForecastNote,
-  type ForecastCardReading,
   formatCycleCardFigures,
 } from './quotaCapacity';
 import type { QuotaCapacityOwner } from './QuotaCapacityButton';
@@ -77,7 +76,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
   }, [history.isError, history.data, activeWindow.model_forecasts]);
   const activeForecast = modelOptions.find((option) => forecastKey(option) === selectedModel) ?? modelOptions[0] ?? null;
   const pendingNote = quotaForecastNote(history.isError ? 'usage_unavailable' : history.data?.forecast_unavailable ?? activeWindow.forecast_unavailable, t);
-  const forecast = describeForecastCard(activeForecast, tokenStyle);
+  const forecastFigures = describeForecastCard(activeForecast, tokenStyle, t);
   const untilText = activeWindow.reset_at_ms
     ? t('quota.capacity_until', { when: formatShortDateTime(activeWindow.reset_at_ms) })
     : null;
@@ -158,17 +157,11 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
               options={selectOptions}
             />
           ) : undefined}
-          figures={forecast.figures}
-          forecast={forecast}
+          figures={forecastFigures}
           isEmpty={!activeForecast}
           foot={(
             <>
-              {activeForecast ? (
-                <MetaLine tone="quiet" className={styles['foot-text']}>
-                  {t('quota.capacity_sample', { n: activeForecast.sample_requests, percent: Number(activeForecast.sample_used_percent.toFixed(1)) })}
-                  {`${formatShortDateTime(activeForecast.from_ms)} – ${formatShortDateTime(activeForecast.observed_at_ms)}`}
-                </MetaLine>
-              ) : (
+              {!activeForecast && (
                 <span className={styles['foot-text']}>{pendingNote ?? t('quota.capacity_reason_low_usage')}</span>
               )}
               <Tag tone="accent" size="small" className={styles['foot-tag']}>{t('quota.capacity_forecast_tag')}</Tag>
@@ -195,17 +188,16 @@ function cycleSpan(cycle: QuotaCapacityCycle): string {
 
 /**
  * Consumption cards lead with recorded API-equivalent cost; the forecast leads with
- * remaining requests and identifies its own sample. A card without a reading keeps every row
- * with a dash for each figure, so the three still line up across the subgrid.
+ * remaining available cost. A card without a reading keeps every row with a dash for
+ * each figure, so the three still line up across the subgrid.
  */
-function Card({ tone, icon, title, caption, captionSlot, figures, forecast, isEmpty, isPending = false, foot }: {
+function Card({ tone, icon, title, caption, captionSlot, figures, isEmpty, isPending = false, foot }: {
   tone?: 'forecast';
   icon: React.ReactNode;
   title: string;
   caption: string;
   captionSlot?: React.ReactNode;
   figures: CycleCardFigures;
-  forecast?: ForecastCardReading;
   isEmpty: boolean;
   isPending?: boolean;
   foot: React.ReactNode;
@@ -222,14 +214,14 @@ function Card({ tone, icon, title, caption, captionSlot, figures, forecast, isEm
         )}
       </header>
       <div className={styles.lead}>
-        <span className={styles.label}>{t(tone === 'forecast' ? 'quota.capacity_remaining_requests' : 'quota.capacity_spent')}</span>
+        <span className={styles.label}>{t(tone === 'forecast' ? 'quota.capacity_available_amount' : 'quota.capacity_spent')}</span>
         <span className={styles['lead-value']} data-tip={figures.costHint ?? undefined}>
-          <FigureValue readout={forecast ? forecast.remainingRequestsReadout : figures.costReadout} fallback={forecast ? forecast.remainingRequests : figures.cost} />
+          <FigureValue readout={figures.costReadout} fallback={figures.cost} />
         </span>
       </div>
       <dl className={styles.rows}>
         <div className={styles.row}>
-          <dt>{t(tone === 'forecast' ? 'quota.capacity_sample_requests' : 'quota.capacity_requests')}</dt>
+          <dt>{t('quota.capacity_requests')}</dt>
           <dd><FigureValue readout={figures.requestsReadout} fallback={figures.requests} /></dd>
         </div>
         <div className={styles.row}>

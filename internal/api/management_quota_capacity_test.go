@@ -285,7 +285,9 @@ func TestQuotaForecastsKeepNativeReadingsAndSeparateRecordedCosts(t *testing.T) 
 	if *window.UsedPercent != 30 || *window.ResetAtMS != reset || len(window.ModelForecasts) != 2 {
 		t.Fatalf("window = %+v", window)
 	}
-	if window.ModelForecasts[0].Model != "gemini-4-carbon" || window.ModelForecasts[0].RemainingRequests != 35 || window.ModelForecasts[1].RemainingRequests != 70 {
+	if window.ModelForecasts[0].Model != "gemini-4-carbon" || window.ModelForecasts[0].RemainingRequests != 35 || window.ModelForecasts[1].RemainingRequests != 70 ||
+		window.ModelForecasts[0].RemainingCostNanos == nil || *window.ModelForecasts[0].RemainingCostNanos != 35_000_000 ||
+		window.ModelForecasts[1].RemainingCostNanos == nil || *window.ModelForecasts[1].RemainingCostNanos != 70_000_000 {
 		t.Fatalf("model attribution = %+v", window.ModelForecasts)
 	}
 	if shared[0].Usage != nil || len(shared[0].ModelForecasts) != 0 {
@@ -298,7 +300,7 @@ func TestQuotaForecastsKeepNativeReadingsAndSeparateRecordedCosts(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{`"capacity":`, `"remaining_cost_nanos":`, `"model_projections":`} {
+	for _, field := range []string{`"capacity":`, `"model_projections":`} {
 		if strings.Contains(string(data), field) {
 			t.Fatalf("legacy quota promise leaked: %s", data)
 		}
@@ -319,8 +321,18 @@ func TestQuotaForecastsKeepNativeReadingsAndSeparateRecordedCosts(t *testing.T) 
 		t.Fatalf("idle refresh changed forecasts: %+v", idle.ModelForecasts)
 	}
 	status, body := getCapacityHistory(t, handler, "?window=five_hour")
-	if status != http.StatusOK || body["model_forecasts"] == nil || body["model_projections"] != nil {
+	if status != http.StatusOK || body["model_projections"] != nil {
 		t.Fatalf("history = %d %v", status, body)
+	}
+	historyForecasts, ok := body["model_forecasts"].([]any)
+	if !ok || len(historyForecasts) != 2 {
+		t.Fatalf("history model_forecasts = %T %v", body["model_forecasts"], body["model_forecasts"])
+	}
+	for idx, wantCost := range []float64{35_000_000, 70_000_000} {
+		f, _ := historyForecasts[idx].(map[string]any)
+		if f["sample_priced_requests"] != float64(10) || f["remaining_cost_nanos"] != wantCost {
+			t.Fatalf("history forecast[%d] = %v, want priced=10 cost=%v", idx, f, wantCost)
+		}
 	}
 	if err := handler.repo.SaveQuotaRefreshAttempt(context.Background(), repository.QuotaRefreshAttemptRecord{AuthIndex: "codex-1", AttemptedAtMS: now, Outcome: repository.QuotaRefreshAttemptFailed, Error: "temporary gateway failure"}); err != nil {
 		t.Fatal(err)
@@ -399,5 +411,70 @@ func TestQuotaForecastHistoryWithholdsUnattributableAndOldSamples(t *testing.T) 
 	next := observeCapacity(t, handler, capacityReading(reset+1, reset+5*3600*1000, 5, 1), reset+1)
 	if len(next.ModelForecasts) != 0 {
 		t.Fatalf("older cycle supplied a forecast: %+v", next)
+	}
+}
+
+func TestLegacyCalibrationIntervalsBackfillForecastCost(t *testing.T) {
+	handler := capacityTestHandler(t)
+	now := time.Now().UnixMilli()
+	reset := now + 2*3600*1000
+	observeCapacity(t, handler, capacityReading(now-30_000, reset, 5, 10), now)
+	insertForecastTraffic(t, handler, "gemini-4-hydrogen", 9, now-25_000)
+	// Include a request that started before the interval (after cycle start) and finished inside it.
+	insertCapacityUsage(t, handler, "cross-interval", now-40_000, 1000, 1_000_000)
+	if _, err := handler.repo.SQL().ExecContext(context.Background(), `UPDATE usage_events SET model='gemini-4-hydrogen', latency_ms=15000 WHERE event_key='cross-interval'`); err != nil {
+		t.Fatal(err)
+	}
+	observeCapacity(t, handler, capacityReading(now-10_000, reset, 5, 20), now)
+
+	// Simulate calibration points persisted before per-interval cost_nanos existed.
+	cycles, err := handler.repo.LoadCapacityCycles(context.Background(), "codex-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, list := range cycles {
+		for i := range list {
+			for j := range list[i].Points {
+				for m := range list[i].Points[j].IntervalModels {
+					list[i].Points[j].IntervalModels[m].CostNanos = 0
+					list[i].Points[j].IntervalModels[m].PricedRequests = 0
+				}
+			}
+			raw, err := json.Marshal(list[i].Points)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := handler.repo.SQL().ExecContext(context.Background(), `UPDATE quota_capacity_cycles SET points_json = ? WHERE auth_index = 'codex-1' AND window_key = ? AND cycle_reset_at_ms = ?`, string(raw), k, list[i].CycleResetAtMS); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	reading := capacityReading(now-10_000, reset, 5, 20)
+	handler.attachQuotaForecasts(context.Background(), reading, now)
+	got := reading.Windows[0].ModelForecasts
+	if len(got) != 1 || got[0].SamplePricedRequests != 10 || got[0].RemainingCostNanos == nil || *got[0].RemainingCostNanos != 80_000_000 {
+		t.Fatalf("backfilled forecast = %+v", got)
+	}
+
+	// A new interval merged onto that legacy interval still has SamplePricedRequests < SampleRequests
+	// until backfilled from usage_events across the whole combined sample.
+	insertForecastTraffic(t, handler, "gemini-4-hydrogen", 5, now-5_000)
+	window := observeCapacity(t, handler, capacityReading(now-1_000, reset, 5, 25), now)
+	got = window.ModelForecasts
+	if len(got) != 1 || got[0].SampleRequests != 15 || got[0].SamplePricedRequests != 15 || got[0].RemainingCostNanos == nil || *got[0].RemainingCostNanos != 75_000_000 {
+		t.Fatalf("mixed legacy+new forecast = %+v", got)
+	}
+	status, body := getCapacityHistory(t, handler, "?window=five_hour")
+	if status != http.StatusOK {
+		t.Fatalf("backfilled history status = %d (%v)", status, body)
+	}
+	historyForecasts, ok := body["model_forecasts"].([]any)
+	if !ok || len(historyForecasts) != 1 {
+		t.Fatalf("backfilled history model_forecasts = %T %v", body["model_forecasts"], body["model_forecasts"])
+	}
+	firstForecast, _ := historyForecasts[0].(map[string]any)
+	if firstForecast["sample_priced_requests"] != float64(15) || firstForecast["remaining_cost_nanos"] != float64(75_000_000) {
+		t.Fatalf("backfilled history forecast = %v", firstForecast)
 	}
 }

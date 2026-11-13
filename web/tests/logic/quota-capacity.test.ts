@@ -2,29 +2,42 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { TFunc } from '../../src/i18n/index.tsx';
 import type { QuotaModelForecast } from '../../src/types/quota.ts';
-import { describeForecastCard, formatCycleCardFigures, quotaForecastNote } from '../../src/pages/quota/quotaCapacity.ts';
+import { compactQuotaForecast, describeForecastCard, formatCycleCardFigures, quotaForecastNote } from '../../src/pages/quota/quotaCapacity.ts';
 import { formatQuotaMetric, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
 import { siblingCapacityWindows } from '../../src/pages/quota/quotaWindowSelection.ts';
 
 const t = ((key: string, params?: Record<string, unknown>) => params ? `${key}(${Object.values(params).join(',')})` : key) as TFunc;
 const usage = { from_ms: 0, to_ms: 1, requests: 40, priced_requests: 40, tokens: 480_000, cost_nanos: 1_200_000_000 };
 const forecast: QuotaModelForecast = {
-  model: 'gemini-4-hydrogen', sample_requests: 10, sample_tokens: 100_000, sample_used_percent: 10,
-  from_ms: 0, observed_at_ms: 1, cache_rate: 80, remaining_requests: 70, remaining_tokens: 700_000, rounding_error_percent: 11.2,
+  model: 'gemini-4-hydrogen', sample_requests: 10, sample_priced_requests: 10, sample_tokens: 100_000, sample_used_percent: 10,
+  from_ms: 0, observed_at_ms: 1, cache_rate: 80, remaining_requests: 70, remaining_tokens: 700_000,
+  remaining_cost_nanos: 14_000_000_000, rounding_error_percent: 11.2,
 };
 
-test('forecasts show only model-conditioned remaining work and its observed sample', () => {
-  const reading = describeForecastCard(forecast, 'en-compact');
-  assert.equal(reading.remainingRequests, '≈ 70');
-  assert.equal(reading.figures.requests, '10');
-  assert.equal(reading.figures.tokens, '≈ 700K');
-  assert.equal(reading.figures.cacheRate, 80);
-  assert.equal(reading.figures.cost, null);
-  assert.equal(reading.figures.costReadout, undefined);
-  const exhausted = describeForecastCard({ ...forecast, remaining_requests: 0, remaining_tokens: 0 }, 'en-compact');
-  assert.equal(exhausted.remainingRequests, '0');
-  assert.equal(exhausted.figures.tokens, '0');
-  assert.equal(describeForecastCard(null, 'en-compact').remainingRequests, null);
+test('forecasts show available cost alongside remaining requests, tokens, and compact list value', () => {
+  const reading = describeForecastCard(forecast, 'en-compact', t);
+  assert.equal(reading.cost, '≈ $14.00');
+  assert.equal(reading.requests, '≈ 70');
+  assert.equal(reading.tokens, '≈ 700K');
+  assert.equal(reading.cacheRate, 80);
+  assert.equal(compactQuotaForecast({ model_forecasts: [forecast] }, 'en-compact', t), '≈ $14.00');
+  assert.equal(compactQuotaForecast({ model_forecasts: [{ ...forecast, sample_priced_requests: 5 }] }, 'en-compact', t), '≥ $14.00');
+  assert.equal(compactQuotaForecast({ model_forecasts: [{ ...forecast, sample_priced_requests: 0, remaining_cost_nanos: undefined }] }, 'en-compact', t), '≈ 700K');
+  assert.equal(compactQuotaForecast({ model_forecasts: undefined }, 'en-compact', t), null);
+
+  const partial = describeForecastCard({ ...forecast, sample_priced_requests: 5 }, 'en-compact', t);
+  assert.equal(partial.cost, '≥ $14.00');
+  assert.equal(partial.costHint, 'quota.capacity_partial_priced_hint(5,10)');
+
+  const unpriced = describeForecastCard({ ...forecast, sample_priced_requests: 0, remaining_cost_nanos: undefined }, 'en-compact', t);
+  assert.equal(unpriced.cost, null);
+  assert.equal(unpriced.costReadout, undefined);
+
+  const exhausted = describeForecastCard({ ...forecast, remaining_requests: 0, remaining_tokens: 0, remaining_cost_nanos: 0 }, 'en-compact', t);
+  assert.equal(exhausted.cost, '$0.00');
+  assert.equal(exhausted.requests, '0');
+  assert.equal(exhausted.tokens, '0');
+  assert.equal(describeForecastCard(null, 'en-compact', t).cost, null);
 });
 
 test('missing or mixed observations carry an evidence state instead of a generic capacity', () => {

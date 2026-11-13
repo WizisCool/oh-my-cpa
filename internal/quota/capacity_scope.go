@@ -7,7 +7,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
-var CLAUDE_FAMILY_PATTERN = regexp.MustCompile(`^claude-(?:(sonnet|opus|haiku)(?:-|$)|[0-9]+(?:[.-][0-9]+)*-(sonnet|opus|haiku)(?:-|$))`)
+var CLAUDE_FAMILY_PATTERN = regexp.MustCompile(`^claude-(?:(sonnet|opus|haiku|fable|mythos)(?:-|$)|[0-9]+(?:[.-][0-9]+)*-(sonnet|opus|haiku|fable|mythos)(?:-|$))`)
 
 // ModelWindowUsage groups traffic by the best available upstream identity. A
 // client alias without a served model is not evidence of its metered family.
@@ -49,6 +49,9 @@ func capacityModelFamily(model string) string {
 	if model == "fable" {
 		return "fable"
 	}
+	if model == "o1" || model == "o3" || model == "o4" || strings.HasPrefix(model, "o1-") || strings.HasPrefix(model, "o3-") || strings.HasPrefix(model, "o4-") {
+		return "openai-o"
+	}
 	return ""
 }
 
@@ -89,7 +92,7 @@ func windowModelFamilies(window QuotaWindow) []string {
 
 func isKnownCapacityFamily(family string) bool {
 	switch family {
-	case "claude", "claude-sonnet", "claude-opus", "claude-haiku", "gemini", "gemini-3-pro", "gemini-3-flash", "gemini-4-argon", "gpt", "fable":
+	case "claude", "claude-sonnet", "claude-opus", "claude-haiku", "claude-fable", "claude-mythos", "gemini", "gemini-3-pro", "gemini-3-flash", "gemini-4-argon", "gpt", "openai-o", "fable":
 		return true
 	}
 	return false
@@ -104,7 +107,7 @@ func matchWindowModelScope(window QuotaWindow, families []string, exactModel, ra
 		isMatch = model != "" && !usage.IsModelSubstituted(exactModel, model)
 	} else {
 		for _, meteredFamily := range families {
-			if family == meteredFamily || meteredFamily == "claude" && strings.HasPrefix(family, "claude-") || strings.HasPrefix(meteredFamily, "gemini-") && (model == meteredFamily || strings.HasPrefix(model, meteredFamily+"-")) {
+			if family == meteredFamily || meteredFamily == "claude" && strings.HasPrefix(family, "claude-") || meteredFamily == "fable" && family == "claude-fable" || strings.HasPrefix(meteredFamily, "gemini-") && (model == meteredFamily || strings.HasPrefix(model, meteredFamily+"-")) {
 				isMatch = true
 			}
 		}

@@ -6,6 +6,7 @@ import type {
   QuotaCapacityCycle,
   QuotaForecastUnavailableReason,
   QuotaModelForecast,
+  QuotaWindow,
 } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
 import type { RollingReadout } from '../../types/rollingNumber';
@@ -101,28 +102,64 @@ export function formatCycleCardFigures(cycle: QuotaCapacityCycle | null, tokenSt
   };
 }
 
-export interface ForecastCardReading {
-  figures: CycleCardFigures;
-  remainingRequests: string | null;
-  remainingRequestsReadout?: RollingReadout;
+function forecastCostReading(forecast: QuotaModelForecast, t: TFunc): Pick<CycleCardFigures, 'cost' | 'costReadout' | 'costHint'> {
+  if (forecast.remaining_cost_nanos == null || !Number.isFinite(forecast.remaining_cost_nanos)) {
+    return { cost: null, costReadout: undefined, costHint: null };
+  }
+  const nanos = Math.max(0, forecast.remaining_cost_nanos);
+  const usd = nanos / NANOS_PER_USD;
+  const priced = forecast.sample_priced_requests;
+  const isPartial = priced != null && priced < forecast.sample_requests;
+  if (!isPartial) {
+    return {
+      cost: nanos === 0 ? formatUsd(0) : `≈ ${formatUsd(usd)}`,
+      costReadout: withPrefix(currencyReadout(usd), nanos > 0 ? '≈ ' : ''),
+      costHint: null,
+    };
+  }
+  if (priced > 0 && nanos > 0) {
+    return {
+      cost: `≥ ${formatUsd(usd)}`,
+      costReadout: withPrefix(currencyReadout(usd), '≥ '),
+      costHint: t('quota.capacity_partial_priced_hint', {
+        priced: priced.toLocaleString(),
+        total: forecast.sample_requests.toLocaleString(),
+      }),
+    };
+  }
+  return { cost: null, costReadout: undefined, costHint: null };
 }
 
-/** A forecast contains no money and no model-independent window capacity. */
-export function describeForecastCard(forecast: QuotaModelForecast | null, tokenStyle: TokenNumberStyle): ForecastCardReading {
-  if (!forecast) return { figures: EMPTY_CYCLE_FIGURES, remainingRequests: null };
+/** Compact reading shown beside a quota bar when a model forecast is available. */
+export function compactQuotaForecast(
+  window: Pick<QuotaWindow, 'model_forecasts'>,
+  tokenStyle: TokenNumberStyle,
+  t: TFunc,
+): string | null {
+  const forecast = window.model_forecasts?.[0];
+  if (!forecast) return null;
+  const { cost } = forecastCostReading(forecast, t);
+  if (cost) return cost;
+  const tokens = Math.max(0, Math.floor(forecast.remaining_tokens));
+  return tokens === 0 ? t('quota.capacity_open_details') : `≈ ${formatTokens(tokens, tokenStyle)}`;
+}
+
+/** Formats remaining cost, requests, tokens, and cache rate for the forecast card. */
+export function describeForecastCard(
+  forecast: QuotaModelForecast | null,
+  tokenStyle: TokenNumberStyle,
+  t: TFunc,
+): CycleCardFigures {
+  if (!forecast) return EMPTY_CYCLE_FIGURES;
   const requests = Math.max(0, Math.floor(forecast.remaining_requests));
   const tokens = Math.max(0, Math.floor(forecast.remaining_tokens));
   return {
-    remainingRequests: requests === 0 ? '0' : `≈ ${requests.toLocaleString()}`,
-    remainingRequestsReadout: withPrefix(resolveCountFlowReadout(requests), requests > 0 ? '≈ ' : ''),
-    figures: {
-      ...EMPTY_CYCLE_FIGURES,
-      requests: forecast.sample_requests.toLocaleString(),
-      requestsReadout: resolveCountFlowReadout(forecast.sample_requests),
-      tokens: tokens === 0 ? '0' : `≈ ${formatTokens(tokens, tokenStyle)}`,
-      tokensReadout: withPrefix(resolveTokenFlowReadout(tokens, tokenStyle), tokens > 0 ? '≈ ' : ''),
-      cacheRate: forecast.cache_rate,
-      cacheRateReadout: resolveCacheRateReadout(forecast.cache_rate),
-    },
+    ...forecastCostReading(forecast, t),
+    requests: requests === 0 ? '0' : `≈ ${requests.toLocaleString()}`,
+    requestsReadout: withPrefix(resolveCountFlowReadout(requests), requests > 0 ? '≈ ' : ''),
+    tokens: tokens === 0 ? '0' : `≈ ${formatTokens(tokens, tokenStyle)}`,
+    tokensReadout: withPrefix(resolveTokenFlowReadout(tokens, tokenStyle), tokens > 0 ? '≈ ' : ''),
+    cacheRate: forecast.cache_rate,
+    cacheRateReadout: resolveCacheRateReadout(forecast.cache_rate),
   };
 }
