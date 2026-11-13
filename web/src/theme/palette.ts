@@ -121,6 +121,8 @@ export interface ThemePalette extends ThemeCore {
   rowHover: string;
   selected: string;
   hoverInset: string;
+  /** Raised thumb inside a field well (`Segmented`, `ToggleGroup`, phone `StatTiles`). */
+  thumbBg: string;
   /** Filled primary action surface (`<Button variant="primary">`, Composer send, checked box). */
   primary: string;
   primaryHover: string;
@@ -191,6 +193,33 @@ function standOff(ground: string, color: string, toward: string, floor: number):
   if (Math.abs(delta) >= floor) return color;
   const direction = delta !== 0 ? Math.sign(delta) : Math.sign(oklchLightness(toward) - groundLightness) || -1;
   return withLightness(color, Math.min(1, Math.max(0, groundLightness + direction * floor)));
+}
+
+function standOffAbove(color: string, floorLightness: number, step: number): string {
+  const target = Math.min(1, floorLightness + step);
+  return oklchLightness(color) >= target ? color : withLightness(color, target);
+}
+
+/**
+ * Computes `--thumb-bg` so a `Segmented` or `ToggleGroup` thumb stands off its `bg-field` well
+ * (`5%` of `--fg` over the container surface) on every substrate (`bg`, `surface`, `elevated`).
+ */
+function deriveThumbBg(mode: ThemeMode, core: ThemeCore): string {
+  const wells = [core.bg, core.surface, core.elevated].map((ground) => mixSrgb(ground, core.fg, 0.05));
+  const maxWellL = Math.max(...wells.map(oklchLightness));
+  if (mode === 'light') {
+    const minLightL = Math.min(1, maxWellL + 0.03);
+    return oklchLightness(core.elevated) >= minLightL ? core.elevated : withLightness(core.elevated, minLightL);
+  }
+  const targetL = Math.min(1, maxWellL + 0.08);
+  const candidate = withLightness(core.elevated, targetL);
+  const textFloor = CONTRAST_FLOORS.text ?? 4.5;
+  if (contrastRatio(core.fg, candidate) >= textFloor) return candidate;
+  for (let l = targetL - LADDER_STEP; l > maxWellL; l -= LADDER_STEP) {
+    const stepped = withLightness(core.elevated, l);
+    if (contrastRatio(core.fg, stepped) >= textFloor) return stepped;
+  }
+  return candidate;
 }
 
 /**
@@ -660,7 +689,15 @@ export function derivePalette(
   const blend = NEUTRAL_BLEND[mode];
   const semantics = MODE_SEMANTICS[mode];
   const hover = mixOklch(core.bg, core.fg, blend.hover);
-  const selected = mixOklch(hover, core.accent, blend.selected);
+  const rawSelected = mixOklch(hover, core.accent, blend.selected);
+  const elevatedL = oklchLightness(core.elevated);
+  const maxSurfaceL = Math.max(oklchLightness(core.bg), oklchLightness(core.surface), elevatedL);
+  const selected = mode === 'dark'
+    ? standOffAbove(rawSelected, maxSurfaceL, 0.055)
+    : Math.abs(oklchLightness(rawSelected) - elevatedL) >= 0.045
+      ? rawSelected
+      : withLightness(rawSelected, Math.max(0, elevatedL - 0.055));
+  const thumbBg = deriveThumbBg(mode, core);
   const borderSoft = standOff(core.bg, mixOklch(core.bg, core.border, blend.borderSoft), core.fg, BORDER_SOFT_FLOOR);
   const ladder = accentLadder(mode, core.accent);
   const primarySurface = resolvePrimarySurface(mode, ladder, overrides?.primary);
@@ -687,6 +724,7 @@ export function derivePalette(
     rowHover: hover,
     hoverInset: blend.hoverInset === 0 ? core.bg : mixOklch(core.bg, core.fg, blend.hoverInset),
     selected,
+    thumbBg,
     ...primarySurface,
     accentHover: ladder.hover,
     accentActive: ladder.active,

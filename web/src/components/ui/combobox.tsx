@@ -163,12 +163,20 @@ export function Combobox<
     setScrollEl(node);
   }, []);
 
+  const hasEmptyOption = React.useMemo(
+    () =>
+      options.some((opt) =>
+        Array.isArray(opt.options) ? opt.options.some((sub) => sub.value === '') : opt.value === '',
+      ),
+    [options],
+  );
+
   const selected = React.useMemo<ComboboxValue[]>(() => {
     if (value === undefined || value === null) return [];
     if (Array.isArray(value)) return value as ComboboxValue[];
-    if ((value as unknown) === '') return [];
+    if ((value as unknown) === '' && !hasEmptyOption) return [];
     return [value as unknown as ComboboxValue];
-  }, [value]);
+  }, [hasEmptyOption, value]);
 
   const setOpen = React.useCallback(
     (next: boolean) => {

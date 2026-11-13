@@ -1,5 +1,7 @@
 import { providerDisplayName } from './providerMetadata';
 
+export const WARMUP_TASK_ORDER_PREFERENCE = 'omc_warmup_task_order';
+
 export interface WarmupTrigger {
   kind: 'window' | 'daily' | 'every';
   window?: string;
@@ -110,6 +112,12 @@ export interface WarmupCredentialGroup {
   accounts: WarmupCatalogAccount[];
 }
 
+export interface WarmupTaskGroup {
+  provider: string;
+  label: string;
+  tasks: WarmupTask[];
+}
+
 /**
  * The credential picker's groups: one per provider, in the catalogue's own order and named the way
  * the rest of the console names that provider.
@@ -125,6 +133,39 @@ export function groupWarmupAccounts(
       label: providerDisplayName(group.provider, pluginTitles),
       accounts: group.accounts,
     }));
+}
+
+/**
+ * Groups warmup tasks by provider in catalogue order (followed by any provider missing from the
+ * catalogue in first-seen task order).
+ */
+export function groupWarmupTasks(
+  tasks: readonly WarmupTask[],
+  catalog?: WarmupCatalog,
+  pluginTitles?: ReadonlyMap<string, string>,
+): WarmupTaskGroup[] {
+  if (tasks.length === 0) return [];
+  const buckets = new Map<string, WarmupTask[]>();
+  for (const task of tasks) {
+    const provider = task.provider.trim() || 'unknown';
+    const existing = buckets.get(provider);
+    if (existing) existing.push(task);
+    else buckets.set(provider, [task]);
+  }
+  const orderedProviders: string[] = [];
+  for (const group of catalog?.providers ?? []) {
+    if (buckets.has(group.provider) && !orderedProviders.includes(group.provider)) {
+      orderedProviders.push(group.provider);
+    }
+  }
+  for (const provider of buckets.keys()) {
+    if (!orderedProviders.includes(provider)) orderedProviders.push(provider);
+  }
+  return orderedProviders.map((provider) => ({
+    provider,
+    label: providerDisplayName(provider, pluginTitles),
+    tasks: buckets.get(provider) ?? [],
+  }));
 }
 
 /** The task's own model, else the one the server picked for Auto: the server alone knows which listed names are OAuth aliases. */

@@ -33,6 +33,7 @@ import {
   validateThemeManifest,
 } from '../../src/theme/index.ts';
 import { migrateLegacyThemeValue, parseThemePreferences, THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
+import { mixSrgb, oklchLightness } from '../../src/theme/colorMath.ts';
 import { RADIUS } from '../../src/theme/radius.ts';
 
 const indexHTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -189,6 +190,58 @@ test('the first frame draws edges with the shares and shade the default palettes
     assert.equal(/--primary-active:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.primaryActive, `${id} --primary-active`);
     assert.equal(/--primary-on:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.primaryOn, `${id} --primary-on`);
     assert.equal(/--accent:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.accent, `${id} --accent`);
+    assert.equal(/--thumb-bg:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.thumbBg, `${id} --thumb-bg`);
+    assert.equal(/--selected-inset:\s*(#[0-9a-f]{6});/.exec(body)?.[1], palette.selected, `${id} --selected-inset`);
+  }
+});
+
+test('every built-in and custom palette keeps segmented thumbs and selected rows visible on every surface', () => {
+  const cases = [
+    ...BUILT_IN_PALETTES.map((definition) => ({
+      name: definition.id,
+      mode: definition.mode,
+      palette: resolvedBuiltInPalette(definition.id).palette,
+    })),
+    {
+      name: 'custom-dark-high-elevated',
+      mode: 'dark' as const,
+      palette: derivePalette('dark', {
+        bg: '#101216',
+        surface: '#191d24',
+        elevated: '#262c36',
+        fg: '#f0f4f8',
+        fg2: '#b0bac5',
+        muted: '#7a8490',
+        meta: '#57606a',
+        border: '#2d333b',
+        accent: '#58a6ff',
+      }),
+    },
+    {
+      name: 'custom-light-flat-elevated',
+      mode: 'light' as const,
+      palette: derivePalette('light', {
+        bg: '#f5f6f8',
+        surface: '#eceef2',
+        elevated: '#f0f2f5',
+        fg: '#1a1d21',
+        fg2: '#4c525c',
+        muted: '#727882',
+        meta: '#959ba5',
+        border: '#d6dae0',
+        accent: '#1f5bbf',
+      }),
+    },
+  ];
+  for (const { name, mode, palette } of cases) {
+    const wells = [palette.bg, palette.surface, palette.elevated].map((ground) => mixSrgb(ground, palette.fg, 0.05));
+    const maxWellL = Math.max(...wells.map(oklchLightness));
+    const thumbL = oklchLightness(palette.thumbBg);
+    const minStep = mode === 'dark' ? 0.07 : 0.025;
+    assert.ok(thumbL - maxWellL >= minStep, `${name} thumbBg (${palette.thumbBg}) too close to field well`);
+    assert.ok(contrastRatio(palette.fg, palette.thumbBg) >= 4.5, `${name} fg contrast on thumbBg < 4.5`);
+    const selectedDelta = Math.abs(oklchLightness(palette.selected) - oklchLightness(palette.elevated));
+    assert.ok(selectedDelta >= 0.045, `${name} selected (${palette.selected}) too close to elevated (${palette.elevated})`);
   }
 });
 
