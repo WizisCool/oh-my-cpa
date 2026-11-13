@@ -2,7 +2,7 @@ import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { compactQuotaForecast } from './quotaCapacity';
+import { compactQuotaCapacity } from './quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from './QuotaCapacityButton';
 import { quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
 import { quotaWindowFullName } from './quotaWindowSelection';
@@ -60,9 +60,9 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
   const stroke = quotaRemainingStroke(remaining);
   const reset = quotaResetCountdown(window, nowMS, t);
   const resetTitle = window.reset_accuracy && window.reset_accuracy !== 'exact' ? t('quota.reset_estimated_hint') : quotaResetText(window, nowMS, t);
-  const forecastLabel = owner ? compactQuotaForecast(window, tokenStyle, t) : null;
-  // Consumption details stay available on the card while a model sample is still accumulating.
-  const hasDetails = Boolean(owner && (forecastLabel || window.usage || window.forecast_unavailable));
+  const forecastLabel = owner ? compactQuotaCapacity(window, tokenStyle, t) : null;
+  // Consumption details stay available on the card while usage is accumulating.
+  const hasDetails = Boolean(owner && (forecastLabel || window.usage || window.capacity_unavailable));
   const content = (
     <>
       <span className={styles.head}>

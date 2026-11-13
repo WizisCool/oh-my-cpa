@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -14,9 +13,58 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
 
-// Native quota readings and recorded usage stay separate from model-conditioned
-// forecasts. Failed reads may share their window slice with the previous reading.
-func (h *Handler) attachQuotaForecasts(ctx context.Context, observation *quota.NormalizedQuota, nowMS int64) {
+func (h *Handler) resolveCurrentCycleUsage(
+	ctx context.Context,
+	authIndex string,
+	window quota.QuotaWindow,
+	plan *quota.QuotaPlan,
+	observedAtMS, fromMS, toMS int64,
+	cycles []quota.CycleCalibration,
+) (quota.WindowUsage, string, error) {
+	live, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, toMS)
+	if err != nil || scopeReason != "" {
+		return quota.WindowUsage{}, scopeReason, err
+	}
+	effective := quota.EffectiveWindowUsage(window, plan, observedAtMS, live, cycles)
+	if latest, ok := quota.LatestLiveCalibrationPoint(window, plan, observedAtMS, cycles); ok {
+		fromPoint := quota.WindowUsage{
+			FromMS:            fromMS,
+			ToMS:              toMS,
+			Requests:          latest.Requests,
+			PricedRequests:    latest.PricedRequests,
+			Tokens:            latest.Tokens,
+			PromptTokens:      latest.PromptTokens,
+			CachedTokens:      latest.CachedTokens,
+			CacheRate:         quota.ComputeCacheRate(latest.CachedTokens, latest.PromptTokens),
+			CostNanos:         latest.CostNanos,
+			UnmatchedRequests: latest.UnmatchedRequests,
+		}
+		preCutoffMS := min(latest.ObservedAtMS, toMS)
+		if latest.HasUsageGap && preCutoffMS > fromMS {
+			if freshBefore, reason, freshErr := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, preCutoffMS); freshErr == nil && reason == "" && freshBefore.Requests > fromPoint.Requests {
+				fromPoint = freshBefore
+				fromPoint.ToMS = toMS
+			}
+		} else if latest.UsageWatermarkID > 0 && preCutoffMS > fromMS {
+			if lateBefore, reason, lateErr := h.repo.QueryCapacityUsageAfterWatermark(ctx, authIndex, window, fromMS, preCutoffMS, latest.UsageWatermarkID); lateErr == nil && reason == "" {
+				fromPoint = quota.AddWindowUsage(fromPoint, lateBefore)
+			}
+		}
+		if latest.ObservedAtMS < toMS {
+			if postPoint, reason, postErr := h.repo.QueryCapacityUsage(ctx, authIndex, window, max(fromMS, latest.ObservedAtMS), toMS); postErr == nil && reason == "" {
+				fromPoint = quota.AddWindowUsage(fromPoint, postPoint)
+			}
+		}
+		if fromPoint.Requests > effective.Requests {
+			effective = fromPoint
+		}
+	}
+	return effective, "", nil
+}
+
+// Native quota readings stay authoritative; recorded usage and estimated full
+// window capacity are attached at read time without mutating shared window slices.
+func (h *Handler) attachQuotaCapacity(ctx context.Context, observation *quota.NormalizedQuota, nowMS int64) {
 	if h.repo == nil || observation == nil {
 		return
 	}
@@ -24,90 +72,95 @@ func (h *Handler) attachQuotaForecasts(ctx context.Context, observation *quota.N
 	var cycles map[string][]quota.CycleCalibration
 	var cyclesErr error
 	hasLoadedCycles := false
-	for index := range observation.Windows {
-		window := &observation.Windows[index]
-		window.Usage, window.ModelForecasts, window.ForecastUnavailable = nil, nil, ""
-		if !quota.SupportsWindowCapacity(observation.Provider, *window) {
-			continue
-		}
-		if fromMS, toMS, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, observation.ObservedAtMS); reason == "" {
-			usage, scopeReason, err := h.repo.QueryCapacityUsage(ctx, observation.AuthIndex, *window, fromMS, toMS)
-			if err != nil {
-				window.ForecastUnavailable = quota.CapacityReasonUsageUnavailable
-			} else if scopeReason != "" {
-				window.ForecastUnavailable = scopeReason
-			} else {
-				window.Usage = &usage
-			}
-		}
-		if window.ForecastUnavailable != "" {
-			continue
-		}
-		if _, _, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, nowMS); reason != "" {
-			window.ForecastUnavailable = reason
-			continue
-		}
-		if observation.Status == "stale" || observation.Status == "error" || observation.Error != "" || observation.Disabled || observation.HasFailedRead {
-			window.ForecastUnavailable = quota.CapacityReasonNoReading
-			continue
-		}
+	loadCycles := func() bool {
 		if !hasLoadedCycles {
 			cycles, cyclesErr = h.repo.LoadCapacityCycles(ctx, observation.AuthIndex)
 			hasLoadedCycles = true
 		}
-		if cyclesErr != nil {
-			window.ForecastUnavailable = quota.CapacityReasonHistoryUnavailable
+		return cyclesErr == nil
+	}
+	for index := range observation.Windows {
+		window := &observation.Windows[index]
+		window.Usage, window.Capacity, window.CapacityUnavailable = nil, nil, ""
+		if !quota.SupportsWindowCapacity(observation.Provider, *window) {
 			continue
 		}
-		window.ModelForecasts, window.ForecastUnavailable = quota.BuildModelForecasts(*window, observation.Plan, observation.ObservedAtMS, cycles[quota.CapacityWindowKey(observation.Provider, *window)])
-		h.backfillLegacyForecastCosts(ctx, observation.AuthIndex, *window, observation.ObservedAtMS)
-	}
-}
-
-// backfillLegacyForecastCosts fills remaining_cost_nanos from usage_events when
-// a stored calibration interval predates per-interval cost persistence.
-func (h *Handler) backfillLegacyForecastCosts(ctx context.Context, authIndex string, window quota.QuotaWindow, observedAtMS int64) {
-	if len(window.ModelForecasts) == 0 {
-		return
-	}
-	cycleFromMS, _, boundaryReason := quota.WindowCycleRange(window, observedAtMS, observedAtMS)
-	if boundaryReason != "" {
-		return
-	}
-	used, hasReading := quota.WindowUsedPercent(window)
-	if !hasReading {
-		return
-	}
-	remaining := 100 - used
-	for index := range window.ModelForecasts {
-		forecast := &window.ModelForecasts[index]
-		if forecast.SampleUsedPercent <= 0 || (forecast.RemainingCostNanos != nil && forecast.SamplePricedRequests >= forecast.SampleRequests) {
-			continue
-		}
-		_, groups, reason, err := h.repo.QueryCapacityUsageSinceWithModels(ctx, authIndex, window, cycleFromMS, forecast.FromMS, forecast.ObservedAtMS)
-		if err != nil || reason != "" {
-			continue
-		}
-		var matchedRequests, pricedRequests, costNanos int64
-		for _, group := range groups {
-			if !strings.EqualFold(group.Model, forecast.Model) {
-				continue
+		windowKey := quota.CapacityWindowKey(observation.Provider, *window)
+		if fromMS, toMS, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, observation.ObservedAtMS); reason == "" {
+			var windowCycles []quota.CycleCalibration
+			if loadCycles() {
+				windowCycles = cycles[windowKey]
 			}
-			if group.Usage.HasMixedServiceTiers || group.Usage.ServiceTier != forecast.ServiceTier {
-				continue
+			usage, scopeReason, err := h.resolveCurrentCycleUsage(ctx, observation.AuthIndex, *window, observation.Plan, observation.ObservedAtMS, fromMS, toMS, windowCycles)
+			if err != nil {
+				window.CapacityUnavailable = quota.CapacityReasonUsageUnavailable
+			} else if scopeReason != "" {
+				window.CapacityUnavailable = scopeReason
+			} else {
+				window.Usage = &usage
 			}
-			matchedRequests += group.Usage.Requests
-			pricedRequests += group.Usage.PricedRequests
-			costNanos += group.Usage.CostNanos
 		}
-		if matchedRequests != forecast.SampleRequests {
+		if window.CapacityUnavailable != "" {
 			continue
 		}
-		if pricedRequests > forecast.SamplePricedRequests && (pricedRequests == matchedRequests && matchedRequests > 0 || pricedRequests > 0 && costNanos > 0) {
-			cost := int64(math.Floor(float64(costNanos) * remaining / forecast.SampleUsedPercent))
-			forecast.SamplePricedRequests = pricedRequests
-			forecast.RemainingCostNanos = &cost
+		if _, _, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, nowMS); reason != "" {
+			window.CapacityUnavailable = reason
+			continue
 		}
+		if observation.Status == "stale" || observation.Status == "error" || observation.Error != "" || observation.Disabled || observation.HasFailedRead {
+			window.CapacityUnavailable = quota.CapacityReasonNoReading
+			continue
+		}
+		if !loadCycles() {
+			window.CapacityUnavailable = quota.CapacityReasonHistoryUnavailable
+			continue
+		}
+		estimateUsage := window.Usage
+		if cutoff, watermarkID, ok := quota.ExhaustionCutoffPoint(*window, observation.Plan, observation.ObservedAtMS, cycles[windowKey]); ok && estimateUsage != nil && cutoff.ObservedAtMS < observation.ObservedAtMS && cutoff.ObservedAtMS > estimateUsage.FromMS {
+			preFull := quota.WindowUsage{
+				FromMS:            estimateUsage.FromMS,
+				ToMS:              cutoff.ObservedAtMS,
+				Requests:          cutoff.Requests,
+				PricedRequests:    cutoff.PricedRequests,
+				Tokens:            cutoff.Tokens,
+				PromptTokens:      cutoff.PromptTokens,
+				CachedTokens:      cutoff.CachedTokens,
+				CacheRate:         quota.ComputeCacheRate(cutoff.CachedTokens, cutoff.PromptTokens),
+				CostNanos:         cutoff.CostNanos,
+				UnmatchedRequests: cutoff.UnmatchedRequests,
+			}
+			if livePreFull, scopeReason, err := h.repo.QueryCapacityUsage(ctx, observation.AuthIndex, *window, estimateUsage.FromMS, cutoff.ObservedAtMS); err == nil && scopeReason == "" && livePreFull.Requests > preFull.Requests {
+				preFull = livePreFull
+			}
+			if !cutoff.HasUsageGap && watermarkID > 0 {
+				if delta, scopeReason, err := h.repo.QueryCapacityUsageAfterWatermark(ctx, observation.AuthIndex, *window, estimateUsage.FromMS, cutoff.ObservedAtMS, watermarkID); err == nil && scopeReason == "" {
+					withDelta := quota.AddWindowUsage(quota.WindowUsage{
+						FromMS:            estimateUsage.FromMS,
+						ToMS:              cutoff.ObservedAtMS,
+						Requests:          cutoff.Requests,
+						PricedRequests:    cutoff.PricedRequests,
+						Tokens:            cutoff.Tokens,
+						PromptTokens:      cutoff.PromptTokens,
+						CachedTokens:      cutoff.CachedTokens,
+						CacheRate:         quota.ComputeCacheRate(cutoff.CachedTokens, cutoff.PromptTokens),
+						CostNanos:         cutoff.CostNanos,
+						UnmatchedRequests: cutoff.UnmatchedRequests,
+					}, delta)
+					if withDelta.Requests > preFull.Requests {
+						preFull = withDelta
+					}
+				}
+			}
+			estimateUsage = &preFull
+		}
+		window.Capacity, window.CapacityUnavailable = quota.EstimateWindowCapacity(
+			*window,
+			observation.Plan,
+			observation.ObservedAtMS,
+			nowMS,
+			estimateUsage,
+			cycles[windowKey],
+		)
 	}
 }
 
@@ -118,8 +171,8 @@ type capacityCycleDTO struct {
 	Usage       *quota.WindowUsage `json:"usage,omitempty"`
 }
 
-// getQuotaCapacityHistory returns recorded consumption for two cycles and
-// forecasts supported by direct single-model observations in the current cycle.
+// getQuotaCapacityHistory returns recorded consumption for the current and
+// previous cycles alongside the window's estimated full capacity.
 func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	authIndex := strings.TrimSpace(chi.URLParam(request, "authIndex"))
@@ -176,7 +229,7 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 		if used, hasReading := quota.WindowUsedPercent(window); hasReading {
 			current.UsedPercent = &used
 		}
-		if usage, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, toMS); err == nil && scopeReason == "" {
+		if usage, scopeReason, err := h.resolveCurrentCycleUsage(ctx, authIndex, window, plan, snapshot.ObservedAtMS, fromMS, toMS, cycles[windowKey]); err == nil && scopeReason == "" {
 			current.Usage = &usage
 		}
 		response["current"] = current
@@ -212,13 +265,13 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 	observation := normalizedQuotaFromSnapshot(authIndex, snapshot)
 	attempts := h.lastQuotaAttempts(ctx, []string{authIndex})
 	quota.ApplyReadingHealth(observation, quotaAttemptOf(attempts[authIndex]), true, h.now().UnixMilli())
-	h.attachQuotaForecasts(ctx, observation, h.now().UnixMilli())
+	h.attachQuotaCapacity(ctx, observation, h.now().UnixMilli())
 	result := observation.Windows[index]
-	if len(result.ModelForecasts) > 0 {
-		response["model_forecasts"] = result.ModelForecasts
+	if result.Capacity != nil {
+		response["capacity"] = result.Capacity
 	}
-	if result.ForecastUnavailable != "" {
-		response["forecast_unavailable"] = result.ForecastUnavailable
+	if result.CapacityUnavailable != "" {
+		response["capacity_unavailable"] = result.CapacityUnavailable
 	}
 	writeJSON(writer, http.StatusOK, response)
 }

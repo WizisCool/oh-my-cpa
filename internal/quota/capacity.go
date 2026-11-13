@@ -3,19 +3,25 @@ package quota
 import "math"
 
 // capacityResetTolerancePercent absorbs upstream rounding when two readings of
-// the same cycle are compared: only a larger drop is a reset.
+// the same cycle are compared: only a larger drop is a mid-cycle reset.
 const capacityResetTolerancePercent = 1.0
 
-// usedPercentHalfStep is half of the one-point granularity upstream reports, the
-// most a rounded reading can differ from the share it stands for.
-const usedPercentHalfStep = 0.5
+// minEstimableUsedPercent rejects float noise (e.g. 1e-300) while allowing any
+// real provider reading (0.1%, 1%, ...) to scale immediately without a 5% gate.
+const minEstimableUsedPercent = 0.01
 
 // maxDisplayedCacheRate matches the console and dashboard presentation ceiling:
 // any nonzero uncached prompt keeps a rounded reading below 100%.
 const maxDisplayedCacheRate = 99.9
 
-// Reasons a window carries no model forecast yet. They are wire values the
-// console maps to its own copy, each naming the missing evidence.
+// Basis values describing which cycle's consumption supplied a capacity estimate.
+const (
+	CapacityBasisCurrentWindow  = "current_window"
+	CapacityBasisPreviousWindow = "previous_window"
+)
+
+// Reasons a window carries no capacity estimate yet. They are wire values the
+// console maps to its own copy.
 const (
 	// CapacityReasonScopeUnknown: a scoped window's requests all used models
 	// with no known family, so none of them can be counted against it.
@@ -29,60 +35,80 @@ const (
 	CapacityReasonExpired = "expired"
 	// CapacityReasonNoReading: upstream published no used share for the window.
 	CapacityReasonNoReading = "no_reading"
-	// CapacityReasonLowUsage: too little of the window has been used for its
-	// rounded share to support a figure.
-	CapacityReasonLowUsage    = "low_usage"
-	CapacityReasonMixedModels = "mixed_models"
+	// CapacityReasonLowUsage: the window reports zero used share so far.
+	CapacityReasonLowUsage = "low_usage"
 	// CapacityReasonNoTraffic: quota was used but this gateway recorded no
-	// request while it moved, so it was spent elsewhere.
+	// request in the window, so consumption happened elsewhere.
 	CapacityReasonNoTraffic = "no_traffic"
 	// CapacityReasonResetMidCycle: the counter was reset part-way through the
-	// cycle and no reading since the reset gives a change to measure.
+	// cycle and no earlier or post-reset consumption can size it yet.
 	CapacityReasonResetMidCycle = "reset_mid_cycle"
 )
 
 // WindowUsage is what this deployment recorded for a credential in [FromMS, ToMS).
 type WindowUsage struct {
-	FromMS               int64    `json:"from_ms"`
-	ToMS                 int64    `json:"to_ms"`
+	FromMS            int64    `json:"from_ms"`
+	ToMS              int64    `json:"to_ms"`
+	Requests          int64    `json:"requests"`
+	PricedRequests    int64    `json:"priced_requests"`
+	Tokens            int64    `json:"tokens"`
+	PromptTokens      int64    `json:"prompt_tokens,omitempty"`
+	CachedTokens      int64    `json:"cached_tokens,omitempty"`
+	CacheRate         *float64 `json:"cache_rate,omitempty"`
+	CostNanos         int64    `json:"cost_nanos"`
+	UnmatchedRequests int64    `json:"-"`
+}
+
+// WindowCapacity is the estimated 100% full-window allowance, scaled linearly
+// from recorded window consumption and upstream used percentage.
+type WindowCapacity struct {
+	Basis                string   `json:"basis"`
+	SampleRequests       int64    `json:"sample_requests"`
+	SamplePricedRequests int64    `json:"sample_priced_requests,omitempty"`
 	Requests             int64    `json:"requests"`
-	PricedRequests       int64    `json:"priced_requests"`
 	Tokens               int64    `json:"tokens"`
-	PromptTokens         int64    `json:"prompt_tokens,omitempty"`
-	CachedTokens         int64    `json:"cached_tokens,omitempty"`
+	CostNanos            *int64   `json:"cost_nanos,omitempty"`
 	CacheRate            *float64 `json:"cache_rate,omitempty"`
-	CostNanos            int64    `json:"cost_nanos"`
-	PricedTokens         int64    `json:"-"`
-	BreakdownRequests    int64    `json:"-"`
-	CacheWriteTokens     int64    `json:"-"`
-	OutputTokens         int64    `json:"-"`
-	MinInputTokens       int64    `json:"-"`
-	MaxInputTokens       int64    `json:"-"`
-	HasInputBounds       bool     `json:"-"`
-	ServiceTier          string   `json:"-"`
-	HasMixedServiceTiers bool     `json:"-"`
-	UnmatchedRequests    int64    `json:"-"`
 }
 
-func (usage WindowUsage) hasTokenBreakdown() bool {
-	if usage.BreakdownRequests > 0 {
-		return usage.BreakdownRequests == usage.Requests && (usage.PromptTokens > 0 || usage.OutputTokens > 0)
+func scaleMetricToFullWindow(actual int64, usedPercent float64) (int64, bool) {
+	if actual < 0 {
+		return 0, false
 	}
-	return usage.Requests > 0 && (usage.PromptTokens > 0 || usage.OutputTokens > 0)
+	raw := math.Round(float64(actual) * 100 / usedPercent)
+	if math.IsNaN(raw) || math.IsInf(raw, 0) || raw < 0 || raw >= maxInt64Exclusive {
+		return 0, false
+	}
+	return max(actual, int64(raw)), true
 }
 
-func (usage WindowUsage) inputBounds() (minInput, maxInput int64, ok bool) {
-	if !usage.hasTokenBreakdown() {
-		return 0, 0, false
+// ScaleWindowCapacity extrapolates 100% window capacity from a recorded usage
+// sample and its consumed percentage share, clamping to at least recorded
+// actuals and guarding against float/int64 overflow.
+func ScaleWindowCapacity(basis string, usedPercent float64, usage WindowUsage) *WindowCapacity {
+	if math.IsNaN(usedPercent) || math.IsInf(usedPercent, 0) || usedPercent < minEstimableUsedPercent || usedPercent > 100 || usage.Requests <= 0 || usage.Tokens <= 0 {
+		return nil
 	}
-	if usage.HasInputBounds || usage.MinInputTokens > 0 || usage.MaxInputTokens > 0 {
-		return max(usage.MinInputTokens, 0), max(usage.MaxInputTokens, 0), true
+	requests, okReq := scaleMetricToFullWindow(usage.Requests, usedPercent)
+	tokens, okTok := scaleMetricToFullWindow(usage.Tokens, usedPercent)
+	if !okReq || !okTok || requests <= 0 || tokens <= 0 {
+		return nil
 	}
-	if usage.Requests == 1 {
-		single := max(usage.PromptTokens, usage.CachedTokens+usage.CacheWriteTokens)
-		return single, single, true
+	var costNanos *int64
+	if usage.PricedRequests == usage.Requests || (usage.PricedRequests > 0 && usage.CostNanos > 0) {
+		if cost, okCost := scaleMetricToFullWindow(usage.CostNanos, usedPercent); okCost {
+			costNanos = &cost
+		}
 	}
-	return 0, 0, false
+	return &WindowCapacity{
+		Basis:                basis,
+		SampleRequests:       usage.Requests,
+		SamplePricedRequests: usage.PricedRequests,
+		Requests:             requests,
+		Tokens:               tokens,
+		CostNanos:            costNanos,
+		CacheRate:            ComputeCacheRate(usage.CachedTokens, usage.PromptTokens),
+	}
 }
 
 // ComputeCacheRate returns prompt cache reads as a percentage of prompt tokens,

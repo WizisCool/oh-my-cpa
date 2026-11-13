@@ -108,7 +108,7 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 	if refreshed != nil && h.repo != nil {
 		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 	}
-	h.attachQuotaForecasts(ctx, refreshed, h.now().UnixMilli())
+	h.attachQuotaCapacity(ctx, refreshed, h.now().UnixMilli())
 
 	_ = audit("quota.redeem_credit", "quota", authIndex, "success", map[string]any{"cooldown_cleared": cooldownCleared})
 

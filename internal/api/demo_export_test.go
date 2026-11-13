@@ -662,7 +662,7 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 	case map[string]any:
 		// Quota reads and their seeded history already use the fixed handler clock,
 		// including future reset bounds. Moving them again would expire valid cycles.
-		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) || typed["window_id"] != nil && (typed["current"] != nil || typed["model_forecasts"] != nil) {
+		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) || typed["window_id"] != nil && (typed["current"] != nil || typed["capacity"] != nil) {
 			deltaMS = 0
 		}
 		// A warmup catalog account restates that same observation as instants - `snapshot_at`
@@ -1392,13 +1392,11 @@ func assertDemoQuotaEvidenceExamples(t *testing.T, responses map[string]demoExpo
 			if window.Usage == nil || window.Usage.ToMS != observation.ObservedAtMS || window.ResetAtMS == nil || *window.ResetAtMS <= referenceMS {
 				t.Fatalf("invalid exported quota evidence %s: %+v", key, window)
 			}
-			if len(window.ModelForecasts) == 0 && window.ForecastUnavailable == "" {
-				t.Fatalf("missing forecast evidence state: %+v", window)
+			if window.Capacity == nil && window.CapacityUnavailable == "" {
+				t.Fatalf("missing capacity evidence state: %+v", window)
 			}
-			for _, forecast := range window.ModelForecasts {
-				if forecast.SampleRequests < 5 || forecast.SampleUsedPercent < 5 || forecast.FromMS < window.Usage.FromMS || forecast.Model == "" {
-					t.Fatalf("unattributed model forecast: %+v", forecast)
-				}
+			if window.Capacity != nil && (window.Capacity.Requests <= 0 || window.Capacity.Tokens <= 0) {
+				t.Fatalf("invalid window capacity: %+v", window)
 			}
 			delete(expected, key)
 		}
@@ -1556,9 +1554,9 @@ func TestDemoExportPreservesSeededQuotaCyclesAndUsageEnds(t *testing.T) {
 	input := map[string]any{
 		"auth_index": "demo-auth", "observed_at_ms": reference,
 		"windows": []any{map[string]any{
-			"reset_at_ms":     reference + 3600000,
-			"usage":           map[string]any{"from_ms": reference - 3600000, "to_ms": reference},
-			"model_forecasts": []any{map[string]any{"model": "gpt-6.1-sol", "from_ms": reference - 7200000, "observed_at_ms": reference - 3600000}},
+			"reset_at_ms": reference + 3600000,
+			"usage":       map[string]any{"from_ms": reference - 3600000, "to_ms": reference},
+			"capacity":    map[string]any{"basis": "current_window", "requests": float64(100), "tokens": float64(100000)},
 		}},
 	}
 	output := demoExportRebase(input, -90*86400000, map[string]int{}).(map[string]any)
@@ -1573,18 +1571,14 @@ func TestDemoExportPreservesSeededQuotaCyclesAndUsageEnds(t *testing.T) {
 	if usage["to_ms"] != reference {
 		t.Fatalf("usage was treated as an incomplete calendar day: %+v", usage)
 	}
-	forecast := window["model_forecasts"].([]any)[0].(map[string]any)
-	if forecast["observed_at_ms"] != float64(reference-3600000) {
-		t.Fatalf("forecast observation shifted: %+v", forecast)
-	}
 	history := map[string]any{
 		"window_id": "five_hour", "current": map[string]any{"from_ms": reference - 3600000, "reset_at_ms": reference + 3600000},
-		"model_forecasts": []any{map[string]any{"model": "gpt-6.1-sol", "from_ms": reference - 7200000, "observed_at_ms": reference - 3600000}},
+		"capacity": map[string]any{"basis": "current_window", "requests": float64(100), "tokens": float64(100000)},
 	}
 	rebased := demoExportRebase(history, -90*86400000, map[string]int{}).(map[string]any)
-	modelForecast := rebased["model_forecasts"].([]any)[0].(map[string]any)
-	if modelForecast["observed_at_ms"] != float64(reference-3600000) {
-		t.Fatalf("quota detail forecast was shifted twice: %+v", modelForecast)
+	currentCycle := rebased["current"].(map[string]any)
+	if currentCycle["from_ms"] != reference-3600000 {
+		t.Fatalf("quota detail cycle was shifted twice: %+v", currentCycle)
 	}
 
 }

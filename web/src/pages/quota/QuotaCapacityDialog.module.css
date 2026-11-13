@@ -90,22 +90,6 @@
   white-space: nowrap;
 }
 
-.model-select {
-  align-self: flex-start;
-  max-inline-size: calc(100% + 12px);
-  block-size: 20px;
-  margin-inline: -6px;
-  padding-inline: 6px;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 400;
-}
-
-.model-select:hover {
-  color: var(--fg);
-}
 
 .lead {
   display: flex;
@@ -278,11 +262,6 @@
     text-align: end;
   }
 
-  .model-select {
-    align-self: center;
-    margin-inline: 0 -6px;
-    font-size: var(--text-xs);
-  }
 
   .rows {
     display: contents;

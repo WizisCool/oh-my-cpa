@@ -24,11 +24,11 @@ type QuotaWindow struct {
 
 	ModelFamilies []string `json:"model_families,omitempty"`
 
-	// Usage and model-conditioned forecasts are read-time projections. Upstream
+	// Usage and estimated full-window capacity are read-time projections. Upstream
 	// percentages and reset times remain the authority for quota availability.
-	Usage               *WindowUsage         `json:"usage,omitempty"`
-	ModelForecasts      []ModelQuotaForecast `json:"model_forecasts,omitempty"`
-	ForecastUnavailable string               `json:"forecast_unavailable,omitempty"`
+	Usage               *WindowUsage    `json:"usage,omitempty"`
+	Capacity            *WindowCapacity `json:"capacity,omitempty"`
+	CapacityUnavailable string          `json:"capacity_unavailable,omitempty"`
 }
 
 // QuotaExtraUsage represents paid usage beyond the plan (Claude Extra Usage,

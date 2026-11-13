@@ -3893,7 +3893,7 @@
   },
   {
     "name": "quota_list",
-    "description": "Read subscription plans, upstream quota percentages and reset times, recorded API-equivalent usage, and current-window model forecasts with direct sample evidence. Missing or stale observations remain unknown.",
+    "description": "Read subscription plans, upstream quota percentages and reset times, recorded API-equivalent usage, and estimated full-window capacity. Missing or stale observations remain unknown.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -4083,75 +4083,49 @@
                       ],
                       "additionalProperties": false
                     },
-                    "model_forecasts": {
+                    "capacity": {
                       "type": [
                         "null",
-                        "array"
+                        "object"
                       ],
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "model": {
-                            "type": "string"
-                          },
-                          "service_tier": {
-                            "type": "string"
-                          },
-                          "sample_requests": {
-                            "type": "integer"
-                          },
-                          "sample_priced_requests": {
-                            "type": "integer"
-                          },
-                          "sample_tokens": {
-                            "type": "integer"
-                          },
-                          "sample_used_percent": {
-                            "type": "number"
-                          },
-                          "cache_rate": {
-                            "type": [
-                              "null",
-                              "number"
-                            ]
-                          },
-                          "from_ms": {
-                            "type": "integer"
-                          },
-                          "observed_at_ms": {
-                            "type": "integer"
-                          },
-                          "remaining_requests": {
-                            "type": "integer"
-                          },
-                          "remaining_tokens": {
-                            "type": "integer"
-                          },
-                          "remaining_cost_nanos": {
-                            "type": [
-                              "null",
-                              "integer"
-                            ]
-                          },
-                          "rounding_error_percent": {
-                            "type": "number"
-                          }
+                      "properties": {
+                        "basis": {
+                          "type": "string"
                         },
-                        "required": [
-                          "model",
-                          "sample_requests",
-                          "sample_tokens",
-                          "sample_used_percent",
-                          "from_ms",
-                          "observed_at_ms",
-                          "remaining_requests",
-                          "remaining_tokens",
-                          "rounding_error_percent"
-                        ],
-                        "additionalProperties": false
-                      }
+                        "sample_requests": {
+                          "type": "integer"
+                        },
+                        "sample_priced_requests": {
+                          "type": "integer"
+                        },
+                        "requests": {
+                          "type": "integer"
+                        },
+                        "tokens": {
+                          "type": "integer"
+                        },
+                        "cost_nanos": {
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "cache_rate": {
+                          "type": [
+                            "null",
+                            "number"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "basis",
+                        "sample_requests",
+                        "requests",
+                        "tokens"
+                      ],
+                      "additionalProperties": false
                     },
-                    "forecast_unavailable": {
+                    "capacity_unavailable": {
                       "type": "string"
                     }
                   },
@@ -4242,7 +4216,7 @@
   },
   {
     "name": "quota_refresh",
-    "description": "Refresh one credential's upstream quota observation, subscription tier and directly observed model forecasts; does not reset or spend quota credits. Meta observes quota through its key-exchange endpoint, which may mint a key; returned keys are discarded.",
+    "description": "Refresh one credential's upstream quota observation, subscription tier and estimated full-window capacity; does not reset or spend quota credits. Meta observes quota through its key-exchange endpoint, which may mint a key; returned keys are discarded.",
     "permission": "write",
     "input_schema": {
       "type": "object",
@@ -4427,75 +4401,49 @@
                 ],
                 "additionalProperties": false
               },
-              "model_forecasts": {
+              "capacity": {
                 "type": [
                   "null",
-                  "array"
+                  "object"
                 ],
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "model": {
-                      "type": "string"
-                    },
-                    "service_tier": {
-                      "type": "string"
-                    },
-                    "sample_requests": {
-                      "type": "integer"
-                    },
-                    "sample_priced_requests": {
-                      "type": "integer"
-                    },
-                    "sample_tokens": {
-                      "type": "integer"
-                    },
-                    "sample_used_percent": {
-                      "type": "number"
-                    },
-                    "cache_rate": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
-                    },
-                    "from_ms": {
-                      "type": "integer"
-                    },
-                    "observed_at_ms": {
-                      "type": "integer"
-                    },
-                    "remaining_requests": {
-                      "type": "integer"
-                    },
-                    "remaining_tokens": {
-                      "type": "integer"
-                    },
-                    "remaining_cost_nanos": {
-                      "type": [
-                        "null",
-                        "integer"
-                      ]
-                    },
-                    "rounding_error_percent": {
-                      "type": "number"
-                    }
+                "properties": {
+                  "basis": {
+                    "type": "string"
                   },
-                  "required": [
-                    "model",
-                    "sample_requests",
-                    "sample_tokens",
-                    "sample_used_percent",
-                    "from_ms",
-                    "observed_at_ms",
-                    "remaining_requests",
-                    "remaining_tokens",
-                    "rounding_error_percent"
-                  ],
-                  "additionalProperties": false
-                }
+                  "sample_requests": {
+                    "type": "integer"
+                  },
+                  "sample_priced_requests": {
+                    "type": "integer"
+                  },
+                  "requests": {
+                    "type": "integer"
+                  },
+                  "tokens": {
+                    "type": "integer"
+                  },
+                  "cost_nanos": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ]
+                  },
+                  "cache_rate": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "basis",
+                  "sample_requests",
+                  "requests",
+                  "tokens"
+                ],
+                "additionalProperties": false
               },
-              "forecast_unavailable": {
+              "capacity_unavailable": {
                 "type": "string"
               }
             },

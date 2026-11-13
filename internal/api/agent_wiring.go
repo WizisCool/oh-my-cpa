@@ -251,7 +251,7 @@ func (h *Handler) operationsService() *operations.Service {
 				if err = h.persistNormalizedQuotaSnapshot(ctx, value); err != nil {
 					return operations.Quota{}, err
 				}
-				h.attachQuotaForecasts(ctx, value, h.now().UnixMilli())
+				h.attachQuotaCapacity(ctx, value, h.now().UnixMilli())
 				h.invalidateCoordinator("management-auth-files", "management-quota")
 				return operations.SafeQuota(value), nil
 			}

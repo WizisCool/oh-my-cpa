@@ -2,7 +2,6 @@ import React from 'react';
 import { MetaLine } from '../../components/common/MetaLine';
 import { useQuery } from '@tanstack/react-query';
 import { Segmented } from '@/components/ui/segmented';
-import { Select } from '@/components/ui/select';
 import { api } from '../../api/client';
 import { AppModal } from '../../components/common/AppModal';
 import { Meter } from '../../components/common/Meter';
@@ -13,13 +12,13 @@ import { HistoryOutlined, HourglassOutlined, InfoCircleOutlined, InsightsOutline
 import { useT } from '../../i18n';
 import { cacheScaleMix } from '../../theme/cacheScale';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import type { QuotaCapacityCycle, QuotaModelForecast, QuotaWindow } from '../../types/quota';
+import type { QuotaCapacityCycle, QuotaWindow, QuotaWindowCapacity } from '../../types/quota';
 import type { RollingReadout } from '../../types/rollingNumber';
 import { formatShortDateTime } from './quotaFormat';
 import {
   type CycleCardFigures,
-  describeForecastCard,
-  quotaForecastNote,
+  describeCapacityCard,
+  quotaCapacityNote,
   formatCycleCardFigures,
 } from './quotaCapacity';
 import type { QuotaCapacityOwner } from './QuotaCapacityButton';
@@ -34,13 +33,12 @@ export interface QuotaCapacityDialogProps {
   windows?: readonly QuotaWindow[];
 }
 
-/** Recorded consumption and model-conditioned remaining work share one window selector. */
+/** Recorded consumption and estimated full-window capacity share one window selector. */
 export default function QuotaCapacityDialog({ open, onClose, owner, window, windows }: QuotaCapacityDialogProps) {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const siblingWindows = React.useMemo(() => siblingCapacityWindows(window, windows), [window, windows]);
   const [selectedWindowId, setSelectedWindowId] = React.useState(window.id);
-  const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
   const [prevTrigger, setPrevTrigger] = React.useState({ open, windowId: window.id });
   if (prevTrigger.open !== open || prevTrigger.windowId !== window.id) {
     const openedFresh = open && !prevTrigger.open;
@@ -48,7 +46,6 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
     setPrevTrigger({ open, windowId: window.id });
     if (openedFresh || triggerChanged) {
       setSelectedWindowId(window.id);
-      if (openedFresh) setSelectedModel(null);
     }
   }
 
@@ -70,22 +67,22 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
   const previous = history.data?.previous ?? null;
   const currentUsed = current?.used_percent ?? used;
   const group = quotaWindowGroupName(activeWindow);
-  const modelOptions = React.useMemo<QuotaModelForecast[]>(() => {
-    if (history.isError) return [];
-    return history.data ? history.data.model_forecasts ?? [] : activeWindow.model_forecasts ?? [];
-  }, [history.isError, history.data, activeWindow.model_forecasts]);
-  const activeForecast = modelOptions.find((option) => forecastKey(option) === selectedModel) ?? modelOptions[0] ?? null;
-  const pendingNote = quotaForecastNote(history.isError ? 'usage_unavailable' : history.data?.forecast_unavailable ?? activeWindow.forecast_unavailable, t);
-  const forecastFigures = describeForecastCard(activeForecast, tokenStyle, t);
+  const activeCapacity: QuotaWindowCapacity | null = history.isError
+    ? null
+    : history.data
+      ? history.data.capacity ?? null
+      : activeWindow.capacity ?? null;
+  const pendingNote = quotaCapacityNote(
+    history.isError ? 'usage_unavailable' : history.data?.capacity_unavailable ?? activeWindow.capacity_unavailable,
+    t,
+  );
+  const forecastFigures = describeCapacityCard(activeCapacity, tokenStyle, t);
   const untilText = activeWindow.reset_at_ms
     ? t('quota.capacity_until', { when: formatShortDateTime(activeWindow.reset_at_ms) })
     : null;
-  const forecastCaption = activeForecast ? (activeForecast.service_tier ? `${activeForecast.model} (${activeForecast.service_tier})` : activeForecast.model) : untilText ?? '\u00a0';
-
-  const selectOptions = React.useMemo(
-    () => modelOptions.map((option) => ({ value: forecastKey(option), label: option.service_tier ? `${option.model} (${option.service_tier})` : option.model })),
-    [modelOptions],
-  );
+  const forecastCaption = activeCapacity?.basis === 'previous_window'
+    ? t('quota.capacity_from_previous')
+    : untilText ?? '\u00a0';
 
   return (
     <AppModal
@@ -144,24 +141,11 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
           icon={<InsightsOutlined />}
           title={t('quota.capacity_forecast_window')}
           caption={forecastCaption}
-          captionSlot={modelOptions.length > 1 && activeForecast ? (
-            <Select
-              size="sm"
-              variant="borderless"
-              className={styles['model-select']}
-              popupMatchSelectWidth={false}
-              aria-label={t('quota.capacity_select_model')}
-              data-testid="quota-capacity-model-select"
-              value={forecastKey(activeForecast)}
-              onChange={(next) => { if (next) setSelectedModel(next); }}
-              options={selectOptions}
-            />
-          ) : undefined}
           figures={forecastFigures}
-          isEmpty={!activeForecast}
+          isEmpty={!activeCapacity}
           foot={(
             <>
-              {!activeForecast && (
+              {!activeCapacity && (
                 <span className={styles['foot-text']}>{pendingNote ?? t('quota.capacity_reason_low_usage')}</span>
               )}
               <Tag tone="accent" size="small" className={styles['foot-tag']}>{t('quota.capacity_forecast_tag')}</Tag>
@@ -178,25 +162,20 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
   );
 }
 
-function forecastKey(forecast: QuotaModelForecast): string {
-  return JSON.stringify([forecast.model, forecast.service_tier ?? '']);
-}
-
 function cycleSpan(cycle: QuotaCapacityCycle): string {
   return `${formatShortDateTime(cycle.from_ms)} – ${formatShortDateTime(cycle.reset_at_ms)}`;
 }
 
 /**
- * Consumption cards lead with recorded API-equivalent cost; the forecast leads with
- * remaining available cost. A card without a reading keeps every row with a dash for
+ * Consumption cards lead with recorded API-equivalent cost; the capacity card leads with
+ * estimated full-window cost. A card without a reading keeps every row with a dash for
  * each figure, so the three still line up across the subgrid.
  */
-function Card({ tone, icon, title, caption, captionSlot, figures, isEmpty, isPending = false, foot }: {
+function Card({ tone, icon, title, caption, figures, isEmpty, isPending = false, foot }: {
   tone?: 'forecast';
   icon: React.ReactNode;
   title: string;
   caption: string;
-  captionSlot?: React.ReactNode;
   figures: CycleCardFigures;
   isEmpty: boolean;
   isPending?: boolean;
@@ -207,14 +186,12 @@ function Card({ tone, icon, title, caption, captionSlot, figures, isEmpty, isPen
     <section className={styles.card} data-tone={tone} data-empty={isEmpty || undefined} aria-label={title} aria-busy={isPending || undefined}>
       <header className={styles.head}>
         <PanelTitle icon={icon}>{title}</PanelTitle>
-        {captionSlot ?? (
-          <span className={styles.caption} data-tip={caption} data-tip-overflow="">
-            {isPending ? '…' : caption}
-          </span>
-        )}
+        <span className={styles.caption} data-tip={caption} data-tip-overflow="">
+          {isPending ? '…' : caption}
+        </span>
       </header>
       <div className={styles.lead}>
-        <span className={styles.label}>{t(tone === 'forecast' ? 'quota.capacity_available_amount' : 'quota.capacity_spent')}</span>
+        <span className={styles.label}>{t(tone === 'forecast' ? 'quota.capacity_estimated_amount' : 'quota.capacity_spent')}</span>
         <span className={styles['lead-value']} data-tip={figures.costHint ?? undefined}>
           <FigureValue readout={figures.costReadout} fallback={figures.cost} />
         </span>
